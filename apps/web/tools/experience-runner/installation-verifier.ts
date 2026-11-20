@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { lstat } from 'node:fs/promises';
+import { lstat, realpath } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { promisify } from 'node:util';
 import { experienceRunnerInstallationPin } from '../../src/schemas/experience-runner-installation';
 import {
@@ -28,8 +29,32 @@ async function trustedPath(path: string) {
   )
     throw Error('UNTRUSTED_INSTALLATION_PERMISSIONS');
 }
+/** Resolve only fixed system locations and check the whole resolved path. */
+export async function resolveTrustedChroot() {
+  for (const candidate of ['/usr/bin/chroot', '/usr/sbin/chroot']) {
+    let resolved: string;
+    try {
+      resolved = await realpath(candidate);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+    if (!resolved.startsWith('/usr/') || resolved.endsWith('/'))
+      throw Error('UNTRUSTED_CHROOT');
+    await trustedPath(dirname(candidate));
+    const pieces = resolved.split('/').filter(Boolean);
+    let path = '';
+    for (const piece of pieces) {
+      path += `/${piece}`;
+      await trustedPath(path);
+    }
+    if (!(await lstat(resolved)).isFile()) throw Error('UNTRUSTED_CHROOT');
+    return resolved;
+  }
+  throw Error('CHROOT_UNAVAILABLE');
+}
 /** Suitable for createLinuxRunner.verifyInstallation. No installation, network,
- * auto-pinning or fallback; compares both complete rootfs trees and runsc bytes. */
+ * auto-pinning or fallback; compares rootfs trees and the complete gVisor runtime. */
 export function createPinnedLinuxInstallationVerifier(input: unknown) {
   const pin = experienceRunnerInstallationPin.parse(input);
   return async () => {
@@ -46,24 +71,30 @@ export function createPinnedLinuxInstallationVerifier(input: unknown) {
       '/usr/local',
       '/usr/local/bin',
       '/usr/local/bin/runsc',
+      '/usr/local/bin/gvisor-bin',
     ]) {
       await trustedPath(path);
     }
     const node24 = await inventoryInstallationTree(`${root}/node24/rootfs`);
     const browser = await inventoryInstallationTree(`${root}/browser/rootfs`);
+    const gvisorBin = await inventoryInstallationTree(
+      '/usr/local/bin/gvisor-bin'
+    );
     const runscDigest = await fileDigest('/usr/local/bin/runsc');
     if (
       node24.digest !== pin.rootfs.node24 ||
       browser.digest !== pin.rootfs.browser ||
-      runscDigest !== pin.runscDigest
+      runscDigest !== pin.runscDigest ||
+      gvisorBin.digest !== pin.gvisorBinDigest
     )
       throw Error('INSTALLATION_DIGEST_MISMATCH');
-    const compilerNode = await version('/usr/sbin/chroot', [
+    const chroot = await resolveTrustedChroot();
+    const compilerNode = await version(chroot, [
       `${root}/node24/rootfs`,
       '/usr/local/bin/node',
       '--version',
     ]);
-    const captureNode = await version('/usr/sbin/chroot', [
+    const captureNode = await version(chroot, [
       `${root}/browser/rootfs`,
       '/usr/local/bin/node',
       '--version',
@@ -79,6 +110,7 @@ export function createPinnedLinuxInstallationVerifier(input: unknown) {
       toolchainDigest: pin.toolchainDigest,
       rootfs: { node24, browser },
       runscDigest,
+      gvisorBin,
       versions: { compilerNode, captureNode, runsc },
     };
   };

@@ -10,11 +10,14 @@ import {
   type OwnerRequestContext,
   requireExperienceOwner,
 } from './authorization';
+import { isCanonicalMerchantSlug } from './canonical-domain';
 import type { ExperienceCompositionSettings } from './compose-runtime';
 import {
   createProductionPrerenderPipeline,
   type PrerenderPipelineSettings,
 } from './local-prerender-pipeline';
+import { loadOwnerPreviewBootstrap } from './owner-preview-bootstrap';
+import { readPreviewBindingLiveness } from './preview-binding-liveness';
 import { createPreviewVault } from './preview-service';
 import {
   createPrivateExperienceCapture,
@@ -32,8 +35,14 @@ export function createProductionExperienceIntegration(settings: {
   previewOrigin?: string;
   executionOrigin: string;
   artifactDirectory: string;
-  canonicalBase: (slug: string) => string;
+  canonicalBase: (
+    slug: string,
+    signal?: AbortSignal
+  ) => string | Promise<string>;
   publicClient: SupabaseClient;
+  readPublishedRenderer?: Parameters<
+    typeof createProductionStorefront
+  >[0]['readPublishedRenderer'];
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
   authenticate: ExperienceCompositionSettings['authenticate'];
   resolveUserClient: ExperienceCompositionSettings['dispatcher']['resolveUserClient'];
@@ -44,47 +53,61 @@ export function createProductionExperienceIntegration(settings: {
     PrerenderPipelineSettings['build'],
     'execute' | 'profile' | 'hostOrigin'
   >;
-  bootstrap(
+  bootstrap?(
     ctx: OwnerRequestContext,
     manifest: ExperienceManifest,
     routeId: string
   ): Promise<PublicBootstrap>;
-  recordCapture(capture: RecordedPrivateCapture): Promise<void>;
+  recordCapture?(capture: RecordedPrivateCapture): Promise<void>;
+  remoteCapture?: ReturnType<typeof createPrivateExperienceCapture>;
 }) {
   const previewOrigin = settings.previewOrigin ?? settings.hostOrigin;
+  const bootstrap = settings.bootstrap ?? loadOwnerPreviewBootstrap;
   productionDeliveryOrigins({
     executionOrigin: settings.executionOrigin,
     hostOrigins: [settings.hostOrigin, previewOrigin],
   });
   if (settings.build.toolchainDigest !== settings.runner.toolchainDigest)
     throw Error('TOOLCHAIN_MISMATCH');
+  if (!settings.remoteCapture && !settings.recordCapture)
+    throw Error('VERIFIER_NOT_CONFIGURED');
   let active = true;
-  const guarded =
-    (
-      remoteExecute: ReturnType<typeof createRunnerExecutor>
-    ): typeof remoteExecute =>
-    async (kind, payload) => {
+  const guarded = (remoteExecute: ReturnType<typeof createRunnerExecutor>) => {
+    const withSignal: typeof remoteExecute.withSignal = async (
+      kind,
+      payload,
+      signal
+    ) => {
       if (!active) throw Error('PROFILE_DISABLED');
-      const result = await remoteExecute(kind, payload);
+      const result = await remoteExecute.withSignal(kind, payload, signal);
       if (!active) throw Error('PROFILE_DISABLED');
       return result;
     };
-  const execute = guarded(
-    createRunnerExecutor({ ...settings.runner, lane: 'owner' })
-  );
+    return Object.assign(
+      (kind: Parameters<typeof withSignal>[0], payload: unknown) =>
+        withSignal(kind, payload),
+      { withSignal }
+    );
+  };
+  const ownerExecutor = createRunnerExecutor({
+    ...settings.runner,
+    lane: 'owner',
+  });
+  const execute = guarded(ownerExecutor);
   const publicExecute = guarded(
     createRunnerExecutor({ ...settings.runner, lane: 'public-render' })
   );
   const vault = createPreviewVault({
     origin: settings.executionOrigin,
     now: Date.now,
-    async isActive(binding) {
+    async isActive(binding, signal) {
       if (!active) return false;
-      const result = await settings.publicClient.rpc(
-        'experience_preview_binding_active',
-        { p_binding: binding }
+      const live = await readPreviewBindingLiveness(
+        settings.publicClient,
+        binding,
+        signal
       );
-      return active && !result.error && result.data === true;
+      return active && live;
     },
   });
   const pipelines = new Map<
@@ -100,19 +123,27 @@ export function createProductionExperienceIntegration(settings: {
   ) => {
     if (!active) throw Error('PROFILE_DISABLED');
     const owner = await requireExperienceOwner(input, scope);
-    const merchant = await owner.supabase
+    const signal = owner.signal;
+    const lookup = owner.supabase
       .from('merchants')
       .select('slug')
-      .eq('id', owner.merchantId)
-      .maybeSingle();
+      .eq('id', owner.merchantId);
+    const merchant = await (signal
+      ? lookup.abortSignal(signal)
+      : lookup
+    ).maybeSingle();
+    signal?.throwIfAborted();
     if (
       merchant.error ||
       !merchant.data ||
       typeof merchant.data.slug !== 'string' ||
-      !/^[a-z0-9][a-z0-9-]{0,99}$/.test(merchant.data.slug)
+      !isCanonicalMerchantSlug(merchant.data.slug)
     )
       throw Error('NOT_FOUND');
-    const canonicalBase = settings.canonicalBase(merchant.data.slug);
+    const canonicalBase = await (signal
+      ? settings.canonicalBase(merchant.data.slug, signal)
+      : settings.canonicalBase(merchant.data.slug));
+    signal?.throwIfAborted();
     const canonicalOrigin = new URL(canonicalBase).origin;
     productionDeliveryOrigins({
       executionOrigin: settings.executionOrigin,
@@ -126,22 +157,31 @@ export function createProductionExperienceIntegration(settings: {
         canonicalBase,
         executionOrigin: settings.executionOrigin,
         vault,
+        previewExecute: execute.withSignal,
         build: {
           ...settings.build,
+          verifiedRendererStorage: Boolean(settings.readPublishedRenderer),
           hostOrigin: canonicalOrigin,
           previewOrigin,
           execute,
         },
-        bootstrap: settings.bootstrap,
+        bootstrap,
       });
-      const capture = createPrivateExperienceCapture({
-        profile: 'production',
-        hostOrigin: canonicalOrigin,
-        previewOrigin,
-        bootstrap: settings.bootstrap,
-        record: settings.recordCapture,
-        capture: (input) => captureExperience(input, execute),
-      });
+      const capture =
+        settings.remoteCapture ??
+        createPrivateExperienceCapture({
+          profile: 'production',
+          hostOrigin: canonicalOrigin,
+          previewOrigin,
+          bootstrap,
+          record:
+            settings.recordCapture ??
+            (() => Promise.reject(Error('VERIFIER_NOT_CONFIGURED'))),
+          capture: (input, signal) =>
+            captureExperience(input, (kind, payload) =>
+              execute.withSignal(kind, payload, signal)
+            ),
+        });
       if (pipelines.size >= 32) {
         const oldest = pipelines.keys().next().value;
         if (oldest) pipelines.delete(oldest);
@@ -154,11 +194,12 @@ export function createProductionExperienceIntegration(settings: {
   };
   const published = createProductionStorefront({
     client: settings.publicClient,
+    readPublishedRenderer: settings.readPublishedRenderer,
     artifactDirectory: settings.artifactDirectory,
     executionOrigin: settings.executionOrigin,
     canonicalBase: settings.canonicalBase,
     catalogImages: settings.catalogImages,
-    execute: publicExecute,
+    execute: publicExecute.withSignal,
   });
   const privateDelivery = createProductionPreviewDelivery({
     vault,
@@ -188,9 +229,9 @@ export function createProductionExperienceIntegration(settings: {
           : undefined,
       preview: async (ctx, input) =>
         (await pipelineFor(ctx)).capture(ctx, input),
-      resolveUserClient: async (identity) => {
+      resolveUserClient: async (identity, signal) => {
         if (!active) throw Error('PROFILE_DISABLED');
-        const client = await settings.resolveUserClient(identity);
+        const client = await settings.resolveUserClient(identity, signal);
         if (!active) throw Error('PROFILE_DISABLED');
         return client;
       },

@@ -6,7 +6,6 @@ import type {
 import { sourceDigest } from '@baci/shared/experience';
 import { experiencePerformanceReport } from '@/schemas/experience-performance';
 import { createDurablePrerenderArtifacts } from '../../../tools/experience-runner/durable-prerender-artifacts';
-import { runLocalQualification } from '../../../tools/experience-runner/local-oci-executor';
 import { createLocalPrerenderArtifacts } from '../../../tools/experience-runner/prerender-artifacts';
 import {
   type OwnerRequestContext,
@@ -21,13 +20,26 @@ import {
 } from './local-owner-runtime';
 import { createLocalPerformanceReports } from './local-performance-reports';
 import { validatePerformanceBootstrap } from './performance-bootstrap';
+import type { PrerenderPreviewOptions } from './prerender-preview';
 import type { PreviewVault } from './preview-service';
 import { productionDeliveryOrigins } from './production-origins';
+/** Prefer a route that does not require an existing catalog item. */
+export function selectInitialExperienceView(
+  routes: ExperienceManifest['routes']
+) {
+  const selected =
+    routes.find((route) => route.view === 'home') ??
+    routes.find((route) => route.view !== 'product') ??
+    routes[0];
+  if (!selected) throw Error('INVALID_ROUTE');
+  return selected.view;
+}
 /** Explicit local composition: the build and owner preview share exact companion output. */
 export interface PrerenderPipelineSettings {
   artifactDirectory?: string;
   canonicalBase: string;
   vault: PreviewVault;
+  previewExecute?: PrerenderPreviewOptions['executeWithSignal'];
   build: Omit<
     Parameters<typeof runExperienceBuild>[2],
     'bootstrap' | 'prerenderArtifacts'
@@ -95,8 +107,10 @@ function createPrerenderPipeline(
   );
   const prerender = {
     artifacts,
+    verifiedRendererStorage: settings.build.verifiedRendererStorage,
     bootstrap: settings.bootstrap,
     execute: settings.build.execute,
+    executeWithSignal: settings.previewExecute,
     previewOrigin: settings.build.previewOrigin,
   };
   const execute = settings.build.execute;
@@ -127,9 +141,14 @@ function createPrerenderPipeline(
         ...(profile === 'production' ? { profile: 'production' as const } : {}),
         prerenderArtifacts: artifacts,
         bootstrap: (owner, manifest) =>
-          settings.bootstrap(owner, manifest, manifest.routes[0].view),
+          settings.bootstrap(
+            owner,
+            manifest,
+            selectInitialExperienceView(manifest.routes)
+          ),
         performanceMeasurement: ({
           ctx: owner,
+          execute,
           manifest,
           candidate,
           renderer,
@@ -138,7 +157,7 @@ function createPrerenderPipeline(
           sourceDigest,
         }) =>
           measureCandidatePerformance({
-            execute: settings.build.execute ?? runLocalQualification,
+            execute,
             manifest,
             bootstrap: async (view) => {
               await requireExperienceOwner(owner);

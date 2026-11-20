@@ -7,6 +7,10 @@ import {
 import { productionDeliveryOrigins } from '../../src/lib/experience/production-origins';
 import type { createPublicOutputReader } from '../../src/lib/experience/public-output-reader';
 import { normalizeExperiencePath } from '../../src/lib/experience/route-ownership';
+import {
+  deliveryDocumentSandbox,
+  publishedDeliveryPolicy,
+} from './delivery-document-policy';
 import { rewriteCssAssetUrls } from './rewrite-css-asset-urls';
 
 /** Public output projection under normal anonymous RLS. This does not publish or
@@ -35,7 +39,7 @@ export function createProductionPublishedDelivery(config: {
     'X-Content-Type-Options': 'nosniff',
     'X-Robots-Tag': 'noindex,nofollow',
     'Permissions-Policy': 'camera=(),microphone=(),geolocation=(),payment=()',
-    'Content-Security-Policy': `default-src 'none';script-src 'self';style-src 'self' 'unsafe-inline';img-src 'self';font-src 'self';connect-src 'none';worker-src 'none';form-action 'none';base-uri 'none';frame-ancestors ${config.hostOrigin}`,
+    'Content-Security-Policy': publishedDeliveryPolicy(config.hostOrigin),
   };
   return async (request: Request): Promise<Response> => {
     try {
@@ -58,7 +62,10 @@ export function createProductionPublishedDelivery(config: {
         throw Error('NOT_FOUND');
       const [, slug, buildDigest, path] = match;
       if (path !== 'index.html' && url.search) throw Error('NOT_FOUND');
-      const head = await config.reader.manifest(slug);
+      const databaseSignal = () =>
+        AbortSignal.any([request.signal, AbortSignal.timeout(5_000)]);
+      const initialSignal = databaseSignal();
+      const head = await config.reader.manifest(slug, initialSignal);
       if (
         !head ||
         head.buildDigest !== buildDigest ||
@@ -66,7 +73,12 @@ export function createProductionPublishedDelivery(config: {
       )
         throw Error('NOT_FOUND');
       const read = async (filePath: string) => {
-        const file = await config.reader.read(slug, buildDigest, filePath);
+        const file = await config.reader.read(
+          slug,
+          buildDigest,
+          filePath,
+          initialSignal
+        );
         if (!file) throw Error('NOT_FOUND');
         let bytes = Buffer.from(file.bytes);
         if (filePath === 'app.css') {
@@ -109,7 +121,11 @@ export function createProductionPublishedDelivery(config: {
           { kind: 'published', buildDigest, executionOrigin }
         );
         response = new Response(html, {
-          headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
+          headers: {
+            ...headers,
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Security-Policy': `${headers['Content-Security-Policy']}; ${deliveryDocumentSandbox}`,
+          },
         });
       } else {
         const file = await read(path);
@@ -123,7 +139,7 @@ export function createProductionPublishedDelivery(config: {
       }
       // Recheck all output after awaits, including static bytes, not just documents.
       if (
-        JSON.stringify(await config.reader.manifest(slug)) !==
+        JSON.stringify(await config.reader.manifest(slug, databaseSignal())) !==
         JSON.stringify(head)
       )
         throw Error('NOT_FOUND');

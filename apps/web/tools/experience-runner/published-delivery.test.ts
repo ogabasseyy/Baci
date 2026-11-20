@@ -70,11 +70,31 @@ it('delivers custom prerendered controls with SRI, strict CSP and no writes', as
   expect(response.headers.get('content-security-policy')).toContain(
     "connect-src 'none'"
   );
+  expect(response.headers.get('content-security-policy')).toContain(
+    '; sandbox allow-scripts'
+  );
   expect(response.headers.has('set-cookie')).toBe(false);
-  for (const path of ['app.js', 'app.css'])
-    expect((await f.deliver(new Request(f.base + path))).status).toBe(200);
+  for (const path of ['app.js', 'app.css']) {
+    const asset = await f.deliver(new Request(f.base + path));
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get('content-security-policy')).not.toContain(
+      'sandbox'
+    );
+  }
   f.revoke();
   expect((await f.deliver(new Request(`${f.base}app.js`))).status).toBe(404);
+});
+it('serves public output with a fixed wildcard rather than reflecting the caller origin', async () => {
+  const f = fixture();
+  const response = await f.deliver(
+    new Request(`${f.base}app.js`, {
+      headers: { origin: 'https://evil.example' },
+    })
+  );
+  expect(response.status).toBe(200);
+  expect(response.headers.get('access-control-allow-origin')).toBe('*');
+  expect(response.headers.has('access-control-allow-credentials')).toBe(false);
+  expect(response.headers.has('set-cookie')).toBe(false);
 });
 it('withdraws output if publication changes while reading static resources or rendering HTML', async () => {
   const f = fixture();

@@ -4,10 +4,11 @@ import { experienceRunnerInstallationPin } from './experience-runner-installatio
 it('requires complete immutable installation digests and explicit tool versions', () => {
   const digest = 'a'.repeat(64);
   const pin = {
-    format: 'baci.runner-installation-pin/v1',
+    format: 'baci.runner-installation-pin/v2',
     toolchainDigest: digest,
     rootfs: { node24: digest, browser: digest },
     runscDigest: digest,
+    gvisorBinDigest: digest,
     versions: {
       compilerNode: 'v24.1.0',
       captureNode: 'v24.1.0',
@@ -15,6 +16,12 @@ it('requires complete immutable installation digests and explicit tool versions'
     },
   };
   expect(experienceRunnerInstallationPin.safeParse(pin).success).toBe(true);
+  expect(
+    experienceRunnerInstallationPin.safeParse({
+      ...pin,
+      gvisorBinDigest: undefined,
+    }).success
+  ).toBe(false);
   expect(
     experienceRunnerInstallationPin.safeParse({ ...pin, runscDigest: 'latest' })
       .success

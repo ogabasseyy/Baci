@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { readBuilderOwnedMerchant } from '@/lib/builder-connector/account-linking';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import {
   type ExperienceToolResult,
@@ -34,13 +35,17 @@ import {
 import { requestExperiencePublication } from './publication-service';
 import { requestExperienceRollback } from './rollback-service';
 import { adoptSourceCandidate } from './source-candidate';
-import { patchSource, readSource } from './source-service';
+import { patchSource, readSource, readSourceHead } from './source-service';
 import { experienceToolPolicy } from './tool-policy';
 import { beginUpload, finalizeUpload, writeChunk } from './upload-service';
 export interface ExperienceDispatcherDependencies {
   rendering?: 'client' | 'prerender-private';
+  backgroundBuilds?: boolean;
   readPerformance?: PerformanceReader;
-  resolveUserClient(identity: BuilderIdentity): Promise<SupabaseClient>;
+  resolveUserClient(
+    identity: BuilderIdentity,
+    signal?: AbortSignal
+  ): Promise<SupabaseClient>;
   finalizeBuild(
     ctx: OwnerRequestContext,
     input: { jobId: string; idempotencyKey: string }
@@ -61,32 +66,39 @@ export function createExperienceToolDispatcher(
   return async (
     identity: BuilderIdentity,
     name: ExperienceToolName,
-    raw: unknown
+    raw: unknown,
+    signal?: AbortSignal
   ): Promise<ExperienceToolResult> => {
     try {
+      signal?.throwIfAborted();
       const parsed = experienceToolInputs[name].parse(raw);
       const policy = experienceToolPolicy[name];
       if (policy.scopes.some((s) => !identity.scopes.has(s)))
         return experienceError('INSUFFICIENT_SCOPE');
       if (!identity.allowedMerchantIds.includes(parsed.storefrontId))
         return experienceError('NOT_FOUND');
-      const client = await deps.resolveUserClient(identity);
-      const { data, error } = await client
-        .from('merchants')
-        .select('id,user_id')
-        .eq('id', parsed.storefrontId)
-        .eq('user_id', identity.actorUserId)
-        .maybeSingle();
-      if (error || !data || data.user_id !== identity.actorUserId)
-        return experienceError('NOT_FOUND');
+      const client = await deps.resolveUserClient(identity, signal);
+      const merchantId = await readBuilderOwnedMerchant(
+        client,
+        parsed.storefrontId,
+        identity.actorUserId,
+        signal
+      );
+      if (!merchantId) return experienceError('NOT_FOUND');
       const ctx = await requireExperienceOwner(
-        { supabase: client, merchantId: data.id, identity },
+        {
+          supabase: client,
+          merchantId,
+          identity,
+          ...(signal && { signal }),
+        },
         policy.scopes.includes('storefront.write')
           ? 'storefront.write'
           : policy.scopes.includes('storefront.publish')
             ? 'storefront.publish'
             : 'storefront.read'
       );
+      signal?.throwIfAborted();
       const result = await execute(ctx, name, raw, deps);
       const safe = experienceToolResult.parse({ status: 'ok', value: result });
       return Buffer.byteLength(JSON.stringify(safe)) <= 98304
@@ -164,6 +176,7 @@ async function execute(
         operation,
         ...v
       } = experienceToolInputs.read_experience.parse(raw);
+      if (operation === 'head') return readSourceHead(ctx);
       return operation === 'read'
         ? readSource(ctx, v as Parameters<typeof readSource>[1])
         : operation === 'adopt-upload'
@@ -209,6 +222,13 @@ async function execute(
     case 'finalize_experience_build': {
       const { storefrontId: _, ...input } =
         experienceToolInputs.finalize_experience_build.parse(raw);
+      if (deps.backgroundBuilds) {
+        const operation = await readExperienceOperation(ctx, input.jobId);
+        if (operation.status !== 'finalized') return operation;
+        // The DB receipt can survive a crash before the renderer is retained.
+        await deps.finalizeBuild(ctx, input);
+        return operation;
+      }
       return deps.finalizeBuild(ctx, input);
     }
     case 'preview_experience': {
@@ -220,6 +240,7 @@ async function execute(
         deps.readPerformance,
         'storefront.write'
       );
+      ctx.signal?.throwIfAborted();
       const preview = await deps.preview(ctx, input);
       return {
         ...preview,

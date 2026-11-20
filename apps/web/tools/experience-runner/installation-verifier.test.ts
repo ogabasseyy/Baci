@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { lstat } from 'node:fs/promises';
+import { lstat, realpath } from 'node:fs/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   fileDigest,
@@ -9,7 +9,7 @@ import { createPinnedLinuxInstallationVerifier } from './installation-verifier';
 
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
 vi.mock('node:util', () => ({ promisify: (fn: unknown) => fn }));
-vi.mock('node:fs/promises', () => ({ lstat: vi.fn() }));
+vi.mock('node:fs/promises', () => ({ lstat: vi.fn(), realpath: vi.fn() }));
 vi.mock('./installation-inventory', () => ({
   fileDigest: vi.fn(),
   inventoryInstallationTree: vi.fn(),
@@ -20,10 +20,11 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 const pin = {
-  format: 'baci.runner-installation-pin/v1',
+  format: 'baci.runner-installation-pin/v2',
   toolchainDigest: 'a'.repeat(64),
   rootfs: { node24: 'b'.repeat(64), browser: 'c'.repeat(64) },
   runscDigest: 'd'.repeat(64),
+  gvisorBinDigest: 'f'.repeat(64),
   versions: {
     compilerNode: 'v24.21.0',
     captureNode: 'v24.20.0',
@@ -32,14 +33,20 @@ const pin = {
 };
 function fixture() {
   Object.defineProperty(process, 'platform', { value: 'linux' });
+  vi.mocked(realpath).mockResolvedValue('/usr/lib/cargo/bin/coreutils/chroot');
   vi.mocked(lstat).mockResolvedValue({
     uid: 0,
     mode: 0o755,
     isSymbolicLink: () => false,
     isDirectory: () => true,
+    isFile: () => true,
   } as never);
   vi.mocked(inventoryInstallationTree).mockImplementation(async (path) => ({
-    digest: path.includes('/node24/') ? pin.rootfs.node24 : pin.rootfs.browser,
+    digest: path.includes('/node24/')
+      ? pin.rootfs.node24
+      : path === '/usr/local/bin/gvisor-bin'
+        ? pin.gvisorBinDigest
+        : pin.rootfs.browser,
     entries: 100,
     bytes: 1000,
   }));
@@ -59,9 +66,42 @@ it('measures both trees, runtime bytes and versions before returning the trusted
   fixture();
   const result = await createPinnedLinuxInstallationVerifier(pin)();
   expect(result.toolchainDigest).toBe(pin.toolchainDigest);
-  expect(inventoryInstallationTree).toHaveBeenCalledTimes(2);
+  expect(inventoryInstallationTree).toHaveBeenCalledTimes(3);
+  expect(inventoryInstallationTree).toHaveBeenCalledWith(
+    '/usr/local/bin/gvisor-bin'
+  );
   expect(fileDigest).toHaveBeenCalledWith('/usr/local/bin/runsc');
   expect(execFile).toHaveBeenCalledTimes(3);
+  expect(execFile).toHaveBeenCalledWith(
+    '/usr/lib/cargo/bin/coreutils/chroot',
+    expect.arrayContaining(['--version']),
+    expect.anything()
+  );
+});
+it('rejects a chroot resolved outside trusted system paths', async () => {
+  fixture();
+  vi.mocked(realpath).mockResolvedValue('/tmp/chroot');
+  await expect(createPinnedLinuxInstallationVerifier(pin)()).rejects.toThrow(
+    'UNTRUSTED_CHROOT'
+  );
+  expect(execFile).not.toHaveBeenCalled();
+});
+it('fails closed if a gVisor helper changes, before executing the runtime', async () => {
+  fixture();
+  vi.mocked(inventoryInstallationTree).mockImplementation(async (path) => ({
+    digest:
+      path === '/usr/local/bin/gvisor-bin'
+        ? 'e'.repeat(64)
+        : path.includes('/node24/')
+          ? pin.rootfs.node24
+          : pin.rootfs.browser,
+    entries: 100,
+    bytes: 1000,
+  }));
+  await expect(createPinnedLinuxInstallationVerifier(pin)()).rejects.toThrow(
+    'INSTALLATION_DIGEST_MISMATCH'
+  );
+  expect(execFile).not.toHaveBeenCalled();
 });
 it('fails closed on byte drift before invoking any installed executable', async () => {
   fixture();
@@ -92,6 +132,13 @@ it('rejects writable installation paths and version drift', async () => {
   );
 });
 it('rejects malformed pins and native startup on unsupported hosts', async () => {
+  const { gvisorBinDigest: _ignored, ...legacyPin } = pin;
+  expect(() =>
+    createPinnedLinuxInstallationVerifier({
+      ...legacyPin,
+      format: 'baci.runner-installation-pin/v1',
+    })
+  ).toThrow();
   expect(() =>
     createPinnedLinuxInstallationVerifier({
       ...pin,
@@ -113,6 +160,7 @@ it('requires a sticky root-owned directory for the writable /var/tmp parent', as
         mode: path === '/var/tmp' ? 0o777 : 0o755,
         isSymbolicLink: () => false,
         isDirectory: () => true,
+        isFile: () => true,
       }) as never
   );
   await expect(createPinnedLinuxInstallationVerifier(pin)()).rejects.toThrow(
@@ -126,6 +174,7 @@ it('requires a sticky root-owned directory for the writable /var/tmp parent', as
         mode: path === '/var/tmp' ? 0o1777 : 0o755,
         isSymbolicLink: () => false,
         isDirectory: () => true,
+        isFile: () => true,
       }) as never
   );
   await expect(

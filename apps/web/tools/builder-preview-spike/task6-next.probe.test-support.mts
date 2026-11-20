@@ -170,7 +170,7 @@ try {
   })
     .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: 'task6' })
     .setIssuer('https://auth.usebaci.com')
-    .setAudience('https://mcp.usebaci.com/builder/mcp')
+    .setAudience('https://builder-mcp.usebaci.com/builder/mcp')
     .setSubject(actor)
     .setExpirationTime('5m')
     .sign(signing.privateKey);

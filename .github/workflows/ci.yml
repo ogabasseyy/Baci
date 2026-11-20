@@ -74,6 +74,14 @@ jobs:
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test Muse comment review concurrency routing
         run: node --test .github/scripts/muse-comment-review-concurrency.test.mjs
+      - name: Test builder execution proxy
+        run: node --test apps/builder-execution-proxy/worker.test.mjs
+      - name: Install Cosign for the Caddy release signature
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62
+        with:
+          cosign-release: v2.6.2
+      - name: Test builder execution HTTPS ingress
+        run: bash apps/builder-execution-proxy/ci-ingress.sh
       - name: Test loyalty replay binary discovery
         run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening

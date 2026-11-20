@@ -135,7 +135,7 @@ test('Data API accepts normal upstream authority but rejects a builder token and
     })
       .setProtectedHeader({ alg: 'ES256', kid: 'builder', typ: 'at+jwt' })
       .setIssuer('https://auth.usebaci.com')
-      .setAudience('https://mcp.usebaci.com/builder/mcp')
+      .setAudience('https://builder-mcp.usebaci.com/builder/mcp')
       .setSubject(actor)
       .setExpirationTime('5m')
       .sign(builder.privateKey);

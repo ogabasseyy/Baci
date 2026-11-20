@@ -18,6 +18,42 @@ export interface PublicVerificationExpected {
   assets: Record<string, string>;
   publicationRevision: number;
 }
+const requiredJourney = [
+  'navigate',
+  'product',
+  'cart-add',
+  'cart-read',
+  'checkout-review',
+] as const;
+
+function hasCompleteJourney(steps: PublicVerificationExpected['journeySteps']) {
+  let next = 0;
+  for (const step of steps) {
+    if (step.action === requiredJourney[next]) next++;
+  }
+  return next === requiredJourney.length;
+}
+
+function matchesJourney(
+  expected: PublicVerificationExpected,
+  observed: PublicVerificationExpected['journeySteps']
+) {
+  if (observed.length !== expected.journeySteps.length) return false;
+  const routePaths = new Set(expected.routes.map((route) => route.path));
+  return observed.every((step, index) => {
+    const required = expected.journeySteps[index];
+    if (!required || step.action !== required.action) return false;
+    if (step.path === required.path) return true;
+    // Custom carts can open as overlays on declared storefront routes. The
+    // observer must still prove the action; a route match alone is not proof.
+    return (
+      (step.action === 'cart-add' ||
+        step.action === 'cart-read' ||
+        step.action === 'checkout-review') &&
+      routePaths.has(step.path)
+    );
+  });
+}
 /** Observations come from trusted browser/network inspection, never a model flag. */
 export async function verifyPublicExperience(
   expected: PublicVerificationExpected,
@@ -43,10 +79,8 @@ export async function verifyPublicExperience(
           .map(({ path, canonical, title }) => ({ path, canonical, title }))
           .sort((a, b) => a.path.localeCompare(b.path))
       ) ||
-    expected.journeySteps.length === 0 ||
-    JSON.stringify(
-      observed.journey.steps.map(({ action, path }) => ({ action, path }))
-    ) !== JSON.stringify(expected.journeySteps) ||
+    !hasCompleteJourney(expected.journeySteps) ||
+    !matchesJourney(expected, observed.journey.steps) ||
     JSON.stringify(Object.entries(observed.assets).sort()) !==
       JSON.stringify(Object.entries(expected.assets).sort())
   )

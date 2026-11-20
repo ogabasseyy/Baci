@@ -4,18 +4,24 @@ export interface ExperienceOwnerRuntime {
   readPerformance?: PerformanceReader;
   approval?: {
     load(client: SupabaseClient, approvalId: string): Promise<unknown>;
-    confirm(client: SupabaseClient, approvalId: string): Promise<unknown>;
+    confirm(
+      client: SupabaseClient,
+      approvalId: string,
+      signal?: AbortSignal
+    ): Promise<unknown>;
     loadLifecycle?(
       client: SupabaseClient,
       approvalId: string
     ): Promise<unknown>;
     confirmPublication?(
       client: SupabaseClient,
-      approvalId: string
+      approvalId: string,
+      signal?: AbortSignal
     ): Promise<unknown>;
     confirmModeExit?(
       client: SupabaseClient,
-      approvalId: string
+      approvalId: string,
+      signal?: AbortSignal
     ): Promise<unknown>;
   };
   createPreviewLaunch(
@@ -23,6 +29,7 @@ export interface ExperienceOwnerRuntime {
       supabase: SupabaseClient;
       merchantId: string;
       requestOrigin?: string;
+      signal?: AbortSignal;
     },
     input: { buildId: string; routeId?: string }
   ): Promise<unknown>;

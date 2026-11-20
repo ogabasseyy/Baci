@@ -31,8 +31,8 @@ it('rejects wrong, expired or revoked builder credentials and scope escalation b
     },
   });
   const sign = async (
-    issuer = 'https://auth.usebaci.com',
-    audience = 'https://mcp.usebaci.com/builder/mcp',
+    issuer = 'https://builder-auth.usebaci.com',
+    audience = 'https://builder-mcp.usebaci.com/builder/mcp',
     exp: string | number = '5m'
   ) =>
     new SignJWT({ connectionId: id, grantVersion: 1, scope: 'storefront.read' })
@@ -57,6 +57,9 @@ it('rejects wrong, expired or revoked builder credentials and scope escalation b
     );
   for (const token of [
     await sign('https://wrong.invalid'),
+    await sign('https://auth.usebaci.com'),
+    await sign('https://mcp.usebaci.com'),
+    await sign(undefined, 'https://mcp.usebaci.com/builder/mcp'),
     await sign(undefined, 'authenticated'),
     await sign(undefined, undefined, 1),
   ])

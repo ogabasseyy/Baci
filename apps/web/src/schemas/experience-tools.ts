@@ -21,6 +21,7 @@ const lifecycle = {
 export const experienceToolInputs = {
   get_experience_capabilities: z.strictObject(store),
   read_experience: z.discriminatedUnion('operation', [
+    z.strictObject({ ...store, operation: z.literal('head') }),
     z.strictObject({
       ...store,
       operation: z.literal('read'),

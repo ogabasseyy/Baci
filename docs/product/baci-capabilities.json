@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-20T08:22:40+00:00",
-  "source_revision": "bddf07d225746176c69d3608f1ebe489a9ae1c6b",
-  "evidence_digest": "0ef2e4c316d669ed7cb300d01163f7f3bc955f057ed468984c7074563e2f6042",
-  "claims_digest": "8db335eb38cb563a237da15cd9629ceff842b3d558555b8841785dfe0690e8d8",
-  "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the Shopping MCP access map after the misleading link-only add_to_cart alias was retired: anonymous discovery exposes prepare_storefront_cart_link, connected discovery omits it, and clients with cached tool lists must refresh discovery. The connected cart read tool text was reworded with no claim moved; all other register and access-map citations were checked unchanged from the prior reviewed tree. No new production capability promotion.",
+  "reviewed_at": "2026-11-20T10:15:31+00:00",
+  "source_revision": "1f97293c533c71795b7659cfd8b99b8b8ccdb616",
+  "evidence_digest": "0c80d328e50397abb14ec6f9f501a32cdf65a724d7c7211fd5266ea8863715f7",
+  "claims_digest": "4ec3cef32078b4091bbbd01dceee1bb3e3aa57e9ddfb3759ecbac1fdaf940c24",
+  "review_scope": "Source evidence only. Preserves current main\u2019s OAuth, cart retention and notices, payment reconciliation, merchant protocols and Oxygen pilot boundaries. Full-code storefront MCP remains disabled by default. Owner approval, evidence and public-verification schemas retain their existing validation. Direct local admission, source adoption, rollback and simulated commerce tests cover authority boundaries. Hosted qualification and activation remain separate. Re-reviewed the Shopping MCP access map after the misleading link-only add_to_cart alias was retired: anonymous discovery exposes prepare_storefront_cart_link, connected discovery omits it, and clients with cached tool lists must refresh discovery. The connected cart read tool text was reworded with no claim moved; the full-code builder source was also re-reviewed against the merged tree for its durable worker and verified renderer storage, both still disabled by default. Reviewed builder admission and drain. No capability promotion.",
   "capabilities": [
     {
       "id": "payments",
@@ -238,14 +238,17 @@
       "id": "custom-storefront-mcp",
       "title": "Full-code storefront MCP foundations",
       "status": "code_evidenced",
-      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine.",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine. When explicitly enabled in private operator configuration, the hosted candidate runs builds in a durable background worker and exposes their status through MCP. The candidate retains independently verified renderer output in PostgreSQL before finalizing a full-code build.",
       "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
       "source_refs": [
         "apps/web/builder-mcp-server/registry.ts",
         "apps/web/src/lib/experience/production-integration.ts",
         "apps/web/tools/experience-runner/linux-runner.ts",
         "apps/web/tools/experience-runner/preview-delivery.ts",
-        "docs/connectors/experience-runner-delivery-qualification.md"
+        "docs/connectors/experience-runner-delivery-qualification.md",
+        "docs/connectors/builder-background-finalization.md",
+        "apps/web/tools/builder-production/production-start.ts",
+        "supabase/migrations/20261119103000_experience_verified_renderer_storage.sql"
       ]
     },
     {

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { asActor, draftFixture } from './draft-fixture';
+import { asActor, draftFixture } from './draft-fixture.ts';
 
 it('drains pending, running and processing legacy jobs before dropping draft columns', async () => {
   const f = await draftFixture({ cutover: false });

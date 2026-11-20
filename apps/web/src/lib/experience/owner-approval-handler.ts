@@ -4,14 +4,27 @@ import {
   experienceApprovalId,
   experienceApprovalPost,
 } from '@/schemas/experience-publication';
+import { VerifierTemporarilyUnavailable } from './verifier-availability';
 export interface OwnerApprovalDependencies {
   ownerClient(request: Request): Promise<SupabaseClient | null>;
   checkMutation(request: Request): Promise<Response | null>;
   load(client: SupabaseClient, id: string): Promise<unknown>;
-  confirm(client: SupabaseClient, id: string): Promise<unknown>;
+  confirm(
+    client: SupabaseClient,
+    id: string,
+    signal?: AbortSignal
+  ): Promise<unknown>;
   loadLifecycle?(client: SupabaseClient, id: string): Promise<unknown>;
-  confirmPublication?(client: SupabaseClient, id: string): Promise<unknown>;
-  confirmModeExit?(client: SupabaseClient, id: string): Promise<unknown>;
+  confirmPublication?(
+    client: SupabaseClient,
+    id: string,
+    signal?: AbortSignal
+  ): Promise<unknown>;
+  confirmModeExit?(
+    client: SupabaseClient,
+    id: string,
+    signal?: AbortSignal
+  ): Promise<unknown>;
 }
 /** No install side effects and no provider imports. The route supplies normal auth. */
 export function createOwnerApprovalHandler(deps: OwnerApprovalDependencies) {
@@ -62,9 +75,14 @@ export function createOwnerApprovalHandler(deps: OwnerApprovalDependencies) {
             ? deps.confirmPublication
             : deps.confirmModeExit;
       if (!confirm) return respond({ error: 'Approval unavailable.' }, 503);
-      return respond(await confirm(owner, parsed.data.approvalId));
-    } catch {
-      return respond({ error: 'Approval unavailable.' }, 403);
+      request.signal.throwIfAborted();
+      return respond(
+        await confirm(owner, parsed.data.approvalId, request.signal)
+      );
+    } catch (error) {
+      const status =
+        error instanceof VerifierTemporarilyUnavailable ? 503 : 403;
+      return respond({ error: 'Approval unavailable.' }, status);
     }
   };
 }

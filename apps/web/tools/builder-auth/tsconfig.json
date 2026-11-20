@@ -13,5 +13,10 @@
     "checkJs": false
   },
   "include": ["./*.ts"],
-  "exclude": ["publication*.ts", "verify-publication.ts", "local-postgres*.ts"]
+  "exclude": [
+    "edit-apply-replay.test.ts",
+    "publication*.ts",
+    "verify-publication.ts",
+    "local-postgres*.ts"
+  ]
 }

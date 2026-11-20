@@ -167,13 +167,25 @@ it('resolves each authorized merchant canonical base afresh and accepts the exac
   const directory = mkdtempSync(join(tmpdir(), 'baci-production-tenants-'));
   try {
     const f = fixture(directory);
-    const canonicalBase = vi.fn(f.settings.canonicalBase);
+    const canonicalBase = vi.fn(async (slug: string) =>
+      Promise.resolve(f.settings.canonicalBase(slug))
+    );
     const integration = createProductionExperienceIntegration({
       ...f.settings,
       canonicalBase,
     });
-    const context = (merchantId: string, slug: string, authorized = true) => {
+    const context = (
+      merchantId: string,
+      slug: string,
+      authorized = true,
+      disconnect?: AbortController
+    ) => {
       const filters: [string, string, unknown][] = [];
+      const rpcResult = async () => ({ data: authorized, error: null });
+      const merchantSignal = vi.fn(function (this: unknown) {
+        disconnect?.abort();
+        return this;
+      });
       const supabase = {
         auth: {
           getUser: vi.fn(async () => ({
@@ -181,10 +193,11 @@ it('resolves each authorized merchant canonical base afresh and accepts the exac
             error: null,
           })),
         },
-        rpc: vi.fn(async () => ({ data: authorized, error: null })),
+        rpc: () => Object.assign(rpcResult(), { abortSignal: rpcResult }),
         from: (table: string) => {
           const query = {
             select: vi.fn().mockReturnThis(),
+            abortSignal: merchantSignal,
             eq: (column: string, value: unknown) => {
               filters.push([table, column, value]);
               return query;
@@ -202,8 +215,10 @@ it('resolves each authorized merchant canonical base afresh and accepts the exac
           merchantId,
           supabase: supabase as never,
           requestOrigin: 'https://builder.baci.test',
+          signal: disconnect?.signal,
         },
         filters,
+        merchantSignal,
       };
     };
     for (const slug of ['alpha', 'beta']) {
@@ -223,6 +238,17 @@ it('resolves each authorized merchant canonical base afresh and accepts the exac
       ]);
     }
     const before = canonicalBase.mock.calls.length;
+    const disconnect = new AbortController();
+    const cancelled = context('abandoned', 'gamma', true, disconnect);
+    await expect(
+      integration.composition.owner.createPreviewLaunch(cancelled.ctx, {
+        buildId: 'missing',
+        routeId: 'home',
+      })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancelled.merchantSignal).toHaveBeenCalledExactlyOnceWith(
+      disconnect.signal
+    );
     await expect(
       integration.composition.owner.createPreviewLaunch(
         context('denied', 'other', false).ctx,

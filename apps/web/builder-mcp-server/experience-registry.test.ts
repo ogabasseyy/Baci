@@ -1,4 +1,6 @@
 import { expect, it, vi } from 'vitest';
+import reviewDraft from '../chatgpt-builder-plugin/full-code-review-metadata.draft.json';
+import mcpDraft from '../chatgpt-builder-plugin/mcp.config-draft.json';
 import { experienceToolPolicy } from '../src/lib/experience/tool-policy';
 import {
   type ExperienceToolName,
@@ -10,10 +12,29 @@ import {
   experienceWireInputs,
   listedExperienceSchemas,
 } from './experience-contracts';
-import wire from './experience-contracts.json';
+import output from './experience-contracts.json';
+import { experienceToolDescriptions } from './experience-metadata';
+import inputs from './experience-wire-inputs';
+import { BUILDER_RESOURCE } from './metadata';
 import { registerBuilderTools } from './registry';
 
 const id = '11111111-1111-4111-8111-111111111111';
+it('guides status reconciliation after an indeterminate finalization response', () => {
+  const description =
+    experienceToolDescriptions.finalize_experience_build.description;
+  expect(description).toContain('get_experience_operation');
+  expect(description).toContain('same jobId');
+  expect(description).toContain('do not assume failure');
+  expect(description).toContain('background processing');
+  expect(description).toContain('may still be queued');
+});
+it('guides localized commerce controls without replacing commerce operations', () => {
+  const description =
+    experienceToolDescriptions.get_experience_capabilities.description;
+  expect(description).toContain('data-baci-commerce="add"');
+  expect(description).toContain('data-baci-commerce="checkout"');
+  expect(description).toContain('do not replace Baci commerce calls');
+});
 function server() {
   const registered = new Map<
     string,
@@ -40,7 +61,7 @@ function server() {
   return { mock, registered, list: () => list?.() };
 }
 it('disabled discovery is the unchanged eight legacy tools; enabled schemas/policies equal runtime and generated wire', async () => {
-  expect(wire).toEqual(experienceWireContracts());
+  expect({ inputs, output }).toEqual(experienceWireContracts());
   for (const enabled of [false, true]) {
     const s = server();
     registerBuilderTools(s.mock as never, {
@@ -208,5 +229,48 @@ it('rejects unknown root properties in every converted tool schema', () => {
     expect(schema.safeParse({ ...input, unexpected: true }).success, name).toBe(
       false
     );
+  }
+});
+
+it('the review draft targets the exact resource and requests the scopes used by its positive cases', async () => {
+  const mcp = mcpDraft.mcpServers['baci-builder'];
+  const auth = mcp.extensions['com.openai'].auth;
+  expect(mcp.url).toBe(BUILDER_RESOURCE);
+  expect(auth).toMatchObject({
+    resource: BUILDER_RESOURCE,
+    client: { mode: 'provided', tokenEndpointAuthMethod: 'none' },
+    baseScopes: ['openid', 'offline_access', 'storefront.read'],
+    defaultScopes: ['storefront.write'],
+  });
+
+  const s = server();
+  registerBuilderTools(s.mock as never, {
+    executeBuilderTool: vi.fn(),
+    experience: { enabled: true },
+  });
+  const tools = (await s.list())?.tools ?? [];
+  const cases = reviewDraft.extensions['com.openai'].review.test_cases.positive;
+  const positiveTools = cases.flatMap((testCase) =>
+    testCase.tools_triggered.split(',').map((name) => name.trim())
+  );
+  for (const name of ['publish_experience', 'rollback_experience']) {
+    expect(positiveTools).not.toContain(name);
+    expect(tools.find((tool) => tool.name === name)?.securitySchemes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scopes: expect.arrayContaining(['storefront.publish']),
+        }),
+      ])
+    );
+  }
+  for (const name of positiveTools) {
+    const tool = tools.find((entry) => entry.name === name);
+    expect(tool, name).toBeDefined();
+    const schemes = tool?.securitySchemes as Array<{ scopes: string[] }>;
+    for (const scope of schemes.flatMap((scheme) => scheme.scopes)) {
+      expect([...auth.baseScopes, ...auth.defaultScopes], name).toContain(
+        scope
+      );
+    }
   }
 });

@@ -8,7 +8,10 @@ import {
   fileDigest,
   inventoryInstallationTree,
 } from '../../tools/experience-runner/installation-inventory';
-import { createPinnedLinuxInstallationVerifier } from '../../tools/experience-runner/installation-verifier';
+import {
+  createPinnedLinuxInstallationVerifier,
+  resolveTrustedChroot,
+} from '../../tools/experience-runner/installation-verifier';
 import { createLinuxRunner } from '../../tools/experience-runner/linux-runner';
 import { packPrivateBuild } from '../../tools/experience-runner/private-build-payload';
 import { createRunnerExecutor } from '../../tools/experience-runner/runner-transport';
@@ -22,6 +25,7 @@ const root = '/var/tmp/baci-experience-checkpoint-a';
 if (input.mode === 'inspect') {
   const node24 = await inventoryInstallationTree(`${root}/node24/rootfs`);
   const browser = await inventoryInstallationTree(`${root}/browser/rootfs`);
+  const chroot = await resolveTrustedChroot();
   const version = (program: string, args = ['--version']) =>
     execFileSync(program, args, {
       encoding: 'utf8',
@@ -29,17 +33,20 @@ if (input.mode === 'inspect') {
       maxBuffer: 4096,
     }).trim();
   const pin = experienceRunnerInstallationPin.parse({
-    format: 'baci.runner-installation-pin/v1',
+    format: 'baci.runner-installation-pin/v2',
     toolchainDigest: input.toolchainDigest,
     rootfs: { node24: node24.digest, browser: browser.digest },
     runscDigest: await fileDigest('/usr/local/bin/runsc'),
+    gvisorBinDigest: (
+      await inventoryInstallationTree('/usr/local/bin/gvisor-bin')
+    ).digest,
     versions: {
-      compilerNode: version('/usr/sbin/chroot', [
+      compilerNode: version(chroot, [
         `${root}/node24/rootfs`,
         '/usr/local/bin/node',
         '--version',
       ]),
-      captureNode: version('/usr/sbin/chroot', [
+      captureNode: version(chroot, [
         `${root}/browser/rootfs`,
         '/usr/local/bin/node',
         '--version',

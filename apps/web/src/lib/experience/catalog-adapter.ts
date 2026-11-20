@@ -13,6 +13,12 @@ import {
   experienceCatalogSelectionSchema,
 } from '@/schemas/experience-catalog';
 import {
+  type ExperienceContext,
+  type OwnerRequestContext,
+  ownerRpcArgs,
+  requireExperienceOwner,
+} from './authorization';
+import {
   experienceCatalogRevision,
   readConsistentCatalog,
 } from './catalog-revision';
@@ -27,8 +33,17 @@ export function projectExperienceCatalog(
   rows: unknown[],
   images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
 ): PublicCatalog {
+  return projectCatalog(merchant, rows, images, false);
+}
+
+function projectCatalog(
+  merchant: ExperienceCatalogMerchant,
+  rows: unknown[],
+  images: ReadonlyMap<string, { assetId: string; alt: string }>,
+  ownerPreview: boolean
+): PublicCatalog {
   const products: PublicProduct[] = [];
-  if (merchant.is_published)
+  if (merchant.is_published || ownerPreview)
     for (const row of rows) {
       const parsed = experienceCatalogRowSchema.safeParse(row);
       if (!parsed.success) throw Error('INVALID_CATALOG');
@@ -76,20 +91,72 @@ export function projectExperienceCatalog(
   };
 }
 /** Client must be the normal public/RLS client; merchant was resolved by the host/page. */
-export async function loadExperienceCatalog(
+export function loadExperienceCatalog(
   client: SupabaseClient,
   merchant: ExperienceCatalogMerchant,
   selection: unknown,
-  images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
+  images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map(),
+  signal?: AbortSignal
 ): Promise<PublicCatalog | null> {
+  return readCatalog(client, merchant, selection, images, undefined, signal);
+}
+
+/** Authenticated owner preview may include an unpublished merchant's active catalog. */
+export async function loadOwnerPreviewCatalog(
+  ctx: OwnerRequestContext,
+  selection: unknown,
+  images: ReadonlyMap<string, { assetId: string; alt: string }> = new Map()
+): Promise<{ catalog: PublicCatalog; currency: string } | null> {
+  experienceCatalogSelectionSchema.parse(selection);
+  ctx.signal?.throwIfAborted();
+  const owner = await requireExperienceOwner(ctx, 'storefront.read');
+  const signal = owner.signal;
+  signal?.throwIfAborted();
+  const merchantQuery = owner.supabase
+    .from('merchants')
+    .select('id,payout_currency,is_published')
+    .eq('id', owner.merchantId);
+  const merchant = await (signal
+    ? merchantQuery.abortSignal(signal)
+    : merchantQuery
+  ).maybeSingle();
+  if (merchant.error || !merchant.data || merchant.data.id !== owner.merchantId)
+    throw Error('NOT_FOUND');
+  const currency = merchant.data.payout_currency ?? 'NGN';
+  const result = await readCatalog(
+    owner.supabase,
+    {
+      id: merchant.data.id,
+      currency,
+      is_published: merchant.data.is_published === true,
+    },
+    selection,
+    images,
+    owner,
+    signal
+  );
+  signal?.throwIfAborted();
+  await requireExperienceOwner(owner, 'storefront.read');
+  return result ? { catalog: result, currency } : null;
+}
+
+async function readCatalog(
+  client: SupabaseClient,
+  merchant: ExperienceCatalogMerchant,
+  selection: unknown,
+  images: ReadonlyMap<string, { assetId: string; alt: string }>,
+  owner?: ExperienceContext,
+  signal?: AbortSignal
+): Promise<PublicCatalog | null> {
+  const ownerPreview = Boolean(owner);
   const input = experienceCatalogSelectionSchema.parse(selection);
-  if (!merchant.is_published) return null;
+  if (!merchant.is_published && !ownerPreview) return null;
   const generation = async () => {
-    const r = await client
+    const query = client
       .from('experience_catalog_generations')
       .select('generation')
-      .eq('merchant_id', merchant.id)
-      .maybeSingle();
+      .eq('merchant_id', merchant.id);
+    const r = await (signal ? query.abortSignal(signal) : query).maybeSingle();
     if (r.error) throw Error('CATALOG_UNAVAILABLE');
     return r.data ? String(r.data.generation) : null;
   };
@@ -110,19 +177,38 @@ export async function loadExperienceCatalog(
         query = query.eq('product_categories.category_id', input.categoryId);
       if (input.productId) query = query.eq('id', input.productId);
       if (input.productSlug) query = query.eq('slug', input.productSlug);
-      const r = await query;
+      const r = await (signal ? query.abortSignal(signal) : query);
       if (r.error) throw Error('CATALOG_UNAVAILABLE');
       const products = r.data ?? [];
-      if (!products.length) return projectExperienceCatalog(merchant, []);
+      if (!products.length)
+        return projectCatalog(merchant, [], images, ownerPreview);
       const ids = products.map((p) => p.id);
       // The public RPC excludes inventory anchors. Anonymous RLS deliberately
       // hides private variant metadata; it must not become a visibility join.
+      const variantQuery = client.rpc('get_storefront_product_variants', {
+        p_product_ids: ids,
+      });
       const [variants, summaries] = await Promise.all([
-        client.rpc('get_storefront_product_variants', { p_product_ids: ids }),
+        signal ? variantQuery.abortSignal(signal) : variantQuery,
         getPublicSerializedVariantSummariesByProductId(
           client,
           merchant.id,
-          ids
+          ids,
+          undefined,
+          owner && !merchant.is_published
+            ? async (supabase, _merchantId, productIds) => {
+                const counts = supabase.rpc(
+                  'experience_owner_serialized_availability_counts',
+                  { ...ownerRpcArgs(owner), p_product_ids: productIds }
+                );
+                const { data, error } = await (signal
+                  ? counts.abortSignal(signal)
+                  : counts);
+                if (error) throw Error('CATALOG_UNAVAILABLE');
+                return data;
+              }
+            : undefined,
+          signal
         ),
       ]);
       if (
@@ -131,7 +217,7 @@ export async function loadExperienceCatalog(
         variants.data.length > 500
       )
         throw Error('CATALOG_UNAVAILABLE');
-      return projectExperienceCatalog(
+      return projectCatalog(
         merchant,
         products.map((p) => ({
           ...p,
@@ -162,17 +248,35 @@ export async function loadExperienceCatalog(
               productId: p.id,
               parentStock: getEffectiveProductStock(p),
             }
-          ).map((v) => ({
-            id: v.id,
-            attributes: v.attributes,
-            price_override: v.price_override,
-            stock_quantity: v.stock_quantity,
-            is_purchasable: isProductVariantPurchasable(p.manage_stock, v),
-            effective_policy: v.effective_policy,
-            available_units: v.available_units,
-          })),
+          ).map((v) => {
+            const summary =
+              owner && !merchant.is_published
+                ? summaries.find(
+                    (item) => item.productId === p.id && item.variantId === v.id
+                  )
+                : undefined;
+            const inventory = summary
+              ? {
+                  effective_policy: summary.inventoryTrackingPolicy,
+                  available_units: summary.publicAvailableUnits,
+                }
+              : v;
+            return {
+              id: v.id,
+              attributes: v.attributes,
+              price_override: v.price_override,
+              stock_quantity: v.stock_quantity,
+              is_purchasable: isProductVariantPurchasable(p.manage_stock, {
+                ...v,
+                ...inventory,
+              }),
+              effective_policy: inventory.effective_policy,
+              available_units: inventory.available_units,
+            };
+          }),
         })),
-        images
+        images,
+        ownerPreview
       );
     },
   });

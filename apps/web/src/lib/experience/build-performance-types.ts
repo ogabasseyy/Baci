@@ -3,10 +3,12 @@ import type { ExperiencePerformanceReport } from '@/schemas/experience-performan
 import type { loadOfflineAssets } from './asset-service';
 import type { OwnerRequestContext } from './authorization';
 import type { verifyCompiledCandidate } from './build-service';
+import type { ExperienceBuildExecutor } from './local-build-supervisor-types';
 
 export interface BuildPerformanceDependencies {
   performanceMeasurement?: (input: {
     ctx: OwnerRequestContext;
+    execute: ExperienceBuildExecutor;
     manifest: ExperienceManifest;
     candidate: ReturnType<typeof verifyCompiledCandidate>;
     renderer: ReturnType<typeof verifyCompiledCandidate>;

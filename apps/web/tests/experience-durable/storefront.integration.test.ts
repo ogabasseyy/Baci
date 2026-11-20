@@ -29,7 +29,7 @@ it('delivers full custom Orbit after store restart through normal anonymous/RLS 
     for (const path of [
       '/',
       '/collections/all',
-      '/phones/synthetic-device',
+      '/smartphones/synthetic-device',
       '/pages/story',
     ]) {
       const boundary = await delivery.runtime.resolveBoundary(

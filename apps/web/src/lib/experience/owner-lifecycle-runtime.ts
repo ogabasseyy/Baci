@@ -11,11 +11,13 @@ export interface OwnerLifecycleVerification {
   attest(
     client: SupabaseClient,
     approvalId: string,
-    kind: 'draft' | 'lifecycle'
+    kind: 'draft' | 'lifecycle',
+    signal?: AbortSignal
   ): Promise<void>;
   verifyCommitted(
     client: SupabaseClient,
-    receipt: Record<string, unknown>
+    receipt: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<void>;
 }
 export function createOwnerLifecycleRuntime(
@@ -27,23 +29,29 @@ export function createOwnerLifecycleRuntime(
     approval: {
       load: loadDraftApproval,
       loadLifecycle: loadLifecycleApproval,
-      confirm: async (client, id) => {
+      confirm: async (client, id, signal) => {
         const existing = await loadDraftApproval(client, id);
         if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'draft');
+          await verifier.attest(client, id, 'draft', signal);
+        signal?.throwIfAborted();
         return confirmDraftApply(client, id);
       },
-      confirmPublication: async (client, id) => {
+      confirmPublication: async (client, id, signal) => {
         const existing = await loadLifecycleApproval(client, id);
         if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'lifecycle');
+          await verifier.attest(client, id, 'lifecycle', signal);
+        signal?.throwIfAborted();
         const receipt = await confirmExperiencePublication(client, id);
         if (receipt.status === 'verifying') {
           try {
-            await verifier.verifyCommitted(client, {
-              ...receipt,
-              approvalId: id,
-            });
+            await verifier.verifyCommitted(
+              client,
+              {
+                ...receipt,
+                approvalId: id,
+              },
+              signal
+            );
           } catch {
             return receipt;
           }
@@ -51,10 +59,11 @@ export function createOwnerLifecycleRuntime(
         }
         return receipt;
       },
-      confirmModeExit: async (client, id) => {
+      confirmModeExit: async (client, id, signal) => {
         const existing = await loadLifecycleApproval(client, id);
         if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'lifecycle');
+          await verifier.attest(client, id, 'lifecycle', signal);
+        signal?.throwIfAborted();
         return confirmExperienceModeExit(client, id);
       },
     },

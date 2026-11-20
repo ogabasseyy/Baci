@@ -8,17 +8,21 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { createCommerceEngineFixture } from './cart-engine-fixture.ts';
 import { prepareCommerceCatalog } from './catalog-fixture.ts';
+import { compileStorefrontFixture } from './compile-storefront.ts';
 import { startCommerceDataApi } from './data-api.ts';
 import { seedFixtureOutput } from './seed-output.ts';
+import { createSyntheticFixtureInfo } from './synthetic-fixture-info.ts';
 
 const f = await createCommerceEngineFixture();
 let api: Awaited<ReturnType<typeof startCommerceDataApi>> | undefined;
 let child: ReturnType<typeof spawn> | undefined;
 let gateway: { close: () => Promise<void> } | undefined;
 let closing = false;
+let clearFixtureInfo: (() => void) | undefined;
 const close = async () => {
   if (closing) return;
   closing = true;
+  clearFixtureInfo?.();
   if (child && !child.killed) {
     const ended = new Promise<void>((resolve) =>
       child?.once('exit', () => resolve())
@@ -35,8 +39,15 @@ process.once('SIGINT', () => void close());
 process.once('SIGTERM', () => void close());
 try {
   const { merchant } = await prepareCommerceCatalog(f);
-  await seedFixtureOutput(f, merchant);
+  const fixture = await compileStorefrontFixture();
+  await seedFixtureOutput(f, merchant, fixture);
   api = await startCommerceDataApi(f);
+  if (process.env.BACI_LOCAL_FIXTURE_INFO) {
+    clearFixtureInfo = createSyntheticFixtureInfo(
+      process.env.BACI_LOCAL_FIXTURE_INFO,
+      { url: api.url, anonKey: api.anonKey }
+    );
+  }
   const profile = new URL(
     '../../../../.superpowers/sdd/2026-10-23-full-code-experiences/c-runtime-profile.mjs',
     import.meta.url
@@ -80,6 +91,8 @@ try {
     [
       createRequire(import.meta.url).resolve('next/dist/bin/next'),
       'dev',
+      // Worktree dependencies are shared through a symlink outside the root.
+      '--webpack',
       '--hostname',
       'localhost',
       '--port',
@@ -103,7 +116,7 @@ try {
     JSON.stringify({
       origin: 'http://127.0.0.1:43174',
       synthetic: true,
-      main: '9e0105d7ccb94c9b065c59ba9d93316c8cd5c110',
+      source: 'local-worktree',
     })
   );
 } catch (error) {

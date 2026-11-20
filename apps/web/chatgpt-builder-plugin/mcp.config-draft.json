@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "baci-builder": {
+      "type": "streamable-http",
+      "url": "https://builder-mcp.usebaci.com/builder/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": {
+              "mode": "provided",
+              "clientId": "baci-chatgpt-builder-v1",
+              "tokenEndpointAuthMethod": "none"
+            },
+            "resource": "https://builder-mcp.usebaci.com/builder/mcp",
+            "baseScopes": ["openid", "offline_access", "storefront.read"],
+            "defaultScopes": ["storefront.write"]
+          }
+        }
+      }
+    }
+  }
+}

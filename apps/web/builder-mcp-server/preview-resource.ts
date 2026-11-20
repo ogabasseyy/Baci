@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/server';
+import { BUILDER_MCP_ORIGIN } from '../src/lib/builder-connector/resource';
 import { BUILDER_PREVIEW_ASSET_ORIGINS } from '../src/schemas/builder-preview-assets';
 export const BUILDER_PREVIEW_URI = 'ui://baci-builder/home-preview-v1.html';
 export const builderPreviewToolMeta = {
@@ -26,7 +27,7 @@ export function registerBuilderPreviewResource(server: McpServer) {
           _meta: {
             ui: {
               prefersBorder: true,
-              domain: 'https://mcp.usebaci.com',
+              domain: BUILDER_MCP_ORIGIN,
               csp: {
                 connectDomains: [],
                 frameDomains: [],

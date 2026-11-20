@@ -1,0 +1,2 @@
+export const MIN_CONNECTION_TTL_SECONDS = 300;
+export const MAX_CONNECTION_TTL_SECONDS = 30 * 24 * 60 * 60;

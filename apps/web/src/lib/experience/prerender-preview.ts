@@ -12,8 +12,10 @@ import {
 import type { PreviewVault } from './preview-service';
 import { createPrivatePrerenderDocument } from './private-prerender-document';
 import { buildPublicBootstrap } from './public-bootstrap';
+import { readVerifiedPrerender } from './read-verified-prerender';
 export interface PrerenderPreviewOptions {
   artifacts: LocalPrerenderArtifacts;
+  verifiedRendererStorage?: boolean;
   executionOrigin?: string;
   previewOrigin?: string;
   bootstrap(
@@ -22,6 +24,11 @@ export interface PrerenderPreviewOptions {
     routeId: string
   ): Promise<PublicBootstrap>;
   execute?: typeof runLocalQualification;
+  executeWithSignal?: (
+    kind: Parameters<typeof runLocalQualification>[0],
+    payload: unknown,
+    signal?: AbortSignal
+  ) => ReturnType<typeof runLocalQualification>;
 }
 export async function consumePrerenderPreview(
   ctx: ExperienceContext,
@@ -33,14 +40,20 @@ export async function consumePrerenderPreview(
     ref: string;
   },
   vault: PreviewVault,
-  options: PrerenderPreviewOptions
+  options: PrerenderPreviewOptions,
+  signal?: AbortSignal
 ) {
-  const renderer = options.artifacts.read({
+  signal?.throwIfAborted();
+  const binding = {
     merchantId: ctx.merchantId,
     buildId: input.buildId,
     buildDigest: input.buildDigest,
     sourceDigest: sourceDigest(input.manifest),
-  });
+  };
+  const managedRenderer = options.verifiedRendererStorage
+    ? await readVerifiedPrerender(ctx, binding, signal)
+    : null;
+  const renderer = managedRenderer ?? options.artifacts.read(binding);
   let bootstrap: PublicBootstrap | undefined;
   const launch = await vault.consumePrerender(
     ctx.actorUserId,
@@ -60,10 +73,12 @@ export async function consumePrerenderPreview(
             .map((r) => [r.path.slice(7), r.url])
         ),
       };
-      const proof = await (options.execute ?? runLocalQualification)(
-        'prerender',
-        { javascript: renderer.javascript, bootstrap }
-      );
+      signal?.throwIfAborted();
+      const payload = { javascript: renderer.javascript, bootstrap };
+      const proof = await (options.executeWithSignal
+        ? options.executeWithSignal('prerender', payload, signal)
+        : (options.execute ?? runLocalQualification)('prerender', payload));
+      signal?.throwIfAborted();
       const result = proof.output;
       if (
         !result ||
@@ -82,7 +97,8 @@ export async function consumePrerenderPreview(
       );
       await requireExperienceOwner(ctx);
       return document;
-    }
+    },
+    signal
   );
   if (!bootstrap) throw Error('BUILD_FAILED');
   return { ...launch, bootstrap, renderMode: 'prerender' as const };

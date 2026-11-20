@@ -56,6 +56,9 @@ test('normal scoped engine lazy-create and response-loss replay settle once thro
       'experience-review',
     ]);
     assert.equal(review.ok, true, JSON.stringify(review));
+    assert.equal(typeof review.sessionExpiresAt, 'string');
+    assert.equal(typeof review.grantExpiresAt, 'string');
+    assert.equal(typeof review.databaseNow, 'string');
     assert.equal(
       (await f.pool.query('SELECT count(*) FROM orders')).rows[0].count,
       '0'

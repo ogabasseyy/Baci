@@ -41,8 +41,9 @@ it('response-loss reconciliation skips recapture after applied receipt; fresh ap
   vi.mocked(loadDraftApproval).mockResolvedValueOnce({
     status: 'confirmation-required',
   } as never);
-  await f.approval?.confirm({} as never, id);
-  expect(f.verifier.attest).toHaveBeenCalledWith({}, id, 'draft');
+  const { signal } = new AbortController();
+  await f.approval?.confirm({} as never, id, signal);
+  expect(f.verifier.attest).toHaveBeenCalledWith({}, id, 'draft', signal);
 });
 it('failed delivery remains verifying; replay verifies same receipt without fresh attestation or republish attempt', async () => {
   const f = setup();
@@ -51,10 +52,16 @@ it('failed delivery remains verifying; replay verifies same receipt without fres
     status: 'verifying',
     receiptId: id,
   });
+  const { signal } = new AbortController();
   f.verifier.verifyCommitted.mockRejectedValueOnce(Error('browser offline'));
   await expect(
-    f.approval?.confirmPublication?.({} as never, id)
+    f.approval?.confirmPublication?.({} as never, id, signal)
   ).resolves.toEqual({ status: 'verifying', receiptId: id });
+  expect(f.verifier.verifyCommitted).toHaveBeenCalledWith(
+    {},
+    { status: 'verifying', receiptId: id, approvalId: id },
+    signal
+  );
   expect(f.verifier.attest).not.toHaveBeenCalled();
   vi.mocked(loadLifecycleApproval)
     .mockResolvedValueOnce({ status: 'verifying' })

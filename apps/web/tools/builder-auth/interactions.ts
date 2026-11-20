@@ -2,6 +2,10 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type Provider from 'oidc-provider';
 import { z } from 'zod';
+import {
+  MAX_CONNECTION_TTL_SECONDS,
+  MIN_CONNECTION_TTL_SECONDS,
+} from './connection-lifetime.ts';
 import { renderConsentPage } from './consent-page.ts';
 import { buildConsentDecision, validateConsentPost } from './linking.ts';
 import type { AuthStorage } from './storage.ts';
@@ -54,8 +58,8 @@ export function createInteractionHandler(deps: {
 }) {
   if (
     !Number.isSafeInteger(deps.connectionTtlSeconds) ||
-    deps.connectionTtlSeconds < 300 ||
-    deps.connectionTtlSeconds > 2592000
+    deps.connectionTtlSeconds < MIN_CONNECTION_TTL_SECONDS ||
+    deps.connectionTtlSeconds > MAX_CONNECTION_TTL_SECONDS
   )
     throw new Error('Invalid connection lifetime');
   const { provider, storage, upstream } = deps;
@@ -161,12 +165,12 @@ export function createInteractionHandler(deps: {
       !pending.csrf
     )
       throw new Error('Reconnect Baci to continue.');
-    const ownedMerchantId =
-      (await getOwnedMerchant(
-        deps.supabase,
-        pending.tokens.accessToken,
-        pending.subject
-      )) ?? null;
+    const ownedMerchant = await getOwnedMerchant(
+      deps.supabase,
+      pending.tokens.accessToken,
+      pending.subject
+    );
+    const ownedMerchantId = ownedMerchant?.id ?? null;
     const state = {
       actorUserId: pending.subject,
       ownedMerchantId,
@@ -177,7 +181,13 @@ export function createInteractionHandler(deps: {
     if (req.method === 'GET') {
       await put(res, { ...pending, consentMerchantId: ownedMerchantId });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(renderConsentPage(state, url.pathname));
+      res.end(
+        renderConsentPage(
+          state,
+          url.pathname,
+          ownedMerchant?.business_name ?? null
+        )
+      );
       return true;
     }
     if (req.method !== 'POST') throw new Error('Method not allowed');

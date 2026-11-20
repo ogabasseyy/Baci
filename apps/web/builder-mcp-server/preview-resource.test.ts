@@ -32,7 +32,10 @@ it('advertises a tenant-neutral standard resource only on preview; never embeds 
     const content = resource.contents[0];
     expect(content.mimeType).toBe('text/html;profile=mcp-app');
     expect(content._meta).toMatchObject({
-      ui: { csp: { connectDomains: [], frameDomains: [] } },
+      ui: {
+        domain: 'https://builder-mcp.usebaci.com',
+        csp: { connectDomains: [], frameDomains: [] },
+      },
     });
     expect('text' in content ? content.text : '').toContain('id="root"');
     expect(JSON.stringify(resource)).not.toMatch(

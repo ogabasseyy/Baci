@@ -1,8 +1,15 @@
 # Baci ChatGPT builder: staging and release runbook
 
-## Decision
+## Status and scope
 
-Latest owner scope is local preparation and local database only. PostgreSQL17.11 is available and selected explicitly for local journeys. No hosted project, remote credentials, DNS, or VPS process provisioning is authorized by this local continuation.
+This runbook originally described a local-only staging exercise. The owner has
+since authorized live submission preparation and use of the separate Contabo
+VPS. That authorization does not make the production cutover or submission
+complete. The submission must be presented for owner review before final submit;
+synthetic testing must not create orders, make payments or incur extra AI costs.
+The instructions below describing a disposable staging project are a historical
+qualification option, not a claim that one currently exists or a requirement to
+purchase one. Check current service, permission, and cost boundaries before use.
 
 **NO-GO for production and submission.** This branch implements source and local fixtures. Local normal-role PostgreSQL journeys and the signed-token HTTP journey do not prove the real upstream Auth-provider, a complete staged web artifact, privacy cutover or an actual ChatGPT developer connection. Read [the exact staging scope](baci-chatgpt-builder-staging-scope.md) before any provisioning. Both existing submissions and all production stores remain protected.
 
@@ -46,7 +53,13 @@ Latest owner scope is local preparation and local database only. PostgreSQL17.11
 
 The separate package source is `apps/web/chatgpt-builder-plugin/`. It deliberately omits an unverified `mcp.json` connection and is not upload-ready. After endpoint/discovery/host verification, create that file with the verified new endpoint, inspect the deterministic one-root ZIP and all referenced assets, and bind its hash to the candidate. Review public legal URLs and developer identity, make a synthetic reviewer account, write instructions and record a demo. Never store reviewer passwords in the archive/evidence. Do not upload or create/change a submission here.
 
-Production remains a separate owner-authorized VPS release ending in the approved prebuilt deployment flow. This runbook does not authorize `vercel build`, cloud builds, emergency hosted jobs, production migrations, app registration, submission, approval or publication. Stage promotion only after the entire checklist has exact-SHA evidence; reconcile uncertain effects before retries. Stop if health, grants, TLS, discovery or public proof fails. No automatic unpublish or reverse migration follows a delivery failure.
+Live preparation remains subject to the repository's review, migration and
+approved prebuilt deployment requirements. Owner review is required before the
+final submission click. Stage promotion only after the relevant checklist has
+exact-SHA evidence; reconcile uncertain effects before retries. Stop if health,
+grants, TLS, discovery or public proof fails. No automatic unpublish or reverse
+migration follows a delivery failure. See the [cutover recovery gate](builder-private-cutover-recovery.md)
+for the missing committed-cutover recovery evidence.
 
 ## Current evidence and documentation
 

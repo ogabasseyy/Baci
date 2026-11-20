@@ -3,7 +3,12 @@ import {
   hostHeaderValidation,
   NodeStreamableHTTPServerTransport,
 } from '@modelcontextprotocol/node';
-import { builderAuthChallenge } from '../src/lib/builder-connector/tool-policy';
+import {
+  BUILDER_MCP_HOST,
+  BUILDER_MCP_ORIGIN,
+  BUILDER_MCP_PATH,
+  BUILDER_METADATA_URL,
+} from '../src/lib/builder-connector/resource';
 import {
   createRateLimiter,
   resolveClientIp,
@@ -19,10 +24,10 @@ import { createBuilderMcpServer } from './server';
 const allowedOrigins = new Set([
   'https://chatgpt.com',
   'https://usebaci.com',
-  'https://mcp.usebaci.com',
+  BUILDER_MCP_ORIGIN,
 ]);
 export function createBuilderMcpHttpHandler(
-  deps: Pick<BuilderMcpDependencies, 'executeBuilderTool'> & {
+  deps: Pick<BuilderMcpDependencies, 'executeBuilderTool' | 'experience'> & {
     verifyAccessToken: (token: string) => Promise<void>;
     trustedProxies?: readonly string[];
   }
@@ -35,7 +40,7 @@ export function createBuilderMcpHttpHandler(
     maxPerIp: 120,
   });
   const validHost = hostHeaderValidation([
-    'mcp.usebaci.com',
+    BUILDER_MCP_HOST,
     '127.0.0.1',
     'localhost',
     '[::1]',
@@ -50,9 +55,7 @@ export function createBuilderMcpHttpHandler(
   const challenge = (res: ServerResponse) => {
     res.setHeader(
       'www-authenticate',
-      builderAuthChallenge('CONNECTION_REVOKED', 'list_storefronts')._meta[
-        'mcp/www_authenticate'
-      ][0]
+      `Bearer resource_metadata="${BUILDER_METADATA_URL}", error="invalid_token"`
     );
     reply(res, 401, 'Reconnect Baci to continue.');
   };
@@ -70,7 +73,7 @@ export function createBuilderMcpHttpHandler(
       }
       if (!validHost(req, res)) return;
       const url = new URL(req.url ?? '/', BUILDER_RESOURCE);
-      if (url.origin !== new URL(BUILDER_RESOURCE).origin || url.search) {
+      if (url.origin !== BUILDER_MCP_ORIGIN || url.search) {
         reply(res, 404, 'Not found');
         return;
       }
@@ -96,7 +99,7 @@ export function createBuilderMcpHttpHandler(
         res.end(JSON.stringify(builderProtectedResource));
         return;
       }
-      if (url.pathname !== '/builder/mcp') {
+      if (url.pathname !== BUILDER_MCP_PATH) {
         reply(res, 404, 'Not found');
         return;
       }

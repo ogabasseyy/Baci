@@ -53,6 +53,63 @@ it('records independently observed parent/frame/network/routes/assets only after
   ).resolves.toMatchObject({ status: 'verified' });
   expect(record).toHaveBeenCalledOnce();
 });
+
+it('accepts cart and review overlays on a verified product route without inventing native page visits', async () => {
+  const record = vi.fn();
+  const steps = observation.journey.steps.map((step) =>
+    step.action === 'cart-read' || step.action === 'checkout-review'
+      ? { ...step, path: '/products/device' }
+      : step
+  );
+  await expect(
+    verifyPublicExperience(expected, {
+      observe: async () => ({
+        ...observation,
+        journey: { ...observation.journey, steps },
+      }),
+      current: async () => ({ buildDigest: a, publicationRevision: 1 }),
+      record,
+    })
+  ).resolves.toMatchObject({ status: 'verified' });
+  expect(record).toHaveBeenCalledOnce();
+});
+
+it('accepts adding the verified product from a declared home route', async () => {
+  const record = vi.fn();
+  const steps = observation.journey.steps.map((step) =>
+    step.action === 'cart-add' ? { ...step, path: '/' } : step
+  );
+  await expect(
+    verifyPublicExperience(expected, {
+      observe: async () => ({
+        ...observation,
+        journey: { ...observation.journey, steps },
+      }),
+      current: async () => ({ buildDigest: a, publicationRevision: 1 }),
+      record,
+    })
+  ).resolves.toMatchObject({ status: 'verified' });
+});
+
+it('rejects overlay evidence on an undeclared or unsafe route', async () => {
+  for (const path of ['/unrelated', '/api/orders', '/products/device?fake=1']) {
+    const record = vi.fn();
+    const steps = observation.journey.steps.map((step) =>
+      step.action === 'cart-read' ? { ...step, path } : step
+    );
+    await expect(
+      verifyPublicExperience(expected, {
+        observe: async () => ({
+          ...observation,
+          journey: { ...observation.journey, steps },
+        }),
+        current: async () => ({ buildDigest: a, publicationRevision: 1 }),
+        record,
+      })
+    ).rejects.toThrow('PUBLIC_VERIFICATION_FAILED');
+    expect(record).not.toHaveBeenCalled();
+  }
+});
 it('rejects self-reported success, wrong artifacts or superseded heads without recording proof', async () => {
   for (const value of [
     { passed: true },
@@ -87,5 +144,29 @@ it('rejects self-reported success, wrong artifacts or superseded heads without r
       record,
     })
   ).rejects.toThrow('SUPERSEDED');
+  expect(record).not.toHaveBeenCalled();
+});
+
+it.each([
+  [expected.journeySteps.slice(0, 1)],
+  [[...expected.journeySteps].reverse()],
+])('does not accept an incomplete or out-of-order journey', async (steps) => {
+  const record = vi.fn();
+  await expect(
+    verifyPublicExperience(
+      { ...expected, journeySteps: steps },
+      {
+        observe: async () => ({
+          ...observation,
+          journey: {
+            ...observation.journey,
+            steps: steps.map((step) => ({ ...step, evidenceDigest: c })),
+          },
+        }),
+        current: async () => ({ buildDigest: a, publicationRevision: 1 }),
+        record,
+      }
+    )
+  ).rejects.toThrow('PUBLIC_VERIFICATION_FAILED');
   expect(record).not.toHaveBeenCalled();
 });

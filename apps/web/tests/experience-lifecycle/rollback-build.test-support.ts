@@ -14,6 +14,7 @@ import {
   writeChunk,
 } from '@/lib/experience/upload-service';
 import { captureExperience } from '../../tools/experience-runner/capture-route';
+import { runLocalQualification } from '../../tools/experience-runner/local-oci-executor';
 import { createTransientOutputStore } from '../../tools/experience-runner/transient-output-store';
 import { fixtureCatalog } from '../experience-browser/fixtures/qualification-fixtures';
 import { hash, type lifecycleFixture } from './sql.test-support';
@@ -48,6 +49,11 @@ export async function buildRollbackArtifact(
   baseDigest?: string
 ) {
   const ctx = { merchantId: f.merchantId, supabase: client };
+  const execute: typeof runLocalQualification = async (kind, payload) => {
+    const result = await runLocalQualification(kind, payload);
+    console.info(`Rollback ${label}: ${kind} completed in ${result.wallMs}ms`);
+    return result;
+  };
   const source = `import {useState} from 'react'; import {useCommerce} from '@baci/experience-sdk'; export default function Store({route,catalog}){const commerce=useCommerce();const[n,setN]=useState(0);return <main><h1>Synthetic rollback ${label}</h1><p>{route.canonicalPath}</p><p>{catalog.products[0].name}</p><button onClick={()=>setN(n+1)}>Count {n}</button><nav>{['/','/collections/all','/products/device','/pages/story'].map(path=><button key={path} onClick={()=>commerce.navigation.go(path)}>{path}</button>)}</nav></main>}`;
   const manifest: ExperienceManifest = {
     format: 'baci.experience/v2',
@@ -112,6 +118,7 @@ export async function buildRollbackArtifact(
       hostOrigin: 'http://127.0.0.1:4100',
       transient: createTransientOutputStore(),
       bootstrap: bootstrap(),
+      execute,
       recordVerifiedEvidence: async (proof) => {
         await f.c.query('BEGIN');
         try {
@@ -162,16 +169,19 @@ export async function buildRollbackArtifact(
     throw Error('RETENTION_FAILED');
   const captures = [];
   for (const route of routes) {
-    const result = await captureExperience({
-      manifest,
-      hostOrigin: 'http://127.0.0.1:4100',
-      bundle: { javascript, css, digest: built.buildDigest },
-      bootstrap: bootstrap(route.path),
-      assets: [],
-      engine: 'chromium',
-      width: 390,
-      assetsDigest: hash('[]'),
-    });
+    const result = await captureExperience(
+      {
+        manifest,
+        hostOrigin: 'http://127.0.0.1:4100',
+        bundle: { javascript, css, digest: built.buildDigest },
+        bootstrap: bootstrap(route.path),
+        assets: [],
+        engine: 'chromium',
+        width: 390,
+        assetsDigest: hash('[]'),
+      },
+      execute
+    );
     const png = Buffer.from(result.evidence.bytes);
     const file = `${route.view}.png`;
     writeFileSync(new URL(file, folder), png);

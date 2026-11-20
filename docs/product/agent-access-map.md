@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 20 November 2026 against source revision
-`bddf07d225746176c69d3608f1ebe489a9ae1c6b`. The Shopping MCP row was re-reviewed after the misleading link-only
+`1f97293c533c71795b7659cfd8b99b8b8ccdb616`. The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).
 The mobile-admin follow-up queue no longer treats
@@ -52,7 +52,7 @@ does not prove a complete supported workflow.
 | Merchant storefront protocols | `apps/web/src/app/.well-known/acp.json/route.ts`, `apps/web/src/app/.well-known/ucp/route.ts`, `apps/web/src/lib/agentic/acp-discovery-profile.ts`, `apps/web/src/lib/agentic/ucp-shopping-profile.ts`, `apps/web/src/lib/agentic/checkout.ts`, `apps/web/src/lib/agentic/checkout-session-tax.ts`, `apps/web/src/lib/agentic/agentic-line-tax.ts`, `apps/web/src/lib/agentic/checkout-totals.ts`, `apps/web/src/lib/agentic/ucp-response-adapters.ts` | Merchant-scoped ACP/UCP discovery, catalog, carts, checkout and orders; enabled capabilities/auth/payment readiness apply. A REST interface is not automatically an MCP tool. |
 | Browser tools | `apps/web/src/components/storefront/webmcp-storefront-tools-builder.ts` | Browser-bound storefront tools. Inspect current registrations and browser session authority. |
 | Merchant connector gateway | `apps/web/src/lib/connector/manifest.ts`, `apps/web/tools/connector-gateway/` | R0 manifest names (version `r0.4`, data-only, no routes) for four read-only tools planned for the R1 pilot: `orders.list`, `orders.get`, `inventory.levels`, `analytics.summary`. The gateway implementation — scoped owner grants, branch selection, tool-time permission checks and revocation — lives in `apps/web/tools/connector-gateway/`, but the R1 pilot runtime is unverified; do not treat these tools as pilot-callable. REST/OpenAPI, not a ChatGPT MCP server. |
-| Store-builder ChatGPT integration | Full-code MCP build/private-preview source exists; production composition uninstalled/disabled | See the [production composition](../../apps/web/src/lib/experience/production-integration.ts) and [qualification package](../connectors/experience-runner-delivery-qualification.md). Local synthetic proof is not deployed ChatGPT access. Publication, host qualification, auth/RLS and private-apply/performance gates remain separate. Domain purchases and Jumia writes are not implied. |
+| Store-builder ChatGPT integration | Full-code MCP build/private-preview source exists; verified renderer retention in PostgreSQL, hosted builds can opt into a durable worker; production composition uninstalled/disabled | See the [production composition](../../apps/web/src/lib/experience/production-integration.ts) and [qualification package](../connectors/experience-runner-delivery-qualification.md). Local synthetic proof is not deployed ChatGPT access. Publication, host qualification, auth/RLS and private-apply/performance gates remain separate. Domain purchases and Jumia writes are not implied. |
 
 The storefront support-chat health check probes catalog and conversation paths.
 For Ogabassey it also checks tenant and catalog-lookup response markers. A

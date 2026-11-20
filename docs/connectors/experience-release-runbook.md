@@ -37,6 +37,10 @@ Private apply preserves public state. Publication requires a separate owner inte
 
 Rollback selects a previously committed retained build under the current policy and creates new publication history. It does not reverse source, payments or orders. Keep a compatible previous artifact/runtime available; absence/pruning/incompatible runtime is a blocker.
 
+For the PostgreSQL pilot, the [renderer retention dry run](../../apps/web/tools/experience-verifier/renderer-retention-dry-run.sql) reports one merchant at a time in a read-only transaction. It keeps the published head, the three most recent distinct previously verified builds, and every build within 30 days of its last supersession. It protects the saved draft, in-flight jobs, and active preview or approval references. Unreferenced finalized drafts older than seven days and terminal attempts past their job deadline by more than a day can appear as candidates. Ambiguous history is retained. The report covers managed PostgreSQL renderer rows and estimates their stored bytes. It does not change rollback eligibility or touch legacy files.
+
+Run the synthetic report with `pnpm --dir apps/web exec vitest run --config vitest.experience-lifecycle.config.ts renderer-retention-dry-run.test.ts`. The expiry candidates are for review. Revalidate references and provide a grace period for existing rollback targets before enabling any future reclamation.
+
 Mode exit is explicit: private-draft-only cannot remove an unrelated public experience; compatible-legacy restore requires an already published compatible snapshot; missing fallback needs separately described unpublish-and-legacy-draft confirmation. No mode exit automatically restarts legacy AI. Native and queued legacy writes remain governed by the SQL revision lock and execution lease acknowledgement.
 
 ## Stop boundaries

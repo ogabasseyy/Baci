@@ -9,16 +9,11 @@ export function providerMatchesNetwork(
   const normalizedProviderName = normalizeKudaItemCode(provider.billerName);
   const normalizedNetwork = normalizeKudaItemCode(networkProvider);
   if (normalizedNetwork === '9mobile') {
-    // Whole-word names only: a bare "9" or a "t2" inside another word
+    // Whole-word names only ("9mobile", "9 mobile", "mobile 9", "t2",
+    // "t2mobile", "etisalat"): a bare "9" or a "t2" inside another word
     // ("smart2go") would match unrelated providers.
-    const words = provider.billerName.toLowerCase().split(/[^a-z0-9]+/);
-    return words.some(
-      (word) =>
-        word === '9mobile' ||
-        word === 't2' ||
-        word === 't2mobile' ||
-        word === 'etisalat'
-    );
+    const words = ` ${provider.billerName.toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+    return / (?:9 ?mobile|mobile 9|t2(?:mobile)?|etisalat) /.test(words);
   }
 
   return normalizedProviderName.includes(normalizedNetwork);

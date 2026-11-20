@@ -8,6 +8,8 @@ describe('hasMalformedItemList', () => {
     [],
     [{ BillItems: [] }],
     [{ billItems: [{}] }],
+    [{ ItemCode: 'X', IsAmountFixed: true }],
+    [{ isFixedPrice: false }],
   ])('accepts %j', (rawItems) => {
     expect(hasMalformedItemList(rawItems)).toBe(false);
   });
@@ -17,6 +19,9 @@ describe('hasMalformedItemList', () => {
     'x',
     [{ BillItems: {} }],
     [{ billItems: [{ BillItems: 'x' }] }],
+    [{ IsAmountFixed: true, Amount: 100000 }],
+    [{ itemCode: ' ', isFixedPrice: true }],
+    [{ billItems: [{ isFixedPrice: true }] }],
   ])('flags %j', (rawItems) => {
     expect(hasMalformedItemList(rawItems)).toBe(true);
   });

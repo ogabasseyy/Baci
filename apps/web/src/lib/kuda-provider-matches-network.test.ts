@@ -35,6 +35,17 @@ describe('providerMatchesNetwork', () => {
     ).toBe(false);
   });
 
+  it.each([
+    '9 MOBILE DATA',
+    '9MOBILE NG DATA',
+    'MOBILE 9 DATA',
+    'ETISALAT DATA',
+  ])('matches the 9mobile name %j', (name) => {
+    expect(
+      providerMatchesNetwork(provider(name), NetworkProvider.MOBILE_9)
+    ).toBe(true);
+  });
+
   it('does not match "t2" inside another word', () => {
     expect(
       providerMatchesNetwork(

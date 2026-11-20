@@ -222,7 +222,10 @@ export async function assertKudaBillItemPriceCurrent({
   const chosen = candidates.filter(({ items }) => items.length > 0);
   if (chosen.length === 0) throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   // A biller whose package list was malformed can't confirm any price, even
-  // one it lists readably: the hidden part may hold the same package.
+  // one it lists readably: the hidden part may hold the same package. With
+  // no biller named (older clients only) every biller is a candidate, so one
+  // malformed biller deliberately blocks the whole category: which biller's
+  // package it is can't be told, and failing closed is the safe side.
   if (chosen.some(({ biller }) => biller.packagesUnreadable)) {
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }

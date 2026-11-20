@@ -8,7 +8,7 @@ import { asRoute } from '@/lib/routes';
 interface CheckoutReconciliationViewProps {
   orderNumber: string | null;
   getHref: (path: string) => string;
-  outcome?: 'reconciling' | 'reversed' | 'access_required';
+  outcome?: keyof typeof copy;
 }
 
 const copy = {
@@ -23,6 +23,12 @@ const copy = {
     detail:
       'Paystack reported a reversal for this payment. Contact support with your order number if you need help checking the status.',
     cart: 'Your cart is still intact. Wait for the reversal to be confirmed before paying again.',
+  },
+  bank_offer_review: {
+    title: 'Payment attempt under review',
+    detail:
+      'Paystack reported that this payment did not complete. We need to check the original attempt before you can pay again.',
+    cart: 'Your cart is intact. Check your order status or contact support for help.',
   },
   access_required: {
     title: 'Sign in to check your payment',

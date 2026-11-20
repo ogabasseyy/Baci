@@ -87,6 +87,24 @@ describe('CheckoutReconciliationView', () => {
     expect(screen.queryByText(/^#/)).not.toBeInTheDocument();
   });
 
+  it('shows support guidance before a reviewed attempt can be retried', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber="BAC-42"
+        getHref={getHref}
+        outcome="bank_offer_review"
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Payment attempt under review' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('#BAC-42')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /try again/i })
+    ).not.toBeInTheDocument();
+  });
+
   it('omits the order number line when unknown', () => {
     render(<CheckoutReconciliationView orderNumber={null} getHref={getHref} />);
 

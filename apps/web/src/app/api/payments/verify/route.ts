@@ -106,7 +106,10 @@ async function verifyPaymentReference(
       message: 'Payment verification order binding mismatch',
     });
     return NextResponse.json(
-      { error: 'Verification unavailable' },
+      {
+        error: 'Verification unavailable',
+        code: 'BANK_CARD_OFFER_VERIFICATION_DENIED',
+      },
       { status: 403 }
     );
   }
@@ -575,7 +578,10 @@ export async function POST(request: NextRequest) {
     );
     if (!binding) {
       return NextResponse.json(
-        { error: 'Verification unavailable' },
+        {
+          error: 'Verification unavailable',
+          code: 'BANK_CARD_OFFER_VERIFICATION_DENIED',
+        },
         { status: 403 }
       );
     }

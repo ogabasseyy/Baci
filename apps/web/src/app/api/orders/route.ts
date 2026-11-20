@@ -2316,6 +2316,7 @@ export async function POST(request: NextRequest) {
           discountCodeId ||
             loyaltyRedemptionId ||
             requestedSavingsRedemption ||
+            (negotiationDiscount?.totalDiscount ?? 0) > 0 ||
             hasVoucherItem ||
             body.shared_cart ||
             body.discount_code ||

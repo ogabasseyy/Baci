@@ -145,7 +145,13 @@ describe('verifyCheckoutPayment', () => {
 
   it('stops polling a denied bank-offer request without prompting a new payment', async () => {
     request.mockResolvedValue(
-      Response.json({ error: 'Verification unavailable' }, { status: 403 })
+      Response.json(
+        {
+          error: 'Verification unavailable',
+          code: 'BANK_CARD_OFFER_VERIFICATION_DENIED',
+        },
+        { status: 403 }
+      )
     );
     const callbacks = handlers();
 
@@ -158,6 +164,43 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+  });
+
+  it('keeps a bank-offer CSRF failure pending', async () => {
+    request.mockResolvedValue(
+      Response.json({ error: 'Invalid CSRF token' }, { status: 403 })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: `BCO-${'a'.repeat(32)}` },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'failed',
+    'cancelled',
+    'abandoned',
+  ])('shows review for a bank-offer attempt reported %s', async (status) => {
+    request.mockResolvedValue(
+      Response.json({ success: false, status, orderNumber: 'ORD-1' })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: `BCO-${'a'.repeat(32)}` },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('bank_offer_review');
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith('ORD-1');
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
   });
 
   it('shows reconciliation for a reversed bank-offer payment without triggering retry', async () => {

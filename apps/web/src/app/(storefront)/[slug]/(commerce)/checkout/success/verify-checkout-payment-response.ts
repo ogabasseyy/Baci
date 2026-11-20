@@ -4,7 +4,8 @@ export type CheckoutVerificationStatus =
   | 'failed'
   | 'reconciling'
   | 'reversed'
-  | 'access_required';
+  | 'access_required'
+  | 'bank_offer_review';
 
 export type VerificationResponse = {
   code?: string;

@@ -174,7 +174,11 @@ export async function verifyCheckoutPayment(
     const orderNumber = data.orderNumber || fallbackOrderNumber;
 
     if (isBankOffer && response.status === 403) {
-      setStatus('access_required');
+      setStatus(
+        data.code === 'BANK_CARD_OFFER_VERIFICATION_DENIED'
+          ? 'access_required'
+          : 'pending'
+      );
       setOrderNumber(null);
       return;
     }
@@ -258,6 +262,14 @@ export async function verifyCheckoutPayment(
       // A reversal can follow a capture. Keep the shopper on reconciliation
       // while the provider's reversal and the order are matched.
       setStatus('reversed');
+      setOrderNumber(orderNumber);
+    } else if (
+      isBankOffer &&
+      (data.status === 'failed' ||
+        data.status === 'cancelled' ||
+        data.status === 'abandoned')
+    ) {
+      setStatus('bank_offer_review');
       setOrderNumber(orderNumber);
     } else if (
       data.status === 'failed' ||

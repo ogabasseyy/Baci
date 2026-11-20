@@ -129,7 +129,8 @@ function CheckoutSuccessContent() {
   if (
     status === 'reconciling' ||
     status === 'reversed' ||
-    status === 'access_required'
+    status === 'access_required' ||
+    status === 'bank_offer_review'
   ) {
     return (
       <CheckoutReconciliationView

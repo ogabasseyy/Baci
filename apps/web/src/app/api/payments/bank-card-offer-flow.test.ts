@@ -380,6 +380,9 @@ describe('bank card offer payment handlers', () => {
     );
 
     expect(result.status).toBe(403);
+    await expect(result.json()).resolves.toMatchObject({
+      code: 'BANK_CARD_OFFER_VERIFICATION_DENIED',
+    });
     expect(mocks.verify).not.toHaveBeenCalled();
     expect(mocks.from).not.toHaveBeenCalledWith('transactions');
   });

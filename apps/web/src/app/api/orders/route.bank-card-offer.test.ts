@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import {
   authenticateApiRequest,
   NextRequest,
@@ -20,6 +21,19 @@ vi.mock('@/lib/checkout/schedule-checkout-product-blog-purge', () => ({
 vi.mock('@/lib/events/record-platform-order-created-event', () => ({
   recordPlatformOrderCreatedEvent: effects.record,
 }));
+
+vi.mock('@/lib/checkout/order-negotiation-discount', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@/lib/checkout/order-negotiation-discount')
+    >();
+  return {
+    ...actual,
+    computeOrderNegotiationDiscount: vi.fn(
+      actual.computeOrderNegotiationDiscount
+    ),
+  };
+});
 
 vi.mock('@/config/bank-card-offers', () => ({
   BANK_CARD_OFFERS: [
@@ -50,6 +64,13 @@ it.each([
     errorCode: 'BANK_CARD_OFFER_CART_INVALID',
   },
   { quantity: 1, expectedTotal: undefined, status: 409 },
+  {
+    quantity: 1,
+    expectedTotal: 94.05,
+    negotiatedDiscount: 1,
+    status: 409,
+    errorCode: 'BANK_CARD_OFFER_UNAVAILABLE',
+  },
   { quantity: 1, expectedTotal: 100, status: 409 },
   {
     quantity: 1,
@@ -73,8 +94,15 @@ it.each([
   shipping = 0,
   gift = 0,
   errorCode,
+  negotiatedDiscount,
 }) => {
   primeAdminOrderCurrencyRead();
+  if (negotiatedDiscount) {
+    vi.mocked(computeOrderNegotiationDiscount).mockResolvedValueOnce({
+      totalDiscount: negotiatedDiscount,
+      rejectionCode: null,
+    });
+  }
   effects.purge.mockClear();
   effects.record.mockClear();
   vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'synthetic-order-test-proof');
@@ -113,7 +141,12 @@ it.each([
           ...baseOrderPayload,
           merchant_id: MERCHANT_ID.toUpperCase(),
           items: [
-            { product_id: productId, quantity, price: 100, name: 'Widget' },
+            {
+              product_id: productId,
+              quantity,
+              price: 100 - (negotiatedDiscount ?? 0),
+              name: 'Widget',
+            },
           ],
           subtotal: 100 * quantity,
           shipping_fee: shipping,

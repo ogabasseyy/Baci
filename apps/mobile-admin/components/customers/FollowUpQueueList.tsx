@@ -4,7 +4,6 @@ import { type ReactElement, type RefObject, useEffect, useState } from 'react';
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
 import { FollowUpEmptyState } from '@/components/customers/FollowUpEmptyState';
 import { FollowUpErrorBanner } from '@/components/customers/FollowUpErrorBanner';
 import { FollowUpFilteredEmptyState } from '@/components/customers/FollowUpFilteredEmptyState';
+import { StaffFollowUpAction } from '@/components/customers/StaffFollowUpAction';
 import { StaffFollowUpEditor } from '@/components/customers/StaffFollowUpEditor';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import type { FailedOrder } from '@/hooks/useFailedOrders';
@@ -22,7 +22,6 @@ import {
   type GroupedFailedOrderListItem,
   groupFailedOrdersByDate,
 } from '@/lib/customers-failed-orders';
-import { STAFF_FOLLOW_UP_LABELS } from '@/schemas/staff-follow-up';
 
 interface FollowUpQueueListProps {
   currencySymbol: string;
@@ -153,43 +152,14 @@ export function FollowUpQueueList({
           return (
             <View style={styles.queueItem}>
               {card}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityHint="Open team follow-up details"
+              <StaffFollowUpAction
+                followUp={followUp}
+                viewerId={viewerId}
                 onPress={() => {
                   staffFollowUps.resetSave();
                   setSelectedOrderId(order.id);
                 }}
-                style={[styles.staffAction, { backgroundColor: colors.card }]}
-              >
-                <Text style={{ color: colors.text }}>
-                  {STAFF_FOLLOW_UP_LABELS[followUp?.stage ?? 'needs_follow_up']}{' '}
-                  ·{' '}
-                  {followUp?.assignee_id
-                    ? followUp.assignee_name
-                    : 'Unassigned'}
-                </Text>
-                {followUp?.outcome ? (
-                  <Text
-                    style={{ color: colors.textSecondary }}
-                    numberOfLines={2}
-                  >
-                    {followUp.outcome}
-                  </Text>
-                ) : null}
-                {followUp?.follow_up_on ? (
-                  <Text style={{ color: colors.textSecondary }}>
-                    Follow up on {followUp.follow_up_on}
-                  </Text>
-                ) : null}
-                <Text style={{ color: colors.gold }}>
-                  {!followUp?.assignee_id
-                    ? 'Claim follow-up'
-                    : followUp.assignee_id === viewerId
-                      ? 'Update follow-up'
-                      : 'View follow-up'}
-                </Text>
-              </Pressable>
+              />
             </View>
           );
         }}
@@ -278,12 +248,6 @@ export function FollowUpQueueList({
 
 const styles = StyleSheet.create({
   queueItem: { gap: SPACING.xs },
-  staffAction: {
-    minHeight: 44,
-    padding: SPACING.md,
-    borderRadius: 12,
-    gap: SPACING.xs,
-  },
   listContent: {
     padding: SPACING.lg,
     paddingTop: 0,

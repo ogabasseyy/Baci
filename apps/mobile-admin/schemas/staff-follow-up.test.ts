@@ -27,11 +27,36 @@ describe('staff follow-up schema', () => {
     expect(staffFollowUpSchema.parse(row)).toEqual(row);
   });
 
+  it('accepts an orphaned closed record with an empty outcome and no date', () => {
+    const row = {
+      ...record,
+      assignee_id: null,
+      assignee_name: 'A',
+      stage: 'closed',
+      outcome: '',
+      follow_up_on: null,
+      updated_at: '2026-11-19T12:03:00Z',
+    };
+    expect(staffFollowUpSchema.parse(row)).toEqual(row);
+  });
+
   it.each([
+    { order_id: 'bad-id' },
+    { merchant_id: 'bad-id' },
+    { assignee_id: '' },
+    { assignee_name: '' },
+    { assignee_name: '🌱'.repeat(161) },
+    { outcome: '🌱'.repeat(1001) },
     { stage: 'paid' },
     { follow_up_on: '2026-02-30' },
     { stage: 'closed' },
     { revision: 0 },
+    { revision: -1 },
+    { revision: 1.5 },
+    { revision: '1' },
+    { updated_at: '2026-11-19' },
+    { updated_at: '2026-11-19T12:03:00' },
+    { updated_at: '2026-02-30T12:03:00Z' },
   ])('rejects an invalid follow-up state %j', (change) => {
     expect(
       staffFollowUpSchema.safeParse({ ...record, ...change }).success

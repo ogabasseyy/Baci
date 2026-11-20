@@ -67,6 +67,14 @@ export function onboardingFixture() {
       recordRejected: vi.fn().mockResolvedValue(undefined),
       recordOwnershipHold: vi.fn().mockResolvedValue(true),
       releaseIntent: vi.fn().mockResolvedValue(true),
+      // Answers as the database does once a lookup proved no customer.
+      refreshUnknown: vi.fn().mockResolvedValue({
+        status: 'claimed',
+        intentId: 'refreshed-intent',
+        claimToken: 'refreshed-claim',
+        reclaimed: false,
+        identityRefreshed: true,
+      }),
     },
     createCustomer: vi.fn().mockResolvedValue({
       customer_id: 'customer-fixture',

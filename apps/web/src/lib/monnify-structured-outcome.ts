@@ -144,7 +144,7 @@ export function readStructuredOutcome(
         !NON_VEND_STATUS_PREFIX.test(key) &&
         typeof item === 'string' &&
         // A bare `status` under customer/product/... describes that object.
-        !(key === 'status' && underNonVend)
+        !underNonVend
       ) {
         const status = item.replace(/[\s_-]/g, '').toUpperCase();
         found.running ||= RUNNING_STATUSES.has(status);

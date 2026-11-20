@@ -2,6 +2,8 @@ import {
   monnifyEnvelopeSchema,
   requeryResponseBodySchema,
 } from '@/schemas/monnify-bills-schema';
+import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
+import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import { MonnifyHttpError } from './monnify-bills-errors';
 import { monnifyRequest } from './monnify-bills-request';
 import {
@@ -111,13 +113,22 @@ export async function checkTransactionStatus(
   // A rejected requery is about the query unless it names the vend as
   // failed: code 99 ("re-query"), "not found" and the like leave the row
   // processing instead of refunding a vend Monnify may have delivered.
+  // A business 401/403/429 or login wording proves nothing about the vend,
+  // even when the body also names it FAILED.
+  const isAuthRejection =
+    /^\s*0*(?:401|403|429)\s*$/.test(parsed.responseCode) ||
+    mentionsMonnifyAuthWording(
+      `${message} ${joinMonnifyAnswerStrings(envelope)}`
+    );
   return {
-    status: isMonnifyRequeryRejectionDefiniteFailure({
-      envelope,
-      rawMessage: message,
-    })
-      ? 'failed'
-      : 'unknown',
+    status:
+      !isAuthRejection &&
+      isMonnifyRequeryRejectionDefiniteFailure({
+        envelope,
+        rawMessage: message,
+      })
+        ? 'failed'
+        : 'unknown',
     responseCode,
     message,
   };

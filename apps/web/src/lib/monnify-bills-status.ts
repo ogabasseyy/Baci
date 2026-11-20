@@ -51,7 +51,12 @@ function isPlaceholderToken(value: string): boolean {
     return true;
   }
   const compact = value.replace(/[\s\-._*#/]/g, '');
-  return compact === '' || /^(?:0+|x+)$/i.test(compact);
+  return (
+    compact === '' ||
+    /^(?:0+|x+)$/i.test(compact) ||
+    // "N / A", "-- pending --": the vocabulary again, without separators.
+    PLACEHOLDER_TOKEN.test(compact)
+  );
 }
 
 /**

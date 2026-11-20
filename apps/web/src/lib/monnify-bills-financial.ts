@@ -205,6 +205,7 @@ export async function purchaseBill(
         message: sanitizeMonnifyErrorDetail(
           parsedEnvelope.responseMessage || 'Vend outcome unclear'
         ),
+        ...(hasToken && { providerTokenSeen: true }),
         providerVendReference: vendReference,
         requestReference,
       });

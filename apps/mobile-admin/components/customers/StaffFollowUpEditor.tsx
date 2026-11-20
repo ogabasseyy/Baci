@@ -48,7 +48,11 @@ export function StaffFollowUpEditor({
   const [dueOn, setDueOn] = useState(followUp?.follow_up_on ?? null);
   const [pickingDate, setPickingDate] = useState(false);
   const [error, setError] = useState('');
-  const canEdit = Boolean(viewerId && followUp?.assignee_id === viewerId);
+  const isClosed = followUp?.stage === 'closed';
+  const canClaim = Boolean(viewerId && !isClosed && !followUp?.assignee_id);
+  const canEdit = Boolean(
+    viewerId && !isClosed && followUp?.assignee_id === viewerId
+  );
 
   const submit = async () => {
     setError('');
@@ -96,7 +100,7 @@ export function StaffFollowUpEditor({
             You are now handling this follow-up. Add what happened, then save.
           </Text>
         ) : null}
-        {!followUp?.assignee_id && viewerId ? (
+        {canClaim ? (
           <Text style={{ color: colors.textSecondary }}>
             Claim this follow-up first. Then you can record what happened and
             set the next follow-up date.
@@ -145,6 +149,11 @@ export function StaffFollowUpEditor({
                 { color: colors.text, borderColor: colors.border },
               ]}
             />
+            {stage === 'closed' && dueOn ? (
+              <Text style={{ color: colors.textSecondary }}>
+                Closing clears the next follow-up date.
+              </Text>
+            ) : null}
             {stage !== 'closed' && (
               <>
                 <Pressable
@@ -206,7 +215,7 @@ export function StaffFollowUpEditor({
           >
             <Text style={{ color: colors.text }}>Close</Text>
           </Pressable>
-          {viewerId && (!followUp?.assignee_id || canEdit) ? (
+          {canClaim || canEdit ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => void submit()}

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   staffFollowUps: { data: {}, openOrders: [] } as {
-    data: Record<string, { stage: string }>;
+    data?: Record<string, { stage: string }>;
     openOrders: { id: string; created_at: string }[];
   },
   failedOrders: [] as Array<{
@@ -146,6 +146,18 @@ describe('TabLayout', () => {
     mocks.oxygenOrders = [];
     mocks.screens = [];
     mocks.tabsProps = null;
+  });
+
+  it('waits to count checkout rows until the closed status is known', () => {
+    mocks.failedOrders = [
+      { id: 'unknown', created_at: '2026-07-27T08:00:00Z' },
+    ];
+    mocks.staffFollowUps = { openOrders: [] };
+    render(<TabLayout />);
+    expect(
+      mocks.screens.find((route) => route.name === 'customers')?.options
+        ?.tabBarBadge
+    ).toBeUndefined();
   });
 
   it('counts open staff follow-ups and excludes closed drop-offs from the Customers badge', () => {

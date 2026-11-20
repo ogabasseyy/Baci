@@ -125,3 +125,28 @@ it('keeps the sheet open and shows the error when a claim is lost to a teammate'
   );
   expect(options.onClose).not.toHaveBeenCalled();
 });
+
+it.each([
+  claimed.assignee_id,
+  null,
+])('keeps a freshly closed follow-up read-only for assignee %s', (assigneeId) => {
+  const options = props();
+  const { rerender } = render(
+    <StaffFollowUpEditor {...options} followUp={claimed} />
+  );
+  rerender(
+    <StaffFollowUpEditor
+      key="closed"
+      {...options}
+      followUp={{
+        ...claimed,
+        assignee_id: assigneeId,
+        stage: 'closed',
+        revision: 2,
+      }}
+    />
+  );
+  expect(screen.getByText('Closed')).toBeVisible();
+  expect(screen.queryByText('Save follow-up')).toBeNull();
+  expect(screen.queryByText('Claim follow-up')).toBeNull();
+});

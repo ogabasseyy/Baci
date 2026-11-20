@@ -13,8 +13,8 @@ export default function TabLayout() {
     console.log('[TabLayout] Rendering Debug View');
   }
   const { colors } = useTheme();
-  const { orders } = useStaffFollowUpQueue();
-  const followUpCount = orders.length;
+  const { orders, staff } = useStaffFollowUpQueue();
+  const followUpCount = staff.data ? orders.length : 0;
 
   return (
     <View

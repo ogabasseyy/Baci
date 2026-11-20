@@ -316,3 +316,29 @@ describe('bugfix: a delivered token completes the vend even without a known stat
     });
   });
 });
+
+describe('bugfix: an HTTP 5xx on a fresh vend is retried with the same reference, never refunded', () => {
+  it.each([
+    500, 502, 503,
+  ])('throws a transient (retryable) error for HTTP %i instead of returning a failed result', async (status) => {
+    mockHttpError(status, 'Server Error', '{"responseMessage":"upstream"}');
+
+    await expect(vend()).rejects.toMatchObject({
+      name: 'MonnifyTransientVendError',
+    });
+  });
+
+  it('sends our request reference as the vendReference, so a retry is deduped by Monnify', async () => {
+    mockHttpError(502, 'Bad Gateway', '');
+
+    await expect(vend()).rejects.toThrow();
+
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const vendCall = calls.find(([url]) =>
+      String(url).includes('/bills-payment/vend')
+    );
+    expect(JSON.parse(String(vendCall?.[1]?.body))).toMatchObject({
+      vendReference: 'BACI-REF-123',
+    });
+  });
+});

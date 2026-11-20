@@ -73,7 +73,7 @@ export default function DateRangePicker({
 
   return (
     <Modal
-      supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}
+      supportedOrientations={['portrait', 'landscape']}
       transparent
       visible={visible}
       animationType="fade"

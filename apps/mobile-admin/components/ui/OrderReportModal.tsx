@@ -90,7 +90,7 @@ export default function OrderReportModal({
 
   return (
     <Modal
-      supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}
+      supportedOrientations={['portrait', 'landscape']}
       transparent
       visible={visible}
       animationType="fade"

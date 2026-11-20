@@ -26,7 +26,11 @@ export function StorefrontScreenShell({
   return (
     <SafeAreaView
       testID={testID}
-      edges={edges}
+      edges={
+        edges.length === 0
+          ? edges
+          : [...new Set<Edge>([...edges, 'left', 'right'])]
+      }
       style={[
         styles.container,
         themeBackground ? { backgroundColor: colors.background } : null,

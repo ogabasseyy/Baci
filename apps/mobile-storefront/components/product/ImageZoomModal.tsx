@@ -91,7 +91,13 @@ function ActiveImageZoomModal({
   };
 
   const zoomableImage = (
-    <Animated.View style={styles.imageWrapper}>
+    <Animated.View
+      testID="image-zoom-frame"
+      style={[
+        styles.imageWrapper,
+        { marginLeft: insets.left, marginRight: insets.right },
+      ]}
+    >
       <Animated.View
         style={[
           styles.imageContainer,
@@ -127,12 +133,7 @@ function ActiveImageZoomModal({
       statusBarTranslucent
       accessibilityViewIsModal
     >
-      <View
-        style={[
-          styles.container,
-          { paddingLeft: insets.left, paddingRight: insets.right },
-        ]}
-      >
+      <View style={styles.container} testID="image-zoom-container">
         {/* Background */}
         <Animated.View
           entering={FadeIn.duration(200)}
@@ -143,6 +144,7 @@ function ActiveImageZoomModal({
         {/* Header */}
         <Animated.View
           entering={FadeIn.duration(300).delay(100)}
+          testID="image-zoom-header"
           style={[
             styles.header,
             {

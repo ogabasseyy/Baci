@@ -17,6 +17,7 @@ import { BRAND, RADIUS } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 
 type ColorsScheme = (typeof Colors)['light'];
+const WIDE_GALLERY_ASPECT_RATIO = 1.5;
 
 export interface ProductImageGalleryProps {
   images: string[];
@@ -42,7 +43,7 @@ export function ProductImageGallery({
   headerHeight,
 }: ProductImageGalleryProps) {
   const { height, width } = useWindowDimensions();
-  const fitProductInWindow = width > height;
+  const fitProductInWindow = width > height * WIDE_GALLERY_ASPECT_RATIO;
 
   return (
     <>

@@ -61,10 +61,10 @@ describe('StorefrontScreenShell', () => {
     expect(screen.getByText('Content')).toBeTruthy();
   });
 
-  it('accepts edge overrides and merges custom styles', () => {
+  it('keeps both side insets when a screen overrides its vertical edges', () => {
     render(
       <StorefrontScreenShell
-        edges={['bottom']}
+        edges={['top']}
         style={{ backgroundColor: '#111111' }}
         testID="custom-shell"
       >
@@ -74,7 +74,7 @@ describe('StorefrontScreenShell', () => {
 
     const shell = screen.getByTestId('custom-shell');
 
-    expect(shell.props.edges).toEqual(['bottom']);
+    expect(shell.props.edges).toEqual(['top', 'left', 'right']);
     expect(StyleSheet.flatten(shell.props.style)).toMatchObject({
       flex: 1,
       backgroundColor: '#111111',

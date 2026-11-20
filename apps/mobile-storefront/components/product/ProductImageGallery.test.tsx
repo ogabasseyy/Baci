@@ -54,6 +54,21 @@ function renderGallery(overrides: Partial<ProductImageGalleryProps> = {}) {
 }
 
 describe('ProductImageGallery image bounds', () => {
+  it('preserves cover in a nearly square window', () => {
+    mockWindow.width = 640;
+    mockWindow.height = 620;
+    try {
+      renderGallery({ headerHeight: 620 });
+      expect(mockImage.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({ contentFit: 'cover' })
+      );
+    } finally {
+      mockWindow.width = 400;
+      mockWindow.height = 800;
+      mockImage.mockClear();
+    }
+  });
+
   it('keeps the complete product photo visible in a short, wide window', () => {
     mockWindow.width = 800;
     mockWindow.height = 360;

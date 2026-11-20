@@ -12,7 +12,9 @@ test('Swift lowers the Expo async promise callback for a noncopyable result', {
     new URL('../../node_modules/expo-modules-core/ios/Core/Functions/AsyncFunctionDefinition.swift', import.meta.url),
     'utf8'
   );
-  const callback = source.match(/\{ \[promise\] result in\n([\s\S]+?)\n      \}/)?.[1];
+  const callback = source.match(
+    /\{\s*\[promise\]\s*result\s+in\s*([\s\S]+?)\s*\}\s*return\s+promiseValue\b/
+  )?.[1];
   assert.ok(callback, 'Expo async promise callback must be identifiable');
 
   const directory = mkdtempSync(join(tmpdir(), 'baci-expo-async-promise-'));

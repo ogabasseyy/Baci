@@ -113,7 +113,7 @@ describe('StorefrontScreenShell', () => {
     });
   });
 
-  it('reserves the sides when the screen handles its own vertical insets', () => {
+  it('lets a child that handles all its own insets opt out of padding', () => {
     render(
       <StorefrontScreenShell edges={[]} testID="empty-shell">
         {null}
@@ -122,7 +122,7 @@ describe('StorefrontScreenShell', () => {
 
     const shell = screen.getByTestId('empty-shell');
 
-    expect(shell.props.edges).toEqual(['left', 'right']);
+    expect(shell.props.edges).toEqual([]);
     expect(StyleSheet.flatten(shell.props.style)).toMatchObject({
       flex: 1,
     });

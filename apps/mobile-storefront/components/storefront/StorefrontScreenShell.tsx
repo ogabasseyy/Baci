@@ -11,8 +11,8 @@ interface StorefrontScreenShellProps extends PropsWithChildren {
   themeBackground?: boolean;
 }
 
-// NativeStack already reserves the top inset. Callers can select which
-// vertical edges to pad. The shell always reserves both horizontal edges.
+// NativeStack already reserves the top inset. Include both horizontal edges
+// unless a child owns all of its own insets and explicitly passes [].
 export function StorefrontScreenShell({
   children,
   edges = ['bottom'],
@@ -26,7 +26,11 @@ export function StorefrontScreenShell({
   return (
     <SafeAreaView
       testID={testID}
-      edges={[...new Set<Edge>([...edges, 'left', 'right'])]}
+      edges={
+        edges.length === 0
+          ? edges
+          : [...new Set<Edge>([...edges, 'left', 'right'])]
+      }
       style={[
         styles.container,
         themeBackground ? { backgroundColor: colors.background } : null,

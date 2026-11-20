@@ -1,14 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { addMonths, subMonths } from 'date-fns';
 import { useState } from 'react';
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { DateRangePickerCalendarPanel } from '@/components/ui/date-range-picker/DateRangePickerCalendarPanel';
 import { DateRangePickerPresetPanel } from '@/components/ui/date-range-picker/DateRangePickerPresetPanel';
 import { dateRangePickerHelpers } from '@/components/ui/date-range-picker/dateRangePickerHelpers';
@@ -80,9 +73,10 @@ export default function DateRangePicker({
       onRequestClose={onClose}
     >
       <ModalSafeArea
-        style={[styles.overlay, { backgroundColor: colors.backdrop }]}
+        backdropColor={colors.backdrop}
+        onBackdropPress={onClose}
+        style={styles.overlay}
       >
-        <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
         <Pressable
           style={[
             styles.container,

@@ -40,6 +40,7 @@ interface ProductCardProps {
   neutralPrice?: boolean;
   modernSearch?: boolean;
   footer?: ReactNode;
+  gridAvailableWidth?: number;
   variant?: 'grid' | 'editorial' | 'list';
   onPress?: () => void;
   onPressIn?: () => void;
@@ -52,6 +53,7 @@ export function ProductCard({
   neutralPrice = false,
   modernSearch = false,
   footer,
+  gridAvailableWidth,
   variant = 'grid',
   onPress,
   onPressIn,
@@ -59,7 +61,7 @@ export function ProductCard({
   blurhash = DEFAULT_BLURHASH,
 }: ProductCardProps) {
   const { width: screenWidth } = useWindowDimensions();
-  const gridWidth = (screenWidth - 48) / 2;
+  const gridWidth = Math.max(0, (gridAvailableWidth ?? screenWidth) - 48) / 2;
 
   const scale = useSharedValue(1);
   const heartScale = useSharedValue(1);

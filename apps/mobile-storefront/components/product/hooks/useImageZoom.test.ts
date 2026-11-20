@@ -5,6 +5,7 @@ import { act, renderHook } from '@testing-library/react-native';
 // imports, so the factory must not reference any out-of-scope identifiers
 // (no captured types, no closure values).
 jest.mock('react-native-reanimated', () => {
+  const { useRef } = jest.requireActual<typeof import('react')>('react');
   const makeShared = (initial: number) => {
     let current = initial;
     return {
@@ -17,8 +18,12 @@ jest.mock('react-native-reanimated', () => {
   return {
     __esModule: true,
     default: {},
-    useSharedValue: (initial: number) => makeShared(initial),
-    useAnimatedStyle: (factory: () => unknown) => factory(),
+    useSharedValue: (initial: number) => useRef(makeShared(initial)).current,
+    useAnimatedStyle: (factory: () => { transform: unknown }) => ({
+      get transform() {
+        return factory().transform;
+      },
+    }),
     withSpring: (value: number) => value,
     withTiming: (value: number) => value,
     runOnJS:
@@ -128,6 +133,31 @@ const buildParams = (
 };
 
 describe('useImageZoom', () => {
+  it('reclamps an existing zoomed pan after the viewport shrinks', () => {
+    const factory = makeMockGestureFactory();
+    const params = buildParams({ gestureRuntime: { Gesture: factory } });
+    const { result, rerender } = renderHook(useImageZoom, {
+      initialProps: params,
+    });
+    const pinch = factory.__builders.find(({ __kind }) => __kind === 'pinch');
+    const pan = factory.__builders.find(({ __kind }) => __kind === 'pan');
+    act(() => {
+      pinch?.__handlers.start?.();
+      pinch?.__handlers.update?.({ scale: 2, focalX: 0, focalY: 0 });
+      pinch?.__handlers.end?.();
+      pan?.__handlers.start?.();
+      pan?.__handlers.update?.({ translationX: 170, translationY: -340 });
+    });
+    expect(result.current.animatedImageStyle).toMatchObject({
+      transform: [{ translateX: 170 }, { translateY: -340 }, { scale: 2 }],
+    });
+
+    rerender({ ...params, viewportWidth: 220, viewportHeight: 500 });
+    expect(result.current.animatedImageStyle).toMatchObject({
+      transform: [{ translateX: 110 }, { translateY: -250 }, { scale: 2 }],
+    });
+  });
+
   it('returns null composedGesture when Gesture runtime is not available', () => {
     const { result } = renderHook(() =>
       useImageZoom(

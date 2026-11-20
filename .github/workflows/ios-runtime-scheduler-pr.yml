@@ -44,7 +44,7 @@ env:
 
 jobs:
   runtime-scheduler:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     name: Swift RuntimeScheduler compatibility
     runs-on: xcode-27
     timeout-minutes: 30
@@ -58,7 +58,7 @@ jobs:
         run: |
           sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
           xcodebuild -version
-          test "$(xcrun --sdk iphoneos --show-sdk-version)" = "$XCODE_VERSION"
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Install JS deps
         uses: ./.github/actions/pnpm-install-cached

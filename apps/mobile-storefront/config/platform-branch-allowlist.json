@@ -1,6 +1,14 @@
 {
   "platformBranches": [
     {
+      "path": "components/product/ProductImageGallery.tsx",
+      "justification": "The wide-window image crop switches on iOS; Android keeps cover while its keyboard resizes the window."
+    },
+    {
+      "path": "components/product/hooks/use-product-detail-animations.ts",
+      "justification": "Android caps the hero at the screen height so keyboard adjustResize preserves the scroll thresholds; other platforms use the live window height."
+    },
+    {
       "path": "app/cart.tsx",
       "justification": "Reviewed existing cart haptics and list virtualization platform behavior."
     },

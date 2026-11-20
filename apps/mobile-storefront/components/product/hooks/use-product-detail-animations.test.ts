@@ -23,20 +23,28 @@ it('resizes the header in the mounted product detail as the window changes', () 
 
 it('keeps the Android gallery stable when the keyboard reduces window height', () => {
   const original = Dimensions.get('window');
+  const originalScreen = Dimensions.get('screen');
+  const landscapeScreen = { ...originalScreen, width: 800, height: 390 };
   const platform = jest.replaceProperty(Platform, 'OS', 'android');
   try {
-    Dimensions.set({ window: { ...original, width: 800, height: 360 } });
+    Dimensions.set({
+      screen: landscapeScreen,
+      window: { ...original, width: 800, height: 360 },
+    });
     const { result } = renderHook(() =>
       useProductDetailAnimations(Colors.light)
     );
-    expect(result.current.headerHeight).toBe(800);
+    expect(result.current.headerHeight).toBe(390);
 
     act(() => {
-      Dimensions.set({ window: { ...original, width: 800, height: 180 } });
+      Dimensions.set({
+        screen: landscapeScreen,
+        window: { ...original, width: 800, height: 180 },
+      });
     });
-    expect(result.current.headerHeight).toBe(800);
+    expect(result.current.headerHeight).toBe(390);
   } finally {
-    act(() => Dimensions.set({ window: original }));
+    act(() => Dimensions.set({ window: original, screen: originalScreen }));
     platform.restore();
   }
 });

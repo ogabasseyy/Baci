@@ -6,7 +6,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -96,14 +95,14 @@ export default function OrderReportModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <ModalSafeArea style={styles.overlay}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={() => {
-            setShowDropdown(false);
-            onClose();
-          }}
-        />
+      <ModalSafeArea
+        backdropColor="rgba(0,0,0,0.5)"
+        onBackdropPress={() => {
+          setShowDropdown(false);
+          onClose();
+        }}
+        style={styles.overlay}
+      >
         <Pressable
           style={[
             styles.container,

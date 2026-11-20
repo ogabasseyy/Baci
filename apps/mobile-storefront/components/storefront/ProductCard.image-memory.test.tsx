@@ -71,6 +71,17 @@ describe('ProductCard image memory behavior', () => {
     jest.clearAllMocks();
   });
 
+  it('sizes grid cards and image decoding to the safe content width', () => {
+    render(<ProductCard gridAvailableWidth={330} product={product} />);
+
+    expect(mockGridProductCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gridWidth: 141,
+        imageSource: { height: 282, uri: product.image, width: 282 },
+      })
+    );
+  });
+
   it('bounds grid image decoding to the physical viewport size', () => {
     render(<ProductCard product={product} />);
 

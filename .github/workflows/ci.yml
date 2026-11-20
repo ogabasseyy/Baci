@@ -55,6 +55,7 @@ jobs:
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
       piggyvest_runbook: ${{ steps.gate.outputs.piggyvest_runbook }}
+      agent_gate_scripts: ${{ steps.gate.outputs.agent_gate_scripts }}
       private_ci_trusted: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,8 +80,12 @@ jobs:
         run: node --test .github/actions/setup-pnpm-store/setup-pnpm-store-allowlist.test.mjs .github/actions/pnpm-install-cached/pnpm-install-cached-allowlist.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
+      - name: Test chat env pass-through guard
+        run: node --test .github/scripts/turbo-chat-env-passthrough.test.mjs
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
+      - name: Test pre-push behind-base guard
+        run: node --test .github/scripts/lefthook-behind-base.test.mjs .github/scripts/lefthook-behind-base-bounds.test.mjs
       # Unfiltered on purpose; see docs/runbooks/storefront-release-gate.md.
       - name: Test storefront release gate
         run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-mode.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
@@ -107,6 +112,7 @@ jobs:
           FILTER_CWV_RUNNER: ${{ steps.filter.outputs.cwv_runner }}
           FILTER_DEPLOY_SCRIPTS: ${{ steps.filter.outputs.deploy_scripts }}
           FILTER_PIGGYVEST_RUNBOOK: ${{ steps.filter.outputs.piggyvest_runbook }}
+          FILTER_AGENT_GATE_SCRIPTS: ${{ steps.filter.outputs.agent_gate_scripts }}
           # Generated Muse pin PRs must run the real gates in their
           # pull_request context; workflow_dispatch checks do not satisfy
           # required PR checks.
@@ -639,7 +645,7 @@ jobs:
   quality-migration-applier:
     name: Quality Gate - Migration Applier
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true' || needs.changes.outputs.agent_gate_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
@@ -655,7 +661,7 @@ jobs:
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true' || needs.changes.outputs.agent_gate_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
@@ -681,6 +687,14 @@ jobs:
         run: bash .github/scripts/check-mobile-gem-floors.sh
       - name: Test background CI step helper
         run: node --test .github/scripts/background-step.test.mjs
+      - name: Test agent quality-gate scripts
+        run: |
+          node --test ci_scripts/quality-gate-affected-base.test.mjs ci_scripts/quality-gate-affected-base.change-set.test.mjs ci_scripts/quality-gate-affected-base.nested.test.mjs ci_scripts/quality-gate-affected-base.turbo.test.mjs ci_scripts/quality-gate-ci-wiring.test.mjs ci_scripts/quality-gate-docs.test.mjs ci_scripts/resolve-turbo-cmd.test.mjs
+          bash .claude/hooks/quality-gate-affected-scope.test.sh
+          bash .claude/hooks/quality-gate.test.sh
+          bash .claude/hooks/quality-gate-environment.test.sh
+          bash .codex/hooks/quality-gate-affected-scope.test.sh
+          bash .codex/hooks/quality-gate.test.sh
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs

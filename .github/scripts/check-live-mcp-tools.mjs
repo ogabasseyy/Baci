@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import {
   DEFAULT_REQUIRED_TOOLS,
   DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS,
+  RETIRED_PUBLIC_TOOLS,
 } from './mcp-tool-contracts.mjs';
 
 export { DEFAULT_REQUIRED_TOOLS, DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS };
@@ -27,12 +28,18 @@ async function main() {
   const toolNames = tools.map((tool) => tool.name).sort();
   const toolNameSet = new Set(toolNames);
   const missingTools = requiredTools.filter((tool) => !toolNameSet.has(tool));
+  // An explicit inventory override can target a different MCP server, where
+  // the same name may describe a real cart mutation rather than our old alias.
+  const retiredTools = requiredTools === DEFAULT_REQUIRED_TOOLS
+    ? RETIRED_PUBLIC_TOOLS.filter((tool) => toolNameSet.has(tool))
+    : [];
 
-  if (missingTools.length > 0) {
+  if (missingTools.length > 0 || retiredTools.length > 0) {
     throw new Error(
       [
         `MCP production smoke failed for ${mcpUrl}.`,
-        `Missing tools: ${missingTools.join(', ')}`,
+        ...(missingTools.length ? [`Missing tools: ${missingTools.join(', ')}`] : []),
+        ...(retiredTools.length ? [`Retired tools: ${retiredTools.join(', ')}`] : []),
         `Live tools: ${toolNames.join(', ')}`,
       ].join('\n')
     );

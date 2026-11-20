@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   staffFollowUps: { data: {}, openOrders: [] } as {
     data?: Record<string, { stage: string }>;
+    isError?: boolean;
     openOrders: { id: string; created_at: string }[];
   },
   failedOrders: [] as Array<{
@@ -158,6 +159,18 @@ describe('TabLayout', () => {
       mocks.screens.find((route) => route.name === 'customers')?.options
         ?.tabBarBadge
     ).toBeUndefined();
+  });
+
+  it('signals a staff-data error without presenting checkout rows as a verified count', () => {
+    mocks.failedOrders = [
+      { id: 'unknown', created_at: '2026-07-27T08:00:00Z' },
+    ];
+    mocks.staffFollowUps = { openOrders: [], isError: true };
+    render(<TabLayout />);
+    expect(
+      mocks.screens.find((route) => route.name === 'customers')?.options
+        ?.tabBarBadge
+    ).toBe('!');
   });
 
   it('counts open staff follow-ups and excludes closed drop-offs from the Customers badge', () => {

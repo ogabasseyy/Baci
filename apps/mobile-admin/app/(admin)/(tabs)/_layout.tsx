@@ -15,6 +15,11 @@ export default function TabLayout() {
   const { colors } = useTheme();
   const { orders, staff } = useStaffFollowUpQueue();
   const followUpCount = staff.data ? orders.length : 0;
+  const customersBadge = staff.isError
+    ? '!'
+    : followUpCount > 0
+      ? followUpCount
+      : undefined;
 
   return (
     <View
@@ -78,7 +83,7 @@ export default function TabLayout() {
           options={{
             title: 'Customers',
             // Follow-up checkout drop-offs belong with customer outreach, not Orders.
-            tabBarBadge: followUpCount > 0 ? followUpCount : undefined,
+            tabBarBadge: customersBadge,
             tabBarIcon: ({ color, focused, size }) => (
               <Ionicons
                 color={color}

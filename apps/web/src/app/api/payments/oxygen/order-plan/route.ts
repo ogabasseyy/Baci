@@ -57,8 +57,11 @@ export async function GET(request: NextRequest) {
   try {
     const snapshot = await readOxygenSnapshot(auth.supabase, workflow.data.id);
     const { booking, schedule, paymentComplete } = snapshot.state;
+    if (!booking) return NextResponse.json({ plan: null }, { headers });
+    // The runtime snapshot has already validated the saved booking's tenure
+    // and upfront amount. The shared schema also checks the public projection.
     const activationConfirmed =
-      snapshot.stage === 'activated' && booking?.status === 'ACTIVATED';
+      snapshot.stage === 'activated' && booking.status === 'ACTIVATED';
     const repaymentReceipts = activationConfirmed
       ? await readRepaymentReceipts(auth.supabase, id.data)
       : undefined;
@@ -66,21 +69,15 @@ export async function GET(request: NextRequest) {
     const savedSchedule = oxygenOrderPlanSchema.shape.schedule.safeParse(
       schedule ?? []
     );
-    return NextResponse.json(
-      {
-        plan: booking
-          ? {
-              upfront: booking.total_upfront_payment ?? null,
-              upfrontConfirmed: paymentComplete === true,
-              activationConfirmed,
-              repaymentReceipts,
-              months: booking.loan_tenure,
-              schedule: savedSchedule.success ? savedSchedule.data : [],
-            }
-          : null,
-      },
-      { headers }
-    );
+    const plan = oxygenOrderPlanSchema.parse({
+      upfront: booking.total_upfront_payment ?? null,
+      upfrontConfirmed: paymentComplete === true,
+      activationConfirmed,
+      repaymentReceipts,
+      months: booking.loan_tenure,
+      schedule: savedSchedule.success ? savedSchedule.data : [],
+    });
+    return NextResponse.json({ plan }, { headers });
   } catch {
     return NextResponse.json(
       { error: 'Plan unavailable' },

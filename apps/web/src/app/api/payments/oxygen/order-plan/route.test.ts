@@ -160,3 +160,12 @@ it('keeps acknowledgements visible when a saved calendar date is impossible', as
   expect(plan.schedule).toEqual([]);
   expect(plan.repaymentReceipts).toEqual([receipt]);
 });
+
+it('fails closed if the validated snapshot and plan contracts ever diverge', async () => {
+  mocks.read.mockResolvedValue({
+    state: { booking: { status: 'BOOKED', loan_tenure: 0 }, schedule: [] },
+  });
+  const response = await GET(request());
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: 'Plan unavailable' });
+});

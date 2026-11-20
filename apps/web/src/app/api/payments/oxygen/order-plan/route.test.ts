@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   read: vi.fn(),
+  rpc: vi.fn(),
   single: vi.fn(),
   from: vi.fn(),
 }));
@@ -29,8 +30,9 @@ beforeEach(() => {
   mocks.from.mockReturnValue(query);
   mocks.auth.mockResolvedValue({
     user: { id: 'customer' },
-    supabase: { from: mocks.from },
+    supabase: { from: mocks.from, rpc: mocks.rpc },
   });
+  mocks.rpc.mockResolvedValue({ data: [], error: null });
   mocks.single.mockResolvedValue({ data: { id: 'workflow' }, error: null });
 });
 it('rejects unauthenticated and invalid input before database reads', async () => {
@@ -99,8 +101,44 @@ it('projects activation only from the canonical activated workflow and booking',
   expect((await (await GET(request())).json()).plan.activationConfirmed).toBe(
     false
   );
+  expect(mocks.rpc).not.toHaveBeenCalled();
   mocks.read.mockResolvedValue({ stage: 'activated', state });
   expect((await (await GET(request())).json()).plan.activationConfirmed).toBe(
     true
   );
+});
+
+it('returns only customer-safe acknowledgement fields for the activated order', async () => {
+  mocks.read.mockResolvedValue({
+    stage: 'activated',
+    state: { booking: { status: 'ACTIVATED', loan_tenure: 3 }, schedule: [] },
+  });
+  const receipt = {
+    id: 'bb3955b1-0571-49eb-919f-6a6946fdb00b',
+    recordedAt: '2026-11-20T12:00:00+00:00',
+  };
+  mocks.rpc.mockResolvedValue({
+    data: [{ ...receipt, transactionReference: 'private' }],
+    error: null,
+  });
+  const { plan } = await (await GET(request())).json();
+  expect(plan.repaymentReceipts).toEqual([receipt]);
+  expect(mocks.rpc).toHaveBeenCalledOnce();
+  expect(mocks.rpc).toHaveBeenCalledWith('oxygen_order_repayment_receipts', {
+    p_order_id: orderId,
+  });
+});
+
+it('keeps the schedule available when the acknowledgement lookup fails', async () => {
+  const schedule = [{ period: 1, dueDate: [2026, 11, 27], amount: 55658 }];
+  mocks.read.mockResolvedValue({
+    stage: 'activated',
+    state: { booking: { status: 'ACTIVATED', loan_tenure: 3 }, schedule },
+  });
+  mocks.rpc.mockResolvedValue({ data: null, error: { message: 'private' } });
+  const response = await GET(request());
+  expect(response.status).toBe(200);
+  const { plan } = await response.json();
+  expect(plan.schedule).toEqual(schedule);
+  expect(plan.repaymentReceipts).toBeUndefined();
 });

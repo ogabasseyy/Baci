@@ -1,5 +1,5 @@
+import { oxygenOrderPlanSchema } from '@baci/shared/schemas/oxygen-order-plan';
 import { expect, it } from 'vitest';
-import { oxygenOrderPlanSchema } from '@/schemas/oxygen-order-plan';
 import { oxygenProviderStateSchema } from '@/schemas/oxygen-runtime';
 
 it('retains an ACTIVATED provider booking when the canonical workflow is reopened', () => {

@@ -1,9 +1,31 @@
+import { oxygenRepaymentReceiptsSchema } from '@baci/shared/schemas/oxygen-order-plan';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
-import { readOxygenSnapshot } from '@/lib/payments/oxygen/runtime-service';
+import {
+  type OxygenRuntimeRpc,
+  readOxygenSnapshot,
+} from '@/lib/payments/oxygen/runtime-service';
 
 const headers = { 'Cache-Control': 'no-store' };
+
+async function readRepaymentReceipts(client: OxygenRuntimeRpc, id: string) {
+  try {
+    const { data, error } = await client.rpc(
+      'oxygen_order_repayment_receipts',
+      {
+        p_order_id: id,
+      }
+    );
+    if (error) return undefined;
+    const result = oxygenRepaymentReceiptsSchema.safeParse(data);
+    return result.success ? result.data : undefined;
+  } catch {
+    // The booked schedule is available even if receipt history cannot be read.
+    return undefined;
+  }
+}
+
 // Read saved, customer-owned facts only. Never create/resume a provider action.
 export async function GET(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
@@ -32,15 +54,19 @@ export async function GET(request: NextRequest) {
   try {
     const snapshot = await readOxygenSnapshot(auth.supabase, workflow.data.id);
     const { booking, schedule, paymentComplete } = snapshot.state;
+    const activationConfirmed =
+      snapshot.stage === 'activated' && booking?.status === 'ACTIVATED';
+    const repaymentReceipts = activationConfirmed
+      ? await readRepaymentReceipts(auth.supabase, id.data)
+      : undefined;
     return NextResponse.json(
       {
         plan: booking
           ? {
               upfront: booking.total_upfront_payment ?? null,
               upfrontConfirmed: paymentComplete === true,
-              activationConfirmed:
-                snapshot.stage === 'activated' &&
-                booking.status === 'ACTIVATED',
+              activationConfirmed,
+              repaymentReceipts,
               months: booking.loan_tenure,
               schedule: (schedule ?? []).map(({ period, dueDate, amount }) => ({
                 period,

@@ -127,8 +127,8 @@ it('keeps the verified capture pending and flags it for reconciliation without s
   expect(result.status).toBe(202);
   expect(rpc).toHaveBeenCalledTimes(1);
   expect(buyerRpc).toHaveBeenCalledExactlyOnceWith(
-    'flag_sessionless_payment_provider_confirmed',
-    { p_gateway_reference: reference }
+    'ensure_bank_card_offer_capture_sweep',
+    { p_reference: reference }
   );
 });
 
@@ -189,4 +189,18 @@ it('returns a retryable failure when a capture mismatch could not be recorded', 
   const result = await verifyNative(snapshot, buyerClient);
   expect(result.status).toBe(503);
   expect(buyerRpc).not.toHaveBeenCalled();
+});
+
+it.each([
+  { data: false, error: null },
+  { data: null, error: { code: '57014' } },
+])('responds with a retryable error if capture recovery is not durable (%j)', async (outcome) => {
+  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
+  buyerRpc.mockResolvedValueOnce(outcome);
+
+  expect((await verifyNative(snapshot, buyerClient)).status).toBe(503);
+  expect(buyerRpc).toHaveBeenCalledExactlyOnceWith(
+    'ensure_bank_card_offer_capture_sweep',
+    { p_reference: reference }
+  );
 });

@@ -4,7 +4,6 @@ import type { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-o
 import { verifyBankCardOfferPaystack } from '@/lib/checkout/verify-bank-card-offer-paystack';
 import { logger } from '@/lib/logger';
 import { bankCardOfferVerificationContextSchema } from '@/schemas/bank-card-offer-verification-context';
-import { flagSessionlessPaymentProviderConfirmed } from './flag-sessionless-payment-provider-confirmed';
 import type { GuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
 
 export async function verifySessionlessBankCardOffer(
@@ -110,11 +109,15 @@ export async function verifySessionlessBankCardOffer(
         finalizationOutcome: 'completed',
       });
     }
-    await flagSessionlessPaymentProviderConfirmed(
-      buyerClient,
-      snapshot.gatewayReference
+    const recovery = await buyerClient.rpc(
+      'ensure_bank_card_offer_capture_sweep',
+      {
+        p_reference: snapshot.gatewayReference,
+      }
     );
-    return pending();
+    return !recovery.error && recovery.data === true
+      ? pending()
+      : unavailable();
   } catch (error) {
     logger.warn({
       message: 'Bank offer shopper verification unavailable',

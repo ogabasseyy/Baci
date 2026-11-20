@@ -66,7 +66,7 @@ export async function initializeBankCardOfferCheckout({
   if (claim.error || !reserved.success) return { kind: 'unavailable' } as const;
   const { claimed, reference, checkoutUrl } = reserved.data;
   const review = (failed: boolean) =>
-    client.rpc('flag_bank_card_offer_initialization_review', {
+    client.rpc('request_bank_card_offer_initialization_review', {
       ...args,
       p_reference: reference,
       p_failed: failed,
@@ -75,7 +75,9 @@ export async function initializeBankCardOfferCheckout({
     const flagged = await review(immediate);
     if (flagged.error)
       throw new Error('Unable to record bank offer initialization review');
-    return { kind: 'pending', reference } as const;
+    return flagged.data === true
+      ? ({ kind: 'pending', reference } as const)
+      : ({ kind: 'retryable', reference } as const);
   }
   if (!claimed) {
     if (checkoutUrl)

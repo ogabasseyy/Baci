@@ -37,7 +37,7 @@ function setup() {
     get_bank_card_offer_checkout_context: getContext,
     claim_bank_card_offer_attempt: reserve,
     record_bank_card_offer_checkout_url: save,
-    flag_bank_card_offer_initialization_review: review,
+    request_bank_card_offer_initialization_review: review,
   };
   const rpc = vi.fn((name: keyof typeof handlers, args: unknown) => {
     return handlers[name](args);
@@ -132,6 +132,18 @@ describe('initializeBankCardOfferCheckout', () => {
     expect(review).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ p_failed: false, p_reference: reference })
     );
+    expect(paystack).not.toHaveBeenCalled();
+  });
+
+  it('returns retryable for a young attempt with no durable review', async () => {
+    const { input, reserve, review } = setup();
+    reserve.mockResolvedValueOnce({ data: { ...claim, claimed: false } });
+    review.mockResolvedValueOnce({ data: false, error: null });
+
+    await expect(initializeBankCardOfferCheckout(input)).resolves.toEqual({
+      kind: 'retryable',
+      reference,
+    });
     expect(paystack).not.toHaveBeenCalled();
   });
 

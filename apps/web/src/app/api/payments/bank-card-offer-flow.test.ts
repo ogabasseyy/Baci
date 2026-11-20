@@ -277,6 +277,8 @@ function setup(
             ),
           },
         };
+      case 'request_bank_card_offer_initialization_review':
+        return { data: true, error: null };
       case 'flag_bank_card_offer_terminal_review':
         terminalReview = true;
         return { data: true };
@@ -530,7 +532,7 @@ describe('bank card offer payment handlers', () => {
     expect((await initialize(request('initialize', input))).status).toBe(202);
     expect(mocks.initialize).toHaveBeenCalledTimes(1);
     expect(mocks.rpc).toHaveBeenCalledWith(
-      'flag_bank_card_offer_initialization_review',
+      'request_bank_card_offer_initialization_review',
       expect.objectContaining({ p_reference: reference, p_failed: true })
     );
     expect(

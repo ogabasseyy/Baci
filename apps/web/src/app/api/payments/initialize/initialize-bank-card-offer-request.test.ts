@@ -57,3 +57,27 @@ it('returns the existing reference when provider initialization needs review', a
     reference: 'BCO-reference',
   });
 });
+
+it('returns Retry-After when an existing attempt has no durable recovery review', async () => {
+  vi.mocked(checkCsrfProtection).mockResolvedValueOnce({ valid: true });
+  vi.mocked(authenticateApiRequest).mockResolvedValueOnce({
+    user: { id: 'buyer' },
+    error: null,
+  } as never);
+  vi.mocked(initializeBankCardOfferCheckout).mockResolvedValueOnce({
+    kind: 'retryable',
+    reference: 'BCO-reference',
+  });
+
+  const response = await initializeBankCardOfferRequest(
+    request,
+    data,
+    vi.fn().mockResolvedValue({})
+  );
+  expect(response.status).toBe(503);
+  expect(response.headers.get('Retry-After')).toBe('5');
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'BANK_CARD_OFFER_INITIALIZATION_PENDING',
+    reference: 'BCO-reference',
+  });
+});

@@ -29,6 +29,9 @@ BEGIN
   IF has_table_privilege('authenticated', 'private.bank_card_offer_payment_attempts', 'SELECT')
     OR has_function_privilege('anon', 'public.claim_bank_card_offer_attempt(uuid,uuid,bigint,text,text,bigint,bigint)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.bank_card_offer_refund_capture_matches(uuid,uuid,uuid,text,bigint)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.request_bank_card_offer_initialization_review(uuid,uuid,text,boolean)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.ensure_bank_card_offer_capture_sweep(text)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.ensure_bank_card_offer_capture_sweep(text)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.get_bank_card_offer_refundable_amount(uuid,uuid,uuid,text)', 'EXECUTE')
     OR has_function_privilege('anon', 'public.get_bank_card_offer_refundable_amount(uuid,uuid,uuid,text)', 'EXECUTE')
     OR NOT has_function_privilege('service_role', 'public.get_bank_card_offer_refundable_amount(uuid,uuid,uuid,text)', 'EXECUTE')
@@ -150,7 +153,21 @@ BEGIN
   IF public.flag_bank_card_offer_capture_review(v_order, v_merchant, v_transaction) THEN
     RAISE EXCEPTION 'Buyer claims cannot queue a provider capture review directly';
   END IF;
-  PERFORM public.flag_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, true);
+  IF public.request_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, false)
+  THEN RAISE EXCEPTION 'An in-flight reference cannot acknowledge an unfiled recovery review'; END IF;
+  IF NOT public.ensure_bank_card_offer_capture_sweep(v_reference)
+    THEN RAISE EXCEPTION 'A verified owned capture could not request a sweep'; END IF;
+  IF NOT public.ensure_bank_card_offer_capture_sweep(v_reference)
+    THEN RAISE EXCEPTION 'An existing sweep marker was not acknowledged idempotently'; END IF;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', gen_random_uuid())::text, true);
+  IF public.ensure_bank_card_offer_capture_sweep(v_reference)
+    THEN RAISE EXCEPTION 'A different buyer could claim the bank-offer capture marker'; END IF;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
+    'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+  IF NOT public.request_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, true)
+    THEN RAISE EXCEPTION 'A failed attempt did not acknowledge its durable review'; END IF;
+  IF NOT public.request_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, false)
+    THEN RAISE EXCEPTION 'A replay did not acknowledge the existing durable review'; END IF;
   DECLARE v_review_id uuid;
   BEGIN
     SELECT id INTO STRICT v_review_id FROM public.reconciliation_review

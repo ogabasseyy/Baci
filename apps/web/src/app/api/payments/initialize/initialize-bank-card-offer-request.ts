@@ -54,6 +54,15 @@ export async function initializeBankCardOfferRequest(
   if (result.kind === 'unavailable') {
     return unavailable();
   }
+  if (result.kind === 'retryable') {
+    return NextResponse.json(
+      {
+        code: 'BANK_CARD_OFFER_INITIALIZATION_PENDING',
+        reference: result.reference,
+      },
+      { status: 503, headers: { 'Retry-After': '5' } }
+    );
+  }
   if (result.kind === 'pending') {
     return NextResponse.json(
       {

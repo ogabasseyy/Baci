@@ -1,13 +1,5 @@
 import { KudaApiHttpError, KudaPreDispatchError } from './kuda-transport-error';
 
-/**
- * Whether a failed Kuda price-list fetch means Kuda never gave an answer:
- * a timeout (408), rate limit (429) or server error (5xx), a failed login
- * before the request, a timeout or a dropped connection. Only then may a
- * saved price list stand in. Anything else is Kuda answering, definitely
- * (another 4xx) or with something Baci can't trust (empty, broken, priced in
- * the wrong unit), and the purchase is refused instead.
- */
 /** Node's connection failure codes, on the error or its cause. */
 const NETWORK_ERROR_CODES = new Set([
   'ECONNRESET',
@@ -38,11 +30,25 @@ function hasNetworkErrorCode(error: unknown): boolean {
   );
 }
 
+/** A timeout, rate limit or server error: Kuda gave no usable answer. */
+function isTransientStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/**
+ * Whether a failed Kuda price-list fetch means Kuda never gave an answer:
+ * a timeout (408), rate limit (429) or server error (5xx), a login that
+ * never reached Kuda or was answered the same way, a request timeout or a
+ * dropped connection. Only then may a saved price list stand in. Anything
+ * else is Kuda answering, definitely (another 4xx, including a 401/403 on
+ * login) or with something Baci can't trust (empty, broken, priced in the
+ * wrong unit), and the purchase is refused instead.
+ */
 export function isKudaNoResponse(error: unknown): boolean {
-  if (error instanceof KudaApiHttpError) {
-    return error.status === 408 || error.status === 429 || error.status >= 500;
+  if (error instanceof KudaApiHttpError) return isTransientStatus(error.status);
+  if (error instanceof KudaPreDispatchError) {
+    return error.status === undefined || isTransientStatus(error.status);
   }
-  if (error instanceof KudaPreDispatchError) return true;
   if (hasNetworkErrorCode(error)) return true;
   // fetch rejects with a TypeError whose message names the network failure;
   // a TypeError from reading a broken answer ("Cannot read properties of

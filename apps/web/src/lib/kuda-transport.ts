@@ -116,7 +116,8 @@ async function getToken(): Promise<string> {
 
   if (!response.ok) {
     throw new KudaPreDispatchError(
-      `Failed to get Kuda token: ${response.statusText}`
+      `Failed to get Kuda token: ${response.statusText}`,
+      response.status
     );
   }
 

@@ -12,7 +12,7 @@ import {
  * failed") describes the query, not the vend, so it does not count.
  */
 const VEND_FAILED_WORDING =
-  /\b(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|reversed|cancell?ed)\b|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|\bfailed\s+to\s+vend\b/i;
+  /\b(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)\w*(?:\s+\w+){0,2}?\s+(?:failed|failure|unsuccessful|declined|reversed|cancell?ed|rejected|refused|denied)\b|\bfail(?:ed|ure)(?:\s+\w+){0,2}?\s+(?:vend|transaction|purchase|airtime|payment|top\s?up|recharge)|\bfailed\s+to\s+vend\b/i;
 
 /** A negated failure ("has not failed", "was not unsuccessful") proves nothing. */
 const NEGATED_FAILURE_WORDING =
@@ -44,9 +44,13 @@ export function isMonnifyRequeryRejectionDefiniteFailure({
   const wording = normaliseMonnifyWording(
     `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`
   );
+  // A vend-level FAILED status in the body is conclusive: it is not masked by
+  // generic query wording such as "Request failed" in the message.
+  if (hasMonnifyExplicitVendFailure(envelope)) {
+    return !isMonnifyUnresolvedAnswer({ answer: envelope, wording });
+  }
   return (
-    (VEND_FAILED_WORDING.test(wording) ||
-      hasMonnifyExplicitVendFailure(envelope)) &&
+    VEND_FAILED_WORDING.test(wording) &&
     !LOOKUP_WORDING.test(wording) &&
     !NEGATED_FAILURE_WORDING.test(wording) &&
     !isMonnifyUnresolvedAnswer({ answer: envelope, wording })

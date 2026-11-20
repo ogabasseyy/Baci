@@ -174,7 +174,9 @@ export function isMonnifyUnresolvedAnswer({
   const structuredHold =
     outcome.running ||
     outcome.incomplete ||
-    ((outcome.done || outcome.unknown) && !outcome.failed);
+    // An unrecognised vend state proves nothing, even beside a FAILED one.
+    outcome.unknown ||
+    (outcome.done && !outcome.failed);
   const wordingHolds =
     !(outcome.failed && !outcome.running) &&
     IN_FLIGHT_WORDING.test(
@@ -218,6 +220,13 @@ export function hasMonnifyExplicitVendFailure(answer: unknown): boolean {
     incomplete: false,
   };
   readStructuredOutcome(answer, outcome);
-  settleVendPrecedence(outcome);
-  return outcome.failed && !outcome.running && !outcome.incomplete;
+  // Only a VEND-level failure proves it: a generic top-level `status: FAILED`
+  // may describe the lookup request itself.
+  return (
+    outcome.vendFailed &&
+    !outcome.vendDone &&
+    !outcome.running &&
+    !outcome.unknown &&
+    !outcome.incomplete
+  );
 }

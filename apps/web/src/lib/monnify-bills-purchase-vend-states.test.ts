@@ -264,3 +264,55 @@ describe('bugfix: auth wording in the HTTP reason phrase stays off Kuda', () => 
     });
   });
 });
+
+describe('bugfix: a delivered token completes the vend even without a known status', () => {
+  function mockSuccessEnvelope(responseBody: Record<string, unknown>) {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody,
+      }),
+    });
+  }
+
+  it('returns success with the token when the vend status is missing', async () => {
+    mockSuccessEnvelope({
+      transactionReference: 'MNFY-1',
+      metaData: { token: '1111-2222-3333', unit: '4.5' },
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      success: true,
+      status: 'successful',
+      pin: '1111-2222-3333',
+    });
+  });
+
+  it('returns success with the token when the vend status is unrecognised', async () => {
+    mockSuccessEnvelope({
+      transactionReference: 'MNFY-1',
+      vendStatus: 'WEIRD',
+      token: 'ABCD-1234',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'successful',
+      pin: 'ABCD-1234',
+    });
+  });
+
+  it('still holds an unrecognised status with no token', async () => {
+    mockSuccessEnvelope({
+      transactionReference: 'MNFY-1',
+      vendStatus: 'WEIRD',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'pending',
+      providerOutcomeUnresolved: true,
+    });
+  });
+});

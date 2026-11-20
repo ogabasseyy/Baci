@@ -202,3 +202,25 @@ describe('bugfix: numeric vend-specific status holds', () => {
     );
   });
 });
+
+describe('bugfix: an unknown vend state is never cleared by a FAILED one', () => {
+  it('holds vendStatus FAILED next to transactionStatus UNKNOWN', () => {
+    expect(
+      open(
+        {
+          responseBody: { vendStatus: 'FAILED', transactionStatus: 'UNKNOWN' },
+        },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+});
+
+describe('bugfix: postposed duplicate negation', () => {
+  it.each([
+    'Duplicate reference not found',
+    'Duplicate was not detected',
+  ])('does not hold on "%s"', (wording) => {
+    expect(open({ responseCode: '01' }, wording)).toBe(false);
+  });
+});

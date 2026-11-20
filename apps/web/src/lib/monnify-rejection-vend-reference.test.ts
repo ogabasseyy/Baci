@@ -60,13 +60,13 @@ describe('bugfix: vendReference is found in every supported answer shape', () =>
     ).toBeUndefined();
   });
 
-  it('ignores blank and non-string values', () => {
+  it('ignores blank values and reads a numeric reference as a string', () => {
     expect(
       findMonnifyBodyVendReference({ responseBody: { vendReference: '  ' } })
     ).toBeUndefined();
     expect(
       findMonnifyBodyVendReference({ responseBody: { vendReference: 12 } })
-    ).toBeUndefined();
+    ).toBe('12');
   });
 });
 
@@ -156,5 +156,32 @@ describe('bugfix: top-level provider references count as evidence', () => {
     expect(
       findMonnifyBodyVendReference({ vendReference: 'MFBP-1' })
     ).toBeUndefined();
+  });
+});
+
+describe('bugfix: every reference shape vend evidence reads counts as a provider reference', () => {
+  it.each([
+    [
+      'numeric transactionReference',
+      { responseBody: { transactionReference: 12345 } },
+    ],
+    ['paymentReference', { responseBody: { paymentReference: 'PAY-1' } }],
+    ['transactionId', { responseBody: { transactionId: 'TX-1' } }],
+  ])('counts %s', (_label, answer) => {
+    expect(hasMonnifyProviderReference(answer, ref)).toBe(true);
+  });
+
+  it('ignores validation/request/customer references and a bare top-level reference', () => {
+    expect(
+      hasMonnifyProviderReference(
+        {
+          reference: 'x',
+          validationReference: 'v',
+          customerReference: 'c',
+          requestReference: 'r',
+        },
+        ref
+      )
+    ).toBe(false);
   });
 });

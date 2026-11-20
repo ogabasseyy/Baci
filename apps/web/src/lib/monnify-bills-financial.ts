@@ -141,8 +141,14 @@ export async function purchaseBill(
 
     const transactionReference = body.transactionReference || undefined;
     const vendReference = body.vendReference || undefined;
-    const { isSuccess, isProcessing, isFailed } =
-      classifyMonnifyBillStatus(body);
+    const classified = classifyMonnifyBillStatus(body);
+    const { isProcessing, isFailed } = classified;
+    // A delivered token is conclusive even when the status is missing or a
+    // state we do not know: without it the customer would never get the
+    // voucher they paid for.
+    const hasToken = !!(body.metaData?.token || body.token);
+    const isSuccess =
+      classified.isSuccess || (hasToken && !isProcessing && !isFailed);
 
     if (isSuccess && !transactionReference && !vendReference) {
       throw new MonnifyTransientVendError(

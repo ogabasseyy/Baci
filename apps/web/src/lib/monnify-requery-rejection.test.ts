@@ -114,3 +114,35 @@ describe('bugfix: a negated failure is not proof the vend failed', () => {
     expect(check(message)).toBe(false);
   });
 });
+
+describe('bugfix: vend-level FAILED, generic status and terminal synonyms', () => {
+  it('accepts a vend FAILED even when the message says "Request failed"', () => {
+    expect(
+      check('Request failed', { responseBody: { vendStatus: 'FAILED' } })
+    ).toBe(true);
+  });
+
+  it('does not accept a generic top-level status FAILED with a neutral message', () => {
+    expect(check('Could not complete', { status: 'FAILED' })).toBe(false);
+  });
+
+  it('does not accept FAILED next to an unknown vend state', () => {
+    expect(
+      check('Rejected', {
+        responseBody: { vendStatus: 'FAILED', transactionStatus: 'UNKNOWN' },
+      })
+    ).toBe(false);
+  });
+
+  it.each([
+    'Vend rejected',
+    'Transaction refused',
+    'Purchase denied',
+  ])('accepts "%s"', (message) => {
+    expect(check(message)).toBe(true);
+  });
+
+  it('keeps "Request rejected" unresolved', () => {
+    expect(check('Request rejected')).toBe(false);
+  });
+});

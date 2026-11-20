@@ -9,14 +9,16 @@ interface Found {
   value: string;
 }
 
+type KeyMatcher = (key: string, insideBody: boolean) => boolean;
+
 /**
- * Every non-blank string under `fieldKey` (normalised) inside a `responseBody`
- * object, with its depth, in any key casing / "_" or "-" spelling: JSON, or a
+ * Every non-blank string or numeric value under a key the matcher accepts,
+ * with its depth, in any key casing / "_" or "-" spelling: JSON, or a
  * form-encoded answer parsed into nested objects or one-pair arrays.
  */
 function collectBodyField(
   answer: unknown,
-  fieldKey: string,
+  matches: KeyMatcher,
   out: Found[],
   insideBody = false,
   depth = 0,
@@ -32,17 +34,17 @@ function collectBodyField(
     const key = normaliseKey(rawKey);
     if (
       (insideBody || anywhere) &&
-      key === fieldKey &&
-      typeof value === 'string'
+      matches(key, insideBody) &&
+      (typeof value === 'string' || typeof value === 'number')
     ) {
-      const text = value.trim();
+      const text = String(value).trim();
       if (text) {
         out.push({ depth, value: text });
       }
     }
     collectBodyField(
       value,
-      fieldKey,
+      matches,
       out,
       insideBody || key === 'responsebody',
       depth + 1,
@@ -50,6 +52,22 @@ function collectBodyField(
     );
   }
 }
+
+/**
+ * Reference-like keys, the same shapes vend evidence reads: reference / ref /
+ * a transaction, vend, order, payment or purchase id or number, a receipt or
+ * invoice number. References we supplied (validation, request, customer) and
+ * a bare top-level `reference` are echoes, not evidence.
+ */
+const REFERENCE_LIKE_KEY =
+  /(?:reference(?:no|number|id)?|ref|(?:transaction|txn|vend|order|payment|purchase)(?:id|number|no)|(?:receipt|invoice)(?:no|number|id)?)$/;
+const ECHO_REFERENCE_PREFIX = /^(?:validation|request|customer)/;
+
+const isVendReferenceKey: KeyMatcher = (key) => key === 'vendreference';
+const isProviderReferenceKey: KeyMatcher = (key, insideBody) =>
+  REFERENCE_LIKE_KEY.test(key) &&
+  !ECHO_REFERENCE_PREFIX.test(key) &&
+  (key !== 'reference' || insideBody);
 
 /**
  * The reference at the shallowest depth. When two different references sit at
@@ -73,7 +91,7 @@ export function findMonnifyBodyVendReference(
   answer: unknown
 ): string | undefined {
   const found: Found[] = [];
-  collectBodyField(answer, 'vendreference', found);
+  collectBodyField(answer, isVendReferenceKey, found);
   return pickShallowest(found);
 }
 
@@ -82,8 +100,7 @@ export function collectMonnifyProviderReferences(answer: unknown): string[] {
   const found: Found[] = [];
   // Anywhere in the answer, top level included: a reference Monnify issued
   // means a vend may exist whichever object it sits in.
-  collectBodyField(answer, 'transactionreference', found, false, 0, true);
-  collectBodyField(answer, 'vendreference', found, false, 0, true);
+  collectBodyField(answer, isProviderReferenceKey, found, false, 0, true);
   return found.map((item) => item.value);
 }
 

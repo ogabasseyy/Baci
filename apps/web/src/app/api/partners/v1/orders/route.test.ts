@@ -179,7 +179,10 @@ describe('partner order intake', () => {
 
   it('maps quote ownership and immutable submission conflicts without reporting success', async () => {
     using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-    mocks.rpc.mockResolvedValueOnce({ error: { code: 'P0002' }, data: null });
+    mocks.rpc.mockResolvedValueOnce({
+      error: { code: 'P0002', message: 'partner_quote_not_found' },
+      data: null,
+    });
     mocks.rpc.mockResolvedValueOnce({
       error: { code: '23505', message: 'partner_order_conflict' },
       data: null,
@@ -204,5 +207,16 @@ describe('partner order intake', () => {
       requestId: body.request_id,
     });
     expect((await POST(request())).status).toBe(503);
+  });
+  it('keeps an unexpected missing storage record retryable', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      error: { code: 'P0002', message: 'private storage detail' },
+      data: null,
+    });
+    const result = await POST(request());
+    expect(result.status).toBe(503);
+    expect(await result.json()).toMatchObject({
+      error: { code: 'ORDER_INTAKE_UNAVAILABLE' },
+    });
   });
 });

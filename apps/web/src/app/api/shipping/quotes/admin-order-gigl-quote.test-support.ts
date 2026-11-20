@@ -142,7 +142,10 @@ export function setup(
       if (table === 'merchant_feature_settings') return featureSettings;
       throw new Error(`unexpected authenticated table ${table}`);
     }),
-    rpc: mocks.bindRpc,
+    rpc: (name: string, args: unknown) =>
+      name === 'read_settled_partner_delivery'
+        ? Promise.resolve({ data: null, error: null })
+        : mocks.bindRpc(name, args),
   };
   mocks.authenticateApiRequest.mockResolvedValue({
     user: { id: 'user-1' },

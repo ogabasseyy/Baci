@@ -39,6 +39,16 @@ describe('admin GIG delivery rate selection', () => {
     );
   });
 
+  it('uses the settlement when the order has no source label', async () => {
+    const { db } = fixture({ service: 'GoFaster', delivery_minor: 150000 });
+    expect(
+      await selectAdminOrderGiglRate(db, { ...order, source: null }, [
+        cheaper,
+        settled,
+      ])
+    ).toEqual({ quote: settled });
+  });
+
   it('returns a conflict if no rate matches the settled terms', async () => {
     const { db } = fixture({ service: 'GoFaster', delivery_minor: 150000 });
     const { error } = await selectAdminOrderGiglRate(db, order, [cheaper]);
@@ -72,6 +82,9 @@ describe('admin GIG delivery rate selection', () => {
         cheaper,
       ])
     ).toEqual({ quote: cheaper });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledExactlyOnceWith(
+      'read_settled_partner_delivery',
+      { p_order_id: order.id, p_merchant_id: order.merchant_id }
+    );
   });
 });

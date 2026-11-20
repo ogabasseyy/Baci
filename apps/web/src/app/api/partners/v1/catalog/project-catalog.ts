@@ -1,5 +1,6 @@
 import type { GoogleMerchantListing } from '@/app/api/feed/google-merchant/feed-builder';
 import { logger } from '@/lib/logger';
+import { toKobo } from '@/lib/shipping/to-kobo';
 import type { CrossRemListingBinding } from '@/schemas/crossrem-listing-binding';
 import { CONDITION_LABELS } from './condition-labels';
 import { getSellableIdentity } from './sellable-identity';
@@ -17,8 +18,12 @@ function toListing(
   binding: CrossRemListingBinding,
   availableQuantity: number
 ) {
-  const basePriceMinor = Math.round(row.price * 100);
-  if (!Number.isSafeInteger(basePriceMinor) || basePriceMinor <= 0) {
+  const basePriceMinor = toKobo(row.price);
+  if (
+    basePriceMinor === null ||
+    !Number.isSafeInteger(basePriceMinor) ||
+    basePriceMinor <= 0
+  ) {
     rejectBinding('Invalid CrossRem merchandise price', binding.listingId);
   }
 

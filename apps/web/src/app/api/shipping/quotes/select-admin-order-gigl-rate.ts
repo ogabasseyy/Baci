@@ -15,12 +15,20 @@ export async function selectAdminOrderGiglRate(
   order: { id: string; merchant_id: string; source?: string | null },
   quotes: ShippingQuote[]
 ) {
-  if (order.source === 'partner') {
-    const { data, error } = await supabase.rpc(
-      'read_settled_partner_delivery' as never,
-      { p_order_id: order.id, p_merchant_id: order.merchant_id } as never
-    );
-    if (!error && data === null) {
+  const { data, error } = await supabase.rpc(
+    'read_settled_partner_delivery' as never,
+    { p_order_id: order.id, p_merchant_id: order.merchant_id } as never
+  );
+  if (error) {
+    return {
+      error: NextResponse.json(
+        { error: 'Unable to load settled delivery' },
+        { status: 503 }
+      ),
+    };
+  }
+  if (data !== null || order.source === 'partner') {
+    if (data === null) {
       return {
         error: NextResponse.json(
           {
@@ -32,7 +40,7 @@ export async function selectAdminOrderGiglRate(
       };
     }
     const settled = settledDeliverySchema.safeParse(data);
-    if (error || !settled.success) {
+    if (!settled.success) {
       return {
         error: NextResponse.json(
           { error: 'Unable to load settled delivery' },

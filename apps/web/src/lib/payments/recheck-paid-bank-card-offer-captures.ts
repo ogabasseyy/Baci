@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import { remainingVerificationSignal } from './remaining-verification-signal';
 import { verifyGatewayCharge } from './verify-gateway-charge';
@@ -23,6 +24,10 @@ export async function recheckPaidBankCardOfferCaptures({
     const claim = supabase.rpc('claim_paid_bank_card_offer_recheck');
     const { data, error } = await (signal ? claim.abortSignal(signal) : claim);
     if (error) {
+      logger.warn({
+        message: 'Unable to claim a paid bank card offer for recheck',
+        code: error.code,
+      });
       summary.failed += 1;
       break;
     }
@@ -84,6 +89,12 @@ export async function recheckPaidBankCardOfferCaptures({
       }
     } catch {
       // The database claim advances the retry time without retiring the capture.
+      logger.warn({
+        message:
+          'Paid bank card offer recheck failed before recording a verdict',
+        orderId: capture.order_id,
+        transactionId: capture.transaction_id,
+      });
       summary.failed += 1;
     }
   }

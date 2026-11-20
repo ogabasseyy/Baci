@@ -197,6 +197,8 @@ describe('useCheckoutSuccessVerification', () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(29_999);
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
     });
     expect(mockVerify).toHaveBeenCalledTimes(1);
     await act(async () => {

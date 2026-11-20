@@ -47,9 +47,9 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
     const scheduleAfter = (task: () => Promise<void>) => after(task);
-    // The three serial passes share the invocation budget in equal
-    // cumulative shares: a slow backlog in an early pass must not starve
-    // the recovery jobs behind it or terminate the route.
+    // The abandoned-attempt, wedge, and side-effect passes retain their
+    // cumulative deadlines. The paid-offer pass uses up to 20 seconds
+    // from the remaining window before the side-effect deadline.
     const invocationStartedAt = Date.now();
     let abandonedAttemptSweep: AbandonedPaystackAttemptSummary = {
       checked: 0,
@@ -103,7 +103,10 @@ export async function GET(request: NextRequest) {
       finalizePayment: authorities.finalizePayment,
       scheduleAfter,
       supabase,
-    }).catch(() => ({ checked: 0, failed: 1, retrying: 0, reversed: 0 }));
+    }).catch(() => {
+      logger.warn({ message: 'Paid bank card offer recheck pass failed' });
+      return { checked: 0, failed: 1, retrying: 0, reversed: 0 };
+    });
     const sideEffectDrain = await drainFailedPaidOrderSideEffects({
       deadlineMs: sideEffectDeadlineMs,
       finalizePayment: authorities.finalizePayment,

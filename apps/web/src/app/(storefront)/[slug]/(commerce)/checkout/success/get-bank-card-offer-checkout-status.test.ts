@@ -48,7 +48,7 @@ it.each([408, 429, 503])('keeps a bank offer pending on HTTP %s', (status) => {
 
 it.each([
   ['45', 45000],
-  ['bad', 0],
+  ['bad', 15_000],
   ['1000000000', 300_000],
 ])('reads a bounded Retry-After of %s', (retryAfter, delay) => {
   const response = new Response(null, {
@@ -56,6 +56,12 @@ it.each([
     headers: { 'Retry-After': retryAfter },
   });
   expect(bankCardOfferRetryDelay(response)).toBe(delay);
+});
+
+it('backs off when rate limited without a Retry-After header', () => {
+  expect(bankCardOfferRetryDelay(new Response(null, { status: 429 }))).toBe(
+    15_000
+  );
 });
 
 it('honors an HTTP-date Retry-After', () => {

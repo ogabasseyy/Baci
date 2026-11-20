@@ -17,6 +17,7 @@ export function startCheckoutVerificationPolling({
   let reverifyTimer: ReturnType<typeof setTimeout> | null = null;
   let reverifyAttempts = 0;
   let retryAfterMs = 0;
+  let retryNotBefore = 0;
   let passInFlight = false;
   let passController: AbortController | null = null;
   let passTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -74,6 +75,7 @@ export function startCheckoutVerificationPolling({
         reverifyAttempts < VERIFY_REPOLL_FAST_MAX_ATTEMPTS
           ? VERIFY_REPOLL_INTERVAL_MS
           : VERIFY_REPOLL_SLOW_INTERVAL_MS;
+      retryNotBefore = retryAfterMs > 0 ? Date.now() + retryAfterMs : 0;
       reverifyTimer = setTimeout(
         () => {
           reverifyTimer = null;
@@ -83,8 +85,8 @@ export function startCheckoutVerificationPolling({
       );
     });
   };
-  // The shopper returned while a slow-lane wait was pending: revalidate
-  // now instead of making them wait out the backoff.
+  // A returning shopper can skip the normal poll delay. A rate-limit
+  // response sets a minimum time that focus and visibility also honor.
   const revalidateOnVisible = () => {
     if (
       typeof document !== 'undefined' &&
@@ -92,7 +94,12 @@ export function startCheckoutVerificationPolling({
     ) {
       return;
     }
-    if (stopped || passInFlight || reverifyTimer === null) {
+    if (
+      stopped ||
+      passInFlight ||
+      reverifyTimer === null ||
+      Date.now() < retryNotBefore
+    ) {
       return;
     }
     if (!isPending() || reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS) {

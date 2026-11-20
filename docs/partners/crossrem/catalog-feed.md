@@ -53,7 +53,7 @@ Rerun once after a timeout or temporary upstream error. If the public XML redire
 
 The feed ran through Baci's Next.js HTTP route on loopback with a temporary credential and read-only public catalog access. Requests without the credential returned 401, including conditional requests. An authenticated request returned 200 and the full snapshot. A repeat with its ETag returned 304.
 
-All 4,501 served IDs and base prices matched the live Google Merchant feed. Each CrossRem selling price was 106% of the corresponding base price, rounded to the nearest kobo. Every listing included brand, condition, product type, availability and a false protection flag.
+Before the five retirements, all 4,501 served IDs and base prices matched the live Google Merchant feed. Each CrossRem selling price was 106% of the corresponding base price, rounded to the nearest kobo. Every listing included brand, condition, product type, availability and a false protection flag.
 
 This check covers Baci's feed and its HTTP contract. Confirm CrossRem’s importer behavior separately. Baci can check hosted responses with its own approved credential.
 

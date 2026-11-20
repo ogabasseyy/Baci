@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expectPartnerResponse } from '../partner-openapi.test-support';
 import { GET } from './route';
 
 const {
@@ -58,7 +59,9 @@ describe('CrossRem catalog', () => {
     const response = await GET(request(`Bearer ${token}`));
 
     expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: 'Unauthorized' });
+    const body = await response.json();
+    expect(body).toEqual({ error: 'Unauthorized' });
+    expectPartnerResponse('GET /catalog', 401, body);
     expect(warn).toHaveBeenCalledExactlyOnceWith({
       message: 'Partner catalog credential is unconfigured',
     });
@@ -144,9 +147,11 @@ describe('CrossRem catalog', () => {
     expect(response.status).toBe(503);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.has('etag')).toBe(false);
-    expect(await response.json()).toEqual({
+    const body = await response.json();
+    expect(body).toEqual({
       error: 'CrossRem catalog unavailable',
     });
+    expectPartnerResponse('GET /catalog', 503, body);
     expect(captureServerEvent).not.toHaveBeenCalled();
     expect(after).toHaveBeenCalledTimes(1);
     await after.mock.calls[0]?.[0]();

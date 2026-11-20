@@ -17,29 +17,27 @@ type OxygenOrderItem = CreateOrderRequest['items'][number] & {
   voucherAwardId?: unknown;
 };
 
-function hasVoucherIdentifier(item: OxygenOrderItem): boolean {
-  // Reject malformed voucher values before checkout. Direct API requests with
-  // those types fail order schema validation before the Oxygen combination gate.
-  return [
-    item.voucher_token,
-    item.voucher_award_id,
-    item.voucherToken,
-    item.voucherAwardId,
-  ].some(
-    (value) =>
-      value !== undefined &&
-      value !== null &&
-      (typeof value !== 'string' || value.trim().length > 0)
-  );
-}
-
-function omitEmptyVoucherFields({
-  voucher_token: _token,
-  voucher_award_id: _awardId,
-  voucherToken: _legacyToken,
-  voucherAwardId: _legacyAwardId,
+function prepareOxygenOrderItem({
+  voucher_token,
+  voucher_award_id,
+  voucherToken,
+  voucherAwardId,
   ...item
 }: OxygenOrderItem) {
+  for (const value of [
+    voucher_token,
+    voucher_award_id,
+    voucherToken,
+    voucherAwardId,
+  ]) {
+    if (value === undefined || value === null) continue;
+    if (typeof value !== 'string')
+      throw new Error('Invalid voucher identifier');
+    if (value.trim())
+      throw new Error(
+        'Oxygen requires a cart without vouchers or store credit'
+      );
+  }
   return item;
 }
 
@@ -56,13 +54,13 @@ export async function submitOxygenCheckout(
     input.request.use_wallet_credit ||
     input.request.use_savings_credit ||
     (input.request.wallet_amount ?? 0) > 0 ||
-    (input.request.savings_amount ?? 0) > 0 ||
-    input.request.items.some(hasVoucherIdentifier)
+    (input.request.savings_amount ?? 0) > 0
   ) {
     throw new Error(
       'Oxygen requires a signed-in customer and a cart without vouchers or store credit'
     );
   }
+  const items = input.request.items.map(prepareOxygenOrderItem);
   const deps = dependencies ?? {
     admit: async () => {
       const { oxygenNativeSession } = await import(
@@ -79,7 +77,7 @@ export async function submitOxygenCheckout(
   return deps.createOrder(
     {
       ...input.request,
-      items: input.request.items.map(omitEmptyVoucherFields),
+      items,
     },
     {
       checkoutGeneration: input.checkoutGeneration,

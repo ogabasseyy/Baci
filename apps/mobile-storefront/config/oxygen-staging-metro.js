@@ -7,7 +7,9 @@ function resolveOxygenStagingModule(moduleName, env) {
     stagingDevelopment && !env.EAS_BUILD && !env.EAS_BUILD_PROFILE && !env.CI;
   if (
     !localStaging &&
-    /(?:^|\/)oxygen-preview\/visual-qa-route(?:\.[jt]sx?)?$/.test(moduleName)
+    /(?:^|\/)oxygen-preview\/visual-qa-route(?:\.[jt]sx?)?$/.test(
+      moduleName.replaceAll('\\', '/')
+    )
   )
     return require.resolve('./oxygen-preview-release');
   if (moduleName === 'react-native-splash-motion' && stagingDevelopment)

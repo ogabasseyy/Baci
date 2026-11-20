@@ -73,7 +73,6 @@ describe('native Oxygen order admission', () => {
     ['voucherAwardId', 'id'],
     ['voucher_token', 'id'],
     ['voucher_award_id', 'id'],
-    ['voucherToken', 0],
   ])('rejects voucher field %s with value %j before sending the order', async (key, value) => {
     await expect(
       submitOxygenCheckout(
@@ -90,6 +89,29 @@ describe('native Oxygen order admission', () => {
         { admit, createOrder }
       )
     ).rejects.toThrow(/without vouchers/);
+    expect(admit).not.toHaveBeenCalled();
+    expect(createOrder).not.toHaveBeenCalled();
+  });
+  it.each([
+    0,
+    false,
+    {},
+  ])('rejects a malformed voucher identifier %j', async (voucherToken) => {
+    await expect(
+      submitOxygenCheckout(
+        {
+          request: {
+            ...request,
+            items: request.items.map((item) => ({ ...item, voucherToken })),
+          },
+          checkoutGeneration: 'g',
+          isAuthenticated: true,
+          hasVoucher: false,
+          hasCredits: false,
+        },
+        { admit, createOrder }
+      )
+    ).rejects.toThrow('Invalid voucher identifier');
     expect(admit).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
   });

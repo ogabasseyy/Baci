@@ -42,6 +42,7 @@ test('resolves the Oxygen preview fixture graph only in staging development', ()
   const names = [
     '../components/oxygen-preview/visual-qa-route',
     '@/components/oxygen-preview/visual-qa-route.tsx',
+    '..\\components\\oxygen-preview\\visual-qa-route',
   ];
   const staging = { EXPO_PUBLIC_OXYGEN_STAGING: '1' };
   for (const name of names) {

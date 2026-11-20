@@ -130,6 +130,16 @@ export function createOxygenWorkflow(options: {
       });
     await read(generation);
   }
+  const retireQueued = (kind: 'address' | 'phone') =>
+    run(async (generation) => {
+      if (!state.capabilitiesVerified) throw new OxygenClientError('recovery');
+      const snapshot = await read(generation);
+      if (!alive || generation !== revision) return;
+      await retireOxygenQueued(options.client, snapshot, kind);
+      if (!alive || generation !== revision) return;
+      await options.journal.clear();
+      await read(generation);
+    });
   return {
     getState: () => state,
     getCapabilities: () => verifiedCapabilities,
@@ -276,28 +286,8 @@ export function createOxygenWorkflow(options: {
         );
         if (alive && generation === revision) await options.journal.clear();
       }),
-    retireQueuedAddress: () =>
-      run(async (generation) => {
-        if (!state.capabilitiesVerified)
-          throw new OxygenClientError('recovery');
-        const snapshot = await read(generation);
-        if (!alive || generation !== revision) return;
-        await retireOxygenQueued(options.client, snapshot, 'address');
-        if (!alive || generation !== revision) return;
-        await options.journal.clear();
-        await read(generation);
-      }),
-    retireQueuedPhone: () =>
-      run(async (generation) => {
-        if (!state.capabilitiesVerified)
-          throw new OxygenClientError('recovery');
-        const snapshot = await read(generation);
-        if (!alive || generation !== revision) return;
-        await retireOxygenQueued(options.client, snapshot, 'phone');
-        if (!alive || generation !== revision) return;
-        await options.journal.clear();
-        await read(generation);
-      }),
+    retireQueuedAddress: () => retireQueued('address'),
+    retireQueuedPhone: () => retireQueued('phone'),
     dispose() {
       alive = false;
       revision += 1;

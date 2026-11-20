@@ -30,12 +30,12 @@ INSERT INTO auth.users (id, email) VALUES
   ('aa560000-0000-4000-8000-000000000001', 'follow-up-owner@example.test'),
   ('aa560000-0000-4000-8000-000000000002', 'follow-up-editor@example.test'),
   ('aa560000-0000-4000-8000-000000000003', 'follow-up-no-view@example.test');
+SELECT set_config('request.jwt.claim.sub', 'aa560000-0000-4000-8000-000000000001', true);
 INSERT INTO public.merchants (id, user_id, slug, business_name, email) VALUES
   ('aa560000-0000-4000-8000-000000000011', 'aa560000-0000-4000-8000-000000000001', 'follow-up-terminal-test', 'Follow-up terminal test', 'follow-up-owner@example.test');
 INSERT INTO public.staff_members (merchant_id, user_id, name, email, role, status, permissions) VALUES
   ('aa560000-0000-4000-8000-000000000011', 'aa560000-0000-4000-8000-000000000002', 'Editor', 'follow-up-editor@example.test', 'admin', 'active', '{"customers":{"view":true,"edit":true}}'),
   ('aa560000-0000-4000-8000-000000000011', 'aa560000-0000-4000-8000-000000000003', 'No view', 'follow-up-no-view@example.test', 'admin', 'active', '{"customers":{"view":false,"edit":true}}');
-SELECT set_config('request.jwt.claim.sub', 'aa560000-0000-4000-8000-000000000001', true);
 INSERT INTO public.orders (id, merchant_id, order_number, customer_name, customer_email, subtotal, total, payment_status) VALUES
   ('aa560000-0000-4000-8000-000000000021', 'aa560000-0000-4000-8000-000000000011', 'TEST-TEAM-OPEN', 'Guest', 'guest@example.test', 100, 100, 'unpaid'),
   ('aa560000-0000-4000-8000-000000000022', 'aa560000-0000-4000-8000-000000000011', 'TEST-TEAM-CLOSED', 'Guest', 'guest@example.test', 100, 100, 'unpaid');

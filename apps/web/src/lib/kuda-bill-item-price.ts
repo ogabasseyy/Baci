@@ -129,6 +129,16 @@ function collectBillItems(
   return found;
 }
 
+/** Stands in for a listing the mapper dropped for an unusable price. */
+const UNREADABLE_LISTING: BillItem = {
+  amount: 0,
+  isAmountFixed: true,
+  itemCode: '',
+  itemCurrencySymbol: 'NGN',
+  itemFee: 0,
+  itemName: 'Unreadable price',
+};
+
 function hasFixedPrice(item: BillItem) {
   return item.isAmountFixed;
 }
@@ -180,19 +190,33 @@ export async function assertKudaBillItemPriceCurrent({
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
-  const listing = billers
-    .map((biller) => ({
-      biller,
-      items: collectBillItems(
-        biller.billItems,
-        normalizeItemCode(billItemIdentifier),
-        []
-      ),
-    }))
-    .filter(({ items }) => items.length > 0);
+  const code = normalizeItemCode(billItemIdentifier);
+  const offers = (biller: Biller) => {
+    const items = collectBillItems(biller.billItems, code, []);
+    // A listing Kuda sent with an unusable price was dropped by the mapper;
+    // it stands in here as an unreadable (₦0) fixed price, so its biller
+    // can never be skipped as if it didn't offer the package.
+    if (
+      biller.unreadableItemCodes?.some(
+        (unreadable) => normalizeItemCode(unreadable) === code
+      )
+    ) {
+      items.push({ ...UNREADABLE_LISTING, itemCode: billItemIdentifier });
+    }
+    return { biller, items };
+  };
+  // The named biller is chosen from the whole list first, then its package
+  // looked up, so a biller that stopped offering it never falls back to a
+  // shorter-named biller that still does (and to that biller's price).
+  const candidates = billerName
+    ? chosenListings(
+        billers.map((biller) => ({ biller })),
+        billerName
+      ).map(({ biller }) => offers(biller))
+    : billers.map(offers);
   // The current list no longer offers this package (or not under the named
   // biller): the app's saved choice, and its price, are out of date.
-  const chosen = billerName ? chosenListings(listing, billerName) : listing;
+  const chosen = candidates.filter(({ items }) => items.length > 0);
   if (chosen.length === 0) {
     // Kuda's listed electricity meter products are always customer-priced,
     // so a partial list that leaves out their biller cannot make them stale.

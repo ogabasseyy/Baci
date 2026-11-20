@@ -150,3 +150,68 @@ describe('bugfix: a slow Kuda failure stretched the price-list backup window', (
     expect(mockGetBillersByCategory).toHaveBeenCalledTimes(callsAfterFailure);
   });
 });
+
+describe('bugfix: billers chosen and unreadable listings seen end to end', () => {
+  // Real Kuda answers mapped exactly as getBillersByType maps them.
+  async function kudaAnswer(
+    billers: Array<{ name: string; amount: number | string }>
+  ) {
+    const { mapKudaBillersAnswer } = await import('./kuda-biller-mapping');
+    return mapKudaBillersAnswer(
+      {
+        billers: billers.map(({ name, amount }) => ({
+          id: name,
+          name,
+          description: 'Cable',
+          billTypeId: 'cable',
+          billItems: [
+            {
+              itemCode: 'KUD-CAB-DST-SHARED',
+              itemName: 'Shared package',
+              amount,
+              isFixedPrice: true,
+            },
+          ],
+        })),
+      },
+      'CableTv'
+    ).billers;
+  }
+
+  it('fails closed with no biller named when one biller sent a blank price', async () => {
+    mockGetBillersByCategory.mockResolvedValue(
+      await kudaAnswer([
+        { name: 'DSTV', amount: 950000 },
+        { name: 'DSTV NG', amount: '' },
+      ])
+    );
+
+    await expect(purchase(9500)).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+  });
+
+  it('fails closed for a named biller whose only listing is unreadable', async () => {
+    mockGetBillersByCategory.mockResolvedValue(
+      await kudaAnswer([
+        { name: 'DSTV', amount: 500000 },
+        { name: 'DSTV - PREMIUM', amount: 0 },
+      ])
+    );
+
+    await expect(purchase(5000, 'DSTV - PREMIUM - Monthly')).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+  });
+
+  it('does not fall back to a shorter biller when the named one stopped listing it', async () => {
+    mockGetBillersByCategory.mockResolvedValue([
+      cableBiller('DSTV', 5000),
+      { ...cableBiller('DSTV - PREMIUM', 9500), billItems: [] },
+    ]);
+
+    await expect(purchase(5000, 'DSTV - PREMIUM - Monthly')).rejects.toThrow(
+      KUDA_BILL_PRICE_CHANGED_MESSAGE
+    );
+  });
+});

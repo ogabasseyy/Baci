@@ -1,49 +1,93 @@
 const MAX_DEPTH = 6;
 
+/** Baci's own request references are 24 hex characters (generateRequestRef). */
+const OWN_REQUEST_REFERENCE = /^[0-9a-f]{24}$/i;
+
 function normaliseKey(key: string): string {
   return key.replace(/[\s_-]/g, '').toLowerCase();
 }
 
+interface Found {
+  depth: number;
+  value: string;
+}
+
 /**
- * The first string `vendReference` found under a `responseBody` key, in any
- * key casing or "_"/"-" spelling and at any depth: JSON, or a form-encoded
- * answer parsed into nested objects or an array of one-pair objects.
+ * Every non-blank string under `fieldKey` (normalised) inside a `responseBody`
+ * object, with its depth, in any key casing / "_" or "-" spelling: JSON, or a
+ * form-encoded answer parsed into nested objects or one-pair arrays.
  */
-export function findMonnifyBodyVendReference(
+function collectBodyField(
   answer: unknown,
+  fieldKey: string,
+  out: Found[],
   insideBody = false,
   depth = 0
-): string | undefined {
+): void {
   if (!answer || typeof answer !== 'object' || depth > MAX_DEPTH) {
-    return undefined;
+    return;
   }
-  if (Array.isArray(answer)) {
-    for (const item of answer) {
-      const found = findMonnifyBodyVendReference(item, insideBody, depth + 1);
-      if (found) {
-        return found;
-      }
-    }
-    return undefined;
-  }
-  for (const [rawKey, value] of Object.entries(answer)) {
+  const children = Array.isArray(answer)
+    ? answer.map((item) => ['', item] as const)
+    : Object.entries(answer);
+  for (const [rawKey, value] of children) {
     const key = normaliseKey(rawKey);
-    if (insideBody && key === 'vendreference' && typeof value === 'string') {
-      const reference = value.trim();
-      if (reference) {
-        return reference;
+    if (insideBody && key === fieldKey && typeof value === 'string') {
+      const text = value.trim();
+      if (text) {
+        out.push({ depth, value: text });
       }
     }
-    const found = findMonnifyBodyVendReference(
+    collectBodyField(
       value,
+      fieldKey,
+      out,
       insideBody || key === 'responsebody',
       depth + 1
     );
-    if (found) {
-      return found;
-    }
   }
-  return undefined;
+}
+
+/**
+ * The reference at the shallowest depth. When two different references sit at
+ * that depth the answer is ambiguous (history, batch, echoed objects): no
+ * reference is returned, so the row is held for review instead of requerying
+ * the wrong vend.
+ */
+function pickShallowest(found: Found[]): string | undefined {
+  if (found.length === 0) {
+    return undefined;
+  }
+  const shallowest = Math.min(...found.map((item) => item.depth));
+  const values = new Set(
+    found.filter((item) => item.depth === shallowest).map((item) => item.value)
+  );
+  return values.size === 1 ? [...values][0] : undefined;
+}
+
+/** Monnify's own `responseBody.vendReference`, if the answer carries one. */
+export function findMonnifyBodyVendReference(
+  answer: unknown
+): string | undefined {
+  const found: Found[] = [];
+  collectBodyField(answer, 'vendreference', found);
+  return pickShallowest(found);
+}
+
+/**
+ * Whether the answer carries a Monnify-issued reference in its responseBody:
+ * a transactionReference, or a vendReference that is not our own request
+ * reference shape. Such a body means a vend may exist.
+ */
+export function hasMonnifyProviderReference(answer: unknown): boolean {
+  const transaction: Found[] = [];
+  collectBodyField(answer, 'transactionreference', transaction);
+  const vend: Found[] = [];
+  collectBodyField(answer, 'vendreference', vend);
+  return (
+    transaction.length > 0 ||
+    vend.some((item) => !OWN_REQUEST_REFERENCE.test(item.value))
+  );
 }
 
 /**

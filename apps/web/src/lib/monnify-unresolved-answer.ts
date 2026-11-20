@@ -1,11 +1,14 @@
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyUnresolvedCode } from './monnify-non-definitive-code';
+import { hasMonnifyProviderReference } from './monnify-rejection-vend-reference';
 import { normaliseMonnifyWording } from './monnify-text-normalise';
 import { reportsMonnifyUnresolvedCode } from './monnify-unexpected-error-text';
 import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
 const MAX_DEPTH = 6;
+/** Wording is cut before the regex runs, so provider text can't make it slow. */
+const MAX_WORDING_LENGTH = 4000;
 
 /** Vend states that say the vend is still running: Monnify may yet deliver. */
 const RUNNING_STATUSES = new Set([
@@ -166,11 +169,15 @@ export function isMonnifyUnresolvedAnswer({
     ((outcome.done || outcome.unknown) && !outcome.failed);
   const wordingHolds =
     !(outcome.failed && !outcome.running) &&
-    IN_FLIGHT_WORDING.test(normaliseMonnifyWording(wording));
+    IN_FLIGHT_WORDING.test(
+      normaliseMonnifyWording(wording.slice(0, MAX_WORDING_LENGTH))
+    );
   const strong =
     hasMonnifyDuplicateFlag(answer) ||
     isMonnifyDuplicateReferenceText(wording) ||
     structuredHold ||
+    // A Monnify-issued reference in the body means a vend may exist.
+    hasMonnifyProviderReference(answer) ||
     wordingHolds;
   if (strong) {
     return true;

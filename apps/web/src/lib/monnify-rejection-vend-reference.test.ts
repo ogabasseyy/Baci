@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   findMonnifyBodyVendReference,
+  hasMonnifyProviderReference,
   ignoreMonnifyRequestEcho,
   readMonnifyRejectionVendReference,
 } from './monnify-rejection-vend-reference';
@@ -74,5 +75,49 @@ describe('ignoreMonnifyRequestEcho', () => {
     expect(ignoreMonnifyRequestEcho('MFBP-1', ref)).toBe('MFBP-1');
     expect(ignoreMonnifyRequestEcho(ref, ref)).toBeUndefined();
     expect(ignoreMonnifyRequestEcho(undefined, ref)).toBeUndefined();
+  });
+});
+
+describe('bugfix: ambiguous or shallow-first vendReference selection', () => {
+  it('prefers the shallowest reference over a deeper one', () => {
+    expect(
+      findMonnifyBodyVendReference({
+        responseBody: {
+          vendReference: 'MFBP-TOP',
+          history: { responseBody: { vendReference: 'MFBP-OLD' } },
+        },
+      })
+    ).toBe('MFBP-TOP');
+  });
+
+  it('returns nothing when two different references sit at the same depth', () => {
+    expect(
+      findMonnifyBodyVendReference([
+        { responseBody: { vendReference: 'MFBP-1' } },
+        { responseBody: { vendReference: 'MFBP-2' } },
+      ])
+    ).toBeUndefined();
+  });
+});
+
+describe('hasMonnifyProviderReference', () => {
+  it('is true for a transactionReference or a non-own vendReference', () => {
+    expect(
+      hasMonnifyProviderReference({
+        responseBody: { transactionReference: 'T-1' },
+      })
+    ).toBe(true);
+    expect(
+      hasMonnifyProviderReference({ responseBody: { vendReference: 'MFBP-1' } })
+    ).toBe(true);
+  });
+
+  it('is false for an echo of our own request reference or no reference', () => {
+    expect(
+      hasMonnifyProviderReference({
+        responseBody: { vendReference: 'a1b2c3d4e5f6a1b2c3d4e5f6' },
+      })
+    ).toBe(false);
+    expect(hasMonnifyProviderReference({ responseBody: {} })).toBe(false);
   });
 });

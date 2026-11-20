@@ -139,3 +139,35 @@ describe('bugfix: vend-level status beats a generic payment status, both ways', 
     ).toBe(false);
   });
 });
+
+describe('bugfix: a provider reference alone means a vend may exist', () => {
+  it('holds a rejection whose body carries only a transactionReference', () => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { transactionReference: 'T-1' } },
+        'Invalid customer'
+      )
+    ).toBe(true);
+  });
+
+  it('holds a rejection whose body carries only a Monnify vendReference', () => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { vendReference: 'MFBP-1' } },
+        'Invalid customer'
+      )
+    ).toBe(true);
+  });
+
+  it('does not hold when the body only echoes our own request reference', () => {
+    expect(
+      open(
+        {
+          responseCode: 'D01',
+          responseBody: { vendReference: 'a1b2c3d4e5f6a1b2c3d4e5f6' },
+        },
+        'Invalid customer'
+      )
+    ).toBe(false);
+  });
+});

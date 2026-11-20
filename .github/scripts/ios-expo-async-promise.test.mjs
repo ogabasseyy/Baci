@@ -6,16 +6,17 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 test('Swift lowers the Expo async promise callback for a noncopyable result', {
-  skip: process.platform !== 'darwin',
+  skip: process.platform !== 'darwin' && 'Requires the Xcode Swift compiler',
 }, () => {
   const source = readFileSync(
     new URL('../../node_modules/expo-modules-core/ios/Core/Functions/AsyncFunctionDefinition.swift', import.meta.url),
     'utf8'
   );
   const callback = source.match(
-    /\{\s*\[promise\]\s*result\s+in\s*([\s\S]+?)\s*\}\s*return\s+promiseValue\b/
-  )?.[1];
-  assert.ok(callback, 'Expo async promise callback must be identifiable');
+    /\{\s*\[promise\]\s*(\w+)\s+in\s*(switch\s+consume\s+\1\s*\{[^{}]*\})/
+  );
+  assert.ok(callback, 'Expo must pass its owned result to the promise callback');
+  const [, parameter, resultSwitch] = callback;
 
   const directory = mkdtempSync(join(tmpdir(), 'baci-expo-async-promise-'));
   try {
@@ -30,8 +31,8 @@ class Exception: Error, @unchecked Sendable {}
 func observe(_ callback: @Sendable @escaping (consuming Result<JavaScriptValue, Exception>) -> Void) {}
 
 func build(_ promise: JavaScriptPromise) {
-  observe { [promise] result in
-${callback}
+  observe { [promise] ${parameter} in
+${resultSwitch}
   }
 }
 `);

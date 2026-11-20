@@ -7,7 +7,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { AdSlot } from '@/components/ads/AdSlot';
@@ -58,9 +57,7 @@ export default function CategoryScreen() {
   }>();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const { getListContentStyle, insets } = useStorefrontInsets();
-  const { width } = useWindowDimensions();
-  const gridAvailableWidth = width - insets.left - insets.right;
+  const { getListContentStyle } = useStorefrontInsets();
 
   const slug =
     typeof slugParam === 'string' ? slugParam.trim().toLowerCase() : '';
@@ -121,11 +118,7 @@ export default function CategoryScreen() {
         index % 2 === 0 ? styles.productLeft : styles.productRight,
       ]}
     >
-      <ProductCard
-        gridAvailableWidth={gridAvailableWidth}
-        product={item}
-        onPress={() => handleProductPress(item)}
-      />
+      <ProductCard product={item} onPress={() => handleProductPress(item)} />
     </View>
   );
 

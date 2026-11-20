@@ -53,6 +53,7 @@ import {
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
 import { isMonnifyAirtimeKudaFallbackEligible } from '@/lib/vtu-monnify-kuda-fallback-eligibility';
+import { markVtuMonnifyUnresolvedHold } from '@/lib/vtu-monnify-unresolved-hold';
 import { getVtuProviderLabel, readPaymentSplit } from '@/lib/vtu-payment-split';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
@@ -2651,6 +2652,13 @@ export async function fulfillPendingVtuTransaction({
   // replay check fails closed on a missing flag).
   delete updatedMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY];
   applyProviderFailureDiagnostics(updatedMetadata, result);
+  // A Monnify answer that leaves the outcome open is held (pending →
+  // processing below), never refunded or sent to Kuda.
+  markVtuMonnifyUnresolvedHold({
+    metadata: updatedMetadata,
+    result,
+    transactionId: row.id,
+  });
 
   if (result.status === 'pending') {
     const processingUpdatePayload: {

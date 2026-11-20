@@ -1,16 +1,9 @@
-import { parseMonnifyAnswer } from './monnify-answer-parse';
-import { joinMonnifyAnswerStrings } from './monnify-answer-strings';
-import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
+import {
+  type MonnifyAnswerReading,
+  readMonnifyAnswer,
+} from './monnify-answer-reading';
 import { redactMonnifyCredentials } from './monnify-credential-redaction';
-import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
-import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
-import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
-import { readMonnifyResponseCode } from './monnify-response-code';
-import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
-import { hasMonnifyVendEvidence } from './monnify-vend-evidence';
-import { mentionsMonnifyVendEvidence } from './monnify-vend-evidence-text';
-import { isMonnifyVendOutcomeText } from './monnify-vend-outcome';
-import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
+import { readMonnifyRejectionVendReference } from './monnify-rejection-vend-reference';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
@@ -42,66 +35,6 @@ const SENSITIVE_LONG_GROUPED_NUMBER_PATTERN =
  */
 const SENSITIVE_THREE_THREE_FOUR_PATTERN =
   /(?<!\d)\(?\d{3}\)?[\s./_-]+\d{3}[\s./_-]+\d{4}(?!\d)/g;
-/** How Monnify's full answer reads, worked out once from the unscrubbed text. */
-interface MonnifyAnswerReading {
-  isDuplicateReference: boolean;
-  isKnownRefusal: boolean;
-  mentionsVendOutcome: boolean;
-  reportsUnexpectedError: boolean;
-  showsVendEvidence: boolean;
-  mentionsAuthWording: boolean;
-  responseCode: string | undefined;
-}
-
-/**
- * A JSON or key=value body is read structurally, plus the text of its string
- * values (not its keys, so a top-level reference echo does not count).
- * Anything else is read as plain text.
- */
-function showsVendEvidence(body: string): boolean {
-  const parsed = parseMonnifyAnswer(body);
-  if (parsed && typeof parsed === 'object') {
-    return (
-      hasMonnifyVendEvidence(parsed) ||
-      mentionsMonnifyVendEvidence(joinMonnifyAnswerStrings(parsed))
-    );
-  }
-  return mentionsMonnifyVendEvidence(body);
-}
-
-/**
- * `statusLine` is the error's status line; `body` is Monnify's answer alone.
- */
-function readMonnifyAnswer(
-  statusLine: string,
-  body: string
-): MonnifyAnswerReading {
-  // A JSON body is read by its string values (not its keys) for wording.
-  const parsed = parseMonnifyAnswer(body);
-  const bodyText =
-    parsed && typeof parsed === 'object'
-      ? joinMonnifyAnswerStrings(parsed)
-      : body;
-  const text = `${statusLine} - ${bodyText}`;
-  return {
-    // Duplicate wording is read from values; a structured flag counts only
-    // when set (`duplicate: true`, not `duplicate: false`).
-    isDuplicateReference:
-      isMonnifyDuplicateReferenceText(text) || hasMonnifyDuplicateFlag(parsed),
-    // A refusal must come from Monnify's body, never the HTTP status line.
-    isKnownRefusal: isMonnifyKnownVendRefusalText(bodyText),
-    mentionsVendOutcome: isMonnifyVendOutcomeText(text),
-    reportsUnexpectedError:
-      reportsMonnifyUnexpectedError(body) ||
-      hasMonnifyNonDefinitiveCode(parsed),
-    showsVendEvidence: showsVendEvidence(body),
-    // Auth wording counts from the HTTP reason phrase too (a proxy may move
-    // "Unauthorized" there while keeping a 400 status).
-    mentionsAuthWording: mentionsMonnifyAuthWording(text),
-    responseCode: readMonnifyResponseCode(parsed),
-  };
-}
-
 const MONNIFY_ERROR_DETAIL_MAX_LENGTH = 240;
 const MONNIFY_ERROR_DETAIL_REDACTION_LOOKAHEAD = 64;
 
@@ -181,6 +114,32 @@ export class MonnifyHttpError extends Error {
    */
   get isDuplicateReference() {
     return this.status === 409 || this.#reading.isDuplicateReference;
+  }
+
+  /**
+   * The answer leaves the vend's outcome open: a timeout (408), a duplicate
+   * reference (409 or its wording), a vend status or wording that says the
+   * vend ran or is running, or an open code (99, 2xx, 408, 409, 5xx) without
+   * a known refusal. Login rejections (401/403) never count (owner decision
+   * 2026-11-18: refunded), nor throttles (429).
+   */
+  get leavesOutcomeOpen() {
+    if (this.status === 401 || this.status === 403 || this.status === 429) {
+      return false;
+    }
+    return (
+      this.status === 408 ||
+      this.isDuplicateReference ||
+      this.#reading.leavesOutcomeOpen
+    );
+  }
+
+  /** Monnify's own vendReference in the body, when it gave one. */
+  providerVendReference(requestReference: string) {
+    return readMonnifyRejectionVendReference(
+      this.#reading.vendReferenceSource,
+      requestReference
+    );
   }
 
   get diagnosticMessage() {

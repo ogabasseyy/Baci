@@ -148,7 +148,7 @@ describe('Monnify bill requery', () => {
     expect(result.pin).toBeUndefined();
   });
 
-  it('fails closed for HTTP OK non-zero responseCode', async () => {
+  it('never fails a row on a rejected requery whose body says SUCCESSFUL', async () => {
     const mockResponse = {
       requestSuccessful: true,
       responseCode: '1',
@@ -165,7 +165,9 @@ describe('Monnify bill requery', () => {
     });
 
     const result = await checkTransactionStatus('MON-TX-123');
-    expect(result.status).toBe('failed');
+    // Not proof of failure (the vend reads SUCCESSFUL): left processing,
+    // where a refund could pay the customer twice.
+    expect(result.status).toBe('unknown');
     expect(result.message).toContain('Status lookup failed');
   });
 

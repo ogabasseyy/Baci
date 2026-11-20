@@ -19,8 +19,13 @@ import {
   MONNIFY_FINANCIAL_TIMEOUT_MS,
 } from './monnify-bills-shared';
 import { classifyMonnifyBillStatus } from './monnify-bills-status';
-import { isMonnifyDefiniteBusinessRefusal } from './monnify-business-refusal';
+import { isMonnifyRequeryRejectionDefiniteFailure } from './monnify-requery-rejection';
 import { readMonnifyResponseCode } from './monnify-response-code';
+import { buildMonnifyUnresolvedVendResult } from './monnify-unresolved-vend-result';
+import {
+  buildMonnifyBusinessRejectionResult,
+  buildMonnifyHttpRejectionResult,
+} from './monnify-vend-rejection-result';
 
 export async function verifyBillCustomer(
   _billerCode: string,
@@ -119,27 +124,12 @@ export async function purchaseBill(
     );
 
     if (!isMonnifyBusinessSuccess(parsedEnvelope)) {
-      const rawMessage = getMonnifyEnvelopeMessage({
-        fallback: 'Monnify business failure',
-        responseCode: parsedEnvelope.responseCode,
-        responseMessage: parsedEnvelope.responseMessage,
-      });
-      return {
-        success: false,
-        reference: requestReference,
-        // Scrubbed like HTTP error details: Monnify may echo the customer's
-        // number, and this text is persisted and logged. Classification
-        // reads the full answer, before it is cut short.
-        message: sanitizeMonnifyErrorDetail(rawMessage),
-        status: 'failed',
+      return buildMonnifyBusinessRejectionResult({
         amount,
-        providerDefiniteFailure: isMonnifyDefiniteBusinessRefusal({
-          envelope,
-          rawMessage,
-          responseCode: parsedEnvelope.responseCode,
-        }),
-        providerResponseCode: readMonnifyResponseCode(parsedEnvelope),
-      };
+        envelope,
+        parsedEnvelope,
+        requestReference,
+      });
     }
 
     const body = parsedEnvelope.responseBody;
@@ -165,6 +155,19 @@ export async function purchaseBill(
       );
     }
 
+    if (!isSuccess && !isProcessing && !isFailed) {
+      // A vend state Monnify did not name as success, in progress or failed
+      // (missing, REVERSED, UNKNOWN...) proves nothing: hold, never refund.
+      return buildMonnifyUnresolvedVendResult({
+        amount,
+        message: sanitizeMonnifyErrorDetail(
+          parsedEnvelope.responseMessage || 'Vend outcome unclear'
+        ),
+        providerVendReference: vendReference,
+        requestReference,
+      });
+    }
+
     const status = isSuccess
       ? 'successful'
       : isProcessing
@@ -186,38 +189,11 @@ export async function purchaseBill(
     };
   } catch (error) {
     if (error instanceof MonnifyHttpError && error.isClientError) {
-      return {
-        success: false,
-        reference: requestReference,
-        message:
-          'Monnify rejected the bill payment request. Please verify the details and try again.',
-        providerErrorDetail: error.diagnosticMessage,
-        providerResponseCode: error.responseCode,
-        status: 'failed',
+      return buildMonnifyHttpRejectionResult({
         amount,
-        // A refusal Monnify gave before vending: a known refusal (the amount
-        // check, Baci's Monnify float too low). A 401/403 never qualifies
-        // (owner decision): Monnify does not document that its auth check runs
-        // before any vend, so a login rejection is refunded, not re-vended. A
-        // timeout (408), a throttle (429) or anything that may be a duplicate
-        // never qualifies. Any answer that talks about the service being
-        // unavailable or a vend outcome, or whose body carries a vend status or
-        // reference, may come after a vend that ran, so it never qualifies.
-        providerDefiniteFailure:
-          // Only reachable for 4xx (isClientError above); kept explicit so a
-          // future refactor can never let a 5xx (unknown outcome) through.
-          error.status < 500 &&
-          error.status !== 401 &&
-          error.status !== 403 &&
-          error.status !== 408 &&
-          error.status !== 429 &&
-          !error.isDuplicateReference &&
-          !error.reportsUnexpectedError &&
-          !error.mentionsVendOutcome &&
-          !error.showsVendEvidence &&
-          !error.mentionsAuthWording &&
-          error.isKnownRefusal,
-      };
+        error,
+        requestReference,
+      });
     }
 
     const errorMsg =
@@ -250,10 +226,19 @@ export async function checkTransactionStatus(
     envelope
   );
 
-  if (isMonnifyBusinessSuccess(parsed) && parsed.responseBody) {
+  const message = getMonnifyEnvelopeMessage({
+    fallback: 'failed',
+    responseCode: parsed.responseCode,
+    responseMessage: parsed.responseMessage,
+  });
+  const responseCode = readMonnifyResponseCode(parsed);
+
+  if (isMonnifyBusinessSuccess(parsed)) {
     const body = parsed.responseBody;
-    const { isSuccess, isProcessing } = classifyMonnifyBillStatus(body);
-    if (isSuccess) {
+    const { isSuccess, isProcessing, isFailed } = body
+      ? classifyMonnifyBillStatus(body)
+      : { isSuccess: false, isProcessing: false, isFailed: false };
+    if (body && isSuccess) {
       return {
         status: 'successful',
         message: parsed.responseMessage || 'success',
@@ -267,15 +252,25 @@ export async function checkTransactionStatus(
         message: parsed.responseMessage || 'processing',
       };
     }
+    if (isFailed) {
+      return { status: 'failed', responseCode, message };
+    }
+    // No body, or a vend state Monnify did not name: not proof of failure,
+    // so the row stays processing (never refunded on it).
+    return { status: 'unknown', responseCode, message };
   }
 
+  // A rejected requery is about the query unless it names the vend as
+  // failed: code 99 ("re-query"), "not found" and the like leave the row
+  // processing instead of refunding a vend Monnify may have delivered.
   return {
-    status: 'failed',
-    responseCode: readMonnifyResponseCode(parsed),
-    message: getMonnifyEnvelopeMessage({
-      fallback: 'failed',
-      responseCode: parsed.responseCode,
-      responseMessage: parsed.responseMessage,
-    }),
+    status: isMonnifyRequeryRejectionDefiniteFailure({
+      envelope,
+      rawMessage: message,
+    })
+      ? 'failed'
+      : 'unknown',
+    responseCode,
+    message,
   };
 }

@@ -155,6 +155,20 @@ describe('internal partner reconciliation', () => {
     });
   });
 
+  it.each([
+    { receipt: { ...receipt, order_id: undefined }, hold_reason: null },
+    { receipt, hold_reason: 'ORDER_REVIEW_REQUIRED' },
+  ])('surfaces an invalid reconciliation response separately from an outage', async (data) => {
+    mocks.rpc.mockResolvedValue({ data, error: null });
+
+    const result = await POST(request());
+
+    expect(result.status).toBe(500);
+    expect(await result.json()).toMatchObject({
+      error: { code: 'RECONCILIATION_RESPONSE_INVALID' },
+    });
+  });
+
   it('returns a held receipt without reporting order acceptance', async () => {
     mocks.rpc.mockResolvedValue({
       data: {

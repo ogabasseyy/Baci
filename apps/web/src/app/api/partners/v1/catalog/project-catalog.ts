@@ -56,7 +56,8 @@ function toListing(
 
 export function projectCatalog(
   rows: GoogleMerchantListing[],
-  bindings: readonly CrossRemListingBinding[]
+  bindings: readonly CrossRemListingBinding[],
+  stockByListing?: Map<string, number>
 ) {
   const confirmedNewProducts = new Set(
     bindings
@@ -102,7 +103,17 @@ export function projectCatalog(
       boundIdentities.add(key);
       if (binding.retired) return [];
       const row = rowsByIdentity.get(key);
-      return row ? [toListing(row, binding)] : [];
+      if (!row) return [];
+      const managedStock = row.variant
+        ? row.variant.stock_quantity
+        : row.product.stock_quantity;
+      const quoteStock = row.offer
+        ? row.offer.stock_quantity
+        : row.product.manage_stock === true
+          ? managedStock
+          : row.stock;
+      stockByListing?.set(binding.listingId, quoteStock ?? 0);
+      return [toListing(row, binding)];
     })
     .sort((a, b) =>
       a.listing_id < b.listing_id ? -1 : a.listing_id > b.listing_id ? 1 : 0

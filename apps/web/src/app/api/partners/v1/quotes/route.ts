@@ -10,10 +10,10 @@ import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-rou
 import type { QuoteRequest } from '@/lib/shipping/types';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
+import { partnerQuoteRequestSchema } from '@/schemas/partner-quote-request';
 import { authorizePartnerProfile } from '../partner-profile';
 import { getPartnerProfiles } from '../partner-profiles';
 import { buildPartnerQuoteParcel } from './quote-parcel';
-import { partnerQuoteRequestSchema } from './quote-request';
 
 export const maxDuration = 60;
 
@@ -85,14 +85,19 @@ export async function POST(request: Request) {
       });
     }
 
-    const catalog = await access.profile.loadCatalog();
+    const catalog = await profile.loadCatalog();
     const byId = new Map(
       catalog.listings.map((listing) => [listing.listing_id, listing])
     );
     const items = [];
     for (const item of parsed.data.items) {
       const listing = byId.get(item.listing_id);
-      if (listing?.availability !== 'in_stock') {
+      const available = catalog.stockByListing.get(item.listing_id);
+      if (
+        listing?.availability !== 'in_stock' ||
+        !available ||
+        item.quantity > available
+      ) {
         return errorResponse(409, 'LISTING_UNAVAILABLE', requestId);
       }
       items.push({

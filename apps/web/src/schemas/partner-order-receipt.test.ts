@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { partnerOrderReceiptSchema } from './order-receipt';
+import { partnerOrderReceiptSchema } from './partner-order-receipt';
 
 it('omits private submission data from the public receipt', () => {
   const receipt = {

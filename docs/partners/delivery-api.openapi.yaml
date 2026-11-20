@@ -63,7 +63,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409':
-          description: A listing is missing, retired, or unavailable.
+          description: A listing is missing, retired, unavailable, or has insufficient quantity.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}

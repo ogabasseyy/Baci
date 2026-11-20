@@ -22,7 +22,10 @@ export type PartnerProfile = {
   id: string;
   merchantId: string;
   credentials: readonly Pick<PartnerConnection, 'scopes' | 'token'>[];
-  loadCatalog: () => Promise<{ listings: readonly QuoteListing[] }>;
+  loadCatalog: () => Promise<{
+    listings: readonly QuoteListing[];
+    stockByListing: ReadonlyMap<string, number>;
+  }>;
   readCatalogSnapshot: (
     validator: string | null
   ) => Promise<{ body: string | null; etag: string }>;

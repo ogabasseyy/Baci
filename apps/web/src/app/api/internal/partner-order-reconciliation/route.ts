@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
-import { partnerOrderReceiptSchema } from '@/app/api/partners/v1/order-receipt';
 import { authorizePartnerProfile } from '@/app/api/partners/v1/partner-profile';
 import { getPartnerProfiles } from '@/app/api/partners/v1/partner-profiles';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
@@ -8,39 +6,8 @@ import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
-
-const reference = z.string().trim().min(1).max(200);
-const moneyEvidence = {
-  source: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
-  amount_minor: z.number().int().positive(),
-  currency: z.literal('NGN'),
-};
-const evidenceSchema = z.strictObject({
-  submission_id: z.uuid(),
-  quote_id: z.uuid(),
-  partner_order_id: z.string().trim().min(1).max(128),
-  capture: z.strictObject({
-    ...moneyEvidence,
-    provider_account: reference,
-    reference,
-    captured_at: z.iso.datetime({ offset: true }),
-  }),
-  settlement: z
-    .strictObject({
-      ...moneyEvidence,
-      settlement_account: reference,
-      payout_reference: reference,
-      allocation_reference: reference,
-      settled_at: z.iso.datetime({ offset: true }),
-    })
-    .optional(),
-});
-const outcomeSchema = z.object({
-  receipt: partnerOrderReceiptSchema,
-  hold_reason: z
-    .enum(['SETTLEMENT_REVIEW_REQUIRED', 'ORDER_REVIEW_REQUIRED'])
-    .nullable(),
-});
+import { evidenceSchema } from '@/schemas/partner-reconciliation-evidence';
+import { outcomeSchema } from '@/schemas/partner-reconciliation-outcome';
 
 export async function POST(request: Request) {
   const requestId = randomUUID();
@@ -116,8 +83,19 @@ export async function POST(request: Request) {
       return reject(409, 'CAPTURE_EVIDENCE_CONFLICT');
     }
     if (error) throw new Error('Partner reconciliation unavailable');
-    const outcome = outcomeSchema.parse(data);
-    return reply(outcome, outcome.receipt.status === 'accepted' ? 200 : 202);
+    const outcome = outcomeSchema.safeParse(data);
+    if (!outcome.success) {
+      logger.error({
+        message: 'Partner reconciliation returned an invalid receipt',
+        connectionId,
+        requestId,
+      });
+      return reject(500, 'RECONCILIATION_RESPONSE_INVALID');
+    }
+    return reply(
+      outcome.data,
+      outcome.data.receipt.status === 'accepted' ? 200 : 202
+    );
   } catch {
     logger.warn({
       message: 'Partner reconciliation unavailable',

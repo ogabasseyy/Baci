@@ -21,7 +21,11 @@ export function getPartnerProfiles(): readonly PartnerProfile[] {
           scopes: ['reconciliation:write'],
         },
       ],
-      loadCatalog: loadCrossRemCatalog,
+      async loadCatalog() {
+        const stockByListing = new Map<string, number>();
+        const { listings } = await loadCrossRemCatalog(stockByListing);
+        return { listings, stockByListing };
+      },
       readCatalogSnapshot: getVersionedCrossRemCatalog,
       catalogFailure: {
         message: 'CrossRem catalog unavailable',

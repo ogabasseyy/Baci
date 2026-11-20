@@ -1,24 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
+import { orderTrackingSchema } from '@/schemas/partner-order-tracking';
 import { authorizePartnerProfile } from '../../partner-profile';
 import { getPartnerProfiles } from '../../partner-profiles';
-
-const orderTrackingSchema = z.object({
-  order_id: z.uuid(),
-  partner_order_id: z.string(),
-  payment_status: z.string(),
-  shipping_status: z.string(),
-  tracking: z
-    .object({
-      provider: z.string(),
-      tracking_number: z.string(),
-    })
-    .nullable(),
-});
 
 export async function GET(
   request: Request,
@@ -43,7 +30,9 @@ export async function GET(
       : invalid(401, 'UNAUTHORIZED', { 'WWW-Authenticate': 'Bearer' });
   }
 
-  const orderId = z.uuid().safeParse((await context.params).orderId);
+  const orderId = orderTrackingSchema.shape.order_id.safeParse(
+    (await context.params).orderId
+  );
   if (!orderId.success) return invalid(400, 'INVALID_REQUEST');
 
   const { connectionId, merchantId } = access;

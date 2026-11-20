@@ -30,7 +30,7 @@ Call `POST /quotes` with the quote credential and a JSON body. The following exa
 }
 ```
 
-A `201` returns `quote_id`, `currency`, the selected service and delivery estimate, line prices, `subtotal_minor`, `tax_minor`, `delivery_minor`, `total_minor`, and `expires_at`. The pilot offers domestic door delivery and sets expiry to the earlier of ten minutes after quoting or the validity limit returned by the shipping adapter. Show `total_minor` before payment. It includes the item subtotal, Baci VAT on the underlying merchant merchandise where applicable, and delivery. Get a new quote before charging if the order or address changes, or if the quote expires. A quote does not reserve stock.
+A `201` returns `quote_id`, `currency`, the selected service and delivery estimate, line prices, `subtotal_minor`, `tax_minor`, `delivery_minor`, `total_minor`, and `expires_at`. The pilot offers domestic door delivery and sets expiry to the earlier of ten minutes after quoting or the validity limit returned by the shipping adapter. Show `total_minor` before payment. It includes the item subtotal, Baci VAT on the underlying merchant merchandise where applicable, and delivery. Get a new quote before charging if the order or address changes, or if the quote expires. Baci checks requested quantities before issuing the quote. A quote does not reserve stock.
 
 If Baci returns `ADDRESS_UNSERVICEABLE`, `CARRIER_UNAVAILABLE`, or `QUOTE_UNAVAILABLE`, Baci has issued no payable quote. An unconfigured settlement policy returns `QUOTE_UNAVAILABLE`. Keep checkout on hold for that address or retry after a temporary outage.
 

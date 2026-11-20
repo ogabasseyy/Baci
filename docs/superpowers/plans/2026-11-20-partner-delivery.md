@@ -44,6 +44,22 @@ Once the merchant moves a settled partner order to processing, the existing fulf
 
 The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documents the supported calls. The internal reconciliation route is for Baci’s authorized verifier only. It accepts normalized capture and settlement evidence using a separate connection-scoped verifier credential. Do not provision that credential for a partner or enable a live verifier until its payment and payout evidence sources are confirmed. The fixture checks exercise complete acceptance and a price-drift hold. Carrier booking and tracking still need verification against the real shipment path.
 
+#### Internal verifier responses
+
+`POST /api/internal/partner-order-reconciliation` takes the submission ID, quote ID, partner order reference, verified capture, and optional verified settlement. The verifier supplies NGN minor amounts and the original provider timestamps. Success returns `receipt`, `hold_reason` and `request_id`. Errors return `error.code` and `request_id`. Partner clients use the order submission status route in the public OpenAPI contract.
+
+| HTTP | Outcome | Verifier action |
+| --- | --- | --- |
+| 200 | Accepted receipt and order ID | Save the receipt. An identical retry returns the same order. |
+| 202 | Verification pending or a receipt held with `SETTLEMENT_REVIEW_REQUIRED` or `ORDER_REVIEW_REQUIRED` | Use the review procedure below when `hold_reason` is set. |
+| 400 | `INVALID_REQUEST` or `CAPTURE_EVIDENCE_MISMATCH` | Check the submitted evidence against the original capture and quote. |
+| 404 | `NOT_FOUND` | Check credential scope and the submission reference. |
+| 409 | `CAPTURE_EVIDENCE_CONFLICT` | Reconcile the existing capture claim before proceeding. |
+| 413 | `PAYLOAD_TOO_LARGE` | Reduce the evidence payload to the normalized fields. |
+| 429 | `RATE_LIMITED` | Wait for `Retry-After`. |
+| 500 | `RECONCILIATION_RESPONSE_INVALID` | Escalate with the request ID and check the current receipt. The database may have committed before producing the invalid response. |
+| 503 | `RECONCILIATION_UNAVAILABLE` | Check the receipt and retry the same evidence with backoff after service recovery. |
+
 ### GIG contract check
 
 The existing Baci adapter maps to GIG’s documented domestic price (`/price/v3`), pre-shipment capture (`/capture/preshipment`), and waybill tracking (`/track/mobileShipment`). Keep those calls behind Baci’s quote, fulfillment, and order-status services, so future partners can use the same API regardless of the carrier. Verify a domestic quote, the merchant-funded booking, and retrieval of the same waybill through Baci’s order endpoint using authorized GIG credentials and a controlled shipment. Confirm the hosted catalog’s `200` and `304` behavior at the agreed poll interval before enabling partner sync. [GIG API documentation](https://dev-thirdpartynode.theagilitysystems.com/docs/)
@@ -51,8 +67,6 @@ The existing Baci adapter maps to GIG’s documented domestic price (`/price/v3`
 ### Local storefront writer check
 
 Run `python3 supabase/tests/run_partner_order_real_storefront_writer.py` with PostgreSQL binaries on `PATH`. It creates an isolated database with a reduced schema, loads Baci's actual storefront order writer, and checks paid acceptance, replay, exact prices, and both product and offer inventory. The same SQL suite is registered for the complete Supabase schema replay in CI. The local check does not contact the carrier or payment provider.
-
-The internal verifier receives `400 CAPTURE_EVIDENCE_MISMATCH` when capture evidence disagrees with the submission or quote. It receives `409 CAPTURE_EVIDENCE_CONFLICT` for evidence already claimed or changed, `404` for an inaccessible submission, and `429` with `Retry-After` when it hits the reconciliation limit. These responses belong to the internal ingress and do not appear in the partner API contract.
 
 ### Provision another merchant connection
 
@@ -72,7 +86,7 @@ The deployed feed returned 4,496 unique listings. The authenticated full request
 
 ### Resolve orders that require review
 
-Use the submission ID and provider references to check the stored charge and payout evidence. For a settlement hold, submit a corrected allocation only after independently verifying the amount, currency, and destination account. For an order hold, reconcile the original charge with the agreed refund owner and record the verified disposition under the original references. A price or stock change after the original purchase leaves that submission held. A replacement purchase uses a fresh quote and new references after the original charge is resolved. Use the same review process for a verified capture outside the original quote window.
+Use the submission ID and provider references to check the stored charge and payout evidence. For a settlement hold, submit a corrected allocation only after independently verifying the amount, currency, and destination account. For an order hold, reconcile the original charge with the agreed refund owner and record the verified disposition under the original references. A price, stock, or tax change after the original purchase leaves that submission held. Keeping the original reference held prevents a later retry from fulfilling a charge while its refund is being resolved. A replacement purchase uses a fresh quote and new references after the original charge is resolved. Use the same review process for a verified capture outside the original quote window.
 
 The capture check uses the provider's actual capture timestamp, between quote issuance and expiry and no later than Baci's receipt of the paid submission. Validate the provider timestamp semantics and clock alignment during onboarding. Investigate a reported clock mismatch against the provider source. Keep the original evidence timestamp.
 

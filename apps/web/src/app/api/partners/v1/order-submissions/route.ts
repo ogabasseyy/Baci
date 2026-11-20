@@ -3,7 +3,7 @@ import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
-import { partnerOrderReceiptSchema } from '../order-receipt';
+import { partnerOrderReceiptSchema } from '@/schemas/partner-order-receipt';
 import { authorizePartnerProfile } from '../partner-profile';
 import { getPartnerProfiles } from '../partner-profiles';
 

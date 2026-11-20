@@ -1,0 +1,96 @@
+import { execFileSync } from 'node:child_process';
+import { expect } from 'vitest';
+
+const pgSocket = process.env.BACI_PARTNER_LIFECYCLE_SOCKET;
+const pgPort = process.env.BACI_PARTNER_LIFECYCLE_PORT;
+
+function fixtureSql(sql: string) {
+  if (
+    !pgSocket?.includes('baci-partner-api-') ||
+    !pgPort ||
+    !/^\d+$/.test(pgPort)
+  ) {
+    throw new Error(
+      'Run this test through the disposable partner API launcher'
+    );
+  }
+  return execFileSync(
+    'psql',
+    [
+      '-XAtq',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-h',
+      pgSocket,
+      '-p',
+      pgPort,
+      '-U',
+      'postgres',
+      '-d',
+      'postgres',
+    ],
+    { input: sql, encoding: 'utf8' }
+  ).trim();
+}
+
+function verifyGiglWalletBinding(orderId: string) {
+  expect(
+    fixtureSql(`
+    UPDATE public.orders SET shipping_status = 'processing' WHERE id = '${orderId}';
+    DO $$
+    DECLARE
+      v_order public.orders%ROWTYPE;
+      v_quote_id uuid;
+    BEGIN
+      PERFORM set_config('baci_fixture.staff', '7a100000-0000-4000-8000-000000000101', true);
+      SELECT * INTO STRICT v_order FROM public.orders WHERE id = '${orderId}';
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1501);
+      BEGIN
+        PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+          v_quote_id, v_order.shipping_address);
+        RAISE EXCEPTION 'unsettled rate increase was bound';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'partner_delivery_price_changed' THEN RAISE; END IF;
+      END;
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1500);
+      PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+        v_quote_id, v_order.shipping_address);
+    END;
+    $$;
+    SELECT shipping_status, shipping_funding_source, shipping_provider,
+      (selected_quote_id IS NOT NULL) FROM public.orders WHERE id = '${orderId}';
+  `)
+  ).toBe('processing|merchant_wallet|GIGL|t');
+}
+
+function request(
+  path: string,
+  token: string,
+  body?: object,
+  headers?: HeadersInit
+) {
+  const allHeaders = new Headers(headers);
+  allHeaders.set('Authorization', `Bearer ${token}`);
+  if (body) allHeaders.set('Content-Type', 'application/json');
+  return new Request(`http://baci-fixture.invalid/api/${path}`, {
+    method: body ? 'POST' : 'GET',
+    headers: allHeaders,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+async function expectJson(response: Response, status: number) {
+  const body = await response.json();
+  expect(response.status, JSON.stringify(body)).toBe(status);
+  return body;
+}
+
+const fixtureEnabled = Boolean(pgSocket && pgPort);
+
+export {
+  expectJson,
+  fixtureEnabled,
+  fixtureSql,
+  request,
+  verifyGiglWalletBinding,
+};

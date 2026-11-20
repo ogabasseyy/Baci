@@ -1,29 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
-import { partnerOrderReceiptSchema } from '../order-receipt';
+import { partnerOrderReceiptSchema } from '@/schemas/partner-order-receipt';
+import { orderSchema } from '@/schemas/partner-order-submission';
 import { authorizePartnerProfile } from '../partner-profile';
 import { getPartnerProfiles } from '../partner-profiles';
-
-const orderSchema = z.strictObject({
-  quote_id: z.uuid(),
-  partner_order_id: z.string().trim().min(1).max(128),
-  recipient: z.strictObject({
-    name: z.string().trim().min(1).max(160),
-    phone: z.string().regex(/^\+[1-9][0-9]{7,14}$/),
-    email: z.email().max(254),
-  }),
-  payment: z.strictObject({
-    source: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
-    reference: z.string().trim().min(1).max(200),
-    amount_minor: z.number().int().positive(),
-    currency: z.literal('NGN'),
-  }),
-});
 
 export async function POST(request: Request) {
   const requestId = randomUUID();

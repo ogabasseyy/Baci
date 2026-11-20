@@ -7,7 +7,9 @@ import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { crossRemCatalogConfig } from './catalog-bindings';
 import { projectCatalog } from './project-catalog';
 
-export async function loadCrossRemCatalog() {
+export async function loadCrossRemCatalog(
+  stockByListing?: Map<string, number>
+) {
   const { merchantId, bindings } = crossRemCatalogConfig;
   const activeCount = bindings.filter((binding) => !binding.retired).length;
   if (!merchantId || bindings.length === 0) {
@@ -63,7 +65,7 @@ export async function loadCrossRemCatalog() {
     }),
     data.imageManifest
   );
-  const listings = projectCatalog(rows, bindings);
+  const listings = projectCatalog(rows, bindings, stockByListing);
   if (listings.length !== activeCount) {
     const resolvedIds = new Set(listings.map((listing) => listing.listing_id));
     const sampleListingIds = bindings

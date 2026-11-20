@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { partnerQuoteRequestSchema } from './quote-request';
+import { partnerQuoteRequestSchema } from './partner-quote-request';
 
 it('allows only domestic destinations and complete coordinate pairs', () => {
   const base = {

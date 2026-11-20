@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '@/lib/logger';
 import { GET } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -93,5 +94,33 @@ describe('partner tracking lookup', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
     mocks.rpc.mockResolvedValue({ data: null, error: null });
     expect((await request()).status).toBe(404);
+  });
+
+  it('logs tracking status drift without including the raw status', async () => {
+    using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    mocks.rpc.mockResolvedValue({
+      data: {
+        order_id: orderId,
+        partner_order_id: 'partner-1',
+        payment_status: 'paid',
+        shipping_status: 'private-status',
+        tracking: null,
+      },
+      error: null,
+    });
+    const response = await request();
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      payment_status: 'paid',
+      shipping_status: 'unknown',
+    });
+    expect(warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'Unrecognized partner tracking status',
+      connectionId: 'crossrem-ogabassey',
+      requestId: body.request_id,
+      paymentStatusUnknown: false,
+      shippingStatusUnknown: true,
+    });
   });
 });

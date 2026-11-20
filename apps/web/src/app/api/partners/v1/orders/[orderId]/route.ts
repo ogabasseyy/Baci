@@ -85,6 +85,17 @@ export async function GET(
       });
       return invalid(500, 'ORDER_RESPONSE_INVALID');
     }
+    const paymentStatusUnknown = reply.data.payment_status === 'unknown';
+    const shippingStatusUnknown = reply.data.shipping_status === 'unknown';
+    if (paymentStatusUnknown || shippingStatusUnknown) {
+      logger.warn({
+        message: 'Unrecognized partner tracking status',
+        connectionId,
+        requestId,
+        paymentStatusUnknown,
+        shippingStatusUnknown,
+      });
+    }
     return Response.json({ ...reply.data, request_id: requestId }, { headers });
   } catch {
     logger.warn({

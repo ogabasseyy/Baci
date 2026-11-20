@@ -31,13 +31,11 @@ export async function POST(request: Request) {
     getPartnerProfiles()
   );
   if (!access.ok) {
-    if (access.reason === 'ambiguous' || access.reason === 'scope_required') {
-      logger.warn({
-        message: 'Partner verifier access rejected',
-        reason: access.reason,
-        requestId,
-      });
-    }
+    logger.warn({
+      message: 'Partner verifier access rejected',
+      reason: access.reason,
+      requestId,
+    });
     return reject(404, 'NOT_FOUND');
   }
 
@@ -89,7 +87,13 @@ export async function POST(request: Request) {
       p_evidence: evidence,
       p_route_proof: proof,
     });
-    if (error?.code === 'P0002') return reject(404, 'NOT_FOUND');
+    if (error?.code === 'P0002') {
+      logger.warn({
+        message: 'Partner reconciliation submission not found',
+        requestId,
+      });
+      return reject(404, 'NOT_FOUND');
+    }
     if (
       error?.code === '22023' &&
       error.message === 'partner_payment_evidence_mismatch'

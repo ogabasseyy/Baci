@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '@/lib/logger';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -177,14 +178,31 @@ describe('partner order intake', () => {
   });
 
   it('maps quote ownership and immutable submission conflicts without reporting success', async () => {
+    using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     mocks.rpc.mockResolvedValueOnce({ error: { code: 'P0002' }, data: null });
     mocks.rpc.mockResolvedValueOnce({
       error: { code: '23505', message: 'partner_order_conflict' },
       data: null,
     });
-    mocks.rpc.mockResolvedValueOnce({ error: { code: '23505' }, data: null });
+    mocks.rpc.mockResolvedValueOnce({
+      error: { code: '23505', message: 'private constraint detail' },
+      data: null,
+    });
+    mocks.rpc.mockResolvedValueOnce({ error: { code: '08006' }, data: null });
     expect((await POST(request())).status).toBe(404);
     expect((await POST(request())).status).toBe(409);
+    const conflict = await POST(request());
+    expect(conflict.status).toBe(409);
+    const body = await conflict.json();
+    expect(body).toEqual({
+      error: { code: 'ORDER_CONFLICT' },
+      request_id: expect.any(String),
+    });
+    expect(warn).toHaveBeenCalledExactlyOnceWith({
+      message: 'Unexpected partner order uniqueness conflict',
+      connectionId: 'crossrem-ogabassey',
+      requestId: body.request_id,
+    });
     expect((await POST(request())).status).toBe(503);
   });
 });

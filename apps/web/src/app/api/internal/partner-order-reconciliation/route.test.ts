@@ -101,6 +101,48 @@ describe('internal partner reconciliation', () => {
     ]);
   });
 
+  it('distinguishes credential failures and missing submissions in logs alone', async () => {
+    using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const unauthorized = await POST(
+      request(evidence, 'incorrect-verifier-credential-not-for-production')
+    );
+    vi.stubEnv('CROSSREM_ORDER_TOKEN', undefined);
+    vi.stubEnv('CROSSREM_CATALOG_TOKEN', undefined);
+    vi.stubEnv('CROSSREM_QUOTE_TOKEN', undefined);
+    vi.stubEnv('CROSSREM_VERIFIER_TOKEN', undefined);
+    const unconfigured = await POST(request());
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    vi.stubEnv('CROSSREM_VERIFIER_TOKEN', verifierToken);
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'P0002', message: 'private storage detail' },
+    });
+    const missing = await POST(request());
+    for (const response of [unauthorized, unconfigured, missing]) {
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: { code: 'NOT_FOUND' },
+        request_id: expect.any(String),
+      });
+    }
+    expect(warn.mock.calls.map(([entry]) => entry)).toEqual([
+      {
+        message: 'Partner verifier access rejected',
+        reason: 'unauthorized',
+        requestId: expect.any(String),
+      },
+      {
+        message: 'Partner verifier access rejected',
+        reason: 'unconfigured',
+        requestId: expect.any(String),
+      },
+      {
+        message: 'Partner reconciliation submission not found',
+        requestId: expect.any(String),
+      },
+    ]);
+  });
+
   it('validates submitted evidence and derives merchant and connection server-side', async () => {
     expect(
       (await POST(request({ ...evidence, merchant_id: 'other-store' }))).status

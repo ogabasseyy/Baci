@@ -96,3 +96,23 @@ describe('isMonnifyRequeryRejectionDefiniteFailure', () => {
     expect(f(m)).toBe(false);
   });
 });
+
+describe('bugfix: an explicit FAILED vend status is not masked by a payment-level success', () => {
+  it('does not hold a body with payment status SUCCESS and vendStatus FAILED', () => {
+    expect(
+      open(
+        { responseBody: { status: 'SUCCESS', vendStatus: 'FAILED' } },
+        'Vend rejected'
+      )
+    ).toBe(false);
+  });
+
+  it('still holds when a vend is PENDING next to a FAILED payment status', () => {
+    expect(
+      open(
+        { responseBody: { status: 'FAILED', vendStatus: 'PENDING' } },
+        'Vend rejected'
+      )
+    ).toBe(true);
+  });
+});

@@ -7,23 +7,20 @@ import { isMonnifyKnownVendRefusalText } from './monnify-vend-refusal';
 
 const MAX_DEPTH = 6;
 
-/**
- * Vend states that say the vend ran or is still running: Monnify may yet
- * deliver (or already has), so a refund now could pay the customer twice.
- */
-const IN_FLIGHT_STATUSES = new Set([
+/** Vend states that say the vend is still running: Monnify may yet deliver. */
+const RUNNING_STATUSES = new Set([
   'ACCEPTED',
-  'COMPLETED',
   'INITIATED',
   'INPROGRESS',
-  'PAID',
   'PENDING',
   'PROCESSING',
   'QUEUED',
   'SUBMITTED',
-  'SUCCESS',
-  'SUCCESSFUL',
 ]);
+/** States that say the vend ran (or the payment was taken). */
+const DONE_STATUSES = new Set(['COMPLETED', 'PAID', 'SUCCESS', 'SUCCESSFUL']);
+/** Explicit failure: the same names classifyMonnifyBillStatus treats as failed. */
+const FAILED_STATUSES = new Set(['FAILED', 'FAILURE', 'UNSUCCESSFUL']);
 
 /**
  * The same states (and a timeout or a request to re-query) as wording. A
@@ -34,29 +31,54 @@ const IN_FLIGHT_STATUSES = new Set([
 const IN_FLIGHT_WORDING =
   /(?<!\b(?:not|never|no|cannot|n't)(?:\s+\w+){0,3}?\s+)(?<!(?:validation|verification|lookup|login|authentication|customer)\s+)\b(?:pending|processing|in\s+progress|queued|initiated|submitted|accepted|successful(?:ly)?|succeeded|success|delivered|completed|credited|vended|dispatched|timed?\s*out|re\s*quer(?:y|ied))\b/i;
 
-function hasInFlightStatus(answer: unknown, depth = 0): boolean {
+/** Every string value under a key ending in "status", normalised, at any depth. */
+function collectStatuses(answer: unknown, found: string[], depth = 0): boolean {
   if (!answer || typeof answer !== 'object') {
-    return false;
+    return true;
   }
   // Nesting deeper than we scan can't be cleared: fail closed (hold).
   if (depth > MAX_DEPTH) {
+    return false;
+  }
+  const children = Array.isArray(answer)
+    ? answer.map((item) => ['', item] as const)
+    : Object.entries(answer);
+  let complete = true;
+  for (const [key, value] of children) {
+    if (
+      key
+        .replace(/[\s_-]/g, '')
+        .toLowerCase()
+        .endsWith('status') &&
+      typeof value === 'string'
+    ) {
+      found.push(value.replace(/[\s_-]/g, '').toUpperCase());
+    }
+    if (!collectStatuses(value, found, depth + 1)) {
+      complete = false;
+    }
+  }
+  return complete;
+}
+
+/**
+ * Holds on a vend that is running anywhere in the body, and on a done state
+ * (payment taken, vend completed) unless the same body also names an explicit
+ * failure: like classifyMonnifyBillStatus, a FAILED vend status beats a
+ * payment-level SUCCESS/PAID, so a failed vend is refunded, not stranded.
+ */
+function hasInFlightStatus(answer: unknown): boolean {
+  const statuses: string[] = [];
+  if (!collectStatuses(answer, statuses)) {
     return true;
   }
-  if (Array.isArray(answer)) {
-    return answer.some((item) => hasInFlightStatus(item, depth + 1));
+  if (statuses.some((status) => RUNNING_STATUSES.has(status))) {
+    return true;
   }
-  return Object.entries(answer).some(([key, value]) => {
-    const isStatusKey = key
-      .replace(/[\s_-]/g, '')
-      .toLowerCase()
-      .endsWith('status');
-    return (
-      (isStatusKey &&
-        typeof value === 'string' &&
-        IN_FLIGHT_STATUSES.has(value.replace(/[\s_-]/g, '').toUpperCase())) ||
-      hasInFlightStatus(value, depth + 1)
-    );
-  });
+  return (
+    statuses.some((status) => DONE_STATUSES.has(status)) &&
+    !statuses.some((status) => FAILED_STATUSES.has(status))
+  );
 }
 
 /**

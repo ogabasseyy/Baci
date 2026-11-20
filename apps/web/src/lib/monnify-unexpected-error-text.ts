@@ -9,23 +9,19 @@ import { isMonnifyUnexpectedErrorCode } from './monnify-unexpected-error';
  * Other keys that end in "code" (productCode, product_code, biller-code)
  * never count.
  */
-function buildCodeTextPattern(codes: string): RegExp {
-  return new RegExp(
-    `(?<![A-Za-z_-])(?<!\\b(?:product|biller|item|service|customer|package|plan)\\s+)(?:(?:(?:response|error|result|status)[\\s_-]*)?code|(?:(?:http|response|result)[\\s_-]*)?status(?:[\\s_-]*code)?)["'\\s:=]*(?:(?:is|was)\\s*[:=]?\\s*)?\\[?\\s*"?0*(?:${codes})(?!\\d)`,
-    'i'
-  );
-}
-
-const MONNIFY_UNEXPECTED_ERROR_TEXT = buildCodeTextPattern(
-  '99|2\\d\\d|401|403|408|409|429|5\\d\\d'
-);
+/**
+ * "code" / "status code" key shapes followed by a value; the numeric part is
+ * appended per pattern below as a hard-coded literal (no RegExp built from a
+ * variable, so there is nothing to ReDoS-audit at runtime).
+ */
+const MONNIFY_UNEXPECTED_ERROR_TEXT =
+  /(?<![A-Za-z_-])(?<!\b(?:product|biller|item|service|customer|package|plan)\s+)(?:(?:(?:response|error|result|status)[\s_-]*)?code|(?:(?:http|response|result)[\s_-]*)?status(?:[\s_-]*code)?)["'\s:=]*(?:(?:is|was)\s*[:=]?\s*)?\[?\s*"?0*(?:99|2\d\d|401|403|408|409|429|5\d\d)(?!\d)/i;
 /**
  * The same shapes, for the codes that leave a vend's outcome open (99, 2xx,
  * 408, 409, 5xx); 401/403/429 are refusals before any vend.
  */
-const MONNIFY_UNRESOLVED_CODE_TEXT = buildCodeTextPattern(
-  '99|2\\d\\d|408|409|5\\d\\d'
-);
+const MONNIFY_UNRESOLVED_CODE_TEXT =
+  /(?<![A-Za-z_-])(?<!\b(?:product|biller|item|service|customer|package|plan)\s+)(?:(?:(?:response|error|result|status)[\s_-]*)?code|(?:(?:http|response|result)[\s_-]*)?status(?:[\s_-]*code)?)["'\s:=]*(?:(?:is|was)\s*[:=]?\s*)?\[?\s*"?0*(?:99|2\d\d|408|409|5\d\d)(?!\d)/i;
 
 /**
  * Whether a raw Monnify answer reports code 99: read as JSON where it parses,

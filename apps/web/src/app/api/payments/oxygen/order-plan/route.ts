@@ -81,16 +81,22 @@ export async function GET(request: NextRequest) {
     const repaymentReceipts = activationConfirmed
       ? await readRepaymentReceipts(auth.supabase, id.data)
       : undefined;
-    const savedSchedule = projectSchedule(schedule ?? [], booking.loan_tenure);
+    const savedSchedule = schedule ?? [];
+    const projectedSchedule = projectSchedule(
+      savedSchedule,
+      booking.loan_tenure
+    );
     const plan = oxygenOrderPlanSchema.parse({
       upfront: booking.total_upfront_payment ?? null,
       upfrontConfirmed: paymentComplete === true,
       activationConfirmed,
       repaymentReceipts,
       months: booking.loan_tenure,
-      schedule: savedSchedule,
+      schedule: projectedSchedule,
       scheduleIncomplete:
-        schedule?.length && savedSchedule.length !== booking.loan_tenure
+        savedSchedule.length > 0 &&
+        (projectedSchedule.length !== booking.loan_tenure ||
+          projectedSchedule.length !== savedSchedule.length)
           ? true
           : undefined,
     });

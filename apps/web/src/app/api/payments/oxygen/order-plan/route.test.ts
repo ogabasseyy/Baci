@@ -183,6 +183,21 @@ it('keeps unambiguous valid instalments and flags an incomplete schedule', async
   expect(plan.scheduleIncomplete).toBe(true);
 });
 
+it('flags a discarded extra instalment even when every scheduled period is present', async () => {
+  const first = { period: 1, dueDate: [2026, 11, 27], amount: 55658 };
+  const second = { period: 2, dueDate: [2026, 12, 27], amount: 55000 };
+  mocks.read.mockResolvedValue({
+    stage: 'booked',
+    state: {
+      booking: { status: 'BOOKED', loan_tenure: 1 },
+      schedule: [first, second],
+    },
+  });
+  const { plan } = await (await GET(request())).json();
+  expect(plan.schedule).toEqual([first]);
+  expect(plan.scheduleIncomplete).toBe(true);
+});
+
 it('fails closed if the validated snapshot and plan contracts ever diverge', async () => {
   mocks.read.mockResolvedValue({
     state: { booking: { status: 'BOOKED', loan_tenure: 0 }, schedule: [] },

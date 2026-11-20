@@ -614,11 +614,11 @@ describe('bank card offer payment handlers', () => {
       success: true,
       finalizationOutcome: 'completed',
     });
-    expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 1);
+    expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 2);
     mocks.verify.mockResolvedValue({ success: false, code: 'NETWORK_ERROR' });
-    expect((await callCallback()).status).toBe(200);
-    expect((await callWebhook()).status).toBe(200);
-    expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 1);
+    expect((await callCallback()).status).toBe(500);
+    expect((await callWebhook()).status).toBe(503);
+    expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 4);
     expect(mocks.rpc).toHaveBeenCalledWith(
       'approve_bank_card_offer_capture',
       expect.objectContaining({
@@ -649,16 +649,54 @@ describe('bank card offer payment handlers', () => {
     );
   });
 
-  it('recovers an approved capture when completion and then Paystack are unavailable', async () => {
+  it('recovers an approved capture after Paystack verification is available again', async () => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
-    setup('035', 'Wema Bank', undefined, true, true);
+    const { data } = setup('035', 'Wema Bank', undefined, true, true);
 
     expect((await verify(request('verify', { reference }))).status).toBe(500);
-    mocks.verify.mockResolvedValue({ success: false, code: 'NETWORK_ERROR' });
+    mocks.verify.mockResolvedValueOnce({
+      success: false,
+      code: 'NETWORK_ERROR',
+    });
+    expect((await verify(request('verify', { reference }))).status).toBe(500);
+    expect(
+      mocks.rpc.mock.calls.filter(
+        ([name]) => name === 'complete_order_gateway_payment'
+      )
+    ).toHaveLength(1);
 
+    mocks.verify.mockResolvedValueOnce({ success: true, data });
     const replay = await verify(request('verify', { reference }));
     expect(replay.status).toBe(200);
     await expect(replay.json()).resolves.toMatchObject({ success: true });
-    expect(mocks.verify).toHaveBeenCalledTimes(1);
+    expect(mocks.verify).toHaveBeenCalledTimes(3);
+  });
+
+  it('reviews a reversal after approval without retrying settlement', async () => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    const { data } = setup('035', 'Wema Bank', undefined, true, true);
+
+    expect((await verify(request('verify', { reference }))).status).toBe(500);
+    mocks.verify.mockResolvedValueOnce({
+      success: true,
+      data: { ...data, status: 'reversed' },
+    });
+
+    const replay = await verify(request('verify', { reference }));
+
+    expect(replay.status).toBe(200);
+    await expect(replay.json()).resolves.toMatchObject({
+      success: false,
+      status: 'reversed',
+    });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'flag_bank_card_offer_terminal_review',
+      expect.objectContaining({ p_status: 'reversed' })
+    );
+    expect(
+      mocks.rpc.mock.calls.filter(
+        ([name]) => name === 'complete_order_gateway_payment'
+      )
+    ).toHaveLength(1);
   });
 });

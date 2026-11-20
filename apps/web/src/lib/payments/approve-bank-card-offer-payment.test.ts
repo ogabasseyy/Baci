@@ -33,16 +33,24 @@ it('rejects context for another reference before verifying with Paystack', async
   expect(verifyBankCardOfferPaystack).not.toHaveBeenCalled();
 });
 
-it('replays a saved approval without contacting Paystack', async () => {
+it.each([
+  { verification: null, label: 'verification is unavailable' },
+  {
+    verification: { kind: 'terminal', status: 'reversed' } as const,
+    label: 'Paystack confirms a reversal',
+  },
+])('does not replay saved approval when $label', async ({ verification }) => {
   vi.clearAllMocks();
-  const gatewayResponse = { status: 'success' };
+  vi.mocked(verifyBankCardOfferPaystack).mockResolvedValueOnce(verification);
   const rpc = vi.fn().mockResolvedValue({
-    data: { ...context, completedGatewayResponse: gatewayResponse },
+    data: { ...context, completedGatewayResponse: { status: 'success' } },
   });
+
   await expect(
     approveBankCardOfferPayment({ ...input, client: { rpc } })
-  ).resolves.toEqual({ kind: 'verified', gatewayResponse });
-  expect(verifyBankCardOfferPaystack).not.toHaveBeenCalled();
+  ).resolves.toEqual(verification);
+
+  expect(verifyBankCardOfferPaystack).toHaveBeenCalledTimes(1);
   expect(rpc).toHaveBeenCalledTimes(1);
 });
 

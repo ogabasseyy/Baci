@@ -221,7 +221,24 @@ BEGIN
   THEN RAISE EXCEPTION 'Only an exact verified capture should be approved'; END IF;
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)
     #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference
-  THEN RAISE EXCEPTION 'Pending completion must replay saved provider evidence'; END IF;
+  THEN RAISE EXCEPTION 'Pending completion must retain saved provider evidence'; END IF;
+  BEGIN
+    IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
+      OR NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')
+    THEN RAISE EXCEPTION 'Approved capture reversal was not recorded'; END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM public.reconciliation_review
+      WHERE txn_id = v_transaction AND metadata->>'provider_status' = 'reversed'
+    ) THEN RAISE EXCEPTION 'A later terminal response cleared the reversal'; END IF;
+    BEGIN
+      UPDATE public.transactions SET status = 'completed' WHERE id = v_transaction;
+      RAISE EXCEPTION 'Reversed approved capture became completed';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM <> 'bank_card_offer_payment_reversed' THEN RAISE; END IF;
+    END;
+    RAISE EXCEPTION USING ERRCODE = 'BX005', MESSAGE = 'Roll back the test reversal';
+  EXCEPTION WHEN SQLSTATE 'BX005' THEN NULL;
+  END;
   UPDATE public.transactions SET status = 'completed'
     WHERE id = v_transaction;
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)
@@ -247,6 +264,9 @@ BEGIN
   IF NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 10000)
   THEN RAISE EXCEPTION 'Refund must use the discounted capture'; END IF;
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
+    OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
+  THEN RAISE EXCEPTION 'Reconciled reversal must block another cancellation refund'; END IF;
 END;
 $$;
 

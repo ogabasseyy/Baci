@@ -34,13 +34,8 @@ export async function approveBankCardOfferPayment({
   ) {
     return null;
   }
-  // A matching saved approval can resume settlement before or after completion.
-  if (context.data.completedGatewayResponse) {
-    return {
-      kind: 'verified',
-      gatewayResponse: context.data.completedGatewayResponse,
-    } as const;
-  }
+  // Saved approval survives a failed completion, but Paystack can reverse
+  // the capture afterwards. Recheck the provider before any settlement retry.
   const { amountKobo, quote } = context.data;
   const verified = await verifyBankCardOfferPaystack({
     ...context.data,

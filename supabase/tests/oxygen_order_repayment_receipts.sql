@@ -3,8 +3,12 @@ BEGIN;
 DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_index
-    WHERE indexrelid = 'oxygen_private.oxygen_callback_repayment_receipts_idx'::regclass
+    WHERE indexrelid IN (
+      'oxygen_private.oxygen_callback_repayment_receipts_idx'::regclass,
+      'oxygen_private.oxygen_state_canonical_booking_idx'::regclass
+    )
       AND indisvalid AND indisready
+    HAVING count(*) = 2
   ) THEN
     RAISE EXCEPTION 'Repayment receipt lookup index is missing or invalid';
   END IF;
@@ -172,6 +176,40 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 ROLLBACK TO SAVEPOINT legacy_booking;
+
+SAVEPOINT ambiguous_booking;
+SELECT set_config('request.jwt.claim.sub', 'd5010000-0000-4000-8000-000000000002', true);
+INSERT INTO public.orders (id, merchant_id, customer_id, order_number, total, currency, payment_status, payment_method)
+VALUES ('d5010000-0000-4000-8000-000000000032', 'd5010000-0000-4000-8000-000000000011',
+  'd5010000-0000-4000-8000-000000000021', 'REPAYMENT-AMBIGUOUS', 80000, 'NGN', 'unpaid', 'oxygen');
+INSERT INTO public.oxygen_workflows (id, order_id, merchant_id, customer_id, stage)
+VALUES ('d5010000-0000-4000-8000-000000000042', 'd5010000-0000-4000-8000-000000000032',
+  'd5010000-0000-4000-8000-000000000011', 'd5010000-0000-4000-8000-000000000021', 'activated');
+INSERT INTO oxygen_private.provider_states (workflow_id, state)
+VALUES ('d5010000-0000-4000-8000-000000000042',
+  '{"bookingReference":"d5010000-0000-4000-8000-000000000051","booking":{"status":"ACTIVATED","loan_reference":"d5010000-0000-4000-8000-000000000051"}}');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', 'd5010000-0000-4000-8000-000000000001', true);
+DO $$ BEGIN
+  IF public.oxygen_order_repayment_receipts('d5010000-0000-4000-8000-000000000031') <> '[]' THEN
+    RAISE EXCEPTION 'Case-equivalent booking across workflows leaked repayment reports';
+  END IF;
+END $$;
+RESET ROLE;
+INSERT INTO oxygen_private.repayment_booking_bindings
+  (workflow_id, booking_reference, partner_reference, environment)
+VALUES ('d5010000-0000-4000-8000-000000000042',
+  'd5010000-0000-4000-8000-000000000051', 'receipt-partner', 'staging');
+DELETE FROM oxygen_private.provider_states
+WHERE workflow_id = 'd5010000-0000-4000-8000-000000000042';
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  IF public.oxygen_order_repayment_receipts('d5010000-0000-4000-8000-000000000031') <> '[]' THEN
+    RAISE EXCEPTION 'Historical booking conflict leaked repayment reports';
+  END IF;
+END $$;
+RESET ROLE;
+ROLLBACK TO SAVEPOINT ambiguous_booking;
 
 INSERT INTO oxygen_private.callback_inbox
   (partner_reference, environment, deduplication_key, payload_hash, event, received_at)

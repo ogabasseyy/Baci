@@ -7,6 +7,8 @@ CREATE TABLE oxygen_private.repayment_booking_bindings (
   environment text NOT NULL CHECK (environment IN ('staging', 'production')),
   PRIMARY KEY (workflow_id, booking_reference)
 );
+CREATE INDEX oxygen_repayment_binding_booking_idx
+  ON oxygen_private.repayment_booking_bindings (booking_reference, workflow_id);
 ALTER TABLE oxygen_private.repayment_booking_bindings ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON oxygen_private.repayment_booking_bindings
   FROM PUBLIC, anon, authenticated, service_role, oxygen_workflow_worker;
@@ -123,6 +125,20 @@ AS $$
       AND w.stage = 'activated'
       AND s.state#>>'{booking,status}' = 'ACTIVATED'
       AND lower(s.state#>>'{booking,loan_reference}') = b.booking_reference
+      -- The provider-state uniqueness constraint compares raw JSON text.
+      -- Reject case-equivalent references across workflows, including legacy
+      -- workflows without a pinned binding.
+      AND NOT EXISTS (
+        SELECT 1 FROM oxygen_private.provider_states AS other
+        WHERE other.state->>'bookingReference' IS NOT NULL
+          AND lower(other.state->>'bookingReference') = b.booking_reference
+          AND other.workflow_id <> w.id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM oxygen_private.repayment_booking_bindings AS other
+        WHERE other.booking_reference = b.booking_reference
+          AND other.workflow_id <> w.id
+      )
       AND i.event->>'kind' = 'transaction'
       AND nullif(i.event->>'transactionReference', '') IS NOT NULL
       AND i.deduplication_key = 'transaction-loan_repayment:' || (i.event->>'transactionReference')

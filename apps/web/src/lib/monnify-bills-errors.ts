@@ -126,6 +126,10 @@ export class MonnifyHttpError extends Error {
    * a known refusal. Login rejections (401/403) never count (owner decision
    * 2026-11-18: refunded), nor throttles (429).
    */
+  // Precedence is deliberate: a Monnify-issued reference beside even a known
+  // refusal (low float, amount check) means a transaction record exists, so
+  // the row is held, not refunded and not sent to Kuda. A delayed manual
+  // refund is safer than paying a possibly-delivered vend twice.
   leavesOutcomeOpenFor(requestReference: string) {
     if (this.status === 401 || this.status === 403 || this.status === 429) {
       return false;

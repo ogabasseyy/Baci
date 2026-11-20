@@ -1209,9 +1209,11 @@ function getProviderCheckTransactionStatus(
     // Monnify requery resolves ONLY by its own vendReference (persisted at vend
     // time), NOT by transactionReference. Never fall back to the passed
     // responseRef (transaction_id): requerying with a non-vendReference returns
-    // a business "not found", which normalizes to `failed` and would wrongly
-    // fail/refund a pending-or-delivered vend. Legacy rows that predate
-    // vendReference persistence stay in processing instead.
+    // a business "not found". checkTransactionStatus reports that as `unknown`
+    // (only an explicit vend-level FAILED is `failed`), and `unknown` must
+    // never fail/refund a pending-or-delivered vend: reconcile leaves the row
+    // processing, and a failed-row retry returns without re-vending. Legacy
+    // rows that predate vendReference persistence stay in processing instead.
     const monnifyVendReference =
       typeof metadata?.monnifyVendReference === 'string'
         ? metadata.monnifyVendReference

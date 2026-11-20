@@ -12,8 +12,9 @@ import {
   experienceWireInputs,
   listedExperienceSchemas,
 } from './experience-contracts';
-import wire from './experience-contracts.json';
+import output from './experience-contracts.json';
 import { experienceToolDescriptions } from './experience-metadata';
+import inputs from './experience-wire-inputs';
 import { BUILDER_RESOURCE } from './metadata';
 import { registerBuilderTools } from './registry';
 
@@ -60,7 +61,7 @@ function server() {
   return { mock, registered, list: () => list?.() };
 }
 it('disabled discovery is the unchanged eight legacy tools; enabled schemas/policies equal runtime and generated wire', async () => {
-  expect(wire).toEqual(experienceWireContracts());
+  expect({ inputs, output }).toEqual(experienceWireContracts());
   for (const enabled of [false, true]) {
     const s = server();
     registerBuilderTools(s.mock as never, {

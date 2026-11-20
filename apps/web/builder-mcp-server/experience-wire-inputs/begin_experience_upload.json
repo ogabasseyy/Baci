@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "storefrontId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+    },
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "const": "baci.experience/v2"
+        },
+        "runtime": {
+          "type": "string",
+          "const": "react-browser-sandbox/v1"
+        },
+        "sdkVersion": {
+          "type": "string",
+          "const": "commerce-bridge/v1"
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "files": {
+          "minItems": 1,
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": ["path", "content"],
+            "additionalProperties": false
+          }
+        },
+        "packages": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "versionRef": {
+                "type": "string",
+                "const": "platform-pinned"
+              }
+            },
+            "required": ["name", "versionRef"],
+            "additionalProperties": false
+          }
+        },
+        "routes": {
+          "minItems": 1,
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "pattern": "^\\/(?:[a-zA-Z0-9_\\-[\\]/]*)$"
+              },
+              "view": {
+                "type": "string",
+                "enum": ["home", "collection", "product", "editorial"]
+              }
+            },
+            "required": ["path", "view"],
+            "additionalProperties": false
+          }
+        },
+        "assets": {
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "assetId": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]{1,80}$"
+              },
+              "alt": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "required": ["assetId", "alt"],
+            "additionalProperties": false
+          }
+        },
+        "capabilities": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "catalog.read",
+              "cart.read-public",
+              "cart.mutate",
+              "checkout.prepare",
+              "checkout.open",
+              "navigation"
+            ]
+          }
+        }
+      },
+      "required": [
+        "format",
+        "runtime",
+        "sdkVersion",
+        "entry",
+        "files",
+        "packages",
+        "routes",
+        "assets",
+        "capabilities"
+      ],
+      "additionalProperties": false
+    },
+    "files": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "minItems": 1,
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "pattern": "^[a-zA-Z0-9_./-]+$"
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 524288
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["path", "bytes", "digest"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["files"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["storefrontId", "manifest", "files"],
+  "additionalProperties": false
+}

@@ -30,13 +30,13 @@ VALUES ('d5010000-0000-4000-8000-000000000031', 'd5010000-0000-4000-8000-0000000
 INSERT INTO public.oxygen_workflows (id, order_id, merchant_id, customer_id, stage)
 VALUES ('d5010000-0000-4000-8000-000000000041', 'd5010000-0000-4000-8000-000000000031',
   'd5010000-0000-4000-8000-000000000011', 'd5010000-0000-4000-8000-000000000021', 'activated');
-INSERT INTO oxygen_private.provider_states (workflow_id, state)
-VALUES ('d5010000-0000-4000-8000-000000000041',
-  '{"bookingReference":"d5010000-0000-4000-8000-000000000051","booking":{"status":"ACTIVATED"}}');
 INSERT INTO oxygen_private.partner_workers (partner_reference, worker_user_id)
-VALUES ('receipt-partner', auth.uid());
+VALUES ('receipt-partner', auth.uid()), ('another-partner', auth.uid());
 INSERT INTO oxygen_private.runtime_bindings (merchant_id, worker_user_id, partner_reference, enabled)
 VALUES ('d5010000-0000-4000-8000-000000000011', auth.uid(), 'receipt-partner', true);
+INSERT INTO oxygen_private.provider_states (workflow_id, state)
+VALUES ('d5010000-0000-4000-8000-000000000041',
+  '{"bookingReference":"d5010000-0000-4000-8000-000000000051","booking":{"status":"ACTIVATED","loan_reference":"d5010000-0000-4000-8000-000000000051"}}');
 
 SET LOCAL ROLE authenticated;
 DO $$
@@ -88,6 +88,8 @@ BEGIN
     RAISE EXCEPTION 'Expected one minimal acknowledgement per actual repayment';
   END IF;
   IF has_table_privilege('authenticated', 'oxygen_private.callback_inbox', 'SELECT')
+    OR has_table_privilege('authenticated', 'oxygen_private.repayment_booking_bindings', 'SELECT,INSERT,UPDATE')
+    OR has_function_privilege('authenticated', 'oxygen_private.capture_repayment_booking_binding()', 'EXECUTE')
     OR has_function_privilege('anon', 'public.oxygen_order_repayment_receipts(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Callback receipt access is too broad';
   END IF;
@@ -110,6 +112,16 @@ SET LOCAL ROLE authenticated;
 DO $$ BEGIN
   IF jsonb_array_length(public.oxygen_order_repayment_receipts('d5010000-0000-4000-8000-000000000031')) <> 2 THEN
     RAISE EXCEPTION 'Changing the runtime environment hid acknowledgements or mixed environments';
+  END IF;
+END $$;
+RESET ROLE;
+
+UPDATE oxygen_private.runtime_bindings SET partner_reference = 'another-partner'
+WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  IF jsonb_array_length(public.oxygen_order_repayment_receipts('d5010000-0000-4000-8000-000000000031')) <> 2 THEN
+    RAISE EXCEPTION 'Rebinding the merchant hid acknowledgements or mixed partners';
   END IF;
 END $$;
 RESET ROLE;

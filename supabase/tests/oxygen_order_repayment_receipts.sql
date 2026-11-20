@@ -51,6 +51,12 @@ WHERE id = 'd5010000-0000-4000-8000-000000000061';
 INSERT INTO oxygen_private.provider_reference_history (command_id, workflow_id, booking_reference)
 VALUES ('d5010000-0000-4000-8000-000000000061', 'd5010000-0000-4000-8000-000000000041',
   'd5010000-0000-4000-8000-000000000051');
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM oxygen_private.repayment_booking_claims
+    WHERE command_id = 'd5010000-0000-4000-8000-000000000061') THEN
+    RAISE EXCEPTION 'A completed booking left an unnecessary pending claim';
+  END IF;
+END $$;
 UPDATE oxygen_private.runtime_bindings SET partner_reference = 'receipt-partner'
 WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';
 

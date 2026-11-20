@@ -54,13 +54,18 @@ SET search_path = ''
 AS $$
 BEGIN
   -- Runtime writes the reference history for the exact command that produced
-  -- the booking, in the same transaction as the provider state.
+  -- the booking, in the same transaction as the provider state. Move the
+  -- claim into the booking binding. Incomplete claims follow command retention.
+  WITH claimed AS (
+    DELETE FROM oxygen_private.repayment_booking_claims
+    WHERE command_id = NEW.command_id
+    RETURNING partner_reference, environment
+  )
   INSERT INTO oxygen_private.repayment_booking_bindings (
     workflow_id, booking_reference, partner_reference, environment
   )
   SELECT NEW.workflow_id, NEW.booking_reference::text, claim.partner_reference, claim.environment
-  FROM oxygen_private.repayment_booking_claims AS claim
-  WHERE claim.command_id = NEW.command_id
+  FROM claimed AS claim
   ON CONFLICT (workflow_id, booking_reference) DO NOTHING;
   RETURN NEW;
 END $$;

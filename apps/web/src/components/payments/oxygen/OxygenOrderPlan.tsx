@@ -140,6 +140,9 @@ export function OxygenOrderPlan({
         {Boolean(plan.repaymentReceipts?.length) && (
           <div className="border-t pt-3">
             <h3 className="font-semibold">Repayment updates</h3>
+            <p className="text-muted-foreground">
+              Shows up to 50 recent updates from Oxygen.
+            </p>
             <ul className="mt-2 divide-y">
               {plan.repaymentReceipts?.map(({ id, recordedAt }) => (
                 <li

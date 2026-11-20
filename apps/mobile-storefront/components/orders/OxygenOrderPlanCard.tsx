@@ -132,6 +132,9 @@ export function OxygenOrderPlanCard({ colors, orderId, userId }: Props) {
           >
             Repayment updates
           </Text>
+          <Text style={detailColor}>
+            Shows up to 50 recent updates from Oxygen.
+          </Text>
           {plan.repaymentReceipts?.map(({ id, recordedAt }) => (
             <View key={id} style={styles.row}>
               <Text style={[styles.emphasis, titleColor]}>

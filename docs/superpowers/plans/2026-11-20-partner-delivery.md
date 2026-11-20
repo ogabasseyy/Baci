@@ -38,7 +38,7 @@ The internal acceptance transaction requires verified capture and merchant settl
 
 On acceptance, Baci returns the same order ID on every identical submission retry. The order has a paid ledger entry, and its stored shipping address comes from the quote. The carrier quote remains unbound until the booking path establishes merchant-wallet funding and can check the current rate. Partners poll `GET /api/partners/v1/orders/{orderId}` for shipping status and waybill. The read returns only orders accepted through the same partner connection.
 
-Once the merchant moves a settled partner order to processing, the existing fulfillment flow must bind an attested, unused domestic GIG door quote to the order and fund it from the merchant shipping wallet. The database rejects a quote that exceeds the previously settled delivery fee. Baci reports a rate increase for reconciliation and keeps the carrier booking on hold. The existing shipment claim and wallet reservation continue to protect the actual booking.
+Once the merchant moves a settled partner order to processing, the existing fulfillment flow must bind an attested, unused domestic GIG door quote to the order and fund it from the merchant shipping wallet. The database rejects a quote that exceeds the previously settled delivery fee. Baci reports a rate increase for reconciliation and keeps the carrier booking on hold. The existing shipment claim and wallet reservation continue to protect the actual booking. The shipping guard runs after the existing economics trigger so it checks the final funding state. Payment method and status updates can cause that trigger to rewrite the funding fields.
 
 ### Draft consumer guide and evidence ingress
 

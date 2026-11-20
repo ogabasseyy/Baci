@@ -66,6 +66,17 @@ describe('partner order intake', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it('distinguishes an invalid database response from temporary unavailability', async () => {
+    mocks.rpc.mockResolvedValue({ data: { unexpected: true }, error: null });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'ORDER_RESPONSE_INVALID' },
+    });
+  });
+
   it('sets Retry-After on a rate-limited request without accessing storage', async () => {
     mocks.rateLimit.mockResolvedValueOnce({ verdict: 'denied' });
 

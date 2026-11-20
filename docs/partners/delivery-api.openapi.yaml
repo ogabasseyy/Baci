@@ -121,6 +121,7 @@ paths:
               schema: {$ref: '#/components/schemas/Error'}
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InvalidOrderResponse'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /order-submissions:
     get:
@@ -138,6 +139,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InvalidOrderResponse'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /orders/{orderId}:
     get:
@@ -175,6 +177,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InvalidOrderResponse'}
         '503': {$ref: '#/components/responses/Unavailable'}
 components:
   securitySchemes:
@@ -217,6 +220,11 @@ components:
       headers:
         Retry-After:
           schema: {type: integer, minimum: 1}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InvalidOrderResponse:
+      description: Baci could not interpret stored order data. Use the request ID for support and check the original order reference before retrying.
       content:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
@@ -378,5 +386,5 @@ components:
               enum: [INVALID_IDEMPOTENCY_KEY, INVALID_REQUEST, UNAUTHORIZED, SCOPE_REQUIRED,
                 ORDER_NOT_FOUND, ORDER_SUBMISSION_NOT_FOUND, QUOTE_NOT_FOUND, LISTING_UNAVAILABLE, ORDER_CONFLICT,
                 ADDRESS_UNSERVICEABLE, RATE_LIMITED, CARRIER_UNAVAILABLE, ORDER_INTAKE_UNAVAILABLE,
-                ORDER_LOOKUP_UNAVAILABLE, QUOTE_UNAVAILABLE, PAYLOAD_TOO_LARGE]
+                ORDER_LOOKUP_UNAVAILABLE, ORDER_RESPONSE_INVALID, QUOTE_UNAVAILABLE, PAYLOAD_TOO_LARGE]
         request_id: {type: string, format: uuid}

@@ -78,10 +78,16 @@ export async function GET(request: Request) {
     if (error) throw new Error('Partner order lookup storage unavailable');
     if (data === null) return invalid(404, 'ORDER_SUBMISSION_NOT_FOUND');
 
-    return Response.json(
-      { ...partnerOrderReceiptSchema.parse(data), request_id: requestId },
-      { headers }
-    );
+    const reply = partnerOrderReceiptSchema.safeParse(data);
+    if (!reply.success) {
+      logger.error({
+        message: 'Invalid partner order lookup receipt',
+        connectionId,
+        requestId,
+      });
+      return invalid(500, 'ORDER_RESPONSE_INVALID');
+    }
+    return Response.json({ ...reply.data, request_id: requestId }, { headers });
   } catch {
     logger.warn({
       message: 'Partner order lookup unavailable',

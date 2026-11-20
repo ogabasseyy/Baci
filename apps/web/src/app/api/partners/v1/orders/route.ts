@@ -92,10 +92,18 @@ export async function POST(request: Request) {
     if (error?.code === 'P0002') return invalid(404, 'QUOTE_NOT_FOUND');
     if (error?.code === '23505') return invalid(409, 'ORDER_CONFLICT');
     if (error) throw new Error('Partner order intake storage unavailable');
-    const receipt = partnerOrderReceiptSchema.parse(data);
+    const reply = partnerOrderReceiptSchema.safeParse(data);
+    if (!reply.success) {
+      logger.error({
+        message: 'Invalid partner order intake receipt',
+        connectionId,
+        requestId,
+      });
+      return invalid(500, 'ORDER_RESPONSE_INVALID');
+    }
     return Response.json(
-      { ...receipt, request_id: requestId },
-      { status: receipt.status === 'accepted' ? 200 : 202, headers }
+      { ...reply.data, request_id: requestId },
+      { status: reply.data.status === 'accepted' ? 200 : 202, headers }
     );
   } catch {
     logger.warn({

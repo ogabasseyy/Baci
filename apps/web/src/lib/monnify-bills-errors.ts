@@ -171,6 +171,11 @@ export class MonnifyHttpError extends Error {
     return this.#reading.bodyHasToken;
   }
 
+  /** The body names the vend delivered: never retry it. */
+  get showsDeliveredStatus() {
+    return this.#reading.showsDeliveredStatus;
+  }
+
   /** Monnify's own vendReference in the body, when it gave one. */
   providerVendReference(requestReference: string) {
     return ignoreMonnifyRequestEcho(

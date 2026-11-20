@@ -15,6 +15,7 @@ import {
 import { readMonnifyResponseCode } from './monnify-response-code';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import {
+  hasMonnifyDeliveredVendStatus,
   hasMonnifyExplicitVendFailure,
   isMonnifyUnresolvedAnswer,
 } from './monnify-unresolved-answer';
@@ -38,6 +39,8 @@ export interface MonnifyAnswerReading {
   authOrThrottleCode: boolean;
   /** The body carries a real (non-placeholder) voucher token. */
   bodyHasToken: boolean;
+  /** The body names the vend delivered (SUCCESS/COMPLETED...). */
+  showsDeliveredStatus: boolean;
   /** The body leaves the vend's outcome open (see isMonnifyUnresolvedAnswer). */
   leavesOutcomeOpen: boolean;
   /** References Monnify put in responseBody (checked against the request later). */
@@ -101,6 +104,7 @@ export function readMonnifyAnswer(
       !isMonnifyUnresolvedAnswer({ answer: parsed, wording: text }),
     authOrThrottleCode: hasMonnifyAuthOrThrottleCode(parsed),
     bodyHasToken: hasBodyToken(parsed),
+    showsDeliveredStatus: hasMonnifyDeliveredVendStatus(parsed),
     leavesOutcomeOpen:
       hasBodyToken(parsed) ||
       isMonnifyUnresolvedAnswer({

@@ -243,6 +243,8 @@ export async function purchaseBill(
       error instanceof MonnifyHttpError &&
       (error.isClientError ||
         error.bodyHasToken ||
+        // A body that says the vend was delivered: a retry would pay it twice.
+        error.showsDeliveredStatus ||
         // Monnify already identified the vend: hold and requery it, don't re-vend.
         !!error.providerVendReference(requestReference))
     ) {

@@ -1,3 +1,5 @@
+import { NON_VEND_PARENT } from './monnify-structured-outcome';
+
 /**
  * Response codes that never prove Monnify vended nothing: 99 ("unexpected
  * error, re-query"), 408 (timeout), 409 (conflict/duplicate), 429
@@ -27,12 +29,19 @@ const UNRESOLVED_CODE = /^(?:0+|0*(?:99|2\d\d|408|409|5\d\d))$/;
 const CATALOG_PARENT =
   /^(?:product|biller|item|service|customer|package|plan)s?$/;
 
+/** The leading 3-digit HTTP-style code of "500 Internal Server Error", else the trimmed value. */
+function leadingCode(value: string): string {
+  const trimmed = value.trim();
+  return /^\d{3}(?!\d)/.exec(trimmed)?.[0] ?? trimmed;
+}
+
 function hasResponseCodeMatching(
   answer: unknown,
   pattern: RegExp,
   depth: number,
   underCatalog = false,
-  overflowResult = true
+  overflowResult = true,
+  skipAncillary = false
 ): boolean {
   if (!answer || typeof answer !== 'object') {
     return false;
@@ -49,27 +58,34 @@ function hasResponseCodeMatching(
         pattern,
         depth + 1,
         underCatalog,
-        overflowResult
+        overflowResult,
+        skipAncillary
       )
     );
   }
   return Object.entries(answer).some(([key, value]) => {
     const normalisedKey = key.replace(/[\s_-]/g, '').toLowerCase();
     const isCatalogCode = normalisedKey === 'code' && underCatalog;
+    // The auth scan ignores codes under refund/request/error/... objects.
+    if (skipAncillary && NON_VEND_PARENT.test(normalisedKey)) {
+      return false;
+    }
     return (
       (RESPONSE_CODE_KEY.test(normalisedKey) &&
         !isCatalogCode &&
         (Array.isArray(value) ? value : [value]).some(
           (item) =>
             (typeof item === 'string' || typeof item === 'number') &&
-            pattern.test(String(item).trim())
+            // "500 Internal Server Error": the leading code is what counts.
+            pattern.test(leadingCode(String(item)))
         )) ||
       hasResponseCodeMatching(
         value,
         pattern,
         depth + 1,
         underCatalog || CATALOG_PARENT.test(normalisedKey),
-        overflowResult
+        overflowResult,
+        skipAncillary
       )
     );
   });
@@ -108,6 +124,7 @@ export function hasMonnifyAuthOrThrottleCode(answer: unknown): boolean {
     /^0*(?:401|403|429)$/,
     0,
     false,
-    false
+    false,
+    true
   );
 }

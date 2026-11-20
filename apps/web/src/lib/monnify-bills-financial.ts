@@ -241,7 +241,10 @@ export async function purchaseBill(
     // held too (a retry could submit after delivery).
     if (
       error instanceof MonnifyHttpError &&
-      (error.isClientError || error.bodyHasToken)
+      (error.isClientError ||
+        error.bodyHasToken ||
+        // Monnify already identified the vend: hold and requery it, don't re-vend.
+        !!error.providerVendReference(requestReference))
     ) {
       return buildMonnifyHttpRejectionResult({
         amount,

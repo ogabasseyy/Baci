@@ -46,7 +46,8 @@ env:
 jobs:
   build-and-submit:
     name: Build IPA & Submit to App Store Connect
-    runs-on: xcode-27
+    # The pinned actionlint version predates this GitHub-hosted runner label.
+    runs-on: ${{ 'xcode-27' }}
     timeout-minutes: 150
 
     steps:

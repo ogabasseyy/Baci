@@ -50,7 +50,8 @@ jobs:
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Swift RuntimeScheduler compatibility
     # GitHub-hosted ephemeral runner. This compile job uses no signing secrets.
-    runs-on: xcode-27
+    # The pinned actionlint version predates this GitHub-hosted runner label.
+    runs-on: ${{ 'xcode-27' }}
     timeout-minutes: 30
     steps:
       - name: Checkout

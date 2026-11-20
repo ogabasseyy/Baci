@@ -1,3 +1,5 @@
+import { NON_VEND_STATUS_PREFIX } from './monnify-structured-outcome';
+
 const MAX_DEPTH = 6;
 
 /**
@@ -12,7 +14,18 @@ export function joinMonnifyAnswerStrings(value: unknown, depth = 0): string {
   if (depth > MAX_DEPTH || !value || typeof value !== 'object') {
     return '';
   }
-  const children = Array.isArray(value) ? value : Object.values(value);
+  const children = Array.isArray(value)
+    ? value
+    : Object.entries(value)
+        // A customerStatus / productStatus / refundStatus value is another
+        // object's state, never wording about the vend.
+        .filter(
+          ([key]) =>
+            !NON_VEND_STATUS_PREFIX.test(
+              key.replace(/[\s_-]/g, '').toLowerCase()
+            )
+        )
+        .map(([, child]) => child);
   return children
     .map((child) => joinMonnifyAnswerStrings(child, depth + 1))
     .filter(Boolean)

@@ -29,13 +29,14 @@ export function markVtuMonnifyUnresolvedHold({
   >;
   transactionId: string;
 }): void {
+  // A token seen on any held or still-pending answer is flagged (never stored).
+  if (result.providerTokenSeen === true) {
+    metadata[VTU_MONNIFY_HELD_TOKEN_SEEN_KEY] = true;
+  }
   if (result.providerOutcomeUnresolved !== true) {
     return;
   }
   metadata[VTU_MONNIFY_OUTCOME_UNRESOLVED_KEY] = true;
-  if (result.providerTokenSeen === true) {
-    metadata[VTU_MONNIFY_HELD_TOKEN_SEEN_KEY] = true;
-  }
   console.warn('Monnify answer left the vend outcome open; VTU row held:', {
     requeryable: !!result.providerVendReference,
     tokenSeen: result.providerTokenSeen === true,

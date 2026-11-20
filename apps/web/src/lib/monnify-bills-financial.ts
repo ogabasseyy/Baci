@@ -231,6 +231,9 @@ export async function purchaseBill(
       ),
       status,
       amount,
+      // A pending vend that already carries a token: flag it (the token is not
+      // stored on a processing row) so support knows a voucher was issued.
+      ...(status === 'pending' && hasToken && { providerTokenSeen: true }),
     };
   } catch (error) {
     if (error instanceof MonnifyHttpError && error.isClientError) {

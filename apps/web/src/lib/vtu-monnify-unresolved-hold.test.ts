@@ -93,3 +93,19 @@ describe('bugfix: a held answer that carried a token is flagged, without storing
     expect(VTU_MONNIFY_HELD_TOKEN_SEEN_KEY in metadata).toBe(false);
   });
 });
+
+describe('bugfix: a token seen on a still-pending answer is flagged too', () => {
+  it('sets monnifyHeldTokenSeen even when the result is not marked unresolved', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const metadata: Record<string, unknown> = {};
+
+    markVtuMonnifyUnresolvedHold({
+      metadata,
+      result: { providerTokenSeen: true, providerVendReference: 'MFBP-1' },
+      transactionId: 'vtu-1',
+    });
+
+    expect(metadata[VTU_MONNIFY_HELD_TOKEN_SEEN_KEY]).toBe(true);
+    expect(VTU_MONNIFY_OUTCOME_UNRESOLVED_KEY in metadata).toBe(false);
+  });
+});

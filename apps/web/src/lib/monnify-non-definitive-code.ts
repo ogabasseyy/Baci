@@ -31,7 +31,7 @@ function hasResponseCodeMatching(
   answer: unknown,
   pattern: RegExp,
   depth: number,
-  parentKey = ''
+  underCatalog = false
 ): boolean {
   if (!answer || typeof answer !== 'object') {
     return false;
@@ -42,13 +42,12 @@ function hasResponseCodeMatching(
   }
   if (Array.isArray(answer)) {
     return answer.some((item) =>
-      hasResponseCodeMatching(item, pattern, depth + 1, parentKey)
+      hasResponseCodeMatching(item, pattern, depth + 1, underCatalog)
     );
   }
   return Object.entries(answer).some(([key, value]) => {
     const normalisedKey = key.replace(/[\s_-]/g, '').toLowerCase();
-    const isCatalogCode =
-      normalisedKey === 'code' && CATALOG_PARENT.test(parentKey);
+    const isCatalogCode = normalisedKey === 'code' && underCatalog;
     return (
       (RESPONSE_CODE_KEY.test(normalisedKey) &&
         !isCatalogCode &&
@@ -57,7 +56,12 @@ function hasResponseCodeMatching(
             (typeof item === 'string' || typeof item === 'number') &&
             pattern.test(String(item).trim())
         )) ||
-      hasResponseCodeMatching(value, pattern, depth + 1, normalisedKey)
+      hasResponseCodeMatching(
+        value,
+        pattern,
+        depth + 1,
+        underCatalog || CATALOG_PARENT.test(normalisedKey)
+      )
     );
   });
 }

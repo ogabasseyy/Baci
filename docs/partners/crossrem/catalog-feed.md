@@ -32,6 +32,8 @@ ON CONFLICT (merchant_id) DO NOTHING;
 The Ogabassey baseline includes 4,501 Google listing IDs. The Riversong Vision 20S 20000mAh keeps its original ID and uses the merchant-confirmed New condition when the source condition is blank. The public Ogabassey feed used SKU-expanded mode when we validated the baseline on 19 November 2026. CrossRem stores and joins on the pinned `listing_id` from that baseline. A later Google toggle to family mode does not change a pinned ID. A family ID captured in a future migration stays bound to the exact SKU identified by its Google product link, even when Google starts showing a different representative SKU. Confirm that CrossRem's stored keys match the pinned IDs in the hosted sandbox before resuming sync. The endpoint returns 401 for missing, invalid, or unusable credentials. After authentication, it returns 503 if bindings are missing or any active binding cannot resolve uniquely. This protects CrossRem's previous catalog from an incomplete snapshot. For a confirmed withdrawal, mark the binding retired. The next complete snapshot omits its ID and CrossRem can deactivate it. Partner HTTP responses are private.
 
 
+The registry retains all 4,501 original IDs. Five IDs are retired after the Ogabassey catalog archived the Redmi Pad Pro 5G, Redmi Pad Pro and Redmi 15C 5G. The registry has 4,496 active listings.
+
 Run from the repository root. The command reads the configured merchant's public feed data and writes candidate bindings to standard output.
 The exporter requires SKU-expanded Google mode. It stops before reading the catalog in family mode because those Google IDs represent a different import baseline.
 

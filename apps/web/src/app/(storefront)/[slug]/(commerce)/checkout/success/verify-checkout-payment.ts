@@ -180,7 +180,8 @@ export async function verifyCheckoutPayment(
         bankOfferStatus === 'pending' && bankCardOfferRetryDelay(response);
       if (retryDelay) setStatus(bankOfferStatus, retryDelay);
       else setStatus(bankOfferStatus);
-      setOrderNumber(response.status === 403 ? null : orderNumber);
+      if (bankOfferStatus === 'access_required') setOrderNumber(null);
+      else if (response.status !== 403) setOrderNumber(orderNumber);
       return;
     }
 

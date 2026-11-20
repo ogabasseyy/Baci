@@ -185,6 +185,7 @@ export function useCheckoutSuccessVerification({
       setPaymentMethod,
       setStatus: (nextStatus, delayMs = 0) => {
         if (disposed) return;
+        // Every verification result updates the polling guard synchronously here.
         statusRef.current = nextStatus;
         retryAfterMs = delayMs;
         setStatus(nextStatus);

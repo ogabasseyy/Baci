@@ -23,15 +23,19 @@ it.each([
   expect(getBankCardOfferCheckoutStatus(200, { status })).toBe(
     'bank_offer_review'
   );
+  expect(getBankCardOfferCheckoutStatus(202, { status })).toBe(
+    'bank_offer_review'
+  );
 });
 
 it('identifies a reversal only on a successful terminal response', () => {
   expect(getBankCardOfferCheckoutStatus(200, { status: 'reversed' })).toBe(
     'reversed'
   );
-  expect(
-    getBankCardOfferCheckoutStatus(202, { status: 'reversed' })
-  ).toBeNull();
+  expect(getBankCardOfferCheckoutStatus(202, { status: 'reversed' })).toBe(
+    'reversed'
+  );
+  expect(getBankCardOfferCheckoutStatus(202, { status: 'pending' })).toBeNull();
   expect(getBankCardOfferCheckoutStatus(500, { status: 'reversed' })).toBe(
     'pending'
   );

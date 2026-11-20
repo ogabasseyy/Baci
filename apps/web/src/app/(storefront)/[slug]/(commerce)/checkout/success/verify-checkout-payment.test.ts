@@ -233,7 +233,7 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.setStatus).toHaveBeenCalledWith(
       'verification_unavailable'
     );
-    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+    expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });

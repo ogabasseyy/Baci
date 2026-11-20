@@ -15,8 +15,6 @@ export function getBankCardOfferCheckoutStatus(
   if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)
     return 'pending';
   if (httpStatus < 200 || httpStatus >= 300) return 'verification_unavailable';
-  if (httpStatus === 202) return null;
-
   if (payment.status === 'reversed') return 'reversed';
   if (
     payment.status === 'failed' ||

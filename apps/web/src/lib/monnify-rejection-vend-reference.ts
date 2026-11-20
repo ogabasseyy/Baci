@@ -1,8 +1,5 @@
 const MAX_DEPTH = 6;
 
-/** Baci's own request references are 24 hex characters (generateRequestRef). */
-const OWN_REQUEST_REFERENCE = /^[0-9a-f]{24}$/i;
-
 function normaliseKey(key: string): string {
   return key.replace(/[\s_-]/g, '').toLowerCase();
 }
@@ -74,18 +71,36 @@ export function findMonnifyBodyVendReference(
   return pickShallowest(found);
 }
 
+/** Every transactionReference / vendReference the answer carries in its responseBody. */
+export function collectMonnifyProviderReferences(answer: unknown): string[] {
+  const found: Found[] = [];
+  collectBodyField(answer, 'transactionreference', found);
+  collectBodyField(answer, 'vendreference', found);
+  return found.map((item) => item.value);
+}
+
 /**
- * Whether the answer carries a Monnify-issued reference in its responseBody:
- * a transactionReference or vendReference that is not an echo of our own
- * request reference shape. Such a body means a vend may exist.
+ * Whether the answer carries a reference other than an exact echo of our own
+ * request reference. Such a body means a vend may exist. Monnify issues a
+ * transactionReference only for a transaction it created.
  */
-export function hasMonnifyProviderReference(answer: unknown): boolean {
-  const transaction: Found[] = [];
-  collectBodyField(answer, 'transactionreference', transaction);
-  const vend: Found[] = [];
-  collectBodyField(answer, 'vendreference', vend);
-  return [...transaction, ...vend].some(
-    (item) => !OWN_REQUEST_REFERENCE.test(item.value)
+export function hasMonnifyProviderReference(
+  answer: unknown,
+  requestReference: string
+): boolean {
+  return hasForeignMonnifyReference(
+    collectMonnifyProviderReferences(answer),
+    requestReference
+  );
+}
+
+export function hasForeignMonnifyReference(
+  references: string[],
+  requestReference: string
+): boolean {
+  return references.some(
+    (reference) =>
+      reference.toLowerCase() !== requestReference.trim().toLowerCase()
   );
 }
 

@@ -55,6 +55,7 @@ export function buildMonnifyBusinessRejectionResult({
     (contradictorySuccessCode ||
       isMonnifyUnresolvedAnswer({
         answer: envelope,
+        requestReference,
         wording: `${rawMessage} ${joinMonnifyAnswerStrings(envelope)}`,
       }))
   ) {
@@ -84,7 +85,7 @@ export function buildMonnifyBusinessRejectionResult({
 /**
  * A 4xx answer to the vend. A known refusal before any vend may go to Kuda;
  * an answer that leaves the outcome open is held (see
- * MonnifyHttpError.leavesOutcomeOpen); anything else, including 401/403
+ * MonnifyHttpError.leavesOutcomeOpenFor); anything else, including 401/403
  * login rejections (owner decision 2026-11-18) and 429 throttles, fails and
  * is refunded, as before.
  */
@@ -119,7 +120,10 @@ export function buildMonnifyHttpRejectionResult({
     !error.showsVendEvidence &&
     !error.mentionsAuthWording &&
     error.isKnownRefusal;
-  if (!providerDefiniteFailure && error.leavesOutcomeOpen) {
+  if (
+    !providerDefiniteFailure &&
+    error.leavesOutcomeOpenFor(requestReference)
+  ) {
     return buildMonnifyUnresolvedVendResult({
       amount,
       message: HTTP_REJECTION_MESSAGE,

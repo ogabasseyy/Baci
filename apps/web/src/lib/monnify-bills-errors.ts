@@ -3,7 +3,10 @@ import {
   readMonnifyAnswer,
 } from './monnify-answer-reading';
 import { redactMonnifyCredentials } from './monnify-credential-redaction';
-import { ignoreMonnifyRequestEcho } from './monnify-rejection-vend-reference';
+import {
+  hasForeignMonnifyReference,
+  ignoreMonnifyRequestEcho,
+} from './monnify-rejection-vend-reference';
 
 const SENSITIVE_DIGIT_SEQUENCE_PATTERN = /(?<!\d)\d{7,}(?!\d)/g;
 /**
@@ -123,14 +126,18 @@ export class MonnifyHttpError extends Error {
    * a known refusal. Login rejections (401/403) never count (owner decision
    * 2026-11-18: refunded), nor throttles (429).
    */
-  get leavesOutcomeOpen() {
+  leavesOutcomeOpenFor(requestReference: string) {
     if (this.status === 401 || this.status === 403 || this.status === 429) {
       return false;
     }
     return (
       this.status === 408 ||
       this.isDuplicateReference ||
-      this.#reading.leavesOutcomeOpen
+      this.#reading.leavesOutcomeOpen ||
+      hasForeignMonnifyReference(
+        this.#reading.providerReferences,
+        requestReference
+      )
     );
   }
 

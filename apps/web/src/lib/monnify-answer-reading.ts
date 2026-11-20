@@ -4,7 +4,10 @@ import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyNonDefinitiveCode } from './monnify-non-definitive-code';
-import { findMonnifyBodyVendReference } from './monnify-rejection-vend-reference';
+import {
+  collectMonnifyProviderReferences,
+  findMonnifyBodyVendReference,
+} from './monnify-rejection-vend-reference';
 import { readMonnifyResponseCode } from './monnify-response-code';
 import { reportsMonnifyUnexpectedError } from './monnify-unexpected-error-text';
 import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
@@ -24,6 +27,8 @@ export interface MonnifyAnswerReading {
   responseCode: string | undefined;
   /** The body leaves the vend's outcome open (see isMonnifyUnresolvedAnswer). */
   leavesOutcomeOpen: boolean;
+  /** References Monnify put in responseBody (checked against the request later). */
+  providerReferences: string[];
   /** Monnify's own responseBody.vendReference, if the answer carries one. */
   vendReferenceCandidate: string | undefined;
 }
@@ -79,6 +84,7 @@ export function readMonnifyAnswer(
       // The reason phrase counts too ("Vend in progress" with an empty body).
       wording: text,
     }),
+    providerReferences: collectMonnifyProviderReferences(parsed),
     vendReferenceCandidate: findMonnifyBodyVendReference(parsed),
   };
 }

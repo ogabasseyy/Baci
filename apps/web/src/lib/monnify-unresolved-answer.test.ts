@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isMonnifyUnresolvedAnswer } from './monnify-unresolved-answer';
 
+const REQ = 'a1b2c3d4e5f6a1b2c3d4e5f6';
 const open = (answer: unknown, wording: string) =>
   isMonnifyUnresolvedAnswer({ answer, wording });
 
@@ -141,33 +142,49 @@ describe('bugfix: vend-level status beats a generic payment status, both ways', 
 });
 
 describe('bugfix: a provider reference alone means a vend may exist', () => {
+  const withReference = (responseBody: Record<string, string>) =>
+    isMonnifyUnresolvedAnswer({
+      answer: { responseCode: 'D01', responseBody },
+      requestReference: REQ,
+      wording: 'Invalid customer',
+    });
+
   it('holds a rejection whose body carries only a transactionReference', () => {
-    expect(
-      open(
-        { responseCode: 'D01', responseBody: { transactionReference: 'T-1' } },
-        'Invalid customer'
-      )
-    ).toBe(true);
+    expect(withReference({ transactionReference: 'T-1' })).toBe(true);
   });
 
   it('holds a rejection whose body carries only a Monnify vendReference', () => {
-    expect(
-      open(
-        { responseCode: 'D01', responseBody: { vendReference: 'MFBP-1' } },
-        'Invalid customer'
-      )
-    ).toBe(true);
+    expect(withReference({ vendReference: 'MFBP-1' })).toBe(true);
+  });
+
+  it('holds a different 24-hex reference next to an ordinary refusal', () => {
+    expect(withReference({ vendReference: 'ffffffffffffffffffffffff' })).toBe(
+      true
+    );
   });
 
   it('does not hold when the body only echoes our own request reference', () => {
-    expect(
-      open(
-        {
-          responseCode: 'D01',
-          responseBody: { vendReference: 'a1b2c3d4e5f6a1b2c3d4e5f6' },
-        },
-        'Invalid customer'
-      )
-    ).toBe(false);
+    expect(withReference({ transactionReference: REQ })).toBe(false);
+  });
+});
+
+describe('bugfix: negated duplicate wording and login rejections with an open code', () => {
+  it.each([
+    'Not a duplicate, vend rejected',
+    'No duplicate reference found',
+  ])('does not hold on "%s"', (wording) => {
+    expect(open({ responseCode: '01' }, wording)).toBe(false);
+  });
+
+  it('still holds a real duplicate', () => {
+    expect(open({ responseCode: '01' }, 'Duplicate vendReference')).toBe(true);
+  });
+
+  it('refunds an authentication rejection even with code 99', () => {
+    expect(open({ responseCode: '99' }, 'Invalid access token')).toBe(false);
+  });
+
+  it('still holds code 99 without authentication wording', () => {
+    expect(open({ responseCode: '99' }, 'Unexpected error')).toBe(true);
   });
 });

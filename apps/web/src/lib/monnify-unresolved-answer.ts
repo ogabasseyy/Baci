@@ -1,3 +1,4 @@
+import { mentionsMonnifyAuthWording } from './monnify-auth-wording';
 import { hasMonnifyDuplicateFlag } from './monnify-duplicate-flag';
 import { isMonnifyDuplicateReferenceText } from './monnify-duplicate-reference';
 import { hasMonnifyUnresolvedCode } from './monnify-non-definitive-code';
@@ -129,6 +130,14 @@ function readStructuredOutcome(
   }
 }
 
+/** "not a duplicate", "no duplicate reference": says the opposite of a duplicate. */
+function stripNegatedDuplicate(text: string): string {
+  return text.replace(
+    /\b(?:not|no|never|n't)\s+(?:an?\s+)?(?:\w+\s+)?duplicate\w*(?:\s+\w+)?/gi,
+    ' '
+  );
+}
+
 /**
  * Whether a Monnify rejection leaves the vend's outcome open, so the
  * customer must not be refunded straight away (Monnify may still deliver).
@@ -142,9 +151,12 @@ function readStructuredOutcome(
  */
 export function isMonnifyUnresolvedAnswer({
   answer,
+  requestReference,
   wording,
 }: {
   answer: unknown;
+  /** When given, a Monnify reference in the body (not an echo of ours) holds. */
+  requestReference?: string;
   wording: string;
 }): boolean {
   const outcome: StructuredOutcome = {
@@ -174,17 +186,24 @@ export function isMonnifyUnresolvedAnswer({
     );
   const strong =
     hasMonnifyDuplicateFlag(answer) ||
-    isMonnifyDuplicateReferenceText(wording) ||
+    isMonnifyDuplicateReferenceText(stripNegatedDuplicate(wording)) ||
     structuredHold ||
     // A Monnify-issued reference in the body means a vend may exist.
-    hasMonnifyProviderReference(answer) ||
+    (requestReference !== undefined &&
+      hasMonnifyProviderReference(answer, requestReference)) ||
     wordingHolds;
   if (strong) {
     return true;
   }
   const codeLeavesOutcomeOpen =
     hasMonnifyUnresolvedCode(answer) || reportsMonnifyUnresolvedCode(wording);
-  return codeLeavesOutcomeOpen && !isMonnifyKnownVendRefusalText(wording);
+  // A login rejection with an open code is still refunded (owner decision
+  // 2026-11-18), like a known refusal.
+  return (
+    codeLeavesOutcomeOpen &&
+    !isMonnifyKnownVendRefusalText(wording) &&
+    !mentionsMonnifyAuthWording(wording)
+  );
 }
 
 /**

@@ -101,33 +101,37 @@ describe('bugfix: ambiguous or shallow-first vendReference selection', () => {
 });
 
 describe('hasMonnifyProviderReference', () => {
-  it('is true for a transactionReference or a non-own vendReference', () => {
+  it('is true for a reference that is not an exact echo of our request', () => {
     expect(
-      hasMonnifyProviderReference({
-        responseBody: { transactionReference: 'T-1' },
-      })
+      hasMonnifyProviderReference(
+        { responseBody: { transactionReference: 'T-1' } },
+        ref
+      )
     ).toBe(true);
     expect(
-      hasMonnifyProviderReference({ responseBody: { vendReference: 'MFBP-1' } })
+      hasMonnifyProviderReference(
+        { responseBody: { vendReference: 'MFBP-1' } },
+        ref
+      )
     ).toBe(true);
   });
 
-  it('is false for an echo of our own request reference or no reference', () => {
+  it('is true for a DIFFERENT 24-hex reference (only an exact echo is excluded)', () => {
     expect(
-      hasMonnifyProviderReference({
-        responseBody: { vendReference: 'a1b2c3d4e5f6a1b2c3d4e5f6' },
-      })
-    ).toBe(false);
-    expect(hasMonnifyProviderReference({ responseBody: {} })).toBe(false);
+      hasMonnifyProviderReference(
+        { responseBody: { vendReference: 'ffffffffffffffffffffffff' } },
+        ref
+      )
+    ).toBe(true);
   });
-});
 
-describe('bugfix: a transactionReference that echoes our request reference is not provider evidence', () => {
-  it('is false for an own-shaped transactionReference', () => {
+  it('is false for an exact echo (any casing) or no reference', () => {
     expect(
-      hasMonnifyProviderReference({
-        responseBody: { transactionReference: 'a1b2c3d4e5f6a1b2c3d4e5f6' },
-      })
+      hasMonnifyProviderReference(
+        { responseBody: { transactionReference: ref.toUpperCase() } },
+        ref
+      )
     ).toBe(false);
+    expect(hasMonnifyProviderReference({ responseBody: {} }, ref)).toBe(false);
   });
 });

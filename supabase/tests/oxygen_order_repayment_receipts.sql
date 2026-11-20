@@ -44,7 +44,7 @@ UPDATE oxygen_private.runtime_bindings SET partner_reference = 'another-partner'
 WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';
 INSERT INTO oxygen_private.provider_states (workflow_id, state)
 VALUES ('d5010000-0000-4000-8000-000000000041',
-  '{"bookingReference":"d5010000-0000-4000-8000-000000000051","booking":{"status":"ACTIVATED","loan_reference":"d5010000-0000-4000-8000-000000000051"}}');
+  '{"bookingReference":"D5010000-0000-4000-8000-000000000051","booking":{"status":"ACTIVATED","loan_reference":"D5010000-0000-4000-8000-000000000051"}}');
 UPDATE oxygen_private.commands SET status = 'succeeded'
 WHERE id = 'd5010000-0000-4000-8000-000000000061';
 -- The exact command ID still proves the partner after the command completes.
@@ -71,7 +71,7 @@ BEGIN
     RAISE EXCEPTION 'Repayment was not deduplicated';
   END IF;
   PERFORM public.oxygen_callback('accept', 'receipt-partner',
-    base || '{"transactionReference":"second","deduplicationKey":"transaction-loan_repayment:second"}');
+    base || '{"transactionReference":"second","deduplicationKey":"transaction-loan_repayment:second","bookedLoanReference":"D5010000-0000-4000-8000-000000000051"}');
   PERFORM public.oxygen_callback('accept', 'receipt-partner',
     base || '{"transactionReference":"same","deduplicationKey":"transaction-split_payment:same"}');
   PERFORM public.oxygen_callback('accept', 'receipt-partner',
@@ -130,9 +130,20 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 
-UPDATE oxygen_private.runtime_bindings SET environment = 'production'
+UPDATE oxygen_private.runtime_bindings SET environment = 'production', enabled = true
 WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';
+-- A later callback authenticated under production cannot be attributed to
+-- this staging booking simply because its body contains the reference.
 SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', 'd5010000-0000-4000-8000-000000000002', true);
+DO $$ BEGIN
+  IF public.oxygen_callback('accept', 'receipt-partner',
+    '{"kind":"transaction","bookedLoanReference":"d5010000-0000-4000-8000-000000000051","providerAmountSent":"10000.00","providerAmountDeducted":"10000.00","transactionReference":"late","deduplicationKey":"transaction-loan_repayment:late"}'
+  )->>'result' IS DISTINCT FROM 'accepted' THEN
+    RAISE EXCEPTION 'Expected an accepted provider report in the replacement environment';
+  END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub', 'd5010000-0000-4000-8000-000000000001', true);
 DO $$ BEGIN
   IF jsonb_array_length(public.oxygen_order_repayment_receipts('d5010000-0000-4000-8000-000000000031')) <> 2 THEN
     RAISE EXCEPTION 'Changing the runtime environment hid acknowledgements or mixed environments';

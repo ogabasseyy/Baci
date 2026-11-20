@@ -40,12 +40,6 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION oxygen_private.capture_repayment_booking_claim()
   FROM PUBLIC, anon, authenticated, service_role, oxygen_workflow_worker;
-CREATE TRIGGER oxygen_capture_repayment_booking_claim
-  AFTER UPDATE OF status ON oxygen_private.commands
-  FOR EACH ROW
-  WHEN (OLD.status = 'queued' AND NEW.status = 'executing' AND NEW.command->>'action' = 'book')
-  EXECUTE FUNCTION oxygen_private.capture_repayment_booking_claim();
-
 CREATE FUNCTION oxygen_private.capture_repayment_booking_binding()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -76,6 +70,23 @@ CREATE TRIGGER oxygen_capture_repayment_booking_binding
   FOR EACH ROW WHEN (NEW.booking_reference IS NOT NULL)
   EXECUTE FUNCTION oxygen_private.capture_repayment_booking_binding();
 
+-- Drain or reconcile existing book commands before applying this migration.
+-- The check and trigger creation share a lock, including during psql replay.
+DO $$ BEGIN
+  LOCK TABLE oxygen_private.commands IN SHARE ROW EXCLUSIVE MODE NOWAIT;
+  IF EXISTS (
+    SELECT 1 FROM oxygen_private.commands
+    WHERE status = 'executing' AND command->>'action' = 'book'
+  ) THEN
+    RAISE EXCEPTION 'Drain executing Oxygen booking commands before applying repayment history';
+  END IF;
+  CREATE TRIGGER oxygen_capture_repayment_booking_claim
+    AFTER UPDATE OF status ON oxygen_private.commands
+    FOR EACH ROW
+    WHEN (OLD.status = 'queued' AND NEW.status = 'executing' AND NEW.command->>'action' = 'book')
+    EXECUTE FUNCTION oxygen_private.capture_repayment_booking_claim();
+END $$;
+
 -- Legacy bookings without a recorded partner can still show their saved
 -- schedule. The current merchant binding cannot prove who booked those loans.
 -- These are provider reports only. They do not confirm any money movement.
@@ -101,15 +112,17 @@ AS $$
     JOIN oxygen_private.provider_states AS s ON s.workflow_id = w.id
     JOIN oxygen_private.repayment_booking_bindings AS b
       ON b.workflow_id = w.id AND b.environment = w.environment
-      AND b.booking_reference = s.state->>'bookingReference'
+      AND b.booking_reference = lower(s.state->>'bookingReference')
+    -- A callback tagged with a different environment has no authority for
+    -- this booking, even after a runtime binding switch. Do not reattribute it.
     JOIN oxygen_private.callback_inbox AS i
       ON i.partner_reference = b.partner_reference AND i.environment = b.environment
-      AND i.event->>'bookedLoanReference' = b.booking_reference
+      AND lower(i.event->>'bookedLoanReference') = b.booking_reference
     WHERE w.order_id = p_order_id
       AND c.user_id = (SELECT auth.uid())
       AND w.stage = 'activated'
       AND s.state#>>'{booking,status}' = 'ACTIVATED'
-      AND s.state#>>'{booking,loan_reference}' = b.booking_reference
+      AND lower(s.state#>>'{booking,loan_reference}') = b.booking_reference
       AND i.event->>'kind' = 'transaction'
       AND nullif(i.event->>'transactionReference', '') IS NOT NULL
       AND i.deduplication_key = 'transaction-loan_repayment:' || (i.event->>'transactionReference')

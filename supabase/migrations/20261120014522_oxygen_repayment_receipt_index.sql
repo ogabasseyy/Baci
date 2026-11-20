@@ -18,7 +18,7 @@ BEGIN
       (LIKE oxygen_private.callback_inbox) ON COMMIT DROP;
     CREATE INDEX oxygen_repayment_receipt_expected_shape
       ON pg_temp.oxygen_repayment_receipt_index_shape (
-        partner_reference, environment, (event->>'bookedLoanReference'), received_at DESC, id
+        partner_reference, environment, (lower(event->>'bookedLoanReference')), received_at DESC, id
       )
       WHERE event->>'kind' = 'transaction'
         AND deduplication_key = 'transaction-loan_repayment:' || (event->>'transactionReference');
@@ -39,7 +39,7 @@ END $$;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS oxygen_callback_repayment_receipts_idx
   ON oxygen_private.callback_inbox (
-    partner_reference, environment, (event->>'bookedLoanReference'), received_at DESC, id
+    partner_reference, environment, (lower(event->>'bookedLoanReference')), received_at DESC, id
   )
   WHERE event->>'kind' = 'transaction'
     AND deduplication_key = 'transaction-loan_repayment:' || (event->>'transactionReference');

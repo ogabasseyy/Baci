@@ -16,6 +16,7 @@ import type { ChatwootCheckoutMerchant } from './chatwoot-checkout-merchant';
 import { postChatwootCheckoutOrder } from './chatwoot-checkout-order-post';
 import { buildChatwootCheckoutOrderRequest } from './chatwoot-checkout-order-request';
 import { initializeChatwootCheckoutBankTransfer } from './chatwoot-checkout-payment';
+import { decideChatwootCheckoutReplay } from './chatwoot-checkout-replay-decision';
 import type {
   ChatwootCheckoutCreatedOrder,
   ChatwootCheckoutFailureCode,
@@ -136,34 +137,17 @@ async function placeForKeys(
 
   const remembered = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   if (remembered) {
-    // A replay answers only for the merchant and conversation that placed it.
-    if (
-      remembered.merchantId !== merchant.id ||
-      remembered.conversationId !== request.conversationId
-    )
-      return fail('order_failed');
-    // Bank details already issued are returned as they were: asking again
-    // could mint a second account and reference for the same order.
-    if (remembered.payment) {
-      if (input.canPost()) {
-        input.postResult({
-          requestId: request.requestId,
-          status: 'payment_ready',
-          orderNumber: remembered.order.orderNumber,
-          amountMajor: remembered.order.amountDueMajor,
-          currency: 'NGN',
-          bank: remembered.payment.bank,
-          reference: remembered.payment.reference,
-        });
-      }
+    const replay = decideChatwootCheckoutReplay(remembered, {
+      requestId: request.requestId,
+      conversationId: request.conversationId,
+      merchantId: merchant.id,
+    });
+    if (replay.kind === 'refuse') return fail('order_failed');
+    if (replay.kind === 'answer') {
+      if (input.canPost()) input.postResult(replay.result);
       return;
     }
-    return startPayment(
-      input,
-      merchant.id,
-      remembered.order,
-      keys.idempotencyKey
-    );
+    return startPayment(input, merchant.id, replay.order, keys.idempotencyKey);
   }
 
   const sameCart = () => {

@@ -68,7 +68,7 @@ export async function handleChatwootCheckoutAction({
     return unavailable();
   }
   const { readChatwootCheckoutPaymentStatus } = await import(
-    './chatwoot-checkout-payment'
+    './chatwoot-checkout-payment-status'
   );
   const result = await readChatwootCheckoutPaymentStatus({
     requestId: message.data.requestId,

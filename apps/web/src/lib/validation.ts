@@ -83,6 +83,7 @@ const INFRA_RESERVED_SUBDOMAINS = new Set([
   'status',
   'support',
   'help',
+  'chat',
 ]);
 
 /**

@@ -62,6 +62,14 @@ describe('isReservedMerchantSlug', () => {
     expect(isReservedMerchantSlug('  WWW ')).toBe(true);
   });
 
+  it('reserves the chat engine host so no store can take chat.<root domain>', () => {
+    expect(isReservedMerchantSlug('chat')).toBe(true);
+    expect(isReservedMerchantSlug(' Chat ')).toBe(true);
+    // Only the exact label is reserved; store names that contain it stay free.
+    expect(isReservedMerchantSlug('chat-store')).toBe(false);
+    expect(isReservedMerchantSlug('livechat')).toBe(false);
+  });
+
   it('accepts a normal store slug', () => {
     expect(isReservedMerchantSlug('acme-store')).toBe(false);
   });

@@ -1,13 +1,6 @@
 -- Project transaction acknowledgements from the authenticated callback inbox.
 -- The inbox already deduplicates each typed reference per partner and environment.
-CREATE INDEX oxygen_callback_repayment_receipts_idx
-  ON oxygen_private.callback_inbox (
-    partner_reference, environment, (event->>'bookedLoanReference'), received_at DESC, id
-  )
-  WHERE event->>'kind' = 'transaction'
-    AND deduplication_key = 'transaction-loan_repayment:' || (event->>'transactionReference');
-
-CREATE FUNCTION public.oxygen_order_repayment_receipts(p_order_id uuid)
+CREATE OR REPLACE FUNCTION public.oxygen_order_repayment_receipts(p_order_id uuid)
 RETURNS jsonb
 LANGUAGE sql
 STABLE

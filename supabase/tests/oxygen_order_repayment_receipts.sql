@@ -1,5 +1,15 @@
 BEGIN;
 
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_index
+    WHERE indexrelid = 'oxygen_private.oxygen_callback_repayment_receipts_idx'::regclass
+      AND indisvalid AND indisready
+  ) THEN
+    RAISE EXCEPTION 'Repayment receipt lookup index is missing or invalid';
+  END IF;
+END $$;
+
 INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 VALUES

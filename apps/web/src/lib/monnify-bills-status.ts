@@ -66,28 +66,35 @@ export function toBillStatusInput(body: {
   status?: string | null;
   vendStatus?: string | null;
   transactionStatus?: string | null;
+  finalStatus?: string | null;
 }) {
   return {
     status: body.status,
-    vendStatus: body.vendStatus?.trim()
-      ? body.vendStatus
-      : body.transactionStatus,
+    vendStatus: [
+      body.vendStatus,
+      body.transactionStatus,
+      body.finalStatus,
+    ].find((value) => !!value?.trim()),
   };
 }
 
 /**
- * `vendStatus` and `transactionStatus` that contradict each other (one
- * success, one failed): neither has authority, so the answer proves nothing
+ * Vend-level states (`vendStatus`, `transactionStatus`, `finalStatus`) where
+ * one says failed and another does not: neither has authority, so the answer proves nothing
  * and must be held, not refunded and not settled.
  */
 export function hasConflictingVendStatuses(body: {
   vendStatus?: string | null;
   transactionStatus?: string | null;
+  finalStatus?: string | null;
 }): boolean {
-  if (!body.vendStatus?.trim() || !body.transactionStatus?.trim()) {
-    return false;
-  }
-  const a = classifyMonnifyBillStatus({ vendStatus: body.vendStatus });
-  const b = classifyMonnifyBillStatus({ vendStatus: body.transactionStatus });
-  return (a.isSuccess && b.isFailed) || (a.isFailed && b.isSuccess);
+  const states = [body.vendStatus, body.transactionStatus, body.finalStatus]
+    .map((value) => value?.trim())
+    .filter((value): value is string => !!value);
+  const failed = states.filter(
+    (value) => classifyMonnifyBillStatus({ vendStatus: value }).isFailed
+  ).length;
+  // One says failed while another says anything else (success, pending, or a
+  // state we do not know): neither has authority.
+  return failed > 0 && failed < states.length;
 }

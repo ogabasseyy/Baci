@@ -16,7 +16,7 @@ never refunded and never sent to Kuda automatically.
 
 ```sql
 select id, merchant_id, type, amount, request_reference, created_at, updated_at,
-       now() - updated_at as held_for,
+       now() - created_at as age,
        metadata->>'providerResponseCode' as provider_code
 from vtu_transactions
 where status = 'processing'
@@ -37,8 +37,9 @@ order by created_at;
 4. Not found at all after a day: treat as not delivered, same as step 3, and
    note the Monnify check in the row's support notes.
 
-Check this query at least once a day. Rows held for more than 24 hours are the
-ones to settle first. An automatic alert for this query is a follow-up PR.
+Check this query at least once a day. Rows older than 24 hours (`age`, from
+`created_at`: `updated_at` is bumped by every reconciliation pass) are the ones
+to settle first. An automatic alert for this query is a follow-up PR.
 
 ## Wording decisions (kept fail-closed)
 

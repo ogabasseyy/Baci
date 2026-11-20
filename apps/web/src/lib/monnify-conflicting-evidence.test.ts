@@ -161,3 +161,85 @@ describe('bugfix: ancillary verb forms and generic failed flags', () => {
     ).toBe(true);
   });
 });
+
+describe('bugfix: FAILED beside a pending or unknown vend state is held', () => {
+  it.each([
+    [{ vendStatus: 'FAILED', transactionStatus: 'PENDING' }],
+    [{ vendStatus: 'FAILED', transactionStatus: 'UNKNOWN' }],
+    [{ vendStatus: 'FAILED', finalStatus: 'SUCCESS' }],
+  ])('treats %j as a conflict', (body) => {
+    expect(hasConflictingVendStatuses(body)).toBe(true);
+  });
+
+  it('holds a fresh vend with vendStatus FAILED and transactionStatus PENDING', async () => {
+    mockEnvelope({
+      requestSuccessful: true,
+      responseCode: '0',
+      responseMessage: 'success',
+      responseBody: {
+        transactionReference: 'MNFY-1',
+        vendReference: 'MFBP-1',
+        vendStatus: 'FAILED',
+        transactionStatus: 'PENDING',
+      },
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'pending',
+      providerOutcomeUnresolved: true,
+    });
+  });
+});
+
+describe('bugfix: finalStatus is read from a success envelope', () => {
+  it('does not settle a payment SUCCESS whose finalStatus is PENDING', async () => {
+    mockEnvelope({
+      requestSuccessful: true,
+      responseCode: '0',
+      responseMessage: 'success',
+      responseBody: {
+        transactionReference: 'MNFY-1',
+        vendReference: 'MFBP-1',
+        status: 'SUCCESS',
+        finalStatus: 'PENDING',
+      },
+    });
+
+    await expect(vend()).resolves.toMatchObject({ status: 'pending' });
+  });
+
+  it('reads finalStatus FAILED on a requery', async () => {
+    mockEnvelope({
+      requestSuccessful: true,
+      responseCode: '0',
+      responseMessage: 'success',
+      responseBody: { transactionReference: 'MNFY-1', finalStatus: 'FAILED' },
+    });
+
+    await expect(checkTransactionStatus('MFBP-1')).resolves.toMatchObject({
+      status: 'failed',
+    });
+  });
+});
+
+describe('bugfix: customer and product statuses never prove a vend failed', () => {
+  it.each([
+    'customerStatus',
+    'productStatus',
+    'billerStatus',
+    'accountStatus',
+  ])('ignores %s: FAILED', (key) => {
+    expect(
+      hasMonnifyExplicitVendFailure({ responseBody: { [key]: 'FAILED' } })
+    ).toBe(false);
+  });
+
+  it('still accepts vendStatus and finalStatus FAILED', () => {
+    expect(
+      hasMonnifyExplicitVendFailure({ responseBody: { vendStatus: 'FAILED' } })
+    ).toBe(true);
+    expect(
+      hasMonnifyExplicitVendFailure({ responseBody: { finalStatus: 'FAILED' } })
+    ).toBe(true);
+  });
+});

@@ -243,6 +243,7 @@ export const vendResponseBodySchema = z.object({
   status: z.string().optional().nullable(),
   vendStatus: z.string().optional().nullable(),
   transactionStatus: transactionStatusSchema,
+  finalStatus: transactionStatusSchema,
   token: z.string().optional().nullable(),
   metaData: billMetaDataSchema,
 });
@@ -255,6 +256,7 @@ export const requeryResponseBodySchema = z.object({
   status: z.string().optional().nullable(),
   vendStatus: z.string().optional().nullable(),
   transactionStatus: transactionStatusSchema,
+  finalStatus: transactionStatusSchema,
   token: z.string().optional().nullable(),
   metaData: billMetaDataSchema,
 });

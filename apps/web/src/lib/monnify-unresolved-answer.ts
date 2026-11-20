@@ -38,7 +38,7 @@ const IN_FLIGHT_WORDING =
 
 /** Vend-specific status keys (not a bare `status`). */
 const VEND_STATUS_KEY =
-  /^(?!(?:http|response|result)?status(?:code)?$).+status$/;
+  /^(?!(?:http|response|result)?status(?:code)?$)(?!(?:customer|product|biller|item|service|package|plan|validation|request|merchant|account|user|payment)).+status$/;
 
 /**
  * A generic `status` that is not an HTTP reason phrase, an error label or a

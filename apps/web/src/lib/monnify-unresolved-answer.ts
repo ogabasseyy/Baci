@@ -37,7 +37,7 @@ const IN_FLIGHT_WORDING =
 
 /** Vend-specific status keys (not a bare `status`). */
 const VEND_STATUS_KEY =
-  /^(?:vend|transaction|txn|purchase|order|payment|bill)status$/;
+  /^(?!(?:http|response|result)?status(?:code)?$).+status$/;
 
 /** True outcome flags, key normalised: "delivered", "isPending", "vendFailed"... */
 const RUNNING_FLAG =
@@ -126,7 +126,8 @@ function readStructuredOutcome(
         found.unknown = true;
       }
     }
-    if (isTrueFlag(value)) {
+    // An array flag ("delivered": [true]) is read item by item too.
+    if ((Array.isArray(value) ? value : [value]).some(isTrueFlag)) {
       found.running ||= RUNNING_FLAG.test(key);
       found.done ||= DONE_FLAG.test(key);
       found.failed ||= FAILED_FLAG.test(key);

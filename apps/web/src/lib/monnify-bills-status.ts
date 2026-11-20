@@ -35,3 +35,19 @@ export function classifyMonnifyBillStatus(body: {
     MONNIFY_FAILED_STATUSES.has(terminalStatus);
   return { isSuccess, isProcessing, isFailed };
 }
+
+/**
+ * The delivered token: the first non-blank of metaData.token / token, trimmed.
+ * A whitespace-only token is not a delivery (it would settle a row with no
+ * voucher), and must not shadow a valid flat token.
+ */
+export function readMonnifyBillToken(body: {
+  token?: string | null;
+  metaData?: { token?: string | null } | null;
+}): string | undefined {
+  return (
+    [body.metaData?.token, body.token]
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .find((value) => value !== '') || undefined
+  );
+}

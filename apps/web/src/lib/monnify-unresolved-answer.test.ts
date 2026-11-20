@@ -248,3 +248,32 @@ describe('bugfix: array-valued vend states are read item by item', () => {
     ).toBe(false);
   });
 });
+
+describe('bugfix: any non-generic status key and array flags are read', () => {
+  it('holds an unrecognised finalStatus', () => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { finalStatus: 'UNKNOWN' } },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+
+  it('does not treat a generic responseStatus label as a vend state', () => {
+    expect(
+      open(
+        { responseStatus: 'Bad Request', responseCode: '01' },
+        'Invalid customer'
+      )
+    ).toBe(false);
+  });
+
+  it('holds an array-valued delivered flag', () => {
+    expect(
+      open(
+        { responseCode: 'D01', responseBody: { delivered: [true] } },
+        'Rejected'
+      )
+    ).toBe(true);
+  });
+});

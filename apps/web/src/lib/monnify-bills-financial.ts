@@ -18,7 +18,10 @@ import {
   isMonnifyBusinessSuccess,
   MONNIFY_FINANCIAL_TIMEOUT_MS,
 } from './monnify-bills-shared';
-import { classifyMonnifyBillStatus } from './monnify-bills-status';
+import {
+  classifyMonnifyBillStatus,
+  readMonnifyBillToken,
+} from './monnify-bills-status';
 import { isMonnifyRequeryRejectionDefiniteFailure } from './monnify-requery-rejection';
 import { readMonnifyResponseCode } from './monnify-response-code';
 import { buildMonnifyUnresolvedVendResult } from './monnify-unresolved-vend-result';
@@ -139,14 +142,14 @@ export async function purchaseBill(
       );
     }
 
-    const transactionReference = body.transactionReference || undefined;
-    const vendReference = body.vendReference || undefined;
+    const transactionReference = body.transactionReference?.trim() || undefined;
+    const vendReference = body.vendReference?.trim() || undefined;
     const classified = classifyMonnifyBillStatus(body);
     const { isProcessing, isFailed } = classified;
     // A delivered token is conclusive even when the status is missing or a
     // state we do not know: without it the customer would never get the
     // voucher they paid for.
-    const hasToken = !!(body.metaData?.token || body.token);
+    const hasToken = !!readMonnifyBillToken(body);
     const isSuccess =
       classified.isSuccess || (hasToken && !isProcessing && !isFailed);
 
@@ -186,7 +189,7 @@ export async function purchaseBill(
       reference: requestReference,
       transactionId: transactionReference ?? vendReference,
       providerVendReference: vendReference,
-      pin: body.metaData?.token || body.token || undefined,
+      pin: readMonnifyBillToken(body),
       units: body.metaData?.unit || undefined,
       message: sanitizeMonnifyErrorDetail(
         parsedEnvelope.responseMessage ||
@@ -252,15 +255,12 @@ export async function checkTransactionStatus(
     // status, like on the first vend.
     const isSuccess =
       classified.isSuccess ||
-      (!!body &&
-        !isProcessing &&
-        !isFailed &&
-        !!(body.metaData?.token || body.token));
+      (!!body && !isProcessing && !isFailed && !!readMonnifyBillToken(body));
     if (body && isSuccess) {
       return {
         status: 'successful',
         message: parsed.responseMessage || 'success',
-        pin: body.metaData?.token || body.token || undefined,
+        pin: readMonnifyBillToken(body),
         units: body.metaData?.unit || undefined,
       };
     }

@@ -379,3 +379,46 @@ describe('bugfix: a FAILED vend that carries a token is held, not refunded', () 
     await expect(vend()).resolves.toMatchObject({ status: 'failed' });
   });
 });
+
+describe('bugfix: blank token and blank vendReference are not evidence', () => {
+  function mockEnvelope(responseBody: Record<string, unknown>) {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody,
+      }),
+    });
+  }
+
+  it('does not complete a vend on a whitespace-only token', async () => {
+    mockEnvelope({
+      transactionReference: 'MNFY-1',
+      vendStatus: 'WEIRD',
+      token: '   ',
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'pending',
+      providerOutcomeUnresolved: true,
+    });
+  });
+
+  it('holds without a requery reference when the vendReference is blank', async () => {
+    mockEnvelope({
+      transactionReference: 'MNFY-1',
+      vendStatus: 'WEIRD',
+      vendReference: '   ',
+    });
+
+    const result = await vend();
+
+    expect(result).toMatchObject({
+      status: 'pending',
+      providerOutcomeUnresolved: true,
+    });
+    expect(result.providerVendReference).toBeUndefined();
+  });
+});

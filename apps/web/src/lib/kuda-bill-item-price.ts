@@ -179,19 +179,18 @@ export async function assertKudaBillItemPriceCurrent({
   billerName?: string;
   type: string;
 }): Promise<void> {
-  const billers = await loadPriceList(type);
-  if (billers === null) {
-    // Kuda's listed electricity meter products are always sold at the
-    // customer's own amount, so no saved price can go stale; every other
-    // purchase fails closed until a list is available.
-    if (
-      type === 'electricity' &&
-      isKudaElectricityMeterItemCode(billItemIdentifier)
-    ) {
-      return;
-    }
-    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  // Kuda's listed electricity meter products are always sold at the
+  // customer's own amount: no saved price can go stale and no list state
+  // (missing, partial, or a biller marked unreadable) can make them so.
+  if (
+    type === 'electricity' &&
+    isKudaElectricityMeterItemCode(billItemIdentifier)
+  ) {
+    return;
   }
+  const billers = await loadPriceList(type);
+  // Every other purchase fails closed until a list is available.
+  if (billers === null) throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
 
   const code = normalizeKudaItemCode(billItemIdentifier);
   const offers = (biller: Biller) => {
@@ -221,16 +220,11 @@ export async function assertKudaBillItemPriceCurrent({
   // The current list no longer offers this package (or not under the named
   // biller): the app's saved choice, and its price, are out of date.
   const chosen = candidates.filter(({ items }) => items.length > 0);
-  if (chosen.length === 0) {
-    // Kuda's listed electricity meter products are always customer-priced,
-    // so a partial list that leaves out their biller cannot make them stale.
-    if (
-      type === 'electricity' &&
-      isKudaElectricityMeterItemCode(billItemIdentifier)
-    ) {
-      return;
-    }
-    throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+  if (chosen.length === 0) throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
+  // A biller whose package list was malformed can't confirm any price, even
+  // one it lists readably: the hidden part may hold the same package.
+  if (chosen.some(({ biller }) => biller.packagesUnreadable)) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
   // Each biller's fixed listings, kept apart so that with no biller named

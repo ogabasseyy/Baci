@@ -222,6 +222,11 @@ export async function resolveKudaDataPlanForPurchase({
     ({ item }) => normalizeComparable(item.itemCode) === normalizedCode
   );
   if (exactMatch) {
+    // A provider with a malformed plan list can't confirm any plan, even a
+    // readable one: the hidden part may hold the same code at another price.
+    if (exactMatch.provider.packagesUnreadable) {
+      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    }
     // Includes an unreadable fixed price (mapped to 0).
     if (
       exactMatch.item.isAmountFixed &&

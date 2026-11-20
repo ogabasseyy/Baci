@@ -34,4 +34,13 @@ describe('providerMatchesNetwork', () => {
       )
     ).toBe(false);
   });
+
+  it('does not match "t2" inside another word', () => {
+    expect(
+      providerMatchesNetwork(
+        provider('SMART2GO DATA'),
+        NetworkProvider.MOBILE_9
+      )
+    ).toBe(false);
+  });
 });

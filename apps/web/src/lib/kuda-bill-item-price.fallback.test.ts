@@ -160,3 +160,84 @@ describe('bugfix: a malformed package list kept the saved prices confirmable', (
     );
   });
 });
+
+describe('bugfix: a biller with a malformed package list still confirmed a readable price', () => {
+  it('refuses a named purchase when the biller also sent a malformed group', async () => {
+    mockGetBillersByCategory.mockResolvedValue(
+      mapKudaBillersAnswer(
+        {
+          billers: [
+            {
+              id: 'dstv',
+              name: 'DSTV',
+              description: 'Cable',
+              billTypeId: 'cable',
+              billItems: [
+                {
+                  itemCode: 'KUD-CAB-DST-SHARED',
+                  itemName: 'Package',
+                  amount: 950000,
+                  isFixedPrice: true,
+                },
+                {
+                  itemCode: 'GROUP',
+                  itemName: 'Group',
+                  amount: 0,
+                  isFixedPrice: false,
+                  billItems: {},
+                },
+              ],
+            },
+          ],
+        },
+        'CableTv'
+      ).billers
+    );
+
+    await expect(purchase(9500, 'DSTV')).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+  });
+
+  it('still lets an electricity meter top-up through for such a biller', async () => {
+    mockGetBillersByCategory.mockResolvedValue(
+      mapKudaBillersAnswer(
+        {
+          billers: [
+            {
+              id: 'ekedc',
+              name: 'EKEDC',
+              description: 'Electricity',
+              billTypeId: 'electricity',
+              billItems: {},
+            },
+            {
+              id: 'aedc',
+              name: 'AEDC',
+              description: 'Electricity',
+              billTypeId: 'electricity',
+              billItems: [
+                {
+                  itemCode: 'KUD-ELE-AEDC-FIXED-5000',
+                  itemName: 'AEDC fixed top-up',
+                  amount: 500000,
+                  isFixedPrice: true,
+                },
+              ],
+            },
+          ],
+        },
+        'Electricity'
+      ).billers
+    );
+
+    await expect(
+      assertKudaBillItemPriceCurrent({
+        amount: 5000,
+        billItemIdentifier: 'KUD-ELE-EKED-002',
+        billerName: 'EKEDC',
+        type: 'electricity',
+      })
+    ).resolves.toBeUndefined();
+  });
+});

@@ -197,7 +197,7 @@ test('mixed diff with one unknown file still gets the full suite', () => {
     'apps/web/tsconfig.build.json',
     'apps/web/sample_orphans.txt',
     'apps/web/public/fonts/inter.woff2',
-    'patches/next@16.4.1.patch',
+    'patches/next@16.4.5.patch',
     '.github/scripts/run-ci-web-shard.sh',
     '.github/scripts/ci-lint-gate-contract.test.mjs',
   ]) {

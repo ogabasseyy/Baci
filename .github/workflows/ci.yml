@@ -584,6 +584,20 @@ jobs:
           # The suites run on these binaries: fail on a server with older ones instead of testing the wrong release.
           /usr/lib/postgresql/18/bin/postgres --version | grep -Eq '^postgres \(PostgreSQL\) 18\.6( \(.+\))?$'
           /usr/lib/postgresql/18/bin/psql --version | grep -Eq '^psql \(PostgreSQL\) 18\.6( \(.+\))?$'
+      - name: Run disposable BrilStash suites
+        env:
+          PGHOST: localhost
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          for timezone in UTC Africa/Lagos; do
+            PGTZ="$timezone" /usr/lib/postgresql/18/bin/psql -X --dbname postgres -v ON_ERROR_STOP=1 \
+              -f supabase/tests/brilstash_catalogue_storage.sql \
+              -f supabase/tests/brilstash_catalogue_assortment.sql \
+              -f supabase/tests/brilstash_catalogue_sources.sql
+          done
       - name: Test storefront order explicit delegation
         env:
           PG_BIN: /usr/lib/postgresql/18/bin

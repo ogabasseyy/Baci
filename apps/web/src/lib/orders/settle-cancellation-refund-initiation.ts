@@ -24,6 +24,7 @@ export async function settleCancellationRefundInitiation({
   auditBlockedTransactions,
   budgetDeferred,
   budgetSkippedManualLegIds,
+  claimToken,
   deadlineMs,
   initiationTransactions,
   isLastAttempt,
@@ -39,6 +40,7 @@ export async function settleCancellationRefundInitiation({
   auditBlockedTransactions: GatewayPaymentTransaction[];
   budgetDeferred?: boolean;
   budgetSkippedManualLegIds?: string[];
+  claimToken?: string;
   deadlineMs?: number;
   initiationTransactions: GatewayPaymentTransaction[];
   isLastAttempt?: boolean;
@@ -60,6 +62,7 @@ export async function settleCancellationRefundInitiation({
   // matching; see the settled-leg gate).
   const orderCurrency = normalizeRefundMoneyField(order.currency) || 'NGN';
   const refundIds = await initiatePaystackCancellationRefunds({
+    claimToken,
     deadlineMs,
     isLastAttempt,
     order,

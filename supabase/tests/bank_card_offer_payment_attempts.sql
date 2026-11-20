@@ -11,6 +11,7 @@ DECLARE
   v_quote jsonb;
   v_attempt jsonb;
   v_transaction uuid;
+  v_refund_claim uuid := gen_random_uuid();
   v_reference text;
   v_hash text := repeat('a', 64);
   v_evidence jsonb;
@@ -341,6 +342,17 @@ BEGIN
   IF NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 10000)
   THEN RAISE EXCEPTION 'Refund must use the discounted capture'; END IF;
+  INSERT INTO public.order_cancellation_side_effects(order_id, merchant_id, step, status, claim_token)
+    VALUES (v_order, v_merchant, 'refund', 'claimed', v_refund_claim);
+  SET LOCAL ROLE service_role;
+  IF public.authorize_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+    v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM true
+    OR public.authorize_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+      gen_random_uuid(), '42', 'test', 9500) IS DISTINCT FROM false
+    OR public.authorize_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+      v_refund_claim, '43', 'test', 9500) IS DISTINCT FROM false
+  THEN RAISE EXCEPTION 'Refund admission must bind the captured provider identity and live worker claim'; END IF;
+  RESET ROLE;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'failed')
   THEN RAISE EXCEPTION 'The sweep must record a confirmed failed status for a completed attempt'; END IF;
   IF NOT EXISTS (
@@ -360,6 +372,11 @@ BEGIN
   IF public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS NOT NULL
   THEN RAISE EXCEPTION 'Reconciled reversal must block another cancellation refund'; END IF;
+  SET LOCAL ROLE service_role;
+  IF public.authorize_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+    v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM false
+  THEN RAISE EXCEPTION 'A reversal recorded before refund admission must win'; END IF;
+  RESET ROLE;
 
   -- Inventory can leave a completed transaction attached to a pending order.
   UPDATE public.orders SET payment_status = 'pending' WHERE id = v_order;

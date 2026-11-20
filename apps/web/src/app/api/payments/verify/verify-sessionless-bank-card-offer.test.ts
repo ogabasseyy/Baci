@@ -163,7 +163,11 @@ it('records a capture mismatch without authorizing settlement', async () => {
   const result = await verifyNative(snapshot, buyerClient);
 
   expect(result.status).toBe(202);
-  await expect(result.json()).resolves.toMatchObject({ status: 'pending' });
+  await expect(result.json()).resolves.toMatchObject({
+    code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+    orderNumber: 'ORD-1',
+    status: 'pending',
+  });
   expect(rpc).toHaveBeenLastCalledWith('flag_bank_card_offer_capture_review', {
     p_order_id: snapshot.orderId,
     p_merchant_id: snapshot.merchantId,

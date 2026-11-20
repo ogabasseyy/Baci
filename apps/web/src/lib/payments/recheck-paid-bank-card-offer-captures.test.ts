@@ -12,18 +12,25 @@ const candidate = {
   transaction_id: 'transaction-1',
 };
 
-function worker() {
-  const rpc = vi
-    .fn()
-    .mockResolvedValueOnce({ data: [candidate], error: null })
-    .mockResolvedValue({ data: [], error: null });
+function worker(captures = [candidate]) {
+  const abortSignal = vi.fn().mockImplementation(async () => ({
+    data: captures.splice(0, 1),
+    error: null,
+  }));
+  const rpc = vi.fn(() => ({ abortSignal }));
   const finalizePayment = vi.fn().mockResolvedValue({
     kind: 'bank_offer_terminal',
     status: 'reversed',
   });
   const scheduleAfter = vi.fn();
   const supabase = { rpc } as unknown as SupabaseClient;
-  return { rpc, finalizePayment, scheduleAfter, supabase };
+  return {
+    deadlineMs: Date.now() + 20_000,
+    rpc,
+    finalizePayment,
+    scheduleAfter,
+    supabase,
+  };
 }
 
 describe('recheckPaidBankCardOfferCaptures', () => {
@@ -108,5 +115,19 @@ describe('recheckPaidBankCardOfferCaptures', () => {
       reversed: 0,
     });
     expect(input.finalizePayment).not.toHaveBeenCalled();
+  });
+
+  it('continues beyond ten captures when work still fits within the pass', async () => {
+    const input = worker(Array.from({ length: 15 }, () => candidate));
+    vi.mocked(verifyGatewayCharge).mockResolvedValue({
+      ok: true,
+      amount: 95,
+      currency: 'NGN',
+      response: {},
+    });
+
+    await expect(
+      recheckPaidBankCardOfferCaptures(input)
+    ).resolves.toMatchObject({ checked: 15 });
   });
 });

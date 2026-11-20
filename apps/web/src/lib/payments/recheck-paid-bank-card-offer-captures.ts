@@ -1,10 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
-import { remainingVerificationSignal } from './remaining-verification-signal';
 import { verifyGatewayCharge } from './verify-gateway-charge';
-
-const CAPTURE_LIMIT = 10;
 
 export async function recheckPaidBankCardOfferCaptures({
   deadlineMs,
@@ -12,17 +9,18 @@ export async function recheckPaidBankCardOfferCaptures({
   scheduleAfter,
   supabase,
 }: {
-  deadlineMs?: number;
+  deadlineMs: number;
   finalizePayment: typeof finalizeOrderGatewayPayment;
   scheduleAfter: (task: () => Promise<void>) => void;
   supabase: SupabaseClient;
 }) {
   const summary = { checked: 0, failed: 0, retrying: 0, reversed: 0 };
-  for (let index = 0; index < CAPTURE_LIMIT; index += 1) {
-    const signal = remainingVerificationSignal(deadlineMs);
-    if (signal === null) break;
+  while (true) {
+    const remainingMs = deadlineMs - Date.now();
+    if (remainingMs <= 0) break;
+    const signal = AbortSignal.timeout(remainingMs);
     const claim = supabase.rpc('claim_paid_bank_card_offer_recheck');
-    const { data, error } = await (signal ? claim.abortSignal(signal) : claim);
+    const { data, error } = await claim.abortSignal(signal);
     if (error) {
       logger.warn({
         message: 'Unable to claim a paid bank card offer for recheck',

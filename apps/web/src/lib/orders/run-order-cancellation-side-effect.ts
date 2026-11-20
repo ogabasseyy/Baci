@@ -36,7 +36,7 @@ export async function runOrderCancellationSideEffect({
   step,
   supabase,
 }: {
-  execute: () => Promise<Json | undefined>;
+  execute: (claimToken: string) => Promise<Json | undefined>;
   orderId: string;
   step: OrderCancellationSideEffectStep;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
@@ -68,7 +68,7 @@ export async function runOrderCancellationSideEffect({
   // and the verification budget is enforced precisely where a leg
   // needing provider verification is scheduled.
   try {
-    result = await execute();
+    result = await execute(claimToken);
   } catch (error) {
     status =
       error instanceof DeliveryUncertainError

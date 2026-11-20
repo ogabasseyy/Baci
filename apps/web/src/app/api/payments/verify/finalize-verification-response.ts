@@ -69,7 +69,12 @@ export async function finalizeVerificationResponse(
   }
   if (finalizeOutcome.kind === 'bank_offer_capture_review') {
     return NextResponse.json(
-      { code: 'BANK_CARD_OFFER_CAPTURE_REVIEW', status: 'pending' },
+      {
+        code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+        orderId,
+        orderNumber: existingOrder?.order_number ?? undefined,
+        status: 'pending',
+      },
       { status: 202 }
     );
   }

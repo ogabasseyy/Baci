@@ -88,7 +88,15 @@ export async function verifySessionlessBankCardOffer(
         });
         return unavailable();
       }
-      return pending();
+      return NextResponse.json(
+        {
+          ...orderDetails,
+          code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+          success: false,
+          status: 'pending',
+        },
+        { status: 202 }
+      );
     }
     if (verified?.kind !== 'verified') return pending();
 

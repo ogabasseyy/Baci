@@ -21,6 +21,7 @@ import { settleCancellationRefundInitiation } from '@/lib/orders/settle-cancella
 import { soleCompletedCancellationLeg } from '@/lib/orders/sole-completed-cancellation-leg';
 
 export async function executeOrderCancellationSideEffect({
+  claimToken,
   deadlineMs,
   isLastAttempt,
   merchant,
@@ -30,6 +31,7 @@ export async function executeOrderCancellationSideEffect({
   step,
   supabase,
 }: {
+  claimToken?: string;
   deadlineMs?: number;
   isLastAttempt?: boolean;
   merchant: CancellationMerchant;
@@ -165,6 +167,7 @@ export async function executeOrderCancellationSideEffect({
     auditBlockedTransactions,
     budgetDeferred,
     budgetSkippedManualLegIds,
+    claimToken,
     deadlineMs,
     initiationTransactions,
     isLastAttempt,

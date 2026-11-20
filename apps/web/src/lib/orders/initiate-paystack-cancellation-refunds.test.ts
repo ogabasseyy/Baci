@@ -9,10 +9,14 @@ import {
 const mocks = vi.hoisted(() => ({
   initiatePaystackRefund: vi.fn(),
   quarantineRefund: vi.fn(),
+  verifyTransaction: vi.fn(),
 }));
 
 vi.mock('@/lib/initiate-paystack-refund', () => ({
   initiateRefund: mocks.initiatePaystackRefund,
+}));
+vi.mock('@/lib/paystack', () => ({
+  verifyTransaction: mocks.verifyTransaction,
 }));
 
 vi.mock('./quarantine-order-cancellation-refund', () => ({
@@ -60,10 +64,25 @@ describe('initiatePaystackCancellationRefunds', () => {
   it('uses the exact saved kobo amount for a bank-offer refund', async () => {
     const reference = `BCO-${'a'.repeat(32)}`;
     acceptedRefund({ transaction: { id: 55, reference } });
-    const rpc = vi.fn().mockResolvedValue({ data: 9501, error: null });
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: 9501, error: null })
+      .mockResolvedValueOnce({ data: true, error: null });
+    mocks.verifyTransaction.mockResolvedValueOnce({
+      success: true,
+      data: {
+        status: 'success',
+        reference,
+        amount: 9501,
+        currency: 'NGN',
+        domain: 'test',
+        id: '55',
+      },
+    });
 
     await expect(
       initiatePaystackCancellationRefunds({
+        claimToken: 'claim-1',
         order,
         refundedPaymentIds: new Set(),
         supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
@@ -82,6 +101,47 @@ describe('initiatePaystackCancellationRefunds', () => {
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({ amount: '95.01' })
     );
+    expect(rpc).toHaveBeenLastCalledWith(
+      'authorize_bank_card_offer_refund_dispatch',
+      expect.objectContaining({
+        p_claim_token: 'claim-1',
+        p_provider_id: '55',
+        p_amount_kobo: 9501,
+      })
+    );
+  });
+
+  it.each([
+    'reversed',
+    'raced',
+  ])('withholds the refund when a reversal is %s', async (state) => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: 9501, error: null })
+      .mockResolvedValueOnce({ data: false, error: null });
+    mocks.verifyTransaction.mockResolvedValueOnce({
+      success: true,
+      data: {
+        status: state === 'reversed' ? 'reversed' : 'success',
+        reference,
+        amount: 9501,
+        currency: 'NGN',
+        domain: 'test',
+        id: '55',
+      },
+    });
+    await expect(
+      initiatePaystackCancellationRefunds({
+        claimToken: 'claim-1',
+        order,
+        refundedPaymentIds: new Set(),
+        supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
+        transactions: [{ ...transaction, gateway_reference: reference }],
+      })
+    ).resolves.toEqual([]);
+    expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+    expect(mocks.quarantineRefund).toHaveBeenCalled();
   });
 
   it('defers a bank-offer refund when capture lookup consumes the provider budget', async () => {

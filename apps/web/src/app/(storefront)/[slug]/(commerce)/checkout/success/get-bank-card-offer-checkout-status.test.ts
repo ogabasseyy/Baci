@@ -15,6 +15,15 @@ it('distinguishes ownership denials from persistent CSRF failures', () => {
   );
 });
 
+it('recognizes a recorded capture review in a pending HTTP envelope', () => {
+  expect(
+    getBankCardOfferCheckoutStatus(202, {
+      status: 'pending',
+      code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+    })
+  ).toBe('bank_offer_review');
+});
+
 it.each([
   'failed',
   'cancelled',

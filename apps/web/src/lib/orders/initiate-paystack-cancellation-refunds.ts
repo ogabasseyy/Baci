@@ -5,6 +5,7 @@ import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-pay
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
+import { verifyTransaction } from '@/lib/paystack';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import {
   DeferredError,
@@ -21,6 +22,7 @@ import {
 // before the worker is killed.
 const REFUND_PROVIDER_CALL_WORST_MS = 30_000;
 const REFUND_AUDIT_WRITE_RESERVE_MS = 8_000;
+const BANK_OFFER_VERIFY_BUDGET_MS = 8_000;
 // Single source for the preflight admission reserve: an initiation
 // leg starts only when a full provider call plus the audit reserve
 // both fit (see the per-leg gate below), so verification must leave
@@ -40,6 +42,7 @@ function formatVerifiedKobo(amountKobo: number): string {
  * proceed; quarantine paths file a reconciliation review first.
  */
 export async function initiatePaystackCancellationRefunds({
+  claimToken,
   deadlineMs,
   isLastAttempt,
   order,
@@ -48,6 +51,7 @@ export async function initiatePaystackCancellationRefunds({
   supabase,
   transactions,
 }: {
+  claimToken?: string;
   deadlineMs?: number;
   /**
    * Set when this run consumes the final retry attempt: a
@@ -89,8 +93,8 @@ export async function initiatePaystackCancellationRefunds({
       continue;
     }
     let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
-    // A positive leg below half a kobo rounds to 0, and the provider
-    // treats a non-positive amount as a full-transaction refund.
+    let eligibleForDispatch = !isBankOffer;
+    // A sub-kobo amount would round to zero and request a full refund.
     if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
       await quarantineRefund({
         metadata: {
@@ -107,14 +111,16 @@ export async function initiatePaystackCancellationRefunds({
       continue;
     }
     if (isBankOffer) {
+      const reference = transaction.gateway_reference as string;
+      const identity = {
+        p_order_id: order.id,
+        p_merchant_id: order.merchant_id,
+        p_transaction_id: transaction.id,
+        p_reference: reference,
+      };
       const capture = await supabase.rpc(
         'get_bank_card_offer_refundable_amount',
-        {
-          p_order_id: order.id,
-          p_merchant_id: order.merchant_id,
-          p_transaction_id: transaction.id,
-          p_reference: transaction.gateway_reference,
-        }
+        identity
       );
       if (capture.error) {
         bankOfferLookupUnavailable = true;
@@ -126,6 +132,62 @@ export async function initiatePaystackCancellationRefunds({
         continue;
       }
       koboAmount = capture.data;
+      const verifyBudgetMs =
+        deadlineMs === undefined
+          ? BANK_OFFER_VERIFY_BUDGET_MS
+          : Math.min(
+              BANK_OFFER_VERIFY_BUDGET_MS,
+              deadlineMs - Date.now() - REFUND_INITIATION_LEG_BUDGET_MS
+            );
+      if (verifyBudgetMs > 0) {
+        if (!claimToken) {
+          bankOfferLookupUnavailable = true;
+          if (isLastAttempt) bankOfferLegsForReview.push(transaction);
+          continue;
+        }
+        const verification = await verifyTransaction(
+          reference,
+          AbortSignal.timeout(verifyBudgetMs),
+          { textIds: true }
+        );
+        if (!verification.success) {
+          bankOfferLookupUnavailable = true;
+          if (isLastAttempt) bankOfferLegsForReview.push(transaction);
+          continue;
+        }
+        const { data } = verification;
+        if (
+          data?.status !== 'success' ||
+          data.reference !== reference ||
+          data.currency !== 'NGN' ||
+          data.amount !== koboAmount ||
+          !('domain' in data) ||
+          (data.domain !== 'test' && data.domain !== 'live')
+        ) {
+          bankOfferLegsForReview.push(transaction);
+          continue;
+        }
+        const admission = await supabase.rpc(
+          'authorize_bank_card_offer_refund_dispatch',
+          {
+            ...identity,
+            p_claim_token: claimToken,
+            p_provider_id: data.id,
+            p_provider_domain: data.domain,
+            p_amount_kobo: koboAmount,
+          }
+        );
+        if (admission.error) {
+          bankOfferLookupUnavailable = true;
+          if (isLastAttempt) bankOfferLegsForReview.push(transaction);
+          continue;
+        }
+        if (admission.data !== true) {
+          bankOfferLegsForReview.push(transaction);
+          continue;
+        }
+        eligibleForDispatch = true;
+      }
     }
     // Compute the budget after reading the saved capture. A plain
     // Error keeps the step retryable, so unattempted legs run on the
@@ -140,8 +202,8 @@ export async function initiatePaystackCancellationRefunds({
         ? undefined
         : timeoutMs - REFUND_AUDIT_WRITE_RESERVE_MS;
     if (
-      timeoutMs !== undefined &&
-      timeoutMs - REFUND_AUDIT_WRITE_RESERVE_MS < REFUND_PROVIDER_CALL_WORST_MS
+      !eligibleForDispatch ||
+      (timeoutMs !== undefined && timeoutMs < REFUND_INITIATION_LEG_BUDGET_MS)
     ) {
       // On the final attempt the claim has already raised the row to
       // the attempts cap, so a plain retryable error would finish it

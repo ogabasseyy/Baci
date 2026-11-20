@@ -1,5 +1,6 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
 import {
   isAbortError,
@@ -239,11 +240,14 @@ export async function verifyCheckoutPayment(
           ...(verifiedCurrency ? { currency: verifiedCurrency } : {}),
         });
       }
-    } else if (reference.startsWith('BCO-') && data.status === 'reversed') {
+    } else if (
+      data.status === 'reversed' &&
+      bankCardOfferReferenceSchema.safeParse(reference).success
+    ) {
       // A reversal can follow a capture. Keep the shopper on reconciliation
       // while the provider's reversal and the order are matched.
       setStatus('reversed');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+      setOrderNumber(data.orderNumber || null);
     } else if (
       data.status === 'failed' ||
       data.status === 'cancelled' ||

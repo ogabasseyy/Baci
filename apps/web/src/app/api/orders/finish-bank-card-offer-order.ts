@@ -128,6 +128,15 @@ export async function finishBankCardOfferOrder({
     quote,
     userId,
   });
+  if (result.error?.message === 'checkout_idempotency_conflict') {
+    return NextResponse.json(
+      {
+        code: 'CHECKOUT_IDEMPOTENCY_CONFLICT',
+        error: 'This checkout key has already been used for a different order',
+      },
+      { status: 409 }
+    );
+  }
   if (result.error || !result.data) {
     logger.warn({
       message: 'Bank card offer checkout was rejected',

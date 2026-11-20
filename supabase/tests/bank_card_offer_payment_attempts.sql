@@ -267,6 +267,18 @@ BEGIN
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
   THEN RAISE EXCEPTION 'Reconciled reversal must block another cancellation refund'; END IF;
+
+  -- Inventory can leave a completed transaction attached to a pending order.
+  UPDATE public.orders SET payment_status = 'pending' WHERE id = v_order;
+  BEGIN
+    UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order;
+    RAISE EXCEPTION 'Completed replay repaid an order after its reversal';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_card_offer_payment_not_verified' THEN RAISE; END IF;
+  END;
+  IF (SELECT status FROM public.transactions WHERE id = v_transaction) <> 'completed'
+    OR (SELECT payment_status FROM public.orders WHERE id = v_order) <> 'pending'
+  THEN RAISE EXCEPTION 'A reversed replay changed settlement state'; END IF;
 END;
 $$;
 

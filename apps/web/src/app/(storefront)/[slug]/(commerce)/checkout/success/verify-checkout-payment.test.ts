@@ -147,16 +147,16 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
-  it('leaves a non-offer reversal pending under standard verification behavior', async () => {
+  it.each([
+    'standard-reference',
+    'BCO-invalid',
+  ])('leaves reversal pending when %s is not a valid bank-offer reference', async (reference) => {
     request.mockResolvedValue(
       Response.json({ success: false, status: 'reversed' })
     );
     const callbacks = handlers();
 
-    await verifyCheckoutPayment(
-      { ...params, reference: 'standard-reference' },
-      callbacks
-    );
+    await verifyCheckoutPayment({ ...params, reference }, callbacks);
 
     expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();

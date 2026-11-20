@@ -88,6 +88,22 @@ it.each([
   expect(repairEffects).not.toHaveBeenCalled();
 });
 
+it('returns the standard conflict when the key belongs to another checkout', async () => {
+  const { options, rpc, repairEffects } = setup();
+  rpc.mockResolvedValue({
+    error: { message: 'checkout_idempotency_conflict' },
+    data: null,
+  });
+
+  const response = await finishBankCardOfferOrder(options);
+
+  expect(response.status).toBe(409);
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'CHECKOUT_IDEMPOTENCY_CONFLICT',
+  });
+  expect(repairEffects).not.toHaveBeenCalled();
+});
+
 it.each([
   { replayed: false, status: 201 },
   { replayed: true, status: 200 },

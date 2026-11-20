@@ -147,11 +147,26 @@ describe('verifyCheckoutPayment', () => {
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
 
+  it('leaves a non-offer reversal pending under standard verification behavior', async () => {
+    request.mockResolvedValue(
+      Response.json({ success: false, status: 'reversed' })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: 'standard-reference' },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+  });
+
   it.each([
     { status: 'failed', reason: 'payment_failed' },
     { status: 'cancelled', reason: 'payment_cancelled' },
     { status: 'abandoned', reason: 'payment_abandoned' },
-    { status: 'reversed', reason: 'payment_failed' },
   ])('fails a $status reference verification with the matching failure event', async ({
     status,
     reason,

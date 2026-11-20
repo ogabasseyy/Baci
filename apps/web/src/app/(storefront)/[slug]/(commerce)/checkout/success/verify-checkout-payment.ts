@@ -247,8 +247,7 @@ export async function verifyCheckoutPayment(
     } else if (
       data.status === 'failed' ||
       data.status === 'cancelled' ||
-      data.status === 'abandoned' ||
-      data.status === 'reversed'
+      data.status === 'abandoned'
     ) {
       // Terminal provider outcomes (abandoned = the shopper left the
       // Paystack page; the attempt can never settle): show the

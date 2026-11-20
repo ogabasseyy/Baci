@@ -4,6 +4,7 @@
 import {
   formatOxygenPaymentDate,
   formatOxygenRepaymentReceiptDate,
+  OXYGEN_REPAYMENT_HISTORY_LIMIT,
   oxygenOrderPlanResponseSchema,
   type OxygenOrderPlan as Plan,
 } from '@baci/shared/schemas/oxygen-order-plan';
@@ -141,7 +142,8 @@ export function OxygenOrderPlan({
           <div className="border-t pt-3">
             <h3 className="font-semibold">Repayment updates</h3>
             <p className="text-muted-foreground">
-              Shows up to 50 recent updates from Oxygen.
+              Shows up to {OXYGEN_REPAYMENT_HISTORY_LIMIT} recent updates from
+              Oxygen.
             </p>
             <ul className="mt-2 divide-y">
               {plan.repaymentReceipts?.map(({ id, recordedAt }) => (

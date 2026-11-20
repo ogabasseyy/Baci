@@ -1,13 +1,15 @@
 import { z } from 'zod';
 
+export const OXYGEN_REPAYMENT_HISTORY_LIMIT = 50;
+
 export const oxygenRepaymentReceiptSchema = z.object({
   id: z.string().uuid(),
   recordedAt: z.string().datetime({ offset: true }),
 });
 
-export const oxygenRepaymentReceiptsSchema = z.array(
-  oxygenRepaymentReceiptSchema
-);
+export const oxygenRepaymentReceiptsSchema = z
+  .array(oxygenRepaymentReceiptSchema)
+  .max(OXYGEN_REPAYMENT_HISTORY_LIMIT);
 
 function utcCalendarDate(year: number, month: number, day: number) {
   const date = new Date(0);

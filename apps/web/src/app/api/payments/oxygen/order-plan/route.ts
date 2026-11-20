@@ -1,4 +1,5 @@
 import {
+  OXYGEN_REPAYMENT_HISTORY_LIMIT,
   oxygenOrderPlanSchema,
   oxygenRepaymentReceiptSchema,
 } from '@baci/shared/schemas/oxygen-order-plan';
@@ -37,7 +38,7 @@ async function readRepaymentReceipts(client: OxygenRuntimeRpc, id: string) {
       }
     );
     if (error || !Array.isArray(data)) return undefined;
-    return data.flatMap((item) => {
+    return data.slice(0, OXYGEN_REPAYMENT_HISTORY_LIMIT).flatMap((item) => {
       const receipt = oxygenRepaymentReceiptSchema.safeParse(item);
       return receipt.success ? [receipt.data] : [];
     });

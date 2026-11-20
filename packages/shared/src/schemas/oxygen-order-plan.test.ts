@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatOxygenPaymentDate,
   formatOxygenRepaymentReceiptDate,
+  OXYGEN_REPAYMENT_HISTORY_LIMIT,
   oxygenOrderPlanResponseSchema,
   oxygenOrderPlanSchema,
   oxygenRepaymentReceiptsSchema,
@@ -12,6 +13,16 @@ const receipt = {
   recordedAt: '2026-11-19T23:30:00Z',
 };
 const instalment = { period: 1, dueDate: [2026, 1, 31], amount: 0 };
+it('bounds repayment history at the disclosed maximum', () => {
+  const entries = Array.from(
+    { length: OXYGEN_REPAYMENT_HISTORY_LIMIT },
+    () => receipt
+  );
+  expect(oxygenRepaymentReceiptsSchema.safeParse(entries).success).toBe(true);
+  expect(
+    oxygenRepaymentReceiptsSchema.safeParse([...entries, receipt]).success
+  ).toBe(false);
+});
 const plan = {
   upfront: null,
   upfrontConfirmed: false,

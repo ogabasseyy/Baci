@@ -1,6 +1,7 @@
 import {
   formatOxygenPaymentDate,
   formatOxygenRepaymentReceiptDate,
+  OXYGEN_REPAYMENT_HISTORY_LIMIT,
   type OxygenOrderPlan,
 } from '@baci/shared/schemas/oxygen-order-plan';
 import Ionicons from '@react-native-vector-icons/ionicons';
@@ -133,7 +134,8 @@ export function OxygenOrderPlanCard({ colors, orderId, userId }: Props) {
             Repayment updates
           </Text>
           <Text style={detailColor}>
-            Shows up to 50 recent updates from Oxygen.
+            Shows up to {OXYGEN_REPAYMENT_HISTORY_LIMIT} recent updates from
+            Oxygen.
           </Text>
           {plan.repaymentReceipts?.map(({ id, recordedAt }) => (
             <View key={id} style={styles.row}>

@@ -55,7 +55,7 @@ def seed_fixture(directory):
         GRANT SELECT (id, vat_registration_status) ON public.merchants TO anon;
         """,
         f"INSERT INTO vault.decrypted_secrets VALUES ('service_role_key', '{FIXTURE_PROOF_KEY}');",
-        seed,
+        f"BEGIN;\n{seed}\nCOMMIT;",
         (ROOT / 'supabase/tests/partner_api_lifecycle_fulfillment_fixture.sql').read_text(),
         migration('20261114100000'),
     ])

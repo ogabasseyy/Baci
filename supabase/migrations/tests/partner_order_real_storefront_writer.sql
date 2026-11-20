@@ -2,6 +2,10 @@
 -- writers. All changes are rolled back. No provider credentials are needed.
 BEGIN;
 
+-- The full schema requires an audit actor for merchant fixture writes.
+-- Keep the fixture seed claim out of the order writer checks below.
+SET LOCAL request.jwt.claim.role = 'service_role';
+
 INSERT INTO public.merchants (
   id, email, business_name, slug, is_published, payout_currency, vat_registration_status
 ) VALUES (
@@ -24,6 +28,8 @@ INSERT INTO public.product_offers (
   '7a100000-0000-4000-8000-000000000021', '7a100000-0000-4000-8000-000000000012',
   '7a100000-0000-4000-8000-000000000001', 'used', 100, 'active', 5
 );
+
+SET LOCAL request.jwt.claim.role = '';
 
 DO $$
 <<fixture>>

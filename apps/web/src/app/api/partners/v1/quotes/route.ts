@@ -190,7 +190,7 @@ export async function POST(request: Request) {
           rate.currency === 'NGN' &&
           rate.providerRateId &&
           Number.isFinite(rate.price) &&
-          rate.price >= 0 &&
+          Math.round(rate.price * 100) > 0 &&
           rate.expiresAt.getTime() > now
       )
       .sort(

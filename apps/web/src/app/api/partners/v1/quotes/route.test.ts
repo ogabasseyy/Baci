@@ -251,6 +251,29 @@ describe('partner delivery quotes', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it('does not issue a zero-fee rate that the merchant wallet cannot bind', async () => {
+    mocks.rates.mockResolvedValueOnce([
+      {
+        id: quoteId,
+        provider: 'GIGL',
+        currency: 'NGN',
+        providerRateId: 'zero-fee',
+        price: 0,
+        providerCost: 0,
+        serviceTier: 'Standard',
+        expiresAt: new Date('2026-11-20T14:04:00.000Z'),
+      },
+    ]);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'CARRIER_UNAVAILABLE' },
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('does not publish a quote that was not durably stored', async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code: '42501' } });
     expect((await POST(request())).status).toBe(503);

@@ -38,6 +38,14 @@ export function clearKudaBillItemPriceCacheForTests() {
   lastFailedFetchAt.clear();
 }
 
+/** The saved list, while it is under a day old at `at`. */
+function lastGoodPriceList(type: string, at: number): Biller[] | null {
+  const cached = priceListCache.get(type);
+  return cached && at - cached.loadedAt < PRICE_LIST_LAST_GOOD_MS
+    ? cached.billers
+    : null;
+}
+
 /**
  * The current price list, or the last good one from the past day when Kuda
  * fails or answers with an empty list (an application-level Kuda failure
@@ -49,14 +57,27 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
   if (cached && cached.expiresAt > now) {
     return cached.billers;
   }
-  const lastGood =
-    cached && now - cached.loadedAt < PRICE_LIST_LAST_GOOD_MS
-      ? cached.billers
-      : null;
   const failedAt = lastFailedFetchAt.get(type);
   if (failedAt !== undefined && now - failedAt < PRICE_LIST_RETRY_AFTER_MS) {
-    return lastGood;
+    return lastGoodPriceList(type, now);
   }
+
+  // Kuda can take a while to answer, so after a failure the backup list's
+  // age and the retry pause are both measured from when the fetch ended.
+  const failFetch = (message: string, error?: unknown) => {
+    const failedAt = Date.now();
+    lastFailedFetchAt.set(type, failedAt);
+    const backup = lastGoodPriceList(type, failedAt);
+    logger.warn({
+      message,
+      ...(error !== undefined && {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+      hasLastGoodList: backup !== null,
+      type,
+    });
+    return backup;
+  };
 
   let billers: Biller[];
   try {
@@ -64,25 +85,12 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
       addElectricityMeterItems: false,
     });
   } catch (error) {
-    lastFailedFetchAt.set(type, now);
-    logger.warn({
-      message: 'Kuda price list unavailable',
-      error: error instanceof Error ? error.message : String(error),
-      hasLastGoodList: lastGood !== null,
-      type,
-    });
-    return lastGood;
+    return failFetch('Kuda price list unavailable', error);
   }
   // No biller with any package is a broken answer (every production biller
   // lists packages), so it never replaces a good list.
   if (!billers.some((biller) => biller.billItems?.length)) {
-    lastFailedFetchAt.set(type, now);
-    logger.warn({
-      message: 'Kuda price list came back without packages',
-      hasLastGoodList: lastGood !== null,
-      type,
-    });
-    return lastGood;
+    return failFetch('Kuda price list came back without packages');
   }
 
   // The meter products are added only after the check above, so Baci's own
@@ -92,10 +100,11 @@ async function loadPriceList(type: string): Promise<Biller[] | null> {
   }
 
   lastFailedFetchAt.delete(type);
+  const loadedAt = Date.now();
   priceListCache.set(type, {
     billers,
-    expiresAt: now + PRICE_LIST_CACHE_TTL_MS,
-    loadedAt: now,
+    expiresAt: loadedAt + PRICE_LIST_CACHE_TTL_MS,
+    loadedAt,
   });
   return billers;
 }
@@ -123,16 +132,27 @@ function chosenListings<T extends { biller: Biller }>(
   listing: T[],
   billerName: string
 ): T[] {
-  const exact = listing.filter(({ biller }) =>
-    namesMatch(plainBillerName(biller.billerName), plainBillerName(billerName))
-  );
-  if (exact.length > 0) return exact;
-  return listing.filter(({ biller }) =>
-    namesMatch(
-      normalizeBillerName(biller.billerName),
-      normalizeBillerName(billerName)
-    )
-  );
+  // Most specific first: a literal name match, then the checkout's decorated
+  // "<biller> - <package group>" form, each before the provider-stripped
+  // name. A purchase naming "DSTV - PREMIUM" therefore uses that biller's
+  // own listings and never also a plain "DSTV" listing's price.
+  const sentPlain = plainBillerName(billerName);
+  const sentNormalized = normalizeBillerName(billerName);
+  const tiers: Array<(listed: Biller) => boolean> = [
+    (listed) => plainBillerName(listed.billerName) === sentPlain,
+    (listed) => namesMatch(plainBillerName(listed.billerName), sentPlain),
+    (listed) => {
+      const name = normalizeBillerName(listed.billerName);
+      return name !== '' && name === sentNormalized;
+    },
+    (listed) =>
+      namesMatch(normalizeBillerName(listed.billerName), sentNormalized),
+  ];
+  for (const matches of tiers) {
+    const found = listing.filter(({ biller }) => matches(biller));
+    if (found.length > 0) return found;
+  }
+  return [];
 }
 
 /** Item codes compared like the data-plan check does: case and punctuation free. */
@@ -231,7 +251,12 @@ export async function assertKudaBillItemPriceCurrent({
     throw new Error(KUDA_BILL_PRICE_CHANGED_MESSAGE);
   }
 
-  const fixed = chosen.flatMap(({ items }) => items).filter(hasFixedPrice);
+  // Each biller's fixed listings, kept apart so that with no biller named
+  // every biller offering the package has to confirm the price itself.
+  const fixedByBiller = chosen
+    .map(({ items }) => items.filter(hasFixedPrice))
+    .filter((items) => items.length > 0);
+  const fixed = fixedByBiller.flat();
   if (fixed.length === 0) return; // sold at the customer's own amount
   // An unreadable (mapped to 0) or implausible (under ₦10) fixed price is
   // never treated as an open amount. It is skipped when another listing can
@@ -248,6 +273,17 @@ export async function assertKudaBillItemPriceCurrent({
       billItemIdentifier,
       type,
     });
+  }
+  // With no biller named, a biller whose listings are all unreadable can't
+  // confirm the price, so the purchase fails closed rather than trusting
+  // another biller alone.
+  if (
+    !billerName &&
+    fixedByBiller.some((items) =>
+      items.every((item) => item.amount < IMPLAUSIBLE_FIXED_PRICE_NAIRA)
+    )
+  ) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
   // Under a named biller one of its listings must match; with no biller
   // named, every listing must agree, so the cheapest of two billers' prices

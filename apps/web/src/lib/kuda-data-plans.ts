@@ -114,6 +114,14 @@ function providerMatchesNetwork(
   return normalizedProviderName.includes(normalizedNetwork);
 }
 
+/** The saved data plans, while they are under a day old at `at`. */
+function lastGoodDataProviders(at: number): Biller[] | null {
+  return dataProvidersCache &&
+    at - dataProvidersCache.loadedAt < DATA_PLAN_LAST_GOOD_MS
+    ? dataProvidersCache.providers
+    : null;
+}
+
 /**
  * The current Kuda data plans, or the last good list from the past day when
  * Kuda fails or answers without any packages (which never replaces a good
@@ -127,40 +135,38 @@ async function loadDataProviders(): Promise<Biller[] | null> {
   if (dataProvidersCache && dataProvidersCache.expiresAt > now) {
     return dataProvidersCache.providers;
   }
-  const lastGood =
-    dataProvidersCache &&
-    now - dataProvidersCache.loadedAt < DATA_PLAN_LAST_GOOD_MS
-      ? dataProvidersCache.providers
-      : null;
-
   if (
     lastFailedDataPlanFetchAt !== undefined &&
     now - lastFailedDataPlanFetchAt < DATA_PLAN_RETRY_AFTER_MS
   ) {
-    return lastGood;
+    return lastGoodDataProviders(now);
   }
+
+  // Kuda can take a while to answer, so after a failure the backup list's
+  // age and the retry pause are both measured from when the fetch ended.
+  const failFetch = (message: string, error?: unknown) => {
+    const failedAt = Date.now();
+    lastFailedDataPlanFetchAt = failedAt;
+    const backup = lastGoodDataProviders(failedAt);
+    logger.warn({
+      message,
+      ...(error !== undefined && {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+      hasLastGoodList: backup !== null,
+      type: 'data',
+    });
+    return backup;
+  };
 
   let providers: Biller[];
   try {
     providers = await getDataProviders();
   } catch (error) {
-    lastFailedDataPlanFetchAt = now;
-    logger.warn({
-      message: 'Kuda data plan list unavailable',
-      error: error instanceof Error ? error.message : String(error),
-      hasLastGoodList: lastGood !== null,
-      type: 'data',
-    });
-    return lastGood;
+    return failFetch('Kuda data plan list unavailable', error);
   }
   if (collectDataPlanCandidates(providers).length === 0) {
-    lastFailedDataPlanFetchAt = now;
-    logger.warn({
-      message: 'Kuda data plan list came back without packages',
-      hasLastGoodList: lastGood !== null,
-      type: 'data',
-    });
-    return lastGood;
+    return failFetch('Kuda data plan list came back without packages');
   }
   lastFailedDataPlanFetchAt = undefined;
   dataProvidersCache = {

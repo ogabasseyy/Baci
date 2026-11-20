@@ -5,8 +5,8 @@ interface RawBillItemLike {
   isAmountFixed?: boolean;
   IsFixedPrice?: boolean;
   isFixedPrice?: boolean;
-  BillItems?: unknown[];
-  billItems?: unknown[];
+  BillItems?: unknown;
+  billItems?: unknown;
 }
 
 /**
@@ -16,10 +16,12 @@ interface RawBillItemLike {
  * unit check.
  */
 export function collectRawFixedPricesKobo(
-  rawItems: unknown[] | undefined,
+  rawItems: unknown,
   prices: number[] = []
 ): number[] {
-  for (const raw of rawItems ?? []) {
+  // Children that aren't a list are skipped (the mapper drops them too).
+  if (!Array.isArray(rawItems)) return prices;
+  for (const raw of rawItems) {
     if (!raw || typeof raw !== 'object') continue;
     const item = raw as RawBillItemLike;
     const isFixed =

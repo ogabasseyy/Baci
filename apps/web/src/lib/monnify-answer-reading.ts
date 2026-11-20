@@ -26,6 +26,8 @@ export interface MonnifyAnswerReading {
   showsVendEvidence: boolean;
   mentionsAuthWording: boolean;
   responseCode: string | undefined;
+  /** The body carries a real (non-placeholder) voucher token. */
+  bodyHasToken: boolean;
   /** The body leaves the vend's outcome open (see isMonnifyUnresolvedAnswer). */
   leavesOutcomeOpen: boolean;
   /** References Monnify put in responseBody (checked against the request later). */
@@ -80,6 +82,7 @@ export function readMonnifyAnswer(
     // "Unauthorized" there while keeping a 400 status).
     mentionsAuthWording: mentionsMonnifyAuthWording(text),
     responseCode: readMonnifyResponseCode(parsed),
+    bodyHasToken: hasBodyToken(parsed),
     leavesOutcomeOpen:
       hasBodyToken(parsed) ||
       isMonnifyUnresolvedAnswer({

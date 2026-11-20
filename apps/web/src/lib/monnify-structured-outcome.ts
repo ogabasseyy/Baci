@@ -179,7 +179,8 @@ export function readStructuredOutcome(
       // vend outcome: a top-level `failed: true` may describe the request.
       if (
         !PAYMENT_LEVEL_FLAG.test(key) &&
-        (inBody || VEND_FLAG_KEY.test(key))
+        (inBody || VEND_FLAG_KEY.test(key)) &&
+        !NON_VEND_PARENT.test(parentKey)
       ) {
         found.vendDone ||= DONE_FLAG.test(key);
         found.vendFailed ||= FAILED_FLAG.test(key);

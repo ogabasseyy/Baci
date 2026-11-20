@@ -44,11 +44,15 @@ export function buildMonnifyBusinessRejectionResult({
   // the full answer, before it is cut short.
   const message = sanitizeMonnifyErrorDetail(rawMessage);
   const providerResponseCode = readMonnifyResponseCode(parsedEnvelope);
-  const providerDefiniteFailure = isMonnifyDefiniteBusinessRefusal({
-    envelope,
-    rawMessage,
-    responseCode: parsedEnvelope.responseCode,
-  });
+  // A real token beside refusal wording means a voucher may have been
+  // delivered: never a definite refusal (no Kuda, no refund).
+  const providerDefiniteFailure =
+    !hasBodyToken(envelope) &&
+    isMonnifyDefiniteBusinessRefusal({
+      envelope,
+      rawMessage,
+      responseCode: parsedEnvelope.responseCode,
+    });
   const contradictorySuccessCode = /^\s*0+\s*$/.test(
     parsedEnvelope.responseCode
   );
@@ -132,6 +136,7 @@ export function buildMonnifyHttpRejectionResult({
     !error.mentionsVendOutcome &&
     !error.showsVendEvidence &&
     !error.mentionsAuthWording &&
+    !error.bodyHasToken &&
     error.isKnownRefusal;
   if (
     !providerDefiniteFailure &&

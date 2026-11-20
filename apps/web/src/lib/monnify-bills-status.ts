@@ -40,6 +40,15 @@ export function classifyMonnifyBillStatus(body: {
 const PLACEHOLDER_TOKEN =
   /^(?:0+|[-.\s_*#]+|x+|n\/?a|na|null|none|nil|undefined|tbd|pending|processing|failed|failure|error|invalid|unavailable|unknown|test|dummy|token)$/i;
 
+/** "0000-0000", "XXXX XXXX", "---": placeholders written with separators. */
+function isPlaceholderToken(value: string): boolean {
+  if (PLACEHOLDER_TOKEN.test(value)) {
+    return true;
+  }
+  const compact = value.replace(/[\s\-._*#/]/g, '');
+  return compact === '' || /^(?:0+|x+)$/i.test(compact);
+}
+
 /**
  * The delivered token: the first non-blank of metaData.token / token, trimmed.
  * A whitespace-only token is not a delivery (it would settle a row with no
@@ -52,8 +61,7 @@ export function readMonnifyBillToken(body: {
   return (
     [body.metaData?.token, body.token]
       .map((value) => (typeof value === 'string' ? value.trim() : ''))
-      .find((value) => value !== '' && !PLACEHOLDER_TOKEN.test(value)) ||
-    undefined
+      .find((value) => value !== '' && !isPlaceholderToken(value)) || undefined
   );
 }
 

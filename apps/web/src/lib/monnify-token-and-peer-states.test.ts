@@ -235,3 +235,52 @@ describe('bugfix: request-object statuses and nested customer references', () =>
     expect(answer({ reference: 'MFBP-1' })).toBe(true);
   });
 });
+
+describe('bugfix: mixed placeholders, nested flags and tokens beside refusal wording', () => {
+  it.each([
+    '0000-0000',
+    'XXXX-XXXX',
+    '00 00 00',
+    '- - -',
+    '**** ****',
+  ])('does not treat the placeholder %j as a token', (token) => {
+    expect(hasBodyToken({ responseBody: { token } })).toBe(false);
+  });
+
+  it('does not treat request.failed: true as proof the vend failed', () => {
+    expect(
+      isMonnifyRequeryRejectionDefiniteFailure({
+        envelope: { responseBody: { request: { failed: true } } },
+        rawMessage: 'Could not complete',
+      })
+    ).toBe(false);
+  });
+
+  it('holds a business refusal ("Insufficient wallet balance") that carries a token', async () => {
+    mockJson({
+      requestSuccessful: false,
+      responseCode: '01',
+      responseMessage: 'Insufficient wallet balance',
+      responseBody: { token: '1111-2222-3333' },
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'pending',
+      providerOutcomeUnresolved: true,
+      providerDefiniteFailure: false,
+    });
+  });
+
+  it('holds an HTTP refusal ("Insufficient wallet balance") that carries a token', async () => {
+    mockHttpError(400, {
+      responseCode: '01',
+      responseMessage: 'Insufficient wallet balance',
+      responseBody: { token: '1111-2222-3333' },
+    });
+
+    await expect(vend()).resolves.toMatchObject({
+      status: 'pending',
+      providerOutcomeUnresolved: true,
+    });
+  });
+});

@@ -149,6 +149,11 @@ export class MonnifyHttpError extends Error {
     );
   }
 
+  /** The body carries a real voucher token: a vend may have delivered. */
+  get bodyHasToken() {
+    return this.#reading.bodyHasToken;
+  }
+
   /** Monnify's own vendReference in the body, when it gave one. */
   providerVendReference(requestReference: string) {
     return ignoreMonnifyRequestEcho(

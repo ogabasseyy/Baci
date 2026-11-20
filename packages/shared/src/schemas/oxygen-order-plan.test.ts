@@ -62,9 +62,21 @@ describe('Oxygen order plan response', () => {
     { schedule: [{ ...instalment, dueDate: [2026, 13, 31] }] },
     { schedule: [{ ...instalment, dueDate: [2026, 12, 0] }] },
     { schedule: [{ ...instalment, dueDate: [2026, 12, 32] }] },
+    { schedule: [{ ...instalment, dueDate: [2026, 2, 30] }] },
+    { schedule: [{ ...instalment, dueDate: [2026, 2, 29] }] },
+    { schedule: [{ ...instalment, dueDate: [2026, 4, 31] }] },
+    { schedule: [{ ...instalment, dueDate: [0, 1, 1] }] },
+    { schedule: [{ ...instalment, dueDate: [10000, 1, 1] }] },
   ])('rejects an invalid plan %#', (patch) => {
     expect(oxygenOrderPlanSchema.safeParse({ ...plan, ...patch }).success).toBe(
       false
+    );
+  });
+
+  it('accepts a leap day in a leap year', () => {
+    const schedule = [{ ...instalment, dueDate: [2028, 2, 29] }];
+    expect(oxygenOrderPlanSchema.parse({ ...plan, schedule }).schedule).toEqual(
+      schedule
     );
   });
 });

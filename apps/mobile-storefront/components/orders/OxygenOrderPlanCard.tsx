@@ -114,7 +114,7 @@ export function OxygenOrderPlanCard({ colors, orderId, userId }: Props) {
         ))}
         {plan.schedule.length === 0 && (
           <Text style={detailColor}>
-            Payment dates are not saved for this plan.
+            Payment dates are currently unavailable for this plan.
           </Text>
         )}
       </View>

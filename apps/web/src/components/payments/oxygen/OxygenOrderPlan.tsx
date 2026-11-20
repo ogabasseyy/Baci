@@ -127,7 +127,7 @@ export function OxygenOrderPlan({
             </ol>
           ) : (
             <p className="mt-2 text-muted-foreground">
-              Payment dates are not saved for this plan.
+              Payment dates are currently unavailable for this plan.
             </p>
           )}
         </div>

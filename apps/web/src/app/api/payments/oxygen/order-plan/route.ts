@@ -1,4 +1,7 @@
-import { oxygenRepaymentReceiptsSchema } from '@baci/shared/schemas/oxygen-order-plan';
+import {
+  oxygenOrderPlanSchema,
+  oxygenRepaymentReceiptsSchema,
+} from '@baci/shared/schemas/oxygen-order-plan';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
@@ -59,6 +62,10 @@ export async function GET(request: NextRequest) {
     const repaymentReceipts = activationConfirmed
       ? await readRepaymentReceipts(auth.supabase, id.data)
       : undefined;
+    // An invalid saved date cannot be displayed as a guessed due date.
+    const savedSchedule = oxygenOrderPlanSchema.shape.schedule.safeParse(
+      schedule ?? []
+    );
     return NextResponse.json(
       {
         plan: booking
@@ -68,11 +75,7 @@ export async function GET(request: NextRequest) {
               activationConfirmed,
               repaymentReceipts,
               months: booking.loan_tenure,
-              schedule: (schedule ?? []).map(({ period, dueDate, amount }) => ({
-                period,
-                dueDate,
-                amount,
-              })),
+              schedule: savedSchedule.success ? savedSchedule.data : [],
             }
           : null,
       },

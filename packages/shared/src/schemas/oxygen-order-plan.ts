@@ -7,6 +7,23 @@ export const oxygenRepaymentReceiptsSchema = z.array(
   })
 );
 
+function utcCalendarDate(year: number, month: number, day: number) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
+
+const paymentDateSchema = z
+  .tuple([
+    z.number().int().min(1).max(9999),
+    z.number().int().min(1).max(12),
+    z.number().int().min(1).max(31),
+  ])
+  .refine(([year, month, day]) => {
+    const date = utcCalendarDate(year, month, day);
+    return date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  }, 'Invalid payment date');
+
 export const oxygenOrderPlanSchema = z.object({
   upfront: z.number().finite().nonnegative().nullable(),
   upfrontConfirmed: z.boolean(),
@@ -16,11 +33,7 @@ export const oxygenOrderPlanSchema = z.object({
   schedule: z.array(
     z.object({
       period: z.number().int().positive(),
-      dueDate: z.tuple([
-        z.number().int(),
-        z.number().int().min(1).max(12),
-        z.number().int().min(1).max(31),
-      ]),
+      dueDate: paymentDateSchema,
       amount: z.number().finite().nonnegative(),
     })
   ),
@@ -46,5 +59,5 @@ export function formatOxygenPaymentDate([
   day,
 ]: OxygenOrderPlan['schedule'][number]['dueDate']) {
   // Oxygen supplies a calendar date. UTC midnight stays on that date in Lagos.
-  return paymentDateFormatter.format(new Date(Date.UTC(year, month - 1, day)));
+  return paymentDateFormatter.format(utcCalendarDate(year, month, day));
 }

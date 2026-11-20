@@ -142,3 +142,21 @@ it('keeps the schedule available when the acknowledgement lookup fails', async (
   expect(plan.schedule).toEqual(schedule);
   expect(plan.repaymentReceipts).toBeUndefined();
 });
+
+it('keeps acknowledgements visible when a saved calendar date is impossible', async () => {
+  const receipt = {
+    id: 'bb3955b1-0571-49eb-919f-6a6946fdb00b',
+    recordedAt: '2026-11-20T12:00:00+00:00',
+  };
+  mocks.rpc.mockResolvedValue({ data: [receipt], error: null });
+  mocks.read.mockResolvedValue({
+    stage: 'activated',
+    state: {
+      booking: { status: 'ACTIVATED', loan_tenure: 3 },
+      schedule: [{ period: 1, dueDate: [2026, 2, 30], amount: 55658 }],
+    },
+  });
+  const { plan } = await (await GET(request())).json();
+  expect(plan.schedule).toEqual([]);
+  expect(plan.repaymentReceipts).toEqual([receipt]);
+});

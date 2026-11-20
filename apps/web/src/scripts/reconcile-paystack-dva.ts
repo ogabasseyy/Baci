@@ -79,13 +79,11 @@ export async function runReconcilePaystackDvaCli(
     return 1;
   }
 
-  // Step 2 — load the on-record transaction's amount so we can sanity-
-  // check the Paystack-verified amount before mutating anything. Only
-  // `amount` is used at this step; the post-RPC fetch below selects the
-  // wider shape the executors need.
+  // Check the amount and bind ledger completion to the transaction's merchant.
+  // The post-RPC fetch below selects the wider shape the executors need.
   const { data: txnRow, error: txnErr } = await supabase
     .from('transactions')
-    .select('amount')
+    .select('amount, merchant_id')
     .eq('id', args.transactionId)
     .single();
   if (txnErr || !txnRow) {
@@ -151,6 +149,7 @@ export async function runReconcilePaystackDvaCli(
     supabase,
     transactionId: args.transactionId,
     orderId: args.canonicalOrderId,
+    merchantId: txnRow.merchant_id,
     gatewayResponse: verify.data as unknown as Record<string, unknown>,
     actor: ACTOR,
   });

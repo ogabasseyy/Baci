@@ -101,6 +101,7 @@ describe('runReconcilePaystackDvaCli — happy path (incident shape)', () => {
       transactionId: '427ec4ea-b41d-4058-aaf9-3de57ee5fa35',
       orderId: '211bcf0e-0795-488f-aeeb-52c5b7a8b9ae',
       gatewayResponse: verifySuccess.data,
+      merchantId: 'merchant-1',
       actor: 'script:reconcile-paystack-dva',
     });
 

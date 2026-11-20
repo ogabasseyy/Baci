@@ -48,6 +48,7 @@ DECLARE
   v_timeout_at timestamptz;
   v_replacement_ids uuid[];
   v_inventory jsonb;
+  v_paid_order record;
   v_credit_direct_notes jsonb;
   v_credit_direct_session text;
   v_credit_direct_reference text;
@@ -241,7 +242,17 @@ BEGIN
             'platformFee', v_payment.platform_fee
           )
         )::text ELSE v_order.notes END
-    WHERE id = p_order_id;
+    WHERE id = p_order_id
+    RETURNING payment_status, shipping_status, cancelled_at, paid_transaction_id, amount_paid
+    INTO v_paid_order;
+    IF NOT FOUND
+      OR v_paid_order.payment_status IS DISTINCT FROM 'paid'
+      OR v_paid_order.shipping_status IS DISTINCT FROM 'processing'
+      OR v_paid_order.cancelled_at IS NOT NULL
+      OR v_paid_order.paid_transaction_id IS DISTINCT FROM p_transaction_id
+      OR v_paid_order.amount_paid IS DISTINCT FROM v_payment.amount THEN
+      RAISE EXCEPTION USING ERRCODE = 'BX001', MESSAGE = 'Late payment order update was blocked';
+    END IF;
     PERFORM pg_catalog.set_config('baci.reinstating_order_id', '', true);
 
     -- Quantity-based stock was debited at checkout and is retained by this

@@ -7,10 +7,26 @@ import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import {
   type OxygenRuntimeRpc,
+  type OxygenRuntimeSnapshot,
   readOxygenSnapshot,
 } from '@/lib/payments/oxygen/runtime-service';
 
 const headers = { 'Cache-Control': 'no-store' };
+
+function projectSchedule(
+  saved: NonNullable<OxygenRuntimeSnapshot['state']['schedule']>,
+  months: number
+) {
+  const counts = new Map<number, number>();
+  for (const { period } of saved) {
+    counts.set(period, (counts.get(period) ?? 0) + 1);
+  }
+  return saved.flatMap((row) => {
+    if (counts.get(row.period) !== 1 || row.period > months) return [];
+    const result = oxygenOrderPlanSchema.shape.schedule.element.safeParse(row);
+    return result.success ? [result.data] : [];
+  });
+}
 
 async function readRepaymentReceipts(client: OxygenRuntimeRpc, id: string) {
   try {
@@ -65,17 +81,18 @@ export async function GET(request: NextRequest) {
     const repaymentReceipts = activationConfirmed
       ? await readRepaymentReceipts(auth.supabase, id.data)
       : undefined;
-    // An invalid saved date cannot be displayed as a guessed due date.
-    const savedSchedule = oxygenOrderPlanSchema.shape.schedule.safeParse(
-      schedule ?? []
-    );
+    const savedSchedule = projectSchedule(schedule ?? [], booking.loan_tenure);
     const plan = oxygenOrderPlanSchema.parse({
       upfront: booking.total_upfront_payment ?? null,
       upfrontConfirmed: paymentComplete === true,
       activationConfirmed,
       repaymentReceipts,
       months: booking.loan_tenure,
-      schedule: savedSchedule.success ? savedSchedule.data : [],
+      schedule: savedSchedule,
+      scheduleIncomplete:
+        schedule?.length && savedSchedule.length !== booking.loan_tenure
+          ? true
+          : undefined,
     });
     return NextResponse.json({ plan }, { headers });
   } catch {

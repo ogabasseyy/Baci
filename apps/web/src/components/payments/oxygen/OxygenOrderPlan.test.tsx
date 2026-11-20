@@ -12,6 +12,7 @@ it('shows saved payment dates without inventing monthly paid statuses', async ()
         upfrontConfirmed: true,
         months: 3,
         schedule: [{ period: 1, dueDate: [2026, 11, 27], amount: 55658 }],
+        scheduleIncomplete: true,
       },
     }),
   });
@@ -23,6 +24,7 @@ it('shows saved payment dates without inventing monthly paid statuses', async ()
   ).toHaveAttribute('id', 'oxygen-payment-plan');
   expect(screen.getByText('27 Nov 2026')).toBeVisible();
   expect(screen.getByText('Instalment 1')).toBeVisible();
+  expect(screen.getByText(/Some payment dates are unavailable/)).toBeVisible();
   expect(
     screen.getByText(/Monthly repayment status is not available/)
   ).toBeVisible();

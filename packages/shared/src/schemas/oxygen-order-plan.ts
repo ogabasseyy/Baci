@@ -24,19 +24,25 @@ const paymentDateSchema = z
     return date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
   }, 'Invalid payment date');
 
+const instalmentSchema = z.object({
+  period: z.number().int().positive(),
+  dueDate: paymentDateSchema,
+  amount: z.number().finite().nonnegative(),
+});
+
 export const oxygenOrderPlanSchema = z.object({
   upfront: z.number().finite().nonnegative().nullable(),
   upfrontConfirmed: z.boolean(),
   activationConfirmed: z.boolean().default(false),
   months: z.number().int().positive(),
   repaymentReceipts: oxygenRepaymentReceiptsSchema.optional(),
-  schedule: z.array(
-    z.object({
-      period: z.number().int().positive(),
-      dueDate: paymentDateSchema,
-      amount: z.number().finite().nonnegative(),
-    })
-  ),
+  scheduleIncomplete: z.boolean().optional(),
+  schedule: z
+    .array(instalmentSchema)
+    .refine(
+      (rows) => new Set(rows.map(({ period }) => period)).size === rows.length,
+      'Duplicate repayment period'
+    ),
 });
 export type OxygenOrderPlan = z.infer<typeof oxygenOrderPlanSchema>;
 

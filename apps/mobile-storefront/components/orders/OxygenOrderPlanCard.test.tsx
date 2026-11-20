@@ -25,6 +25,7 @@ it('shows the saved schedule and the upfront payment separately', async () => {
     activationConfirmed: true,
     months: 1,
     schedule: [{ period: 1, dueDate: [2026, 11, 27], amount: 55658 }],
+    scheduleIncomplete: true,
     repaymentReceipts: [
       {
         id: 'bb3955b1-0571-49eb-919f-6a6946fdb00b',
@@ -38,6 +39,7 @@ it('shows the saved schedule and the upfront payment separately', async () => {
   expect(screen.getByText('Instalment 1')).toBeVisible();
   expect(screen.getByText('27 Nov 2026')).toBeVisible();
   expect(screen.getByText('₦55,658')).toBeVisible();
+  expect(screen.getByText(/Some payment dates are unavailable/)).toBeVisible();
   expect(screen.getAllByText('Payment received')).toHaveLength(1);
   expect(screen.getByText('Recorded 20 Nov 2026')).toBeVisible();
   expect(readPlan).toHaveBeenCalledWith('order', 'customer', expect.anything());

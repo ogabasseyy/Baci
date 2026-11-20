@@ -77,6 +77,7 @@ it('projects only saved plan facts, excluding identity, provider links and refer
       activationConfirmed: false,
       months: 3,
       schedule: [{ period: 1, dueDate: [2026, 11, 27], amount: 55658 }],
+      scheduleIncomplete: true,
     },
   });
 });
@@ -158,7 +159,28 @@ it('keeps acknowledgements visible when a saved calendar date is impossible', as
   });
   const { plan } = await (await GET(request())).json();
   expect(plan.schedule).toEqual([]);
+  expect(plan.scheduleIncomplete).toBe(true);
   expect(plan.repaymentReceipts).toEqual([receipt]);
+});
+
+it('keeps unambiguous valid instalments and flags an incomplete schedule', async () => {
+  const valid = { period: 1, dueDate: [2026, 11, 27], amount: 55658 };
+  mocks.read.mockResolvedValue({
+    stage: 'booked',
+    state: {
+      booking: { status: 'BOOKED', loan_tenure: 3 },
+      schedule: [
+        valid,
+        { period: 2, dueDate: [2026, 11, 31], amount: 55658 },
+        { period: 3, dueDate: [2027, 1, 27], amount: 55658 },
+        { period: 3, dueDate: [2027, 1, 32], amount: 55000 },
+        { period: 4, dueDate: [2027, 2, 27], amount: 55000 },
+      ],
+    },
+  });
+  const { plan } = await (await GET(request())).json();
+  expect(plan.schedule).toEqual([valid]);
+  expect(plan.scheduleIncomplete).toBe(true);
 });
 
 it('fails closed if the validated snapshot and plan contracts ever diverge', async () => {

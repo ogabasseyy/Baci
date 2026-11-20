@@ -130,6 +130,12 @@ export function OxygenOrderPlan({
               Payment dates are currently unavailable for this plan.
             </p>
           )}
+          {plan.scheduleIncomplete && plan.schedule.length > 0 && (
+            <p className="mt-2 text-muted-foreground">
+              Some payment dates are unavailable. Check your Oxygen agreement
+              for the full schedule.
+            </p>
+          )}
         </div>
         {Boolean(plan.repaymentReceipts?.length) && (
           <div className="border-t pt-3">

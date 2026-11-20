@@ -117,6 +117,12 @@ export function OxygenOrderPlanCard({ colors, orderId, userId }: Props) {
             Payment dates are currently unavailable for this plan.
           </Text>
         )}
+        {plan.scheduleIncomplete && plan.schedule.length > 0 && (
+          <Text style={detailColor}>
+            Some payment dates are unavailable. Check your Oxygen agreement for
+            the full schedule.
+          </Text>
+        )}
       </View>
       {Boolean(plan.repaymentReceipts?.length) && (
         <View style={[styles.schedule, borderColor]}>

@@ -67,6 +67,8 @@ describe('Oxygen order plan response', () => {
     { schedule: [{ ...instalment, dueDate: [2026, 4, 31] }] },
     { schedule: [{ ...instalment, dueDate: [0, 1, 1] }] },
     { schedule: [{ ...instalment, dueDate: [10000, 1, 1] }] },
+    { schedule: [instalment, { ...instalment, amount: 1 }] },
+    { scheduleIncomplete: 'true' },
   ])('rejects an invalid plan %#', (patch) => {
     expect(oxygenOrderPlanSchema.safeParse({ ...plan, ...patch }).success).toBe(
       false

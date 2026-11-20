@@ -247,6 +247,17 @@ describe('internal partner reconciliation', () => {
     });
   });
 
+  it('alerts on a rejected Baci proof while keeping the response retryable', async () => {
+    using error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: '42501' } });
+    const response = await POST(request());
+    expect(response.status).toBe(503);
+    expect(error).toHaveBeenCalledExactlyOnceWith({
+      message: 'Partner reconciliation database authorization rejected',
+      connectionId: 'crossrem-ogabassey',
+      requestId: (await response.json()).request_id,
+    });
+  });
   it.each([
     { receipt: { ...receipt, order_id: undefined }, hold_reason: null },
     { receipt, hold_reason: 'ORDER_REVIEW_REQUIRED' },

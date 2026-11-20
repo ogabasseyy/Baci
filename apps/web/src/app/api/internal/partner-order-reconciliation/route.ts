@@ -135,6 +135,15 @@ export async function POST(request: Request) {
       });
       return reject(409, 'RECONCILIATION_CONFLICT');
     }
+    // The proof is minted by Baci after verifier authentication and validation.
+    if (error?.code === '42501') {
+      logger.error({
+        message: 'Partner reconciliation database authorization rejected',
+        connectionId,
+        requestId,
+      });
+      return reject(503, 'RECONCILIATION_UNAVAILABLE');
+    }
     if (error) throw new Error('Partner reconciliation unavailable');
     const outcome = outcomeSchema.safeParse(data);
     if (!outcome.success) {

@@ -190,7 +190,11 @@ export function useStaffOrderFollowUps(
           openOrders:
             row.stage === 'closed'
               ? current.openOrders.filter((order) => order.id !== row.order_id)
-              : current.openOrders,
+              : current.openOrders.map((order) =>
+                  order.id === row.order_id
+                    ? { ...order, follow_up_at: row.updated_at }
+                    : order
+                ),
         };
       });
     },

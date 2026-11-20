@@ -83,6 +83,37 @@ describe('FollowUpQueueList', () => {
     expect(screen.queryByText('No issues')).toBeNull();
   });
 
+  it('warns that the retained staff scan was capped and counts the visible work', () => {
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      isLimited: true,
+      openOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      data: {},
+    });
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    expect(screen.getByText('Ada')).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This queue has reached its limit'
+    );
+    expect(defaultProps.onFollowUpCountChange).toHaveBeenLastCalledWith(1);
+  });
+
+  it('shows a retry instead of an empty-queue confirmation when the staff scan fails', () => {
+    mocks.useStaffOrderFollowUps.mockReturnValue({ isError: true });
+    render(<FollowUpQueueList {...defaultProps} />);
+
+    expect(
+      screen.getByRole('button', { name: 'Retry loading follow-ups' })
+    ).toBeVisible();
+    expect(
+      screen.queryByText('No follow-ups need attention right now.')
+    ).toBeNull();
+    expect(defaultProps.onFollowUpCountChange).toHaveBeenLastCalledWith(0);
+  });
+
   it('shows what is loading when checkout rows appear before staff actions', () => {
     mocks.useFollowUpQueue.mockReturnValue({
       failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],

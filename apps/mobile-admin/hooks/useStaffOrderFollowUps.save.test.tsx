@@ -216,13 +216,17 @@ describe('useStaffOrderFollowUps saving', () => {
       expect(result.current.data?.[orderId(1)]?.stage).toBe('closed');
     });
 
-    it('keeps the open entries when a save leaves the follow-up open', async () => {
+    it('refreshes the retained activity timestamp before the reload finishes', async () => {
       mocks.from.mockReturnValueOnce(queryBuilder(ok([openRow(1)])).builder);
       const { result } = render();
       await waitFor(() => expect(result.current.openOrders).toHaveLength(1));
       holdNextReload();
       mocks.rpc.mockResolvedValue({
-        data: followUp(1, { stage: 'waiting', revision: 2 }),
+        data: followUp(1, {
+          stage: 'waiting',
+          revision: 2,
+          updated_at: '2026-11-20T12:00:00+00:00',
+        }),
         error: null,
       });
 
@@ -243,6 +247,9 @@ describe('useStaffOrderFollowUps saving', () => {
         expect(result.current.data?.[orderId(1)]?.stage).toBe('waiting')
       );
       expect(result.current.openOrders).toHaveLength(1);
+      expect(result.current.openOrders?.[0]?.follow_up_at).toBe(
+        '2026-11-20T12:00:00+00:00'
+      );
     });
   });
 });

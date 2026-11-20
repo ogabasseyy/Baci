@@ -71,8 +71,8 @@ export function FollowUpQueueList({
     followUp?: StaffFollowUp;
     merchantId?: string;
     viewerId?: string;
+    justClaimed?: boolean;
   } | null>(null);
-  const [claimedOrderId, setClaimedOrderId] = useState<string | null>(null);
   const followUpCount = orders.length;
   const isLimited = isFollowUpLimited || staffFollowUps.isLimited;
   const hasQueueError = Boolean(isFailedOrdersError || staffFollowUps.isError);
@@ -252,12 +252,11 @@ export function FollowUpQueueList({
           viewerId={viewerId}
           canWrite={staffFollowUps.canWrite}
           followUp={selectedFollowUp}
-          justClaimed={claimedOrderId === selectedOrder.id}
+          justClaimed={activeSelection?.justClaimed}
           busy={staffFollowUps.isSaving}
           saveError={staffFollowUps.saveError}
           onClose={() => {
             setSelection(null);
-            setClaimedOrderId(null);
             staffFollowUps.resetSave();
           }}
           onClaim={async () => {
@@ -265,7 +264,11 @@ export function FollowUpQueueList({
               type: 'claim',
               orderId: selectedOrder.id,
             });
-            setClaimedOrderId(selectedOrder.id);
+            setSelection((current) =>
+              current && current === activeSelection
+                ? { ...current, justClaimed: true }
+                : current
+            );
             return claimed;
           }}
           onSave={(fields) => staffFollowUps.save({ type: 'update', fields })}

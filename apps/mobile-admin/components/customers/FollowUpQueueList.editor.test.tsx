@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   defaultProps,
@@ -117,6 +117,33 @@ describe('FollowUpQueueList', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close editor' }));
     fireEvent.click(screen.getByText('Claim follow-up'));
+    expect(screen.queryByText('Claim confirmed')).toBeNull();
+  });
+
+  it('keeps a late claim confirmation out of a newly opened editor', async () => {
+    let finishClaim: (value: { order_id: string }) => void = () => undefined;
+    const save = vi.fn(
+      () =>
+        new Promise<{ order_id: string }>((resolve) => {
+          finishClaim = resolve;
+        })
+    );
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      merchant: { id: 'merchant-1' },
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({ isSuccess: true, save });
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+
+    fireEvent.click(screen.getByText('Claim follow-up'));
+    fireEvent.click(screen.getByRole('button', { name: 'Claim from editor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close editor' }));
+    fireEvent.click(screen.getByText('Claim follow-up'));
+    await act(async () => finishClaim({ order_id: 'order-1' }));
+
     expect(screen.queryByText('Claim confirmed')).toBeNull();
   });
 });

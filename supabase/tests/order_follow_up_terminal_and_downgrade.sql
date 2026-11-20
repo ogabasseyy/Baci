@@ -1,4 +1,21 @@
 BEGIN;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_index i
+    WHERE i.indexrelid = to_regclass('public.order_follow_ups_open_due_idx')
+      AND i.indrelid = 'public.order_follow_ups'::regclass
+      AND i.indisvalid AND i.indnkeyatts = 3 AND i.indoption[1] = 0
+      AND pg_get_indexdef(i.indexrelid, 1, true) = 'merchant_id'
+      AND pg_get_indexdef(i.indexrelid, 2, true) = 'follow_up_on'
+      AND pg_get_indexdef(i.indexrelid, 3, true) = 'order_id'
+      AND position('stage <> ''closed''' IN pg_get_expr(i.indpred, i.indrelid)) > 0
+  ) THEN
+    RAISE EXCEPTION 'The bounded open follow-up scan is missing its ordered partial index';
+  END IF;
+END
+$$;
+
 -- Use the same defaults in both the replayed schema and a disposable fixture.
 UPDATE public.role_permissions SET permissions = permissions || '{"customers":{"view":true,"edit":true}}'
 WHERE role = 'admin';

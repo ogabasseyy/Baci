@@ -47,6 +47,28 @@ describe('useStaffFollowUpQueue', () => {
     expect(result.current.ordersById.get('closed')).toBe(closed);
   });
 
+  it.each([
+    ['2026-11-20T08:00:00Z', '2026-11-20T12:00:00Z'],
+    ['2026-11-21T08:00:00Z', '2026-11-21T08:00:00Z'],
+  ])('preserves the newest activity when an order is in both feeds (%s)', (providerActivity, latest) => {
+    const source = {
+      id: 'same',
+      payment_method: 'oxygen',
+      oxygen_follow_up_status: 'oxygen_processing',
+      follow_up_at: providerActivity,
+    };
+    mocks.source.mockReturnValue({ failedOrders: [source] });
+    mocks.staff.mockReturnValue({
+      openOrders: [{ id: 'same', staff_follow_up_only: true }],
+      data: { same: { stage: 'waiting', updated_at: '2026-11-20T12:00:00Z' } },
+    });
+
+    const { result } = renderHook(() => useStaffFollowUpQueue());
+    expect(result.current.orders).toEqual([
+      { ...source, follow_up_at: latest },
+    ]);
+  });
+
   it('passes through staff loading and errors and keeps the checkout rows available', () => {
     mocks.auth.mockReturnValue({ user: null });
     const source = { failedOrders: [{ id: 'order' }] };

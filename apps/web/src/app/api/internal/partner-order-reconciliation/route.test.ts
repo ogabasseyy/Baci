@@ -144,7 +144,7 @@ describe('internal partner reconciliation', () => {
 
   it.each([
     ['P0002', 404, 'NOT_FOUND'],
-    ['22023', 409, 'CAPTURE_EVIDENCE_CONFLICT'],
+    ['22023', 400, 'CAPTURE_EVIDENCE_MISMATCH'],
     ['23505', 409, 'CAPTURE_EVIDENCE_CONFLICT'],
   ])('maps storage error %s without issuing a success receipt', async (code, status, responseCode) => {
     mocks.rpc.mockResolvedValue({ data: null, error: { code } });

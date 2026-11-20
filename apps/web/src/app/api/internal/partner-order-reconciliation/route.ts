@@ -110,7 +110,9 @@ export async function POST(request: Request) {
       }
     );
     if (error?.code === 'P0002') return reject(404, 'NOT_FOUND');
-    if (error?.code === '22023' || error?.code === '23505') {
+    if (error?.code === '22023')
+      return reject(400, 'CAPTURE_EVIDENCE_MISMATCH');
+    if (error?.code === '23505') {
       return reject(409, 'CAPTURE_EVIDENCE_CONFLICT');
     }
     if (error) throw new Error('Partner reconciliation unavailable');

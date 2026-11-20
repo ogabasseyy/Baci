@@ -38,7 +38,7 @@ The internal acceptance transaction requires verified capture and merchant settl
 
 On acceptance, Baci returns the same order ID on every identical submission retry. The order has a paid ledger entry, and its stored shipping address comes from the quote. The carrier quote remains unbound until the booking path establishes merchant-wallet funding and can check the current rate. Partners poll `GET /api/partners/v1/orders/{orderId}` for shipping status and waybill. The read returns only orders accepted through the same partner connection.
 
-For a settled partner order, the existing merchant fulfillment flow must bind an attested, unused domestic GIG door quote to the order and fund it from the merchant shipping wallet. The database rejects a quote that exceeds the previously settled delivery fee. Baci reports a rate increase for reconciliation and keeps the carrier booking on hold. The existing shipment claim and wallet reservation continue to protect the actual booking.
+Once the merchant moves a settled partner order to processing, the existing fulfillment flow must bind an attested, unused domestic GIG door quote to the order and fund it from the merchant shipping wallet. The database rejects a quote that exceeds the previously settled delivery fee. Baci reports a rate increase for reconciliation and keeps the carrier booking on hold. The existing shipment claim and wallet reservation continue to protect the actual booking.
 
 ### Draft consumer guide and evidence ingress
 
@@ -52,7 +52,7 @@ The existing Baci adapter maps to GIG’s documented domestic price (`/price/v3`
 
 Run `python3 supabase/tests/run_partner_order_real_storefront_writer.py` with PostgreSQL binaries on `PATH`. It creates an isolated database with a reduced schema, loads Baci's actual storefront order writer, and checks paid acceptance, replay, exact prices, and both product and offer inventory. The same SQL suite is registered for the complete Supabase schema replay in CI. The local check does not contact the carrier or payment provider.
 
-The internal verifier receives `409 CAPTURE_EVIDENCE_CONFLICT` for a capture mismatch or duplicate, `404` for an inaccessible submission, and `429` with `Retry-After` when it hits the reconciliation limit. These responses belong to the internal ingress and do not appear in the partner API contract.
+The internal verifier receives `400 CAPTURE_EVIDENCE_MISMATCH` when capture evidence disagrees with the submission or quote. It receives `409 CAPTURE_EVIDENCE_CONFLICT` for evidence already claimed or changed, `404` for an inaccessible submission, and `429` with `Retry-After` when it hits the reconciliation limit. These responses belong to the internal ingress and do not appear in the partner API contract.
 
 ### Provision another merchant connection
 
@@ -60,7 +60,7 @@ Register a server-side connection profile with a unique connection ID, the merch
 
 ### Local API lifecycle check
 
-Run `python3 supabase/tests/run_partner_api_lifecycle.py` with PostgreSQL and PostgREST on `PATH` and the workspace dependencies installed. It starts a disposable database and a loopback PostgREST instance, then calls the actual route handlers using Baci’s database client. It checks the feed envelope and conditional response, VAT-inclusive quote, paid-order receipt, wrong settlement hold, one accepted order and inventory decrement after reconciliation, idempotent replay, and connection-scoped tracking. The catalog input, carrier responses, and upstream payment evidence are fixtures. The test imports the live quote proof logic and runs the real storefront order writer on the reduced database schema.
+Run `python3 supabase/tests/run_partner_api_lifecycle.py` with PostgreSQL and PostgREST on `PATH` and the workspace dependencies installed. It starts a disposable database and a loopback PostgREST instance, then calls the actual route handlers using Baci’s database client. It checks the feed envelope and conditional response, VAT-inclusive quote, paid-order receipt, wrong settlement hold, one accepted order and inventory decrement after reconciliation, idempotent replay, and connection-scoped tracking. It also calls the real GIG quote binder for the accepted order. The binder rejects a rate above the settled delivery fee and binds an eligible rate to the merchant wallet. The catalog input, carrier responses, and upstream payment evidence are fixtures. The test imports the live quote proof logic and runs the real storefront order writer on the reduced database schema.
 
 ### CrossRem payment evidence to confirm
 
@@ -69,3 +69,11 @@ CrossRem’s public terms name Square as a processor. Square uses the seller acc
 ### Hosted catalog baseline on 20 November 2026
 
 The deployed feed returned 4,496 unique listings. The authenticated full request took 2,811 ms to headers and 4,718 ms in total. At five-second smoke intervals, three conditional requests returned bodyless `304` responses in 645, 413, and 291 ms. The live Google ID and sellable-identity parity check also passed. Repeat the hosted measurement at the agreed partner interval after deploying the partner API, before enabling sync.
+
+### Resolve orders that require review
+
+Use the submission ID and provider references to check the stored charge and payout evidence. For a settlement hold, submit a corrected allocation only after independently verifying the amount, currency, and destination account. For an order hold, reconcile the original charge with the agreed refund owner and record the verified disposition under the original references. A price or stock change after the original purchase leaves that submission held. A replacement purchase uses a fresh quote and new references after the original charge is resolved. Use the same review process for a verified capture outside the original quote window.
+
+The capture check uses the provider's actual capture timestamp, between quote issuance and expiry and no later than Baci's receipt of the paid submission. Validate the provider timestamp semantics and clock alignment during onboarding. Investigate a reported clock mismatch against the provider source. Keep the original evidence timestamp.
+
+Before opening the paid-order flow, assign ownership for monitoring pending verification receipts and both hold reasons, verify the alert reaches that owner, and confirm who initiates and verifies refunds.

@@ -148,6 +148,36 @@ function fixtureSql(sql: string) {
   ).trim();
 }
 
+function verifyGiglWalletBinding(orderId: string) {
+  expect(
+    fixtureSql(`
+    UPDATE public.orders SET shipping_status = 'processing' WHERE id = '${orderId}';
+    DO $$
+    DECLARE
+      v_order public.orders%ROWTYPE;
+      v_quote_id uuid;
+    BEGIN
+      PERFORM set_config('baci_fixture.staff', '7a100000-0000-4000-8000-000000000101', true);
+      SELECT * INTO STRICT v_order FROM public.orders WHERE id = '${orderId}';
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1501);
+      BEGIN
+        PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+          v_quote_id, v_order.shipping_address);
+        RAISE EXCEPTION 'unsettled rate increase was bound';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'partner_delivery_price_changed' THEN RAISE; END IF;
+      END;
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1500);
+      PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+        v_quote_id, v_order.shipping_address);
+    END;
+    $$;
+    SELECT shipping_status, shipping_funding_source, shipping_provider,
+      (selected_quote_id IS NOT NULL) FROM public.orders WHERE id = '${orderId}';
+  `)
+  ).toBe('processing|merchant_wallet|GIGL|t');
+}
+
 describe.runIf(Boolean(pgSocket && pgPort))(
   'partner API lifecycle with real database',
   () => {
@@ -284,7 +314,7 @@ describe.runIf(Boolean(pgSocket && pgPort))(
             capture: { ...evidence.capture, captured_at: expiredAt },
           })
         ),
-        409
+        400
       );
       const held = await expectJson(
         await reconcile(
@@ -320,7 +350,12 @@ describe.runIf(Boolean(pgSocket && pgPort))(
         });
       expect((await expectJson(await state(), 200)).tracking).toBeNull();
       expect((await state(tokens.other)).status).toBe(404);
-      // Substitute only the carrier result persisted by fulfillment.
+      verifyGiglWalletBinding(orderId);
+      expect(await expectJson(await state(), 200)).toMatchObject({
+        shipping_status: 'processing',
+        tracking: null,
+      });
+      // Substitute the carrier booking result persisted by fulfillment.
       fixtureSql(`UPDATE public.orders SET shipping_status = 'shipped', shipping_provider = 'GIGL',
       tracking_number = 'FIXTURE-GIG-WAYBILL' WHERE id = '${orderId}';`);
       expect(await expectJson(await state(), 200)).toMatchObject({

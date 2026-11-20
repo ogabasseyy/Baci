@@ -17,7 +17,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from run_partner_order_real_storefront_writer import ROOT, SQL_TESTS, partner_schema_sql
+from run_partner_order_real_storefront_writer import ROOT, SQL_TESTS, migration, partner_schema_sql
 
 
 DATABASE_PORT = '55469'
@@ -56,6 +56,8 @@ def seed_fixture(directory):
         """,
         f"INSERT INTO vault.decrypted_secrets VALUES ('service_role_key', '{FIXTURE_PROOF_KEY}');",
         seed,
+        (ROOT / 'supabase/tests/partner_api_lifecycle_fulfillment_fixture.sql').read_text(),
+        migration('20261114100000'),
     ])
     subprocess.run(
         ['psql', '-Xq', '-v', 'ON_ERROR_STOP=1', '-h', str(directory), '-p', DATABASE_PORT,

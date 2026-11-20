@@ -60,7 +60,7 @@ Submit the verified buyer amount in NGN using your configured provider source. B
 
 ## 4. Read status and tracking
 
-Call `GET /order-submissions?partner_order_id=example-order-reference`. A receipt reports `pending_verification`, `payment_verified`, `settlement_verified`, `review_required`, or `accepted`. The `accepted` receipt includes `order_id`. A `review_required` receipt includes a `review_reason`. Retain the original payment and order references while Baci reviews the submission.
+Call `GET /order-submissions?partner_order_id=example-order-reference`. A receipt reports `pending_verification`, `payment_verified`, `settlement_verified`, `review_required`, or `accepted`. The `accepted` receipt includes `order_id`. A `review_required` receipt includes a `review_reason`. Retain the original payment and order references. A settlement review can clear when Baci verifies a corrected payout allocation. An order review means the original purchase needs a disposition before a replacement purchase can be attempted.
 
 Call `GET /orders/{orderId}` with that ID. Baci returns the payment status, shipping status, and tracking provider and waybill once available. Tracking is `null` until a waybill is recorded. Only the same merchant–partner connection can read an order.
 

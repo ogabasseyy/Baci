@@ -48,7 +48,10 @@ export async function readChatwootCheckoutPaymentStatus(input: {
     if (
       (typeof order.payment_status === 'string' &&
         TERMINAL_UNPAID_PAYMENT.has(order.payment_status)) ||
+      // The tracking route passes the raw value through; older orders spell
+      // it the American way.
       order.shipping_status === 'cancelled' ||
+      order.shipping_status === 'canceled' ||
       !isChatwootCheckoutPaymentWindowOpen(input.issuedAt)
     ) {
       return unavailable;

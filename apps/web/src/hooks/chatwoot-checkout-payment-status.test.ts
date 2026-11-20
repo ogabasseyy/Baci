@@ -49,4 +49,16 @@ describe('readChatwootCheckoutPaymentStatus', () => {
       status: 'unavailable',
     });
   });
+
+  it.each([
+    'cancelled',
+    'canceled',
+  ])('is unavailable for an unpaid order whose shipping status is %s', async (shipping_status) => {
+    track({ id: 'order-1', payment_status: 'pending', shipping_status });
+
+    expect(await read()).toEqual({
+      requestId: 'status-1',
+      status: 'unavailable',
+    });
+  });
 });

@@ -70,3 +70,20 @@ describe('bugfix: tokens are found in parsed form-encoded bodies', () => {
     expect(hasBodyToken({ token: '1111-2222' })).toBe(false);
   });
 });
+
+describe('bugfix: a body too deeply nested to scan for a token is held', () => {
+  it('treats overflow as a possible token (fail closed)', () => {
+    let deep: Record<string, unknown> = { token: 'N/A' };
+    for (let i = 0; i < 12; i++) {
+      deep = { nested: deep };
+    }
+
+    expect(hasBodyToken({ responseBody: deep })).toBe(true);
+  });
+
+  it('still returns false for a shallow body without a token', () => {
+    expect(hasBodyToken({ responseBody: { vendStatus: 'FAILED' } })).toBe(
+      false
+    );
+  });
+});

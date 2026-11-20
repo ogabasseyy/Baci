@@ -123,8 +123,13 @@ function findTokenIn(
   insideBody: boolean,
   depth: number
 ): boolean {
-  if (!value || typeof value !== 'object' || depth > TOKEN_SEARCH_DEPTH) {
+  if (!value || typeof value !== 'object') {
     return false;
+  }
+  // Nesting deeper than we scan can't be cleared: fail closed (hold), like the
+  // code and duplicate scans.
+  if (depth > TOKEN_SEARCH_DEPTH) {
+    return true;
   }
   const entries = Array.isArray(value)
     ? value.map((item) => ['', item] as const)

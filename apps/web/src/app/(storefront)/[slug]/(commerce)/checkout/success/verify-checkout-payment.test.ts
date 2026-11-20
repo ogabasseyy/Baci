@@ -140,7 +140,7 @@ describe('verifyCheckoutPayment', () => {
       callbacks
     );
 
-    expect(callbacks.setStatus).toHaveBeenCalledWith('reconciling');
+    expect(callbacks.setStatus).toHaveBeenCalledWith('reversed');
     expect(callbacks.setOrderNumber).toHaveBeenCalledWith('ORD-1');
     expect(callbacks.clearCart).not.toHaveBeenCalled();
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();

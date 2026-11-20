@@ -2,7 +2,8 @@ export type CheckoutVerificationStatus =
   | 'success'
   | 'pending'
   | 'failed'
-  | 'reconciling';
+  | 'reconciling'
+  | 'reversed';
 
 export type VerificationResponse = {
   code?: string;

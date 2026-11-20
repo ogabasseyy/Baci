@@ -48,6 +48,27 @@ describe('CheckoutReconciliationView', () => {
     expect(screen.getByText(/Your cart is still intact/)).toBeInTheDocument();
   });
 
+  it('shows an explicit reversal and a support link with the order number', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber="BAC-42"
+        getHref={getHref}
+        reversed
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Payment reversed' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('#BAC-42')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Wait for the reversal to be confirmed/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /Contact our support team/ })
+    ).toHaveAttribute('href', '/test-store/contact');
+  });
+
   it('omits the order number line when unknown', () => {
     render(<CheckoutReconciliationView orderNumber={null} getHref={getHref} />);
 

@@ -126,9 +126,13 @@ function CheckoutSuccessContent() {
   }
 
   // Captured-but-cancelled/refunded: reconciliation state, never success.
-  if (status === 'reconciling') {
+  if (status === 'reconciling' || status === 'reversed') {
     return (
-      <CheckoutReconciliationView orderNumber={orderNumber} getHref={getHref} />
+      <CheckoutReconciliationView
+        orderNumber={orderNumber}
+        getHref={getHref}
+        reversed={status === 'reversed'}
+      />
     );
   }
 

@@ -8,6 +8,7 @@ import { asRoute } from '@/lib/routes';
 interface CheckoutReconciliationViewProps {
   orderNumber: string | null;
   getHref: (path: string) => string;
+  reversed?: boolean;
 }
 
 /**
@@ -19,6 +20,7 @@ interface CheckoutReconciliationViewProps {
 export function CheckoutReconciliationView({
   orderNumber,
   getHref,
+  reversed = false,
 }: CheckoutReconciliationViewProps) {
   // Storefront theme tokens throughout (never hardcoded palette): this
   // state must honor merchant palettes and dark-mode storefronts like the
@@ -40,7 +42,9 @@ export function CheckoutReconciliationView({
         </motion.div>
 
         <h1 className="text-2xl font-bold text-store-background-text mb-3">
-          Payment Received — Order Under Review
+          {reversed
+            ? 'Payment reversed'
+            : 'Payment Received — Order Under Review'}
         </h1>
         {orderNumber && (
           <p className="font-mono font-bold text-store-background-text mb-3">
@@ -48,15 +52,16 @@ export function CheckoutReconciliationView({
           </p>
         )}
         <p className="text-store-background-text/70 mb-6">
-          Your payment went through, but this order was cancelled before it
-          could be confirmed. Our team is reconciling it now — any amount due
-          back to you will be refunded automatically.
+          {reversed
+            ? 'Paystack reported a reversal for this payment. Contact support with your order number if you need help checking the status.'
+            : 'Your payment went through, but this order was cancelled before it could be confirmed. Our team is reconciling it now — any amount due back to you will be refunded automatically.'}
         </p>
 
         <div className="bg-store-secondary border border-store-border rounded-2xl p-4 mb-6">
           <p className="text-sm text-store-secondary-text">
-            No action needed. Your cart is still intact if you&apos;d like to
-            place a fresh order.
+            {reversed
+              ? 'Your cart is still intact. Wait for the reversal to be confirmed before paying again.'
+              : "No action needed. Your cart is still intact if you'd like to place a fresh order."}
           </p>
         </div>
 

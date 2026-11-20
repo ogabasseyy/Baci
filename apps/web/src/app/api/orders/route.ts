@@ -480,6 +480,8 @@ export async function POST(request: NextRequest) {
     }
 
     const parsedOrder = parseResult.data;
+    // Bank-offer config stores canonical UUIDs. Preserve standard checkout's
+    // existing payload identity so old standard idempotency keys still replay.
     const body =
       parsedOrder.payment_method === 'bank_card_offer'
         ? { ...parsedOrder, merchant_id: parsedOrder.merchant_id.toLowerCase() }

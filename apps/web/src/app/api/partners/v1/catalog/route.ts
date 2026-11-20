@@ -1,17 +1,16 @@
 import { after } from 'next/server';
 import { logger } from '@/lib/logger';
 import { captureServerEvent } from '@/lib/posthog/server';
-import { authorizePartner } from '../partner-connection';
-import { getCrossRemConnections } from './catalog-bindings';
-import { getVersionedCrossRemCatalog } from './catalog-snapshot';
+import { authorizePartnerProfile } from '../partner-profile';
+import { getPartnerProfiles } from '../partner-profiles';
 
 export const maxDuration = 60;
 
 const errorHeaders = { 'Cache-Control': 'private, no-store' };
 
-function unavailable() {
+function unavailable(message: string) {
   return Response.json(
-    { error: 'CrossRem catalog unavailable' },
+    { error: message },
     { status: 503, headers: errorHeaders }
   );
 }
@@ -27,24 +26,24 @@ function unauthorized() {
 }
 
 export async function GET(request: Request) {
-  const access = authorizePartner(
+  const access = authorizePartnerProfile(
     request.headers.get('authorization'),
-    getCrossRemConnections(),
-    'catalog:read'
+    'catalog:read',
+    getPartnerProfiles()
   );
   if (!access.ok) {
     if (access.reason === 'unconfigured') {
-      logger.warn({ message: 'CrossRem catalog credential is unconfigured' });
+      logger.warn({ message: 'Partner catalog credential is unconfigured' });
     } else if (access.reason === 'ambiguous') {
       logger.warn({
-        message: 'CrossRem catalog credential matches multiple grants',
+        message: 'Partner catalog credential matches multiple grants',
       });
     }
     return unauthorized();
   }
 
   try {
-    const { body, etag } = await getVersionedCrossRemCatalog(
+    const { body, etag } = await access.profile.readCatalogSnapshot(
       request.headers.get('if-none-match')
     );
     const headers = {
@@ -61,12 +60,18 @@ export async function GET(request: Request) {
       headers: { ...headers, 'Content-Type': 'application/json' },
     });
   } catch {
+    const { catalogFailure } = access.profile;
     after(async () => {
-      await captureServerEvent('crossrem_catalog_snapshot_unavailable', {
-        deployment_environment:
-          process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
-      });
+      await captureServerEvent(
+        catalogFailure?.event ?? 'partner_catalog_snapshot_unavailable',
+        {
+          deployment_environment:
+            process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
+        }
+      );
     });
-    return unavailable();
+    return unavailable(
+      catalogFailure?.message ?? 'Partner catalog unavailable'
+    );
   }
 }

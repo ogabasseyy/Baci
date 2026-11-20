@@ -10,12 +10,8 @@ import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-rou
 import type { QuoteRequest } from '@/lib/shipping/types';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
-import {
-  crossRemDeliveryConfiguration,
-  getCrossRemConnections,
-} from '../catalog/catalog-bindings';
-import { loadCrossRemCatalog } from '../catalog/catalog-service';
-import { authorizePartner } from '../partner-connection';
+import { authorizePartnerProfile } from '../partner-profile';
+import { getPartnerProfiles } from '../partner-profiles';
 import { buildPartnerQuoteParcel } from './quote-parcel';
 import { partnerQuoteRequestSchema } from './quote-request';
 
@@ -41,10 +37,10 @@ function errorResponse(
 
 export async function POST(request: Request) {
   const requestId = randomUUID();
-  const access = authorizePartner(
+  const access = authorizePartnerProfile(
     request.headers.get('authorization'),
-    getCrossRemConnections(),
-    'quotes:write'
+    'quotes:write',
+    getPartnerProfiles()
   );
   if (!access.ok) {
     return access.reason === 'scope_required'
@@ -86,7 +82,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const catalog = await loadCrossRemCatalog();
+    const catalog = await access.profile.loadCatalog();
     const byId = new Map(
       catalog.listings.map((listing) => [listing.listing_id, listing])
     );
@@ -167,8 +163,7 @@ export async function POST(request: Request) {
       deliveryPreference: 'door',
     };
 
-    const { carrier, validityMs, settlementBasis } =
-      crossRemDeliveryConfiguration;
+    const { carrier, validityMs, settlementBasis } = access.profile.delivery;
     const rates = await shippingService.getProviderQuotes(
       carrier,
       quoteRequest

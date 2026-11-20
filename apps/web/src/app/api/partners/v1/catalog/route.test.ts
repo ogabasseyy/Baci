@@ -60,7 +60,7 @@ describe('CrossRem catalog', () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: 'Unauthorized' });
     expect(warn).toHaveBeenCalledExactlyOnceWith({
-      message: 'CrossRem catalog credential is unconfigured',
+      message: 'Partner catalog credential is unconfigured',
     });
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
     expect(after).not.toHaveBeenCalled();
@@ -72,7 +72,7 @@ describe('CrossRem catalog', () => {
 
     expect(response.status).toBe(401);
     expect(warn).toHaveBeenCalledExactlyOnceWith({
-      message: 'CrossRem catalog credential matches multiple grants',
+      message: 'Partner catalog credential matches multiple grants',
     });
     expect(loadCrossRemCatalog).not.toHaveBeenCalled();
   });

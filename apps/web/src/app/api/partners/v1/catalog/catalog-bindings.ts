@@ -23,39 +23,3 @@ export const crossRemCatalogConfig = {
   // Treat invalid data as unconfigured so the route can emit its 503 alert.
   bindings: parsedBindings.data ?? [],
 } as const;
-
-/** Ogabassey is the first configured merchant and CrossRem is its partner. */
-export function getCrossRemConnections() {
-  const connection = {
-    id: 'crossrem-ogabassey',
-    merchantId: crossRemCatalogConfig.merchantId,
-  };
-
-  return [
-    {
-      ...connection,
-      token: process.env.CROSSREM_CATALOG_TOKEN,
-      scopes: ['catalog:read'],
-    },
-    {
-      ...connection,
-      token: process.env.CROSSREM_QUOTE_TOKEN,
-      scopes: ['quotes:write'],
-    },
-    {
-      ...connection,
-      token: process.env.CROSSREM_ORDER_TOKEN,
-      scopes: ['orders:write', 'orders:read'],
-    },
-  ] as const;
-}
-
-export const crossRemDeliveryConfiguration = {
-  carrier: 'GIGL',
-  validityMs: 10 * 60 * 1000,
-  get settlementBasis() {
-    return process.env.CROSSREM_SETTLEMENT_BASIS === 'base_plus_delivery'
-      ? 'base_plus_delivery'
-      : null;
-  },
-} as const;

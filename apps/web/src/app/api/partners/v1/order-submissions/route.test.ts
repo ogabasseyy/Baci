@@ -13,7 +13,7 @@ vi.mock('@/lib/shipping/shipping-quote-route-proof', () => ({
   createShippingQuoteRouteProof: mocks.proof,
 }));
 vi.mock('@/lib/tenant-rate-limit', () => ({
-  checkTenantRateLimit: mocks.rateLimit,
+  checkTenantRateLimitDetailed: mocks.rateLimit,
 }));
 
 const orderToken = 'synthetic-orders-token-with-enough-entropy-for-tests';
@@ -42,11 +42,21 @@ describe('partner order submission lookup', () => {
     vi.resetAllMocks();
     vi.stubEnv('CROSSREM_ORDER_TOKEN', orderToken);
     vi.stubEnv('CROSSREM_QUOTE_TOKEN', quoteToken);
-    mocks.rateLimit.mockResolvedValue('allowed');
+    mocks.rateLimit.mockResolvedValue({ verdict: 'allowed' });
     mocks.proof.mockReturnValue({ signature: 'fixture-proof' });
     mocks.rpc.mockResolvedValue({ data: receipt, error: null });
   });
   afterEach(() => vi.unstubAllEnvs());
+
+  it('sets Retry-After on a rate-limited request without accessing storage', async () => {
+    mocks.rateLimit.mockResolvedValueOnce({ verdict: 'denied' });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('60');
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
 
   it('returns the receipt scoped to the connection and takes no merchant override', async () => {
     const response = await GET(request());

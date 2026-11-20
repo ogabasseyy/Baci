@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { getCrossRemConnections } from '@/app/api/partners/v1/catalog/catalog-bindings';
 import { partnerOrderReceiptSchema } from '@/app/api/partners/v1/order-receipt';
-import { authorizePartner } from '@/app/api/partners/v1/partner-connection';
+import { authorizePartnerProfile } from '@/app/api/partners/v1/partner-profile';
+import { getPartnerProfiles } from '@/app/api/partners/v1/partner-profiles';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
@@ -57,20 +57,10 @@ export async function POST(request: Request) {
       { status, headers: { ...headers, ...extraHeaders } }
     );
 
-  const connections = getCrossRemConnections();
-  const [pilot] = connections;
-  const access = authorizePartner(
+  const access = authorizePartnerProfile(
     request.headers.get('authorization'),
-    [
-      ...connections,
-      {
-        id: pilot.id,
-        merchantId: pilot.merchantId,
-        token: process.env.CROSSREM_VERIFIER_TOKEN,
-        scopes: ['reconciliation:write'],
-      },
-    ],
-    'reconciliation:write'
+    'reconciliation:write',
+    getPartnerProfiles()
   );
   if (!access.ok) return reject(404, 'NOT_FOUND');
 

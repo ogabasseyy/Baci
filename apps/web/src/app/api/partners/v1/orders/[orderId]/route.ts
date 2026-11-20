@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { createAnonClient } from '@/lib/supabase/anon';
-import { checkTenantRateLimit } from '@/lib/tenant-rate-limit';
-import { getCrossRemConnections } from '../../catalog/catalog-bindings';
-import { authorizePartner } from '../../partner-connection';
+import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
+import { authorizePartnerProfile } from '../../partner-profile';
+import { getPartnerProfiles } from '../../partner-profiles';
 
 const orderTrackingSchema = z.object({
   order_id: z.uuid(),
@@ -32,10 +32,10 @@ export async function GET(
       { status, headers: { ...headers, ...additionalHeaders } }
     );
   }
-  const access = authorizePartner(
+  const access = authorizePartnerProfile(
     request.headers.get('authorization'),
-    getCrossRemConnections(),
-    'orders:read'
+    'orders:read',
+    getPartnerProfiles()
   );
   if (!access.ok) {
     return access.reason === 'scope_required'
@@ -48,7 +48,7 @@ export async function GET(
 
   const { connectionId, merchantId } = access;
   try {
-    const limit = await checkTenantRateLimit(
+    const limit = await checkTenantRateLimitDetailed(
       'partner-order-read',
       connectionId,
       {
@@ -56,9 +56,18 @@ export async function GET(
         windowMs: 60_000,
       }
     );
-    if (limit === 'unavailable')
+    if (limit.verdict === 'unavailable')
       return invalid(503, 'ORDER_LOOKUP_UNAVAILABLE');
-    if (limit === 'denied') return invalid(429, 'RATE_LIMITED');
+    if (limit.verdict === 'denied') {
+      const now = Date.now();
+      const retryAfter = Math.max(
+        1,
+        Math.ceil(((limit.resetAt ?? now + 60_000) - now) / 1000)
+      );
+      return invalid(429, 'RATE_LIMITED', {
+        'Retry-After': String(retryAfter),
+      });
+    }
 
     const proof = createShippingQuoteRouteProof({
       action: 'read_partner_order_tracking',

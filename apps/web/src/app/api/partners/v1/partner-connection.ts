@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 
-type PartnerScope =
+export type PartnerScope =
   | 'catalog:read'
   | 'quotes:write'
   | 'orders:write'

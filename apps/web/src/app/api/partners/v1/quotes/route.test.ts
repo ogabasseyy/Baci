@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { quoteProviderFailure } from '@/lib/shipping/quote-provider-failure';
+import type { PartnerProfile } from '../partner-profile';
 import { POST } from './route';
 
 const mocks = vi.hoisted(() => ({
+  additionalProfiles: vi.fn<() => readonly PartnerProfile[]>(),
   lookup: vi.fn(),
   merchant: vi.fn(),
   rpc: vi.fn(),
@@ -26,6 +28,16 @@ vi.mock('@/lib/supabase/anon', () => ({
     rpc: mocks.rpc,
   }),
 }));
+vi.mock('../partner-profiles', async (importOriginal) => {
+  const original =
+    (await importOriginal()) as typeof import('../partner-profiles');
+  return {
+    getPartnerProfiles: () => [
+      ...original.getPartnerProfiles(),
+      ...mocks.additionalProfiles(),
+    ],
+  };
+});
 vi.mock('../catalog/catalog-service', () => ({
   loadCrossRemCatalog: mocks.catalog,
 }));
@@ -65,6 +77,7 @@ const request = (body: unknown = input, token = quoteToken) =>
 describe('partner delivery quotes', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.additionalProfiles.mockReturnValue([]);
     vi.stubEnv('CROSSREM_CATALOG_TOKEN', catalogToken);
     vi.stubEnv('CROSSREM_QUOTE_TOKEN', quoteToken);
     vi.stubEnv('CROSSREM_SETTLEMENT_BASIS', undefined);
@@ -191,6 +204,57 @@ describe('partner delivery quotes', () => {
             provider_cost: 1000,
           }),
         }),
+      })
+    );
+  });
+
+  it('uses the second merchant profile for listing price, quote lifetime and writes', async () => {
+    const otherMerchant = '60000000-0000-4000-8000-000000000002';
+    const otherToken = 'another-merchant-quote-token-synthetic-test-01';
+    mocks.additionalProfiles.mockReturnValue([
+      {
+        id: 'second-connection',
+        merchantId: otherMerchant,
+        credentials: [{ token: otherToken, scopes: ['quotes:write'] }],
+        loadCatalog: async () => ({
+          listings: [
+            {
+              listing_id: 'listing-one',
+              product_id: 'product-one',
+              variant_id: null,
+              offer_id: null,
+              title: 'Fixture merchant device',
+              condition: 'new',
+              availability: 'in_stock',
+              price_minor: 50000,
+              base_price_minor: 50000,
+            },
+          ],
+        }),
+        readCatalogSnapshot: vi.fn(),
+        delivery: {
+          carrier: 'GIGL',
+          validityMs: 60_000,
+          settlementBasis: null,
+        },
+      },
+    ]);
+
+    const response = await POST(request(input, otherToken));
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      subtotal_minor: 100000,
+      expires_at: '2026-11-20T14:01:00.000Z',
+    });
+    expect(mocks.catalog).not.toHaveBeenCalled();
+    expect(mocks.lookup).toHaveBeenCalledWith('merchant_id', otherMerchant);
+    expect(mocks.sender).toHaveBeenCalledWith(expect.anything(), otherMerchant);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'persist_partner_delivery_quote',
+      expect.objectContaining({
+        p_merchant_id: otherMerchant,
+        p_connection_id: 'second-connection',
       })
     );
   });

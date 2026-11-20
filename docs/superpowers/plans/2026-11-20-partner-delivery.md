@@ -53,3 +53,7 @@ The existing Baci adapter maps to GIG’s documented domestic price (`/price/v3`
 Run `python3 supabase/tests/run_partner_order_real_storefront_writer.py` with PostgreSQL binaries on `PATH`. It creates an isolated database with a reduced schema, loads Baci's actual storefront order writer, and checks paid acceptance, replay, exact prices, and both product and offer inventory. The same SQL suite is registered for the complete Supabase schema replay in CI. The local check does not contact the carrier or payment provider.
 
 The internal verifier receives `409 CAPTURE_EVIDENCE_CONFLICT` for a capture mismatch or duplicate, `404` for an inaccessible submission, and `429` with `Retry-After` when it hits the reconciliation limit. These responses belong to the internal ingress and do not appear in the partner API contract.
+
+### Provision another merchant connection
+
+Register a server-side connection profile with a unique connection ID, the merchant ID, and separate credentials for catalog, quotes, orders, and any Baci-operated evidence verifier. Supply the merchant's catalog loader, its versioned snapshot reader, and the supported delivery and settlement policy. Namespace the snapshot and all version or lease keys by connection. The API derives the merchant from the credential. Each profile provisions its own listing IDs and prices. CrossRem's six percent markup, catalog alert, and GIG configuration belong to its Ogabassey profile. The initial onboarding flow is operator-managed.

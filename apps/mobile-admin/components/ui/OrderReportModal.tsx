@@ -104,6 +104,7 @@ export default function OrderReportModal({
         style={styles.overlay}
       >
         <Pressable
+          accessible={false}
           style={[
             styles.container,
             { backgroundColor: colors.card, maxHeight: '80%' },

@@ -78,6 +78,7 @@ export default function DateRangePicker({
         style={styles.overlay}
       >
         <Pressable
+          accessible={false}
           style={[
             styles.container,
             { backgroundColor: colors.card, maxHeight: '80%' },

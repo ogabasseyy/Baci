@@ -25,6 +25,7 @@ export function ModalSafeArea({
         onPress={onBackdropPress}
         style={[StyleSheet.absoluteFill, { backgroundColor: backdropColor }]}
       />
+      {/* Use the presented window's live insets when this modal remounts. */}
       <SafeAreaProvider pointerEvents="box-none">
         <SafeAreaView pointerEvents="box-none" style={style}>
           {children}

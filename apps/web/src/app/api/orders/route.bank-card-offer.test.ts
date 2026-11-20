@@ -12,6 +12,15 @@ import {
   primeAdminOrderCurrencyRead,
 } from './route.redvault-pilot-fixtures.test-support';
 
+const effects = vi.hoisted(() => ({ purge: vi.fn(), record: vi.fn() }));
+
+vi.mock('@/lib/checkout/schedule-checkout-product-blog-purge', () => ({
+  scheduleCheckoutProductBlogPurge: effects.purge,
+}));
+vi.mock('@/lib/events/record-platform-order-created-event', () => ({
+  recordPlatformOrderCreatedEvent: effects.record,
+}));
+
 vi.mock('@/config/bank-card-offers', () => ({
   BANK_CARD_OFFERS: [
     {
@@ -33,6 +42,7 @@ vi.mock('@/config/bank-card-offers', () => ({
 
 it.each([
   { quantity: 1, expectedTotal: 95, status: 201 },
+  { quantity: 1, expectedTotal: 95, status: 200 },
   { quantity: 10_001, expectedTotal: 95, status: 409 },
   { quantity: 1, expectedTotal: undefined, status: 409 },
   { quantity: 1, expectedTotal: 100, status: 409 },
@@ -60,6 +70,8 @@ it.each([
   errorCode,
 }) => {
   primeAdminOrderCurrencyRead();
+  effects.purge.mockClear();
+  effects.record.mockClear();
   vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'synthetic-order-test-proof');
   try {
     const productId = '11111111-1111-4111-8111-111111111111';
@@ -76,11 +88,12 @@ it.each([
       error: null,
       supabase: supabase as never,
     });
+    const order = { id: 'bank-offer-order', total: expectedTotal };
     supabase.rpc.mockImplementation(async (...args: unknown[]) => ({
-      data:
-        args[0] === 'create_storefront_bank_card_offer_order'
-          ? ({ total: expectedTotal, idempotency_replayed: false } as never)
-          : null,
+      data: (args[0] === 'create_storefront_bank_card_offer_order' ||
+      (status === 200 && args[0] === 'get_bank_card_offer_checkout_replay')
+        ? order
+        : null) as never,
       error: null,
     }));
     const res = await POST(
@@ -111,6 +124,23 @@ it.each([
             ? 'BANK_CARD_OFFER_TOTAL_MISMATCH'
             : 'BANK_CARD_OFFER_UNAVAILABLE')
       );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_bank_card_offer_order',
+        expect.anything()
+      );
+      return;
+    }
+    expect(effects.purge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: order.id,
+        merchantSlug: 'test-merchant',
+      })
+    );
+    expect(effects.record).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: order.id, value: expectedTotal })
+    );
+    if (status === 200) {
+      expect(response.idempotency).toEqual({ replayed: true });
       expect(supabase.rpc).not.toHaveBeenCalledWith(
         'create_storefront_bank_card_offer_order',
         expect.anything()

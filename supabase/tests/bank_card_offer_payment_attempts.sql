@@ -14,6 +14,7 @@ DECLARE
   v_reference text;
   v_hash text := repeat('a', 64);
   v_evidence jsonb;
+  v_gateway_response jsonb;
 BEGIN
   IF has_table_privilege('authenticated', 'private.bank_card_offer_payment_attempts', 'SELECT')
     OR has_function_privilege('anon', 'public.claim_bank_card_offer_attempt(uuid,uuid,bigint,text,text,bigint,bigint)', 'EXECUTE')
@@ -156,14 +157,21 @@ BEGIN
     'cardChannel', 'card', 'cardBrand', 'visa', 'currency', 'NGN', 'domain', 'test',
     'reference', v_reference, 'amountKobo', 9500, 'customerEmail', 'bank-attempt-buyer@example.test',
     'acceptedFilterPolicyHash', v_hash, 'issuerName', 'Wema Bank', 'providerVerificationId', '42');
-  IF public.approve_bank_card_offer_capture(v_order, v_merchant, v_transaction,
-    jsonb_set(v_evidence, '{issuerName}', '"Sterling Bank"'))
-    OR NOT public.approve_bank_card_offer_capture(v_order, v_merchant, v_transaction, v_evidence)
-  THEN RAISE EXCEPTION 'Only an exact verified capture should be approved'; END IF;
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)->>'completedGatewayResponse' IS NOT NULL
-    THEN RAISE EXCEPTION 'Pending bank-offer payments must verify against Paystack'; END IF;
-  UPDATE public.transactions SET status = 'completed', gateway_response = jsonb_build_object(
-    'reference', v_reference, 'status', 'success', 'amount', 9500.0, 'domain', 'test', 'id', '42')
+    THEN RAISE EXCEPTION 'Unapproved bank-offer payments must verify against Paystack'; END IF;
+  v_gateway_response := jsonb_build_object('reference', v_reference, 'status', 'success',
+    'currency', 'NGN', 'amount', 9500.0, 'domain', 'test', 'id', '42');
+  IF public.approve_bank_card_offer_capture(v_order, v_merchant, v_transaction,
+    jsonb_set(v_evidence, '{issuerName}', '"Sterling Bank"'), v_gateway_response)
+    OR public.approve_bank_card_offer_capture(v_order, v_merchant, v_transaction,
+      v_evidence, jsonb_set(v_gateway_response, '{amount}', '9600'))
+    OR NOT public.approve_bank_card_offer_capture(v_order, v_merchant, v_transaction,
+      v_evidence, v_gateway_response)
+  THEN RAISE EXCEPTION 'Only an exact verified capture should be approved'; END IF;
+  IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)
+    #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference
+  THEN RAISE EXCEPTION 'Pending completion must replay saved provider evidence'; END IF;
+  UPDATE public.transactions SET status = 'completed'
     WHERE id = v_transaction;
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction)
     #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference

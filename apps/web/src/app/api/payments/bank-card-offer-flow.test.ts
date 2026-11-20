@@ -140,11 +140,14 @@ function setup(
   bankCode: '035' | '232',
   issuerName: string,
   lookup?: { data: null; error: { code: string } | null },
-  saveCheckoutUrl = true
+  saveCheckoutUrl = true,
+  failFirstCompletion = false
 ) {
   let claimed = false;
   let checkoutUrl: string | null = null;
   let approved = false;
+  let approvedResponse: Record<string, unknown> | null = null;
+  let shouldFailCompletion = failFirstCompletion;
   let paid = false;
   let terminalReview = false;
   const refundInsert = vi.fn().mockResolvedValue({ error: null });
@@ -245,7 +248,7 @@ function setup(
             reference,
             amountKobo: 9500,
             customerEmail,
-            completedGatewayResponse: paid ? data : null,
+            completedGatewayResponse: approvedResponse,
             acceptedFilterPolicyHash: hashBankCardOfferFilter(
               quote.paymentPolicy
             ),
@@ -256,9 +259,14 @@ function setup(
         return { data: true };
       case 'approve_bank_card_offer_capture':
         approved = args.p_evidence.issuerName === issuerName;
+        if (approved) approvedResponse = args.p_gateway_response;
         return { data: approved };
       case 'complete_order_gateway_payment': {
         if (!approved) throw new Error('completion before issuer approval');
+        if (shouldFailCompletion) {
+          shouldFailCompletion = false;
+          return { data: null, error: { code: '57014' } };
+        }
         const replay = paid;
         paid = true;
         return {
@@ -377,11 +385,19 @@ describe('bank card offer payment handlers', () => {
   it.each([
     'provider timeout',
     'save rejected',
+    'incorrect amount echoed',
   ] as const)('opens a recovery review after %s without another provider call', async (failure) => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
     setup('035', 'Wema Bank', undefined, failure !== 'save rejected');
     if (failure === 'provider timeout') {
       mocks.initialize.mockRejectedValueOnce(new Error('Connection closed'));
+    }
+    if (failure === 'incorrect amount echoed') {
+      mocks.initialize.mockResolvedValueOnce({
+        reference,
+        authorization_url: 'https://checkout.paystack.com/trx/example',
+        amount: 9501,
+      });
     }
     const input = {
       merchant_id: merchantId,
@@ -405,6 +421,25 @@ describe('bank card offer payment handlers', () => {
         ([name]) => name === 'record_bank_card_offer_checkout_url'
       )
     ).toHaveLength(failure === 'save rejected' ? 1 : 0);
+  });
+
+  it('quarantines terminal evidence from a different Paystack domain', async () => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    const { data } = setup('035', 'Wema Bank');
+    mocks.verify.mockResolvedValue({
+      success: true,
+      data: { ...data, status: 'failed', domain: 'live' },
+    });
+
+    const result = await verify(request('verify', { reference }));
+    expect(result.status).toBe(202);
+    await expect(result.json()).resolves.toMatchObject({
+      code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+    });
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'flag_bank_card_offer_terminal_review',
+      expect.anything()
+    );
   });
 
   it.each([
@@ -581,5 +616,18 @@ describe('bank card offer payment handlers', () => {
     expect(refundInsert).toHaveBeenCalledWith(
       expect.objectContaining({ gateway_reference: '64' })
     );
+  });
+
+  it('recovers an approved capture when completion and then Paystack are unavailable', async () => {
+    vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
+    setup('035', 'Wema Bank', undefined, true, true);
+
+    expect((await verify(request('verify', { reference }))).status).toBe(500);
+    mocks.verify.mockResolvedValue({ success: false, code: 'NETWORK_ERROR' });
+
+    const replay = await verify(request('verify', { reference }));
+    expect(replay.status).toBe(200);
+    await expect(replay.json()).resolves.toMatchObject({ success: true });
+    expect(mocks.verify).toHaveBeenCalledTimes(1);
   });
 });

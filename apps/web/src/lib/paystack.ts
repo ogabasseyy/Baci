@@ -208,6 +208,7 @@ export interface Subaccount {
 export interface PaymentInitData {
   email: string;
   amount: number; // Amount in kobo (NGN smallest unit)
+  currency?: string;
   reference?: string;
   callback_url?: string;
   metadata?: Record<string, unknown>;

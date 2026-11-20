@@ -34,8 +34,7 @@ export async function approveBankCardOfferPayment({
   ) {
     return null;
   }
-  // The database only returns this payload for a completed transaction
-  // tied to the same saved offer and its persisted approval evidence.
+  // A matching saved approval can resume settlement before or after completion.
   if (context.data.completedGatewayResponse) {
     return {
       kind: 'verified',
@@ -54,6 +53,7 @@ export async function approveBankCardOfferPayment({
   const approval = await client.rpc('approve_bank_card_offer_capture', {
     ...args,
     p_evidence: verified.evidence,
+    p_gateway_response: verified.gatewayResponse,
   });
   if (approval.error || approval.data !== true) return null;
   return verified;

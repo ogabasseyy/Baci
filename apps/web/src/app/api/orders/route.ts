@@ -594,6 +594,50 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+    async function repairBankOfferOrderEffects(
+      offerOrder: Record<string, unknown>,
+      merchantSlug: string
+    ) {
+      if (typeof offerOrder.id !== 'string') return;
+      try {
+        await scheduleCheckoutProductBlogPurge({
+          merchantId: merchant_id,
+          merchantSlug,
+          orderId: offerOrder.id,
+          orderItems: items.map((item) => ({
+            product_id: getOrderItemProductId(item),
+            variant_id: item.variantId || item.variant_id,
+          })),
+          supabase,
+        });
+      } catch (error) {
+        logger.error({
+          message:
+            'Failed to revalidate product caches after bank offer order creation',
+          merchantId: merchant_id,
+          error,
+        });
+      }
+      await recordPlatformOrderCreatedEvent({
+        currency:
+          typeof offerOrder.currency === 'string' ? offerOrder.currency : 'NGN',
+        customerEmail: customer_email,
+        eventTimestamp:
+          typeof offerOrder.created_at === 'string'
+            ? offerOrder.created_at
+            : new Date().toISOString(),
+        ipAddress: clientIp,
+        merchantId: merchant_id,
+        orderId: offerOrder.id,
+        orderNumber:
+          typeof offerOrder.order_number === 'string' && offerOrder.order_number
+            ? offerOrder.order_number
+            : offerOrder.id.slice(0, 8).toUpperCase(),
+        userAgent: clientUserAgent,
+        value: Number(offerOrder.total ?? 0),
+      });
+    }
+
     if (bankCardOfferRequestHash && requestIdempotencyKey && resolvedUserId) {
       const scopedClient = createStorefrontOrderRpcClient({
         fallbackClient: supabase,
@@ -625,6 +669,21 @@ export async function POST(request: NextRequest) {
         );
       }
       if (replay.data) {
+        const { data: replayMerchant, error: merchantError } = await supabase
+          .from('merchants')
+          .select('slug')
+          .eq('id', merchant_id)
+          .maybeSingle();
+        if (merchantError || !replayMerchant?.slug) {
+          return NextResponse.json(
+            {
+              code: 'BANK_CARD_OFFER_REPLAY_UNAVAILABLE',
+              error: 'Unable to load this bank card offer order',
+            },
+            { status: 503 }
+          );
+        }
+        await repairBankOfferOrderEffects(replay.data, replayMerchant.slug);
         return NextResponse.json(
           { order: replay.data, idempotency: { replayed: true } },
           { headers: { 'x-idempotency-replayed': 'true' } }
@@ -2473,48 +2532,7 @@ export async function POST(request: NextRequest) {
         );
       }
       const replayed = result.data.idempotency_replayed === true;
-      if (!replayed) {
-        try {
-          await scheduleCheckoutProductBlogPurge({
-            merchantId: merchant_id,
-            merchantSlug: merchant.slug,
-            orderId: typeof result.data.id === 'string' ? result.data.id : null,
-            orderItems: orderItemsPayload,
-            supabase,
-          });
-        } catch (error) {
-          logger.error({
-            message:
-              'Failed to revalidate product caches after bank offer order creation',
-            merchantId: merchant_id,
-            error,
-          });
-        }
-        const offerOrder = result.data;
-        if (typeof offerOrder.id === 'string') {
-          await recordPlatformOrderCreatedEvent({
-            currency:
-              typeof offerOrder.currency === 'string'
-                ? offerOrder.currency
-                : merchantResolvedCurrency,
-            customerEmail: customer_email,
-            eventTimestamp:
-              typeof offerOrder.created_at === 'string'
-                ? offerOrder.created_at
-                : new Date().toISOString(),
-            ipAddress: clientIp,
-            merchantId: merchant_id,
-            orderId: offerOrder.id,
-            orderNumber:
-              typeof offerOrder.order_number === 'string' &&
-              offerOrder.order_number
-                ? offerOrder.order_number
-                : offerOrder.id.slice(0, 8).toUpperCase(),
-            userAgent: clientUserAgent,
-            value: Number(offerOrder.total ?? 0),
-          });
-        }
-      }
+      await repairBankOfferOrderEffects(result.data, merchant.slug);
       return NextResponse.json(
         {
           order: result.data,

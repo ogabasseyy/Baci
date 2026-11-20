@@ -95,7 +95,7 @@ export async function resolveOrderGatewayCompletion({
           txn_id: transactionId,
           paystack_ref: reference,
           reason:
-            'Captured Paystack payment does not match the saved bank card offer',
+            'Paystack verification does not match the saved bank card offer',
           metadata: { source: 'bank_card_offer_capture' },
         });
         if (review.error && review.error.code !== '23505') {

@@ -20,14 +20,15 @@ export async function verifyBankCardOfferPaystack(
     // A terminal status starts operator review for the same reference.
     // Only a successful capture can establish and approve the amount paid.
     if (
-      (status === 'failed' ||
-        status === 'abandoned' ||
-        status === 'cancelled') &&
-      'domain' in data &&
-      data.domain === attempt.domain &&
-      data.currency.toUpperCase() === attempt.currency
+      status === 'failed' ||
+      status === 'abandoned' ||
+      status === 'cancelled'
     ) {
-      return { kind: 'terminal', status } as const;
+      return 'domain' in data &&
+        data.domain === attempt.domain &&
+        data.currency.toUpperCase() === attempt.currency
+        ? ({ kind: 'terminal', status } as const)
+        : ({ kind: 'mismatch' } as const);
     }
     return null;
   }

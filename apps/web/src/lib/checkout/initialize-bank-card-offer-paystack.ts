@@ -19,6 +19,7 @@ export async function initializeBankCardOfferPaystack({
   const metadata = bankCardOfferAuthorization(attempt);
   const result = await initializeTransaction({
     amount: attempt.amountKobo,
+    currency: attempt.currency,
     email: attempt.customerEmail,
     reference: attempt.reference,
     callback_url: callbackUrl,
@@ -31,6 +32,8 @@ export async function initializeBankCardOfferPaystack({
   const url = new URL(result.authorization_url);
   if (
     result.reference !== attempt.reference ||
+    ('amount' in result && result.amount !== attempt.amountKobo) ||
+    ('currency' in result && result.currency !== attempt.currency) ||
     url.protocol !== 'https:' ||
     url.hostname !== 'checkout.paystack.com' ||
     url.username ||

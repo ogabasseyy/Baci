@@ -28,12 +28,19 @@ export interface KudaPascalBiller {
   BillItems?: unknown;
 }
 
-function keptFixedItemCodes(items: BillItem[] | undefined, codes: Set<string>) {
+/** How many fixed listings of each (normalized) code the mapper kept. */
+function keptFixedItemCodes(
+  items: BillItem[] | undefined,
+  counts: Map<string, number>
+) {
   for (const item of items ?? []) {
-    if (item.isAmountFixed) codes.add(normalizeKudaItemCode(item.itemCode));
-    keptFixedItemCodes(item.billItems, codes);
+    if (item.isAmountFixed) {
+      const code = normalizeKudaItemCode(item.itemCode);
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+    keptFixedItemCodes(item.billItems, counts);
   }
-  return codes;
+  return counts;
 }
 
 function toBiller(
@@ -47,10 +54,17 @@ function toBiller(
   // Every fixed-price listing the mapper dropped, whatever the reason (an
   // unusable price, a list whose unit is in doubt, malformed children), so
   // the price recheck never mistakes it for a package the biller lacks.
-  const kept = keptFixedItemCodes(billItems, new Set());
-  const unreadableItemCodes = [
-    ...new Set(collectRawFixedItemCodes(rawItems)),
-  ].filter((code) => !kept.has(normalizeKudaItemCode(code)));
+  // Counted per code, so a code listed twice with only one copy dropped is
+  // still marked: the dropped copy's current price is unconfirmable.
+  const kept = keptFixedItemCodes(billItems, new Map());
+  const sent = new Map<string, { code: string; count: number }>();
+  for (const code of collectRawFixedItemCodes(rawItems)) {
+    const key = normalizeKudaItemCode(code);
+    sent.set(key, { code, count: (sent.get(key)?.count ?? 0) + 1 });
+  }
+  const unreadableItemCodes = [...sent]
+    .filter(([key, { count }]) => count > (kept.get(key) ?? 0))
+    .map(([, { code }]) => code);
   return {
     ...fields,
     billItems,

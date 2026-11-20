@@ -111,7 +111,7 @@ describe('mapKudaBillersAnswer', () => {
     expect(billers[0]?.unreadableItemCodes).toEqual(['SUPER']);
   });
 
-  it('never records a kept code whose spelling differs only by case or spaces', () => {
+  it('never marks readable copies whose code differs only by case or spaces', () => {
     const { billers } = mapKudaBillersAnswer(
       {
         billers: [
@@ -130,7 +130,7 @@ describe('mapKudaBillersAnswer', () => {
               {
                 itemCode: 'KUD-CAB-1 ',
                 itemName: 'Basic',
-                amount: '',
+                amount: 600000,
                 isFixedPrice: true,
               },
             ],
@@ -161,5 +161,37 @@ describe('mapKudaBillersAnswer', () => {
 
     expect(billers[0]?.packagesUnreadable).toBe(true);
     expect(billers[0]?.billItems).toBeUndefined();
+  });
+
+  it('marks a code listed twice when only one copy was dropped', () => {
+    const { billers } = mapKudaBillersAnswer(
+      {
+        billers: [
+          {
+            id: 'st',
+            name: 'STARTIMES NG',
+            description: 'Cable',
+            billTypeId: 'cable',
+            billItems: [
+              {
+                itemCode: 'DUP',
+                itemName: 'Basic',
+                amount: 500000,
+                isFixedPrice: true,
+              },
+              {
+                itemCode: 'DUP',
+                itemName: 'Basic',
+                amount: '',
+                isFixedPrice: true,
+              },
+            ],
+          },
+        ],
+      },
+      'CableTv'
+    );
+
+    expect(billers[0]?.unreadableItemCodes).toEqual(['DUP']);
   });
 });

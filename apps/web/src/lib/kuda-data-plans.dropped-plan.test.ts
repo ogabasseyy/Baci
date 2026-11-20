@@ -289,4 +289,21 @@ describe('bugfix: a dropped data plan fell back to another plan at the same pric
       })
     ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
+
+  it('refuses a plan code listed twice when one copy was dropped', async () => {
+    mockGetDataProviders.mockResolvedValue(
+      mtnAnswer([
+        { code: 'MTN-1GB-MONTHLY', amount: 100000 },
+        { code: 'MTN-1GB-MONTHLY', amount: '' },
+      ])
+    );
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 1000,
+        dataPlanCode: 'MTN-1GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
 });

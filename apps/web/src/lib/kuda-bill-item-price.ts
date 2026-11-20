@@ -226,7 +226,17 @@ export async function assertKudaBillItemPriceCurrent({
   // no biller named (older clients only) every biller is a candidate, so one
   // malformed biller deliberately blocks the whole category: which biller's
   // package it is can't be told, and failing closed is the safe side.
-  if (chosen.some(({ biller }) => biller.packagesUnreadable)) {
+  // Likewise a biller that sent this code with an unusable price, even if
+  // another copy of it is readable: the dropped copy can't be confirmed.
+  if (
+    chosen.some(
+      ({ biller }) =>
+        biller.packagesUnreadable ||
+        biller.unreadableItemCodes?.some(
+          (unreadable) => normalizeKudaItemCode(unreadable) === code
+        )
+    )
+  ) {
     throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 

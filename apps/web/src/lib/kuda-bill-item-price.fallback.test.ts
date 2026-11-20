@@ -241,3 +241,34 @@ describe('bugfix: a biller with a malformed package list still confirmed a reada
     ).resolves.toBeUndefined();
   });
 });
+
+describe('bugfix: a duplicate code with one unreadable copy still confirmed', () => {
+  it('refuses the readable copy when another copy of the code was dropped', async () => {
+    const pkg = (amount: number | string) => ({
+      itemCode: 'KUD-CAB-DST-SHARED',
+      itemName: 'Package',
+      amount,
+      isFixedPrice: true,
+    });
+    mockGetBillersByCategory.mockResolvedValue(
+      mapKudaBillersAnswer(
+        {
+          billers: [
+            {
+              id: 'dstv',
+              name: 'DSTV',
+              description: 'Cable',
+              billTypeId: 'cable',
+              billItems: [pkg(950000), pkg('')],
+            },
+          ],
+        },
+        'CableTv'
+      ).billers
+    );
+
+    await expect(purchase(9500, 'DSTV')).rejects.toThrow(
+      KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE
+    );
+  });
+});

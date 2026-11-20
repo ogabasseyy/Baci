@@ -1,11 +1,11 @@
 # Baci capabilities and agent access
 
 Reviewed 20 November 2026 against source revision
-`fc90238797caeea7a2bd111989b2960ec185eea0`. The Shopping MCP row was re-reviewed after the misleading link-only
+`855888de55e8c97277722c709b8303c24c867c40`. The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).
 The mobile-admin follow-up queue no longer treats
-stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; Staff with customer-edit permission can claim and update follow-ups. Removing a staff member releases their open work while keeping its saved outcome and date. Agentic checkout session quotes now include
+stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; Staff with customer-edit permission can claim and update follow-ups. Removing a staff member releases their open work while keeping its saved outcome and date. Follow-up dates are optional. Past dates represent overdue work, and closing clears the date. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
 review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility

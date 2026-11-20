@@ -233,6 +233,16 @@ export async function postAdminOrderGiglQuote(
     // Settlement can land between the check above and this bind.
     if (bindError.message?.includes(CUSTOMER_CHECKOUT_REBIND_FORBIDDEN))
       return customerPaidGiglShippingResponse();
+    if (bindError.message?.includes('partner_delivery_price_changed')) {
+      return NextResponse.json(
+        {
+          code: 'PARTNER_DELIVERY_PRICE_CHANGED',
+          error:
+            'The current GIG rate exceeds the settled delivery fee. Resolve the difference before booking.',
+        },
+        { status: 409 }
+      );
+    }
     const already = bindError.message?.includes('already');
     const staleInputs = bindError.message?.includes('stale_order_quote_inputs');
     return NextResponse.json(

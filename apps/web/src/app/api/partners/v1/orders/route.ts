@@ -1,0 +1,108 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { logger } from '@/lib/logger';
+import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
+import { createAnonClient } from '@/lib/supabase/anon';
+import { checkTenantRateLimit } from '@/lib/tenant-rate-limit';
+import { getCrossRemConnections } from '../catalog/catalog-bindings';
+import { partnerOrderReceiptSchema } from '../order-receipt';
+import { authorizePartner } from '../partner-connection';
+
+const orderSchema = z.strictObject({
+  quote_id: z.uuid(),
+  partner_order_id: z.string().trim().min(1).max(128),
+  recipient: z.strictObject({
+    name: z.string().trim().min(1).max(160),
+    phone: z.string().regex(/^\+[1-9][0-9]{7,14}$/),
+    email: z.email().max(254).optional(),
+  }),
+  payment: z.strictObject({
+    source: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+    reference: z.string().trim().min(1).max(200),
+    amount_minor: z.number().int().positive(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+  }),
+});
+
+export async function POST(request: Request) {
+  const requestId = randomUUID();
+  const headers = { 'Cache-Control': 'private, no-store' };
+  function invalid(status: number, code: string, additionalHeaders = {}) {
+    return Response.json(
+      { error: { code }, request_id: requestId },
+      { status, headers: { ...headers, ...additionalHeaders } }
+    );
+  }
+  const access = authorizePartner(
+    request.headers.get('authorization'),
+    getCrossRemConnections(),
+    'orders:write'
+  );
+  if (!access.ok) {
+    return access.reason === 'scope_required'
+      ? invalid(403, 'SCOPE_REQUIRED')
+      : invalid(401, 'UNAUTHORIZED', { 'WWW-Authenticate': 'Bearer' });
+  }
+
+  const key = request.headers.get('Idempotency-Key');
+  if (!key || !/^[A-Za-z0-9_.:-]{16,128}$/.test(key)) {
+    return invalid(400, 'INVALID_IDEMPOTENCY_KEY');
+  }
+  const parsed = orderSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return invalid(400, 'INVALID_REQUEST');
+
+  const { connectionId, merchantId } = access;
+  try {
+    const limit = await checkTenantRateLimit(
+      'partner-order-submit',
+      connectionId,
+      {
+        maxRequests: 30,
+        windowMs: 60_000,
+      }
+    );
+    if (limit === 'unavailable')
+      return invalid(503, 'ORDER_INTAKE_UNAVAILABLE');
+    if (limit === 'denied') return invalid(429, 'RATE_LIMITED');
+
+    const { quote_id, partner_order_id, ...submission } = parsed.data;
+    const idempotencyHash = createHash('sha256').update(key).digest('hex');
+    const proof = createShippingQuoteRouteProof({
+      action: 'submit_partner_order',
+      merchantId,
+      subjectId: quote_id,
+      payload: {
+        connection_id: connectionId,
+        partner_order_id,
+        idempotency_hash: idempotencyHash,
+        submission,
+      },
+    });
+    const db = createAnonClient();
+    const { data, error } = await db.rpc('submit_partner_order', {
+      p_quote_id: quote_id,
+      p_merchant_id: merchantId,
+      p_connection_id: connectionId,
+      p_partner_order_id: partner_order_id,
+      p_idempotency_hash: idempotencyHash,
+      p_submission: submission,
+      p_route_proof: proof,
+    });
+
+    if (error?.code === 'P0002') return invalid(404, 'QUOTE_NOT_FOUND');
+    if (error?.code === '23505') return invalid(409, 'ORDER_CONFLICT');
+    if (error) throw new Error('Partner order intake storage unavailable');
+    const receipt = partnerOrderReceiptSchema.parse(data);
+    return Response.json(
+      { ...receipt, request_id: requestId },
+      { status: receipt.status === 'accepted' ? 200 : 202, headers }
+    );
+  } catch {
+    logger.warn({
+      message: 'Partner order intake unavailable',
+      connectionId,
+      requestId,
+    });
+    return invalid(503, 'ORDER_INTAKE_UNAVAILABLE');
+  }
+}

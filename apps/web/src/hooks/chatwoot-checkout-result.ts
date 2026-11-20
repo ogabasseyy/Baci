@@ -13,10 +13,19 @@ export const CHATWOOT_CHECKOUT_FAILURE_CODES = [
   'details_invalid',
   'order_failed',
   'payment_unavailable',
+  'cart_unsupported',
 ] as const;
 
 export type ChatwootCheckoutFailureCode =
   (typeof CHATWOOT_CHECKOUT_FAILURE_CODES)[number];
+
+export interface ChatwootCheckoutCreatedOrder {
+  orderId: string;
+  orderNumber: string;
+  trackingToken: string | null;
+  amountDueMajor: number;
+  currency: string | null;
+}
 
 export type ChatwootCheckoutPlaceResult =
   | {

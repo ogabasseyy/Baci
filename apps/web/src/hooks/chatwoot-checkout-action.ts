@@ -43,25 +43,35 @@ export async function handleChatwootCheckoutAction({
     });
     return;
   }
-  const { isChatwootCheckoutIssuedReference } = await import(
+  const { getChatwootCheckoutRememberedOrderByReference } = await import(
     './chatwoot-checkout-memory'
   );
-  // Only references this page issued for its own chat orders may be polled.
-  if (!isChatwootCheckoutIssuedReference(message.data.reference)) {
+  const unavailable = () => {
     if (place.canPost()) {
       post(CHATWOOT_CHECKOUT_STATUS_PREFIX, {
         requestId: message.data.requestId,
         status: 'unavailable',
       });
     }
-    return;
+  };
+  // The widget's reference only selects an order this page created; the
+  // order, token and merchant used for the poll come from page memory, never
+  // from the widget.
+  const entry = getChatwootCheckoutRememberedOrderByReference(
+    message.data.reference
+  );
+  if (!entry?.payment || entry.merchantId !== place.getMerchant()?.id) {
+    return unavailable();
   }
   const { readChatwootCheckoutPaymentStatus } = await import(
     './chatwoot-checkout-payment'
   );
-  const result = await readChatwootCheckoutPaymentStatus(
-    message.data.requestId,
-    message.data.reference
-  );
+  const result = await readChatwootCheckoutPaymentStatus({
+    requestId: message.data.requestId,
+    orderId: entry.order.orderId,
+    trackingToken: entry.order.trackingToken,
+    merchantSlug: place.storeSlug,
+    issuedAt: entry.payment.issuedAt,
+  });
   if (place.canPost()) post(CHATWOOT_CHECKOUT_STATUS_PREFIX, result);
 }

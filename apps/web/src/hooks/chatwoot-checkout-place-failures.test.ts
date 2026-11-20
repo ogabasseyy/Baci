@@ -57,6 +57,7 @@ describe('handleChatwootCheckoutPlace failure codes', () => {
         cartVersion: CHECKOUT_CART_VERSION,
         currency: 'NGN',
         estimatedTotals: true,
+        itemsSubtotalMinor: 200_000,
       },
     });
     const foreign = placeInput({ authorizedCartId: 'cart-other' });
@@ -156,6 +157,7 @@ describe('handleChatwootCheckoutPlace failure codes', () => {
         cartVersion: CHECKOUT_CART_VERSION,
         currency: 'USD',
         estimatedTotals: false,
+        itemsSubtotalMinor: 200_000,
       },
     });
 

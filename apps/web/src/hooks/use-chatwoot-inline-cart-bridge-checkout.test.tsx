@@ -87,10 +87,12 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
     mocks.cartState.sharedCartRef = { cartId: 'cart-1', version: 8 };
     fetchMock = vi.fn(async (path: string, init: RequestInit = {}) => {
       const url = new URL(path, 'https://store.test');
-      if (url.pathname === '/api/payments/status') {
+      if (url.pathname === '/api/storefront/orders/track-order') {
         return {
           ok: true,
-          json: async () => ({ success: true, is_confirmed: true }),
+          json: async () => ({
+            order: { id: 'order-1', payment_status: 'paid' },
+          }),
         };
       }
       const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -137,13 +139,13 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
     ]);
   });
 
-  it('answers a payment status request from the status route when enabled', async () => {
+  it('answers a payment status request by polling the created order when enabled', async () => {
     // Only a reference this page issued for its own chat order may be polled.
     resetChatwootCheckoutOrderMemory();
     rememberChatwootCheckoutOrder('issued-key', 'merchant-1', {
       orderId: 'order-1',
       orderNumber: 'ORD-1001',
-      trackingToken: null,
+      trackingToken: 'track-1',
       amountDueMajor: 1000,
       currency: 'NGN',
     });
@@ -178,10 +180,15 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
     expect(
       fetchMock.mock.calls.some(([path]) =>
         String(path).startsWith(
-          '/api/payments/status?gateway=paystack&reference=ref-123'
+          '/api/storefront/orders/track-order?token=track-1&merchant_slug=store'
         )
       )
     ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([path]) =>
+        String(path).includes('/api/payments/status')
+      )
+    ).toBe(false);
   });
 
   it('authorizes a place request and rejects a stale cart version before any order call', async () => {
@@ -191,10 +198,13 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
     await act(async () => {
       await establishWidgetContext(target, postMessage);
       sendWidgetMessage(target, 'baci-checkout-place-request', placeData);
-      await waitFor(() =>
-        expect(
-          widgetPosts(postMessage, 'baci-checkout-place-result:')
-        ).toHaveLength(1)
+      await waitFor(
+        () =>
+          expect(
+            widgetPosts(postMessage, 'baci-checkout-place-result:')
+          ).toHaveLength(1),
+        // The checkout modules load lazily; a cold transform can exceed 1s.
+        { timeout: 10_000 }
       );
     });
 

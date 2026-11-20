@@ -1,26 +1,25 @@
 import { getContactErrors } from '@/components/storefront/ogabassey/pages/checkout/contact-validation';
 import type { CartItem } from '@/hooks/cart';
 import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-checkout-client';
-import { calculateCartCatalogSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
+import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer';
+import { formatPhoneToE164 } from '@/lib/phone';
 import type { ChatwootCommerceMessage } from '@/schemas/chatwoot-commerce-message';
 import { resolveChatwootCheckoutDelivery } from './chatwoot-checkout-delivery';
+import { deriveChatwootCheckoutKeys } from './chatwoot-checkout-keys';
 import {
   getChatwootCheckoutRememberedOrder,
   rememberChatwootCheckoutOrder,
   rememberChatwootCheckoutPayment,
 } from './chatwoot-checkout-memory';
-import {
-  buildChatwootCheckoutOrderRequest,
-  type ChatwootCheckoutCreatedOrder,
-  deriveChatwootCheckoutKeys,
-  postChatwootCheckoutOrder,
-  reviewedChatwootCheckoutItems,
-} from './chatwoot-checkout-order';
+import { postChatwootCheckoutOrder } from './chatwoot-checkout-order-post';
+import { buildChatwootCheckoutOrderRequest } from './chatwoot-checkout-order-request';
 import { initializeChatwootCheckoutBankTransfer } from './chatwoot-checkout-payment';
 import type {
+  ChatwootCheckoutCreatedOrder,
   ChatwootCheckoutFailureCode,
   ChatwootCheckoutPlaceResult,
 } from './chatwoot-checkout-result';
+import { reviewedChatwootCheckoutItems } from './chatwoot-checkout-reviewed-items';
 
 type PlaceData = Extract<
   ChatwootCommerceMessage,
@@ -31,7 +30,13 @@ type CartRef = { cartId: string; version: number } | null;
 export interface HandleChatwootCheckoutPlaceInput {
   request: PlaceData;
   storeSlug: string;
-  snapshot: { cartVersion: number; currency: string; estimatedTotals: boolean };
+  snapshot: {
+    cartVersion: number;
+    currency: string;
+    estimatedTotals: boolean;
+    /** Same basis the delivery-options route quoted the shown options on. */
+    itemsSubtotalMinor: number;
+  };
   authorizedCartId: string;
   requestedCartRef: CartRef;
   getCurrentCartRef: () => CartRef;
@@ -99,11 +104,9 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
     }
   };
   const merchant = input.getMerchant();
-  const keys = await deriveChatwootCheckoutKeys(
-    request.requestId,
-    authorizedCartId
-  );
-  if (!merchant || !keys) return fail('order_failed');
+  if (!merchant) return fail('order_failed');
+  const keys = await deriveChatwootCheckoutKeys(request.requestId, merchant.id);
+  if (!keys) return fail('order_failed');
 
   const remembered = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   if (remembered) {
@@ -164,8 +167,16 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
   ) {
     return fail('details_invalid');
   }
+  // The dedicated-account route only serves Nigerian customers; refuse before
+  // an order exists that could never be paid this way.
+  if (!formatPhoneToE164(request.customer.phone).startsWith('+234')) {
+    return fail('details_invalid');
+  }
 
   const display = input.getDisplayCart();
+  // Chat checkout is bank transfer only: a quiz voucher can leave nothing to
+  // pay and the order API would finalize it as already paid.
+  if (display.some(isQuizVoucherCartItem)) return fail('cart_unsupported');
   const delivery = await resolveChatwootCheckoutDelivery({
     merchantId: merchant.id,
     customer: request.customer,
@@ -177,7 +188,7 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
       price: item.price,
       negotiatedPrice: item.negotiatedPrice,
     })),
-    catalogSubtotal: calculateCartCatalogSubtotal(display, true),
+    cartSubtotal: snapshot.itemsSubtotalMinor / 100,
   });
   if (!delivery.ok) return fail(delivery.code);
   if (!sameCart()) return fail('cart_changed');
@@ -196,6 +207,9 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
     );
   }
   const { review } = prepared;
+  if (review.lines.some((line) => line.voucherToken || line.voucherAwardId)) {
+    return fail('cart_unsupported');
+  }
   const items = reviewedChatwootCheckoutItems(review, display);
   if (
     !items ||

@@ -27,7 +27,8 @@ export interface ChatwootCheckoutDeliveryInput {
     price: number;
     negotiatedPrice?: number;
   }[];
-  catalogSubtotal: number;
+  /** The cart subtotal (major units) the shown options were quoted on. */
+  cartSubtotal: number;
 }
 
 export type ChatwootCheckoutDeliveryResult =
@@ -69,7 +70,7 @@ async function loadMerchantQuotes(
       deliveryPreference: 'door',
       country: 'Nigeria',
       countryCode: 'NG',
-      cartSubtotal: input.catalogSubtotal,
+      cartSubtotal: input.cartSubtotal,
     },
     input.quoteItems,
     {

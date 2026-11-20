@@ -101,6 +101,7 @@ export function placeInput(
       cartVersion: CHECKOUT_CART_VERSION,
       currency: 'NGN',
       estimatedTotals: false,
+      itemsSubtotalMinor: 200_000,
     },
     authorizedCartId: CHECKOUT_CART_ID,
     requestedCartRef: ref,

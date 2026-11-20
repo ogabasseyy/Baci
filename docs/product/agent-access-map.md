@@ -1,11 +1,11 @@
 # Baci capabilities and agent access
 
 Reviewed 20 November 2026 against source revision
-`2eea08613dc9c657b630cc8ccada1fbccad02520`. The Shopping MCP row was re-reviewed after the misleading link-only
+`cf7a4c60be7aba4bfde58aa4faef8d14cb7e41a3`. The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).
 The mobile-admin follow-up queue no longer treats
-stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; Follow-up reads require customer-view permission, and claims and updates also require customer-edit permission. Removing staff or revoking either permission releases their open work and preserves its outcome and date. Closed records are read-only. Follow-up dates are optional. Past dates represent overdue work, and closing clears the date. Agentic checkout session quotes now include
+stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; Follow-up reads require customer-view permission, and claims and updates also require customer-edit permission. Removing staff or revoking either permission from the staff member or their role releases their open work and preserves its outcome and date. The claim RPC scopes to orders in the same store so a checkout status change can leave its follow-up actionable. Closed records are read-only. Follow-up dates are optional. Past dates represent overdue work, and closing clears the date. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
 proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
 review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility

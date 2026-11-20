@@ -47,7 +47,8 @@ function fixture() {
         return q;
       },
       like: () => q,
-      in: (_key: string, values: string[]) => {
+      in: (key: string, values: string[]) => {
+        if (key !== 'path') return q;
         allowedPaths = values;
         return q;
       },
@@ -90,11 +91,11 @@ function fixture() {
       ];
     }
   );
-  const capture = vi.fn(async () => ({
+  const capture = vi.fn(async ({ assetsDigest }: { assetsDigest: string }) => ({
     snapshot: {
       key: {
         build: buildDigest,
-        assets: digestBytes(JSON.stringify([])),
+        assets: assetsDigest,
         catalog: 'revision',
         path: '/',
         viewport: '390',
@@ -135,6 +136,35 @@ it('selects the executable files even when another retained file appears first',
   const f = fixture();
   (f.rows.experience_build_files as unknown[]).unshift({ path: 'extra.txt' });
   await f.run(f.ctx as never, input);
+  expect(f.capture).toHaveBeenCalledOnce();
+});
+
+it('replays a capture when the database returns its assets in a different order', async () => {
+  const f = fixture();
+  const artifact = f.rows.experience_artifacts as {
+    manifest: { assets: unknown[] };
+  };
+  const assets = ['front', 'side'].map((asset_id, index) => {
+    const bytes = Buffer.alloc(48);
+    bytes.write('wOF2');
+    bytes.writeUInt32BE(bytes.length, 8);
+    bytes[47] = index;
+    return {
+      asset_id,
+      digest: digestBytes(bytes),
+      mime: 'font/woff2',
+      bytes: `\\x${bytes.toString('hex')}`,
+      purpose: 'design',
+    };
+  });
+  artifact.manifest.assets = assets.map(({ asset_id }) => ({
+    assetId: asset_id,
+    alt: '',
+  }));
+  f.rows.experience_assets = assets;
+  const first = await f.run(f.ctx as never, input);
+  assets.reverse();
+  expect(await f.run(f.ctx as never, input)).toEqual(first);
   expect(f.capture).toHaveBeenCalledOnce();
 });
 
@@ -231,24 +261,13 @@ it.each([
 
 it('does not persist evidence when owner authorization is revoked during capture', async () => {
   const f = fixture();
+  const result = await f.capture.getMockImplementation()?.({
+    assetsDigest: 'a'.repeat(64),
+  });
   f.capture.mockImplementationOnce(async () => {
     f.rpc.mockResolvedValueOnce({ data: false, error: null });
-    return {
-      snapshot: {
-        key: {
-          build: f.buildDigest,
-          assets: 'a'.repeat(64),
-          catalog: 'revision',
-          path: '/',
-          viewport: '390',
-          locale: 'en-NG',
-          browser: 'chromium',
-          extractor: 'semantic-v1',
-        },
-        text: 'synthetic',
-      },
-      evidence: { bytes: Buffer.from('synthetic-image') },
-    };
+    if (!result) throw Error('Missing synthetic capture');
+    return result;
   });
   await expect(f.run(f.ctx as never, input)).rejects.toThrow('NOT_FOUND');
   expect(f.record).not.toHaveBeenCalled();

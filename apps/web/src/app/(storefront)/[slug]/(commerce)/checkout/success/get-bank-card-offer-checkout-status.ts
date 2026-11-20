@@ -39,7 +39,7 @@ export function bankCardOfferRetryDelay(response: Response): number {
   const delay = /^\d+$/.test(retryAfter)
     ? Number(retryAfter) * 1000
     : Date.parse(retryAfter) - Date.now();
-  return Number.isNaN(delay)
-    ? DEFAULT_RETRY_AFTER_MS
-    : Math.min(MAX_RETRY_AFTER_MS, Math.max(0, delay));
+  return delay > 0
+    ? Math.min(MAX_RETRY_AFTER_MS, delay)
+    : DEFAULT_RETRY_AFTER_MS;
 }

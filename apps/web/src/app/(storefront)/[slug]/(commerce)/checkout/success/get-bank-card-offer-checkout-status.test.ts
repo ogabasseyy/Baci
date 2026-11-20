@@ -58,6 +58,7 @@ it.each([408, 429, 503])('keeps a bank offer pending on HTTP %s', (status) => {
 it.each([
   ['45', 45000],
   ['bad', 15_000],
+  ['0', 15_000],
   ['1000000000', 300_000],
 ])('reads a bounded Retry-After of %s', (retryAfter, delay) => {
   const response = new Response(null, {
@@ -82,6 +83,8 @@ it('honors an HTTP-date Retry-After', () => {
       headers: { 'Retry-After': 'Fri, 20 Nov 2026 12:01:00 GMT' },
     });
     expect(bankCardOfferRetryDelay(response)).toBe(60_000);
+    response.headers.set('Retry-After', 'Fri, 20 Nov 2026 11:59:00 GMT');
+    expect(bankCardOfferRetryDelay(response)).toBe(15_000);
   } finally {
     vi.useRealTimers();
   }

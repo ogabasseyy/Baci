@@ -38,8 +38,18 @@ export async function setupNewMerchantRunner(
         );
         return result;
       } catch (error) {
+        const processFailure =
+          typeof error === 'object' && error !== null
+            ? {
+                exitCode:
+                  'code' in error && typeof error.code === 'number'
+                    ? error.code
+                    : null,
+                killed: 'killed' in error && error.killed === true,
+              }
+            : {};
         process.stderr.write(
-          `SYNTHETIC_RUNNER ${kind} failed ${error instanceof Error ? error.name : 'unknown'} ${Date.now() - started}ms\n`
+          `SYNTHETIC_RUNNER ${kind} failed ${Date.now() - started}ms ${JSON.stringify(processFailure)}\n`
         );
         throw error;
       }

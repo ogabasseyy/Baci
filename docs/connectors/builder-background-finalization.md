@@ -7,6 +7,14 @@ The hosted builder queues sandbox work with `build_experience`. The hosted
 runs the full build matrix. Production startup requires the worker because the
 matrix can exceed the MCP backend deadline and Next route duration.
 
+The worker uses the persisted job ID as its finalization retry key. The
+caller-supplied enqueue key identifies the creation request, while the
+locked job and attempt identify finalization. The shared build supervisor
+claims and renews the lease for both synchronous and worker execution.
+Stopping the scheduler closes job admission before waiting for an already
+admitted build to finish. A pending discovery scan cannot admit a job after
+drain begins.
+
 ## Chosen direction
 
 Run durable work in the existing dedicated builder service on Contabo, not in

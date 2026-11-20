@@ -34,7 +34,8 @@ export function createLinkedBuildDiscovery(deps: {
   ): Promise<void>;
 }) {
   return {
-    async runOnce(after: string | null = null) {
+    async runOnce(after: string | null = null, admission?: AbortSignal) {
+      admission?.throwIfAborted();
       if (after !== null) uuid.parse(after);
       const ids = z
         .array(uuid)
@@ -45,12 +46,14 @@ export function createLinkedBuildDiscovery(deps: {
       let failed = 0;
       let connections = 0;
       for (const id of ids) {
+        admission?.throwIfAborted();
         cursor = id;
         connections++;
         try {
           const parsed = connectionSchema.safeParse(
             await deps.readConnection(id)
           );
+          admission?.throwIfAborted();
           if (
             !parsed.success ||
             parsed.data.connectionId !== id ||
@@ -66,7 +69,9 @@ export function createLinkedBuildDiscovery(deps: {
             grantVersion: row.grantVersion,
           };
           const accessToken = await deps.resolveLinkedAccessToken(binding);
+          admission?.throwIfAborted();
           const user = await deps.resolveUser(accessToken);
+          admission?.throwIfAborted();
           if (user.actorUserId !== row.actorUserId) throw Error('Reconnect');
           for (const merchantId of row.allowedMerchantIds) {
             const result = await user.client.rpc('experience_list_due_builds', {
@@ -74,6 +79,7 @@ export function createLinkedBuildDiscovery(deps: {
               p_connection: id,
               p_version: row.grantVersion,
             });
+            admission?.throwIfAborted();
             if (result.error) throw Error('Discovery unavailable');
             const jobs = z.array(uuid).max(20).parse(result.data);
             if (jobs.length) {
@@ -87,6 +93,7 @@ export function createLinkedBuildDiscovery(deps: {
             }
           }
         } catch {
+          admission?.throwIfAborted();
           failed++;
         }
         if (executed) break;

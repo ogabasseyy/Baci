@@ -27,7 +27,7 @@ export function createBackgroundBuildWorker(
     },
   });
   const close = startBuildWorkerLoop({
-    runOnce: (cursor) => discovery.runOnce(cursor),
+    runOnce: (cursor, admission) => discovery.runOnce(cursor, admission),
     schedule: settings.schedule,
   });
   return { close };

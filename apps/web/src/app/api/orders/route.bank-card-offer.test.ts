@@ -131,30 +131,32 @@ it.each([
         : null) as never,
       error: null,
     }));
-    const res = await POST(
-      new NextRequest('http://localhost/api/orders', {
-        method: 'POST',
-        headers: { 'Idempotency-Key': 'bank-offer-expected-total' },
-        body: JSON.stringify({
-          ...baseOrderPayload,
-          merchant_id: MERCHANT_ID.toUpperCase(),
-          items: [
-            {
-              product_id: productId,
-              quantity,
-              price: 100 - (negotiatedDiscount ?? 0),
-              name: 'Widget',
-            },
-          ],
-          subtotal: 100 * quantity,
-          shipping_fee: shipping,
-          gift_wrapping_fee: gift,
-          expected_total: expectedTotal,
-          payment_method: 'bank_card_offer',
-          bank_card_offer_id: 'black-friday',
-        }),
-      })
-    );
+    const submit = (merchantId: string) =>
+      POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'bank-offer-expected-total' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: merchantId,
+            items: [
+              {
+                product_id: productId,
+                quantity,
+                price: 100 - (negotiatedDiscount ?? 0),
+                name: 'Widget',
+              },
+            ],
+            subtotal: 100 * quantity,
+            shipping_fee: shipping,
+            gift_wrapping_fee: gift,
+            expected_total: expectedTotal,
+            payment_method: 'bank_card_offer',
+            bank_card_offer_id: 'black-friday',
+          }),
+        })
+      );
+    const res = await submit(MERCHANT_ID.toUpperCase());
     const response = await res.json();
     expect(res.status, JSON.stringify(response)).toBe(status);
     if (status === 409) {
@@ -185,6 +187,20 @@ it.each([
     );
     if (status === 200) {
       expect(response.idempotency).toEqual({ replayed: true });
+
+      const lowercaseReplay = await submit(MERCHANT_ID.toLowerCase());
+
+      expect(lowercaseReplay.status).toBe(200);
+      await expect(lowercaseReplay.json()).resolves.toEqual(response);
+      const replayArgs = supabase.rpc.mock.calls
+        .filter(([name]) => name === 'get_bank_card_offer_checkout_replay')
+        .map(([, args]) => args);
+      expect(replayArgs).toHaveLength(2);
+      expect(replayArgs[0]).toMatchObject({
+        p_merchant_id: MERCHANT_ID.toLowerCase(),
+        p_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(replayArgs[1]).toEqual(replayArgs[0]);
       expect(supabase.rpc).not.toHaveBeenCalledWith(
         'create_storefront_bank_card_offer_order',
         expect.anything()

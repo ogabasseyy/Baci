@@ -82,6 +82,8 @@ describe('Paystack bank card offers', () => {
     ['Sterling Bank', 'visa', true],
     [' sterling bank ', ' VISA ', true],
     ['Wema Bank', 'visa', false],
+    ['Sterling Bank PLC', 'visa', false],
+    ['', 'visa', false],
     ['Sterling Bank', ' mastercard ', false],
   ])('verifies %s with %s against the selected offer', (bank, brand, accepted) => {
     expect(

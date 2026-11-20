@@ -173,6 +173,8 @@ export async function verifyCheckoutPayment(
     const data = isVerificationResponse(raw) ? raw : {};
     const orderNumber = data.orderNumber || fallbackOrderNumber;
 
+    // fetchWithCsrf has already retried a recognized CSRF failure once.
+    // A remaining forbidden response must not send the buyer back to pay.
     if (isBankOffer && response.status === 403) {
       setStatus(
         data.code === 'BANK_CARD_OFFER_VERIFICATION_DENIED'

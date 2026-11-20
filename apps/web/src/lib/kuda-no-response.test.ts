@@ -12,6 +12,17 @@ describe('isKudaNoResponse', () => {
     ['a timeout', new Error('Kuda GET_BILLERS_BY_TYPE request timed out')],
     ['a short timeout message', new Error('Kuda timeout')],
     ['an abort', Object.assign(new Error('aborted'), { name: 'AbortError' })],
+    [
+      'a reset connection',
+      Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+    ],
+    [
+      'a lookup failure in the cause',
+      new TypeError('request failed', {
+        cause: Object.assign(new Error('getaddrinfo'), { code: 'ENOTFOUND' }),
+      }),
+    ],
+    ['a hung-up socket', new Error('socket hang up')],
   ])('treats %s as no answer', (_label, error) => {
     expect(isKudaNoResponse(error)).toBe(true);
   });

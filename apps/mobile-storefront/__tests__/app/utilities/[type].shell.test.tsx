@@ -159,10 +159,13 @@ describe('UtilityPurchaseScreen shell ownership', () => {
     mockUseLocalSearchParams.mockReturnValue({ type: 'power' });
   });
 
-  it('does not add safe-area padding around the utility form flow', () => {
+  it('adds only horizontal safe-area padding around the utility form flow', () => {
     render(<UtilityPurchaseScreen />);
 
-    expect(mockStorefrontScreenShell.mock.calls[0]?.[0].edges).toEqual([]);
+    expect(mockStorefrontScreenShell.mock.calls[0]?.[0].edges).toEqual([
+      'left',
+      'right',
+    ]);
   });
 
   it('preserves delegated top inset handling for invalid utility services', () => {
@@ -170,7 +173,10 @@ describe('UtilityPurchaseScreen shell ownership', () => {
 
     render(<UtilityPurchaseScreen />);
 
-    expect(mockStorefrontScreenShell.mock.calls[0]?.[0].edges).toEqual([]);
+    expect(mockStorefrontScreenShell.mock.calls[0]?.[0].edges).toEqual([
+      'left',
+      'right',
+    ]);
     expect(mockInvalidUtilityServiceView).toHaveBeenCalledWith(
       expect.objectContaining({
         topInset: mockInsets.top,
@@ -189,7 +195,10 @@ describe('UtilityPurchaseScreen shell ownership', () => {
 
     render(<UtilityPurchaseScreen />);
 
-    expect(mockStorefrontScreenShell.mock.calls[0]?.[0].edges).toEqual([]);
+    expect(mockStorefrontScreenShell.mock.calls[0]?.[0].edges).toEqual([
+      'left',
+      'right',
+    ]);
     expect(mockUtilityPurchaseSuccessView).toHaveBeenCalledWith(
       expect.objectContaining({
         bottomPadding: 20,

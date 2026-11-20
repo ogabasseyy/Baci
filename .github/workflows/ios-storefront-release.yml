@@ -34,7 +34,7 @@ env:
   EXPO_USE_PRECOMPILED_MODULES: '0'
   NODE_VERSION: '24'
   RUBY_VERSION: '3.4'
-  XCODE_VERSION: '26.2'
+  XCODE_VERSION: '27.2'
   WORKING_DIR: apps/mobile-storefront
   BUILD_NUMBER_BASE: '30'
   # Major.minor for App Store version. Patch auto-appends build number.
@@ -43,7 +43,8 @@ env:
 jobs:
   build-and-submit:
     name: Build Storefront IPA & Submit to App Store Connect
-    runs-on: macos-26
+    # The pinned actionlint version predates this GitHub-hosted runner label.
+    runs-on: ${{ 'xcode-27' }}
     timeout-minutes: 90
     # App Store Connect has a single editable version slot, and the submit lane
     # can withdraw an in-progress review to claim it. Share one job-level group
@@ -78,7 +79,10 @@ jobs:
           fi
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
-        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Setup pnpm
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -108,10 +112,9 @@ jobs:
           PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
 
-      # This regression targets the pinned Xcode 26.x ownership diagnostics.
-      # Reevaluate the compatibility patch before upgrading to Xcode 27.
-      - name: Verify Swift RuntimeScheduler compatibility
-        run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
+      # Verify the Expo RuntimeScheduler ownership shim with the selected Swift compiler.
+      - name: Verify Swift Expo compatibility
+        run: node --test .github/scripts/ios-runtime-scheduler.test.mjs .github/scripts/ios-expo-async-promise.test.mjs
 
       - name: Verify native gradient composition
         run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh

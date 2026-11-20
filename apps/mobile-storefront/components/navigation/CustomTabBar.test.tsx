@@ -86,6 +86,22 @@ describe('CustomTabBar', () => {
     };
   });
 
+  it('keeps tab controls clear of different left and right window insets', () => {
+    const view = render(<CustomTabBar {...mockProps} />);
+    view.rerender(
+      <CustomTabBar
+        {...mockProps}
+        insets={{ top: 0, left: 20, right: 55, bottom: 36 }}
+      />
+    );
+    expect(screen.getByTestId('custom-tab-bar-wrapper')).toHaveStyle({
+      left: 36,
+      right: 71,
+      bottom: 36,
+    });
+    expect(screen.getByRole('tab', { name: 'Home' })).toBeOnTheScreen();
+  });
+
   it('renders visible tab items and ignores hidden routes', () => {
     render(<CustomTabBar {...mockProps} />);
 

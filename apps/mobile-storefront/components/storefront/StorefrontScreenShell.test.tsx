@@ -45,10 +45,7 @@ describe('StorefrontScreenShell', () => {
     });
   });
 
-  it('wraps children in a bottom-only safe-area container by default', () => {
-    // Default `edges` is ['bottom'] so we don't double-pad the safe-area-top
-    // already reserved by react-native-screens NativeStack. See the comment
-    // in StorefrontScreenShell.tsx for context.
+  it('reserves the bottom and both sides without double-padding the stack header', () => {
     render(
       <StorefrontScreenShell>
         <Text>Content</Text>
@@ -57,17 +54,17 @@ describe('StorefrontScreenShell', () => {
 
     const shell = screen.getByTestId('storefront-screen-shell');
 
-    expect(shell.props.edges).toEqual(['bottom']);
+    expect(shell.props.edges).toEqual(['bottom', 'left', 'right']);
     expect(StyleSheet.flatten(shell.props.style)).toMatchObject({
       flex: 1,
     });
     expect(screen.getByText('Content')).toBeTruthy();
   });
 
-  it('accepts edge overrides and merges custom styles', () => {
+  it('keeps both side insets when a screen overrides its vertical edges', () => {
     render(
       <StorefrontScreenShell
-        edges={['bottom']}
+        edges={['top']}
         style={{ backgroundColor: '#111111' }}
         testID="custom-shell"
       >
@@ -77,7 +74,7 @@ describe('StorefrontScreenShell', () => {
 
     const shell = screen.getByTestId('custom-shell');
 
-    expect(shell.props.edges).toEqual(['bottom']);
+    expect(shell.props.edges).toEqual(['top', 'left', 'right']);
     expect(StyleSheet.flatten(shell.props.style)).toMatchObject({
       flex: 1,
       backgroundColor: '#111111',
@@ -116,7 +113,7 @@ describe('StorefrontScreenShell', () => {
     });
   });
 
-  it('renders without children and preserves explicit empty edges', () => {
+  it('lets a child that handles all its own insets opt out of padding', () => {
     render(
       <StorefrontScreenShell edges={[]} testID="empty-shell">
         {null}

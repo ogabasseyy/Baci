@@ -92,6 +92,7 @@ function createExpoPlugins({
     ...(tiktokBusinessPlugin ? [tiktokBusinessPlugin] : []),
     ...(googleMobileAdsPlugin ? [googleMobileAdsPlugin] : []),
     './config/withFirebaseModularHeaders.js',
+    './config/withIPhoneOrientations.js',
     './config/withObjCLinkerFlag.js',
     './config/withAdaptiveAndroidManifest.js',
     './config/withAndroidSystemBars.js',

@@ -10,7 +10,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import * as ReactNative from 'react-native';
 import { Animated, StyleSheet } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
-import { BRAND, withAlpha } from '@/constants/Colors';
+import { BRAND, SPACING, withAlpha } from '@/constants/Colors';
 
 const mockPush = jest.fn();
 const mockOrderShortcuts =
@@ -83,6 +83,18 @@ describe('HomeServiceCards', () => {
     expect(screen.getByText('Repair Lab')).toBeTruthy();
     expect(screen.getByText('Swap/Trade')).toBeTruthy();
     expect(screen.getByText('SuperQuiz')).toBeTruthy();
+  });
+
+  it('lays out feature tiles inside the measured safe area', () => {
+    render(<HomeServiceCards placement="underSearch" />);
+    fireEvent(screen.getByTestId('home-service-cards'), 'layout', {
+      nativeEvent: { layout: { width: 320, height: 140, x: 40, y: 0 } },
+    });
+
+    const tileWidth = (320 - SPACING.md * 2 - SPACING.sm * 2) / 3;
+    expect(
+      findAncestorWithWidth(screen.getByText('IMEI Checker'), tileWidth)
+    ).toBeTruthy();
   });
 
   it('does not schedule continuous border animation while home service cards are mounted', () => {

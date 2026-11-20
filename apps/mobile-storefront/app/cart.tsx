@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import { CartEmptyState } from '@/components/cart/CartEmptyState';
 import CartLoadedView from '@/components/cart/CartLoadedView';
+import { renderCartShell } from '@/components/cart/CartScreenShell';
 import CartStateView from '@/components/cart/CartStateView';
 import { CartStatusOnlyScreen } from '@/components/cart/CartStatusOnlyScreen';
 import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
@@ -195,7 +196,7 @@ export default function CartScreen({
 
   const statusOnly = useCartStatusOnly(items.length);
   if (hasCartLoadError) {
-    return (
+    return renderCartShell(
       <CartStateView
         variant="error"
         colorScheme={colorScheme}
@@ -208,10 +209,10 @@ export default function CartScreen({
     );
   }
 
-  if (statusOnly) return <CartStatusOnlyScreen />;
+  if (statusOnly) return renderCartShell(<CartStatusOnlyScreen />);
 
   if (items.length === 0) {
-    return (
+    return renderCartShell(
       <CartEmptyState
         colorScheme={colorScheme}
         colors={colors}
@@ -222,7 +223,7 @@ export default function CartScreen({
     );
   }
 
-  return (
+  return renderCartShell(
     <>
       <SharedCartStatusPanel />
       <NativeCartAccountPanel />

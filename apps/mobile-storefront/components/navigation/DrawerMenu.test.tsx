@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react-native';
+import { Dimensions } from 'react-native';
 import { useMobileAdsReadiness } from '@/hooks/use-mobile-ads-readiness';
 import { DrawerMenu } from './DrawerMenu';
 
@@ -147,9 +148,10 @@ jest.mock('@/components/storefront/GadgetPattern', () => {
     jest.requireActual<typeof import('react-native')>('react-native');
 
   return {
-    GadgetPattern: () => (
+    GadgetPattern: ({ height }: { height: number }) => (
       <View
         accessible
+        style={{ height }}
         accessibilityLabel="Decorative technology backdrop"
         accessibilityRole="image"
       />
@@ -163,6 +165,25 @@ describe('DrawerMenu', () => {
     mockIsFullyOpen = false;
     mockTimingCallbacks = [];
     mockSetCoveringCalls.length = 0;
+  });
+
+  it('updates the open drawer when the window resizes', () => {
+    const original = Dimensions.get('window');
+    try {
+      render(<DrawerMenu />);
+      act(() => {
+        Dimensions.set({ window: { ...original, width: 290, height: 462 } });
+      });
+      const backdrop = screen.getByRole('image', {
+        name: 'Decorative technology backdrop',
+      });
+      expect(backdrop).toHaveStyle({ height: 462 });
+      expect(screen.getByTestId('storefront-drawer')).toHaveStyle({
+        width: 246.5,
+      });
+    } finally {
+      act(() => Dimensions.set({ window: original }));
+    }
   });
 
   it('renders correctly with GadgetPattern background decoration', () => {

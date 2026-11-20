@@ -3,7 +3,6 @@ import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 
 const orderReportModalStyles = StyleSheet.create({
   overlay: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
     flex: 1,
     justifyContent: 'center',
     padding: SPACING.md,
@@ -37,6 +36,10 @@ const orderReportModalStyles = StyleSheet.create({
   title: {
     fontFamily: TYPOGRAPHY.fontFamily.semiBold,
     fontSize: TYPOGRAPHY.size.lg,
+  },
+  scrollBody: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   content: {
     padding: SPACING.lg,

@@ -83,7 +83,15 @@ export function ProductDetailLoadedView({
       </Animated.View>
 
       <View
-        style={[styles.headerButtons, { top: Math.max(insets.top - 4, 0) }]}
+        style={[
+          styles.headerButtons,
+          {
+            top: Math.max(insets.top - 4, 0),
+            left: insets.left,
+            right: insets.right,
+          },
+        ]}
+        testID="product-detail-header-actions"
       >
         <HeaderIcon
           accessibilityLabel="Go back"
@@ -121,6 +129,8 @@ export function ProductDetailLoadedView({
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={{
           paddingBottom: PRODUCT_SCROLL_BOTTOM_PADDING + insets.bottom,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
         }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -131,6 +141,7 @@ export function ProductDetailLoadedView({
 
       <StickyBottomActions
         {...stickyProps}
+        horizontalInsets={insets}
         paddingBottom={Math.max(insets.bottom, MIN_STICKY_BOTTOM_PADDING)}
       />
       {flyingParticles.map((particle) => (

@@ -5,10 +5,10 @@ import { useEffect } from 'react';
 import {
   Alert,
   BackHandler,
-  Dimensions,
   Platform,
   Pressable,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, { interpolate, withTiming } from 'react-native-reanimated';
@@ -30,12 +30,13 @@ import { DrawerMenuFooter } from './DrawerMenuFooter';
 import { DrawerMenuItems } from './DrawerMenuItems';
 import { useDrawerMenuAnimation } from './use-drawer-menu-animation';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
-
 export function DrawerMenu() {
   const { Gesture, GestureDetector } = getOptionalGestureHandlerRuntime();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  // Leave 15% of the safe width exposed for the tap-to-dismiss backdrop.
+  const safeWidth = Math.max(0, width - insets.left - insets.right);
+  const drawerWidth = Math.min(safeWidth * 0.85, 320) + insets.left;
   const pathname = usePathname();
   const { isOpen, isFullyOpen, closeDrawer, setCovering, setFullyOpen } =
     useDrawerStore(
@@ -66,7 +67,7 @@ export function DrawerMenu() {
     shouldRenderPattern,
     translateX,
   } = useDrawerMenuAnimation({
-    drawerWidth: DRAWER_WIDTH,
+    drawerWidth,
     isOpen,
     setCovering,
     setFullyOpen,
@@ -92,15 +93,15 @@ export function DrawerMenu() {
         .activeOffsetX(-10)
         .onUpdate((event) => {
           if (event.translationX < 0) {
-            translateX.set(Math.max(event.translationX, -DRAWER_WIDTH));
+            translateX.set(Math.max(event.translationX, -drawerWidth));
             backdropOpacity.set(
-              interpolate(translateX.get(), [-DRAWER_WIDTH, 0], [0, 1])
+              interpolate(translateX.get(), [-drawerWidth, 0], [0, 1])
             );
           }
         })
         .onEnd((event) => {
           if (event.translationX < -80 || event.velocityX < -500) {
-            translateX.set(withTiming(-DRAWER_WIDTH, { duration: 200 }));
+            translateX.set(withTiming(-drawerWidth, { duration: 200 }));
             backdropOpacity.set(withTiming(0, { duration: 200 }));
             scheduleOnRN(closeDrawer);
           } else {
@@ -153,12 +154,14 @@ export function DrawerMenu() {
       {/* Drawer — L1 fix: Use theme-aware colors instead of hardcoded white */}
       <GestureDetector gesture={panGesture ?? undefined}>
         <Animated.View
+          testID="storefront-drawer"
           style={[
             styles.drawer,
             drawerShadowStyles.drawer,
             {
               paddingTop: insets.top,
-              width: DRAWER_WIDTH,
+              paddingLeft: insets.left,
+              width: drawerWidth,
               backgroundColor: colors.card,
               overflow: 'hidden',
             },
@@ -171,7 +174,7 @@ export function DrawerMenu() {
               <GadgetPattern
                 colorScheme={colorScheme ?? 'light'}
                 opacity={colorScheme === 'dark' ? 0.04 : 0.08}
-                height={SCREEN_HEIGHT}
+                height={height}
                 variant="default"
                 color={colorScheme === 'dark' ? '#ffffff' : BRAND.primary}
               />

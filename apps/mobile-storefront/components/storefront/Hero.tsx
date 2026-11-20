@@ -1,6 +1,4 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
-import type { ImageSource } from 'expo-image';
-import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { type FlatListProps, useWindowDimensions, View } from 'react-native';
 import Animated, {
@@ -23,32 +21,12 @@ import { FashionSlide } from './FashionSlide';
 import { ELITE_HEIGHT, getHeroStyles } from './Hero.styles';
 import { HeroAdSlide } from './HeroAdSlide';
 import { CAROUSEL_HEIGHT, STANDARD_HEIGHT } from './hero-slide-dimensions';
+import type { HeroProps, HeroSlide } from './hero-slide-types';
 import { nextOffsetAfterAdToggle } from './launch-ad-offset';
 import { StandardSlide } from './StandardSlide';
 import { useHeroAutoplay } from './use-hero-autoplay';
 
-export interface HeroSlide {
-  campaign?: 'black-friday';
-  artwork?: ImageSource;
-  showSavingsProvider?: boolean;
-  title: string;
-  subtitle: string;
-  image: string;
-  ctaText: string;
-  ctaLink: Href;
-}
-
-interface HeroProps {
-  slides?: HeroSlide[];
-  autoplayDelay?: number;
-  autoplayPaused?: boolean;
-  /**
-   * Inserts one sponsored slide second (after the first CMS slide). The
-   * existing autoplay rotates onto it like any other slide. Ignored while
-   * ads are disabled.
-   */
-  trailingAdPlacement?: MobileAdBannerPlacementKey;
-}
+export type { HeroSlide } from './hero-slide-types';
 
 type HeroAdSlideItem = { kind: 'hero-ad-slide' };
 
@@ -68,7 +46,9 @@ export function Hero({
 }: HeroProps) {
   const { colors, isDark } = useTheme();
   const styles = getHeroStyles(colors, isDark);
-  const { width: screenWidth, fontScale } = useWindowDimensions();
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const [layoutWidth, setLayoutWidth] = useState(0);
+  const screenWidth = layoutWidth || windowWidth;
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);
   const scrollX = useSharedValue(0);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -134,21 +114,30 @@ export function Hero({
     scrollOffsetRef.current = offset;
   };
   const wasAdSlideShownRef = useRef(isAdSlideShown);
+  const previousWidthRef = useRef(screenWidth);
   useEffect(() => {
     // Consent resolving (or a load failure) inserts or removes the slide at
     // index 1 under a scrolled carousel; shift the offset by one page so the
     // visible hero stays put instead of being replaced by the ad (or
     // jumping back on removal). The active dot follows the compensated
     // offset because a programmatic scroll fires no momentum event.
-    const target = nextOffsetAfterAdToggle({
+    const previousWidth = previousWidthRef.current;
+    const didResize = previousWidth > 0 && previousWidth !== screenWidth;
+    const adjustedOffset = didResize
+      ? (scrollOffsetRef.current / previousWidth) * screenWidth
+      : scrollOffsetRef.current;
+    const adAdjustedOffset = nextOffsetAfterAdToggle({
       adSlotWidth: screenWidth,
       insertionOffset: screenWidth,
       isAdShown: isAdSlideShown,
-      scrollOffset: scrollOffsetRef.current,
+      scrollOffset: adjustedOffset,
       wasAdShown: wasAdSlideShownRef.current,
     });
     wasAdSlideShownRef.current = isAdSlideShown;
+    previousWidthRef.current = screenWidth;
+    const target = adAdjustedOffset ?? (didResize ? adjustedOffset : null);
     if (target !== null) {
+      scrollOffsetRef.current = target;
       flatListRef.current?.scrollToOffset({ offset: target, animated: false });
       setCurrentIndex(Math.round(target / screenWidth));
     }
@@ -245,7 +234,11 @@ export function Hero({
   };
 
   return (
-    <View style={{ height: getHeroHeight() }}>
+    <View
+      onLayout={({ nativeEvent: { layout } }) => setLayoutWidth(layout.width)}
+      style={{ height: getHeroHeight() }}
+      testID="hero-carousel-viewport"
+    >
       <Animated.FlatList
         ref={flatListRef}
         getItemLayout={(_, index) => ({

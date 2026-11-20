@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { getTemplateConfig } from '@/lib/templates';
 import {
   baseTemplate,
@@ -62,6 +62,19 @@ describe('Hero bounded image sources', () => {
   beforeEach(() => {
     mockImage.mockClear();
     mockedGetTemplateConfig.mockReset();
+  });
+
+  it('sizes slides from the measured carousel viewport after resize', () => {
+    renderHero('standard');
+    fireEvent(screen.getByTestId('hero-carousel-viewport'), 'layout', {
+      nativeEvent: { layout: { width: 300, height: 220, x: 0, y: 0 } },
+    });
+
+    expect(mockImage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({ width: 600 }),
+      })
+    );
   });
 
   it('uses a bounded contain source for the elite hero image', () => {

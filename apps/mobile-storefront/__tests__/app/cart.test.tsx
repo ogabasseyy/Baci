@@ -89,6 +89,9 @@ describe('CartScreen state', () => {
 
     render(<CartScreen />);
 
+    expect(screen.getByTestId('storefront-cart-safe-area').props.edges).toEqual(
+      ['left', 'right']
+    );
     expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
     expect(screen.getByText('Start Shopping')).toBeTruthy();
     expect(screen.queryByText('Lenovo ThinkPad E16 Gen 2')).toBeNull();

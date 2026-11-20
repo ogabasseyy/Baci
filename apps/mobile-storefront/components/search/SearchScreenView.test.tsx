@@ -152,6 +152,10 @@ describe('SearchScreenView', () => {
 
     renderView({ onRecentSearch, onCategoryPress });
 
+    expect(
+      screen.getByTestId('storefront-search-safe-area').props.edges
+    ).toEqual(['top', 'left', 'right']);
+
     fireEvent.press(screen.getByText('iPhone 15 Pro'));
     fireEvent.press(screen.getByText('Phones'));
 

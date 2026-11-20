@@ -219,6 +219,8 @@ export function mockAuthGuardModule(): unknown {
 
 export function mockSafeAreaModule(): unknown {
   return {
+    SafeAreaView:
+      jest.requireActual<typeof import('react-native')>('react-native').View,
     useSafeAreaInsets: () => ({
       top: 16,
       right: 0,

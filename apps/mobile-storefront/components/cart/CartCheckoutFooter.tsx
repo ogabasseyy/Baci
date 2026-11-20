@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCheckoutCtaAnimation } from '@/components/checkout/use-checkout-cta-animation';
 import type Colors from '@/constants/Colors';
 import { RADIUS } from '@/constants/Colors';
@@ -36,12 +37,21 @@ export default function CartCheckoutFooter({
   surfaceInset,
 }: CartCheckoutFooterProps) {
   const animatedArrowStyle = useCheckoutCtaAnimation(false, 600);
+  const { bottom } = useSafeAreaInsets();
 
   return (
     <View
+      testID="cart-checkout-footer"
       style={[
         styles.checkoutStickyFooter,
-        { backgroundColor: colors.card, borderTopColor: colors.border },
+        {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          paddingBottom: Math.max(
+            bottom,
+            styles.checkoutStickyFooter.paddingBottom
+          ),
+        },
       ]}
     >
       <View

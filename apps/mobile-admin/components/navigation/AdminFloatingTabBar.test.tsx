@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminFloatingTabBar } from './AdminFloatingTabBar';
 
 const navigationMocks = vi.hoisted(() => ({
+  safeArea: { top: 0, right: 0, bottom: 34, left: 0 },
   scrollAdminTabToTop: vi.fn(),
   useWarmAdminTabScreens: vi.fn(),
 }));
@@ -41,7 +42,7 @@ vi.mock('@/hooks/useTheme', () => ({
 }));
 
 vi.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }),
+  useSafeAreaInsets: () => navigationMocks.safeArea,
 }));
 
 vi.mock('react-native-reanimated', () => {
@@ -251,6 +252,30 @@ function createProps(focusedIndex = 0): BottomTabBarProps {
 describe('AdminFloatingTabBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('keeps the bar and selected indicator aligned between asymmetric insets', () => {
+    const view = render(<AdminFloatingTabBar {...createProps()} />);
+    const capsule = screen.getByTestId('admin-floating-tab-capsule');
+    const initialOffset =
+      getRenderedElementStyle(capsule).transform[0].translateX;
+    Object.assign(navigationMocks.safeArea, { left: 19, right: 41 });
+    try {
+      view.rerender(<AdminFloatingTabBar {...createProps()} />);
+      const bar = screen.getByTestId('admin-floating-tab-bar-wrapper');
+      expect(
+        styleContains(getRenderedElementStyle(bar), {
+          paddingLeft: 31,
+          paddingRight: 53,
+        })
+      ).toBe(true);
+      const visibleTabs = screen.getAllByRole('tab').length;
+      expect(
+        getRenderedElementStyle(capsule).transform[0].translateX
+      ).toBeCloseTo(initialOffset - 60 / visibleTabs / 2);
+    } finally {
+      Object.assign(navigationMocks.safeArea, { left: 0, right: 0 });
+    }
   });
 
   it('renders visible tabs and hides href-null routes', () => {

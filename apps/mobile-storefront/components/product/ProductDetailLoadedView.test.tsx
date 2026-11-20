@@ -140,12 +140,17 @@ describe('ProductDetailLoadedView', () => {
   });
 
   it('renders loaded product chrome and forwards body, gallery, and sticky props', () => {
-    render(<ProductDetailLoadedView {...createProps()} />);
+    const insets = { top: 44, bottom: 34, left: 19, right: 41 };
+    render(<ProductDetailLoadedView {...createProps({ insets })} />);
 
     expect(screen.getByText(baseProduct.name)).toBeTruthy();
     expect(screen.getByText('Product gallery')).toBeTruthy();
     expect(screen.getByText('Product body')).toBeTruthy();
     expect(screen.getByText('Sticky actions')).toBeTruthy();
+    expect(screen.getByTestId('product-detail-header-actions')).toHaveStyle({
+      left: 19,
+      right: 41,
+    });
     expect(mockProductImageGallery).toHaveBeenCalledWith(
       expect.objectContaining({ images: [baseProduct.image] })
     );
@@ -154,6 +159,7 @@ describe('ProductDetailLoadedView', () => {
     );
     expect(mockStickyBottomActions).toHaveBeenCalledWith(
       expect.objectContaining({
+        horizontalInsets: insets,
         paddingBottom: Math.max(34, MIN_STICKY_BOTTOM_PADDING),
       })
     );

@@ -1,8 +1,6 @@
 name: iOS RuntimeScheduler PR Gate
 
-# PR-time Xcode 26 check for the expo-modules-jsi SWIFT_RETURNS_RETAINED patch.
-# Full storefront release still re-runs this on macos-26; this gate catches
-# patch regressions before merge without waiting for the post-main release job.
+# Check the native patches with the same compiler used by the release jobs.
 
 on:
   pull_request:
@@ -30,6 +28,7 @@ on:
       - 'apps/mobile-storefront/services/error-monitoring*'
       - 'apps/mobile-storefront/config/ios-gradient-layer.test.mjs'
       - '.github/scripts/ios-runtime-scheduler.test.mjs'
+      - '.github/scripts/ios-expo-async-promise.test.mjs'
       - '.github/workflows/ios-runtime-scheduler-pr.yml'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -39,15 +38,20 @@ concurrency:
   group: ios-runtime-scheduler-pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '24'
-  XCODE_VERSION: '26.2'
+  XCODE_VERSION: '27.2'
 
 jobs:
   runtime-scheduler:
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Swift RuntimeScheduler compatibility
-    runs-on: macos-26
+    # GitHub-hosted ephemeral runner. This compile job uses no signing secrets.
+    # The pinned actionlint version predates this GitHub-hosted runner label.
+    runs-on: ${{ 'xcode-27' }}
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -56,13 +60,16 @@ jobs:
           persist-credentials: false
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
-        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Install JS deps
         uses: ./.github/actions/pnpm-install-cached
 
-      - name: Verify Swift RuntimeScheduler compatibility
-        run: pnpm exec node --test .github/scripts/ios-runtime-scheduler.test.mjs
+      - name: Verify Swift Expo compatibility
+        run: node --test .github/scripts/ios-runtime-scheduler.test.mjs .github/scripts/ios-expo-async-promise.test.mjs
 
       - name: Verify native gradient composition
         run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh

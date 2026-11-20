@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useContext } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import {
   Pressable,
@@ -10,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import Animated, { type AnimatedStyle } from 'react-native-reanimated';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { ImageZoomModal } from '@/components/product/ImageZoomModal';
 import { BLURHASH_VARIANTS } from '@/components/storefront/ProductCard';
 import type Colors from '@/constants/Colors';
@@ -17,6 +19,7 @@ import { BRAND, RADIUS } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 
 type ColorsScheme = (typeof Colors)['light'];
+const WIDE_GALLERY_ASPECT_RATIO = 1.5;
 
 export interface ProductImageGalleryProps {
   images: string[];
@@ -41,7 +44,10 @@ export function ProductImageGallery({
   colors,
   headerHeight,
 }: ProductImageGalleryProps) {
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const insets = useContext(SafeAreaInsetsContext);
+  const width = windowWidth - (insets?.left ?? 0) - (insets?.right ?? 0);
+  const fitProductInWindow = width > headerHeight * WIDE_GALLERY_ASPECT_RATIO;
 
   return (
     <>
@@ -56,13 +62,13 @@ export function ProductImageGallery({
         <Animated.View style={[styles.parallaxWrapper, imageAnimatedStyle]}>
           <Image
             source={createSafeBoundedImageSource({
-              fit: 'cover',
+              fit: fitProductInWindow ? 'inside' : 'cover',
               height: headerHeight,
               uri: images[selectedImageIndex],
-              width: screenWidth,
+              width,
             })}
             style={styles.mainImage}
-            contentFit="cover"
+            contentFit={fitProductInWindow ? 'contain' : 'cover'}
             transition={300}
             placeholder={{ blurhash: BLURHASH_VARIANTS.default }}
             cachePolicy="memory-disk"

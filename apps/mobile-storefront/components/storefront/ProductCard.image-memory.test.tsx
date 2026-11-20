@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { Product } from '@/types/product';
 import { ProductCard } from './ProductCard';
 import type GridProductCard from './product-card/GridProductCard';
@@ -69,6 +70,23 @@ const product: Product = {
 describe('ProductCard image memory behavior', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('sizes grid cards and image decoding to the safe content width', () => {
+    render(
+      <SafeAreaInsetsContext.Provider
+        value={{ top: 0, right: 20, bottom: 0, left: 50 }}
+      >
+        <ProductCard product={product} />
+      </SafeAreaInsetsContext.Provider>
+    );
+
+    expect(mockGridProductCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gridWidth: 141,
+        imageSource: { height: 282, uri: product.image, width: 282 },
+      })
+    );
   });
 
   it('bounds grid image decoding to the physical viewport size', () => {

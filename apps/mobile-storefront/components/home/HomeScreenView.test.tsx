@@ -241,6 +241,15 @@ describe('HomeScreenView', () => {
   it('uses the active merchant theme color for decorative and refresh affordances', () => {
     render(<HomeScreenView {...createProps()} primaryColor="#22c55e" />);
 
+    expect(screen.getByTestId('storefront-home-safe-area').props.edges).toEqual(
+      {
+        bottom: 'off',
+        left: 'additive',
+        right: 'additive',
+        top: 'off',
+      }
+    );
+
     expect(screen.getByText('Gadget pattern #22c55e light')).toBeTruthy();
   });
 });

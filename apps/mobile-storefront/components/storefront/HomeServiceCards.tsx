@@ -2,6 +2,7 @@ import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
 import { type Href, useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -128,16 +129,18 @@ export function HomeServiceCards({
   const colors = Colors[colorScheme ?? 'light'];
   const router = useRouter();
   const { width, fontScale } = useWindowDimensions();
+  const [featureGridWidth, setFeatureGridWidth] = useState(0);
   const isCompact = width < COMPACT_BREAKPOINT;
   const orderShortcuts = useHomeOrderShortcuts(placement === 'underSearch');
 
   if (placement === 'underSearch') {
+    const availableWidth = featureGridWidth || width;
     const columns = Math.max(
       2,
-      Math.min(4, Math.floor(width / (85 * fontScale)))
+      Math.min(4, Math.floor(availableWidth / (85 * fontScale)))
     );
     const tileWidth =
-      (width - SPACING.md * 2 - CARD_GAP * (columns - 1)) / columns;
+      (availableWidth - SPACING.md * 2 - CARD_GAP * (columns - 1)) / columns;
     const features = HOME_FEATURES.map((item) => {
       if (item.href === '/receipts' && !orderShortcuts?.receipts)
         return returnsShortcut;
@@ -150,6 +153,9 @@ export function HomeServiceCards({
     return (
       <View
         accessibilityLabel="Ogabassey features"
+        onLayout={({ nativeEvent: { layout } }) =>
+          setFeatureGridWidth(layout.width)
+        }
         testID="home-service-cards"
         style={[
           styles.featureGrid,

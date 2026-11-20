@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import type { Order } from '@baci/shared';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderReportModal from '@/components/ui/OrderReportModal';
 
@@ -63,27 +63,52 @@ vi.mock('@/hooks/useCurrency', () => ({
   }),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  SafeAreaProvider: ({ children }: { children?: ReactNode }) => (
+    <section aria-label="Presented window insets">{children}</section>
+  ),
+  SafeAreaView: ({ children }: { children?: ReactNode }) => (
+    <section aria-label="Dialog safe area">{children}</section>
+  ),
+}));
+
 vi.mock('react-native', () => ({
   StatusBar: () => null,
   ActivityIndicator: () => <output aria-label="loading" />,
   Dimensions: {
     get: () => ({ height: 800, width: 400 }),
   },
-  Modal: ({ children, visible }: { children?: ReactNode; visible: boolean }) =>
+  Modal: ({
+    children,
+    visible,
+    supportedOrientations,
+  }: {
+    children?: ReactNode;
+    visible: boolean;
+    supportedOrientations?: string[];
+  }) =>
     visible ? (
-      <section aria-label="order-report-modal">{children}</section>
+      <section
+        aria-label="order-report-modal"
+        data-orientations={supportedOrientations?.join(',')}
+      >
+        {children}
+      </section>
     ) : null,
   Pressable: ({
     accessibilityLabel,
     children,
     onPress,
+    style,
   }: {
     accessibilityLabel?: string;
     children?: ReactNode;
+    style?: CSSProperties | CSSProperties[];
     onPress?: (event: { stopPropagation: () => void }) => void;
   }) => (
     <button
       aria-label={accessibilityLabel}
+      style={Array.isArray(style) ? Object.assign({}, ...style) : style}
       onClick={(event) =>
         onPress?.({ stopPropagation: () => event.stopPropagation() })
       }
@@ -92,11 +117,29 @@ vi.mock('react-native', () => ({
       {children}
     </button>
   ),
+  ScrollView: ({ children }: { children?: ReactNode }) => (
+    <section aria-label="Scrollable report contents">{children}</section>
+  ),
   StyleSheet: {
     create: (styles: Record<string, unknown>) => styles,
   },
   Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
-  View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  View: ({
+    children,
+    style,
+    testID,
+  }: {
+    children?: ReactNode;
+    style?: CSSProperties | CSSProperties[];
+    testID?: string;
+  }) => (
+    <div
+      data-testid={testID}
+      style={Array.isArray(style) ? Object.assign({}, ...style) : style}
+    >
+      {children}
+    </div>
+  ),
 }));
 
 describe('OrderReportModal', () => {
@@ -159,6 +202,44 @@ describe('OrderReportModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('lets date presets scroll while keeping export actions outside the scrolling area', () => {
+    render(<OrderReportModal {...baseProps} onDateSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Change date range' }));
+
+    const body = screen.getByRole('region', {
+      name: 'Scrollable report contents',
+    });
+    fireEvent.click(body);
+    expect(body).toContainElement(
+      screen.getByRole('button', { name: 'Select custom date range' })
+    );
+    expect(body).not.toContainElement(
+      screen.getByRole('button', { name: 'Export as CSV' })
+    );
+    expect(body).not.toContainElement(
+      screen.getByRole('button', { name: 'Download PDF Report' })
+    );
+  });
+
+  it('sizes the dialog relative to its presented window', () => {
+    render(<OrderReportModal {...baseProps} />);
+    expect(
+      screen.getByRole('region', { name: 'Presented window insets' })
+    ).toContainElement(
+      screen.getByRole('region', { name: 'Dialog safe area' })
+    );
+    expect(
+      screen.getByRole('region', { name: 'Dialog safe area' })
+    ).toContainElement(screen.getByText('Orders Report'));
+    expect(screen.getByLabelText('order-report-modal')).toHaveAttribute(
+      'data-orientations',
+      'portrait,portrait-upside-down,landscape'
+    );
+    expect(screen.getByTestId('order-report-panel')).toHaveStyle({
+      maxHeight: '80%',
+    });
   });
 
   it('renders the summary stats for the current date range', () => {

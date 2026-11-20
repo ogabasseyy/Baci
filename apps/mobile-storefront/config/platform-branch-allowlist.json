@@ -1,6 +1,10 @@
 {
   "platformBranches": [
     {
+      "path": "components/product/hooks/use-product-detail-animations.ts",
+      "justification": "Android adds back the keyboard height removed by adjustResize; all window sizes still cap the hero height and scroll thresholds."
+    },
+    {
       "path": "app/cart.tsx",
       "justification": "Reviewed existing cart haptics and list virtualization platform behavior."
     },
@@ -115,7 +119,7 @@
     },
     {
       "path": "components/navigation/CustomTabBarChrome.tsx",
-      "justification": "Reviewed native haptic feedback and platform-specific dock shadow positioning for the custom floating tab bar."
+      "justification": "Reviewed native haptic feedback, dock shadow placement, and the platform-specific minimum bottom inset for the floating tab bar."
     },
     {
       "path": "components/navigation/RootLayoutNav.tsx",

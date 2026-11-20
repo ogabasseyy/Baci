@@ -187,7 +187,7 @@ export default function UtilityPurchaseScreen() {
   if (!routeType || !currentType) {
     return (
       <StorefrontScreenShell
-        edges={[]}
+        edges={['left', 'right']}
         style={[styles.container, { backgroundColor: colors.background }]}
       >
         <InvalidUtilityServiceView
@@ -202,7 +202,7 @@ export default function UtilityPurchaseScreen() {
   if (resolvedSuccessData) {
     return (
       <StorefrontScreenShell
-        edges={[]}
+        edges={['left', 'right']}
         style={[styles.container, { backgroundColor: colors.background }]}
       >
         <UtilityPurchaseSuccessView
@@ -229,7 +229,7 @@ export default function UtilityPurchaseScreen() {
 
   return (
     <StorefrontScreenShell
-      edges={[]}
+      edges={['left', 'right']}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <Stack.Screen options={{ headerShown: false }} />

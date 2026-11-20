@@ -184,7 +184,7 @@ export function ProfileEditView({
       </ScrollView>
 
       <SafeAreaView
-        edges={['bottom']}
+        edges={['bottom', 'left', 'right']}
         style={[
           styles.bottomAction,
           { backgroundColor: colors.card, borderTopColor: colors.border },

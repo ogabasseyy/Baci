@@ -75,6 +75,7 @@ function buildDevelopmentStorefrontExpoConfig(inputEnvironment) {
       'expo-font',
       'expo-secure-store',
       'expo-web-browser',
+      './config/withIPhoneOrientations.js',
       ...(nativeStagingPush
         ? [
             'expo-dev-client',

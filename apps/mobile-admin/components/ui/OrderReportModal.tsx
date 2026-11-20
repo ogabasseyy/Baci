@@ -3,12 +3,13 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   Modal,
   Pressable,
+  ScrollView,
   Text,
   View,
 } from 'react-native';
+import { ModalSafeArea } from '@/components/ui/ModalSafeArea';
 import { OrderReportDateMenu } from '@/components/ui/order-report-modal/OrderReportDateMenu';
 import { OrderReportStatsPanel } from '@/components/ui/order-report-modal/OrderReportStatsPanel';
 import styles from '@/components/ui/order-report-modal/orderReportModalStyles';
@@ -43,7 +44,6 @@ export default function OrderReportModal({
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const screenHeight = Dimensions.get('window').height;
 
   // Calculate stats
   const totalOrders = orders.length;
@@ -60,11 +60,16 @@ export default function OrderReportModal({
 
   const stats = { totalOrders, totalRevenue, pendingCount, completedCount };
 
+  const handleClose = () => {
+    setShowDropdown(false);
+    onClose();
+  };
+
   const handleExport = async () => {
     setIsExporting(true);
     try {
       await onExport();
-      onClose();
+      handleClose();
     } catch (error) {
       console.error(error);
     }
@@ -80,7 +85,7 @@ export default function OrderReportModal({
         businessName,
         logoUrl
       );
-      onClose();
+      handleClose();
     } catch (error) {
       console.error(error);
     }
@@ -89,28 +94,24 @@ export default function OrderReportModal({
 
   return (
     <Modal
+      supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}
       transparent
       visible={visible}
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
-      <Pressable
+      <ModalSafeArea
+        backdropColor="rgba(0,0,0,0.5)"
+        onBackdropPress={handleClose}
         style={styles.overlay}
-        onPress={() => {
-          setShowDropdown(false);
-          onClose();
-        }}
       >
-        <Pressable
+        <View
           style={[
             styles.container,
-            { backgroundColor: colors.card, maxHeight: screenHeight * 0.8 },
+            { backgroundColor: colors.card, maxHeight: '80%' },
             shadows.lg,
           ]}
-          onPress={(e) => {
-            if (showDropdown) setShowDropdown(false);
-            e.stopPropagation();
-          }}
+          testID="order-report-panel"
         >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -132,7 +133,7 @@ export default function OrderReportModal({
               </Text>
             </View>
             <Pressable
-              onPress={onClose}
+              onPress={handleClose}
               hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel="Close report"
@@ -143,7 +144,10 @@ export default function OrderReportModal({
           </View>
 
           {/* Content */}
-          <View style={[styles.content, { zIndex: 1 }]}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            style={styles.scrollBody}
+          >
             <OrderReportDateMenu
               dateRangeLabel={dateRangeLabel}
               showDropdown={Boolean(onDateSelect && showDropdown)}
@@ -164,7 +168,7 @@ export default function OrderReportModal({
             />
 
             <OrderReportStatsPanel stats={stats} />
-          </View>
+          </ScrollView>
 
           {/* Footer */}
           <View style={[styles.footer, { borderTopColor: colors.border }]}>
@@ -230,8 +234,8 @@ export default function OrderReportModal({
               )}
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </ModalSafeArea>
     </Modal>
   );
 }

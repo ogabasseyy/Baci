@@ -9,7 +9,8 @@
  */
 
 import { jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Dimensions, Modal } from 'react-native';
 import * as imageZoomHook from './hooks/useImageZoom';
 import { ImageZoomModal } from './ImageZoomModal';
 
@@ -112,10 +113,10 @@ jest.mock('expo-image', () => ({
   Image: 'Image',
 }));
 
-// react-native-safe-area-context — return zero insets so layout is predictable.
-// Only export what ImageZoomModal actually uses (useSafeAreaInsets).
+const mockSafeAreaInsets = { top: 0, bottom: 0, left: 0, right: 0 };
+
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => mockSafeAreaInsets,
 }));
 
 // ProductCard dependency — just export BLURHASH_VARIANTS constant
@@ -153,6 +154,55 @@ function renderModal(
 // ---------------------------------------------------------------------------
 
 describe('ImageZoomModal', () => {
+  it('applies each side inset once to the open image and its controls', () => {
+    const original = Dimensions.get('window');
+    mockSafeAreaInsets.left = 54;
+    mockSafeAreaInsets.right = 12;
+    try {
+      Dimensions.set({ window: { ...original, width: 660, height: 840 } });
+      renderModal({ initialIndex: 1 });
+
+      expect(screen.getByLabelText('Product image 2 of 3')).toHaveStyle({
+        width: 594,
+      });
+      expect(screen.getByTestId('image-zoom-frame')).toHaveStyle({
+        marginLeft: 54,
+        marginRight: 12,
+      });
+      expect(screen.getByTestId('image-zoom-header')).toHaveStyle({
+        left: 54,
+        right: 12,
+      });
+      expect(screen.getByTestId('image-zoom-container')).not.toHaveStyle({
+        paddingLeft: 54,
+      });
+    } finally {
+      mockSafeAreaInsets.left = 0;
+      mockSafeAreaInsets.right = 0;
+      act(() => Dimensions.set({ window: original }));
+    }
+  });
+
+  it('resizes the open image and keeps the selected photo when the window shrinks', () => {
+    const original = Dimensions.get('window');
+    try {
+      Dimensions.set({ window: { ...original, width: 660, height: 840 } });
+      renderModal({ initialIndex: 1 });
+      expect(
+        screen.UNSAFE_getByType(Modal).props.supportedOrientations
+      ).toEqual(['portrait', 'portrait-upside-down', 'landscape']);
+      const photo = () => screen.getByLabelText('Product image 2 of 3');
+      expect(photo()).toHaveStyle({ width: 660, height: 588 });
+
+      act(() => {
+        Dimensions.set({ window: { ...original, width: 390, height: 740 } });
+      });
+      expect(photo()).toHaveStyle({ width: 390, height: 518 });
+    } finally {
+      act(() => Dimensions.set({ window: original }));
+    }
+  });
+
   describe('visibility', () => {
     it('renders the close button when visible is true', () => {
       renderModal({ visible: true });

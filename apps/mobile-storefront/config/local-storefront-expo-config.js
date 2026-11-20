@@ -33,6 +33,7 @@ function buildLocalStorefrontExpoConfig(environment) {
       'expo-font',
       'expo-secure-store',
       'expo-web-browser',
+      './config/withIPhoneOrientations.js',
     ],
     updates: { enabled: false },
     extra: {

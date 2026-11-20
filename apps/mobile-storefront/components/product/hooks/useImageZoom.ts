@@ -4,8 +4,8 @@
  * Handles pinch-to-zoom, pan, double-tap-to-zoom, and swipe navigation.
  */
 
+import { useEffect } from 'react';
 import type { ViewStyle } from 'react-native';
-import { Dimensions } from 'react-native';
 import {
   type AnimatedStyle,
   useAnimatedStyle,
@@ -20,10 +20,20 @@ type ImageZoomGesture = ReturnType<
   NonNullable<GestureHandlerRuntime['Gesture']>['Simultaneous']
 >;
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const DOUBLE_TAP_SCALE = 2.5;
+
+function clampTranslation(
+  value: number,
+  dimension: number,
+  currentScale: number
+) {
+  'worklet';
+  const scaledDimension = dimension * currentScale;
+  const maxTranslate = Math.max(0, (scaledDimension - dimension) / 2);
+  return Math.min(Math.max(value, -maxTranslate), maxTranslate);
+}
 
 export interface UseImageZoomParams {
   onClose: () => void;
@@ -31,6 +41,8 @@ export interface UseImageZoomParams {
   goToNext: () => void;
   currentIndex: number;
   totalImages: number;
+  viewportHeight: number;
+  viewportWidth: number;
   gestureRuntime: Pick<GestureHandlerRuntime, 'Gesture'>;
 }
 
@@ -47,6 +59,8 @@ export function useImageZoom({
   goToNext,
   currentIndex,
   totalImages,
+  viewportHeight,
+  viewportWidth,
   gestureRuntime,
 }: UseImageZoomParams): UseImageZoomReturn {
   const { Gesture } = gestureRuntime;
@@ -60,17 +74,23 @@ export function useImageZoom({
   const focalX = useSharedValue(0);
   const focalY = useSharedValue(0);
 
-  // Clamp translation based on scale — must run on the UI thread
-  const clampTranslation = (
-    value: number,
-    dimension: number,
-    currentScale: number
-  ) => {
-    'worklet';
-    const scaledDimension = dimension * currentScale;
-    const maxTranslate = Math.max(0, (scaledDimension - dimension) / 2);
-    return Math.min(Math.max(value, -maxTranslate), maxTranslate);
-  };
+  useEffect(() => {
+    const currentScale = scale.get();
+    const x = clampTranslation(translateX.get(), viewportWidth, currentScale);
+    const y = clampTranslation(translateY.get(), viewportHeight, currentScale);
+    translateX.set(x);
+    translateY.set(y);
+    savedTranslateX.set(x);
+    savedTranslateY.set(y);
+  }, [
+    scale,
+    translateX,
+    translateY,
+    savedTranslateX,
+    savedTranslateY,
+    viewportWidth,
+    viewportHeight,
+  ]);
 
   // Animated spring reset (used when navigating between images)
   const resetTransform = () => {
@@ -129,8 +149,8 @@ export function useImageZoom({
             // Allow panning when zoomed in
             const newX = savedTranslateX.get() + event.translationX;
             const newY = savedTranslateY.get() + event.translationY;
-            translateX.set(clampTranslation(newX, SCREEN_WIDTH, scale.get()));
-            translateY.set(clampTranslation(newY, SCREEN_HEIGHT, scale.get()));
+            translateX.set(clampTranslation(newX, viewportWidth, scale.get()));
+            translateY.set(clampTranslation(newY, viewportHeight, scale.get()));
           } else {
             // When not zoomed, allow horizontal swipe for image navigation
             translateX.set(event.translationX * 0.5);
@@ -139,7 +159,7 @@ export function useImageZoom({
         .onEnd((event) => {
           if (scale.get() <= 1) {
             // Handle swipe navigation
-            const threshold = SCREEN_WIDTH * 0.25;
+            const threshold = viewportWidth * 0.25;
             const velocity = event.velocityX;
 
             if (
@@ -161,13 +181,13 @@ export function useImageZoom({
             // Clamp final position when zoomed
             translateX.set(
               withSpring(
-                clampTranslation(translateX.get(), SCREEN_WIDTH, scale.get()),
+                clampTranslation(translateX.get(), viewportWidth, scale.get()),
                 SPRING_CONFIG.snappy
               )
             );
             translateY.set(
               withSpring(
-                clampTranslation(translateY.get(), SCREEN_HEIGHT, scale.get()),
+                clampTranslation(translateY.get(), viewportHeight, scale.get()),
                 SPRING_CONFIG.snappy
               )
             );
@@ -196,20 +216,20 @@ export function useImageZoom({
             scale.set(withSpring(targetScale, SPRING_CONFIG.snappy));
 
             // Calculate offset so tap position becomes the new focal centre
-            const centerX = SCREEN_WIDTH / 2;
-            const centerY = SCREEN_HEIGHT / 2;
+            const centerX = viewportWidth / 2;
+            const centerY = viewportHeight / 2;
             const offsetX = (centerX - event.x) * (targetScale - 1);
             const offsetY = (centerY - event.y) * (targetScale - 1);
 
             translateX.set(
               withSpring(
-                clampTranslation(offsetX, SCREEN_WIDTH, targetScale),
+                clampTranslation(offsetX, viewportWidth, targetScale),
                 SPRING_CONFIG.snappy
               )
             );
             translateY.set(
               withSpring(
-                clampTranslation(offsetY, SCREEN_HEIGHT, targetScale),
+                clampTranslation(offsetY, viewportHeight, targetScale),
                 SPRING_CONFIG.snappy
               )
             );

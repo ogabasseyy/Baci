@@ -6,7 +6,7 @@ import {
   oxygenProviderStateSchema,
   oxygenRuntimeSubmissionSchema,
 } from '@/schemas/oxygen-runtime';
-import { oxygenActiveLoanCode } from './booking-rejection';
+import { OxygenActiveLoanPreflightError } from './booking-rejection';
 import { oxygenLocalValidationDiagnostic } from './local-validation-diagnostic';
 import {
   isOxygenPaymentOriginError,
@@ -81,7 +81,7 @@ export async function performOxygenAction(
     request.command.action === 'book' &&
     current.bookingBlock === 'active_loan'
   )
-    throw new OxygenProviderFailure('rejected', oxygenActiveLoanCode);
+    throw new OxygenActiveLoanPreflightError();
   // This preflight uses only public facts. The worker rechecks its private context.
   if (
     !oxygenActionAllowed(

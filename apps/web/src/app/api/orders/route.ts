@@ -100,7 +100,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import { rejectMobileOxygenCreditCombination } from './mobile-oxygen-order-admission';
+import {
+  rejectMobileOxygenCreditCombination,
+  rejectMobileOxygenZeroBalance,
+} from './mobile-oxygen-order-admission';
 import { resolveOrderCreationMerchant } from './order-creation-merchant';
 import { authenticateOrderRequest } from './order-request-auth';
 import { replayAdmittedOxygenOrder } from './replay-admitted-oxygen-order';
@@ -2092,6 +2095,24 @@ export async function POST(request: NextRequest) {
     if (idempotencyPayload && adoptedAlternateShippingProvider) {
       idempotencyPayload.shipping_provider = adoptedAlternateShippingProvider;
     }
+
+    const zeroBalanceRejection = rejectMobileOxygenZeroBalance(
+      request,
+      body,
+      canonicalOrderSubtotal === null
+        ? null
+        : Math.max(
+            canonicalOrderSubtotal -
+              (discountCodeId || loyaltyRedemptionId
+                ? discountCodeAmount
+                : serverDerivedDiscountAmount),
+            0
+          ) +
+            effectiveShippingFee +
+            orderTaxAmount +
+            giftWrappingFeeValue
+    );
+    if (zeroBalanceRejection) return zeroBalanceRejection;
 
     const savingsRedemptionIdempotencyKey = requestedSavingsRedemption
       ? getSavingsRedemptionIdempotencyKey({

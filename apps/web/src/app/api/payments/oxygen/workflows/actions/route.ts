@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
+  OxygenActiveLoanPreflightError,
   oxygenActiveLoanCode,
   oxygenActiveLoanMessage,
   oxygenStatementRequiredCode,
@@ -212,6 +213,15 @@ export async function POST(request: NextRequest) {
       { headers }
     );
   } catch (failure) {
+    if (failure instanceof OxygenActiveLoanPreflightError)
+      return NextResponse.json(
+        {
+          code: failure.code,
+          error: failure.message,
+          dispatchState: 'not_dispatched',
+        },
+        { status: 409, headers }
+      );
     if (failure instanceof OxygenPaymentOriginUnverifiedError)
       return NextResponse.json(
         { code: oxygenPaymentOriginCode, error: oxygenPaymentOriginMessage },

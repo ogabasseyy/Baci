@@ -4,6 +4,8 @@ type HostedOrigins = Pick<
   OxygenMobileCapabilities,
   'hostedOrigins' | 'selfieOrigins'
 >;
+// The caller supplies the exact URL from its owned workflow response. The
+// provider controls the path and query, so validate the configured origin here.
 export function canOpenOxygenHostedUrl(
   url: string,
   kind: OxygenHostedKind,

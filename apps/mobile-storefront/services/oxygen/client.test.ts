@@ -94,6 +94,28 @@ it.each([
   ).rejects.toMatchObject({ status: 503, dispatchState });
 });
 
+it.each([
+  [
+    { code: 'OXYGEN_ACTIVE_LOAN', dispatchState: 'not_dispatched' },
+    'not_dispatched',
+  ],
+  [{ code: 'OXYGEN_ACTIVE_LOAN' }, 'unknown'],
+] as const)('distinguishes preflight from provider-side active-loan rejections: %j', async (body, dispatchState) => {
+  const client = createOxygenClient({
+    profile,
+    getSession: session,
+    fetch: jest.fn().mockResolvedValue(Response.json(body, { status: 409 })),
+  });
+  await expect(
+    client.action({
+      workflowId: id,
+      version: 1,
+      idempotencyKey: id,
+      command: { action: 'book', equityPercentage: 30, tenure: 3 },
+    })
+  ).rejects.toMatchObject({ status: 409, dispatchState });
+});
+
 it('reads disabled owned capabilities but checks pins', async () => {
   const transport = jest.fn().mockResolvedValue(
     new Response(

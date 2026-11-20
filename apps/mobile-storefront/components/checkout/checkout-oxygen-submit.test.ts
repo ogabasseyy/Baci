@@ -16,7 +16,7 @@ describe('native Oxygen order admission', () => {
       userId: 'buyer-one',
     });
     createOrder.mockResolvedValue({
-      order: { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab' },
+      order: { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab', total: 20000 },
     });
   });
   it('creates Oxygen initially using the unchanged durable checkout generation', async () => {
@@ -138,6 +138,22 @@ describe('native Oxygen order admission', () => {
     );
     expect(createOrder).toHaveBeenCalledWith(request, expect.anything());
   });
+  it('keeps an old zero-balance order out of the financing handoff', async () => {
+    createOrder.mockResolvedValueOnce({ order: { total: 0 } });
+    await expect(
+      submitOxygenCheckout(
+        {
+          request,
+          checkoutGeneration: 'g',
+          isAuthenticated: true,
+          hasVoucher: false,
+          hasCredits: false,
+        },
+        { readOwner, createOrder }
+      )
+    ).rejects.toThrow('zero-balance order');
+  });
+
   it('preserves a promo code for the server to price before financing', async () => {
     const discounted = { ...request, discount_code: 'SAVE10' };
     await submitOxygenCheckout(

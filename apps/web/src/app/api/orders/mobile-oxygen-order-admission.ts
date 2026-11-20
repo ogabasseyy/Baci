@@ -58,6 +58,26 @@ export function rejectMobileOxygenCreditCombination(
   );
 }
 
+export function rejectMobileOxygenZeroBalance(
+  request: Request,
+  order: Pick<OrderCreateInput, 'payment_method' | 'source'>,
+  total: number | null
+) {
+  if (
+    total === null ||
+    Math.round(total * 100) > 0 ||
+    !isMobileOxygenOrder(request, order.payment_method, order.source)
+  )
+    return null;
+  return NextResponse.json(
+    {
+      code: 'OXYGEN_MOBILE_ZERO_BALANCE',
+      error: 'Choose another payment option for this zero-balance order.',
+    },
+    { status: 400 }
+  );
+}
+
 export async function rejectUnavailableMobileOxygenOrder({
   request,
   client,

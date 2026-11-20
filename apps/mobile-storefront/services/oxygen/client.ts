@@ -128,18 +128,24 @@ export function createOxygenClient(options: {
     )
       throw new OxygenClientError('scope');
     if (!response.ok) {
-      const runtimeUnavailable =
-        response.status === 503 &&
+      const definitiveRejection =
+        [409, 503].includes(response.status) &&
         method === 'POST' &&
         path === 'workflows/actions'
           ? z
-              .object({ code: z.literal(oxygenRuntimeUnavailableCode) })
+              .union([
+                z.object({ code: z.literal(oxygenRuntimeUnavailableCode) }),
+                z.object({
+                  code: z.literal('OXYGEN_ACTIVE_LOAN'),
+                  dispatchState: z.literal('not_dispatched'),
+                }),
+              ])
               .safeParse(await response.json().catch(() => null)).success
           : false;
       throw new OxygenClientError(
         response.status === 401 ? 'auth' : 'http',
         response.status,
-        runtimeUnavailable || [400, 401, 403, 429].includes(response.status)
+        definitiveRejection || [400, 401, 403, 429].includes(response.status)
           ? 'not_dispatched'
           : 'unknown'
       );

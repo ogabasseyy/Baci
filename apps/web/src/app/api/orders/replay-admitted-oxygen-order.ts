@@ -17,6 +17,9 @@ export async function replayAdmittedOxygenOrder({
   rejection: NextResponse;
 }): Promise<NextResponse> {
   if (!userId || !key || !hash) return rejection;
+  // Checkout keys and request hashes belong to the order. The Oxygen
+  // environment is bound when its financing workflow starts. This response
+  // carries no workflow identifier or provider state.
   const { data, error } = await client
     .from('orders')
     .select(

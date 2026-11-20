@@ -74,7 +74,7 @@ export async function submitOxygenCheckout(
   // Scope the send to the current owner. The API admits new orders and can
   // still return an exact previously accepted order during a rollout pause.
   const { merchantId, userId } = await deps.readOwner();
-  return deps.createOrder(
+  const result = await deps.createOrder(
     {
       ...input.request,
       items,
@@ -86,4 +86,9 @@ export async function submitOxygenCheckout(
       expectedOwner: userId,
     }
   );
+  if (result.order.total <= 0)
+    throw new Error(
+      'Choose another payment option for this zero-balance order.'
+    );
+  return result;
 }

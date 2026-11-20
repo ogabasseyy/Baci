@@ -67,3 +67,25 @@ describe('bugfix: placeholder tokens are not a delivered token', () => {
     );
   });
 });
+
+describe('bugfix: more placeholder tokens are not a delivered token', () => {
+  it.each([
+    'TBD',
+    'PENDING',
+    'processing',
+    'xxxx',
+    'error',
+    'Unknown',
+    '0000',
+    'dummy',
+    'TEST',
+  ])('ignores the placeholder %j', (token) => {
+    expect(readMonnifyBillToken({ token })).toBeUndefined();
+  });
+
+  it('keeps a real token that merely contains a placeholder word', () => {
+    expect(readMonnifyBillToken({ token: 'TEST-1234-5678' })).toBe(
+      'TEST-1234-5678'
+    );
+  });
+});

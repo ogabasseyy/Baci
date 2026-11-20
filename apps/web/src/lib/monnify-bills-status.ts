@@ -37,7 +37,8 @@ export function classifyMonnifyBillStatus(body: {
 }
 
 /** Values a biller sends when there is no token ("0", "-", "N/A", "null"...). */
-const PLACEHOLDER_TOKEN = /^(?:0+|[-.\s]+|n\/?a|null|none|nil|undefined|na)$/i;
+const PLACEHOLDER_TOKEN =
+  /^(?:0+|[-.\s_*#]+|x+|n\/?a|na|null|none|nil|undefined|tbd|pending|processing|failed|failure|error|invalid|unavailable|unknown|test|dummy|token)$/i;
 
 /**
  * The delivered token: the first non-blank of metaData.token / token, trimmed.

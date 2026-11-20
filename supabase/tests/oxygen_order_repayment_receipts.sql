@@ -34,9 +34,21 @@ INSERT INTO oxygen_private.partner_workers (partner_reference, worker_user_id)
 VALUES ('receipt-partner', auth.uid()), ('another-partner', auth.uid());
 INSERT INTO oxygen_private.runtime_bindings (merchant_id, worker_user_id, partner_reference, enabled)
 VALUES ('d5010000-0000-4000-8000-000000000011', auth.uid(), 'receipt-partner', true);
+INSERT INTO oxygen_private.commands (id, workflow_id, idempotency_key, expected_version, channel, command)
+VALUES ('d5010000-0000-4000-8000-000000000061', 'd5010000-0000-4000-8000-000000000041',
+  'd5010000-0000-4000-8000-000000000071', 0, 'web', '{"action":"book"}');
+UPDATE oxygen_private.commands SET status = 'executing'
+WHERE id = 'd5010000-0000-4000-8000-000000000061';
+-- Rotate the binding while the booking result is in flight.
+UPDATE oxygen_private.runtime_bindings SET partner_reference = 'another-partner'
+WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';
 INSERT INTO oxygen_private.provider_states (workflow_id, state)
 VALUES ('d5010000-0000-4000-8000-000000000041',
   '{"bookingReference":"d5010000-0000-4000-8000-000000000051","booking":{"status":"ACTIVATED","loan_reference":"d5010000-0000-4000-8000-000000000051"}}');
+UPDATE oxygen_private.commands SET status = 'succeeded'
+WHERE id = 'd5010000-0000-4000-8000-000000000061';
+UPDATE oxygen_private.runtime_bindings SET partner_reference = 'receipt-partner'
+WHERE merchant_id = 'd5010000-0000-4000-8000-000000000011';
 
 SET LOCAL ROLE authenticated;
 DO $$
@@ -90,6 +102,7 @@ BEGIN
   IF has_table_privilege('authenticated', 'oxygen_private.callback_inbox', 'SELECT')
     OR has_table_privilege('authenticated', 'oxygen_private.repayment_booking_bindings', 'SELECT,INSERT,UPDATE')
     OR has_function_privilege('authenticated', 'oxygen_private.capture_repayment_booking_binding()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'oxygen_private.capture_repayment_booking_claim()', 'EXECUTE')
     OR has_function_privilege('anon', 'public.oxygen_order_repayment_receipts(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Callback receipt access is too broad';
   END IF;
@@ -125,6 +138,18 @@ DO $$ BEGIN
   END IF;
 END $$;
 RESET ROLE;
+
+SAVEPOINT legacy_booking;
+DELETE FROM oxygen_private.repayment_booking_bindings
+WHERE workflow_id = 'd5010000-0000-4000-8000-000000000041';
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  IF public.oxygen_order_repayment_receipts('d5010000-0000-4000-8000-000000000031') <> '[]' THEN
+    RAISE EXCEPTION 'A legacy booking without partner evidence showed acknowledgements';
+  END IF;
+END $$;
+RESET ROLE;
+ROLLBACK TO SAVEPOINT legacy_booking;
 
 UPDATE public.oxygen_workflows SET stage = 'payment_required'
 WHERE id = 'd5010000-0000-4000-8000-000000000041';

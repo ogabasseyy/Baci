@@ -13,7 +13,10 @@ export async function verifyBankCardOfferPaystack(
   });
   if (!response.success) return null;
   const { data } = response;
-  const status = String(data.status);
+  if (!data || typeof data !== 'object' || typeof data.status !== 'string') {
+    return { kind: 'mismatch' } as const;
+  }
+  const status: string = data.status;
   const terminal =
     status === 'failed' ||
     status === 'abandoned' ||
@@ -30,6 +33,7 @@ export async function verifyBankCardOfferPaystack(
     if (terminal) {
       return 'domain' in data &&
         data.domain === attempt.domain &&
+        typeof data.currency === 'string' &&
         data.currency.toUpperCase() === attempt.currency
         ? ({ kind: 'terminal', status } as const)
         : ({ kind: 'mismatch' } as const);

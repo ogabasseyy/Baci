@@ -9,10 +9,10 @@ import { verifyBankCardOfferPaystack } from './verify-bank-card-offer-paystack';
 vi.mock('@/lib/paystack', () => ({ verifyTransaction: vi.fn() }));
 
 const verify = vi.mocked(verifyTransaction);
-function respond(changes: Partial<typeof captureFixture> = {}) {
+function respond(data: unknown = captureFixture) {
   verify.mockResolvedValueOnce({
     success: true,
-    data: { ...captureFixture, ...changes },
+    data,
   } as unknown as Awaited<ReturnType<typeof verifyTransaction>>);
 }
 
@@ -35,13 +35,13 @@ it('verifies the saved reference and retains the exact provider ID', async () =>
 });
 
 it('leaves pending transactions without settlement evidence', async () => {
-  respond({ status: 'pending' });
+  respond({ ...captureFixture, status: 'pending' });
 
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
 });
 
 it('reports a reversal for reconciliation when its reference and domain match', async () => {
-  respond({ status: 'reversed' });
+  respond({ ...captureFixture, status: 'reversed' });
 
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
     kind: 'terminal',
@@ -55,6 +55,21 @@ it.each([
   { amount: 10_000 },
 ])('classifies mismatched provider responses without capture evidence (%j)', async (changes) => {
   respond(changes);
+
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'mismatch',
+  });
+});
+
+it.each([
+  { data: null },
+  { data: {} },
+  { data: { ...captureFixture, status: 'reversed', currency: null } },
+  { data: { ...captureFixture, status: 'failed', currency: 566 } },
+])('routes malformed provider data to capture review (%j)', async ({
+  data,
+}) => {
+  respond(data);
 
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
     kind: 'mismatch',

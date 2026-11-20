@@ -143,11 +143,28 @@ describe('internal partner reconciliation', () => {
   });
 
   it.each([
-    ['P0002', 404, 'NOT_FOUND'],
-    ['22023', 400, 'CAPTURE_EVIDENCE_MISMATCH'],
-    ['23505', 409, 'CAPTURE_EVIDENCE_CONFLICT'],
-  ])('maps storage error %s without issuing a success receipt', async (code, status, responseCode) => {
-    mocks.rpc.mockResolvedValue({ data: null, error: { code } });
+    ['P0002', 'not_found', 404, 'NOT_FOUND'],
+    [
+      '22023',
+      'partner_payment_evidence_mismatch',
+      400,
+      'CAPTURE_EVIDENCE_MISMATCH',
+    ],
+    [
+      '23505',
+      'partner_payment_evidence_conflict',
+      409,
+      'CAPTURE_EVIDENCE_CONFLICT',
+    ],
+    ['23505', 'an order write failed', 503, 'RECONCILIATION_UNAVAILABLE'],
+    [
+      '22023',
+      'unexpected invalid order argument',
+      503,
+      'RECONCILIATION_UNAVAILABLE',
+    ],
+  ])('maps storage error %s (%s) without issuing a success receipt', async (code, message, status, responseCode) => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code, message } });
     const result = await POST(request());
     expect(result.status).toBe(status);
     expect(await result.json()).toMatchObject({

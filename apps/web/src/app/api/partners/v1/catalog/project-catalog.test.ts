@@ -86,7 +86,7 @@ describe('CrossRem catalog projection', () => {
     expect(selected[0]).not.toHaveProperty('stock_quantity');
   });
 
-  it('uses managed quantity for quotes even when the public feed uses legacy stock', () => {
+  it('marks a listing unavailable when managed stock has run out even if legacy stock remains', () => {
     const stockByListing = new Map<string, number>();
     const selected = projectCatalog(
       [
@@ -100,7 +100,7 @@ describe('CrossRem catalog projection', () => {
     );
 
     expect(stockByListing.get(binding.listingId)).toBe(0);
-    expect(selected[0].availability).toBe('in_stock');
+    expect(selected[0].availability).toBe('out_of_stock');
   });
 
   it.each([

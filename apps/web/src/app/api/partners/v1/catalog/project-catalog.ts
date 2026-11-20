@@ -14,7 +14,8 @@ function rejectBinding(message: string, listingId: string): never {
 
 function toListing(
   row: GoogleMerchantListing,
-  binding: CrossRemListingBinding
+  binding: CrossRemListingBinding,
+  availableQuantity: number
 ) {
   const basePriceMinor = Math.round(row.price * 100);
   if (!Number.isSafeInteger(basePriceMinor) || basePriceMinor <= 0) {
@@ -49,7 +50,7 @@ function toListing(
     condition_label: CONDITION_LABELS[binding.condition],
     base_price_minor: basePriceMinor,
     price_minor: priceMinor,
-    availability: row.stock > 0 ? 'in_stock' : 'out_of_stock',
+    availability: availableQuantity > 0 ? 'in_stock' : 'out_of_stock',
     protection_included: false,
   };
 }
@@ -112,8 +113,9 @@ export function projectCatalog(
         : row.product.manage_stock === true
           ? managedStock
           : row.stock;
-      stockByListing?.set(binding.listingId, quoteStock ?? 0);
-      return [toListing(row, binding)];
+      const availableQuantity = quoteStock ?? 0;
+      stockByListing?.set(binding.listingId, availableQuantity);
+      return [toListing(row, binding, availableQuantity)];
     })
     .sort((a, b) =>
       a.listing_id < b.listing_id ? -1 : a.listing_id > b.listing_id ? 1 : 0

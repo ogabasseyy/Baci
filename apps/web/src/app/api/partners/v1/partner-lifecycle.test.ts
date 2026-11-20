@@ -8,7 +8,9 @@ import {
   expectJson,
   fixtureEnabled,
   fixtureSql,
+  reconcileAfterCatalogDrift,
   request,
+  verifyCatalogDriftHold,
   verifyGiglWalletBinding,
 } from './partner-lifecycle-db.test-support';
 import { POST as quote } from './quotes/route';
@@ -287,6 +289,9 @@ describe.runIf(fixtureEnabled)(
         shipping_status: 'shipped',
         tracking: { provider: 'GIGL', tracking_number: 'FIXTURE-GIG-WAYBILL' },
       });
+      await verifyCatalogDriftHold(quoted.quote_id, (id) =>
+        reconcileAfterCatalogDrift(tokens, id, orderPayload, evidence)
+      );
     }, 20_000);
   }
 );

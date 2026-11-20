@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
+import { logger } from '@/lib/logger';
 import { quoteProviderFailure } from '@/lib/shipping/quote-provider-failure';
 import {
   catalogToken,
@@ -130,12 +131,18 @@ describe('partner delivery quotes', () => {
   });
 
   it('holds quoting until settlement terms are configured', async () => {
+    using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     vi.stubEnv('CROSSREM_SETTLEMENT_BASIS', undefined);
     const response = await POST(request());
 
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
       error: { code: 'QUOTE_UNAVAILABLE' },
+    });
+    expect(warn).toHaveBeenCalledWith({
+      message: 'Partner quote settlement policy is unconfigured',
+      connectionId: 'crossrem-ogabassey',
+      requestId: expect.any(String),
     });
     expect(mocks.catalog).not.toHaveBeenCalled();
     expect(mocks.rates).not.toHaveBeenCalled();

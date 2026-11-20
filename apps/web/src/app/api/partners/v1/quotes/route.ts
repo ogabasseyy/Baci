@@ -61,8 +61,6 @@ export async function POST(request: Request) {
 
   const { connectionId, merchantId, profile } = access;
   const { carrier, validityMs, settlementBasis } = profile.delivery;
-  if (settlementBasis === null)
-    return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
   try {
     const limit = await checkTenantRateLimitDetailed(
       'partner-delivery-quote',
@@ -83,6 +81,15 @@ export async function POST(request: Request) {
       return errorResponse(429, 'RATE_LIMITED', requestId, {
         'Retry-After': String(retryAfter),
       });
+    }
+
+    if (settlementBasis === null) {
+      logger.warn({
+        message: 'Partner quote settlement policy is unconfigured',
+        connectionId,
+        requestId,
+      });
+      return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
     }
 
     const catalog = await profile.loadCatalog();

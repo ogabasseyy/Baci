@@ -39,6 +39,7 @@ DECLARE
   offer_product_id constant uuid := '7a100000-0000-4000-8000-000000000012';
   offer_id constant uuid := '7a100000-0000-4000-8000-000000000021';
   quote_id constant uuid := '7a100000-0000-4000-8000-000000000031';
+  shipping_quote_id constant uuid := '7a100000-0000-4000-8000-000000000033';
   submission_id constant uuid := '7a100000-0000-4000-8000-000000000041';
   connection_id constant text := 'partner-real-writer';
   receiver constant jsonb := '{"address":"1 Fixture Road","city":"Ikeja","state":"Lagos","country":"Nigeria","countryCode":"NG"}';
@@ -104,6 +105,24 @@ BEGIN
     'storefront_order_merchant_id', merchant_id
   )::text, true);
 
+  INSERT INTO public.shipping_quotes (
+    id, merchant_id, provider, currency, session_id, expires_at, price
+  ) VALUES (
+    shipping_quote_id, merchant_id, 'GIGL', 'NGN', 'partner-insert-fixture',
+    now() + interval '5 minutes', 1500
+  );
+
+  BEGIN
+    INSERT INTO public.orders (
+      merchant_id, order_number, source, total, selected_quote_id
+    ) VALUES (
+      merchant_id, 'partner-insert-fixture', 'partner', 1815, shipping_quote_id
+    );
+    RAISE EXCEPTION 'partner order was inserted with a carrier quote' USING ERRCODE = '22023';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'partner_order_shipping_must_start_unbound' THEN RAISE; END IF;
+  END;
+
   receipt := private.accept_settled_partner_order(submission_id, merchant_id, connection_id);
   accepted_id := (receipt->>'order_id')::uuid;
   IF receipt->>'status' IS DISTINCT FROM 'accepted'
@@ -111,6 +130,7 @@ BEGIN
      OR NOT EXISTS (
        SELECT 1 FROM public.orders AS o WHERE o.id = accepted_id AND o.merchant_id = fixture.merchant_id
          AND o.payment_status = 'paid' AND o.total = 1815 AND o.amount_paid = 1815 AND o.tax_amount = 15
+         AND o.source = 'partner'
          AND o.shipping_funding_source IS NULL AND o.selected_quote_id IS NULL
      )
      OR NOT EXISTS (
@@ -143,6 +163,27 @@ BEGIN
      OR (SELECT stock_quantity FROM public.products AS p WHERE p.id = fixture.product_id) <> 8
      OR (SELECT stock_quantity FROM public.product_offers AS po WHERE po.id = fixture.offer_id) <> 4 THEN
     RAISE EXCEPTION 'real writer produced duplicate orders, funds, or inventory mutations';
+  END IF;
+
+  UPDATE private.partner_delivery_quotes
+  SET created_at = now() - interval '10 days', expires_at = now() - interval '9 days'
+  WHERE id = fixture.quote_id;
+
+  INSERT INTO private.partner_delivery_quotes (id, merchant_id, connection_id, created_at, expires_at, snapshot)
+  VALUES
+    ('7a100000-0000-4000-8000-000000000051', merchant_id, connection_id,
+      now() - interval '10 days', now() - interval '9 days', '{}'),
+    ('7a100000-0000-4000-8000-000000000052', merchant_id, connection_id,
+      now() - interval '2 days', now() - interval '1 day', '{}'),
+    ('7a100000-0000-4000-8000-000000000053', merchant_id, connection_id,
+      now(), now() + interval '10 minutes', '{}');
+
+  PERFORM private.expire_unclaimed_partner_quotes();
+  IF EXISTS (SELECT 1 FROM private.partner_delivery_quotes WHERE id = '7a100000-0000-4000-8000-000000000051')
+     OR (SELECT count(*) FROM private.partner_delivery_quotes WHERE id IN (
+       fixture.quote_id, '7a100000-0000-4000-8000-000000000052', '7a100000-0000-4000-8000-000000000053'
+     )) <> 3 THEN
+    RAISE EXCEPTION 'quote expiry failed to remove abandoned data or keep protected quotes';
   END IF;
 END;
 $$;

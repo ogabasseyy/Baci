@@ -162,10 +162,12 @@ function priceMatches(item: BillItem, amount: number) {
  * a different price at another biller never declines a valid purchase
  * while a stale 100x amount (which matches none) is caught. Open-amount
  * packages pass at any amount; an implausible or unreadable fixed price
- * (under ₦10, including 0) means the list can't confirm anything. If no price list is available (Kuda
- * down or empty, with no good list from the past day in this server
- * instance), every purchase fails closed except Kuda's listed electricity
- * meter products.
+ * (under ₦10, including 0) means the list can't confirm anything. A list
+ * from the past day stands in only when Kuda gives no answer at all; an
+ * answer Baci refuses (empty, no packages, priced in the wrong unit, broken)
+ * drops the saved list, and every purchase then fails closed until Kuda
+ * answers well. Kuda's electricity meter products, always sold at the
+ * customer's own amount, pass in every case.
  * After a failed fetch Kuda is not asked again for 30 seconds.
  */
 export async function assertKudaBillItemPriceCurrent({

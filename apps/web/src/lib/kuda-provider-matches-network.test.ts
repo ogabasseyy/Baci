@@ -54,4 +54,14 @@ describe('providerMatchesNetwork', () => {
       )
     ).toBe(false);
   });
+
+  it.each([
+    ['MTN SME DATA', NetworkProvider.MTN, true],
+    ['GLO NG DATA', NetworkProvider.GLO, true],
+    ['AIRTEL NG DATA', NetworkProvider.AIRTEL, true],
+    ['GLOBACOM PLUS DATA', NetworkProvider.GLO, false],
+    ['SMTNET DATA', NetworkProvider.MTN, false],
+  ])('matches %j to %s only as a whole word (%s)', (name, network, expected) => {
+    expect(providerMatchesNetwork(provider(name), network)).toBe(expected);
+  });
 });

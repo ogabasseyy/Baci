@@ -19,6 +19,7 @@ import {
   KUDA_BILL_PRICE_CHANGED_MESSAGE,
   KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE,
 } from './kuda-bill-item-price-messages';
+import { KudaApiHttpError } from './kuda-transport-error';
 
 describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
   beforeEach(() => {
@@ -72,6 +73,13 @@ describe('assertKudaBillItemPriceCurrent when Kuda is unavailable', () => {
           mockGetBillersByCategory.mockResolvedValue([
             startimes({ billItems: [] }),
           ]),
+      ],
+      [
+        'rejects the request with a 4xx',
+        () =>
+          mockGetBillersByCategory.mockRejectedValue(
+            new KudaApiHttpError(400, 'Bad Request')
+          ),
       ],
       [
         'sends a list refused as priced in naira',

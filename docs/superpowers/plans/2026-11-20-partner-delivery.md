@@ -63,6 +63,8 @@ The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documen
 
 ### GIG contract check
 
+The adapter generates the Baci UUID used as the partner `quote_id` locally. The GIG rate identifier is stored separately as `provider_rate_id`.
+
 The existing Baci adapter maps to GIG’s documented domestic price (`/price/v3`), pre-shipment capture (`/capture/preshipment`), and waybill tracking (`/track/mobileShipment`). Keep those calls behind Baci’s quote, fulfillment, and order-status services, so future partners can use the same API regardless of the carrier. Verify a domestic quote, the merchant-funded booking, and retrieval of the same waybill through Baci’s order endpoint using authorized GIG credentials and a controlled shipment. Confirm the hosted catalog’s `200` and `304` behavior at the agreed poll interval before enabling partner sync. [GIG API documentation](https://dev-thirdpartynode.theagilitysystems.com/docs/)
 
 ### Local storefront writer check

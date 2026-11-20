@@ -142,6 +142,17 @@ BEGIN
     IF SQLERRM <> 'partner_order_shipping_must_start_unbound' THEN RAISE; END IF;
   END;
 
+  BEGIN
+    INSERT INTO public.orders (
+      merchant_id, order_number, source, total, shipping_status, tracking_number
+    ) VALUES (
+      merchant_id, 'partner-dispatch-fixture', 'partner', 1815, 'shipped', 'FIXTURE-WAYBILL'
+    );
+    RAISE EXCEPTION 'partner order started in dispatch' USING ERRCODE = '22023';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'partner_order_shipping_must_start_unbound' THEN RAISE; END IF;
+  END;
+
   receipt := private.accept_settled_partner_order(submission_id, merchant_id, connection_id);
   accepted_id := (receipt->>'order_id')::uuid;
   IF receipt->>'status' IS DISTINCT FROM 'accepted'

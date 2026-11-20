@@ -59,4 +59,17 @@ describe('partner order tracking schema', () => {
       }).success
     ).toBe(true);
   });
+
+  it('does not expose extra fields in the tracking payload', () => {
+    expect(
+      orderTrackingSchema.parse({
+        ...receipt,
+        tracking: {
+          provider: 'GIGL',
+          tracking_number: 'fixture-number',
+          receiver_phone: 'private',
+        },
+      }).tracking
+    ).toEqual({ provider: 'GIGL', tracking_number: 'fixture-number' });
+  });
 });

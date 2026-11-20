@@ -89,6 +89,7 @@ export function useCheckoutSuccessVerification({
     // terminal status/order details linger and the guard below refuses
     // to verify the new identity at all.
     const verificationIdentity = [
+      merchantSlug,
       orderId,
       reference,
       trackingToken,
@@ -181,7 +182,9 @@ export function useCheckoutSuccessVerification({
         timerHandle.current = setTimeout(redirectToCheckout, 4000);
       },
       setIsVerifying,
-      setOrderNumber,
+      setOrderNumber: (number) => {
+        if (!disposed) setOrderNumber(number);
+      },
       setPaymentMethod,
       setStatus: (nextStatus, delayMs = 0) => {
         if (disposed) return;

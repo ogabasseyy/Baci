@@ -5,6 +5,7 @@ import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-pay
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
+import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import {
   DeferredError,
   PartialCancellationRefundError,
@@ -74,16 +75,22 @@ export async function initiatePaystackCancellationRefunds({
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
     const transactionAmount = Number(transaction.amount);
-    // A positive leg below half a kobo rounds to 0, and the provider
-    // call treats a non-positive amount as "refund the whole
-    // transaction": quarantine the leg for operations instead of
-    // over-refunding a multi-leg order.
-    // Read the order's persisted payment method. A bank reference on an
-    // unexpected order still goes through the same saved-capture gate.
-    const isBankOffer =
-      order.payment_method === 'bank_card_offer' ||
-      transaction.gateway_reference?.startsWith('BCO-');
+    const isBankOffer = bankCardOfferReferenceSchema.safeParse(
+      transaction.gateway_reference
+    ).success;
+    // A malformed reserved reference or an offer order with a mismatched
+    // reference needs review before any refund lookup or provider call.
+    if (
+      !isBankOffer &&
+      (order.payment_method === 'bank_card_offer' ||
+        transaction.gateway_reference?.startsWith('BCO-'))
+    ) {
+      bankOfferLegsForReview.push(transaction);
+      continue;
+    }
     let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
+    // A positive leg below half a kobo rounds to 0, and the provider
+    // treats a non-positive amount as a full-transaction refund.
     if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
       await quarantineRefund({
         metadata: {

@@ -9,6 +9,7 @@ import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-f
 import { useCheckoutSuccessVerification } from './use-checkout-success-verification';
 import {
   hasMatchingPendingRedvaultOrder,
+  type VerifyCheckoutPaymentHandlers,
   verifyCheckoutPayment,
 } from './verify-checkout-payment';
 
@@ -154,6 +155,34 @@ describe('useCheckoutSuccessVerification', () => {
     expect(result.current.status).toBe('reversed');
     expect(vi.getTimerCount()).toBe(0);
     expect(mockVerify).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the prior order number when the storefront changes', async () => {
+    let previousHandlers: VerifyCheckoutPaymentHandlers | undefined;
+    mockVerify
+      .mockImplementationOnce(async (_params, handlers) => {
+        previousHandlers = handlers;
+        handlers.setOrderNumber('BAC-1');
+        handlers.setStatus('pending');
+      })
+      .mockImplementationOnce(async (_params, handlers) => {
+        handlers.setStatus('verification_unavailable');
+      });
+    const { props } = setup();
+    const { result, rerender } = renderHook(
+      (hookProps) => useCheckoutSuccessVerification(hookProps),
+      { initialProps: props }
+    );
+    await waitFor(() => expect(result.current.orderNumber).toBe('BAC-1'));
+
+    rerender({ ...props, merchantSlug: 'another-store' });
+
+    await waitFor(() =>
+      expect(result.current.status).toBe('verification_unavailable')
+    );
+    expect(result.current.orderNumber).toBeNull();
+    act(() => previousHandlers?.setOrderNumber('BAC-1'));
+    expect(result.current.orderNumber).toBeNull();
   });
 
   it('waits for the rate-limit delay before polling again', async () => {

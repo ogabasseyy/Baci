@@ -311,9 +311,18 @@ BEGIN
     OR public.get_bank_card_offer_webhook_transaction('BANK-OFFER-FALLBACK-FIXTURE') IS NOT NULL
   THEN RAISE EXCEPTION 'Webhook lookup returned a payment outside the saved merchant attempt'; END IF;
 
+  SET LOCAL ROLE service_role;
   IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS DISTINCT FROM 9500
     OR public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, 'BCO-other') IS NOT NULL
-    OR NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
+  THEN RAISE EXCEPTION 'Refund worker must read only the verified discounted capture'; END IF;
+  SET LOCAL ROLE authenticated;
+  BEGIN
+    PERFORM public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference);
+    RAISE EXCEPTION 'A buyer session accessed the service-only refund lookup';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  RESET ROLE;
+  IF NOT public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
     OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 10000)
   THEN RAISE EXCEPTION 'Refund must use the discounted capture'; END IF;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'failed')

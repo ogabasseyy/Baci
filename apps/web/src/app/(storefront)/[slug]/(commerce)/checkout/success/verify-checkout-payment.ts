@@ -180,6 +180,8 @@ export async function verifyCheckoutPayment(
         bankOfferStatus === 'pending' && bankCardOfferRetryDelay(response);
       if (retryDelay) setStatus(bankOfferStatus, retryDelay);
       else setStatus(bankOfferStatus);
+      // Access denial clears the number. A CSRF error preserves only the
+      // number from an earlier pass for this checkout identity.
       if (bankOfferStatus === 'access_required') setOrderNumber(null);
       else if (response.status !== 403) setOrderNumber(orderNumber);
       return;

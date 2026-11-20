@@ -144,22 +144,22 @@ describe('initiatePaystackCancellationRefunds', () => {
     }
   });
 
-  it('checks the saved offer when a bank-offer order has an unexpected leg reference', async () => {
+  it.each([
+    ['bank_card_offer', 'PSK-1'],
+    ['paystack', 'BCO-malformed'],
+  ])('quarantines unexpected %s refund reference %s before lookup', async (paymentMethod, reference) => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
 
     await expect(
       initiatePaystackCancellationRefunds({
-        order: { ...order, payment_method: 'bank_card_offer' },
+        order: { ...order, payment_method: paymentMethod },
         refundedPaymentIds: new Set(),
         supabase: { from: vi.fn(() => ({ insert })), rpc } as never,
-        transactions: [transaction],
+        transactions: [{ ...transaction, gateway_reference: reference }],
       })
     ).resolves.toEqual([]);
 
-    expect(rpc).toHaveBeenCalledWith(
-      'get_bank_card_offer_refundable_amount',
-      expect.objectContaining({ p_reference: transaction.gateway_reference })
-    );
+    expect(rpc).not.toHaveBeenCalled();
     expect(mocks.quarantineRefund).toHaveBeenCalled();
     expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
   });

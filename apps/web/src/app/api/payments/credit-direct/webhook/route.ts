@@ -20,11 +20,11 @@ import {
   isOrderClampedAsCancelled,
 } from '@/lib/payments/handle-payment-for-cancelled-order';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
-import { reinstateTimeoutOrderPayment } from '@/lib/payments/reinstate-timeout-order-payment';
 import { resolveCreditDirectConfirmationReview } from '@/lib/payments/resolve-credit-direct-confirmation-review';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { createServiceClient } from '@/lib/supabase/service';
 import { respondCustomerInventoryFailure } from './customer-inventory-failure';
+import { recoverCreditDirectTimeoutOrder } from './recover-credit-direct-timeout-order';
 
 function readNoteString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -793,21 +793,20 @@ export async function POST(request: NextRequest) {
                 { status: 500 }
               );
             }
-            if (cancelledTxResult.transactionId) {
-              const reinstatement = await reinstateTimeoutOrderPayment(
-                supabase,
-                order.id,
-                cancelledTxResult.transactionId,
-                order.merchant_id
-              );
-              if (reinstatement !== 'blocked') {
-                return resumeReinstatedCreditDirectOrder({
+            const recovered = await recoverCreditDirectTimeoutOrder({
+              orderId: order.id,
+              merchantId: order.merchant_id,
+              transactionId: cancelledTxResult.transactionId,
+              supabase,
+              resume: (parsedNotes) =>
+                healPaidCreditDirectOrderReplay({
                   order,
+                  parsedNotes,
                   payload,
                   supabase,
-                });
-              }
-            }
+                }),
+            });
+            if (recovered) return recovered;
             const cancelReviewFiled = await handlePaymentForCancelledOrder({
               gatewayReference: payload.checkoutTransactionId,
               order: { id: order.id },
@@ -895,21 +894,20 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          if (recordedTransactionId) {
-            const reinstatement = await reinstateTimeoutOrderPayment(
-              supabase,
-              order.id,
-              recordedTransactionId,
-              order.merchant_id
-            );
-            if (reinstatement !== 'blocked') {
-              return resumeReinstatedCreditDirectOrder({
+          const recovered = await recoverCreditDirectTimeoutOrder({
+            orderId: order.id,
+            merchantId: order.merchant_id,
+            transactionId: recordedTransactionId,
+            supabase,
+            resume: (parsedNotes) =>
+              healPaidCreditDirectOrderReplay({
                 order,
+                parsedNotes,
                 payload,
                 supabase,
-              });
-            }
-          }
+              }),
+          });
+          if (recovered) return recovered;
           const cancellationReviewFiled = await handlePaymentForCancelledOrder({
             gatewayReference: payload.checkoutTransactionId,
             order: updatedOrder,
@@ -1081,31 +1079,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-async function resumeReinstatedCreditDirectOrder({
-  order,
-  payload,
-  supabase,
-}: Omit<Parameters<typeof healPaidCreditDirectOrderReplay>[0], 'parsedNotes'>) {
-  const { data, error } = await supabase
-    .from('orders')
-    .select('notes')
-    .eq('id', order.id)
-    .single();
-
-  if (error || !data) {
-    throw new Error('Unable to load reinstated Credit Direct order', {
-      cause: error,
-    });
-  }
-
-  return healPaidCreditDirectOrderReplay({
-    order,
-    parsedNotes: JSON.parse(data.notes ?? '{}') as Record<string, unknown>,
-    payload,
-    supabase,
-  });
 }
 
 // Replay heal for an order a prior delivery already flipped to paid: reinsert

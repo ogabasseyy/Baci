@@ -24,7 +24,6 @@ import { shouldRequireJuicywaySettlementMetadata } from '@/lib/payments/juicyway
 import { JUICYWAY_UNDERPAYMENT_TOLERANCE } from '@/lib/payments/juicyway-settlement-policy';
 import { handleJuicywayWalletTopUpIfNeeded } from '@/lib/payments/juicyway-wallet-top-up';
 import { recordJuicywayOrderSettlement } from '@/lib/payments/record-juicyway-order-settlement';
-import { reinstateTimeoutOrderPayment } from '@/lib/payments/reinstate-timeout-order-payment';
 import { scheduleLegacyPurchaseConversion } from '@/lib/payments/schedule-legacy-purchase-conversion';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
@@ -579,17 +578,9 @@ export async function POST(request: NextRequest) {
       const terminalOrderCancelled =
         isOrderClampedAsCancelled(terminalOrder) ||
         terminalOrder?.payment_status === 'cancelled';
-      const reinstatement = terminalOrderCancelled
-        ? await reinstateTimeoutOrderPayment(
-            supabase,
-            transaction.order_id,
-            transaction.id,
-            transaction.merchant_id
-          )
-        : 'blocked';
-      if (reinstatement !== 'blocked') {
-        // Reuse the seeded outbox for settlement and notifications so a
-        // webhook redelivery and the reconciliation worker can share claims.
+      if (terminalOrderCancelled) {
+        // Let the shared finalizer observe and own the paid transition so
+        // settlement and notifications run on the winning delivery.
         const finalization = await finalizeOrderGatewayPayment({
           actor: 'juicyway:late_payment',
           gateway: 'juicyway',
@@ -601,6 +592,12 @@ export async function POST(request: NextRequest) {
           transaction: { ...transaction, gateway_reference: reference },
           wonTransactionFlip: false,
         });
+        if (finalization.kind === 'order_cancelled') {
+          return NextResponse.json({
+            message: 'Payment recorded; terminal order filed for review',
+            success: true,
+          });
+        }
         if (finalization.kind !== 'completed') {
           return NextResponse.json(
             { error: 'Order payment completion failed' },
@@ -617,9 +614,7 @@ export async function POST(request: NextRequest) {
         const terminalIssueType =
           terminalOrder.payment_status === 'refunded'
             ? 'payment_received_after_refund'
-            : terminalOrderCancelled
-              ? 'payment_received_after_cancellation'
-              : null;
+            : null;
         if (terminalIssueType) {
           const reviewFiled = await handlePaymentForCancelledOrder({
             gatewayReference: reference,

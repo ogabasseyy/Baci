@@ -102,7 +102,8 @@ BEGIN
     OR coalesce(v_order.is_credit_order, false)
     OR v_order.payment_method IS NOT DISTINCT FROM 'uba_redvault'
     OR NOT coalesce(v_order.source IN ('online_store', 'mobile_app'), false)
-    OR v_order.recorded_by_user_id IS NOT NULL THEN
+    OR v_order.recorded_by_user_id IS NOT NULL
+    OR (v_order.customer_id IS NULL AND nullif(btrim(v_order.customer_email), '') IS NULL) THEN
     RETURN 'blocked';
   END IF;
 
@@ -193,7 +194,7 @@ BEGIN
     WHERE later.merchant_id = v_order.merchant_id
       AND (later.created_at, later.id) > (v_order.created_at, v_order.id)
       AND (later.customer_id = v_order.customer_id
-        OR lower(later.customer_email) = lower(v_order.customer_email))
+        OR nullif(lower(btrim(later.customer_email)), '') = nullif(lower(btrim(v_order.customer_email)), ''))
       AND EXISTS (
         SELECT 1 FROM public.order_items newer_item
         JOIN public.order_items original_item ON original_item.order_id = p_order_id

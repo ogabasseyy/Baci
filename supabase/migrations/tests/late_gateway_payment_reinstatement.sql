@@ -64,6 +64,10 @@ BEGIN
     DELETE FROM public.order_items WHERE order_id = replacement_id;
     DELETE FROM public.orders WHERE id = replacement_id;
     UPDATE public.orders SET customer_email = NULL WHERE id = test_order_id;
+    IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'blocked' THEN
+      RAISE EXCEPTION 'Missing customer identity did not block % reinstatement', provider;
+    END IF;
+    UPDATE public.orders SET customer_email = test_order_id::text || '@example.test' WHERE id = test_order_id;
 
     UPDATE public.transactions SET amount = 149 WHERE id = capture_id;
     IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'blocked' THEN

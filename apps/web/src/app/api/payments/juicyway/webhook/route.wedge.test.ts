@@ -102,20 +102,14 @@ describe('POST /api/payments/juicyway/webhook — wedge regression', () => {
         throw new Error(`Unexpected table ${table}`);
       }
     );
-    const rpc = webhookTest.mockAdminSupabase.rpc;
-    rpc.mockResolvedValueOnce({ data: 'reinstated', error: null } as {
-      error: null;
-    });
-
     const response = await webhookTest.postJuicywayWebhook(
       webhookTest.createWebhookRequest(webhookTest.createSuccessPayload())
     );
 
     expect(response.status).toBe(200);
-    expect(rpc).toHaveBeenCalledWith('reinstate_timeout_order_payment', {
-      p_order_id: 'order-123',
-      p_transaction_id: 'txn-123',
-    });
+    expect(transactionUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'completed' })
+    );
     expect(finalizeLatePayment).toHaveBeenCalledWith(
       expect.objectContaining({
         gateway: 'juicyway',

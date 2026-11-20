@@ -22,6 +22,7 @@ interface StaffFollowUpEditorProps {
   /** True right after this viewer claimed the follow-up in this sheet. */
   justClaimed?: boolean;
   busy: boolean;
+  saveError?: string;
   onClose: () => void;
   onClaim: () => Promise<StaffFollowUp>;
   onSave: (fields: StaffFollowUpUpdate) => Promise<StaffFollowUp>;
@@ -34,6 +35,7 @@ export function StaffFollowUpEditor({
   viewerId,
   justClaimed = false,
   busy,
+  saveError,
   onClose,
   onClaim,
   onSave,
@@ -190,9 +192,9 @@ export function StaffFollowUpEditor({
             ) : null}
           </>
         )}
-        {error ? (
+        {saveError || error ? (
           <Text accessibilityRole="alert" style={{ color: colors.error }}>
-            {error}
+            {saveError || error}
           </Text>
         ) : null}
         <View style={styles.actions}>

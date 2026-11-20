@@ -123,6 +123,9 @@ describe('useStaffOrderFollowUps saving', () => {
       await act(async () => {
         await expect(result.current.save(change)).rejects.toThrow(message);
       });
+      await waitFor(() => expect(result.current.saveError).toBe(message));
+      act(() => result.current.resetSave());
+      await waitFor(() => expect(result.current.saveError).toBeUndefined());
     });
 
     it('tells the user the change was saved when the reply is not a valid follow-up', async () => {

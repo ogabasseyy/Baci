@@ -4,6 +4,10 @@ import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  staffFollowUps: { data: {}, openOrders: [] } as {
+    data: Record<string, { stage: string }>;
+    openOrders: { id: string; created_at: string }[];
+  },
   failedOrders: [] as Array<{
     id: string;
     created_at: string;
@@ -99,6 +103,13 @@ vi.mock('@/components/feedback/FeedbackLauncher', () => ({
   FeedbackLauncher: () => <div data-testid="feedback-launcher" />,
 }));
 
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { id: 'viewer-1' } }),
+}));
+vi.mock('@/hooks/useStaffOrderFollowUps', () => ({
+  useStaffOrderFollowUps: () => mocks.staffFollowUps,
+}));
+
 vi.mock('@/hooks/useFailedOrders', () => ({
   useFailedOrders: () => ({ data: mocks.failedOrders }),
 }));
@@ -131,9 +142,29 @@ type TabBarRenderer = (props: BottomTabBarProps) => React.ReactNode;
 describe('TabLayout', () => {
   beforeEach(() => {
     mocks.failedOrders = [];
+    mocks.staffFollowUps = { data: {}, openOrders: [] };
     mocks.oxygenOrders = [];
     mocks.screens = [];
     mocks.tabsProps = null;
+  });
+
+  it('counts open staff follow-ups and excludes closed drop-offs from the Customers badge', () => {
+    mocks.failedOrders = [
+      { id: 'closed-1', created_at: '2026-07-27T08:00:00Z' },
+      { id: 'closed-2', created_at: '2026-07-27T08:00:00Z' },
+    ];
+    mocks.staffFollowUps = {
+      data: {
+        'closed-1': { stage: 'closed' },
+        'closed-2': { stage: 'closed' },
+      },
+      openOrders: [{ id: 'retained-1', created_at: '2026-07-27T08:00:00Z' }],
+    };
+    render(<TabLayout />);
+    expect(
+      mocks.screens.find((route) => route.name === 'customers')?.options
+        ?.tabBarBadge
+    ).toBe(1);
   });
 
   it('keeps admin tabs retained and delegates rendering to the floating bar', () => {

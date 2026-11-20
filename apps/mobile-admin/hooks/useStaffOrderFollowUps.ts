@@ -186,5 +186,7 @@ export function useStaffOrderFollowUps(
     isLimited: query.data?.isLimited ?? false,
     save: mutation.mutateAsync,
     isSaving: mutation.isPending,
+    saveError: mutation.error?.message,
+    resetSave: mutation.reset,
   };
 }

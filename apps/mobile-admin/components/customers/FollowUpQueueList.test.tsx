@@ -15,16 +15,21 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: 'viewer' } }),
 }));
 vi.mock('@/hooks/useStaffOrderFollowUps', () => ({
-  useStaffOrderFollowUps: mocks.useStaffOrderFollowUps,
+  useStaffOrderFollowUps: () => ({
+    resetSave: vi.fn(),
+    ...mocks.useStaffOrderFollowUps(),
+  }),
 }));
 vi.mock('@/components/customers/StaffFollowUpEditor', () => ({
   StaffFollowUpEditor: (props: {
     justClaimed?: boolean;
+    saveError?: string;
     onClaim: () => Promise<unknown>;
     onClose: () => void;
   }) => (
     <div>
       Open follow-up editor
+      {props.saveError ? <span role="alert">{props.saveError}</span> : null}
       {props.justClaimed ? <span>Claim confirmed</span> : null}
       <button type="button" onClick={() => void props.onClaim()}>
         Claim from editor
@@ -273,6 +278,51 @@ describe('FollowUpQueueList', () => {
     expect(screen.getByText('Follow up on 2026-12-01')).toBeVisible();
     fireEvent.click(screen.getByText('View follow-up'));
     expect(screen.getByText('Open follow-up editor')).toBeVisible();
+  });
+
+  it('removes closed checkouts from the work queue and its count', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      data: { 'order-1': { stage: 'closed' } },
+    });
+    render(
+      <FollowUpQueueList {...defaultProps} renderOrder={() => <div>Ada</div>} />
+    );
+    expect(screen.queryByText('Ada')).toBeNull();
+    expect(
+      screen.getByText('No follow-ups need attention right now.')
+    ).toBeVisible();
+    expect(defaultProps.onFollowUpCountChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it('preserves a claim conflict when refreshing changes the editor revision', () => {
+    mocks.useFollowUpQueue.mockReturnValue({
+      failedOrders: [{ id: 'order-1', created_at: '2026-07-27T08:00:00Z' }],
+      merchant: { id: 'merchant-1' },
+      refresh: mocks.refresh,
+      viewState: { status: 'ready' },
+    });
+    mocks.useStaffOrderFollowUps.mockReturnValue({ isSuccess: true });
+    const props = { ...defaultProps, renderOrder: () => <div>Ada</div> };
+    const { rerender } = render(<FollowUpQueueList {...props} />);
+    fireEvent.click(screen.getByText('Claim follow-up'));
+    mocks.useStaffOrderFollowUps.mockReturnValue({
+      isSuccess: true,
+      data: {
+        'order-1': { stage: 'waiting', assignee_id: 'teammate', revision: 1 },
+      },
+      saveError: 'Someone else has already claimed this follow-up.',
+    });
+    rerender(<FollowUpQueueList {...props} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Someone else has already claimed this follow-up.'
+    );
   });
 
   it('keeps a claimed follow-up visible after the checkout leaves the source queue', () => {

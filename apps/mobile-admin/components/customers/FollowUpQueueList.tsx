@@ -15,10 +15,8 @@ import { FollowUpErrorBanner } from '@/components/customers/FollowUpErrorBanner'
 import { FollowUpFilteredEmptyState } from '@/components/customers/FollowUpFilteredEmptyState';
 import { StaffFollowUpEditor } from '@/components/customers/StaffFollowUpEditor';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
 import type { FailedOrder } from '@/hooks/useFailedOrders';
-import { useFollowUpQueue } from '@/hooks/useFollowUpQueue';
-import { useStaffOrderFollowUps } from '@/hooks/useStaffOrderFollowUps';
+import { useStaffFollowUpQueue } from '@/hooks/useStaffFollowUpQueue';
 import { useTheme } from '@/hooks/useTheme';
 import {
   type GroupedFailedOrderListItem,
@@ -54,44 +52,40 @@ export function FollowUpQueueList({
 }: FollowUpQueueListProps) {
   const { colors } = useTheme();
   const {
-    failedOrders,
+    source,
+    staff: staffFollowUps,
+    orders,
+    ordersById,
+    viewerId,
+  } = useStaffFollowUpQueue();
+  const {
     isFailedOrdersError,
     isFollowUpLimited,
     isRefreshing,
     merchant,
     refresh,
     viewState,
-  } = useFollowUpQueue();
-  const { user } = useAuth();
+  } = source;
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [claimedOrderId, setClaimedOrderId] = useState<string | null>(null);
-  const orderIds = failedOrders?.map((order) => order.id).sort() ?? [];
-  const staffFollowUps = useStaffOrderFollowUps(
-    merchant?.id,
-    user?.id,
-    orderIds
-  );
-  const sourceOrderIds = new Set(orderIds);
-  const orders = [
-    ...(failedOrders ?? []),
-    ...(staffFollowUps.openOrders ?? []).filter(
-      (order) => !sourceOrderIds.has(order.id)
-    ),
-  ];
   const followUpCount = orders.length;
   const isLimited = isFollowUpLimited || staffFollowUps.isLimited;
   const emptyViewState =
-    viewState.status === 'empty' && staffFollowUps.isLoading
-      ? ({ status: 'loading' } as const)
-      : viewState;
-  const selectedOrder = orders.find((order) => order.id === selectedOrderId);
+    followUpCount === 0 && viewState.status === 'ready'
+      ? ({ status: 'empty' } as const)
+      : viewState.status === 'empty' && staffFollowUps.isLoading
+        ? ({ status: 'loading' } as const)
+        : viewState;
+  const selectedOrder = selectedOrderId
+    ? ordersById.get(selectedOrderId)
+    : undefined;
   const selectedFollowUp = selectedOrder
     ? staffFollowUps.data?.[selectedOrder.id]
     : undefined;
   const refreshQueue = async () => {
     await Promise.allSettled([
       refresh(),
-      ...(merchant?.id && user?.id ? [staffFollowUps.refetch()] : []),
+      ...(merchant?.id && viewerId ? [staffFollowUps.refetch()] : []),
     ]);
   };
 
@@ -162,7 +156,10 @@ export function FollowUpQueueList({
               <Pressable
                 accessibilityRole="button"
                 accessibilityHint="Open team follow-up details"
-                onPress={() => setSelectedOrderId(order.id)}
+                onPress={() => {
+                  staffFollowUps.resetSave();
+                  setSelectedOrderId(order.id);
+                }}
                 style={[styles.staffAction, { backgroundColor: colors.card }]}
               >
                 <Text style={{ color: colors.text }}>
@@ -188,7 +185,7 @@ export function FollowUpQueueList({
                 <Text style={{ color: colors.gold }}>
                   {!followUp?.assignee_id
                     ? 'Claim follow-up'
-                    : followUp.assignee_id === user?.id
+                    : followUp.assignee_id === viewerId
                       ? 'Update follow-up'
                       : 'View follow-up'}
                 </Text>
@@ -235,6 +232,14 @@ export function FollowUpQueueList({
           )
         }
       />
+      {selectedOrderId && !selectedOrder && staffFollowUps.saveError ? (
+        <Text
+          accessibilityRole="alert"
+          style={{ color: colors.error, padding: SPACING.lg }}
+        >
+          {staffFollowUps.saveError}
+        </Text>
+      ) : null}
       {selectedOrder && (
         <StaffFollowUpEditor
           key={`${selectedOrder.id}:${selectedFollowUp?.revision ?? 0}`}
@@ -244,13 +249,15 @@ export function FollowUpQueueList({
             selectedOrder.order_number ||
             'Customer'
           }
-          viewerId={user?.id}
+          viewerId={viewerId}
           followUp={selectedFollowUp}
           justClaimed={claimedOrderId === selectedOrder.id}
           busy={staffFollowUps.isSaving}
+          saveError={staffFollowUps.saveError}
           onClose={() => {
             setSelectedOrderId(null);
             setClaimedOrderId(null);
+            staffFollowUps.resetSave();
           }}
           onClaim={async () => {
             const claimed = await staffFollowUps.save({

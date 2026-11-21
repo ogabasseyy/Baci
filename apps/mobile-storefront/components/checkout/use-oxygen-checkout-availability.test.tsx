@@ -206,11 +206,12 @@ it.each([
 ])('uses the LAN reachability exception only for pinned localhost: %s', async (apiOrigin, available) => {
   const staging = { ...profile, apiOrigin };
   jest.mocked(getOxygenMobileProfile).mockReturnValue(staging);
-  jest
-    .mocked(getOxygenStagingProfile)
-    .mockReturnValue(
-      staging as NonNullable<ReturnType<typeof getOxygenStagingProfile>>
-    );
+  jest.mocked(getOxygenStagingProfile).mockReturnValue({
+    ...staging,
+    expectedAuthIssuer: 'https://auth.example.com/auth/v1',
+    publicKey: 'staging-test-key',
+    appId: 'com.ogabassey.oxygenstaging',
+  });
   jest.mocked(NetInfo.addEventListener).mockImplementationOnce((next) => {
     next({ isConnected: true, isInternetReachable: false } as NetInfoState);
     return () => {};

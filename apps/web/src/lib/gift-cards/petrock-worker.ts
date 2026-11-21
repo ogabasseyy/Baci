@@ -66,12 +66,15 @@ export async function runGiftCardWorker(
     return { status: 'not_pollable' };
   }
   const reply = await deps.poll(order.providerOrderId);
-  if (
-    !reply.ok ||
-    reply.data.orderUuid !== order.providerOrderId ||
-    reply.data.referenceId !== order.id
-  ) {
-    return { status: 'review' };
+  if (!reply.ok) return { status: 'review', reason: 'poll_unverified' };
+  if (reply.data.orderUuid !== order.providerOrderId) {
+    return { status: 'review', reason: 'order_mismatch' };
+  }
+  if (!reply.data.referenceId) {
+    return { status: 'review', reason: 'missing_reference' };
+  }
+  if (reply.data.referenceId !== order.id) {
+    return { status: 'review', reason: 'reference_mismatch' };
   }
   const { status, replay } = reply.data;
   if (status !== 'success' && status !== 'reject') return { status: 'pending' };

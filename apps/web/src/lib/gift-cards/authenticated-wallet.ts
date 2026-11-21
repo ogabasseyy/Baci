@@ -54,7 +54,8 @@ export async function issueAuthenticatedGiftCardQuote(
     userId: data.user.id,
     cardId,
     totalKobo,
-    expiresAt: Date.now() + 60_000,
+    // Leave five seconds of headroom under PostgreSQL’s 60-second limit.
+    expiresAt: Date.now() + 55_000,
   };
   const payload = JSON.stringify(quote);
   const signature = createHmac('sha256', signingKey)

@@ -42,13 +42,14 @@ export default function GiftCardPage(props: GiftCardPageProps) {
 }
 
 async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
-  const [{ slug }, { card, selection }] = await Promise.all([
-    params,
-    searchParams,
-  ]);
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
   const merchant = await getRequestScopedMerchant(slug);
   if (!merchant || !isGiftCardPreviewEnabled(merchant.slug)) notFound();
 
+  const card = Array.isArray(query.card) ? query.card[0] : query.card;
+  const selection = Array.isArray(query.selection)
+    ? query.selection[0]
+    : query.selection;
   const catalog = getGiftCardPreviewCatalog();
   const selected = catalog.find((item) => item.id === (card ?? selection));
   const key = process.env.JUICYWAY_EXCHANGE_RATE_READ_KEY?.trim();

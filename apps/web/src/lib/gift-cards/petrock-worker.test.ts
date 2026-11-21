@@ -77,3 +77,26 @@ it('captures a verified terminal replay encrypted and returns only redacted meta
   );
   expect(JSON.stringify(result)).not.toContain('SECRET-VOUCHER');
 });
+
+it('flags missing reference separately without exposing or capturing the replay', async () => {
+  const deps = setup();
+  deps.read.mockResolvedValue({
+    ...paid,
+    status: 'submitted',
+    providerOrderId: 'supplier-1',
+  });
+  deps.poll.mockResolvedValue({
+    ok: true,
+    data: {
+      orderUuid: 'supplier-1',
+      status: 'success',
+      replay: 'SECRET-VOUCHER',
+    },
+  });
+  await expect(
+    runGiftCardWorker({ mode: 'poll', orderId: paid.id }, deps)
+  ).resolves.toEqual({ status: 'review', reason: 'missing_reference' });
+  expect(deps.seal).not.toHaveBeenCalled();
+  expect(deps.recordResult).not.toHaveBeenCalled();
+  expect(deps.submit).not.toHaveBeenCalled();
+});

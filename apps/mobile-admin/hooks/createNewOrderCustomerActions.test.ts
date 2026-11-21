@@ -263,7 +263,7 @@ describe('createNewOrderCustomerActions', () => {
       newCustomer: {
         ...createEmptyNewCustomerDraft(),
         address: ' 12 allen avenue, ',
-        city: 'Ikeja,',
+        city: 'Ikeja',
         state: ' Lagos ',
       },
       setCustomer,
@@ -290,7 +290,7 @@ describe('createNewOrderCustomerActions', () => {
 
     expect(setCustomer).toHaveBeenCalledWith(
       expect.objectContaining({
-        city: 'Ikeja,',
+        city: 'Ikeja',
         state: 'Lagos',
         latitude: 6.6,
         longitude: 3.35,

@@ -8,6 +8,8 @@ export function bankCardOfferRetryDelay(response: Response): number {
       : 0;
   const retryAfter = response.headers.get('Retry-After')?.trim();
   if (!retryAfter) return fallback;
+  // The verification API sends delta-seconds. For an intermediary's absolute
+  // date, use the response clock when available and avoid device clock skew.
   const serverTime = Date.parse(response.headers.get('Date') ?? '');
   const delay = /^\d+$/.test(retryAfter)
     ? Number(retryAfter) * 1000

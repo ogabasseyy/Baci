@@ -86,6 +86,9 @@ export async function verifySessionlessBankCardOffer(
         ...orderDetails,
         success: false,
         status: verified.status,
+        ...(verified.status === 'reversed'
+          ? { reference: saved.data.reference }
+          : {}),
       });
     }
     if (verified?.kind === 'mismatch') {

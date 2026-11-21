@@ -75,6 +75,7 @@ it.each([
     status,
     orderId: snapshot.orderId,
     orderNumber: 'ORD-1',
+    ...(status === 'reversed' ? { reference } : {}),
   });
   expect(rpc).toHaveBeenLastCalledWith('flag_bank_card_offer_terminal_review', {
     p_order_id: snapshot.orderId,
@@ -176,6 +177,7 @@ it('rechecks settled attempts for reversals before reporting history success', a
   await expect(result.json()).resolves.toMatchObject({
     success: false,
     status: 'reversed',
+    reference,
   });
   expect(rpc).toHaveBeenLastCalledWith(
     'flag_bank_card_offer_terminal_review',

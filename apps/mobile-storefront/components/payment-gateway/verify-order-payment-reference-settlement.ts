@@ -19,7 +19,7 @@ const bankOfferReversalResponseSchema = z.object({
   status: z.literal('reversed'),
   success: z.literal(false),
   finalizationOutcome: z.never().optional(),
-  reference: z.string().optional(),
+  reference: z.string(),
 });
 
 // Permanent reference defects: the attempt itself is invalid (wrong
@@ -127,8 +127,7 @@ export async function checkReferenceSettled(
       return response.status === 200 &&
         reversal.success &&
         reversal.data.orderId === orderId &&
-        (reversal.data.reference === undefined ||
-          reversal.data.reference === reference)
+        reversal.data.reference === reference
         ? { paid: false, reconciliation: 'payment_reversed' }
         : { paid: false, inconclusive: true };
     }

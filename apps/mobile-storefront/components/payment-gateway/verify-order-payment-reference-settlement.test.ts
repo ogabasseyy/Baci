@@ -80,6 +80,7 @@ describe('checkReferenceSettled transport selection', () => {
         orderId: 'order-1',
         success: false,
         status: 'reversed',
+        reference,
       }) as never
     );
 
@@ -112,6 +113,7 @@ describe('checkReferenceSettled transport selection', () => {
     { success: true, finalizationOutcome: 'completed' },
     { finalizationOutcome: 'completed' },
     { reference: `BCO-${'b'.repeat(32)}` },
+    { reference: undefined },
     { orderId: 42 },
   ])('does not trust an inconsistent or unbound reversal envelope %j', async (overrides) => {
     mockGetSession.mockResolvedValue({
@@ -122,6 +124,7 @@ describe('checkReferenceSettled transport selection', () => {
         orderId: 'order-1',
         success: false,
         status: 'reversed',
+        reference: `BCO-${'a'.repeat(32)}`,
         ...overrides,
       }) as never
     );

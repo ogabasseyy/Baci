@@ -76,6 +76,7 @@ export async function finalizeVerificationResponse(
     return NextResponse.json({
       success: false,
       status: finalizeOutcome.status,
+      ...(finalizeOutcome.status === 'reversed' ? { reference } : {}),
       orderId,
       orderNumber: existingOrder?.order_number ?? undefined,
     });

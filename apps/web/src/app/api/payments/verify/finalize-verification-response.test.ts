@@ -32,6 +32,7 @@ it('reports a recorded bank-offer reversal with the real order number', async ()
     success: false,
     orderId: 'order',
     orderNumber: 'ORD-1',
+    reference: bankOfferInput.reference,
   });
   expect(finalize).toHaveBeenCalledWith(
     expect.objectContaining({ wonTransactionFlip: false })

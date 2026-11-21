@@ -46,6 +46,8 @@ SELECT * FROM (VALUES
    'FOLLOW-UP: quote id is the only capability; not tied to caller or session'),
   ('public.get_credit_direct_settings(text)',
    'public storefront/feed read; anon-safe projection'),
+  ('public.get_chat_message_push_preference(uuid)',
+   'chat webhook has no merchant session; returns one boolean switch only'),
   ('public.get_feed_product_variants(uuid[],uuid)',
    'public storefront/feed read; anon-safe projection'),
   ('public.get_follow_up_notification_preference(uuid)',
@@ -231,6 +233,8 @@ SELECT * FROM (VALUES
   ('public.chat_event_deactivate_push_tokens(text,bigint,uuid,text,uuid,text,text[])',
    'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
   ('public.chat_event_record_push_attempt(text,bigint,uuid,text,uuid,jsonb)',
-   'signed chat push flow; action-bound HMAC proof verified in the body, no service role')
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
+  ('public.record_chat_handover(text,bigint,uuid,text,bigint,text)',
+   'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

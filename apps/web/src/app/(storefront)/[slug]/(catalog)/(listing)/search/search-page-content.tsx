@@ -119,17 +119,18 @@ export async function SearchPageContent({
     visibleCount,
   });
 
-  const summaryText =
-    giftCards.length > 0 && visibleCount === 0 && !searchFailed
-      ? 'Gift cards matching your search'
-      : searchFailed
-        ? `We couldn't load results for “${query}”.`
-        : formatSearchSummary({
-            query: searchQuery,
-            totalCount: effectiveResult.count,
-            visibleCount,
-            page,
-          });
+  // Gift-card preview links carry no product offer or live quote.
+  const giftCardResultsOnly = giftCards.length > 0 && visibleCount === 0;
+  const summaryText = giftCardResultsOnly
+    ? 'Gift cards matching your search'
+    : searchFailed
+      ? `We couldn't load results for “${query}”.`
+      : formatSearchSummary({
+          query: searchQuery,
+          totalCount: effectiveResult.count,
+          visibleCount,
+          page,
+        });
 
   return (
     <V2ComparisonScope storageNamespace={merchant.id}>
@@ -138,9 +139,13 @@ export async function SearchPageContent({
           <JsonLd
             data={breadcrumbSchema as unknown as WithContext<BreadcrumbList>}
           />
-          <JsonLd
-            data={searchResultsSchema as unknown as WithContext<CollectionPage>}
-          />
+          {!giftCardResultsOnly && (
+            <JsonLd
+              data={
+                searchResultsSchema as unknown as WithContext<CollectionPage>
+              }
+            />
+          )}
           <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-8 pt-6">
             <div className="mx-auto max-w-[1400px] px-4 md:px-6">
               <SearchPageBreadcrumb pathPrefix={pathPrefix} />

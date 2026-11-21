@@ -13,6 +13,7 @@ import {
 } from '@/lib/gift-cards/preview-catalog';
 import { getGiftCardPreviewQuote } from '@/lib/gift-cards/preview-quote';
 import { getGiftCardQuote } from '@/lib/gift-cards/quote';
+import { asRoute } from '@/lib/routes';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { createClient } from '@/lib/supabase/server';
 import { MockGiftCardConfirmation } from './mock-gift-card-confirmation';
@@ -109,7 +110,7 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
       <p>Preview US gift cards and check the current naira price.</p>
       {catalog.length > 0 ? (
         <form
-          action={`${prefix}/gift-cards`}
+          action={asRoute(`${prefix}/gift-cards`)}
           method="get"
           className="space-y-3"
         >

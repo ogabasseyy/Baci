@@ -7,7 +7,7 @@ export async function getBankCardOfferVerificationBinding(
   reference: string,
   merchantSlug: string | undefined
 ) {
-  if (!merchantSlug) return null;
+  if (!merchantSlug) return 'unavailable';
 
   try {
     const auth = await getAuthenticatedUser(request);

@@ -6,7 +6,7 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import type { BrowserBankCardOffer } from '@/lib/checkout/get-browser-bank-card-offers';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { checkoutDeliveryFormFields } from './checkout/checkout-delivery-form-fields';
-import { BankCardOfferOptionsContext } from './checkout/components/BankCardOfferOptions';
+import { BankCardOfferOptionsContext } from './checkout/components/bank-card-offer-options-context';
 import { CheckoutCartScreen } from './checkout/components/CheckoutCartScreen';
 import { getCheckoutPageResumeFallback } from './checkout/components/get-checkout-page-resume-fallback';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';

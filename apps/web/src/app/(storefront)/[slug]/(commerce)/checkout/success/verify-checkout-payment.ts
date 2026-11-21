@@ -1,10 +1,7 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
-import {
-  bankCardOfferRetryDelay,
-  getBankCardOfferCheckoutStatus,
-} from './get-bank-card-offer-checkout-status';
+import { readBankCardOfferCheckoutResponse } from './read-bank-card-offer-checkout-response';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
 import {
   isAbortError,
@@ -168,34 +165,19 @@ export async function verifyCheckoutPayment(
       method: 'POST',
       signal,
     });
-    const body = response.json();
-    const raw: unknown = await (isBankOffer
-      ? body.catch((error: unknown) => {
-          if (!isAbortError(error)) {
-            console.warn('Bank card offer verification returned invalid JSON', {
-              status: response.status,
-            });
-          }
-          return null;
+    const bankOfferResponse = isBankOffer
+      ? await readBankCardOfferCheckoutResponse(response, {
+          setOrderNumber,
+          setStatus,
         })
-      : body);
+      : null;
+    if (bankOfferResponse?.handled) return;
+
+    const raw: unknown = bankOfferResponse
+      ? bankOfferResponse.data
+      : await response.json();
     const data = isVerificationResponse(raw) ? raw : {};
     const orderNumber = data.orderNumber || fallbackOrderNumber;
-
-    const bankOfferStatus = isBankOffer
-      ? getBankCardOfferCheckoutStatus(response.status, data)
-      : null;
-    if (bankOfferStatus) {
-      const retryDelay =
-        bankOfferStatus === 'pending' && bankCardOfferRetryDelay(response);
-      if (retryDelay) setStatus(bankOfferStatus, retryDelay);
-      else setStatus(bankOfferStatus);
-      // Only an ownership denial clears an already verified order number.
-      if (bankOfferStatus === 'access_required') setOrderNumber(null);
-      else if (response.status !== 403 && orderNumber)
-        setOrderNumber(orderNumber);
-      return;
-    }
 
     // A 202 or an explicit held/evidence/review code keeps the page
     // pending even when the payload also carries a success flag: the

@@ -11,7 +11,8 @@ import {
 } from '../../../components/PaymentLogos';
 import type { PaymentTab } from '../types';
 import type { PaymentOptionsPanelProps } from './payment-options-panel.types';
-import { BankCardOfferOptions, BankCardOfferOptionsContext } from './BankCardOfferOptions';
+import { BankCardOfferOptionsContext } from './bank-card-offer-options-context';
+import { BankCardOfferOptions } from './BankCardOfferOptions';
 import { PaymentInstallmentDetails } from './PaymentInstallmentDetails';
 import { PaymentOptionCard } from './PaymentOptionCard';
 import { PaymentScheduleCard } from './PaymentScheduleCard';

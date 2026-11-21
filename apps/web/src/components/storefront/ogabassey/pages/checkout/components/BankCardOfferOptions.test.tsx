@@ -1,9 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import {
-  BankCardOfferOptions,
-  BankCardOfferOptionsContext,
-} from './BankCardOfferOptions';
+import { BankCardOfferOptionsContext } from './bank-card-offer-options-context';
+import { BankCardOfferOptions } from './BankCardOfferOptions';
 
 it('lets the buyer clear an unavailable selection', () => {
   const select = vi.fn();

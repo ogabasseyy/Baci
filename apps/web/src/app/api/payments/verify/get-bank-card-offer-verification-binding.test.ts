@@ -45,10 +45,10 @@ it('binds an owned order to the selected storefront', async () => {
   ]);
 });
 
-it('rejects a request without a storefront or signed-in shopper', async () => {
+it('distinguishes missing storefront context from a missing buyer session', async () => {
   await expect(
     getBankCardOfferVerificationBinding(request, reference, undefined)
-  ).resolves.toBeNull();
+  ).resolves.toBe('unavailable');
   expect(authenticate).not.toHaveBeenCalled();
 
   authenticate.mockResolvedValueOnce(null);

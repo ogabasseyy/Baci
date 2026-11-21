@@ -138,7 +138,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409':
-          description: Quote, order reference, or idempotency key conflicts with a previous submission.
+          description: The claimed payment amount differs from the quote total, or the quote, order reference, or idempotency key conflicts with a previous submission.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -419,7 +419,7 @@ components:
           properties:
             code:
               enum: [INVALID_IDEMPOTENCY_KEY, INVALID_REQUEST, UNAUTHORIZED, SCOPE_REQUIRED,
-                ORDER_NOT_FOUND, ORDER_SUBMISSION_NOT_FOUND, QUOTE_NOT_FOUND, LISTING_UNAVAILABLE, ORDER_CONFLICT,
+                ORDER_NOT_FOUND, ORDER_SUBMISSION_NOT_FOUND, QUOTE_NOT_FOUND, LISTING_UNAVAILABLE, ORDER_CONFLICT, ORDER_AMOUNT_MISMATCH,
                 ADDRESS_UNSERVICEABLE, RATE_LIMITED, CARRIER_UNAVAILABLE, ORDER_INTAKE_UNAVAILABLE,
                 ORDER_LOOKUP_UNAVAILABLE, ORDER_RESPONSE_INVALID, QUOTE_UNAVAILABLE, QUOTE_ORIGIN_UNAVAILABLE, QUOTE_SETTLEMENT_UNAVAILABLE, PAYLOAD_TOO_LARGE]
         request_id: {type: string, format: uuid}

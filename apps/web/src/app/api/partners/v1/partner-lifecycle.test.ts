@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as reconcile } from '@/app/api/internal/partner-order-reconciliation/route';
 import { GET as catalog } from './catalog/route';
 import { GET as lookup } from './order-submissions/route';
-import { POST as submit } from './orders/route';
 import {
   expectJson,
   fixtureEnabled,
@@ -14,6 +13,7 @@ import {
   verifyConcurrentRetry,
   verifyPartnerTracking,
 } from './partner-lifecycle-db.test-support';
+import { verifyPartnerIntake } from './partner-lifecycle-intake.test-support';
 import { POST as quote } from './quotes/route';
 
 vi.mock('@/lib/tenant-rate-limit', () => ({
@@ -202,16 +202,9 @@ describe.runIf(fixtureEnabled)(
           currency: 'NGN',
         },
       };
-      const purchase = () =>
-        submit(
-          request('partners/v1/orders', tokens.order, orderPayload, {
-            'Idempotency-Key': 'fixture-order-idempotency-0001',
-          })
-        );
-      const pending = await verifyConcurrentRetry(
-        purchase,
-        202,
-        'POST /orders'
+      const { pending, purchase } = await verifyPartnerIntake(
+        tokens.order,
+        orderPayload
       );
       expect(pending.status).toBe('pending_verification');
       const receiptPath = `partners/v1/order-submissions?partner_order_id=${partnerOrderId}`;

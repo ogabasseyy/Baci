@@ -32,9 +32,9 @@ VALUES ('10000000-0000-4000-8000-000000000001');
 INSERT INTO private.partner_delivery_quotes (id, merchant_id, connection_id, created_at, expires_at, snapshot)
 VALUES
   ('20000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001',
-   'fixture-connection', now() - interval '20 minutes', now() - interval '10 minutes', '{}'),
+   'fixture-connection', now() - interval '20 minutes', now() - interval '10 minutes', '{"total_minor":171200}'),
   ('20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001',
-   'fixture-connection', now(), now() + interval '10 minutes', '{}');
+   'fixture-connection', now(), now() + interval '10 minutes', '{"total_minor":171200}');
 
 SET LOCAL ROLE anon;
 DO $$
@@ -45,7 +45,7 @@ DECLARE
   connection_id constant text := 'fixture-connection';
   partner_order_id constant text := 'external-order-one';
   key_hash constant text := repeat('a', 64);
-  submission constant jsonb := '{"payment":{"reference":"fixture-payment"}}';
+  submission constant jsonb := '{"payment":{"reference":"fixture-payment","amount_minor":171200}}';
   proof constant jsonb := pg_temp.partner_order_proof(quote_id, merchant_id, connection_id, partner_order_id, key_hash, submission);
   receipt jsonb;
 BEGIN

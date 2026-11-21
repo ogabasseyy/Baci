@@ -91,6 +91,11 @@ export async function POST(request: Request) {
 
     if (error?.code === 'P0002' && error.message === 'partner_quote_not_found')
       return invalid(404, 'QUOTE_NOT_FOUND');
+    if (
+      error?.code === '22023' &&
+      error.message === 'partner_order_payment_amount_mismatch'
+    )
+      return invalid(409, 'ORDER_AMOUNT_MISMATCH');
     if (error?.code === '23505') {
       if (error.message === 'partner_order_conflict')
         return invalid(409, 'ORDER_CONFLICT');

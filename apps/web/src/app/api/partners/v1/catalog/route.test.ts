@@ -26,6 +26,8 @@ vi.mock('@/lib/posthog/server', () => ({ captureServerEvent }));
 vi.mock('@/lib/tenant-rate-limit', () => ({
   checkTenantRateLimitDetailed: rateLimit,
 }));
+// Exercise the real partner profile, credential scope and snapshot reader.
+// Replace only their product, version and Redis dependencies.
 vi.mock('./catalog-service', () => ({ loadCrossRemCatalog }));
 vi.mock('./catalog-version', () => ({
   readCrossRemCatalogVersion: readVersion,

@@ -16,7 +16,10 @@ const proofSchema = z.object({
   signature: z.string().regex(/^[0-9a-f]{64}$/),
 });
 
-export async function issueAuthenticatedGiftCardQuote(input: unknown) {
+export async function issueAuthenticatedGiftCardQuote(
+  input: unknown,
+  orderId?: string
+) {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) throw new Error('Sign in to get a wallet quote');
@@ -46,7 +49,7 @@ export async function issueAuthenticatedGiftCardQuote(input: unknown) {
     throw new Error('Gift card price is out of range');
 
   const quote = {
-    id: randomUUID(),
+    id: orderId === undefined ? randomUUID() : z.uuid().parse(orderId),
     merchantId: merchant.id,
     userId: data.user.id,
     cardId,

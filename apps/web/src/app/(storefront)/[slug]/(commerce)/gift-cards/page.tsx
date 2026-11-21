@@ -4,12 +4,18 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import {
+  getGiftCardPilotConfig,
+  PILOT_PRODUCT_ID,
+} from '@/lib/gift-cards/pilot-wallet-config';
+import {
   getGiftCardPreviewCatalog,
   isGiftCardPreviewEnabled,
 } from '@/lib/gift-cards/preview-catalog';
 import { getGiftCardQuote } from '@/lib/gift-cards/quote';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
+import { createClient } from '@/lib/supabase/server';
 import { MockGiftCardConfirmation } from './mock-gift-card-confirmation';
+import { PilotWalletForm } from './pilot-wallet-form';
 
 export const metadata: Metadata = {
   title: 'Gift Cards',
@@ -86,6 +92,14 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
           expiresAt: Date.now() + 60_000,
         }
       : null;
+  const pilot =
+    !mockCheckout && selected?.id === PILOT_PRODUCT_ID
+      ? getGiftCardPilotConfig()
+      : null;
+  const pilotBuyer = pilot
+    ? (await (await createClient()).auth.getUser()).data.user?.id ===
+      pilot.userId
+    : false;
 
   return (
     <>
@@ -126,6 +140,7 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
       ) : (
         <p role="status">Gift cards are temporarily unavailable.</p>
       )}
+      {pilotBuyer && <PilotWalletForm />}
       {card !== undefined && (
         <div role="status" className="rounded-md border p-4">
           {total === null || !selected ? (

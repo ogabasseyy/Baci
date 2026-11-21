@@ -6,7 +6,7 @@ export function resolveGiftCardFulfillment(
     orderUuid: string;
     referenceId?: string;
     status: PetrockOrderStatus;
-    replay: string;
+    replay: string | null;
   },
   decodeVoucher?: (replay: string) => string | null
 ):
@@ -23,7 +23,7 @@ export function resolveGiftCardFulfillment(
   if (order.status !== 'success') return { status: 'pending' };
 
   // A success receipt establishes order state, but cannot validate a voucher format.
-  if (!decodeVoucher || !order.replay.trim()) return { status: 'review' };
+  if (!decodeVoucher || !order.replay?.trim()) return { status: 'review' };
   try {
     const voucher = decodeVoucher(order.replay);
     if (voucher?.trim()) return { status: 'fulfilled', voucher };

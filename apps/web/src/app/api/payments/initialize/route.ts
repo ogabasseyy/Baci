@@ -48,6 +48,7 @@ import {
   initializePayment as initializeKorapayPayment,
 } from '@/lib/korapay';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
+import { beginPaystackDvaAttempt } from '@/lib/payments/begin-paystack-dva-attempt';
 import { checkPaystackDvaShippingEligibility } from '@/lib/payments/check-paystack-dva-shipping-eligibility';
 import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-redvault-paystack-checkout';
 import { initializeTransactionMetadata } from '@/lib/payments/initialize-transaction-metadata';
@@ -1728,6 +1729,44 @@ export async function POST(request: NextRequest) {
               );
             }
 
+            const fees = calculatePaystackFee(dvaAmountKobo);
+            if (orderSnapshot.payment_method === 'bank_transfer') {
+              const attempt = await beginPaystackDvaAttempt({
+                amountKobo: dvaAmountKobo,
+                customerEmail: paymentData.customer_email,
+                merchantId,
+                orderId: paymentData.order_id,
+                reference,
+                trackingToken: data.tracking_token,
+              });
+              if (!attempt || attempt.kind === 'pending') {
+                return createErrorResponse(
+                  'We’re checking your bank transfer details. Please try again shortly.',
+                  'DVA_SETUP_PENDING',
+                  503
+                );
+              }
+              if (attempt.kind === 'refused') {
+                return createErrorResponse(
+                  'Bank transfer is unavailable for this checkout.',
+                  'DVA_SETUP_REFUSED',
+                  409
+                );
+              }
+              if (attempt.kind === 'saved') {
+                return NextResponse.json(
+                  {
+                    success: true,
+                    authorization_url: '',
+                    dva: attempt.dva,
+                    gateway,
+                    reference: attempt.reference,
+                  },
+                  { headers: { 'Cache-Control': 'private, no-store' } }
+                );
+              }
+            }
+
             const { createDedicatedVirtualAccount } = await import(
               '@/lib/agentic/paystack'
             );
@@ -1743,10 +1782,6 @@ export async function POST(request: NextRequest) {
                 phone: paymentData.customer_phone || '',
               },
               { subaccount: merchantWithPaystack.paystack_subaccount_code }
-            );
-
-            const fees = calculatePaystackFee(
-              Math.round(paymentData.amount * 100)
             );
 
             // B1 (Δ-10): persist the DVA assignment so the webhook can

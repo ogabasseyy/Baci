@@ -83,7 +83,10 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
-async function prepare(recoveryForRedvault: boolean) {
+async function prepare(
+  recoveryForRedvault: boolean,
+  recoveryForBankTransfer = false
+) {
   return POST(
     new NextRequest('https://store.example/api/storefront/cart/checkout', {
       method: 'POST',
@@ -92,6 +95,7 @@ async function prepare(recoveryForRedvault: boolean) {
         expectedVersion: 1,
         operationId: 'op-1',
         recoveryForRedvault,
+        recoveryForBankTransfer,
       }),
     })
   );
@@ -145,4 +149,14 @@ it('does not issue a recovery proof for ordinary checkout or an indeterminate au
   expect(response.headers.get('set-cookie') ?? '').not.toContain(
     checkoutRecoveryCookieName(merchantId)
   );
+});
+
+it('issues the same checkout-bound recovery cookie for bank-transfer checkout', async () => {
+  const response = await prepare(false, true);
+  expect(response.status).toBe(200);
+  expect(
+    response.cookies.get(checkoutReconciliationCookieName(merchantId))
+  ).toMatchObject({
+    httpOnly: true,
+  });
 });

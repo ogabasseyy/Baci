@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockCreateDedicatedVirtualAccount = vi.fn();
 const mockPersistPaystackDvaAssignment = vi.fn();
 const mockCreatePaymentTransaction = vi.fn();
+const mockDvaAttempt = vi.fn();
+vi.mock('@/lib/payments/begin-paystack-dva-attempt', () => ({
+  beginPaystackDvaAttempt: (...args: unknown[]) => mockDvaAttempt(...args),
+}));
 
 vi.mock('@/env', () => ({
   getSupabaseUrl: () => 'https://test.supabase.co',
@@ -62,7 +66,11 @@ function createAdminClientMock() {
       if (name === 'get_order_payment_snapshot') {
         return Promise.resolve({
           data: [
-            { merchant_id: merchantId, total: 5000, tracking_token: 'token' },
+            {
+              merchant_id: merchantId,
+              total: 5000,
+              payment_method: 'bank_transfer',
+            },
           ],
           error: null,
         });
@@ -128,7 +136,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 import { POST } from './route';
 
-function request() {
+function request(trackingToken?: string) {
   return new NextRequest('http://localhost:3000/api/payments/initialize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -142,6 +150,7 @@ function request() {
       customer_phone: '08012345678',
       gateway: 'paystack',
       payment_type: 'dva',
+      tracking_token: trackingToken,
       billing_address: { line1: '123 Main St', city: 'Lagos', country: 'NG' },
     }),
   });
@@ -156,6 +165,7 @@ describe('POST /api/payments/initialize DVA reservation', () => {
       bank_name: 'Wema Bank',
     });
     mockPersistPaystackDvaAssignment.mockResolvedValue(null);
+    mockDvaAttempt.mockResolvedValue({ kind: 'claimed' });
   });
 
   it('passes the generated DVA and customer identity to atomic persistence', async () => {
@@ -193,5 +203,44 @@ describe('POST /api/payments/initialize DVA reservation', () => {
     expect(response.status).toBe(503);
     expect(body).toMatchObject({ code: 'DVA_PERSISTENCE_FAILED' });
     expect(body.dva).toBeUndefined();
+  });
+  it('returns the saved account and reference after a lost response', async () => {
+    const dva = {
+      account_name: 'Test Store / John Doe',
+      account_number: '1234567890',
+      bank_name: 'Wema Bank',
+    };
+    mockDvaAttempt.mockResolvedValue({
+      kind: 'saved',
+      reference: 'BAC-ORIGINAL',
+      dva,
+    });
+    const response = await POST(request('tracking-proof'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      reference: 'BAC-ORIGINAL',
+      dva,
+    });
+    expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
+    expect(mockPersistPaystackDvaAssignment).not.toHaveBeenCalled();
+    expect(mockCreatePaymentTransaction).not.toHaveBeenCalled();
+    expect(response.headers.get('cache-control')).toContain('no-store');
+  });
+
+  it('avoids calling Paystack again while the existing attempt is unresolved', async () => {
+    mockDvaAttempt.mockResolvedValue({ kind: 'pending' });
+    const response = await POST(request('tracking-proof'));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: 'DVA_SETUP_PENDING' });
+    expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
+    expect(mockCreatePaymentTransaction).not.toHaveBeenCalled();
+  });
+  it('does not provision an account when checkout ownership is refused', async () => {
+    mockDvaAttempt.mockResolvedValue({ kind: 'refused' });
+    const response = await POST(request('incorrect-proof'));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'DVA_SETUP_REFUSED' });
+    expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
+    expect(mockCreatePaymentTransaction).not.toHaveBeenCalled();
   });
 });

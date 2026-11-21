@@ -192,3 +192,32 @@ it('does not restore a review if the order was paid after reconciliation', async
   });
   expect((await POST(request())).status).toBe(503);
 });
+
+it('restores a submitted bank-transfer order from the bound receipt', async () => {
+  const order = {
+    id: '66666666-6666-4666-8666-666666666666',
+    order_number: 'BACI-123',
+    tracking_token: 'shopper-token',
+    currency: 'NGN',
+  };
+  const receipt = { kind: 'submitted', order, amountDueToGateway: 12500 };
+  mocks.rpc.mockResolvedValueOnce({ data: receipt, error: null });
+  const response = await POST(request({ paymentMethod: 'bank_transfer' }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(receipt);
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    'commerce_cart_reconcile_bank_transfer_checkout'
+  );
+  expect(mocks.summary).not.toHaveBeenCalled();
+});
+
+it('leaves bank-transfer checkout unresolved when the receipt is unavailable', async () => {
+  mocks.rpc.mockResolvedValueOnce({
+    data: { kind: 'unavailable' },
+    error: null,
+  });
+  expect((await POST(request({ paymentMethod: 'bank_transfer' }))).status).toBe(
+    503
+  );
+  expect(mocks.summary).not.toHaveBeenCalled();
+});

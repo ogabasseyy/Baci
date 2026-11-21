@@ -109,6 +109,7 @@ export const sharedCartPrepareRequestSchema = z.strictObject({
   expectedVersion: z.number().int().min(1),
   operationId: operationIdSchema,
   recoveryForRedvault: z.boolean().optional(),
+  recoveryForBankTransfer: z.boolean().optional(),
 });
 
 export const createCartRequestSchema = z.strictObject({

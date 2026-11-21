@@ -15,11 +15,12 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
+  bankTransferCheckoutReceiptSchema,
   cartCheckoutReconciliationReceiptSchema,
   cartCheckoutReconciliationSchema,
 } from '@/schemas/cart-checkout-reconciliation';
 
-/** Resolve an uncertain REDVAULT checkout without creating an order or payment. */
+/** Resolve an uncertain checkout without creating an order or payment. */
 export async function POST(request: NextRequest) {
   try {
     if (!(await checkCsrfProtection(request)).valid)
@@ -57,6 +58,17 @@ export async function POST(request: NextRequest) {
     });
     if (!quota.allowed) return cartErrorResponse('quota_exceeded');
     const client = createCheckoutReconciliationClient(proof.authority, input);
+    if (input.paymentMethod === 'bank_transfer') {
+      const response = await client.rpc(
+        'commerce_cart_reconcile_bank_transfer_checkout'
+      );
+      const receipt = bankTransferCheckoutReceiptSchema.safeParse(
+        response.data
+      );
+      return response.error || !receipt.success
+        ? cartErrorResponse('temporarily_unavailable')
+        : cartJsonResponse(receipt.data);
+    }
     const response = await client.rpc(
       'commerce_cart_reconcile_redvault_checkout' as never
     );

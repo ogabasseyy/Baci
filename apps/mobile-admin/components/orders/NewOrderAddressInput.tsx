@@ -40,13 +40,19 @@ export function NewOrderAddressInput({
   const [detailsRecovery, setDetailsRecovery] = useState(false);
   const [manualLocality, setManualLocality] = useState(false);
 
-  const setCity = (text: string) => {
+  const setLocality = (field: 'city' | 'state', text: string) => {
     setManualLocality(true);
-    setDeliveryInfo((previous) => ({ ...previous, city: text }));
-  };
-  const setState = (text: string) => {
-    setManualLocality(true);
-    setDeliveryInfo((previous) => ({ ...previous, state: text }));
+    setDeliveryInfo((previous) => {
+      if (previous[field].trim() === text.trim()) {
+        return { ...previous, [field]: text };
+      }
+      return {
+        ...previous,
+        [field]: text,
+        latitude: undefined,
+        longitude: undefined,
+      };
+    });
   };
 
   return (
@@ -188,8 +194,8 @@ export function NewOrderAddressInput({
               <NewOrderManualLocalityFields
                 city={deliveryInfo.city}
                 colors={colors}
-                onCityChange={setCity}
-                onStateChange={setState}
+                onCityChange={(text) => setLocality('city', text)}
+                onStateChange={(text) => setLocality('state', text)}
                 state={deliveryInfo.state}
               />
             </View>
@@ -222,8 +228,8 @@ export function NewOrderAddressInput({
           <NewOrderManualLocalityFields
             city={deliveryInfo.city}
             colors={colors}
-            onCityChange={setCity}
-            onStateChange={setState}
+            onCityChange={(text) => setLocality('city', text)}
+            onStateChange={(text) => setLocality('state', text)}
             state={deliveryInfo.state}
           />
           <Text style={[styles.listSubValue, { color: colors.warning }]}>

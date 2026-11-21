@@ -185,6 +185,35 @@ describe('NewOrderAddressInput', () => {
     });
   });
 
+  it.each([
+    'City',
+    'State',
+  ])('clears the old pin when the delivery %s changes', (field) => {
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({ setDeliveryInfo })}
+        googleMapsApiKey={undefined}
+      />
+    );
+    fireEvent.change(screen.getByPlaceholderText(field), {
+      target: { value: 'New locality' },
+    });
+    const update = setDeliveryInfo.mock.calls[0][0];
+    const address = update({
+      address: 'Old address',
+      city: 'Ikeja',
+      state: 'Lagos',
+      name: 'Ada',
+      phone: '08030000000',
+      latitude: 6.6,
+      longitude: 3.4,
+    });
+    expect(address[field.toLowerCase()]).toBe('New locality');
+    expect(address.latitude).toBeUndefined();
+    expect(address.longitude).toBeUndefined();
+  });
+
   it('updates city and state through dedicated fallback inputs', () => {
     const setDeliveryInfo = vi.fn();
     render(

@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getExpenseNavigationMocks } from '@/components/expenses/add-expense-navigation.test-fixtures';
 import type { ExpenseGroup } from '@/schemas/expense-group';
 
 const merchantId = '97e7a9a4-4f82-484d-a0a5-0f2ba07f4e2e';
@@ -47,9 +48,6 @@ const mocks = vi.hoisted(() => ({
   isAccessLoading: false,
   invalidateQueries: vi.fn(),
   mutate: vi.fn(),
-  removalPrevented: false,
-  router: { back: vi.fn() },
-  exitScreen: vi.fn(),
 }));
 vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ isPending: false, mutate: vi.fn() }),
@@ -193,23 +191,6 @@ vi.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: mocks.imagePicker,
 }));
 
-vi.mock('expo-router', () => ({
-  Stack: {
-    Screen: ({ options }: { options?: { headerLeft?: () => ReactNode } }) => (
-      <>{options?.headerLeft?.()}</>
-    ),
-  },
-  useNavigation: () => ({ dispatch: vi.fn() }),
-  useRouter: () => mocks.router,
-}));
-vi.mock('expo-router/react-navigation', () => ({
-  usePreventRemove: (prevent: boolean) => {
-    mocks.removalPrevented = prevent;
-    return () => {
-      mocks.removalPrevented = false;
-    };
-  },
-}));
 vi.mock('@react-native-vector-icons/ionicons', () => ({
   default: () => null,
   Ionicons: () => null,
@@ -244,11 +225,13 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (value: unknown) => value },
 }));
 
-import AddExpenseScreen from './new';
+const { default: AddExpenseScreen } = await import('./new');
+const navigation = getExpenseNavigationMocks();
 
 describe('AddExpenseScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.removalPrevented = false;
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 7, 9, 11, 0));
     mocks.branchScope = { type: 'branch', branchId };
@@ -267,9 +250,6 @@ describe('AddExpenseScreen', () => {
       (_input: unknown, options?: { onSuccess?: () => void }) =>
         options?.onSuccess?.()
     );
-    mocks.router.back.mockImplementation(() => {
-      if (!mocks.removalPrevented) mocks.exitScreen();
-    });
   });
   afterEach(() => vi.useRealTimers());
   it('uses today and sends every editable field through the save mutation in the authoritative branch', async () => {
@@ -316,7 +296,7 @@ describe('AddExpenseScreen', () => {
       },
       expect.any(Object)
     );
-    expect(mocks.exitScreen).toHaveBeenCalledOnce();
+    expect(navigation.exitScreen).toHaveBeenCalledOnce();
     expect(mocks.alert).not.toHaveBeenCalled();
   });
   it('clears a selected group after it is archived', async () => {
@@ -357,8 +337,8 @@ describe('AddExpenseScreen', () => {
       'Could not save expense',
       'Please try again.'
     );
-    expect(mocks.removalPrevented).toBe(true);
-    expect(mocks.exitScreen).not.toHaveBeenCalled();
+    expect(navigation.removalPrevented).toBe(true);
+    expect(navigation.exitScreen).not.toHaveBeenCalled();
   });
 
   it('rejects save when the selected branch is no longer active', () => {

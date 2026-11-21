@@ -14,9 +14,9 @@ export async function selectAdminOrderGiglRate(
     'read_settled_partner_delivery' as never,
     { p_order_id: order.id, p_merchant_id: order.merchant_id } as never
   );
-  // Keep ordinary quotes available during a lookup outage. The bind RPC
-  // still enforces the settled service and price for every accepted partner order.
-  if (error && order.source === 'partner') {
+  // A known ordinary order can still get a quote during an outage. Without
+  // a source we cannot classify the order until the accepted-order lookup works.
+  if (error && (!order.source || order.source === 'partner')) {
     return {
       error: NextResponse.json(
         { error: 'Unable to load settled delivery' },

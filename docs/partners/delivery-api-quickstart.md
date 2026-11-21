@@ -10,7 +10,7 @@ Use the API base URL Baci gives your team. For the Ogabassey connection, the cat
 
 Call `GET /catalog` with your read-only credential. Keep each product's `listing_id` as the source key across imports. Use `price_minor` as the listed selling price. For Ogabassey–CrossRem, that price excludes delivery and optional device protection.
 
-Store the last complete catalog and its `ETag`. On subsequent requests send `If-None-Match` with that value. A `200` contains the entire new catalog. Validate it before replacing the old one. A `304` means your existing copy is current. Keep your last good copy on errors, including `503`.
+Store the last complete catalog and its `ETag`. On subsequent requests send `If-None-Match` with that value. A `200` contains the entire new catalog. Validate it before replacing the old one. A `304` means your existing copy is current. Keep your last good copy on errors, including `503`. The catalog uses `Cache-Control: private, no-cache` and `Vary: Authorization` so each authorized client can keep its catalog body and revalidate it. The order and tracking endpoints send `no-store`.
 Catalog reads allow up to 120 requests per connection per minute, including conditional requests. If you receive `429`, wait for the interval in `Retry-After` before polling again.
 
 ## 2. Quote delivery before collecting payment

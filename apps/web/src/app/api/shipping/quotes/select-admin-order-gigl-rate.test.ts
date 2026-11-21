@@ -96,7 +96,11 @@ describe('admin GIG delivery rate selection', () => {
         cheaper,
       ])
     ).toEqual({ quote: cheaper });
-    const partner = await selectAdminOrderGiglRate(db, order, [cheaper]);
-    expect(partner.error?.status).toBe(503);
+    for (const source of ['partner', null, undefined]) {
+      const result = await selectAdminOrderGiglRate(db, { ...order, source }, [
+        cheaper,
+      ]);
+      expect(result.error?.status).toBe(503);
+    }
   });
 });

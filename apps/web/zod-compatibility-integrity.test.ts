@@ -1,4 +1,6 @@
 /** @vitest-environment node */
+
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,7 +9,20 @@ import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { overrideRoots } from './security-integrity-override-roots';
 import { packageMain } from './security-integrity-package-main';
 import { packageModule } from './security-integrity-package-module';
+import { resolveExportTarget } from './security-integrity-resolve-export-target';
 import { versionAt } from './security-integrity-version-at';
+
+function packageSubpath(root: string, subpath: string, conditions: string[]) {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+    exports?: Record<string, unknown>;
+  };
+  const target = resolveExportTarget(pkg.exports?.[`./${subpath}`], conditions);
+  if (!target)
+    throw new Error(
+      `Cannot resolve zod package export ./${subpath} at ${root}`
+    );
+  return target;
+}
 
 const require = createRequire(import.meta.url);
 const roots =
@@ -40,14 +55,34 @@ describe('Zod legacy schema compatibility and bounded collection validation', ()
 
   it('finds installed validators to guard', () =>
     expect(roots.length).toBeGreaterThan(0));
-  for (const root of roots) {
+  const entrypoints = roots.flatMap((root) => {
+    const version = versionAt(root, 'zod');
+    const main = { root, version, subpath: '.' };
+    // Zod 4 also ships a separate copy of the legacy validator.
+    return version.startsWith('4.')
+      ? [main, { root, version, subpath: 'v3' }]
+      : [main];
+  });
+  for (const { root, version, subpath } of entrypoints) {
     for (const format of ['cjs', 'esm'] as const) {
       for (const asynchronous of [false, true]) {
-        it(`rejects oversized bounded collections before visiting children in ${root} (${format}, async=${asynchronous})`, async () => {
-          const entryPath = join(
-            root,
-            format === 'cjs' ? packageMain(root) : packageModule(root)
-          );
+        it(`rejects oversized bounded collections before visiting children in ${root}/${subpath} (${format}, async=${asynchronous})`, async () => {
+          const entryPath =
+            subpath === '.'
+              ? join(
+                  root,
+                  format === 'cjs' ? packageMain(root) : packageModule(root)
+                )
+              : join(
+                  root,
+                  packageSubpath(
+                    root,
+                    subpath,
+                    format === 'cjs'
+                      ? ['require', 'node', 'default']
+                      : ['import', 'node', 'default']
+                  )
+                );
           const entry = (
             format === 'cjs'
               ? require(entryPath)
@@ -71,8 +106,37 @@ describe('Zod legacy schema compatibility and bounded collection validation', ()
             expect(parsed.success).toBe(false);
             expect(
               visits,
-              `zod ${versionAt(root, 'zod')} visited an already oversized collection`
+              `zod ${version}/${subpath} visited an already oversized collection`
             ).toBe(0);
+            if (!parsed.success)
+              expect(parsed.error.issues[0].code).toBe('too_big');
+          }
+          // Legacy Zod v3 ZodMap has no size-bound API. Native Zod 4 maps use
+          // `.max()`, so cover that already-bounded root path separately.
+          if (version.startsWith('4.') && subpath === '.') {
+            const nativeZ = entry as typeof import('zod');
+            const nativeElement = nativeZ.z.any().superRefine(() => {
+              visits++;
+            });
+            visits = 0;
+            const map = nativeZ.z.map(nativeElement, nativeElement).max(2);
+            const parsed = asynchronous
+              ? await map.safeParseAsync(
+                  new Map([
+                    [1, 1],
+                    [2, 2],
+                    [3, 3],
+                  ])
+                )
+              : map.safeParse(
+                  new Map([
+                    [1, 1],
+                    [2, 2],
+                    [3, 3],
+                  ])
+                );
+            expect(parsed.success).toBe(false);
+            expect(visits).toBe(0);
             if (!parsed.success)
               expect(parsed.error.issues[0].code).toBe('too_big');
           }

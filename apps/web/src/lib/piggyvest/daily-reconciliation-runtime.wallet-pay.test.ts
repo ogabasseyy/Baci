@@ -80,3 +80,58 @@ describe('runPiggyvestDailyReconciliation: wallet pay lines', () => {
     );
   });
 });
+
+describe('runPiggyvestDailyReconciliation: moved legacy wallets', () => {
+  it('regression: pages and emails when a wallet already moved to PiggyVest holds money again', async () => {
+    const execute = executeWith(snapshot(), ledger(), undefined, {
+      count: 1,
+      totalBalance: '500.00',
+      wallets: [
+        { walletId: '0b3f1e0a-0000-4000-8000-0000000000a1', balance: '500.00' },
+      ],
+    });
+    const { deps } = makeDeps({
+      createExecutor: vi.fn(() => execute) as never,
+    });
+    const result = await runPiggyvestDailyReconciliation({ env, deps });
+    expect(result).toMatchObject({ status: 'reported', paged: true });
+    expect(deps.emitAlert).toHaveBeenCalledWith(
+      'PIGGYVEST_RECONCILIATION_MISMATCH',
+      expect.objectContaining({
+        reason: expect.stringContaining('legacy_migrated_with_balance=1'),
+      })
+    );
+    expect(vi.mocked(deps.sendEmail).mock.calls[0][0].textContent).toContain(
+      'Moved legacy wallets holding money again: 1 (NGN 500.00 in all).'
+    );
+  });
+
+  it('pages when the moved-wallet read fails (never all clear)', async () => {
+    const base = executeWith();
+    const execute = vi.fn(async (statement?: string) =>
+      statement?.includes('read_migrated_legacy_wallet_balances')
+        ? Promise.reject(new Error('db'))
+        : base(statement)
+    );
+    const { deps } = makeDeps({
+      createExecutor: vi.fn(() => execute) as never,
+    });
+    const result = await runPiggyvestDailyReconciliation({ env, deps });
+    expect(result).toMatchObject({ paged: true });
+    expect(deps.emitAlert).toHaveBeenCalledWith(
+      'PIGGYVEST_RECONCILIATION_MISMATCH',
+      expect.objectContaining({
+        reason: expect.stringContaining('legacy_migrated_unreadable'),
+      })
+    );
+  });
+
+  it('stays clear and says so when no moved wallet holds money', async () => {
+    const { deps } = makeDeps();
+    const result = await runPiggyvestDailyReconciliation({ env, deps });
+    expect(result).toMatchObject({ paged: false });
+    expect(vi.mocked(deps.sendEmail).mock.calls[0][0].textContent).toContain(
+      'Moved legacy wallets: none hold money again.'
+    );
+  });
+});

@@ -194,14 +194,23 @@ describe('verifyCheckoutPayment', () => {
     );
     const callbacks = handlers();
 
-    await verifyCheckoutPayment(
-      { ...params, reference: `BCO-${'a'.repeat(32)}` },
-      callbacks
-    );
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await verifyCheckoutPayment(
+        { ...params, reference: `BCO-${'a'.repeat(32)}` },
+        callbacks
+      );
 
-    expect(callbacks.setStatus).toHaveBeenCalledWith('pending', 30_000);
-    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
-    expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+      expect(warning).toHaveBeenCalledWith(
+        'Bank card offer verification returned invalid JSON',
+        { status }
+      );
+      expect(callbacks.setStatus).toHaveBeenCalledWith('pending', 30_000);
+      expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+      expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
   });
 
   it.each([

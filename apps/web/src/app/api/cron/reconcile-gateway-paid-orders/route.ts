@@ -95,18 +95,29 @@ export async function GET(request: NextRequest) {
       invocationStartedAt,
       2
     );
-    const bankOfferRecheck = await recheckPaidBankCardOfferCaptures({
-      deadlineMs: Math.min(
-        sideEffectDeadlineMs,
-        Date.now() + BANK_OFFER_RECHECK_BUDGET_MS
-      ),
-      finalizePayment: authorities.finalizePayment,
-      scheduleAfter,
-      supabase,
-    }).catch(() => {
-      logger.warn({ message: 'Paid bank card offer recheck pass failed' });
-      return { checked: 0, failed: 1, retrying: 0, reversed: 0 };
-    });
+    const bankOfferStartedAt = Date.now();
+    const bankOfferRecheckSkipped = bankOfferStartedAt >= sideEffectDeadlineMs;
+    const emptyRecheck = { checked: 0, failed: 0, retrying: 0, reversed: 0 };
+    if (bankOfferRecheckSkipped) {
+      logger.warn({
+        message:
+          'Paid bank card offer recheck skipped: invocation budget exhausted',
+      });
+    }
+    const bankOfferRecheck = bankOfferRecheckSkipped
+      ? emptyRecheck
+      : await recheckPaidBankCardOfferCaptures({
+          deadlineMs: Math.min(
+            sideEffectDeadlineMs,
+            bankOfferStartedAt + BANK_OFFER_RECHECK_BUDGET_MS
+          ),
+          finalizePayment: authorities.finalizePayment,
+          scheduleAfter,
+          supabase,
+        }).catch(() => {
+          logger.warn({ message: 'Paid bank card offer recheck pass failed' });
+          return { ...emptyRecheck, failed: 1 };
+        });
     const sideEffectDrain = await drainFailedPaidOrderSideEffects({
       deadlineMs: sideEffectDeadlineMs,
       finalizePayment: authorities.finalizePayment,
@@ -144,6 +155,7 @@ export async function GET(request: NextRequest) {
         abandonedAttemptSweep,
         abandonedAttemptSweepFailed,
         bankOfferRecheck,
+        bankOfferRecheckSkipped,
         ...summary,
         sideEffectDrain,
       },

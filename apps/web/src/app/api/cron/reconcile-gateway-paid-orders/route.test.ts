@@ -176,6 +176,32 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     }
   });
 
+  it('reports when earlier passes consume the paid bank-offer recheck budget', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    mocks.reconcileWedgedGatewayOrders.mockImplementation(async (input) => {
+      await input.beforeSweep({
+        finalizePayment: mocks.finalizeOrderGatewayPayment,
+        fileWedgeReview: mocks.fileWedgeReview,
+      });
+      now.mockReturnValue(1_270_001);
+      return { checked: 0 };
+    });
+
+    try {
+      const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        bankOfferRecheckSkipped: true,
+      });
+      expect(mocks.recheckPaidBankCardOfferCaptures).not.toHaveBeenCalled();
+      expect(mocks.logger.warn).toHaveBeenCalledWith({
+        message: expect.stringContaining('invocation budget exhausted'),
+      });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('surfaces and logs recovered/stranded side effects even when nothing else changed', async () => {
     mockSweepResult({
       checked: 0,

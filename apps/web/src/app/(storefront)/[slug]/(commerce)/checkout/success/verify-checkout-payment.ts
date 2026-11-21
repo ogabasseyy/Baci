@@ -169,7 +169,16 @@ export async function verifyCheckoutPayment(
       signal,
     });
     const body = response.json();
-    const raw: unknown = await (isBankOffer ? body.catch(() => null) : body);
+    const raw: unknown = await (isBankOffer
+      ? body.catch((error: unknown) => {
+          if (!isAbortError(error)) {
+            console.warn('Bank card offer verification returned invalid JSON', {
+              status: response.status,
+            });
+          }
+          return null;
+        })
+      : body);
     const data = isVerificationResponse(raw) ? raw : {};
     const orderNumber = data.orderNumber || fallbackOrderNumber;
 

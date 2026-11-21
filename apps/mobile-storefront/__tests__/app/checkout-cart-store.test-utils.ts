@@ -24,6 +24,7 @@ const mockUseCartStore = Object.assign(
     getState: () => mockCartState,
     subscribe: () => () => undefined,
     persist: {
+      hasHydrated: () => true,
       getOptions: () => ({
         name: 'cart-storage',
         partialize: (state: unknown) => state,

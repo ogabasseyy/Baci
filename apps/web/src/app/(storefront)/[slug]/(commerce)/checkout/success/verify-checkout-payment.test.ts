@@ -1,31 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { verifyCheckoutPayment } from './verify-checkout-payment';
+import { handlers, params } from './verify-checkout-payment.test-support';
 
 const request = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: request }));
-
-function handlers() {
-  return {
-    capturePaymentCompleted: vi.fn(),
-    capturePaymentFailed: vi.fn(),
-    clearCart: vi.fn(),
-    redirectToCheckout: vi.fn(),
-    scheduleFailedRedirect: vi.fn(),
-    setIsVerifying: vi.fn(),
-    setOrderNumber: vi.fn(),
-    setPaymentMethod: vi.fn(),
-    setStatus: vi.fn(),
-  };
-}
-
-const params = {
-  merchantSlug: 'ogabassey',
-  orderId: 'order-id',
-  paymentMethod: null,
-  pendingRedvaultOrder: false,
-  reference: null,
-  trackingToken: null,
-};
 
 describe('verifyCheckoutPayment', () => {
   beforeEach(() => vi.clearAllMocks());

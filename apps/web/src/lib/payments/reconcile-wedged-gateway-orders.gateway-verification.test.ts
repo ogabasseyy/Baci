@@ -131,6 +131,37 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
     );
   });
 
+  it.each([
+    [{ kind: 'bank_offer_terminal', status: 'reversed' }, true],
+    [{ kind: 'completion_failed' }, false],
+  ] as const)('rechecks a bank-offer reversal before deciding whether to retire (%j)', async (outcome, shouldStamp) => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const supabase = buildSupabase([
+      { ...wedgedCandidate, gateway_reference: reference },
+    ]);
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 5829060, currency: 'NGN', status: 'reversed' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue(outcome);
+
+    await reconcileWedgedGatewayOrders({ scheduleAfter, supabase });
+
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        reference,
+        gateway: 'paystack',
+        orderId: wedgedCandidate.order_id,
+        expectedBankOfferTerminalStatus: 'reversed',
+      })
+    );
+    expect(
+      supabase.rpc.mock.calls.some(
+        ([name]) => name === 'stamp_wedge_sweep_resolution_v1'
+      )
+    ).toBe(shouldStamp);
+  });
+
   it('keeps retrying when gateway verification is unavailable', async () => {
     const supabase = buildSupabase([wedgedCandidate]);
     mocks.verifyPaystackPayment.mockResolvedValue({
@@ -153,6 +184,81 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
       'stamp_wedge_sweep_resolution_v1',
       expect.anything()
     );
+  });
+
+  it.each([
+    { amount: 100, currency: 'NGN' },
+    { amount: 5829060, currency: 'USD' },
+  ])('files bank-offer capture review for mismatched evidence (%j)', async (evidence) => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const supabase = buildSupabase([
+      { ...wedgedCandidate, gateway_reference: reference },
+    ]);
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { ...evidence, status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      kind: 'bank_offer_capture_review',
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ reference, gateway: 'paystack' })
+    );
+    expect(summary.reviewsFiled).toEqual([
+      { orderId: wedgedCandidate.order_id, transactionId: wedgedCandidate.id },
+    ]);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'bank_offer_capture_review' })
+    );
+  });
+
+  it('keeps a held bank-offer capture eligible for the sweep after a dispute win', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const candidate = { ...wedgedCandidate, gateway_reference: reference };
+    const supabase = buildSupabase([candidate]);
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 100, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment
+      .mockResolvedValueOnce({
+        kind: 'bank_offer_capture_review',
+        temporaryHold: true,
+      })
+      .mockResolvedValueOnce({
+        kind: 'completed',
+        healed: true,
+        orderNumber: 'ORD-1',
+      });
+
+    const held = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+    expect(held.skipped).toContainEqual({
+      reason: 'bank_offer_capture_held',
+      transactionId: wedgedCandidate.id,
+    });
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.anything()
+    );
+
+    const released = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase: buildSupabase([candidate]),
+    });
+    expect(released.healed).toContainEqual({
+      orderId: wedgedCandidate.order_id,
+      orderNumber: 'ORD-1',
+    });
   });
 
   it('skips on gateway/database amount mismatch', async () => {

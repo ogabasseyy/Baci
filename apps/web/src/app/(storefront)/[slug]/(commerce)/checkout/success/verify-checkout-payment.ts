@@ -1,5 +1,8 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { isCapturedPaymentFinalizationOutcome } from './captured-payment-finalization-outcomes';
+import { normalizeCheckoutBankCardOfferReference } from './normalize-checkout-bank-card-offer-reference';
+import { readBankCardOfferCheckoutResponse } from './read-bank-card-offer-checkout-response';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
 import {
   isAbortError,
@@ -38,19 +41,6 @@ export function hasMatchingPendingRedvaultOrder(
   }
 }
 
-// captured the money (mirrors finalizeOrderGatewayPayment kinds): never
-// payment failures — the reverify loop keeps polling for completion.
-// capture_hold_failed joins them: the hold record failed but the capture
-// is durable, so the shopper must keep waiting, never re-pay.
-const CAPTURED_PAYMENT_FINALIZATION_OUTCOMES = new Set([
-  'capture_hold_failed',
-  'completion_failed',
-  'inventory_cleanup_failed',
-  'inventory_failed',
-  'order_fetch_failed',
-  'review_failed',
-]);
-
 // Captured money with no active paid order left to complete: the finalizer
 // filed a reconciliation review (order_cancelled) or the order was refunded
 // (order_skipped). Terminal — repolling would return the same outcome —
@@ -67,10 +57,7 @@ export interface VerifyCheckoutPaymentParams {
   pendingRedvaultOrder: boolean;
   reference: string | null;
   trackingToken: string | null;
-  /**
-   * Per-pass bound owned by the hook: aborts a hung request so the lane
-   * releases instead of stranding the page on "processing" forever.
-   */
+  // The polling hook bounds this request.
   signal?: AbortSignal;
 }
 
@@ -81,7 +68,10 @@ export interface VerifyCheckoutPaymentHandlers {
   setIsVerifying: (isVerifying: boolean) => void;
   setOrderNumber: (orderNumber: string | null) => void;
   setPaymentMethod: (paymentMethod: string | null) => void;
-  setStatus: (status: CheckoutVerificationStatus) => void;
+  setStatus: (
+    status: CheckoutVerificationStatus,
+    retryAfterMs?: number
+  ) => void;
   capturePaymentCompleted: (input: {
     currency?: string;
     orderId: string;
@@ -99,11 +89,6 @@ export interface VerifyCheckoutPaymentHandlers {
   }) => void;
 }
 
-/**
- * Runs payment/order verification and maps every outcome onto the page state
- * via the supplied handlers. Module-scope so the try/finally blocks stay
- * outside the component body (React Compiler cannot lower try/finally yet).
- */
 export async function verifyCheckoutPayment(
   {
     merchantSlug,
@@ -153,16 +138,39 @@ export async function verifyCheckoutPayment(
   }
 
   setIsVerifying(true);
+  const bankOfferReference = normalizeCheckoutBankCardOfferReference(reference);
+  const isBankOffer = bankOfferReference !== null;
+  const fallbackOrderNumber = isBankOffer
+    ? null
+    : reference.slice(0, 8).toUpperCase();
 
   try {
     const response = await fetchWithCsrf('/api/payments/verify', {
-      body: JSON.stringify({ reference }),
+      body: JSON.stringify({
+        reference: bankOfferReference ?? reference,
+        ...(isBankOffer ? { merchantSlug } : {}),
+      }),
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
       signal,
     });
-    const raw: unknown = await response.json();
+    const bankOfferResponse = isBankOffer
+      ? await readBankCardOfferCheckoutResponse(
+          response,
+          {
+            setOrderNumber,
+            setStatus,
+          },
+          orderId
+        )
+      : null;
+    if (bankOfferResponse?.handled) return;
+
+    const raw: unknown = bankOfferResponse
+      ? bankOfferResponse.data
+      : await response.json();
     const data = isVerificationResponse(raw) ? raw : {};
+    const orderNumber = data.orderNumber || fallbackOrderNumber;
 
     // A 202 or an explicit held/evidence/review code keeps the page
     // pending even when the payload also carries a success flag: the
@@ -175,12 +183,9 @@ export async function verifyCheckoutPayment(
       data.status === 'pending'
     ) {
       setStatus('pending');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+      if (orderNumber) setOrderNumber(orderNumber);
     } else if (!response.ok) {
-      if (
-        typeof data.finalizationOutcome === 'string' &&
-        CAPTURED_PAYMENT_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
-      ) {
+      if (isCapturedPaymentFinalizationOutcome(data.finalizationOutcome)) {
         // Order/inventory finalization failed after the provider captured
         // the money: the payment is not failed — reconciliation or the
         // next reverify pass can still complete it — so stay pending
@@ -190,7 +195,7 @@ export async function verifyCheckoutPayment(
           data.finalizationOutcome
         );
         setStatus('pending');
-        setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+        if (orderNumber) setOrderNumber(orderNumber);
       } else {
         console.error('Payment verification failed:', data);
         setStatus('failed');
@@ -214,15 +219,19 @@ export async function verifyCheckoutPayment(
         RECONCILING_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
       ) {
         setStatus('reconciling');
-        setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+        if (orderNumber) setOrderNumber(orderNumber);
         if (data.paymentMethod) {
           setPaymentMethod(data.paymentMethod);
         }
         return;
       }
+      if (isBankOffer && data.finalizationOutcome !== 'completed') {
+        setStatus('pending');
+        return;
+      }
       clearCart();
       setStatus('success');
-      setOrderNumber(data.orderNumber || reference.slice(0, 8).toUpperCase());
+      if (orderNumber) setOrderNumber(orderNumber);
       const verifiedOrderId = data.orderId || orderId;
       // Only a completed finalization leaves an active paid order, so only
       // it counts as a paid conversion.
@@ -264,7 +273,7 @@ export async function verifyCheckoutPayment(
       scheduleFailedRedirect();
     } else {
       setStatus('pending');
-      setOrderNumber(reference.slice(0, 8).toUpperCase());
+      if (orderNumber) setOrderNumber(orderNumber);
     }
   } catch (error) {
     // An aborted bound is the loop working as intended — stay pending so
@@ -273,7 +282,7 @@ export async function verifyCheckoutPayment(
       console.error('Failed to verify payment:', error);
     }
     setStatus('pending');
-    setOrderNumber(reference.slice(0, 8).toUpperCase());
+    if (fallbackOrderNumber) setOrderNumber(fallbackOrderNumber);
   } finally {
     setIsVerifying(false);
   }

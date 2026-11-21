@@ -3,9 +3,7 @@ import { act, render, screen } from '@testing-library/react-native';
 import type { OxygenClient } from '@/services/oxygen/client';
 import { OxygenApplicationFlow } from './OxygenApplicationFlow';
 
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }), {
-  virtual: true,
-});
+jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
 jest.mock('expo-file-system', () => ({ File: jest.fn() }));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'dark',

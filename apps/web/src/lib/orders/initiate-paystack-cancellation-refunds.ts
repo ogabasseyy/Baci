@@ -1,28 +1,30 @@
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
+import {
+  type BankOfferRefundEvidence,
+  beginBankCardOfferRefundDispatch,
+} from '@/lib/orders/begin-bank-card-offer-refund-dispatch';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-paystack-cancellation-refund-failure';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
+import { verifyBankOfferRefundEvidence } from '@/lib/orders/verify-bank-offer-refund-evidence';
+import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
+import { PartialCancellationRefundError } from './partial-cancellation-refund-error';
 import { DeferredError } from './run-order-cancellation-side-effect';
 
-// Worst-case sizing for one refund leg: the provider POST may take up
-// to 30s (mirroring the transport worst-case precedent), and the
-// audit write reserves 8s after the response (mirroring the audit
-// margin precedent). Starting a leg short of both strands it: an
-// abort before dispatch reports NETWORK_ERROR and terminally
-// quarantines a definitely unattempted leg, while an accept just
-// before the timeout leaves no margin to persist its audit row
-// before the worker is killed.
+// Reserve a complete provider call and time to persist its outcome.
 const REFUND_PROVIDER_CALL_WORST_MS = 30_000;
 const REFUND_AUDIT_WRITE_RESERVE_MS = 8_000;
-// Single source for the preflight admission reserve: an initiation
-// leg starts only when a full provider call plus the audit reserve
-// both fit (see the per-leg gate below), so verification must leave
-// this much room or the run verifies and then refuses to initiate.
 export const REFUND_INITIATION_LEG_BUDGET_MS =
   REFUND_PROVIDER_CALL_WORST_MS + REFUND_AUDIT_WRITE_RESERVE_MS;
+
+function formatVerifiedKobo(amountKobo: number): string {
+  const digits = String(amountKobo).padStart(3, '0');
+  return `${digits.slice(0, -2)}.${digits.slice(-2)}`;
+}
 
 /**
  * Initiate a Paystack refund for every gateway leg that has no recorded
@@ -31,6 +33,7 @@ export const REFUND_INITIATION_LEG_BUDGET_MS =
  * proceed; quarantine paths file a reconciliation review first.
  */
 export async function initiatePaystackCancellationRefunds({
+  claimToken,
   deadlineMs,
   isLastAttempt,
   order,
@@ -39,6 +42,7 @@ export async function initiatePaystackCancellationRefunds({
   supabase,
   transactions,
 }: {
+  claimToken?: string;
   deadlineMs?: number;
   /**
    * Set when this run consumes the final retry attempt: a
@@ -52,6 +56,7 @@ export async function initiatePaystackCancellationRefunds({
     id: string;
     merchant_id: string;
     order_number: string | null;
+    payment_method?: string | null;
   };
   reason?: string;
   refundedPaymentIds: Set<string>;
@@ -59,12 +64,81 @@ export async function initiatePaystackCancellationRefunds({
   transactions: GatewayPaymentTransaction[];
 }): Promise<number[]> {
   const refundIds: number[] = [];
+  const bankOfferLegsForReview: GatewayPaymentTransaction[] = [];
+  let bankOfferLookupUnavailable = false;
+  let bankOfferMissingDispatchClaim = false;
 
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
-    // Bound every leg to the remaining invocation deadline: a plain
-    // Error keeps the step retryable, so unattempted legs run on the
-    // next tick instead of stranding a mid-flight claim. Legs start
+    const transactionAmount = Number(transaction.amount);
+    const isBankOffer = bankCardOfferReferenceSchema.safeParse(
+      transaction.gateway_reference
+    ).success;
+    // A malformed reserved reference or an offer order with a mismatched
+    // reference needs review before any refund lookup or provider call.
+    if (
+      !isBankOffer &&
+      (order.payment_method === 'bank_card_offer' ||
+        hasBankCardOfferReferencePrefix(transaction.gateway_reference))
+    ) {
+      bankOfferLegsForReview.push(transaction);
+      continue;
+    }
+    let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
+    let dispatchEvidence: BankOfferRefundEvidence | undefined;
+    // Paystack defaults to a full refund when the amount is omitted.
+    if (
+      !isBankOffer &&
+      (!Number.isSafeInteger(koboAmount) || koboAmount <= 0)
+    ) {
+      await quarantineRefund({
+        metadata: {
+          failed_payment_transaction_id: transaction.id,
+          ambiguous_initiation: false,
+          leg_amount: transaction.amount,
+        },
+        order,
+        reason: 'Payment leg amount is invalid and needs review before refund',
+        supabase,
+        transactions: [transaction],
+      });
+      continue;
+    }
+    if (isBankOffer) {
+      if (!claimToken) {
+        bankOfferMissingDispatchClaim = true;
+        bankOfferLegsForReview.push(transaction);
+        continue;
+      }
+      const verification = await verifyBankOfferRefundEvidence({
+        claimToken,
+        identity: {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_transaction_id: transaction.id,
+          p_reference: transaction.gateway_reference as string,
+        },
+        supabase,
+        verifyDeadlineMs:
+          deadlineMs === undefined
+            ? undefined
+            : deadlineMs - REFUND_INITIATION_LEG_BUDGET_MS,
+      });
+      if (verification.kind === 'unavailable') {
+        bankOfferLookupUnavailable = true;
+        if (isLastAttempt) bankOfferLegsForReview.push(transaction);
+        continue;
+      }
+      if (verification.kind === 'mismatch') {
+        bankOfferLegsForReview.push(transaction);
+        continue;
+      }
+      if (verification.kind === 'verified') {
+        dispatchEvidence = verification.evidence;
+        koboAmount = dispatchEvidence.p_amount_kobo;
+      }
+    }
+    // Compute the retryable budget after reading the saved capture. Legs start
     // only when a full provider call plus the audit reserve both fit;
     // the provider timeout excludes the reserve so an accepted refund
     // always has margin to persist before the worker is killed.
@@ -75,8 +149,8 @@ export async function initiatePaystackCancellationRefunds({
         ? undefined
         : timeoutMs - REFUND_AUDIT_WRITE_RESERVE_MS;
     if (
-      timeoutMs !== undefined &&
-      timeoutMs - REFUND_AUDIT_WRITE_RESERVE_MS < REFUND_PROVIDER_CALL_WORST_MS
+      (isBankOffer && !dispatchEvidence) ||
+      (timeoutMs !== undefined && timeoutMs < REFUND_INITIATION_LEG_BUDGET_MS)
     ) {
       // On the final attempt the claim has already raised the row to
       // the attempts cap, so a plain retryable error would finish it
@@ -117,26 +191,24 @@ export async function initiatePaystackCancellationRefunds({
       }
       throw new Error('cancellation_refund_deadline_exceeded');
     }
-    const transactionAmount = Number(transaction.amount);
-    // A positive leg below half a kobo rounds to 0, and the provider
-    // call treats a non-positive amount as "refund the whole
-    // transaction": quarantine the leg for operations instead of
-    // over-refunding a multi-leg order.
-    const koboAmount = Math.round(transactionAmount * 100);
-    if (transactionAmount > 0 && koboAmount <= 0) {
-      await quarantineRefund({
-        metadata: {
-          failed_payment_transaction_id: transaction.id,
-          ambiguous_initiation: false,
-          leg_amount: transaction.amount,
-        },
+    if (dispatchEvidence) {
+      const admission = await beginBankCardOfferRefundDispatch({
+        evidence: dispatchEvidence,
         order,
-        reason:
-          'Payment leg amount rounds to zero kobo and needs review before refund',
+        refundIds,
         supabase,
-        transactions: [transaction],
+        transaction,
       });
-      continue;
+      if (admission === 'unavailable') {
+        bankOfferLookupUnavailable = true;
+        if (isLastAttempt) bankOfferLegsForReview.push(transaction);
+        continue;
+      }
+      if (admission === 'already_admitted') continue;
+      if (admission !== 'dispatch') {
+        bankOfferLegsForReview.push(transaction);
+        continue;
+      }
     }
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,
@@ -146,6 +218,7 @@ export async function initiatePaystackCancellationRefunds({
     );
     if (!paystackRefund.success) {
       await handlePaystackCancellationRefundFailure({
+        dispatchEvidence,
         isLastAttempt,
         order,
         paystackRefund,
@@ -162,9 +235,40 @@ export async function initiatePaystackCancellationRefunds({
         reason,
         supabase,
         transaction,
-        transactionAmount,
+        transactionAmount: isBankOffer
+          ? formatVerifiedKobo(koboAmount)
+          : transactionAmount,
       })
     );
   }
+  if (bankOfferLegsForReview.length > 0) {
+    let reviewReason =
+      'Bank card offer refund does not match the verified capture';
+    if (bankOfferMissingDispatchClaim) {
+      reviewReason = 'Bank card offer refund requires a dispatch claim';
+    } else if (isLastAttempt && bankOfferLookupUnavailable) {
+      reviewReason =
+        'Bank card offer refund verification was unavailable on the final attempt';
+    }
+    await quarantineRefund({
+      metadata: {
+        accepted_refund_ids: refundIds,
+        // This worker never submitted the quarantined legs to Paystack.
+        ambiguous_initiation: false,
+        ...(bankOfferLookupUnavailable
+          ? { bank_offer_capture_lookup_unavailable: true }
+          : {}),
+        ...(bankOfferMissingDispatchClaim
+          ? { bank_offer_missing_dispatch_claim: true }
+          : {}),
+      },
+      order,
+      reason: reviewReason,
+      supabase,
+      transactions: bankOfferLegsForReview,
+    });
+  }
+  if (bankOfferLookupUnavailable)
+    throw new PartialCancellationRefundError(refundIds);
   return refundIds;
 }

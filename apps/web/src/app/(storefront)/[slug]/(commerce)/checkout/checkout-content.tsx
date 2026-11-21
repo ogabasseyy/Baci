@@ -9,6 +9,7 @@ import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { getBrowserBankCardOffers } from '@/lib/checkout/get-browser-bank-card-offers';
 import { loadPublishedExperience } from '@/lib/experience/published-manifest';
 import { selectTrustedExperienceCheckout } from '@/lib/experience/route-data-revision';
 import { isDomainIdentifier } from '@/lib/validation';
@@ -80,7 +81,9 @@ export async function CheckoutContent({
   // Default to ogabassey checkout as it's the fully functional implementation
   return (
     <CheckoutThemeProvider>
-      <OgabasseyCheckoutPage />
+      <OgabasseyCheckoutPage
+        bankCardOffers={getBrowserBankCardOffers(merchant.id)}
+      />
     </CheckoutThemeProvider>
   );
 }

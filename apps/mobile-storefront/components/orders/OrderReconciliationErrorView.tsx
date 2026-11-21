@@ -9,8 +9,9 @@ import { BRAND } from '@/constants/Colors';
 interface OrderReconciliationErrorViewProps {
   colors: typeof Colors.light;
   isDark: boolean;
+  invalidPaymentLink?: boolean;
   orderNumber?: string;
-  onRetry: () => void;
+  onRetry?: () => void;
   onContinueShopping: () => void;
 }
 
@@ -23,6 +24,7 @@ interface OrderReconciliationErrorViewProps {
 export function OrderReconciliationErrorView({
   colors,
   isDark,
+  invalidPaymentLink,
   orderNumber,
   onRetry,
   onContinueShopping,
@@ -57,58 +59,71 @@ export function OrderReconciliationErrorView({
                 },
               ]}
             >
-              <Text style={styles.eyebrowText}>Verification unavailable</Text>
+              <Text style={styles.eyebrowText}>
+                {invalidPaymentLink
+                  ? 'Payment link'
+                  : 'Verification unavailable'}
+              </Text>
             </View>
             <Text style={[styles.title, { color: colors.text }]}>
-              Couldn&apos;t verify this order
+              {invalidPaymentLink
+                ? 'Invalid payment link'
+                : "Couldn't verify this order"}
             </Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              We couldn&apos;t confirm this payment link right now — please
-              check your connection and try again. Nothing was assumed about
-              this order.
+              {invalidPaymentLink
+                ? 'Check your order history for the payment status before paying again.'
+                : "We couldn't confirm this payment link right now — please check your connection and try again. Nothing was assumed about this order."}
             </Text>
-            <View
-              style={[
-                styles.orderInfo,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.orderRow}>
-                <Ionicons
-                  name="receipt-outline"
-                  size={18}
-                  color={BRAND.primary}
-                />
-                <Text
-                  style={[styles.orderLabel, { color: colors.textSecondary }]}
-                >
-                  Order Number
-                </Text>
-                <Text style={[styles.orderValue, { color: colors.text }]}>
-                  #{orderNumber || 'Processing...'}
-                </Text>
+            {!invalidPaymentLink && (
+              <View
+                style={[
+                  styles.orderInfo,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <View style={styles.orderRow}>
+                  <Ionicons
+                    name="receipt-outline"
+                    size={18}
+                    color={BRAND.primary}
+                  />
+                  <Text
+                    style={[styles.orderLabel, { color: colors.textSecondary }]}
+                  >
+                    Order Number
+                  </Text>
+                  <Text style={[styles.orderValue, { color: colors.text }]}>
+                    #{orderNumber || 'Processing...'}
+                  </Text>
+                </View>
               </View>
-            </View>
+            )}
             <View style={styles.actions}>
               <View style={styles.actionRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Retry verification"
-                  style={[
-                    styles.secondaryButton,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: colors.card,
-                    },
-                  ]}
-                  onPress={onRetry}
-                >
-                  <Text
-                    style={[styles.secondaryButtonText, { color: colors.text }]}
+                {onRetry && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry verification"
+                    style={[
+                      styles.secondaryButton,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                      },
+                    ]}
+                    onPress={onRetry}
                   >
-                    Try Again
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={[
+                        styles.secondaryButtonText,
+                        { color: colors.text },
+                      ]}
+                    >
+                      Try Again
+                    </Text>
+                  </Pressable>
+                )}
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Continue Shopping"

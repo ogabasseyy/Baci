@@ -4,7 +4,10 @@ import {
   cartLineIdentity,
   planCartMerge,
 } from '@baci/shared/cart';
-import { clearAttemptBody } from './cart-handoff-attempt-store';
+import {
+  clearActiveHandoff,
+  clearAttemptBody,
+} from './cart-handoff-attempt-store';
 
 export {
   clearActiveHandoff,
@@ -155,6 +158,15 @@ export function clearHandoffAttempt(handoffId: string): void {
   } catch {
     /* Storage may be disabled. */
   }
+}
+
+export function clearTerminalHandoff(
+  handoffId: string,
+  clearChoice: () => void
+): void {
+  clearHandoffAttempt(handoffId);
+  clearActiveHandoff(handoffId);
+  clearChoice();
 }
 
 export function formatMinor(minor: number, currency: string): string {

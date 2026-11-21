@@ -15,6 +15,8 @@ DECLARE
   ordinary_handoff uuid := gen_random_uuid();
   changed_handoff uuid := gen_random_uuid();
   reduced_handoff uuid := gen_random_uuid();
+  linked_handoff uuid := gen_random_uuid();
+  linked_grant uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
   result jsonb;
@@ -116,6 +118,18 @@ BEGIN
     origin_principal_id, operation_id, destination, expires_at)
   VALUES (changed_handoff, 'import-updated-link', merchant, source, 'legacy:mcp:test-import',
     'legacy-handoff:mcp-import:updated', '{"type":"web"}', now() + interval '5 minutes');
+  UPDATE public.commerce_cart_grants SET allowed_operations =
+    ARRAY['add','set_quantity','remove','clear','replace','set_assurance','set_negotiated_price']
+  WHERE id = destination_grant;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object(
+    'role','commerce_cart_shopper','exp',9999999999,'cart_scope','bootstrap',
+    'cart_merchant_id',merchant,'cart_principal_id','website-import-test'
+  )::text, true);
+  result := public.commerce_cart_import_mcp_handoff('import-updated-link', changed_handoff, 'forward-update', source_version);
+  IF result->>'resumeImport' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM destination_grant::text
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 2::bigint
+     OR EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE id = changed_handoff AND redeemed_at IS NOT NULL)
+  THEN RAISE EXCEPTION 'Bootstrap recovery did not preserve the pending import and cart: %', result; END IF;
   PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
   result := public.commerce_cart_import_mcp_handoff('import-updated-link', changed_handoff, 'forward-update', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true'
@@ -144,6 +158,20 @@ BEGIN
   IF result->>'ok' IS DISTINCT FROM 'true'
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 3::bigint
   THEN RAISE EXCEPTION 'A source reduction edited the independent website cart: %', result; END IF;
+
+  -- A shopper can link the same website cart to an account and change grants.
+  UPDATE public.commerce_cart_grants SET revoked_at = now() WHERE id = destination_grant;
+  INSERT INTO public.commerce_cart_grants(id, merchant_id, cart_id, principal_id, expires_at)
+  VALUES (linked_grant, merchant, destination, 'linked-website-import-test', now() + interval '1 day');
+  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
+    origin_principal_id, operation_id, destination, expires_at)
+  VALUES (linked_handoff, 'import-linked-link', merchant, source, 'legacy:mcp:test-import',
+    'legacy-handoff:mcp-import:linked', '{"type":"web"}', now() + interval '5 minutes');
+  PERFORM pg_temp.handoff_claim(destination, linked_grant, 'linked-website-import-test');
+  result := public.commerce_cart_import_mcp_handoff('import-linked-link', linked_handoff, 'after-account-link', source_version);
+  IF result->>'replayed' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM linked_grant::text
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 3::bigint
+  THEN RAISE EXCEPTION 'Changing the website grant duplicated an already transferred source revision: %', result; END IF;
 END $$;
 
 DO $$

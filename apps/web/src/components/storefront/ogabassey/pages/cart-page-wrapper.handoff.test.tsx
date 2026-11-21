@@ -92,6 +92,33 @@ describe('CartPageWrapper handoff', () => {
     ).toBeInTheDocument();
   });
 
+  it('redacts the pairing and waits for existing device items to reach the website cart', async () => {
+    mockSearch('');
+    window.history.pushState({}, '', '/ogabassey/cart#handoff=ch1.pending&hid=link');
+    const initial = {
+      addToCart: vi.fn(),
+      cart: [],
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>;
+    vi.mocked(useCart).mockReturnValue({
+      ...initial,
+      sharedCartEnabled: true,
+      importStatus: 'pending',
+    });
+    const { rerender } = render(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText('Loading your cart…')).toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+    expect(screen.queryByText(/Handoff continuation/)).not.toBeInTheDocument();
+
+    vi.mocked(useCart).mockReturnValue({
+      ...initial,
+      sharedCartEnabled: true,
+      importStatus: 'done',
+    });
+    rerender(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText(/Handoff continuation for link/)).toBeInTheDocument();
+  });
+
   it('restores a scoped locator on its own merchant cart page', async () => {
     mockSearch('');
     window.history.pushState({}, '', '/shop-a/cart');

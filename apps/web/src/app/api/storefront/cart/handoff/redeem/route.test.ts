@@ -269,6 +269,25 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     expect(mocks.cartRpcCalls).toHaveLength(0);
   });
 
+  it('installs recovered website authority and tells the browser to resume the pending import', async () => {
+    mocks.cartPayload = {
+      ok: true,
+      replayed: true,
+      resumeImport: true,
+      grantId: DEST_GRANT_ID,
+      state: rawState({ cartId: DEST_CART_ID }),
+    };
+    const response = await postRedeem({
+      body: connectBody({ choice: 'import_mcp' }),
+      headers: { cookie: `baci-cart-${MERCHANT_ID}=${destBootstrapProof()}` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-cookie')).toContain(
+      `baci-cart-${MERCHANT_ID}=`
+    );
+    expect(await response.json()).toMatchObject({ resumeImport: true });
+  });
+
   it.each([
     'web',
     'native',

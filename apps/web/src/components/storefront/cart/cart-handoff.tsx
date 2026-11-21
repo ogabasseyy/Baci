@@ -3,7 +3,12 @@
 import { cartLineIdentity } from '@baci/shared/cart';
 
 import { Button } from '@/components/ui/button';
-import { describeOption, formatMinor } from './cart-handoff-support';
+import { CartHandoffPreviewStatus } from './cart-handoff-preview-status';
+import {
+  clearActiveHandoff,
+  describeOption,
+  formatMinor,
+} from './cart-handoff-support';
 import { McpHandoffImport } from './mcp-handoff-import';
 import { useCartHandoff } from './use-cart-handoff';
 export function CartHandoff(props: { token: string; handoffId: string }) {
@@ -28,60 +33,17 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
     continueMerge,
   } = useCartHandoff(props);
 
-  if (destinationError) {
+  if (destinationError || loadError || !preview || !destChecked) {
     return (
-      <section
-        aria-label="Cart handoff"
-        className="mx-auto max-w-xl px-4 py-10"
-      >
-        <h1 className="text-xl font-semibold">We could not check your cart</h1>
-        <p role="alert" className="mt-2 text-sm">
-          {destinationError}
-        </p>
-        <Button
-          className="mt-4"
-          onClick={() => {
-            setDestinationError(null);
-            void loadPreview();
-          }}
-        >
-          Try again
-        </Button>
-      </section>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <section
-        aria-label="Cart handoff"
-        className="mx-auto max-w-xl px-4 py-10"
-      >
-        <h1 className="text-xl font-semibold">
-          {previewRetryable
-            ? 'We could not load this cart link'
-            : 'This cart link ended'}
-        </h1>
-        <p role="alert" className="mt-2 text-sm">
-          {loadError}
-        </p>
-        {previewRetryable ? (
-          <Button className="mt-4" onClick={() => void loadPreview()}>
-            Try again
-          </Button>
-        ) : null}
-      </section>
-    );
-  }
-
-  if (!preview || !destChecked) {
-    return (
-      <section
-        aria-label="Cart handoff"
-        className="mx-auto max-w-xl px-4 py-10"
-      >
-        <p className="text-sm">Loading your shared cart…</p>
-      </section>
+      <CartHandoffPreviewStatus
+        destinationError={destinationError}
+        loadError={loadError}
+        previewRetryable={previewRetryable}
+        retry={() => {
+          setDestinationError(null);
+          void loadPreview();
+        }}
+      />
     );
   }
 
@@ -146,6 +108,12 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
       <McpHandoffImport
         error={redeemError}
         retry={() => void act('import_mcp')}
+        openWebsiteCart={() => {
+          clearActiveHandoff(props.handoffId);
+          window.location.replace(
+            window.location.pathname + window.location.search
+          );
+        }}
       />
     );
   }

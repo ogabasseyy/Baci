@@ -6,7 +6,7 @@ import { loadDestinationCart } from './cart-handoff-destination-loader';
 import {
   type Choice,
   clearActiveHandoff,
-  clearHandoffAttempt,
+  clearTerminalHandoff,
   fetchJson,
   loadActiveHandoff,
   loadAttemptBody,
@@ -21,6 +21,7 @@ import {
 } from './cart-handoff-support';
 import { prepareHandoffRedeemBody } from './prepare-handoff-redeem-body';
 import { useHandoffRedeem } from './use-handoff-redeem';
+import { useMcpHandoffAutoImport } from './use-mcp-handoff-auto-import';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
   const { token, handoffId } = props;
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -58,7 +59,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   }, []);
 
   const loadStarted = useRef(false);
-  const importStarted = useRef(false);
+  const autoImport = useMcpHandoffAutoImport(handoffId, token, redeem);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: this effect loads once; refresh is intentionally user-triggered thereafter.
   useEffect(() => {
@@ -99,9 +100,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         // Definitive failure: the link is dead, so drop the locator
         // and attempt state instead of restoring this screen on every
         // later cart-page load. Retryable failures keep them.
-        clearHandoffAttempt(handoffId);
-        clearActiveHandoff(handoffId);
-        redeem.clearLockedChoice();
+        clearTerminalHandoff(handoffId, redeem.clearLockedChoice);
         setLoadError(
           'This link is no longer valid. Ask the sender for a fresh one.'
         );
@@ -124,28 +123,13 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
           payload.merchant?.slug ?? null,
           signal
         );
-        if (destination && !signal?.aborted && !importStarted.current) {
-          const body = prepareHandoffRedeemBody(
-            payload,
-            destination.cart,
-            handoffId,
-            token,
-            'import_mcp'
-          );
-          if (body) {
-            importStarted.current = true;
-            lockChoice('import_mcp');
-            await postRedeem(body, payload.merchant?.slug ?? undefined);
-          }
-        }
+        await autoImport(payload, destination, signal);
       } else {
         setDestChecked(true);
         if (payload.status === 'expired') {
           // Terminal: drop the attempt and locator so later cart-page
           // loads do not restore this dead continuation.
-          clearHandoffAttempt(handoffId);
-          clearActiveHandoff(handoffId);
-          redeem.clearLockedChoice();
+          clearTerminalHandoff(handoffId, redeem.clearLockedChoice);
         }
         if (payload.status === 'consumed') {
           // A link consumed by our own earlier attempt (whose success

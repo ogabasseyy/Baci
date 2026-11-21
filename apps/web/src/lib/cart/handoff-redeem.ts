@@ -32,6 +32,8 @@ export type RedeemHandoffResult =
       grantExpiresAt: string | null;
       choice: HandoffChoice;
       replayed: boolean;
+      /** A bootstrap retry recovered the website grant without importing lines. */
+      resumeImport?: true;
       warnings: { code: string; message: string }[];
     }
   | {
@@ -184,6 +186,9 @@ export async function redeemCartHandoff(
       grantExpiresAt: parsed.grantExpiresAt,
       ok: true,
       replayed: parsed.replayed,
+      ...(input.choice === 'import_mcp' && data.resumeImport === true
+        ? { resumeImport: true as const }
+        : {}),
       warnings: priced ? priced.warnings : [],
     };
   }

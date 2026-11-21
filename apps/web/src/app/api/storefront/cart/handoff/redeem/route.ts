@@ -166,6 +166,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (
+      redeemed.resumeImport &&
+      (principal.scope !== 'bootstrap' || !redeemed.cart || !redeemed.grantId)
+    ) {
+      return cartErrorResponse('temporarily_unavailable');
+    }
+
     if (body.choice === 'import_mcp' && principal.scope === 'session') {
       // Imports keep the browser's existing grant and its exact permissions.
       if (
@@ -241,11 +248,15 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('temporarily_unavailable');
     }
 
+    if (redeemed.resumeImport && (!proof || maxAge <= 0)) {
+      return cartErrorResponse('temporarily_unavailable');
+    }
     const response = cartJsonResponse({
       cart: redeemed.cart,
       choice: redeemed.choice,
       ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
       replayed: redeemed.replayed,
+      ...(redeemed.resumeImport ? { resumeImport: true } : {}),
       warnings: redeemed.warnings,
     });
     if (proof && maxAge > 0) {

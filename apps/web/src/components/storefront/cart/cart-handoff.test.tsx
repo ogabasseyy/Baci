@@ -5,6 +5,7 @@ import { redactPreviewSnapshot } from '@/lib/cart/handoff-preview';
 import * as csrf from '@/lib/csrf';
 import { cartHandoffRedeemRequestSchema } from '@/schemas/cart';
 import { CartHandoff } from './cart-handoff';
+import { loadActiveHandoff } from './cart-handoff-support';
 
 const TOKEN = 'ch1.test-payload.test-signature';
 const HANDOFF_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -224,6 +225,54 @@ describe('CartHandoff', () => {
     await waitFor(() => expect(posted).toHaveLength(2));
     expect(posted[1]).not.toHaveProperty('expectedDestVersion');
     expect(replaceMock).toHaveBeenCalledWith('/cart');
+  });
+
+  it('resumes the same handoff attempt after recovering the website session', async () => {
+    const cart = snapshot();
+    const posted: unknown[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/handoff/redeem')) {
+        posted.push(JSON.parse(String(init?.body)));
+        return jsonResponse({
+          choice: 'import_mcp',
+          resumeImport: posted.length === 1,
+        });
+      }
+      if (url.includes('/handoff?'))
+        return jsonResponse({
+          status: 'pending',
+          importMcp: true,
+          snapshot: cart,
+          merchant: { id: cart.merchantId, slug: 'ogabassey' },
+        });
+      return jsonResponse({ code: 'not_found' }, 404);
+    });
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/cart'));
+    expect(posted).toHaveLength(2);
+    expect(posted[1]).toEqual(posted[0]);
+  });
+
+  it('opens the website cart from a failed import without restoring the handoff', async () => {
+    const cart = snapshot();
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('/handoff/redeem'))
+        return jsonResponse({ code: 'invalid_item' }, 400);
+      if (url.includes('/handoff?'))
+        return jsonResponse({
+          status: 'pending',
+          importMcp: true,
+          snapshot: cart,
+          merchant: { id: cart.merchantId, slug: 'ogabassey' },
+        });
+      return jsonResponse({ code: 'not_found' }, 404);
+    });
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'View website cart' })
+    );
+    expect(replaceMock).toHaveBeenCalledWith('/cart');
+    expect(loadActiveHandoff()).toBeNull();
   });
 
   it('bootstraps and imports on the first website visit without a connect screen', async () => {

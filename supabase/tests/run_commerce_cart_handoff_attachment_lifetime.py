@@ -62,7 +62,8 @@ try:
                '20261120182000_commerce_cart_import_mcp_handoff.sql',
                '20261121103000_commerce_cart_mcp_handoff_refresh_replay.sql',
                '20261121103100_commerce_cart_mcp_handoff_import_mode.sql',
-               '20261121103200_commerce_cart_mcp_handoff_incremental_import.sql']:
+               '20261121103200_commerce_cart_mcp_handoff_incremental_import.sql',
+               '20261121103300_commerce_cart_mcp_import_destination_identity.sql']:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'

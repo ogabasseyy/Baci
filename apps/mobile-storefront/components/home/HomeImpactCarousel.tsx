@@ -1,136 +1,82 @@
-import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
-import { type Href, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Alert,
-  Linking,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useTheme } from '@/hooks/useTheme';
-
-const REPORT_URL =
-  'https://www.gsma.com/somic/wp-content/uploads/2025/09/The-State-of-Mobile-Internet-Connectivity-2025-Overview-Report.pdf#page=22';
 
 const stories = [
   {
-    label: 'Repair Lab',
-    title: 'Give your phone more life.',
-    body: 'Keep your phone in use for longer.',
-    action: 'Explore repairs',
-    href: '/repairs' satisfies Href,
-    icon: 'construct-outline',
+    id: 'paycheck',
+    quote: '“I got my first paycheck from my smartphone.”',
+    artwork: require('@/assets/images/campaigns/first-paycheck.webp'),
+    contentPosition: 'top',
   },
   {
-    label: 'Paperless shopping',
-    title: 'Keep the receipt. Skip the printout.',
-    body: 'Save your digital receipt and use less paper.',
-    icon: 'receipt-outline',
+    id: 'laptop',
+    quote: '“Omoh, if not for this laptop, how I wan take chop?”',
+    artwork: require('@/assets/images/campaigns/laptop-story-portrait.webp'),
+    contentPosition: 'right center',
   },
   {
-    label: 'The digital divide',
-    title: 'Getting online starts with access.',
-    body: '39% of rural Nigerian adults surveyed owned an internet-enabled phone.',
-    source: true,
-    icon: 'globe-outline',
+    id: 'repair',
+    quote: '“I thought I needed a new phone. I just needed a new battery.”',
+    artwork: require('@/assets/images/campaigns/repair-story.webp'),
+    contentPosition: 'right top',
+  },
+  {
+    id: 'savings',
+    quote: '“Small small, I saved for the phone I wanted.”',
+    artwork: require('@/assets/images/campaigns/savings-story.webp'),
+    contentPosition: 'right top',
   },
 ] as const;
 
+const GUTTER = 16;
+const GAP = 10;
+
 export function HomeImpactCarousel() {
   const { width } = useWindowDimensions();
-  const { colors, isDark } = useTheme();
-  const router = useRouter();
   const cardWidth = Math.min(width - 52, 420);
-  const accent = isDark ? '#ff858a' : '#b91c1c';
 
   return (
     <View style={styles.section}>
       <ScrollView
         horizontal
-        accessibilityLabel="Stories about access and sustainability"
+        accessibilityLabel="Ogabassey stories"
         showsHorizontalScrollIndicator={false}
-        snapToInterval={cardWidth + 10}
+        snapToInterval={cardWidth + GAP}
+        disableIntervalMomentum
         decelerationRate="fast"
-        contentContainerStyle={styles.track}
+        contentContainerStyle={[
+          styles.track,
+          { paddingRight: width - cardWidth - GUTTER },
+        ]}
       >
-        <View style={[styles.paycheckCard, { width: cardWidth }]}>
-          <Image
-            accessible={false}
-            source={require('@/assets/images/campaigns/first-paycheck.webp')}
-            contentFit="cover"
-            contentPosition="top"
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.paycheckCopy}>
-            <Text style={styles.quote}>
-              “I got my first paycheck from my smartphone.”
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.paycheckCard, { width: cardWidth }]}>
-          <Image
-            accessible
-            accessibilityLabel="Omoh if not for this laptop… how i wan take chop?"
-            source={require('@/assets/images/campaigns/laptop-story.webp')}
-            contentFit="contain"
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
         {stories.map((story) => (
-          <View
-            key={story.title}
-            style={[
-              styles.card,
-              {
-                width: cardWidth,
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            {'source' in story ? (
-              <Pressable
-                accessibilityRole="link"
-                onPress={() =>
-                  void Linking.openURL(REPORT_URL).catch(() => {
-                    Alert.alert('Could not open the GSMA report');
-                  })
-                }
-                style={styles.action}
-              >
-                <Text style={{ color: colors.textSecondary }}>
-                  GSMA Consumer Survey, 2024 ↗
-                </Text>
-              </Pressable>
-            ) : (
-              <View style={styles.labelRow}>
-                <Ionicons name={story.icon} size={18} color={accent} />
-                <Text style={[styles.label, { color: accent }]}>
-                  {story.label}
-                </Text>
-              </View>
-            )}
-            <Text style={[styles.title, { color: colors.text }]}>
-              {story.title}
-            </Text>
-            <Text style={[styles.body, { color: colors.textSecondary }]}>
-              {story.body}
-            </Text>
-            {'href' in story && (
-              <Pressable
-                accessibilityRole="link"
-                onPress={() => router.push(story.href)}
-                style={styles.action}
-              >
-                <Text style={[styles.label, { color: accent }]}>
-                  {story.action} →
-                </Text>
-              </Pressable>
-            )}
+          <View key={story.id} style={[styles.card, { width: cardWidth }]}>
+            <Image
+              accessible={false}
+              source={story.artwork}
+              contentFit="cover"
+              contentPosition={story.contentPosition}
+              style={[
+                StyleSheet.absoluteFill,
+                story.id === 'laptop' && styles.laptopArt,
+              ]}
+            />
+            <LinearGradient
+              pointerEvents="none"
+              colors={['#21050c', '#21050c', 'transparent']}
+              locations={[0, 0.72, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.scrim}
+            />
+            <Text style={styles.quote}>{story.quote}</Text>
           </View>
         ))}
       </ScrollView>
@@ -140,9 +86,8 @@ export function HomeImpactCarousel() {
 
 const styles = StyleSheet.create({
   section: { marginTop: 4, marginBottom: 4 },
-  track: { paddingHorizontal: 16, paddingBottom: 3, gap: 10 },
-  card: { borderWidth: 1, borderRadius: 16, padding: 10, gap: 3 },
-  paycheckCard: {
+  track: { paddingLeft: GUTTER, paddingBottom: 3, gap: GAP },
+  card: {
     minHeight: 124,
     justifyContent: 'center',
     backgroundColor: '#21050c',
@@ -151,11 +96,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
   },
-  paycheckCopy: { width: '57%', padding: 12, gap: 4 },
-  quote: { color: '#fff', fontSize: 19, lineHeight: 22, fontWeight: '800' },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  label: { fontSize: 13, fontWeight: '700' },
-  title: { fontSize: 17, fontWeight: '800' },
-  body: { fontSize: 13, lineHeight: 17 },
-  action: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  laptopArt: { left: '52%' },
+  scrim: { ...StyleSheet.absoluteFill, right: '36%' },
+  quote: {
+    width: '62%',
+    padding: 12,
+    color: '#fff',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
 });

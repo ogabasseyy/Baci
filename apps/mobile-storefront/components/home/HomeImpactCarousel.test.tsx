@@ -1,11 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import { HomeImpactCarousel } from './HomeImpactCarousel';
 
-const mockPush = jest.fn();
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
-
-it('opens Repair Lab from the sustainability story', () => {
+it('shows the four story quotes in swipe order as accessible text', () => {
   render(<HomeImpactCarousel />);
-  fireEvent.press(screen.getByText(/Explore repairs/));
-  expect(mockPush).toHaveBeenCalledWith('/repairs');
+
+  expect(
+    screen.getAllByText(/^“/).map((quote) => quote.props.children)
+  ).toEqual([
+    '“I got my first paycheck from my smartphone.”',
+    '“Omoh, if not for this laptop, how I wan take chop?”',
+    '“I thought I needed a new phone. I just needed a new battery.”',
+    '“Small small, I saved for the phone I wanted.”',
+  ]);
 });

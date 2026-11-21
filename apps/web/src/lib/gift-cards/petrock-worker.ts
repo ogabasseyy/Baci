@@ -78,7 +78,11 @@ export async function runGiftCardWorker(
   }
   const { status, replay } = reply.data;
   if (status !== 'success' && status !== 'reject') return { status: 'pending' };
-  if (typeof replay !== 'string' || Buffer.byteLength(replay, 'utf8') > 65536) {
+  if (
+    typeof replay !== 'string' ||
+    (status === 'success' && !replay.trim()) ||
+    Buffer.byteLength(replay, 'utf8') > 65536
+  ) {
     return { status: 'review', reason: 'invalid_replay' };
   }
   await deps.recordResult(

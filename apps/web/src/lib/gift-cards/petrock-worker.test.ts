@@ -101,7 +101,11 @@ it('flags missing reference separately without exposing or capturing the replay'
   expect(deps.submit).not.toHaveBeenCalled();
 });
 
-it('returns review for invalid terminal replay evidence', async () => {
+it.each([
+  null,
+  '',
+  '   ',
+])('returns review for invalid terminal replay evidence %j', async (replay) => {
   const deps = setup();
   deps.read.mockResolvedValue({
     ...paid,
@@ -114,7 +118,7 @@ it('returns review for invalid terminal replay evidence', async () => {
       orderUuid: 'supplier-1',
       referenceId: paid.id,
       status: 'success',
-      replay: null,
+      replay,
     },
   });
   await expect(

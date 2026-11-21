@@ -60,7 +60,14 @@ export async function runPilotWalletAction(
         ...(await issueGiftCardPilotQuote(config, dependencies)),
       };
     }
-    if (form.get('intent') === 'confirm' && form.get('region') === 'US') {
+    if (form.get('intent') === 'confirm') {
+      if (form.get('region') !== 'US') {
+        return {
+          status: 'error',
+          message:
+            'Confirm that your PlayStation account region is United States.',
+        };
+      }
       const order = await confirmGiftCardPilot(
         {
           expiresAt: Number(form.get('expiresAt')),

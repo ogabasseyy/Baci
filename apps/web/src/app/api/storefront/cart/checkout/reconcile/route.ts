@@ -65,9 +65,36 @@ export async function POST(request: NextRequest) {
       const receipt = bankTransferCheckoutReceiptSchema.safeParse(
         response.data
       );
-      return response.error || !receipt.success
-        ? cartErrorResponse('temporarily_unavailable')
-        : cartJsonResponse(receipt.data);
+      if (response.error || !receipt.success)
+        return cartErrorResponse('temporarily_unavailable');
+
+      // Payment or cancellation can commit after the cart RPC releases its locks.
+      const snapshot = await (auth.supabase ?? createAnonClient()).rpc(
+        'get_order_payment_snapshot',
+        {
+          p_order_id: receipt.data.order.id,
+          p_email: input.customerEmail,
+        }
+      );
+      const order = snapshot.data?.[0];
+      if (
+        snapshot.error ||
+        !order ||
+        order.merchant_id !== merchant.merchant.id ||
+        order.currency !== receipt.data.order.currency ||
+        order.payment_method !== 'bank_transfer' ||
+        (order.payment_status !== 'unpaid' &&
+          order.payment_status !== 'pending') ||
+        !order.shipping_status ||
+        ['cancelled', 'canceled'].includes(
+          order.shipping_status.toLowerCase()
+        ) ||
+        (order.wallet_amount_used ?? 0) !== 0 ||
+        order.total !== receipt.data.amountDueToGateway
+      ) {
+        return cartErrorResponse('temporarily_unavailable');
+      }
+      return cartJsonResponse(receipt.data);
     }
     const response = await client.rpc(
       'commerce_cart_reconcile_redvault_checkout' as never

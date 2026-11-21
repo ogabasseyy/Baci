@@ -1739,7 +1739,14 @@ export async function POST(request: NextRequest) {
                 reference,
                 trackingToken: data.tracking_token,
               });
-              if (!attempt || attempt.kind === 'pending') {
+              if (attempt.kind === 'unavailable') {
+                return createErrorResponse(
+                  'Bank transfer is temporarily unavailable. Please try again later.',
+                  'DVA_SETUP_UNAVAILABLE',
+                  503
+                );
+              }
+              if (attempt.kind === 'pending') {
                 return createErrorResponse(
                   'We’re checking your bank transfer details. Please try again shortly.',
                   'DVA_SETUP_PENDING',

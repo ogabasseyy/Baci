@@ -243,4 +243,14 @@ describe('POST /api/payments/initialize DVA reservation', () => {
     expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
     expect(mockCreatePaymentTransaction).not.toHaveBeenCalled();
   });
+  it('reports a service failure separately from a pending attempt', async () => {
+    mockDvaAttempt.mockResolvedValue({ kind: 'unavailable' });
+    const response = await POST(request('tracking-proof'));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'DVA_SETUP_UNAVAILABLE',
+    });
+    expect(mockCreateDedicatedVirtualAccount).not.toHaveBeenCalled();
+    expect(mockCreatePaymentTransaction).not.toHaveBeenCalled();
+  });
 });

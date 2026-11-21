@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { z } from 'zod';
+import { logger } from '@/lib/logger';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { signScopedSupabaseJwt } from '@/lib/supabase/scoped-jwt';
 
@@ -29,30 +30,44 @@ export async function beginPaystackDvaAttempt(input: {
   reference: string;
   trackingToken?: string;
 }) {
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const client: {
-    rpc(
-      name: 'begin_chat_paystack_dva_attempt',
-      args: { p_tracking_token: string }
-    ): PromiseLike<{ data: unknown; error: unknown }>;
-  } = createScopedClient(
-    signScopedSupabaseJwt({
-      aud: 'authenticated',
-      exp: issuedAt + 60,
-      iat: issuedAt,
-      role: 'authenticated',
-      paystack_dva_attempt: {
-        amount_kobo: input.amountKobo,
-        customer_email: input.customerEmail.trim().toLowerCase(),
-        merchant_id: input.merchantId,
-        order_id: input.orderId,
-        reference: input.reference,
-      },
-    })
-  );
-  const result = await client.rpc('begin_chat_paystack_dva_attempt', {
-    p_tracking_token: input.trackingToken ?? '',
-  });
-  const parsed = attemptSchema.safeParse(result.data);
-  return !result.error && parsed.success ? parsed.data : null;
+  try {
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const client: {
+      rpc(
+        name: 'begin_chat_paystack_dva_attempt',
+        args: { p_tracking_token: string }
+      ): PromiseLike<{ data: unknown; error: unknown }>;
+    } = createScopedClient(
+      signScopedSupabaseJwt({
+        aud: 'authenticated',
+        exp: issuedAt + 60,
+        iat: issuedAt,
+        role: 'authenticated',
+        paystack_dva_attempt: {
+          amount_kobo: input.amountKobo,
+          customer_email: input.customerEmail.trim().toLowerCase(),
+          merchant_id: input.merchantId,
+          order_id: input.orderId,
+          reference: input.reference,
+        },
+      })
+    );
+    const result = await client.rpc('begin_chat_paystack_dva_attempt', {
+      p_tracking_token: input.trackingToken ?? '',
+    });
+    if (!result.error) {
+      const parsed = attemptSchema.safeParse(result.data);
+      if (parsed.success) return parsed.data;
+    }
+    logger.error({
+      message: 'Chat bank transfer attempt is unavailable',
+      reason: result.error ? 'rpc_error' : 'invalid_receipt',
+    });
+  } catch {
+    logger.error({
+      message: 'Chat bank transfer attempt is unavailable',
+      reason: 'request_exception',
+    });
+  }
+  return { kind: 'unavailable' } as const;
 }

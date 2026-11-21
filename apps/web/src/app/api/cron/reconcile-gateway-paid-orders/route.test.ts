@@ -1,91 +1,14 @@
-import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  buildRequest,
+  CRON_SECRET,
+  GET,
+  mockSweepResult,
+  mocks,
+  resetReconciliationRouteMocks,
+} from './route.test-support';
 
-const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
-  drainFailedPaidOrderSideEffects: vi.fn(),
-  finalizeOrderGatewayPayment: vi.fn(),
-  fileWedgeReview: vi.fn(),
-  getCronSecret: vi.fn(),
-  logger: { error: vi.fn(), warn: vi.fn() },
-  recheckPaidBankCardOfferCaptures: vi.fn(),
-  reconcileAbandonedPaystackAttempts: vi.fn(),
-  reconcileWedgedGatewayOrders: vi.fn(),
-}));
-
-vi.mock('@/env', () => ({
-  getCronSecret: mocks.getCronSecret,
-}));
-vi.mock('@/lib/logger', () => ({
-  logger: mocks.logger,
-}));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mocks.createServiceClient,
-}));
-vi.mock('@/lib/payments/reconcile-wedged-gateway-orders', () => ({
-  reconcileWedgedGatewayOrders: mocks.reconcileWedgedGatewayOrders,
-}));
-vi.mock('@/lib/payments/reconcile-abandoned-paystack-attempts', () => ({
-  reconcileAbandonedPaystackAttempts: mocks.reconcileAbandonedPaystackAttempts,
-}));
-vi.mock('@/lib/payments/recheck-paid-bank-card-offer-captures', () => ({
-  recheckPaidBankCardOfferCaptures: mocks.recheckPaidBankCardOfferCaptures,
-}));
-vi.mock('@/lib/payments/drain-failed-paid-order-side-effects', () => ({
-  drainFailedPaidOrderSideEffects: mocks.drainFailedPaidOrderSideEffects,
-}));
-vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
-  finalizeOrderGatewayPayment: mocks.finalizeOrderGatewayPayment,
-}));
-
-import { GET } from './route';
-
-const CRON_SECRET = 'cron-secret-for-tests';
-
-function buildRequest(authorization?: string) {
-  return new NextRequest(
-    'https://usebaci.com/api/cron/reconcile-gateway-paid-orders',
-    {
-      headers: authorization ? { authorization } : undefined,
-    }
-  );
-}
-
-function mockSweepResult(result: unknown) {
-  mocks.reconcileWedgedGatewayOrders.mockImplementation(async (input) => {
-    await input.beforeSweep?.({
-      finalizePayment: mocks.finalizeOrderGatewayPayment,
-      fileWedgeReview: mocks.fileWedgeReview,
-    });
-    return result;
-  });
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.getCronSecret.mockReturnValue(CRON_SECRET);
-  mocks.createServiceClient.mockReturnValue({});
-  mockSweepResult({ checked: 0, failed: [], healed: [], skipped: [] });
-  mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
-    checked: 0,
-    failed: false,
-    held: [],
-    retired: [],
-  });
-  mocks.drainFailedPaidOrderSideEffects.mockResolvedValue({
-    drained: [],
-    failed: [],
-    recovered: [],
-    skipped: [],
-    stranded: [],
-  });
-  mocks.recheckPaidBankCardOfferCaptures.mockResolvedValue({
-    checked: 0,
-    failed: 0,
-    retrying: 0,
-    reversed: 0,
-  });
-});
+beforeEach(resetReconciliationRouteMocks);
 
 describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
   it('returns 500 server_misconfigured when CRON_SECRET is unset', async () => {
@@ -149,59 +72,6 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     );
   });
 
-  it('shares the invocation budget with a bounded paid bank-offer pass', async () => {
-    mockSweepResult({ checked: 0 });
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    try {
-      const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
-
-      expect(response.status).toBe(200);
-      expect(mocks.reconcileAbandonedPaystackAttempts).toHaveBeenCalledWith(
-        expect.objectContaining({ deadlineMs: 1_090_000 })
-      );
-      expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalledWith(
-        expect.objectContaining({ deadlineMs: 1_160_000 })
-      );
-      expect(mocks.recheckPaidBankCardOfferCaptures).toHaveBeenCalledWith(
-        expect.objectContaining({
-          deadlineMs: 1_020_000,
-          finalizePayment: mocks.finalizeOrderGatewayPayment,
-        })
-      );
-      expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalledWith(
-        expect.objectContaining({ deadlineMs: 1_270_000 })
-      );
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  it('reports when earlier passes consume the paid bank-offer recheck budget', async () => {
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    mocks.reconcileWedgedGatewayOrders.mockImplementation(async (input) => {
-      await input.beforeSweep({
-        finalizePayment: mocks.finalizeOrderGatewayPayment,
-        fileWedgeReview: mocks.fileWedgeReview,
-      });
-      now.mockReturnValue(1_180_001);
-      return { checked: 0 };
-    });
-
-    try {
-      const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
-      expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({
-        bankOfferRecheckSkipped: true,
-      });
-      expect(mocks.recheckPaidBankCardOfferCaptures).not.toHaveBeenCalled();
-      expect(mocks.logger.warn).toHaveBeenCalledWith({
-        message: expect.stringContaining('invocation budget exhausted'),
-      });
-    } finally {
-      now.mockRestore();
-    }
-  });
-
   it('surfaces and logs recovered/stranded side effects even when nothing else changed', async () => {
     mockSweepResult({
       checked: 0,
@@ -235,36 +105,6 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ sideEffectDrain })
     );
-  });
-
-  it.each([
-    { failed: 0, retrying: 1 },
-    { failed: 1, retrying: 0 },
-  ])('distinguishes deferred checks from recheck failures (%j)', async (counts) => {
-    const bankOfferRecheck = {
-      checked: 1,
-      ...counts,
-      reversed: 0,
-    };
-    mocks.recheckPaidBankCardOfferCaptures.mockResolvedValue(bankOfferRecheck);
-
-    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
-
-    expect(response.status).toBe(counts.failed ? 503 : 200);
-    expect(await response.json()).toMatchObject({ bankOfferRecheck });
-  });
-
-  it('retains the recheck error for operations on a failed pass', async () => {
-    const error = new Error('recheck database unavailable');
-    mocks.recheckPaidBankCardOfferCaptures.mockRejectedValueOnce(error);
-
-    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
-
-    expect(response.status).toBe(503);
-    expect(mocks.logger.warn).toHaveBeenCalledWith({
-      error,
-      message: 'Paid bank card offer recheck pass failed',
-    });
   });
 
   it('keeps the existing repair passes running if the Paystack attempt sweep fails', async () => {

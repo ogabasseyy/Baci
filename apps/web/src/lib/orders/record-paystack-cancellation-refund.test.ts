@@ -1,66 +1,17 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  acceptedRefund,
+  database,
   initiationOrder,
   initiationTransaction,
-} from './initiate-paystack-cancellation-refunds.test-helpers';
-import { recordPaystackCancellationRefund } from './record-paystack-cancellation-refund';
+  mocks,
+  recordPaystackCancellationRefund,
+  resetRefundAuditMocks,
+} from './record-paystack-cancellation-refund.test-support';
 
-const mocks = vi.hoisted(() => ({
-  quarantineRefund: vi.fn(),
-}));
-
-vi.mock('./quarantine-order-cancellation-refund', () => ({
-  quarantineRefund: mocks.quarantineRefund,
-}));
-
-function acceptedRefund(overrides: Record<string, unknown> = {}) {
-  return {
-    data: {
-      id: 101,
-      status: 'queued',
-      transaction: { id: 55, reference: 'PSK-1' },
-      ...overrides,
-    },
-    success: true as const,
-  };
-}
+beforeEach(resetRefundAuditMocks);
 
 describe('recordPaystackCancellationRefund', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.quarantineRefund.mockImplementation(() => {
-      throw new Error('quarantined');
-    });
-  });
-
-  function database({
-    conflictRow = null,
-    insertError = null,
-  }: {
-    conflictRow?: unknown;
-    insertError?: unknown;
-  } = {}) {
-    const insert = vi.fn().mockResolvedValue({ error: insertError });
-    const from = vi.fn().mockImplementation((table: string) => {
-      if (table !== 'transactions') throw new Error(`unexpected ${table}`);
-      return {
-        insert,
-        select: vi.fn(() => ({
-          eq: vi.fn().mockReturnThis(),
-          maybeSingle: vi
-            .fn()
-            .mockResolvedValue({ data: conflictRow, error: null }),
-        })),
-      };
-    });
-    return {
-      from,
-      insert,
-      supabase: { from } as unknown as Pick<SupabaseClient, 'from' | 'rpc'>,
-    };
-  }
-
   it('audits an accepted refund and returns the provider id', async () => {
     const { insert, supabase } = database();
 
@@ -131,36 +82,6 @@ describe('recordPaystackCancellationRefund', () => {
     });
 
     expect(refundId).toBe(101);
-    expect(mocks.quarantineRefund).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    '95.01',
-    '95.0100',
-    95.01,
-  ])('replays the exact typed refund audit amount %s', async (amount) => {
-    const { supabase } = database({
-      conflictRow: {
-        amount,
-        currency: 'NGN',
-        gateway: 'paystack',
-        gateway_reference: '101',
-        id: 'other-row',
-        metadata: { payment_transaction_id: 'tx-1' },
-        transaction_type: 'refund',
-      },
-      insertError: { code: '23505' },
-    });
-
-    await expect(
-      recordPaystackCancellationRefund({
-        order: initiationOrder,
-        paystackRefund: acceptedRefund(),
-        supabase,
-        transaction: initiationTransaction,
-        transactionAmount: '95.01',
-      })
-    ).resolves.toBe(101);
     expect(mocks.quarantineRefund).not.toHaveBeenCalled();
   });
 

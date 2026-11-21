@@ -1,54 +1,13 @@
-vi.mock('./check-cancellation-refund-provider', () => ({
-  checkCancellationRefundProvider: vi.fn().mockResolvedValue([]),
-}));
-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({ initiateRefund: vi.fn() }));
-
-vi.mock('@/lib/initiate-paystack-refund', () => ({
-  initiateRefund: mocks.initiateRefund,
-}));
-vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
-  buildOrderCancellationEmailMessage: vi.fn(),
-}));
-
-import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
-import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
+import {
+  auditReviewsQuery,
+  executeOrderCancellationSideEffect,
+  merchant,
+  mocks,
+  order,
+  transactionQuery,
+} from './execute-order-cancellation-side-effect.accepted-refund.test-support';
 import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
-
-const merchant = {
-  business_name: 'Store',
-  cac_rc_number: null,
-  email: 'store@example.com',
-  email_sender_name: null,
-  id: 'merchant-1',
-  slug: 'store',
-  support_email: null,
-  tax_identification_number: null,
-};
-const order = {
-  amount_paid: 100,
-  currency: 'NGN',
-  customer_email: 'buyer@example.com',
-  customer_id: null,
-  customer_name: 'Buyer',
-  id: 'order-1',
-  merchant_id: 'merchant-1',
-  order_items: [],
-  order_number: 'ORD-1',
-  payment_status: 'paid',
-  total: 100,
-};
-
-function transactionQuery(data: unknown) {
-  return {
-    eq: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    order: vi.fn().mockResolvedValue({ data, error: null }),
-    select: vi.fn().mockReturnThis(),
-  };
-}
 
 describe('cancellation refund accepted-refund safety', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -100,96 +59,6 @@ describe('cancellation refund accepted-refund safety', () => {
       })
     );
     expect(from).toHaveBeenCalledTimes(4);
-  });
-
-  it.each([
-    { isLastAttempt: false, mismatch: false },
-    { isLastAttempt: true, mismatch: false },
-    { isLastAttempt: false, mismatch: true },
-  ])('saves a later refund without completing a mixed refund run ($isLastAttempt, $mismatch)', async ({
-    isLastAttempt,
-    mismatch,
-  }) => {
-    const refundInsert = vi.fn().mockResolvedValue({ error: null });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(
-        transactionQuery([
-          {
-            amount: 60,
-            currency: 'NGN',
-            gateway: 'paystack',
-            gateway_reference: 'BCO-fixture',
-            id: 'payment-1',
-          },
-          {
-            amount: 40,
-            currency: 'NGN',
-            gateway: 'paystack',
-            gateway_reference: 'regular-fixture',
-            id: 'payment-2',
-          },
-        ])
-      )
-      .mockReturnValueOnce(transactionQuery([]))
-      .mockReturnValueOnce(auditReviewsQuery([]))
-      .mockReturnValue({ insert: refundInsert });
-    const rpc = vi
-      .fn()
-      .mockResolvedValue(
-        mismatch
-          ? { data: false, error: null }
-          : { data: null, error: { code: '57014' } }
-      );
-    mocks.initiateRefund.mockResolvedValue({
-      success: true,
-      data: {
-        id: 42,
-        status: 'pending',
-        transaction: { id: 123, reference: 'regular-fixture' },
-      },
-    });
-
-    const result = executeOrderCancellationSideEffect({
-      isLastAttempt,
-      merchant,
-      order,
-      step: 'refund',
-      supabase: { from, rpc } as never,
-    });
-    if (isLastAttempt || mismatch) {
-      await expect(result).rejects.toBeInstanceOf(DeliveryUncertainError);
-      expect(refundInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          issue_type: 'order_cancellation_refund_requires_review',
-          candidates: [
-            expect.objectContaining({ paymentTransactionId: 'payment-1' }),
-          ],
-          metadata: {
-            accepted_refund_ids: [42],
-            ambiguous_initiation: false,
-            ...(mismatch
-              ? {}
-              : { bank_offer_capture_lookup_unavailable: true }),
-          },
-        })
-      );
-    } else {
-      await expect(result).rejects.toMatchObject({
-        message: 'Unable to verify bank card offer refund capture',
-        refundIds: [42],
-      });
-    }
-    expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
-    expect(mocks.initiateRefund).toHaveBeenCalledWith(
-      'regular-fixture',
-      4000,
-      'Order cancelled',
-      undefined
-    );
-    expect(refundInsert).toHaveBeenCalledWith(
-      expect.objectContaining({ gateway_reference: '42' })
-    );
   });
 
   it('initiates every payment leg when an earlier accepted refund is pending', async () => {

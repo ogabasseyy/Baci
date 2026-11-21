@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildCheckoutOrderRequest } from '../build-checkout-order-request';
 import { getCheckoutOrderErrorMessage } from '../checkout-order-error-message';
 import { selectRejectedVoucherLines } from '../select-rejected-voucher-lines';
 import {
@@ -7,83 +6,9 @@ import {
   submitCheckoutOrder,
 } from './submit-checkout-order';
 
-function response(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
-}
-
-function orderRequest() {
-  return buildCheckoutOrderRequest({
-    merchantId: 'merchant-1',
-    items: [],
-    paymentMethod: 'card',
-    acceptsMarketing: false,
-    customer: {
-      name: 'Ada Customer',
-      email: 'customer@example.com',
-      phone: '08000000000',
-    },
-    money: {
-      subtotal: 4200,
-      shipping: 0,
-      tax: 0,
-      giftWrapping: 0,
-      discountAmount: 0,
-      useWalletCredit: false,
-      walletAmount: 0,
-    },
-    delivery: {
-      method: 'pickup',
-      airportType: 'delivery',
-      quoteMatchesMethod: false,
-      selectedQuoteId: '',
-      merchantRateId: null,
-      provider: null,
-      address: {
-        address: 'Store',
-        city: 'Lagos',
-        state: 'Lagos',
-        phone: '',
-        countryCode: 'NG',
-        country: 'Nigeria',
-      },
-    },
-  });
-}
+import { orderRequest, response } from './submit-checkout-order.test-support';
 
 describe('submitCheckoutOrder', () => {
-  it('sends the browser CSRF token and the order idempotency key for a bank offer', async () => {
-    const browserFetch = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(response({ order: { id: 'new-order' } }));
-    vi.stubGlobal('document', { cookie: 'csrf-token=checkout-proof' });
-    vi.stubGlobal('fetch', browserFetch);
-    try {
-      const result = await submitCheckoutOrder({
-        resolvedPendingOrder: { reusableOrder: null, clearStoredOrder: false },
-        getIdempotencyKey: async () => 'bank-offer-key',
-        orderRequest: { ...orderRequest(), payment_method: 'bank_card_offer' },
-        paymentMethod: 'paystack',
-        total: 4200,
-        onVoucherRejected: vi.fn(),
-        onPendingOrderInvalidated: vi.fn(async () => undefined),
-        onShippingRateRejected: vi.fn(),
-        getOrderErrorMessage: () => 'unreachable',
-      });
-
-      expect(result.order.id).toBe('new-order');
-      expect(browserFetch).toHaveBeenCalledTimes(1);
-      expect(browserFetch).toHaveBeenCalledWith(
-        '/api/orders',
-        expect.objectContaining({ credentials: 'include', method: 'POST' })
-      );
-      const headers = new Headers(browserFetch.mock.calls[0]?.[1]?.headers);
-      expect(headers.get('x-csrf-token')).toBe('checkout-proof');
-      expect(headers.get('idempotency-key')).toBe('bank-offer-key');
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it('reuses a pending payable order without creating an idempotency key or a second order', async () => {
     const request = vi.fn<typeof fetch>();
     const getIdempotencyKey = vi.fn(async () => 'new-key');

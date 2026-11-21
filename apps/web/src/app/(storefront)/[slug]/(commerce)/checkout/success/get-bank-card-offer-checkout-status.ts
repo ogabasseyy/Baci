@@ -5,8 +5,9 @@ export function getBankCardOfferCheckoutStatus(
   payment: VerificationResponse
 ) {
   // fetchWithCsrf has already retried a recognized CSRF failure.
-  if (httpStatus === 401) return 'access_required';
-  if (httpStatus === 403) {
+  // A bare 401 or 403 can also come from middleware. Only an explicit
+  // bank-offer ownership denial should send the shopper to sign in.
+  if (httpStatus === 401 || httpStatus === 403) {
     return payment.code === 'BANK_CARD_OFFER_VERIFICATION_DENIED'
       ? 'access_required'
       : 'verification_unavailable';

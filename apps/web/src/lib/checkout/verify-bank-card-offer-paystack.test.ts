@@ -40,8 +40,12 @@ it('leaves pending transactions without settlement evidence', async () => {
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
 });
 
-it('reports a reversal for reconciliation when its reference and domain match', async () => {
-  respond({ ...captureFixture, status: 'reversed' });
+it('holds the saved reference for operations when Paystack reports a partial reversal', async () => {
+  respond({
+    ...captureFixture,
+    status: 'reversed',
+    amount: captureFixture.amount - 100,
+  });
 
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
     kind: 'terminal',

@@ -4,13 +4,15 @@ import {
   getBankCardOfferCheckoutStatus,
 } from './get-bank-card-offer-checkout-status';
 
-it('distinguishes ownership denials from persistent CSRF failures', () => {
+it.each([
+  401, 403,
+])('requires the explicit ownership denial code for HTTP %s', (status) => {
   expect(
-    getBankCardOfferCheckoutStatus(403, {
+    getBankCardOfferCheckoutStatus(status, {
       code: 'BANK_CARD_OFFER_VERIFICATION_DENIED',
     })
   ).toBe('access_required');
-  expect(getBankCardOfferCheckoutStatus(403, {})).toBe(
+  expect(getBankCardOfferCheckoutStatus(status, {})).toBe(
     'verification_unavailable'
   );
 });

@@ -26,8 +26,10 @@ export async function verifyBankCardOfferPaystack(
     return { kind: 'mismatch' } as const;
   }
   if (status !== 'success') {
-    // A terminal status starts operator review for the same reference.
-    // Only a successful capture can establish and approve the amount paid.
+    // Terminal evidence only holds the exact reference for review. Its
+    // amount may describe a partial reversal, so requiring the original
+    // amount here could hide a legitimate reversal. Successful capture
+    // approval below still requires the full saved amount.
     if (terminal.success) {
       return 'domain' in data &&
         data.domain === attempt.domain &&

@@ -187,7 +187,7 @@ describe('bank card offer verification', () => {
     expect((await verify(request('verify', { reference }))).status).toBe(500);
     mocks.verify.mockResolvedValueOnce({
       success: true,
-      data: { ...data, status: 'reversed' },
+      data: { ...data, status: 'reversed', amount: 800 },
     });
 
     const replay = await verify(request('verify', { reference }));
@@ -199,7 +199,10 @@ describe('bank card offer verification', () => {
     });
     expect(mocks.rpc).toHaveBeenCalledWith(
       'flag_bank_card_offer_terminal_review',
-      expect.objectContaining({ p_status: 'reversed' })
+      expect.objectContaining({
+        p_status: 'reversed',
+        p_reported_amount_kobo: 800,
+      })
     );
     expect(
       mocks.rpc.mock.calls.filter(

@@ -59,7 +59,15 @@ export async function verifyBankCardOfferPaystack(
         customer.success &&
         customer.data.customer.email.toLowerCase() ===
           attempt.customerEmail.trim().toLowerCase()
-        ? ({ kind: 'terminal', status: terminal.data } as const)
+        ? ({
+            kind: 'terminal',
+            status: terminal.data,
+            ...(terminal.data === 'reversed' &&
+            Number.isSafeInteger(data.amount) &&
+            data.amount >= 0
+              ? { reportedReversalAmountKobo: data.amount }
+              : {}),
+          } as const)
         : ({ kind: 'mismatch' } as const);
     }
     return { kind: 'pending' } as const;

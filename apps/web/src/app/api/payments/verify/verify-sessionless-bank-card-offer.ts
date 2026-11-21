@@ -77,6 +77,9 @@ export async function verifySessionlessBankCardOffer(
       const review = await client.rpc('flag_bank_card_offer_terminal_review', {
         ...args,
         p_status: verified.status,
+        ...(verified.reportedReversalAmountKobo !== undefined
+          ? { p_reported_amount_kobo: verified.reportedReversalAmountKobo }
+          : {}),
       });
       if (review.error || review.data !== true) return unavailable();
       return NextResponse.json({

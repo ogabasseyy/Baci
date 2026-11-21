@@ -53,6 +53,20 @@ it('holds the saved reference for operations when Paystack reports a partial rev
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
     kind: 'terminal',
     status: 'reversed',
+    reportedReversalAmountKobo: captureFixture.amount - 100,
+  });
+});
+
+it.each([
+  -1,
+  1.5,
+  Number.MAX_SAFE_INTEGER + 1,
+  null,
+])('keeps a reversal under review without trusting malformed amount %s', async (amount) => {
+  respond({ ...captureFixture, status: 'reversed', amount });
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'terminal',
+    status: 'reversed',
   });
 });
 

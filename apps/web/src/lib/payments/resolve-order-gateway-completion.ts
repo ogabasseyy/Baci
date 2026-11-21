@@ -92,6 +92,9 @@ export async function resolveOrderGatewayCompletion({
             p_merchant_id: merchantId,
             p_transaction_id: transactionId,
             p_status: verified.status,
+            ...(verified.reportedReversalAmountKobo !== undefined
+              ? { p_reported_amount_kobo: verified.reportedReversalAmountKobo }
+              : {}),
           }
         );
         if (review.error || review.data !== true) {

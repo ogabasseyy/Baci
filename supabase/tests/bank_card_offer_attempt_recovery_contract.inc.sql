@@ -116,6 +116,7 @@ BEGIN
     IF SQLERRM <> 'checkout_dispute_test_complete' THEN RAISE; END IF;
   END;
   IF public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')
+    OR public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed', 800)
     THEN RAISE EXCEPTION 'Shopper scope recorded a terminal provider status'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
@@ -137,8 +138,21 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'capture_review_test_complete' THEN RAISE; END IF;
   END;
-  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
+  IF public.flag_bank_card_offer_terminal_review(v_order, gen_random_uuid(), v_transaction, 'reversed', 800)
+    OR public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed', -1)
+    OR public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'failed', 800)
+  THEN RAISE EXCEPTION 'Invalid reversal evidence was accepted'; END IF;
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed', 800)
     THEN RAISE EXCEPTION 'Unable to review a reversed initialized attempt'; END IF;
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'failed')
+    OR NOT EXISTS (
+      SELECT 1 FROM public.reconciliation_review
+      WHERE order_id = v_order AND merchant_id = v_merchant AND txn_id = v_transaction
+        AND paystack_ref = v_reference AND resolved_at IS NULL
+        AND metadata->>'provider_status' = 'reversed'
+        AND metadata->'paystack_reported_reversal_amount_kobo' = '800'::jsonb
+    )
+  THEN RAISE EXCEPTION 'Reversal amount was not preserved in the scoped review'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);

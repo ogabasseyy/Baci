@@ -157,7 +157,11 @@ it('reports a verified payment that already settled with confirmed inventory', a
 });
 
 it('rechecks settled attempts for reversals before reporting history success', async () => {
-  verify.mockResolvedValueOnce({ kind: 'terminal', status: 'reversed' });
+  verify.mockResolvedValueOnce({
+    kind: 'terminal',
+    status: 'reversed',
+    reportedReversalAmountKobo: 875,
+  });
   rpc.mockResolvedValueOnce({ data: true, error: null });
   const result = await verifyNative(
     {
@@ -173,6 +177,13 @@ it('rechecks settled attempts for reversals before reporting history success', a
     success: false,
     status: 'reversed',
   });
+  expect(rpc).toHaveBeenLastCalledWith(
+    'flag_bank_card_offer_terminal_review',
+    expect.objectContaining({
+      p_status: 'reversed',
+      p_reported_amount_kobo: 875,
+    })
+  );
 });
 
 it('records a capture mismatch without authorizing settlement', async () => {

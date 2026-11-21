@@ -248,15 +248,13 @@ export async function handleQuizQueueBatch(
       continue;
     }
 
-    const partIndex = isSplitPart ? firstSplit.partIndex : 0;
-    const totalParts = isSplitPart ? firstSplit.totalParts : 1;
+    const partIndex = 0;
+    const totalParts = 1;
     const answerCount = bundlesToSend.reduce(
       (sum, b) => sum + b.answers.length,
       0
     );
-    const batchChecksum = isSplitPart
-      ? firstSplit.bundleChecksumSha256
-      : await sha256Hex(JSON.stringify(bundlesToSend));
+    const batchChecksum = await sha256Hex(JSON.stringify(bundlesToSend));
 
     try {
       const rpc = await postIngestRpc(

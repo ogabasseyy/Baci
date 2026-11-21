@@ -240,12 +240,12 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
         {
           p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:b1`,
           p_part_index: 0,
-          p_total_parts: 2,
+          p_total_parts: 1,
         },
         {
           p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:b2`,
-          p_part_index: 1,
-          p_total_parts: 2,
+          p_part_index: 0,
+          p_total_parts: 1,
         },
       ].map((e) => expect.objectContaining(e))
     );
@@ -405,8 +405,10 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       dispatchEnv
     );
     expect(setupRes?.status).toBe(200);
+    const setupBody = (await setupRes?.json()) as { eventId: string };
+    const eventId = setupBody.eventId;
+    expect(eventId).toMatch(/^demo-round-3-/);
     expect(initializedRooms).toHaveLength(13);
-    const eventId = '11111111-1111-4111-8111-000000000003';
     expect(initializedRooms[0]).toBe(`${eventId}:room-0000`);
 
     // Check-in fails closed when QUIZ_DEMO_INVITE_CODE is unset

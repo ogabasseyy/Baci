@@ -1,6 +1,9 @@
 import { quizV2ActiveAttemptResponseSchema } from '@/schemas/quiz-schemas';
 import { requestQuizV2 } from './quiz';
-import { resolveQuizEdgeSessionForEvent } from './quiz-edge-session';
+import {
+  clearQuizEdgeSession,
+  resolveQuizEdgeSessionForEvent,
+} from './quiz-edge-session';
 import { recoverQuizEdgeAttempt } from './quiz-edge-transport';
 import {
   type QuizActiveAttemptResponse,
@@ -8,6 +11,8 @@ import {
   QuizServiceError,
   type QuizServiceOptions,
 } from './quiz-types';
+
+const EDGE_TICKET_POST_END_GRACE_MS = 60_000;
 
 export interface RecoverQuizAttemptInput extends QuizServiceOptions {
   backendMode?: QuizEventBackendMode;
@@ -28,9 +33,28 @@ export async function recoverActiveQuizAttempt({
     expectedUserId
   );
   if (edgeSession) {
-    return recoverQuizEdgeAttempt(edgeSession, eventId);
-  }
-  if (backendMode === 'edge_rooms') {
+    const endsAtMs = Date.parse(edgeSession.endsAt);
+    const ticketExpiredAfterEvent =
+      Number.isFinite(endsAtMs) &&
+      Date.now() >= endsAtMs + EDGE_TICKET_POST_END_GRACE_MS;
+    if (ticketExpiredAfterEvent) {
+      clearQuizEdgeSession(eventId, expectedUserId);
+    } else {
+      try {
+        return await recoverQuizEdgeAttempt(edgeSession, eventId);
+      } catch (error) {
+        const isExpiredTicketError =
+          error instanceof QuizServiceError &&
+          (error.status === 401 || error.status === 403) &&
+          Number.isFinite(endsAtMs) &&
+          Date.now() >= endsAtMs;
+        if (!isExpiredTicketError) {
+          throw error;
+        }
+        clearQuizEdgeSession(eventId, expectedUserId);
+      }
+    }
+  } else if (backendMode === 'edge_rooms') {
     throw new QuizServiceError(
       'Your quiz room session expired. Please check in again.',
       'QUIZ_EDGE_SESSION_MISSING',

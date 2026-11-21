@@ -795,6 +795,66 @@ export class LiveRankIndexEngine {
     };
   }
 
+  private readonly lastPrunedControlVersion = new Map<string, number>();
+
+  private pruneRestrictedAttemptsForEvent(eventId: string): void {
+    const version = this.controlState.getVersion();
+    if (this.lastPrunedControlVersion.get(eventId) === version) {
+      return;
+    }
+    this.lastPrunedControlVersion.set(eventId, version);
+    const snapshot = this.controlState.getSnapshot();
+    const restrictedAttemptIds = new Set<string>([
+      ...snapshot.blockedAttemptIds,
+      ...snapshot.disqualifiedAttemptIds,
+    ]);
+    const eventPrefix = `${eventId}:`;
+    const blockedCustomerIds = snapshot.blockedCustomerKeys
+      .filter((k) => k.startsWith(eventPrefix))
+      .map((k) => k.slice(eventPrefix.length));
+    const revokedUserIds = snapshot.revokedTesterKeys
+      .filter((k) => k.startsWith(eventPrefix))
+      .map((k) => k.slice(eventPrefix.length));
+
+    if (
+      restrictedAttemptIds.size === 0 &&
+      blockedCustomerIds.length === 0 &&
+      revokedUserIds.length === 0
+    ) {
+      return;
+    }
+
+    this.ensureSchemaSync();
+    for (const customerId of blockedCustomerIds) {
+      const row = this.storage.exec<{ attempt_id: string }>(
+        `SELECT attempt_id FROM live_submissions WHERE event_id = ? AND customer_id = ?`,
+        eventId,
+        customerId
+      ).rows[0];
+      if (row) restrictedAttemptIds.add(row.attempt_id);
+    }
+    for (const userId of revokedUserIds) {
+      const rows = this.storage.exec<{ attempt_id: string }>(
+        `SELECT attempt_id FROM live_submissions WHERE event_id = ? AND user_id = ?`,
+        eventId,
+        userId
+      ).rows;
+      for (const row of rows) {
+        restrictedAttemptIds.add(row.attempt_id);
+      }
+    }
+
+    let prunedCount = 0;
+    for (const attemptId of restrictedAttemptIds) {
+      if (this.removeAttempt(eventId, attemptId)) {
+        prunedCount += 1;
+      }
+    }
+    if (prunedCount > 0) {
+      this.publishSnapshot(eventId, Date.now());
+    }
+  }
+
   /**
    * Serves the shared live leaderboard view (top-100 + caller's `currentPlayer`)
    * with merchant isolation, tester revocation check, and <60s identity masking.
@@ -821,36 +881,7 @@ export class LiveRankIndexEngine {
       throw new QuizRoomError('QZ031', 'not_authorized', 403);
     }
 
-    // Prune any attempts that became blocked, disqualified, or tester-revoked
-    // after their submission was recorded, then republish before serving.
-    this.ensureSchemaSync();
-    const persistedSubs = this.storage.exec<{
-      attempt_id: string;
-      customer_id: string;
-      user_id: string;
-    }>(
-      `SELECT attempt_id, customer_id, user_id FROM live_submissions WHERE event_id = ?`,
-      options.eventId
-    ).rows;
-    let prunedCount = 0;
-    for (const sub of persistedSubs) {
-      if (
-        this.controlState.isAttemptBlocked(
-          options.eventId,
-          sub.attempt_id,
-          sub.customer_id
-        ) ||
-        this.controlState.isAttemptDisqualified(sub.attempt_id) ||
-        this.controlState.isTesterRevoked(options.eventId, sub.user_id)
-      ) {
-        if (this.removeAttempt(options.eventId, sub.attempt_id)) {
-          prunedCount += 1;
-        }
-      }
-    }
-    if (prunedCount > 0) {
-      this.publishSnapshot(options.eventId, Date.now());
-    }
+    this.pruneRestrictedAttemptsForEvent(options.eventId);
 
     const manifest = this.getPublishedManifest(options.eventId);
     if (!manifest) {

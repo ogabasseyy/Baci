@@ -93,9 +93,7 @@ export async function handleDemoWorkerRoute(
     const startsAtMs = nowMs + (body.startsInMs ?? 0);
     const defaultDurationMs = soloInstantResult ? 43_200_000 : 120_000;
     const endsAtMs = startsAtMs + (body.durationMs ?? defaultDurationMs);
-    const eventId =
-      body.eventId ??
-      `11111111-1111-4111-8111-${String(round).padStart(12, '0')}`;
+    const eventId = body.eventId ?? `demo-round-${round}-${nowMs.toString(36)}`;
     const merchantId = 'merch-ogabassey-demo';
     const roomIds = buildRoundRoomIds(eventId, round, body.roomCount);
     const config = await buildDemoEventConfig({

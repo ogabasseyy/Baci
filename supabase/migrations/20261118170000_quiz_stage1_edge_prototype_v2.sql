@@ -1295,7 +1295,23 @@ BEGIN
       ON cust.id = item.customer_id
     LEFT JOIN public.quiz_event_admissions AS adm
       ON adm.id = item.admission_id
-    ON CONFLICT (event_id, attempt_id) DO NOTHING;
+    ON CONFLICT (event_id, attempt_id) DO UPDATE
+    SET answers = (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(dedup.elem ORDER BY (dedup.elem ->> 'position')::integer),
+        '[]'::jsonb
+      )
+      FROM (
+        SELECT DISTINCT ON ((elem ->> 'position')::integer) elem
+        FROM pg_catalog.jsonb_array_elements(
+          private.quiz_edge_attempt_staging.answers || EXCLUDED.answers
+        ) AS elem
+      ) AS dedup
+    ),
+    submitted_at = COALESCE(
+      private.quiz_edge_attempt_staging.submitted_at,
+      EXCLUDED.submitted_at
+    );
 
     GET DIAGNOSTICS v_attempts_inserted = ROW_COUNT;
   ELSE

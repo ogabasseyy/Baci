@@ -66,7 +66,8 @@ export async function checkReferenceSettled(
     } catch {
       accessToken = null;
     }
-    if (!accessToken && !trackingToken) {
+    const bankOffer = reference.startsWith('BCO-');
+    if (!accessToken && (bankOffer || !trackingToken)) {
       return { paid: false, inconclusive: true };
     }
     // Prefer the proof-bound GET whenever the creation tracking token is
@@ -75,7 +76,8 @@ export async function checkReferenceSettled(
     // and Juicyway rows — completed wallet references and asynchronously
     // settled CredPal/Klump references would otherwise poll pending
     // forever for signed-in shoppers.
-    const useBearerPost = !!accessToken && !trackingToken;
+    // Bank offers require buyer ownership and fresh issuer evidence.
+    const useBearerPost = !!accessToken && (bankOffer || !trackingToken);
     const verifyUrl = useBearerPost
       ? `${CHECKOUT_API_BASE_URL}/api/payments/verify`
       : `${CHECKOUT_API_BASE_URL}/api/payments/verify?reference=${encodeURIComponent(reference)}&trackingToken=${encodeURIComponent(trackingToken ?? '')}`;
@@ -112,6 +114,14 @@ export async function checkReferenceSettled(
       data.finalizationOutcome !== 'completed' ||
       data.orderId !== orderId
     ) {
+      if (
+        bankOffer &&
+        response.ok &&
+        data.orderId === orderId &&
+        data.status === 'reversed'
+      ) {
+        return { paid: false, reconciliation: 'order_skipped' };
+      }
       // A definitive failed/cancelled envelope for THIS order is terminal:
       // collapsing it into the transient pending shape would clear the
       // cart and present "Order Confirmed" for a payment that cannot

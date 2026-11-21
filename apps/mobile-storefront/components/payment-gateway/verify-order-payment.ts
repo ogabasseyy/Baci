@@ -96,7 +96,8 @@ export async function verifyOrderPaymentForCompletion({
           currency: settled.currency ?? paidAttribution.currency,
         };
       }
-      return tracked;
+      // A cached paid row cannot confirm a bank offer after a reversal.
+      return reference.startsWith('BCO-') ? settled : tracked;
     }
     if (tracked.paid || tracked.reconciliation) {
       return tracked;

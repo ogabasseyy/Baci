@@ -30,7 +30,14 @@ const verification: PaymentVerificationDependencies = {
 // creation tracking token (narrow snapshot RPC, no service client)
 // instead of POSTing through a CSRF failure.
 export function GET(request: NextRequest) {
-  return verifyGuestPaymentReferenceByQuery(request.nextUrl.searchParams);
+  const { searchParams } = request.nextUrl;
+  if (searchParams.get('reference')?.trim().startsWith('BCO-')) {
+    return NextResponse.json(
+      { error: 'Bank card offer verification requires authenticated POST' },
+      { status: 405, headers: { Allow: 'POST' } }
+    );
+  }
+  return verifyGuestPaymentReferenceByQuery(searchParams);
 }
 
 export async function POST(request: NextRequest) {

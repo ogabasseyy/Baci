@@ -69,6 +69,44 @@ describe('checkReferenceSettled transport selection', () => {
     );
   });
 
+  it('uses the buyer session for a bank offer even with a tracking token and reports a reversal', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    mockGetSession.mockResolvedValue({
+      access_token: 'session-token',
+    } as never);
+    mockFetchWithTimeout.mockResolvedValue(
+      jsonResponse({
+        orderId: 'order-1',
+        success: false,
+        status: 'reversed',
+      }) as never
+    );
+
+    await expect(
+      checkReferenceSettled('order-1', reference, 'track-1')
+    ).resolves.toEqual({
+      paid: false,
+      reconciliation: 'order_skipped',
+    });
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/payments\/verify$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ reference }),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer session-token',
+        }),
+      })
+    );
+  });
+
+  it('keeps a bank offer pending if only its tracking token is available', async () => {
+    await expect(
+      checkReferenceSettled('order-1', `BCO-${'a'.repeat(32)}`, 'track-1')
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   it('reports inconclusive with neither session nor token', async () => {
     mockGetSession.mockResolvedValue(null);
 

@@ -14,6 +14,7 @@ interface CriticalCommerceCartActionsInput {
   activeRouteOffer: CriticalRouteOfferLike | null;
   canAddToCart: boolean;
   effectivePurchasableVariantSelection: ResolvedCriticalVariantSelection | null;
+  hasExactVariantSelection?: boolean;
   maxQuantity?: number | null;
   productForCart: CartProduct;
   quantity: number;
@@ -29,22 +30,25 @@ export function useCriticalCommerceCartActions({
   activeRouteOffer,
   canAddToCart,
   effectivePurchasableVariantSelection,
+  hasExactVariantSelection,
   maxQuantity = null,
   productForCart,
   quantity,
 }: CriticalCommerceCartActionsInput) {
   // `cart` defaults for test doubles that stub only the cart actions.
   const { addToCart, cart = [], removeFromCart, updateQuantity } = useCart();
+  const isExactSelection =
+    hasExactVariantSelection ??
+    (!productForCart.has_variants ||
+      Boolean(effectivePurchasableVariantSelection));
   const cartAddOptions = buildCriticalCartAddOptions({
     purchasableSelection: effectivePurchasableVariantSelection,
     productForCart,
     activeRouteOffer,
   });
-  const mergingCartLineIndex = findMergingCartLineIndex(
-    cart,
-    productForCart,
-    cartAddOptions
-  );
+  const mergingCartLineIndex = isExactSelection
+    ? findMergingCartLineIndex(cart, productForCart, cartAddOptions)
+    : -1;
   const mergingCartLine =
     mergingCartLineIndex >= 0 ? cart[mergingCartLineIndex] : undefined;
   const quantityInCart = mergingCartLine?.quantity ?? 0;

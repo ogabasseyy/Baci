@@ -150,4 +150,28 @@ describe('OgabasseyPdpCriticalCommerceControls', () => {
     fireEvent.click(removeBtn);
     expect(mockState.handleDecrementCartQuantity).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps Add to cart and the missing-selection blocker visible when selection is incomplete', () => {
+    mockState.canAddToCart = false;
+    mockState.quantityInCart = 2;
+    mockState.addToCartBlocker = {
+      kind: 'missing-selection',
+      message: 'Choose a color to add this to your cart.',
+    };
+
+    render(
+      <OgabasseyPdpCriticalCommerceControls
+        cartHref={'/cart' as Route}
+        productName="Google Pixel 9"
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Add to cart' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Choose a color to add this to your cart.'
+    );
+    expect(screen.queryByText('In Cart')).not.toBeInTheDocument();
+  });
 });

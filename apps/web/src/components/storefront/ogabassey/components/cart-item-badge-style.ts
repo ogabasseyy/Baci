@@ -1,3 +1,27 @@
+function relativeLuminance(channel: number): number {
+  const srgb = channel / 255;
+  return srgb <= 0.04045
+    ? srgb / 12.92
+    : ((srgb + 0.055) / 1.055) ** 2.4;
+}
+
+function getRelativeLuminance(r: number, g: number, b: number): number {
+  return (
+    0.2126 * relativeLuminance(r) +
+    0.7152 * relativeLuminance(g) +
+    0.0722 * relativeLuminance(b)
+  );
+}
+
+function contrastRatio(lumA: number, lumB: number): number {
+  const lighter = Math.max(lumA, lumB);
+  const darker = Math.min(lumA, lumB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+const DARK_TEXT_LUMINANCE = getRelativeLuminance(31, 41, 55);
+const LIGHT_TEXT_LUMINANCE = 1;
+
 /**
  * Resolves theme-independent swatch colors for a cart line item's selected
  * colour variant, giving chromatic names priority over dark/metallic modifiers.
@@ -15,11 +39,13 @@ export function resolveCartColorChipStyle(
     const r = Number.parseInt(hex.slice(1, 3), 16);
     const g = Number.parseInt(hex.slice(3, 5), 16);
     const b = Number.parseInt(hex.slice(5, 7), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    const luminance = getRelativeLuminance(r, g, b);
+    const darkContrast = contrastRatio(luminance, DARK_TEXT_LUMINANCE);
+    const lightContrast = contrastRatio(luminance, LIGHT_TEXT_LUMINANCE);
     return {
       backgroundColor: hex,
-      color: luminance > 0.6 ? '#1f2937' : '#ffffff',
-      borderColor: luminance > 0.85 ? '#d4d4d8' : hex,
+      color: darkContrast >= lightContrast ? '#1f2937' : '#ffffff',
+      borderColor: luminance > 0.8 ? '#d4d4d8' : hex,
     };
   }
 

@@ -31,6 +31,10 @@ export function OgabasseyPdpCriticalCommerceControls({
   // something the shopper can fix, so the button stays tappable and the
   // tap explains what to choose instead of doing nothing.
   const isSoldOut = addToCartBlocker?.kind === 'out-of-stock';
+  const hasIncompleteSelection =
+    addToCartBlocker?.kind === 'missing-selection' ||
+    addToCartBlocker?.kind === 'unconfirmed-selection';
+  const showInCartControls = quantityInCart > 0 && !hasIncompleteSelection;
   const removeOnDecrement = isAtMinCartQuantity;
 
   return (
@@ -39,7 +43,7 @@ export function OgabasseyPdpCriticalCommerceControls({
       aria-label="Purchase controls"
       role="group"
     >
-      {quantityInCart > 0 ? (
+      {showInCartControls ? (
         <div data-ogabassey-pdp-commerce-in-cart-actions>
           <div
             data-ogabassey-pdp-commerce-quantity

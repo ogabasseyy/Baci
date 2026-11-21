@@ -1,12 +1,14 @@
 'use client';
 
 import { resolveCriticalDefaultAndDisplaySelection } from './resolve-critical-default-and-display-selection';
+import { SHARED_CART_MAX_QUANTITY_PER_LINE } from '@baci/shared/cart';
 import {
   resolveVariantDisplaySelection,
   resolveVariantSelection,
 } from '@baci/shared/lib/product-default-variant';
 import { useEffect, useState } from 'react';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
+import { useCart } from '@/hooks/cart';
 import { useCriticalAddToCartBlocker } from './critical-add-to-cart-blocker.client';
 import { resolveMissingCriticalVariantAxes } from './critical-missing-variant-axes';
 import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
@@ -143,12 +145,22 @@ export function OgabasseyPdpCriticalCommerceProvider({
   const hasPurchasableVariantSelection =
     !selectionCartProduct.has_variants ||
     Boolean(effectivePurchasableVariantSelection);
-  const maxQuantity = productForCart.manage_stock
+  const hasExactVariantSelection =
+    hasRequiredVariantSelection &&
+    hasRequiredHiddenVariantSelection &&
+    hasPurchasableVariantSelection;
+  const { sharedCartEnabled = false } = useCart();
+  const stockLimit = productForCart.manage_stock
     ? Math.max(
         0,
         typeof productForCart.stock === 'number' ? productForCart.stock : 0
       )
     : null;
+  const maxQuantity = sharedCartEnabled
+    ? stockLimit === null
+      ? SHARED_CART_MAX_QUANTITY_PER_LINE
+      : Math.min(stockLimit, SHARED_CART_MAX_QUANTITY_PER_LINE)
+    : stockLimit;
   const [quantity, setQuantity] = useState(maxQuantity === 0 ? 0 : 1);
   const [previousMaxQuantity, setPreviousMaxQuantity] = useState(maxQuantity);
 
@@ -202,6 +214,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
     activeRouteOffer,
     canAddToCart,
     effectivePurchasableVariantSelection,
+    hasExactVariantSelection,
     maxQuantity,
     productForCart,
     quantity,

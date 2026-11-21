@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { STOREFRONT_OAUTH_NEXT_COOKIE } from '@/app/api/storefront/auth/oauth-callback-next';
+import { STOREFRONT_OAUTH_NEXT_COOKIE } from '@/app/api/storefront/auth/oauth-next-cookie';
 import { logger } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { isDomainIdentifier } from '@/lib/validation';

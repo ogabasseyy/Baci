@@ -205,4 +205,56 @@ describe('useCriticalCommerceCartActions', () => {
       undefined
     );
   });
+
+  it('reports zero in-cart units for variant products until an exact variant is selected', () => {
+    const variantProduct: CartProduct = {
+      brand: 'OgaBassey',
+      condition: 'new',
+      description: 'Pad',
+      gtin: '',
+      has_variants: true,
+      id: 'pad-1',
+      image: 'https://cdn.ogabassey.com/pad-1.avif',
+      imageHint: 'Pad',
+      imageLarge: 'https://cdn.ogabassey.com/pad-1.avif',
+      manage_stock: true,
+      mpn: 'pad-1',
+      name: 'Pad',
+      price: 100_000,
+      status: 'active',
+      stock: 5,
+      variants: [
+        {
+          attributes: { color: 'Black' },
+          id: 'variant-black',
+          merchant_id: 'merchant-1',
+          price_override: 100_000,
+          product_id: 'pad-1',
+          stock_quantity: 5,
+        },
+      ],
+    };
+    cartMocks.cart = [
+      {
+        cartItemId: 'pad-1::variant-black',
+        condition: 'new',
+        id: 'pad-1',
+        quantity: 2,
+        variantId: 'variant-black',
+      },
+    ];
+
+    const { result } = renderHook(() =>
+      useCriticalCommerceCartActions({
+        activeRouteOffer: null,
+        canAddToCart: false,
+        effectivePurchasableVariantSelection: null,
+        hasExactVariantSelection: false,
+        productForCart: variantProduct,
+        quantity: 1,
+      })
+    );
+
+    expect(result.current.quantityInCart).toBe(0);
+  });
 });

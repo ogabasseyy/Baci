@@ -36,7 +36,7 @@ describe('resolveTrustedStorefrontRedirectUrl', () => {
     ).toBe('https://ogabassey.usebaci.com/account/callback');
   });
 
-  it('allows the merchant configured custom-domain origin and its www variant', () => {
+  it('allows the configured custom-domain origin and explicitly verified aliases without auto-trusting unverified www siblings', () => {
     expect(
       resolveTrustedStorefrontRedirectUrl(
         'https://ogabassey.com/account/callback',
@@ -47,6 +47,12 @@ describe('resolveTrustedStorefrontRedirectUrl', () => {
       resolveTrustedStorefrontRedirectUrl(
         'https://www.ogabassey.com/account/callback',
         merchant
+      )
+    ).toBeNull();
+    expect(
+      resolveTrustedStorefrontRedirectUrl(
+        'https://www.ogabassey.com/account/callback',
+        { ...merchant, verified_domains: ['www.ogabassey.com'] }
       )
     ).toBe('https://www.ogabassey.com/account/callback');
   });

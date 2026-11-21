@@ -26,8 +26,7 @@ export function CheckoutReturn({
       if (
         destination.origin === window.location.origin &&
         (destination.pathname === '/checkout' ||
-          (!isDomainIdentifier(slug) &&
-            destination.pathname === `/${slug}/checkout`))
+          (basePath !== '' && destination.pathname === `${basePath}/checkout`))
       ) {
         setInvalidDestination(false);
         router.replace(asRoute(`${destination.pathname}${destination.search}`));
@@ -37,7 +36,7 @@ export function CheckoutReturn({
     } catch {
       setInvalidDestination(true);
     }
-  }, [isLoading, isAuthenticated, next, slug, router]);
+  }, [isLoading, isAuthenticated, next, basePath, router]);
   return (
     <main className="mx-auto max-w-md p-8 text-center" role="status">
       {isLoading ? (

@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCartDrawerLifecycle } from './use-cart-drawer-lifecycle';
 
@@ -83,13 +84,29 @@ describe('useCartDrawerLifecycle', () => {
     expect(result.current.checkoutError).toBeNull();
   });
 
-  it('closes cart on unmount if open', () => {
+  it('closes cart on unmount if open', async () => {
     const setIsCartOpen = vi.fn();
     const { unmount } = renderHook(() =>
       useCartDrawerLifecycle({ isCartOpen: true, setIsCartOpen })
     );
 
     unmount();
+    await Promise.resolve();
     expect(setIsCartOpen).toHaveBeenCalledWith(false);
+  });
+
+  it('does not close the cart during Strict Mode effect replay, only on real unmount', async () => {
+    const setIsCartOpen = vi.fn();
+    const { unmount } = renderHook(
+      () => useCartDrawerLifecycle({ isCartOpen: true, setIsCartOpen }),
+      { wrapper: StrictMode }
+    );
+
+    await Promise.resolve();
+    expect(setIsCartOpen).not.toHaveBeenCalled();
+
+    unmount();
+    await Promise.resolve();
+    expect(setIsCartOpen).toHaveBeenCalledExactlyOnceWith(false);
   });
 });

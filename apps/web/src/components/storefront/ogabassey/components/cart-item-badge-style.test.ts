@@ -70,5 +70,10 @@ describe('resolveCartColorChipStyle', () => {
       color: '#ffffff',
       borderColor: '#123456',
     });
+    expect(resolveCartColorChipStyle('Neon Green', '#00ff00')).toEqual({
+      backgroundColor: '#00ff00',
+      color: '#1f2937',
+      borderColor: '#00ff00',
+    });
   });
 });

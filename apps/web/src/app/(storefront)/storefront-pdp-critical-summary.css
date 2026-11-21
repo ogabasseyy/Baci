@@ -35,14 +35,12 @@
     margin: 0;
     text-transform: uppercase;
   }
-
   [data-ogabassey-pdp-commerce-fact] {
     align-items: center;
     display: flex;
     justify-content: space-between;
     margin: 0;
   }
-
   [data-ogabassey-pdp-commerce-fact] span {
     color: color-mix(
       in srgb,
@@ -51,17 +49,14 @@
     );
     font-size: 0.875rem;
   }
-
   [data-ogabassey-pdp-commerce-fact] strong {
     color: var(--store-background-text, #111827);
     font-size: 0.875rem;
   }
-
   [data-ogabassey-pdp-commerce-variant-selectors] {
     display: grid;
     gap: 0.875rem;
   }
-
   [data-ogabassey-pdp-commerce-variant-axis] {
     display: grid;
     gap: 0.625rem;
@@ -237,9 +232,22 @@
     color: var(--store-on-primary, #ffffff);
   }
 
-  [data-ogabassey-pdp-commerce-primary-action][aria-disabled="true"],
-  [data-ogabassey-pdp-commerce-primary-action]:disabled {
+  [data-ogabassey-pdp-commerce-primary-action][aria-disabled="true"] {
     opacity: 0.55;
+  }
+
+  [data-ogabassey-pdp-commerce-primary-action]:disabled {
+    background: color-mix(
+      in srgb,
+      var(--store-background-text, #111827) 10%,
+      transparent
+    );
+    color: color-mix(
+      in srgb,
+      var(--store-background-text, #111827) 45%,
+      transparent
+    );
+    cursor: not-allowed;
   }
 
   [data-ogabassey-pdp-commerce-blocker] {
@@ -270,20 +278,6 @@
       var(--store-primary, #d62027) 8%,
       transparent
     );
-  }
-
-  [data-ogabassey-pdp-commerce-primary-action]:disabled {
-    background: color-mix(
-      in srgb,
-      var(--store-background-text, #111827) 10%,
-      transparent
-    );
-    color: color-mix(
-      in srgb,
-      var(--store-background-text, #111827) 45%,
-      transparent
-    );
-    cursor: not-allowed;
   }
 
   @media (min-width: 1024px) {

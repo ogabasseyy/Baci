@@ -17,6 +17,7 @@ export function useCartDrawerLifecycle({
   const isCartOpenRef = useRef(isCartOpen);
   const setIsCartOpenRef = useRef(setIsCartOpen);
   const isCheckoutLoadingRef = useRef(isCheckoutLoading);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
     isCheckoutLoadingRef.current = isCheckoutLoading;
@@ -39,10 +40,16 @@ export function useCartDrawerLifecycle({
   }, [pathname, isCartOpen, setIsCartOpen]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      if (isCartOpenRef.current) {
-        setIsCartOpenRef.current(false);
-      }
+      isMountedRef.current = false;
+      // Defer close past the synchronous React Strict Mode setup->cleanup->setup
+      // replay so dynamically mounting the drawer while open does not close it.
+      queueMicrotask(() => {
+        if (!isMountedRef.current && isCartOpenRef.current) {
+          setIsCartOpenRef.current(false);
+        }
+      });
     };
   }, []);
 

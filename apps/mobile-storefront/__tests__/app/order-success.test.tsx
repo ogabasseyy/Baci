@@ -14,7 +14,7 @@ import {
   mockReceiptOrder,
   OrderSuccessScreen,
   resetOrderSuccessScreenMocks,
-} from './order-success-screen.test-support';
+} from './order-success-screen.test-utils';
 
 describe('OrderSuccessScreen', () => {
   beforeEach(resetOrderSuccessScreenMocks);

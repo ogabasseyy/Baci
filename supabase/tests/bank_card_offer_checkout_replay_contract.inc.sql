@@ -8,6 +8,7 @@ DECLARE
   v_item uuid := gen_random_uuid();
   v_quote jsonb;
   v_hash text := repeat('a', 64);
+  v_existing_checkout_key constant text := 'bank-test-key-4387';
   v_checkout_key text;
   v_checkout_order jsonb;
   v_checkout_quote jsonb;
@@ -34,20 +35,19 @@ BEGIN
   THEN RAISE EXCEPTION 'bank offer attempt privileges are incorrect'; END IF;
 
   INSERT INTO auth.users (id, email) VALUES (v_user, 'bank-attempt-buyer@example.test');
-  -- Merchant creation is audited in the full replay schema.
+  -- Seed the audited merchant and direct order fixtures as a service actor.
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   INSERT INTO public.merchants (id, email, business_name, slug, paystack_subaccount_code)
     VALUES (v_merchant, 'bank-attempt-store@example.test', 'Bank Attempt Store', 'bank-attempt-store', 'ACCT_synthetic');
-  PERFORM set_config('request.jwt.claim.role', '', true);
   INSERT INTO public.customers (id, merchant_id, user_id, email)
     VALUES (v_customer, v_merchant, v_user, 'bank-attempt-buyer@example.test');
   INSERT INTO public.products (id, merchant_id, name, slug, price, status)
     VALUES (v_product, v_merchant, 'Fixture Phone', 'bank-attempt-phone', 100, 'active');
   INSERT INTO public.orders (id, merchant_id, customer_id, order_number, currency, payment_method,
-    payment_status, shipping_status, customer_email, total, discount_amount, tax_basis,
+    payment_status, shipping_status, customer_email, subtotal, total, discount_amount, tax_basis,
     checkout_idempotency_key, checkout_request_hash)
     VALUES (v_order, v_merchant, v_customer, 'BANK-OFFER-ATTEMPT', 'NGN', 'bank_card_offer',
-      'unpaid', 'pending', 'bank-attempt-buyer@example.test', 95, 5, 'exclusive', 'bank-test-key', v_hash);
+      'unpaid', 'pending', 'bank-attempt-buyer@example.test', 100, 95, 5, 'exclusive', v_existing_checkout_key, v_hash);
   INSERT INTO public.order_items (id, order_id, product_id, name, price, quantity)
     VALUES (v_item, v_order, v_product, 'Fixture Phone', 100, 1);
   v_quote := jsonb_build_object('merchantId', v_merchant, 'discountKobo', 500,
@@ -58,6 +58,7 @@ BEGIN
       'unitNetAmountsKobo', jsonb_build_array(9500))));
   PERFORM private.record_bank_card_offer_order(v_order, v_merchant, v_quote);
 
+  PERFORM set_config('request.jwt.claim.role', '', true);
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user)::text, true);
   IF public.get_bank_card_offer_checkout_context(v_order, v_merchant) IS NOT NULL THEN
     RAISE EXCEPTION 'Unscoped customer could read checkout context';
@@ -77,17 +78,17 @@ BEGIN
   END;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
-  IF public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash)->>'id' IS DISTINCT FROM v_order::text THEN
+  IF public.get_bank_card_offer_checkout_replay(v_merchant, v_existing_checkout_key, v_hash)->>'id' IS DISTINCT FROM v_order::text THEN
     RAISE EXCEPTION 'Checkout replay should return the saved order';
   END IF;
   PERFORM set_config('app.quiz_rpc_server_secret_current', v_test_secret, true);
   UPDATE public.orders SET payment_status = 'pending' WHERE id = v_order;
-  FOREACH v_checkout_key IN ARRAY ARRAY['bank-expired-test-key', 'bank-test-key']
+  FOREACH v_checkout_key IN ARRAY ARRAY['bank-expired-test-key', v_existing_checkout_key]
   LOOP
     v_checkout_order := jsonb_build_object('merchant_id', v_merchant, 'user_id', v_user,
       'checkout_idempotency_key', v_checkout_key, 'checkout_request_hash', v_hash);
     v_checkout_quote := jsonb_set(v_quote, '{endsAt}', to_jsonb(
-      CASE WHEN v_checkout_key = 'bank-test-key' THEN now() + interval '1 hour'
+      CASE WHEN v_checkout_key = v_existing_checkout_key THEN now() + interval '1 hour'
         ELSE now() - interval '1 second' END
     ));
     v_proof_payload := jsonb_build_object('order', v_checkout_order, 'quote', v_checkout_quote);
@@ -99,7 +100,7 @@ BEGIN
         concat_ws(E'\n', 'quiz-rpc-proof:v1', 'quiz_phase1a', v_action,
           v_merchant::text, v_user::text, v_issued_at, v_proof_hash), v_test_secret, 'sha256'
       ), 'hex'));
-    IF v_checkout_key = 'bank-test-key' THEN
+    IF v_checkout_key = v_existing_checkout_key THEN
       v_checkout_replay := public.create_storefront_bank_card_offer_order(
         v_checkout_order, v_checkout_quote, v_proof
       );
@@ -122,7 +123,7 @@ BEGIN
     END IF;
   END LOOP;
   BEGIN
-    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', repeat('b', 64));
+    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, v_existing_checkout_key, repeat('b', 64));
     RAISE EXCEPTION 'A different bank checkout body replayed the old order';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'checkout_idempotency_conflict' THEN RAISE; END IF;
@@ -131,7 +132,7 @@ BEGIN
     UPDATE public.orders SET shipping_status = 'cancelled', cancelled_at = now()
       WHERE id = v_order;
     BEGIN
-      PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash);
+      PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, v_existing_checkout_key, v_hash);
       RAISE EXCEPTION 'A cancelled bank offer was returned as a payable replay';
     EXCEPTION WHEN raise_exception THEN
       IF SQLERRM <> 'order_not_reusable' THEN RAISE; END IF;
@@ -143,7 +144,7 @@ BEGIN
   END;
   BEGIN
     UPDATE public.orders SET payment_status = 'refunded' WHERE id = v_order;
-    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash);
+    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, v_existing_checkout_key, v_hash);
     RAISE EXCEPTION 'A refunded bank offer was returned as a payable replay';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'order_not_reusable' THEN RAISE; END IF;
@@ -153,7 +154,7 @@ BEGIN
     -- exception rolls back the fixture update before the payment checks.
     UPDATE private.bank_card_offer_order_snapshots
       SET payable_kobo = 9600 WHERE order_id = v_order;
-    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash);
+    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, v_existing_checkout_key, v_hash);
     RAISE EXCEPTION 'An inconsistent bank offer total was replayed';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'bank_card_offer_checkout_mismatch' THEN RAISE; END IF;

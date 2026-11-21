@@ -32,11 +32,11 @@ BEGIN
     IF SQLERRM <> 'bank_card_offer_checkout_not_authorized' THEN RAISE; END IF;
   END;
 
-  -- Merchant creation is audited in the full replay schema.
+  -- These direct fixture writes use the service actor required by the
+  -- merchant audit and order-route triggers in the full replay schema.
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   INSERT INTO public.merchants (id, email, business_name, slug)
     VALUES (v_merchant, 'bank-offer-fixture@example.test', 'Bank Offer Fixture', 'bank-offer-fixture');
-  PERFORM set_config('request.jwt.claim.role', '', true);
   BEGIN
     INSERT INTO public.orders (merchant_id, order_number, currency, payment_method,
       payment_status, customer_email, total, discount_amount, tax_basis)
@@ -114,11 +114,13 @@ BEGIN
     IF SQLERRM <> 'bank_card_offer_order_total_mismatch' THEN RAISE; END IF;
     END;
 
+    -- Item edits recalculate tax and totals. Establish the final fixture
+    -- economics after that trigger has run.
+    UPDATE public.order_items SET assurance_fee = 1 WHERE id = v_item;
     UPDATE public.orders
       SET shipping_fee = 2, gift_wrapping_fee = 3, tax_amount = 4, tax_basis = 'exclusive',
           total = 200
       WHERE id = v_order;
-    UPDATE public.order_items SET assurance_fee = 1 WHERE id = v_item;
 
     PERFORM private.record_bank_card_offer_order(v_order, v_merchant, v_quote);
     PERFORM private.record_bank_card_offer_order(v_order, v_merchant, v_quote);

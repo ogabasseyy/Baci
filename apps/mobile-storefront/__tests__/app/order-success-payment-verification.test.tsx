@@ -13,7 +13,7 @@ import {
   mockVerifyOrderPaymentForCompletion,
   OrderSuccessScreen,
   resetOrderSuccessScreenMocks,
-} from './order-success-screen.test-support';
+} from './order-success-screen.test-utils';
 
 describe('OrderSuccessScreen payment verification', () => {
   beforeEach(resetOrderSuccessScreenMocks);

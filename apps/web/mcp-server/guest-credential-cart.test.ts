@@ -191,6 +191,20 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
     );
   }
   expect(rows.size).toBe(1);
+
+  const empty = await call(updateName, {
+    product_id: camera,
+    quantity: 0,
+    cartCredential: token,
+    expectedVersion: 4,
+    operationId: 'remove-last-item',
+  });
+  expect(empty.structuredContent).toMatchObject({
+    success: true,
+    cartCredential: token,
+    cart_url: 'https://ogabassey.com/cart',
+    items: [],
+  });
 });
 
 it('only returns exact signed handoff URLs on an allowed storefront origin', () => {

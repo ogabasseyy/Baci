@@ -5,7 +5,6 @@ import {
   verifyOrderPaymentForCompletion,
 } from '@/components/payment-gateway/verify-order-payment';
 import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
-import { logger } from '@/lib/logger';
 
 interface ParamReconciliationVerificationInput {
   isParamReconciliation: boolean;
@@ -126,13 +125,7 @@ export function useParamReconciliationVerification({
         if (requireVerifiedPayment && result.paid && reference) {
           await deferredBankOfferCart
             .clearIfUnchanged(orderId, reference, () => !cancelled)
-            .catch(() =>
-              logger.warn(
-                'Bank card checkout',
-                'Could not clear the verified cart',
-                { orderId }
-              )
-            );
+            .catch(() => undefined);
         }
         if (!cancelled)
           setOutcome(

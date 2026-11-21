@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';
 import { deferredBankOfferCart } from './deferred-bank-offer-cart';
 
@@ -13,6 +14,7 @@ jest.mock('@/stores/cart-store', () => ({
     persist: { hasHydrated: jest.fn(() => true) },
   },
 }));
+jest.mock('@/lib/logger', () => ({ logger: { warn: jest.fn() } }));
 
 const stored = new Map<string, string>();
 const clearCart = jest.fn<() => Promise<void>>();
@@ -182,6 +184,13 @@ it('preserves the original marker for retry when clearing fails', async () => {
   await expect(
     deferredBankOfferCart.clearIfUnchanged('order-1', reference, () => true)
   ).rejects.toThrow('retryable cart write');
+  expect(jest.mocked(logger.warn).mock.calls).toEqual([
+    [
+      'Bank card checkout',
+      'Cart snapshot operation failed',
+      { operation: 'cleanup', stage: 'clear_cart' },
+    ],
+  ]);
   expect([...stored.values()]).toEqual([identity]);
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
@@ -189,4 +198,44 @@ it('preserves the original marker for retry when clearing fails', async () => {
     () => true
   );
   expect([...stored.values()]).toEqual(['consumed']);
+});
+
+it('logs only the failure stage when saving a snapshot fails', async () => {
+  jest
+    .mocked(AsyncStorage.setItem)
+    .mockRejectedValueOnce(new Error('private storage details'));
+  await expect(
+    deferredBankOfferCart.remember(
+      'private-order-id',
+      reference,
+      'private-cart'
+    )
+  ).rejects.toThrow('private storage details');
+  expect(jest.mocked(logger.warn).mock.calls).toEqual([
+    [
+      'Bank card checkout',
+      'Cart snapshot operation failed',
+      { operation: 'save', stage: 'write_snapshot' },
+    ],
+  ]);
+});
+
+it('distinguishes a cleanup marker write failure from a cart clear failure', async () => {
+  jest
+    .mocked(AsyncStorage.setItem)
+    .mockRejectedValueOnce(new Error('private storage details'));
+  await expect(
+    deferredBankOfferCart.clearIfUnchanged(
+      'private-order-id',
+      reference,
+      () => true
+    )
+  ).rejects.toThrow('private storage details');
+  expect(jest.mocked(logger.warn).mock.calls).toEqual([
+    [
+      'Bank card checkout',
+      'Cart snapshot operation failed',
+      { operation: 'cleanup', stage: 'mark_consumed' },
+    ],
+  ]);
 });

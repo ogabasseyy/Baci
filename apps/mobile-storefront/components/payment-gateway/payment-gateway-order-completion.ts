@@ -124,9 +124,7 @@ export async function settleOrderCompletion(
     ) {
       await deferredBankOfferCart
         .remember(orderId, bankOfferReference, cartIdentity)
-        .catch(() =>
-          console.warn('Could not save the bank-offer cart snapshot')
-        );
+        .catch(() => undefined);
       if (!isMountedRef.current) return;
     }
     if (verification.paid) {

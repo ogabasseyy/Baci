@@ -1,9 +1,26 @@
 import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';
 
 const CONSUMED_MARKER = 'consumed';
 const pendingCartOperations = new Map<string, Promise<void>>();
+
+async function runCartStep<T>(
+  operation: 'save' | 'cleanup',
+  stage: 'read_snapshot' | 'write_snapshot' | 'clear_cart' | 'mark_consumed',
+  run: () => Promise<T>
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    logger.warn('Bank card checkout', 'Cart snapshot operation failed', {
+      operation,
+      stage,
+    });
+    throw error;
+  }
+}
 
 async function serializeCartOperation(
   key: string,
@@ -54,8 +71,13 @@ export const deferredBankOfferCart = {
     const key = storageKey(orderId, reference);
     if (!key) return;
     await serializeCartOperation(key, async () => {
-      if (!(await AsyncStorage.getItem(key))) {
-        await AsyncStorage.setItem(key, identity);
+      const existing = await runCartStep('save', 'read_snapshot', () =>
+        AsyncStorage.getItem(key)
+      );
+      if (!existing) {
+        await runCartStep('save', 'write_snapshot', () =>
+          AsyncStorage.setItem(key, identity)
+        );
       }
     });
   },
@@ -67,16 +89,23 @@ export const deferredBankOfferCart = {
     const key = storageKey(orderId, reference);
     if (!key) return;
     await serializeCartOperation(key, async () => {
-      const expected = await AsyncStorage.getItem(key);
+      const expected = await runCartStep('cleanup', 'read_snapshot', () =>
+        AsyncStorage.getItem(key)
+      );
       if (!isActive() || expected === CONSUMED_MARKER) return;
       if (expected) {
         if (!useCartStore.persist.hasHydrated()) return;
-        if (cartIdentity() === expected)
-          await useCartStore.getState().clearCart();
+        if (cartIdentity() === expected) {
+          await runCartStep('cleanup', 'clear_cart', () =>
+            useCartStore.getState().clearCart()
+          );
+        }
       }
       // Payment is verified. Even if the snapshot was absent or the cart
       // was edited, a repeat callback must not bind this order to a new cart.
-      await AsyncStorage.setItem(key, CONSUMED_MARKER);
+      await runCartStep('cleanup', 'mark_consumed', () =>
+        AsyncStorage.setItem(key, CONSUMED_MARKER)
+      );
     });
   },
 };

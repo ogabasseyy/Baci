@@ -1142,9 +1142,67 @@ export class QuizRoomEngine {
       }
 
       // Idempotent duplicate / retry / lost-response recovery: if this question
-      // position has already been advanced past `current_position`, return the
-      // current projection untouched without resetting clocks.
+      // position has already been advanced past `current_position`, check if a
+      // concurrent expiry recovery recorded a timeout while this timely answer
+      // was hashing; if so, preserve the timely answer without resetting clocks.
       if (targetPlan.position < attemptRow.current_position) {
+        const existingAns = this.storage.exec<{
+          timeout: number;
+          issued_at_ms: number;
+        }>(
+          `SELECT timeout, issued_at_ms FROM room_answers
+           WHERE attempt_id = ? AND position = ?`,
+          attemptRow.attempt_id,
+          targetPlan.position
+        ).rows[0];
+        if (existingAns && existingAns.timeout === 1) {
+          const prevDeadlineMs = quizEffectiveQuestionDeadlineMs(
+            existingAns.issued_at_ms,
+            config.endsAtMs,
+            config.timePerQuestionSeconds
+          );
+          if (receivedAtMs < prevDeadlineMs) {
+            const variant = this.variantIndex.get(targetPlan.variantId);
+            const matchesKey =
+              variant !== undefined &&
+              selectedAnswerHash === variant.answerKeyHash;
+            const timelyScoreDelta = matchesKey ? 1 : 0;
+            const timelyAnsweredInMs = Math.min(
+              60_000,
+              Math.max(0, Math.floor(receivedAtMs - existingAns.issued_at_ms))
+            );
+            this.storage.exec(
+              `UPDATE room_answers
+               SET raw_answer = ?, selected_answer_hash = ?, received_at_ms = ?,
+                   answered_in_ms = ?, timeout = 0, is_correct = ?
+               WHERE attempt_id = ? AND position = ?`,
+              input.answer,
+              selectedAnswerHash,
+              receivedAtMs,
+              timelyAnsweredInMs,
+              timelyScoreDelta,
+              attemptRow.attempt_id,
+              targetPlan.position
+            );
+            if (timelyScoreDelta > 0) {
+              this.storage.exec(
+                `UPDATE room_attempts SET score = score + ? WHERE attempt_id = ?`,
+                timelyScoreDelta,
+                attemptRow.attempt_id
+              );
+            }
+            const refreshed = {
+              ...attemptRow,
+              score: attemptRow.score + timelyScoreDelta,
+            };
+            return this.projectAttemptStateSync(
+              refreshed,
+              config,
+              alarmState,
+              nowMs
+            );
+          }
+        }
         return this.projectAttemptStateSync(
           attemptRow,
           config,
@@ -1658,14 +1716,32 @@ export class QuizRoomEngine {
       ).rows;
 
       for (const open of openAttempts) {
+        let openStatus = targetStatus;
+        let openCloseReason: QuizAttemptCloseReason = closeReason;
+        if (mode !== 'cancelled') {
+          if (this.controlState.isTesterRevoked(config.eventId, open.user_id)) {
+            openStatus = 'tester_revoked';
+            openCloseReason = 'tester_revoked';
+          } else if (
+            this.controlState.isAttemptDisqualified(open.attempt_id) ||
+            this.controlState.isAttemptBlocked(
+              config.eventId,
+              open.attempt_id,
+              open.customer_id
+            )
+          ) {
+            openStatus = 'disqualified';
+            openCloseReason = 'disqualified';
+          }
+        }
         this.storage.exec(
           `UPDATE room_attempts
            SET status = ?, submitted_at_ms = COALESCE(submitted_at_ms, ?),
                close_reason = ?, current_issued_at_ms = NULL
            WHERE attempt_id = ?`,
-          targetStatus,
+          openStatus,
           effectiveCloseMs,
-          closeReason,
+          openCloseReason,
           open.attempt_id
         );
         this.storage.exec(

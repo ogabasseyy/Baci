@@ -1273,7 +1273,11 @@ export class QuizRoomEngine {
       const target =
         attempts.find((a) => a.status === 'started') ??
         attempts.find(
-          (a) => a.status === 'submitted' || a.status === 'event_cancelled'
+          (a) =>
+            a.status === 'submitted' ||
+            a.status === 'event_cancelled' ||
+            a.status === 'disqualified' ||
+            a.status === 'tester_revoked'
         );
 
       const serverNow = new Date(nowMs).toISOString();

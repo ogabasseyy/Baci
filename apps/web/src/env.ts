@@ -349,9 +349,10 @@ const serverSchema = z
     QUIZ_RPC_SERVER_SECRET: optionalTrimmedStringSchema,
     QUIZ_DEVICE_HASH_PEPPER: quizDeviceHashPepperSchema,
     QUIZ_APP_INTEGRITY_TIER_OVERRIDES_JSON: quizIntegrityTierOverridesSchema,
-    QUIZ_EDGE_WORKER_URL: httpsOrLocalhostUrl(
-      'QUIZ_EDGE_WORKER_URL'
-    ).optional(),
+    QUIZ_EDGE_WORKER_URL: z.preprocess(
+      (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+      httpsOrLocalhostUrl('QUIZ_EDGE_WORKER_URL').optional()
+    ),
     QUIZ_TICKET_SECRET: optionalTrimmedStringSchema,
 
     // Push Notifications

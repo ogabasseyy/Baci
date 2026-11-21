@@ -320,6 +320,7 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
         const body = await readJsonBody<{ ticket: QuizAdmissionTicket }>(
           request
         );
+        await this.refreshControlStateIfStale(body.ticket.eventId, Date.now());
         return jsonResponse(this.engine.resumeAttempt(body.ticket, Date.now()));
       }
       if (request.method === 'POST' && url.pathname === '/internal/seal') {
@@ -494,9 +495,17 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
             );
           }
           const payload = (await res.json()) as {
+            availability?: string;
             claim?: OriginWinnerAwardPayload['claim'];
             prizeClaim?: OriginWinnerAwardPayload['prizeClaim'];
           };
+          if (payload.availability && payload.availability !== 'final') {
+            throw new QuizRoomError(
+              'QUIZ_WINNER_ORIGIN_NOT_FINAL',
+              `Origin winner award lookup returned ${payload.availability}`,
+              503
+            );
+          }
           return {
             ...(payload.claim ? { claim: payload.claim } : {}),
             ...(payload.prizeClaim ? { prizeClaim: payload.prizeClaim } : {}),
@@ -907,7 +916,12 @@ export default {
             );
           }
         },
-        freezeAndSweepCoordinator: async ({ eventId, endsAtMs, roomIds }) => {
+        freezeAndSweepCoordinator: async ({
+          eventId,
+          endsAtMs,
+          roomIds,
+          nowMs,
+        }) => {
           const stub = getWeurStub(env.EVENT_COORDINATOR, eventId);
           const freezeRes = await stub.fetch(
             'https://coord.internal/internal/freeze',
@@ -931,7 +945,7 @@ export default {
             'https://coord.internal/internal/sweep',
             {
               method: 'POST',
-              body: JSON.stringify({ eventId }),
+              body: JSON.stringify({ eventId, nowMs }),
             }
           );
           if (!sweepRes.ok) {

@@ -242,7 +242,13 @@ export async function handleQuizQueueBatch(
         ? reassembled.completedBundles
         : packed.bundles;
 
-    if (bundlesToSend.some((b) => !Array.isArray(b.answers))) {
+    if (
+      bundlesToSend.some(
+        (b) =>
+          !Array.isArray(b.answers) ||
+          b.answers.some((a) => !a || typeof a !== 'object')
+      )
+    ) {
       msg.ack();
       result.acked += 1;
       continue;

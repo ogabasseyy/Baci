@@ -795,14 +795,13 @@ export class LiveRankIndexEngine {
     };
   }
 
-  private readonly lastPrunedControlVersion = new Map<string, number>();
+  private readonly lastPrunedControlMarker = new Map<string, string>();
 
   private pruneRestrictedAttemptsForEvent(eventId: string): void {
-    const version = this.controlState.getVersion();
-    if (this.lastPrunedControlVersion.get(eventId) === version) {
+    const marker = `${this.controlState.getVersion()}:${this.controlState.getUpdatedAtMs()}`;
+    if (this.lastPrunedControlMarker.get(eventId) === marker) {
       return;
     }
-    this.lastPrunedControlVersion.set(eventId, version);
     const snapshot = this.controlState.getSnapshot();
     const restrictedAttemptIds = new Set<string>([
       ...snapshot.blockedAttemptIds,
@@ -821,6 +820,7 @@ export class LiveRankIndexEngine {
       blockedCustomerIds.length === 0 &&
       revokedUserIds.length === 0
     ) {
+      this.lastPrunedControlMarker.set(eventId, marker);
       return;
     }
 
@@ -853,6 +853,7 @@ export class LiveRankIndexEngine {
     if (prunedCount > 0) {
       this.publishSnapshot(eventId, Date.now());
     }
+    this.lastPrunedControlMarker.set(eventId, marker);
   }
 
   /**

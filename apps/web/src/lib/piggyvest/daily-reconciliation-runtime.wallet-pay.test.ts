@@ -101,9 +101,33 @@ describe('runPiggyvestDailyReconciliation: moved legacy wallets', () => {
         reason: expect.stringContaining('legacy_migrated_with_balance=1'),
       })
     );
-    expect(vi.mocked(deps.sendEmail).mock.calls[0][0].textContent).toContain(
+    const sent = vi.mocked(deps.sendEmail).mock.calls[0][0];
+    expect(sent.textContent).toContain(
       'Moved legacy wallets holding money again: 1 (NGN 500.00 in all).'
     );
+    expect(sent.subject).toMatch(/^ATTENTION, see below: /);
+  });
+
+  it('regression: puts the moved-wallet marker ahead of the main report so clipping can not drop it', async () => {
+    const execute = executeWith(snapshot(), ledger(), undefined, {
+      count: 2,
+      totalBalance: '9.00',
+      wallets: [],
+    });
+    const { deps } = makeDeps({
+      createExecutor: vi.fn(() => execute) as never,
+      readProviderTransfer: vi.fn(async () => {
+        throw new Error('provider down');
+      }) as never,
+      sendEmail: vi.fn(async () => ({ success: false })),
+    });
+    await runPiggyvestDailyReconciliation({ env, deps });
+    const reason = String(
+      (vi.mocked(deps.emitAlert).mock.calls[0][1] as { reason: string }).reason
+    );
+    expect(
+      reason.startsWith('report_email_failed legacy_migrated_with_balance=2')
+    ).toBe(true);
   });
 
   it('pages when the moved-wallet read fails (never all clear)', async () => {
@@ -130,8 +154,10 @@ describe('runPiggyvestDailyReconciliation: moved legacy wallets', () => {
     const { deps } = makeDeps();
     const result = await runPiggyvestDailyReconciliation({ env, deps });
     expect(result).toMatchObject({ paged: false });
-    expect(vi.mocked(deps.sendEmail).mock.calls[0][0].textContent).toContain(
+    const sent = vi.mocked(deps.sendEmail).mock.calls[0][0];
+    expect(sent.textContent).toContain(
       'Moved legacy wallets: none hold money again.'
     );
+    expect(sent.subject).not.toMatch(/ATTENTION/);
   });
 });

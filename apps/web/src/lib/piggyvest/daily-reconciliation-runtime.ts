@@ -277,16 +277,16 @@ export async function runPiggyvestDailyReconciliation(
     address: env.PIGGYVEST_RECONCILIATION_REPORT_EMAIL,
     email: withEmailLines(
       renderReconciliationEmail(report),
-      sideChecks?.lines ?? []
+      sideChecks?.lines ?? [],
+      sideChecks?.attention === true
     ),
     sendEmail: deps.sendEmail,
   });
-  // The email-failure marker goes first: the alert reason is clipped at
-  // 120 characters and must never lose it behind a long count list.
+  // Reasons are clipped at 120 characters: short high-risk markers go first.
   const reasons = [
     emailed ? null : 'report_email_failed',
-    pageReasonOf(report),
     ...(sideChecks?.reasons ?? []),
+    pageReasonOf(report),
   ];
   const reason = reasons.filter(Boolean).join(' ');
   if (reason) deps.emitAlert('PIGGYVEST_RECONCILIATION_MISMATCH', { reason });

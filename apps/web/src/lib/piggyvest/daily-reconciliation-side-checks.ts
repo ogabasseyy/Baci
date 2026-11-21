@@ -1,9 +1,9 @@
 import 'server-only';
+import { readMigratedLegacyWallets } from './daily-reconciliation-legacy-wallets';
 import {
   migratedLegacyWalletEmailLines,
   migratedLegacyWalletPageReason,
-  readMigratedLegacyWallets,
-} from './daily-reconciliation-legacy-wallets';
+} from './daily-reconciliation-legacy-wallets-report';
 import {
   readWalletPaySummary,
   walletPayEmailLines,
@@ -18,8 +18,13 @@ type Execute = (
 export interface SideChecks {
   /** Owner email lines, appended after the main report. */
   lines: string[];
-  /** Page reasons; null entries mean that check is clear. */
+  /**
+   * Page reasons, most urgent first (an already-paid wallet holding money
+   * again before wallet pay work); null entries mean that check is clear.
+   */
   reasons: (string | null)[];
+  /** True when any side check pages, so the email never reads all clear. */
+  attention: boolean;
 }
 
 /**
@@ -36,14 +41,16 @@ export async function readSideChecks(input: {
 }): Promise<SideChecks> {
   const walletPay = await readWalletPaySummary(input).catch(() => null);
   const migrated = await readMigratedLegacyWallets(input).catch(() => null);
+  const reasons = [
+    migratedLegacyWalletPageReason(migrated),
+    walletPayPageReason(walletPay),
+  ];
   return {
     lines: [
-      ...walletPayEmailLines(walletPay),
       ...migratedLegacyWalletEmailLines(migrated),
+      ...walletPayEmailLines(walletPay),
     ],
-    reasons: [
-      walletPayPageReason(walletPay),
-      migratedLegacyWalletPageReason(migrated),
-    ],
+    reasons,
+    attention: reasons.some((reason) => reason !== null),
   };
 }

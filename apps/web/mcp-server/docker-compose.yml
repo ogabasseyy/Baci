@@ -18,6 +18,10 @@ services:
       - MCP_TRUST_PROXY_REAL_IP=${MCP_TRUST_PROXY_REAL_IP:?Set explicitly after verifying the production reverse proxy}
       # Default off; enable only after isolated ChatGPT rendering QA.
       - BACI_MCP_PRIVATE_TEXT_CONTINUATION=${BACI_MCP_PRIVATE_TEXT_CONTINUATION:-false}
+      # Dedicated no-OAuth credential mode requires the canonical bridge and website import.
+      - BACI_MCP_GUEST_CREDENTIAL_ENABLED=${BACI_MCP_GUEST_CREDENTIAL_ENABLED:-false}
+      - MCP_CANONICAL_CART_BRIDGE_URL=${MCP_CANONICAL_CART_BRIDGE_URL:-}
+      - MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS=${MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS:-}
       # Separate OAuth QA/release gate; never enabled by text-continuation QA.
       - BACI_MCP_GUEST_OAUTH_ENABLED=${BACI_MCP_GUEST_OAUTH_ENABLED:-false}
       - MCP_GUEST_OAUTH_WORKER_TOKEN=${MCP_GUEST_OAUTH_WORKER_TOKEN:-}

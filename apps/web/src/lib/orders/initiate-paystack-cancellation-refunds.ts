@@ -86,8 +86,11 @@ export async function initiatePaystackCancellationRefunds({
     }
     let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
     let dispatchEvidence: BankOfferRefundEvidence | undefined;
-    // A sub-kobo amount would round to zero and request a full refund.
-    if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
+    // Paystack defaults to a full refund when the amount is omitted.
+    if (
+      !isBankOffer &&
+      (!Number.isSafeInteger(koboAmount) || koboAmount <= 0)
+    ) {
       await quarantineRefund({
         metadata: {
           failed_payment_transaction_id: transaction.id,
@@ -95,8 +98,7 @@ export async function initiatePaystackCancellationRefunds({
           leg_amount: transaction.amount,
         },
         order,
-        reason:
-          'Payment leg amount rounds to zero kobo and needs review before refund',
+        reason: 'Payment leg amount is invalid and needs review before refund',
         supabase,
         transactions: [transaction],
       });

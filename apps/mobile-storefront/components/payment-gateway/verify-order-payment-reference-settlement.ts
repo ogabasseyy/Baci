@@ -1,3 +1,4 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import { CHECKOUT_API_BASE_URL } from '@/components/checkout/checkout-screen.constants';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { getSession } from '@/lib/supabase';
@@ -53,6 +54,11 @@ export async function checkReferenceSettled(
   reference: string,
   trackingToken?: string | null
 ): Promise<OrderPaymentVerification> {
+  const bankOffer = reference.startsWith('BCO-');
+  if (bankOffer && !BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)) {
+    return { paid: false, terminalFailure: 'failed' };
+  }
+
   try {
     // The verify route enforces CSRF protection on POST, which accepts
     // session header auth for native callers. Guests have no session:
@@ -66,7 +72,6 @@ export async function checkReferenceSettled(
     } catch {
       accessToken = null;
     }
-    const bankOffer = reference.startsWith('BCO-');
     if (!accessToken && (bankOffer || !trackingToken)) {
       return { paid: false, inconclusive: true };
     }

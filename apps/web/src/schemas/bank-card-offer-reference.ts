@@ -1,7 +1,6 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import { z } from 'zod';
 
-// The database creates BCO- plus PostgreSQL UUID text with hyphens
-// removed. Paystack must return that exact lowercase hexadecimal identity.
 export const bankCardOfferReferenceSchema = z
   .string()
-  .regex(/^BCO-[a-f0-9]{32}$/);
+  .regex(BANK_CARD_OFFER_REFERENCE_PATTERN);

@@ -1,4 +1,5 @@
 import 'server-only';
+import { z } from 'zod';
 import { verifyTransaction } from '@/lib/paystack';
 import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-terminal-status';
 import { paystackVerifyResponseSchema } from '@/schemas/paystack-card-offer-verification';
@@ -7,8 +8,14 @@ import {
   verifyBankCardOfferAttempt,
 } from './bank-card-offer-payment';
 
-const paystackTerminalCustomerSchema =
-  paystackVerifyResponseSchema.shape.data.pick({ customer: true });
+const paystackTerminalCustomerSchema = z.object({
+  customer: z.object({
+    email: z
+      .string()
+      .trim()
+      .pipe(paystackVerifyResponseSchema.shape.data.shape.customer.shape.email),
+  }),
+});
 
 export async function verifyBankCardOfferPaystack(
   attempt: BankCardOfferAttempt,

@@ -1,4 +1,5 @@
 export * from './airport-delivery';
+export * from './bank-card-offer-reference';
 export * from './countries';
 export * from './merchant-countries';
 export * from './order-status';

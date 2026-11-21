@@ -108,6 +108,18 @@ describe('checkReferenceSettled transport selection', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'BCO-',
+    'BCO-invalid',
+    `BCO-${'A'.repeat(32)}`,
+  ])('rejects malformed bank offer reference %s without querying the order', async (reference) => {
+    await expect(
+      checkReferenceSettled('order-1', reference, 'track-1')
+    ).resolves.toEqual({ paid: false, terminalFailure: 'failed' });
+    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   it('reports inconclusive with neither session nor token', async () => {
     mockGetSession.mockResolvedValue(null);
 

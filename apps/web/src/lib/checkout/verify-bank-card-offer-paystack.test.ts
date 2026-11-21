@@ -47,6 +47,7 @@ it('holds the saved reference for operations when Paystack reports a partial rev
     ...captureFixture,
     status: 'reversed',
     amount: captureFixture.amount - 100,
+    customer: { email: ` ${attemptFixture.customerEmail.toUpperCase()} ` },
   });
 
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({

@@ -328,9 +328,10 @@ BEGIN
     );
   END IF;
 
-  -- Optional or enforced single-use App Check challenge consumption (20261115120000).
+  -- Optional single-use App Check challenge consumption (20261115120000).
+  -- Server routes that already verified/consumed attestation via enforceQuizStartGuards
+  -- pass p_require_attestation = false and NULL hashes to avoid double consumption.
   IF p_require_attestation IS TRUE
-    OR COALESCE(v_event.settings ->> 'attestation_mode', 'off') = 'enforce'
     OR p_attestation_nonce_hash IS NOT NULL
     OR p_attestation_token_hash IS NOT NULL
     OR p_attestation_token_issued_at IS NOT NULL THEN
@@ -372,6 +373,12 @@ BEGIN
   IF (v_event.settings ->> 'max_entrants') ~ '^[0-9]+$'
     AND (v_event.settings ->> 'max_entrants')::numeric BETWEEN 1 AND 2147483647 THEN
     v_max_entrants := (v_event.settings ->> 'max_entrants')::integer;
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      ('x' || pg_catalog.substr(
+        pg_catalog.md5(v_event.id::text || ':adm-cap'),
+        1, 16
+      ))::bit(64)::bigint
+    );
     SELECT pg_catalog.count(*)::integer
     INTO v_admitted_count
     FROM public.quiz_event_admissions AS adm

@@ -339,7 +339,7 @@ export class ResultShardEngine {
 
     if (nowMs >= row.retention_expires_at_ms) {
       this.storage.exec(
-        `DELETE FROM shard_attempt_results WHERE attempt_id = ?`,
+        `DELETE FROM shard_results WHERE attempt_id = ?`,
         row.attempt_id
       );
       if (this.hooks.recoverExpiredResultFromOrigin) {

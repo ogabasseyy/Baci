@@ -119,6 +119,11 @@ export async function POST(
 
   const device = resolveQuizDevice(request, fingerprint ?? undefined);
   const deviceHash = device.deviceHash;
+  if (!deviceHash) {
+    return invalidInputResponse({
+      deviceFingerprint: ['Device identity is required'],
+    });
+  }
   const withCookie = (result: NextResponse) => {
     if ('cookieToSet' in device && device.cookieToSet) {
       result.cookies.set(device.cookieToSet);

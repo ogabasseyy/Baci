@@ -1152,6 +1152,13 @@ export default {
           request.headers.get('Authorization'),
           { secret: jwtSecret, nowMs: Date.now() }
         );
+        if (!user.merchantId || !user.customerId) {
+          throw new QuizRoomError(
+            'QUIZ_JWT_CLAIMS_MISSING',
+            'Bearer JWT missing required merchantId or customerId claims',
+            403
+          );
+        }
         const shardIdx = await computeResultShardIndex(
           eventId,
           user.userId,
@@ -1166,6 +1173,8 @@ export default {
           body: JSON.stringify({
             eventId,
             callerUserId: user.userId,
+            callerCustomerId: user.customerId,
+            callerMerchantId: user.merchantId,
           }),
         });
       }

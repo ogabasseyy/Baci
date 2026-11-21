@@ -72,12 +72,15 @@ export async function confirmGiftCardPilot(
   config: PilotConfig,
   deps: PilotDependencies
 ) {
-  const { expiresAt, token } = z
+  const parsed = z
     .object({
       expiresAt: z.number().int(),
       token: z.string().regex(/^[a-f0-9]{64}$/),
     })
-    .parse(input);
+    .safeParse(input);
+  const freshPriceMessage = 'Please request a fresh price before confirming.';
+  if (!parsed.success) throw new Error(freshPriceMessage);
+  const { expiresAt, token } = parsed.data;
   if (
     expiresAt <= Date.now() ||
     !timingSafeEqual(
@@ -85,7 +88,7 @@ export async function confirmGiftCardPilot(
       signPresentation(config, expiresAt)
     )
   ) {
-    throw new Error('Please request a fresh price before confirming.');
+    throw new Error(freshPriceMessage);
   }
   const fresh = await freshPilotQuote(config, deps);
   const confirmationTime = Date.now();

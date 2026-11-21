@@ -81,6 +81,7 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
         )
     : (supplierUsdCents: number) =>
         getGiftCardPreviewQuote(supplierUsdCents, markup);
+  // The live preview helper records a redacted diagnostic for quote failures.
   const total =
     card !== undefined && selected && (mockCheckout || key) && markupIsValid
       ? await quote(selected.usdCents).catch(() => null)

@@ -16,6 +16,7 @@ const proofSchema = z.object({
   signature: z.string().regex(/^[0-9a-f]{64}$/),
 });
 
+// A fixed order ID is supplied by server-side pilot config only.
 export async function issueAuthenticatedGiftCardQuote(
   input: unknown,
   orderId?: string

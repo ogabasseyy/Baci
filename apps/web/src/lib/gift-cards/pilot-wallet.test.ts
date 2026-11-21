@@ -95,3 +95,12 @@ it('keeps the worker SQL allowlist bound to the checkout pilot economics', () =>
     `p_product_id = '${PILOT_PRODUCT_ID}' AND p_amount_kobo = ${PILOT_APPROVED_KOBO}`
   );
 });
+
+it('requests a fresh price if confirmation fields are malformed', async () => {
+  const { deps, config } = setup();
+  await expect(
+    confirmGiftCardPilot({ expiresAt: Number.NaN, token: null }, config, deps)
+  ).rejects.toThrow('Please request a fresh price before confirming.');
+  expect(deps.readPetrockOffer).not.toHaveBeenCalled();
+  expect(deps.confirm).not.toHaveBeenCalled();
+});

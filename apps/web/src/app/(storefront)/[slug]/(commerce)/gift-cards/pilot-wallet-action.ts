@@ -79,7 +79,7 @@ export async function runPilotWalletAction(
       if (order?.order_status === 'refunded') {
         return {
           status: 'error',
-          message: 'Petrock rejected this order. Your wallet was refunded.',
+          message: 'This order was refunded to your wallet.',
         };
       }
       if (order) return { status: 'confirmed', orderId: order.order_id };

@@ -37,8 +37,8 @@ export interface PublishedShardEventMetadata {
 }
 
 export interface OriginWinnerAwardPayload {
-  claim: QuizResultClaim;
-  prizeClaim: QuizPrizeClaim;
+  claim?: QuizResultClaim;
+  prizeClaim?: QuizPrizeClaim;
 }
 
 export interface ResultShardHooks {

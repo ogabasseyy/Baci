@@ -454,14 +454,10 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
             claim?: OriginWinnerAwardPayload['claim'];
             prizeClaim?: OriginWinnerAwardPayload['prizeClaim'];
           };
-          if (!payload.claim || !payload.prizeClaim) {
-            throw new QuizRoomError(
-              'QUIZ_WINNER_ORIGIN_INCOMPLETE',
-              'Origin winner award lookup omitted claim metadata',
-              502
-            );
-          }
-          return { claim: payload.claim, prizeClaim: payload.prizeClaim };
+          return {
+            ...(payload.claim ? { claim: payload.claim } : {}),
+            ...(payload.prizeClaim ? { prizeClaim: payload.prizeClaim } : {}),
+          };
         },
       },
     });

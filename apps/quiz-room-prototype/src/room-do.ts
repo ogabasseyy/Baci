@@ -1088,6 +1088,51 @@ export class QuizRoomEngine {
         );
       }
 
+      const testerRevoked = this.controlState.isTesterRevoked(
+        config.eventId,
+        attemptRow.user_id
+      );
+      const attemptRestricted =
+        this.controlState.isAttemptDisqualified(attemptRow.attempt_id) ||
+        this.controlState.isAttemptBlocked(
+          config.eventId,
+          attemptRow.attempt_id,
+          attemptRow.customer_id
+        );
+      if (testerRevoked || attemptRestricted) {
+        const restrictedStatus = testerRevoked
+          ? 'tester_revoked'
+          : 'disqualified';
+        const submittedAtMs = attemptRow.submitted_at_ms ?? nowMs;
+        this.storage.exec(
+          `UPDATE room_attempts
+             SET status = ?, close_reason = ?, submitted_at_ms = ?, current_issued_at_ms = NULL
+           WHERE attempt_id = ?`,
+          restrictedStatus,
+          restrictedStatus,
+          submittedAtMs,
+          attemptRow.attempt_id
+        );
+        const nextAlarmState = this.enqueueSubmittedAttemptSync(
+          attemptRow.attempt_id,
+          config,
+          alarmState,
+          nowMs
+        );
+        return this.projectAttemptStateSync(
+          {
+            ...attemptRow,
+            status: restrictedStatus,
+            close_reason: restrictedStatus,
+            submitted_at_ms: submittedAtMs,
+            current_issued_at_ms: null,
+          },
+          config,
+          nextAlarmState,
+          nowMs
+        );
+      }
+
       const plans = JSON.parse(
         attemptRow.questions_json
       ) as SelectedQuestionPlan[];
@@ -1353,8 +1398,26 @@ export class QuizRoomEngine {
     };
   }
 
+  private flushChain: Promise<void> = Promise.resolve();
+
   async flushPendingBatches(
     nowMs = Date.now()
+  ): Promise<PackedMessageWithMetrics[]> {
+    const prev = this.flushChain;
+    let release!: () => void;
+    this.flushChain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await prev;
+    try {
+      return await this.flushPendingBatchesSerialized(nowMs);
+    } finally {
+      release();
+    }
+  }
+
+  private async flushPendingBatchesSerialized(
+    nowMs: number
   ): Promise<PackedMessageWithMetrics[]> {
     const pendingRaw = this.storage.transactionSync(() => {
       const config = this.readMetaSync<QuizEventConfig>('config');

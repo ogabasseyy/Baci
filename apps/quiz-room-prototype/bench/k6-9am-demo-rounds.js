@@ -108,13 +108,18 @@ export default function runPlayerFlow() {
   const checkIn = checkInRes.json();
   const ticket = checkIn.ticket;
   const activeEventId = checkIn.eventId || EVENT_ID;
+  const startRequestId = `00000000-0000-4000-8000-${String(
+    Math.abs(Math.floor(playerSeq))
+  )
+    .padStart(12, '0')
+    .slice(-12)}`;
   const startRes = http.post(
     `${BASE_URL}/api/quiz/events/${encodeURIComponent(activeEventId)}/start`,
     JSON.stringify({
       integrityTier: 'device',
       acceptedRulesVersion: 'live-v1',
       termsAccepted: true,
-      startRequestId: `k6-start-${playerSeq}`,
+      startRequestId,
       appVersion: '2.10.0',
       platform: 'android',
     }),

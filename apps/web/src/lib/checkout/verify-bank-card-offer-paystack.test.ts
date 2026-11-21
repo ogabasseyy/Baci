@@ -81,12 +81,10 @@ it.each([
   { code: 'HTTP_404', error: 'Not found' },
   { code: 'HTTP_400', error: 'Transaction reference not found' },
   { code: 'HTTP_200', error: 'Transaction not found' },
-])('flags a missing provider reference for review (%j)', async (failure) => {
+])('leaves a missing provider reference pending (%j)', async (failure) => {
   verify.mockResolvedValueOnce({ success: false, ...failure });
 
-  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
-    kind: 'mismatch',
-  });
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
 });
 
 it.each([

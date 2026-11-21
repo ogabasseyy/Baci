@@ -97,3 +97,12 @@ it.each([
     'verification_unavailable'
   );
 });
+
+it('treats a missing reference as unavailable and reserves review for a known mismatch', () => {
+  expect(
+    getBankCardOfferCheckoutStatus(404, { code: 'reference_not_found' })
+  ).toBe('verification_unavailable');
+  expect(
+    getBankCardOfferCheckoutStatus(409, { code: 'reference_not_order_payment' })
+  ).toBe('bank_offer_review');
+});

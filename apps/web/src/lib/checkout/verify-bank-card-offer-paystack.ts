@@ -13,17 +13,9 @@ export async function verifyBankCardOfferPaystack(
   const response = await verifyTransaction(attempt.reference, signal, {
     textIds: true,
   });
-  if (!response.success) {
-    const errorMessage = response.error?.trim().toLowerCase();
-    const referenceNotFound =
-      response.code === 'HTTP_404' ||
-      ((response.code === 'HTTP_400' || response.code === 'HTTP_200') &&
-        (errorMessage === 'transaction reference not found' ||
-          errorMessage === 'transaction not found'));
-    // A missing lookup flags evidence for review. Only a verified terminal
-    // transaction can enter the attempt retirement path.
-    return referenceNotFound ? ({ kind: 'mismatch' } as const) : null;
-  }
+  // A provider lookup without transaction data cannot prove a mismatch
+  // or a terminal outcome. Keep the same attempt pending for verification.
+  if (!response.success) return null;
   const { data } = response;
   if (!data || typeof data !== 'object' || typeof data.status !== 'string') {
     return { kind: 'mismatch' } as const;

@@ -14,10 +14,7 @@ export function getBankCardOfferCheckoutStatus(
   // Transient responses leave the capture unknown. Keep polling this reference.
   if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)
     return 'pending';
-  if (
-    (httpStatus === 404 && payment.code === 'reference_not_found') ||
-    (httpStatus === 409 && payment.code === 'reference_not_order_payment')
-  )
+  if (httpStatus === 409 && payment.code === 'reference_not_order_payment')
     return 'bank_offer_review';
   if (httpStatus < 200 || httpStatus >= 300) return 'verification_unavailable';
   if (payment.code === 'BANK_CARD_OFFER_CAPTURE_REVIEW') {

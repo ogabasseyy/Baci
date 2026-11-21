@@ -10,10 +10,11 @@ import type { OrderCreateInput } from '@/schemas/orders';
 
 // Bearer or a declared mobile source can only add mobile admission checks.
 // A cookie request claiming mobile_app must pass those same extra checks.
-// A malformed Bearer header still selects the stricter admission path. Order
-// authentication separately rejects it before cookie or guest fallback.
-// Existing web checkout uses cookies to save an unpaid order. Its separate
-// Oxygen workflow entrypoint verifies the signed-in owner and merchant rollout.
+// A bare Bearer header still selects mobile admission for a normal order, even
+// if the request resolves to a cookie session. Explicit recovery rejects it
+// during authentication before cookie or guest fallback.
+// Normal web checkout without a Bearer header may save an unpaid Oxygen order.
+// The owned workflow entrypoint checks merchant rollout before financing starts.
 // The SQL regression is supabase/tests/oxygen_storefront_pilot_availability.sql.
 function isMobileOxygenOrder(
   request: Request,

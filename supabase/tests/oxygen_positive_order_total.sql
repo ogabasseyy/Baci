@@ -42,4 +42,22 @@ BEGIN
   END;
 END
 $test$;
+-- Trigger calls use the trigger ACL checked when the trigger was created.
+-- Verify the existing service role can still insert a valid order and is
+-- constrained by the same amount guard even without direct EXECUTE.
+SET LOCAL ROLE service_role;
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('eb200000-0000-4000-8000-000000000007','eb200000-0000-4000-8000-000000000002','eb200000-0000-4000-8000-000000000003','OXYGEN-SERVICE-POSITIVE',100,'NGN','unpaid','oxygen');
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+    VALUES ('eb200000-0000-4000-8000-000000000008','eb200000-0000-4000-8000-000000000002','eb200000-0000-4000-8000-000000000003','OXYGEN-SERVICE-ZERO',0,'NGN','unpaid','oxygen');
+    RAISE EXCEPTION 'Service role accepted a zero-value Oxygen order';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'oxygen_order_total_must_be_positive' THEN RAISE; END IF;
+  END;
+END
+$test$;
+RESET ROLE;
 ROLLBACK;

@@ -1,6 +1,7 @@
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
+import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
 import type { CartItem } from '@/stores/cart-store';
 import { useOxygenCheckoutAvailability } from './use-oxygen-checkout-availability';
@@ -11,6 +12,9 @@ jest.mock('@react-native-community/netinfo', () => ({
 }));
 jest.mock('@/lib/oxygen-mobile-profile', () => ({
   getOxygenMobileProfile: jest.fn(),
+}));
+jest.mock('@/lib/oxygen-staging-profile', () => ({
+  getOxygenStagingProfile: jest.fn(),
 }));
 jest.mock('@/services/oxygen/native-session', () => ({
   oxygenNativeSession: jest.fn(() => ({ capabilities: mockCapabilities })),
@@ -46,6 +50,7 @@ function setOnline(isOnline: boolean) {
 
 beforeEach(() => {
   listener = undefined;
+  jest.mocked(getOxygenStagingProfile).mockReturnValue(null);
   jest.mocked(NetInfo.addEventListener).mockImplementation((next) => {
     listener = next;
     setOnline(true);
@@ -193,4 +198,30 @@ it('keeps Oxygen hidden in production until the server admits the linked custome
   expect(result.current.visible).toBe(false);
   await act(async () => allow());
   await waitFor(() => expect(result.current.visible).toBe(true));
+});
+
+it.each([
+  ['http://127.0.0.1:3000', true],
+  ['https://staging.example.com', false],
+])('uses the LAN reachability exception only for pinned localhost: %s', async (apiOrigin, available) => {
+  const staging = { ...profile, apiOrigin };
+  jest.mocked(getOxygenMobileProfile).mockReturnValue(staging);
+  jest
+    .mocked(getOxygenStagingProfile)
+    .mockReturnValue(
+      staging as NonNullable<ReturnType<typeof getOxygenStagingProfile>>
+    );
+  jest.mocked(NetInfo.addEventListener).mockImplementationOnce((next) => {
+    next({ isConnected: true, isInternetReachable: false } as NetInfoState);
+    return () => {};
+  });
+  const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
+  await act(async () => {});
+  if (available) {
+    expect(mockCapabilities).toHaveBeenCalledTimes(1);
+    expect(result.current.disabledReason).toBeUndefined();
+  } else {
+    expect(mockCapabilities).not.toHaveBeenCalled();
+    expect(result.current.disabledReason).toContain('unavailable');
+  }
 });

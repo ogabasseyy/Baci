@@ -1,6 +1,7 @@
 import { withTimeout } from '@baci/shared';
 import NetInfo from '@react-native-community/netinfo';
 import { useEffect, useState } from 'react';
+import { allowsLocalOxygenNetwork } from '@/lib/api-core';
 import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
 import { useAuthStore } from '@/stores/auth-store';
@@ -20,6 +21,8 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
   );
   const merchantId = useAuthStore((state) => state.merchantId);
   const profile = getOxygenMobileProfile();
+  const usesLocalNetwork =
+    profile?.environment === 'staging' && allowsLocalOxygenNetwork();
   const linked =
     Boolean(userId && customerId) &&
     customerUserId === userId &&
@@ -82,10 +85,11 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     };
     scheduleUnknownProbe();
     const unsubscribe = NetInfo.addEventListener((state) => {
+      const canReachApi = usesLocalNetwork || state.isInternetReachable;
       const network =
-        state.isConnected === false || state.isInternetReachable === false
+        state.isConnected === false || canReachApi === false
           ? 'offline'
-          : state.isConnected === true && state.isInternetReachable === true
+          : state.isConnected === true && canReachApi === true
             ? 'online'
             : 'unknown';
       if (network === previousState) return;
@@ -107,7 +111,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
       clearTimeout(delayedProbe);
       unsubscribe();
     };
-  }, [scope]);
+  }, [scope, usesLocalNetwork]);
 
   if (!profile) return { visible: false, disabledReason: undefined };
   const disabledReason = !linked

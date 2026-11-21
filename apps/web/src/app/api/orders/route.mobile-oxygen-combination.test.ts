@@ -38,7 +38,10 @@ it('lets web checkout save an unpaid Oxygen order without using native admission
   );
 });
 
-it('permits only replay reads when Bearer Oxygen admission is closed', async () => {
+it.each([
+  'Bearer test-token',
+  'Bearer',
+])('permits only replay reads when Oxygen admission is closed and the request uses %s', async (authorization) => {
   vi.mocked(readOxygenMobileCapabilities).mockResolvedValueOnce({
     ok: false,
     status: 404,
@@ -47,7 +50,7 @@ it('permits only replay reads when Bearer Oxygen admission is closed', async () 
     source: 'online_store',
     payment_method: 'oxygen',
   });
-  request.headers.set('Authorization', 'Bearer test-token');
+  request.headers.set('Authorization', authorization);
   request.headers.set(
     'Idempotency-Key',
     '43276b67-0362-4d83-a522-eb445dc11735'

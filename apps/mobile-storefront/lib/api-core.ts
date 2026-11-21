@@ -86,21 +86,25 @@ export function calculateBackoffDelay(
   return Math.min(maxDelay, exponentialDelay + jitter);
 }
 
-export async function checkNetworkConnectivity(): Promise<boolean> {
-  const state = await NetInfo.fetch();
+export function allowsLocalOxygenNetwork(): boolean {
   const profile =
     typeof __DEV__ !== 'undefined' && __DEV__
       ? getOxygenStagingProfile()
       : null;
-  if (
-    profile &&
+  return (
+    profile !== null &&
     /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
       profile.apiOrigin
     )
-  ) {
-    return state.isConnected === true;
-  }
-  return state.isConnected === true && state.isInternetReachable !== false;
+  );
+}
+
+export async function checkNetworkConnectivity(): Promise<boolean> {
+  const state = await NetInfo.fetch();
+  return (
+    state.isConnected === true &&
+    (allowsLocalOxygenNetwork() || state.isInternetReachable !== false)
+  );
 }
 
 export function sleep(ms: number): Promise<void> {

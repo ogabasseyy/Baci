@@ -6,6 +6,23 @@ import { logger } from '@/lib/logger';
 import { bankCardOfferVerificationContextSchema } from '@/schemas/bank-card-offer-verification-context';
 import type { GuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
 
+function getRecordedCaptureOutcome(snapshot: GuestPaymentReferenceSnapshot) {
+  if (snapshot.transactionStatus !== 'completed') return null;
+
+  const payment = snapshot.orderPaymentStatus?.toLowerCase();
+  const shipping = snapshot.orderShippingStatus?.toLowerCase();
+  if (
+    payment === 'cancelled' ||
+    payment === 'canceled' ||
+    shipping === 'cancelled' ||
+    shipping === 'canceled'
+  ) {
+    return 'order_cancelled';
+  }
+  if (payment === 'refunded') return 'order_skipped';
+  return payment === 'paid' && snapshot.inventoryConfirmed ? 'completed' : null;
+}
+
 export async function verifySessionlessBankCardOffer(
   snapshot: GuestPaymentReferenceSnapshot,
   buyerClient: SupabaseClient,
@@ -116,11 +133,10 @@ export async function verifySessionlessBankCardOffer(
     }
     if (verified?.kind !== 'verified') return pending();
 
-    if (
-      snapshot.transactionStatus === 'completed' &&
-      snapshot.orderPaymentStatus === 'paid' &&
-      snapshot.inventoryConfirmed
-    ) {
+    // The provider proof and completed transaction establish capture. A
+    // terminal order remains closed and the caller shows reconciliation.
+    const finalizationOutcome = getRecordedCaptureOutcome(snapshot);
+    if (finalizationOutcome) {
       return NextResponse.json({
         ...orderDetails,
         success: true,
@@ -130,7 +146,7 @@ export async function verifySessionlessBankCardOffer(
           ? { orderTotal: snapshot.orderTotal }
           : {}),
         currency: 'NGN',
-        finalizationOutcome: 'completed',
+        finalizationOutcome,
       });
     }
     const recovery = await buyerClient.rpc(

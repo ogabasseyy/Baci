@@ -157,6 +157,52 @@ it('reports a verified payment that already settled with confirmed inventory', a
   expect(buyerRpc).not.toHaveBeenCalled();
 });
 
+it.each([
+  { payment: 'pending', shipping: 'cancelled', outcome: 'order_cancelled' },
+  { payment: 'canceled', shipping: 'pending', outcome: 'order_cancelled' },
+  { payment: 'refunded', shipping: 'pending', outcome: 'order_skipped' },
+] as const)('reports a verified terminal order as $outcome', async ({
+  payment,
+  shipping,
+  outcome,
+}) => {
+  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
+
+  const response = await verifyNative(
+    {
+      ...snapshot,
+      transactionStatus: 'completed',
+      orderPaymentStatus: payment,
+      orderShippingStatus: shipping,
+    },
+    buyerClient
+  );
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toMatchObject({
+    orderId: snapshot.orderId,
+    success: true,
+    status: 'success',
+    finalizationOutcome: outcome,
+  });
+  expect(buyerRpc).not.toHaveBeenCalled();
+});
+
+it('waits for durable capture when a cancelled order still has a pending transaction', async () => {
+  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
+
+  const response = await verifyNative(
+    { ...snapshot, orderShippingStatus: 'cancelled' },
+    buyerClient
+  );
+
+  expect(response.status).toBe(202);
+  expect(buyerRpc).toHaveBeenCalledExactlyOnceWith(
+    'ensure_bank_card_offer_capture_sweep',
+    { p_reference: reference }
+  );
+});
+
 it('rechecks settled attempts for reversals before reporting history success', async () => {
   verify.mockResolvedValueOnce({
     kind: 'terminal',

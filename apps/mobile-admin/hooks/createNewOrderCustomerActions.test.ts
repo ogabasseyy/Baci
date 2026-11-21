@@ -179,6 +179,36 @@ describe('createNewOrderCustomerActions', () => {
     });
   });
 
+  it.each([
+    ['12 Allen Avenue', 'Ikeja', 'Lagos'],
+    ['10 Hospital Road', '', ''],
+  ])('only reuses profile locality when the entered street still matches', (address, city, state) => {
+    const setCustomer = vi.fn();
+    const actions = makeActions({
+      newCustomer: { ...createEmptyNewCustomerDraft(), address },
+      setCustomer,
+    });
+    actions.handleSelectCustomer(
+      {
+        id: 'customer-1',
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        company_name: null,
+        customer_type: 'individual',
+        email: null,
+        first_name: 'Ada',
+        full_name: 'Ada Merchant',
+        last_name: 'Merchant',
+        phone: '08030000000',
+      },
+      true
+    );
+    expect(setCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({ address, city, state })
+    );
+  });
+
   it('bugfix: preserves structured locality when reusing an existing customer', () => {
     const setCustomer = vi.fn();
     const actions = makeActions({ setCustomer });

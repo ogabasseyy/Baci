@@ -15,6 +15,7 @@ const GOOGLE_MAPS_PIN_COLOR = '#EA4335';
 interface NewOrderDetailsSectionProps {
   controller: ReturnType<typeof useNewOrderController>;
   showDateField?: boolean;
+  /** Creation owns the customer address draft; Edit Order uses its own save contract. */
   allowOrderAddressEdit?: boolean;
 }
 

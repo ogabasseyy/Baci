@@ -108,17 +108,30 @@ export function createNewOrderCustomerActions({
       ? normalizeNewCustomerDraft(newCustomer)
       : null;
     const address = entered?.address ? entered : null;
+    // Profile locality can fill gaps only when it describes the same destination.
+    const storedStreet = sanitizeAddress(item.address ?? '');
+    const sameDestination =
+      !address ||
+      (address.address.toLowerCase() === storedStreet.toLowerCase() &&
+        (!address.city ||
+          address.city.toLowerCase() === item.city?.trim().toLowerCase()) &&
+        (!address.state ||
+          address.state.toLowerCase() === item.state?.trim().toLowerCase()) &&
+        (!address.countryCode ||
+          address.countryCode.toLowerCase() ===
+            item.country_code?.trim().toLowerCase()));
+    const profile = sameDestination ? item : undefined;
     setCustomer({
       address: address?.address ?? (item.address || ''),
       email: item.email || '',
       id: item.id,
       name: getCustomerDisplayName(item),
       phone: item.phone || '',
-      city: address?.city ?? (item.city || ''),
-      state: address?.state ?? (item.state || ''),
-      country: address?.country ?? (item.country || ''),
-      countryCode: address?.countryCode ?? (item.country_code || ''),
-      postalCode: address?.postalCode ?? (item.zip_code || ''),
+      city: address?.city || profile?.city || '',
+      state: address?.state || profile?.state || '',
+      country: address?.country || profile?.country || '',
+      countryCode: address?.countryCode || profile?.country_code || '',
+      postalCode: address?.postalCode || profile?.zip_code || '',
       latitude: address ? address.latitude : (item.latitude ?? undefined),
       longitude: address ? address.longitude : (item.longitude ?? undefined),
     });

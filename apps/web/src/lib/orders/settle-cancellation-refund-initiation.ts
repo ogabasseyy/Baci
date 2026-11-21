@@ -19,6 +19,8 @@ import {
  * next run re-derives coverage instead of this run reasoning about
  * it — and a partially covered verified leg keeps the same
  * manual-pending liveness as any other partial manual.
+ * This worker handles whole-order cancellations. For bank-offer partial-item
+ * refunds, see docs/runbooks/bank-card-offers.md.
  */
 export async function settleCancellationRefundInitiation({
   auditBlockedTransactions,

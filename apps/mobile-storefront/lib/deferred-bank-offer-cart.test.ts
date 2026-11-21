@@ -138,6 +138,43 @@ it('keeps cart edits and does not replace the original marker on a repeat callba
   expect([...stored.values()]).toEqual(['consumed']);
 });
 
+it('retains the first snapshot when two callbacks save concurrently', async () => {
+  const first = deferredBankOfferCart.capture() as string;
+  cart(2);
+  const edited = deferredBankOfferCart.capture() as string;
+  await Promise.all([
+    deferredBankOfferCart.remember('order-1', reference, first),
+    deferredBankOfferCart.remember('order-1', reference, edited),
+  ]);
+  expect([...stored.values()]).toEqual([first]);
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-1',
+    reference,
+    () => true
+  );
+  expect(clearCart).not.toHaveBeenCalled();
+});
+
+it('does not attach a later cart to a paid order that had no snapshot', async () => {
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-1',
+    reference,
+    () => true
+  );
+  expect([...stored.values()]).toEqual(['consumed']);
+  await deferredBankOfferCart.remember(
+    'order-1',
+    reference,
+    deferredBankOfferCart.capture() as string
+  );
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-1',
+    reference,
+    () => true
+  );
+  expect(clearCart).not.toHaveBeenCalled();
+});
+
 it('preserves the original marker for retry when clearing fails', async () => {
   const identity = deferredBankOfferCart.capture() as string;
   await deferredBankOfferCart.remember('order-1', reference, identity);

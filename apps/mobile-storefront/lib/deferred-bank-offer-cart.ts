@@ -3,6 +3,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCartStore } from '@/stores/cart-store';
 
 const CONSUMED_MARKER = 'consumed';
+const pendingCartOperations = new Map<string, Promise<void>>();
+
+async function serializeCartOperation(
+  key: string,
+  operation: () => Promise<void>
+) {
+  const previous = pendingCartOperations.get(key);
+  const current = (previous ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(operation);
+  pendingCartOperations.set(key, current);
+  try {
+    await current;
+  } finally {
+    if (pendingCartOperations.get(key) === current)
+      pendingCartOperations.delete(key);
+  }
+}
 
 function cartIdentity() {
   if (!useCartStore.persist.hasHydrated()) return null;
@@ -35,8 +53,11 @@ export const deferredBankOfferCart = {
   async remember(orderId: string, reference: string, identity: string) {
     const key = storageKey(orderId, reference);
     if (!key) return;
-    if (!(await AsyncStorage.getItem(key)))
-      await AsyncStorage.setItem(key, identity);
+    await serializeCartOperation(key, async () => {
+      if (!(await AsyncStorage.getItem(key))) {
+        await AsyncStorage.setItem(key, identity);
+      }
+    });
   },
   async clearIfUnchanged(
     orderId: string,
@@ -45,12 +66,17 @@ export const deferredBankOfferCart = {
   ) {
     const key = storageKey(orderId, reference);
     if (!key) return;
-    const expected = await AsyncStorage.getItem(key);
-    if (!isActive() || !expected || expected === CONSUMED_MARKER) return;
-    if (!useCartStore.persist.hasHydrated()) return;
-    if (cartIdentity() === expected) await useCartStore.getState().clearCart();
-    // Keep a small marker so a repeated callback cannot bind this paid
-    // order to a new cart, even if the original cart was edited.
-    await AsyncStorage.setItem(key, CONSUMED_MARKER);
+    await serializeCartOperation(key, async () => {
+      const expected = await AsyncStorage.getItem(key);
+      if (!isActive() || expected === CONSUMED_MARKER) return;
+      if (expected) {
+        if (!useCartStore.persist.hasHydrated()) return;
+        if (cartIdentity() === expected)
+          await useCartStore.getState().clearCart();
+      }
+      // Payment is verified. Even if the snapshot was absent or the cart
+      // was edited, a repeat callback must not bind this order to a new cart.
+      await AsyncStorage.setItem(key, CONSUMED_MARKER);
+    });
   },
 };

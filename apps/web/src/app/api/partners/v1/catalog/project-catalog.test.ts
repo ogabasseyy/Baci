@@ -57,6 +57,52 @@ describe('CrossRem catalog projection', () => {
     ]);
   });
 
+  it('collects offer quantity for quoting without exposing it in the catalog', () => {
+    const stockByListing = new Map<string, number>();
+    const offer = {
+      id: 'offer-1',
+      condition: 'used' as const,
+      price: 100,
+      stock_quantity: 1,
+    };
+    const selected = projectCatalog(
+      [{ ...row, id: offer.id, offer, stock: 9999 }],
+      [
+        {
+          ...binding,
+          listingId: offer.id,
+          condition: 'used',
+          offerId: offer.id,
+        },
+      ],
+      stockByListing
+    );
+
+    expect(stockByListing.get(offer.id)).toBe(1);
+    expect(selected[0]).toMatchObject({
+      listing_id: offer.id,
+      availability: 'in_stock',
+    });
+    expect(selected[0]).not.toHaveProperty('stock_quantity');
+  });
+
+  it('marks a listing unavailable when managed stock has run out even if legacy stock remains', () => {
+    const stockByListing = new Map<string, number>();
+    const selected = projectCatalog(
+      [
+        {
+          ...row,
+          product: { ...product, manage_stock: true, stock_quantity: 0 },
+        },
+      ],
+      [binding],
+      stockByListing
+    );
+
+    expect(stockByListing.get(binding.listingId)).toBe(0);
+    expect(selected[0].availability).toBe('out_of_stock');
+  });
+
   it.each([
     [99.25, 9925, 10521],
     [100.1, 10010, 10611],

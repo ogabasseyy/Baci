@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable } from 'react-native';
 import { AddExpenseFooter } from '@/components/expenses/AddExpenseFooter';
@@ -24,7 +24,6 @@ import { useExpenseGroups } from '@/hooks/useExpenseGroups';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useSaveExpense } from '@/hooks/useSaveExpense';
 import { useTheme } from '@/hooks/useTheme';
-import { parseExpenseAmount } from '@/lib/expense-amount';
 import { CreateExpenseFormSchema } from '@/schemas/expense-form';
 
 function AddExpenseForm({
@@ -60,7 +59,6 @@ function AddExpenseForm({
   );
   const fatalGroupsError = isFatalDependencyError(groupsError, hasCachedGroups);
   const saveExpense = useSaveExpense();
-  const router = useRouter();
   const activeBranches = branches.filter((branch) => branch.active);
   const defaultBranchId =
     activeBranches.find((branch) => branch.is_default)?.id ??
@@ -72,7 +70,6 @@ function AddExpenseForm({
       ? scope.branchId
       : defaultBranchId;
   const form = useExpenseFormState({ initialBranchId });
-  const [amountText, setAmountText] = useState('');
   const [categorySheetVisible, setCategorySheetVisible] = useState(false);
   const [groupManagerVisible, setGroupManagerVisible] = useState(false);
 
@@ -96,13 +93,17 @@ function AddExpenseForm({
   const selectedBranchId =
     scope.type === 'branch' ? scope.branchId : form.values.branchId;
   const selectedCategory = toExpenseCategoryOrNull(form.values.category);
-  const disabled = saveExpense.isPending || branchesLoading || isRefreshing;
-  const { archiveGroup, close, navigateBackAfterSave, pickReceipt } =
-    useExpenseFormHandlers({
-      archiveGroupMutation,
-      form,
-      onNavigateBack: router.back,
-    });
+  const {
+    amountText,
+    archiveGroup,
+    changeAmount,
+    close,
+    hasSaved,
+    navigateBackAfterSave,
+    pickReceipt,
+  } = useExpenseFormHandlers({ archiveGroupMutation, form });
+  const disabled =
+    hasSaved || saveExpense.isPending || branchesLoading || isRefreshing;
   if (fatalBranchesError) {
     return (
       <ExpenseStatusShell
@@ -124,7 +125,7 @@ function AddExpenseForm({
     );
   }
   const save = () => {
-    if (!merchant?.id) return;
+    if (!merchant?.id || disabled) return;
 
     if (
       scope.type === 'all' &&
@@ -212,10 +213,7 @@ function AddExpenseForm({
           description={form.values.description ?? ''}
           disabled={disabled}
           existingReceiptUri={null}
-          onAmountChange={(value) => {
-            setAmountText(value);
-            form.setField('amount', parseExpenseAmount(value));
-          }}
+          onAmountChange={changeAmount}
           onBranchChange={(branchId) => form.setField('branchId', branchId)}
           onDateChange={(date) => form.setField('date', date)}
           onDescriptionChange={(description) =>

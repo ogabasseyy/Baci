@@ -14,11 +14,13 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
 }));
 
+type QuizRouteHelpersModule =
+  typeof import('@/app/api/quiz/_shared/route-helpers');
+type QuizV2ContractModule =
+  typeof import('@/app/api/quiz/_shared/quiz-v2-contract');
+
 vi.mock('@/app/api/quiz/_shared/route-helpers', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/app/api/quiz/_shared/route-helpers')
-    >();
+  const actual = await importOriginal<QuizRouteHelpersModule>();
   return {
     ...actual,
     requireQuizUser: mocks.requireQuizUser,
@@ -27,10 +29,7 @@ vi.mock('@/app/api/quiz/_shared/route-helpers', async (importOriginal) => {
 });
 
 vi.mock('@/app/api/quiz/_shared/quiz-v2-contract', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/app/api/quiz/_shared/quiz-v2-contract')
-    >();
+  const actual = await importOriginal<QuizV2ContractModule>();
   return {
     ...actual,
     requireQuizV2Contract: mocks.requireQuizV2Contract,

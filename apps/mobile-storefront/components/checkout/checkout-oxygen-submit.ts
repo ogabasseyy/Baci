@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { type CreateOrderRequest, createOrder } from '@/services/orders';
 
 type Input = {
@@ -89,6 +90,15 @@ export async function submitOxygenCheckout(
       expectedOwner: userId,
     }
   );
+  // A receipt must be usable by the owned-order screen before we hand off
+  // and clear the cart. The generic order decoder accepts string order IDs.
+  if (
+    !z.uuid().safeParse(result.order.id).success ||
+    !Number.isFinite(result.order.total)
+  )
+    throw new Error(
+      'Could not confirm the saved Oxygen order. Please try again.'
+    );
   if (result.order.total <= 0)
     throw new Error(
       'Choose another payment option for this zero-balance order.'

@@ -31,6 +31,7 @@ it('returns an exact owned Oxygen order without writing or exposing owner detail
     payment_method: 'oxygen',
     payment_status: 'unpaid',
     total: 120,
+    currency: 'NGN',
     amount_paid: 20,
     customers: { user_id: 'user', merchant_id: 'merchant' },
   });
@@ -50,6 +51,7 @@ it('returns an exact owned Oxygen order without writing or exposing owner detail
       payment_method: 'oxygen',
       payment_status: 'unpaid',
       total: 120,
+      currency: 'NGN',
     },
     wallet: null,
     savings: null,
@@ -83,11 +85,13 @@ it.each([
   { payment_status: 'refunded' },
   { cancelled_at: '2026-11-21T09:00:00Z' },
   { total: 0 },
+  { currency: 'USD' },
 ])('does not report a closed or unfinanceable order as replayed: %j', async (patch) => {
   const { args } = setup({
     id: 'order',
     payment_status: 'unpaid',
     shipping_status: 'pending',
+    currency: 'NGN',
     total: 120,
     ...patch,
   });

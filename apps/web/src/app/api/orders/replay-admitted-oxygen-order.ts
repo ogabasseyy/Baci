@@ -33,7 +33,8 @@ export async function replayAdmittedOxygenOrder({
   if (!userId || !key || !hash) return rejection;
   // Checkout keys and request hashes belong to the order. The Oxygen
   // environment is bound when its financing workflow starts. This response
-  // carries no workflow identifier or provider state.
+  // carries no workflow identifier or provider state. A changed merchant
+  // binding can block new applications without hiding a saved NGN order.
   const { data, error } = await client
     .from('orders')
     .select(
@@ -54,6 +55,7 @@ export async function replayAdmittedOxygenOrder({
   if (
     cancelled_at ||
     order.payment_status !== 'unpaid' ||
+    order.currency !== 'NGN' ||
     closedShippingStatuses.includes(order.shipping_status) ||
     !(order.total > 0)
   )

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "reviewed_at": "2026-11-21T16:06:44+00:00",
-  "source_revision": "1e83b4152bc8de54524b4c02780cc6b5684a27d2",
-  "evidence_digest": "c41204512bf07f655501b430194a89ed792ee84948ec70d80b5af2b0ffce9b40",
-  "claims_digest": "9b93b2a8c0f9a3449ea5e68be37457c64b61645961955e9b1ddb8f5113981d90",
+  "source_revision": "f654c9b95780fec288bb25bf1f4201c0598dcce6",
+  "evidence_digest": "20872bf2af96e842aaeadac7fa1f724df03fe8f3c4c54e129d3c382a9b16ebdc",
+  "claims_digest": "e8a621c01662467d37c7d46f30acaad07844cca62b4e2b803bd7ddff171ba75c",
   "review_scope": "Source evidence only. Re-reviewed staff-entered mobile orders after the delivery-address selection change. Existing permission, payment and cancellation limitations still apply. Other bound capability sources match the prior reviewed revision. No production capability promotion.",
   "capabilities": [
     {

@@ -223,6 +223,7 @@ function createMockSupabaseClient() {
 
   return {
     from: vi.fn((_table: string) => mockChain),
+    rpc: vi.fn().mockResolvedValue({ data: 'blocked', error: null }),
   };
 }
 

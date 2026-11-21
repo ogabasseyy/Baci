@@ -24,6 +24,7 @@ import { resolveCreditDirectConfirmationReview } from '@/lib/payments/resolve-cr
 import { escapeHtmlText } from '@/lib/sanitize';
 import { createServiceClient } from '@/lib/supabase/service';
 import { respondCustomerInventoryFailure } from './customer-inventory-failure';
+import { recoverCreditDirectTimeoutOrder } from './recover-credit-direct-timeout-order';
 
 function readNoteString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -792,6 +793,20 @@ export async function POST(request: NextRequest) {
                 { status: 500 }
               );
             }
+            const recovered = await recoverCreditDirectTimeoutOrder({
+              orderId: order.id,
+              merchantId: order.merchant_id,
+              transactionId: cancelledTxResult.transactionId,
+              supabase,
+              resume: (parsedNotes) =>
+                healPaidCreditDirectOrderReplay({
+                  order,
+                  parsedNotes,
+                  payload,
+                  supabase,
+                }),
+            });
+            if (recovered) return recovered;
             const cancelReviewFiled = await handlePaymentForCancelledOrder({
               gatewayReference: payload.checkoutTransactionId,
               order: { id: order.id },
@@ -879,6 +894,20 @@ export async function POST(request: NextRequest) {
             });
           }
 
+          const recovered = await recoverCreditDirectTimeoutOrder({
+            orderId: order.id,
+            merchantId: order.merchant_id,
+            transactionId: recordedTransactionId,
+            supabase,
+            resume: (parsedNotes) =>
+              healPaidCreditDirectOrderReplay({
+                order,
+                parsedNotes,
+                payload,
+                supabase,
+              }),
+          });
+          if (recovered) return recovered;
           const cancellationReviewFiled = await handlePaymentForCancelledOrder({
             gatewayReference: payload.checkoutTransactionId,
             order: updatedOrder,

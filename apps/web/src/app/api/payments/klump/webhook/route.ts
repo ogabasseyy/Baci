@@ -30,6 +30,7 @@ import {
   isOrderClampedAsCancelled,
 } from '@/lib/payments/handle-payment-for-cancelled-order';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
+import { reinstateTimeoutOrderPayment } from '@/lib/payments/reinstate-timeout-order-payment';
 import { resolveOrderGiglSettlementRpc } from '@/lib/payments/resolve-order-gigl-settlement-rpc';
 import { calculatePlatformFee } from '@/lib/paystack';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -104,6 +105,9 @@ type KlumpUpdatedOrder = KlumpPaidOrder & {
   shipping_status?: string | null;
 };
 
+const KLUMP_PAYMENT_ORDER_SELECT =
+  'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount';
+
 function updateKlumpOrder({
   orderId,
   supabase,
@@ -132,9 +136,7 @@ function updateKlumpOrder({
       // terminal for payment finalization.
       .neq('shipping_status', 'cancelled')
       .neq('shipping_status', 'canceled')
-      .select(
-        'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
-      )
+      .select(KLUMP_PAYMENT_ORDER_SELECT)
       .maybeSingle<KlumpUpdatedOrder>()
   );
 }
@@ -304,6 +306,7 @@ export async function POST(request: NextRequest) {
   }
 
   let order: KlumpUpdatedOrder | null = null;
+  let inventoryAlreadyConfirmed = false;
   if (transaction.order_id) {
     // Snapshot the order's pre-update status so a later inventory-confirmation
     // failure can roll it back to what it actually was (e.g. 'bnpl_pending'),
@@ -340,36 +343,12 @@ export async function POST(request: NextRequest) {
       return errorResponse('Failed to update order', 500);
     }
 
-    // The prevent_cancelled_order_reopen trigger clamped this reopen: suppress
-    // settlement + merchant notification and file a reconciliation row. Ack
-    // Klump with a 200 so it does not retry into a loop.
-    if (updatedOrder && isOrderClampedAsCancelled(updatedOrder)) {
-      const reviewFiled = await handlePaymentForCancelledOrder({
-        gatewayReference: referenceResult.data,
-        order: updatedOrder,
-        reason:
-          'Klump payment captured for an order cancelled before finalization',
-        transactionId: transaction.id,
-      });
-      if (!reviewFiled) {
-        return errorResponse('Payment reconciliation review unavailable', 500);
-      }
-
-      return NextResponse.json({
-        message:
-          'Klump payment recorded; order was cancelled, filed for review',
-        success: true,
-      });
-    }
-
     order = updatedOrder;
 
     if (!order) {
       const { data: existingOrder, error: existingOrderError } = await supabase
         .from('orders')
-        .select(
-          'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
-        )
+        .select(KLUMP_PAYMENT_ORDER_SELECT)
         .eq('id', transaction.order_id)
         .maybeSingle<KlumpUpdatedOrder>();
 
@@ -386,35 +365,84 @@ export async function POST(request: NextRequest) {
       order = existingOrder;
     }
 
-    // The update predicates exclude cancelled orders (either axis),
-    // so a late capture for one lands here with updatedOrder null:
-    // file it for review instead of confirming inventory on an unpaid
-    // order (which rejects and would retry the webhook into a loop).
     if (
       order &&
       (order.payment_status === 'cancelled' ||
         order.payment_status === 'canceled' ||
         isOrderClampedAsCancelled(order))
     ) {
-      const reviewFiled = await handlePaymentForCancelledOrder({
-        gatewayReference: referenceResult.data,
-        order,
-        reason:
-          'Klump payment captured for an order cancelled before finalization',
-        transactionId: transaction.id,
-      });
-      if (!reviewFiled) {
-        return errorResponse('Payment reconciliation review unavailable', 500);
+      let reinstatement: Awaited<
+        ReturnType<typeof reinstateTimeoutOrderPayment>
+      >;
+      try {
+        reinstatement = await reinstateTimeoutOrderPayment(
+          supabase,
+          order.id,
+          transaction.id,
+          transaction.merchant_id
+        );
+      } catch (error) {
+        logger.error({
+          error,
+          message: 'Klump late payment reinstatement failed',
+        });
+        return errorResponse('Late payment reinstatement unavailable', 500);
       }
-
-      return NextResponse.json({
-        message:
-          'Klump payment recorded; order was cancelled, filed for review',
-        success: true,
-      });
+      if (reinstatement === 'blocked') {
+        const reviewFiled = await handlePaymentForCancelledOrder({
+          gatewayReference: referenceResult.data,
+          order,
+          reason:
+            'Klump payment captured for an order cancelled before finalization',
+          transactionId: transaction.id,
+        });
+        if (!reviewFiled) {
+          return errorResponse(
+            'Payment reconciliation review unavailable',
+            500
+          );
+        }
+        return NextResponse.json({
+          message:
+            'Klump payment recorded; order was cancelled, filed for review',
+          success: true,
+        });
+      }
+      const { data: reopenedOrder, error: reopenedOrderError } = await supabase
+        .from('orders')
+        .select(KLUMP_PAYMENT_ORDER_SELECT)
+        .eq('id', transaction.order_id)
+        .eq('merchant_id', transaction.merchant_id)
+        .maybeSingle<KlumpUpdatedOrder>();
+      if (reopenedOrderError || !reopenedOrder) {
+        return errorResponse('Failed to load reinstated order', 500);
+      }
+      if (
+        reopenedOrder.payment_status !== 'paid' ||
+        isOrderClampedAsCancelled(reopenedOrder)
+      ) {
+        const filed = await handlePaymentForCancelledOrder({
+          gatewayReference: referenceResult.data,
+          issueType:
+            reopenedOrder.payment_status === 'refunded'
+              ? 'payment_received_after_refund'
+              : undefined,
+          order: reopenedOrder,
+          reason: 'Klump order left the paid state before settlement',
+          transactionId: transaction.id,
+        });
+        return filed
+          ? NextResponse.json({
+              success: true,
+              message: 'Payment recorded; order filed for review',
+            })
+          : errorResponse('Payment reconciliation review unavailable', 500);
+      }
+      order = reopenedOrder;
+      inventoryAlreadyConfirmed = true;
     }
 
-    if (order) {
+    if (order && !inventoryAlreadyConfirmed) {
       try {
         await ensurePaidOrderInventoryConfirmed(
           supabase,

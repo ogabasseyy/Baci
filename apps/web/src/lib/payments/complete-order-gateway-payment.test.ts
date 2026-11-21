@@ -2,6 +2,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, it, vi } from 'vitest';
 import { completeOrderGatewayPayment } from '@/lib/payments/complete-order-gateway-payment';
 
+const refreshReclaimedOrderInventory = vi.hoisted(() => vi.fn());
+vi.mock('./ensure-paid-order-inventory-confirmed', () => ({
+  refreshReclaimedOrderInventory,
+}));
+
 function buildSupabaseMock(rpcResult: {
   data?: unknown;
   error?: { message: string } | null;
@@ -86,6 +91,79 @@ describe('completeOrderGatewayPayment', () => {
       expect(result.completion.already_completed).toBe(true);
       expect(result.completion.order_updated).toBe(true);
     }
+  });
+
+  it.each([
+    ['reinstated', true, false],
+    ['reinstated_inventory_reclaimed', true, true],
+    ['already_reinstated', false, false],
+  ] as const)('reports a %s timeout payment as paid', async (state, updated, reclaimed) => {
+    refreshReclaimedOrderInventory.mockClear();
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          ...completionPayload,
+          cancelled_at: '2026-11-15T00:00:00Z',
+          order_cancelled: true,
+          order_updated: false,
+          payment_status: 'cancelled',
+          shipping_status: 'cancelled',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: state, error: null });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    const result = await completeOrderGatewayPayment({
+      actor: 'webhook:BAC-REF',
+      gatewayResponse: { status: 'success' },
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      supabase,
+      transactionId: 'txn-1',
+    });
+
+    if (reclaimed) {
+      expect(refreshReclaimedOrderInventory).toHaveBeenCalledExactlyOnceWith(
+        supabase,
+        'merchant-1',
+        'order-1'
+      );
+    } else {
+      expect(refreshReclaimedOrderInventory).not.toHaveBeenCalled();
+    }
+    expect(supabase.rpc).toHaveBeenNthCalledWith(
+      2,
+      'reinstate_timeout_order_payment',
+      { p_order_id: 'order-1', p_transaction_id: 'txn-1' }
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      completion: {
+        cancelled_at: null,
+        order_cancelled: false,
+        order_updated: updated,
+        payment_status: 'paid',
+        shipping_status: 'processing',
+        timeout_inventory_confirmed: true,
+      },
+    });
+  });
+
+  it('returns an error for a cancelled payment without a merchant identity', async () => {
+    const supabase = buildSupabaseMock({
+      data: { ...completionPayload, order_cancelled: true },
+    });
+    const result = await completeOrderGatewayPayment({
+      actor: 'webhook:BAC-REF',
+      gatewayResponse: { status: 'success' },
+      orderId: 'order-1',
+      supabase,
+      transactionId: 'txn-1',
+    });
+    expect(result).toMatchObject({ ok: false });
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when the RPC itself errors', async () => {

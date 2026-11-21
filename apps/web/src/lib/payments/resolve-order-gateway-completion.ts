@@ -140,6 +140,7 @@ export async function resolveOrderGatewayCompletion({
     actor,
     expectedOutstandingMinor,
     gatewayResponse,
+    merchantId,
     orderId,
     supabase,
     transactionId,

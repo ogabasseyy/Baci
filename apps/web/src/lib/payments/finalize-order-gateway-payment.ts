@@ -146,7 +146,11 @@ export async function finalizeOrderGatewayPayment({
     return { error: normalizationError, kind: 'order_fetch_failed' };
   }
 
-  if (!capturedOnAlreadyPaidOrder && !result.redvaultInventoryConfirmed) {
+  if (
+    !capturedOnAlreadyPaidOrder &&
+    !result.redvaultInventoryConfirmed &&
+    !completion.timeout_inventory_confirmed
+  ) {
     const inventoryOutcome = await confirmPaidOrderInventoryOrRollback({
       gateway,
       merchantId: transaction.merchant_id,

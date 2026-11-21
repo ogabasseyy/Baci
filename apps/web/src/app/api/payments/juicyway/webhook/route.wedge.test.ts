@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as webhookTest from './route.test-helpers';
 
+const finalizeLatePayment = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
+  finalizeOrderGatewayPayment: finalizeLatePayment,
+}));
+
 // Regression coverage for the wedge class from incident ORD-260711-00NT-5:
 // a completed transaction whose order flip never landed must be HEALED by a
 // redelivery (not acked away), and an order-update failure must fail closed
@@ -47,6 +52,74 @@ const paidOrderRow = {
 };
 
 describe('POST /api/payments/juicyway/webhook — wedge regression', () => {
+  it('reinstates a timeout order on a verified payment redelivery', async () => {
+    mockVerifyWebhookSignature.mockResolvedValue(true);
+    finalizeLatePayment.mockResolvedValue({ kind: 'completed' });
+    const cancelledOrder = {
+      id: 'order-123',
+      payment_status: 'cancelled',
+      shipping_status: 'pending',
+      cancelled_at: null,
+    };
+
+    const transactionUpdate = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    }));
+    (webhookTest.mockSupabase as Record<string, unknown>).from = vi.fn(
+      (table) => {
+        if (table === 'transactions') {
+          return {
+            eq: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { ...baseTransaction, status: 'completed' },
+              error: null,
+            }),
+            update: transactionUpdate,
+          };
+        }
+        if (table === 'orders') {
+          return {
+            eq: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: cancelledOrder,
+              error: null,
+            }),
+            select: vi.fn().mockReturnThis(),
+            update: vi.fn(() => {
+              const update = {
+                eq: vi.fn().mockReturnThis(),
+                in: vi.fn().mockReturnThis(),
+                maybeSingle: vi
+                  .fn()
+                  .mockResolvedValue({ data: null, error: null }),
+                select: vi.fn().mockReturnThis(),
+              };
+              return update;
+            }),
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      }
+    );
+    const response = await webhookTest.postJuicywayWebhook(
+      webhookTest.createWebhookRequest(webhookTest.createSuccessPayload())
+    );
+
+    expect(response.status).toBe(200);
+    expect(transactionUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'completed' })
+    );
+    expect(finalizeLatePayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gateway: 'juicyway',
+        orderId: 'order-123',
+        reference: 'TXN-123456',
+      })
+    );
+    expect(webhookTest.mockReconciliationInsert).not.toHaveBeenCalled();
+  });
+
   it('heals a wedged order on redelivery instead of acking Already processed', async () => {
     mockVerifyWebhookSignature.mockResolvedValue(true);
 

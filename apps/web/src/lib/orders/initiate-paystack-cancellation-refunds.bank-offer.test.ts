@@ -41,6 +41,31 @@ describe('bank-offer cancellation refunds', () => {
     mockAcceptedRefund(mocks.initiatePaystackRefund, overrides);
   }
 
+  it('records missing dispatch authority without looking up or sending a refund', async () => {
+    const leg = { ...transaction, gateway_reference: `BCO-${'a'.repeat(32)}` };
+    const rpc = vi.fn();
+
+    await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase: { from: vi.fn(), rpc },
+      transactions: [leg],
+    });
+
+    expect(rpc).not.toHaveBeenCalled();
+    expect(mocks.verifyTransaction).not.toHaveBeenCalled();
+    expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'Bank card offer refund requires a dispatch claim',
+        metadata: expect.objectContaining({
+          bank_offer_missing_dispatch_claim: true,
+        }),
+        transactions: [leg],
+      })
+    );
+  });
+
   it.each([
     [9501, 'NGN'],
     ['9501', 'ngn'],

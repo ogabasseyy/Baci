@@ -68,6 +68,7 @@ export async function initiatePaystackCancellationRefunds({
   const refundIds: number[] = [];
   const bankOfferLegsForReview: GatewayPaymentTransaction[] = [];
   let bankOfferLookupUnavailable = false;
+  let bankOfferMissingDispatchClaim = false;
 
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
@@ -105,6 +106,7 @@ export async function initiatePaystackCancellationRefunds({
     }
     if (isBankOffer) {
       if (!claimToken) {
+        bankOfferMissingDispatchClaim = true;
         bankOfferLegsForReview.push(transaction);
         continue;
       }
@@ -275,6 +277,14 @@ export async function initiatePaystackCancellationRefunds({
     );
   }
   if (bankOfferLegsForReview.length > 0) {
+    let reviewReason =
+      'Bank card offer refund does not match the verified capture';
+    if (bankOfferMissingDispatchClaim) {
+      reviewReason = 'Bank card offer refund requires a dispatch claim';
+    } else if (isLastAttempt && bankOfferLookupUnavailable) {
+      reviewReason =
+        'Bank card offer refund verification was unavailable on the final attempt';
+    }
     await quarantineRefund({
       metadata: {
         accepted_refund_ids: refundIds,
@@ -283,12 +293,12 @@ export async function initiatePaystackCancellationRefunds({
         ...(bankOfferLookupUnavailable
           ? { bank_offer_capture_lookup_unavailable: true }
           : {}),
+        ...(bankOfferMissingDispatchClaim
+          ? { bank_offer_missing_dispatch_claim: true }
+          : {}),
       },
       order,
-      reason:
-        isLastAttempt && bankOfferLookupUnavailable
-          ? 'Bank card offer refund verification was unavailable on the final attempt'
-          : 'Bank card offer refund does not match the verified capture',
+      reason: reviewReason,
       supabase,
       transactions: bankOfferLegsForReview,
     });

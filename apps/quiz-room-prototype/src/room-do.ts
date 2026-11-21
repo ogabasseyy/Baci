@@ -1076,10 +1076,23 @@ export class QuizRoomEngine {
       if (
         this.controlState.isEventCancelled(config.eventId) ||
         alarmState.eventStatus === 'cancelled' ||
-        attemptRow.status !== 'started' ||
         nowMs >= config.endsAtMs ||
         alarmState.sealed
       ) {
+        return this.projectAttemptStateSync(
+          attemptRow,
+          config,
+          alarmState,
+          nowMs
+        );
+      }
+
+      const canRecoverTimelyFinalAnswer =
+        attemptRow.status === 'submitted' &&
+        attemptRow.close_reason === 'completed' &&
+        attemptRow.exported_batch_id === null;
+
+      if (attemptRow.status !== 'started' && !canRecoverTimelyFinalAnswer) {
         return this.projectAttemptStateSync(
           attemptRow,
           config,
@@ -1145,7 +1158,10 @@ export class QuizRoomEngine {
       // position has already been advanced past `current_position`, check if a
       // concurrent expiry recovery recorded a timeout while this timely answer
       // was hashing; if so, preserve the timely answer without resetting clocks.
-      if (targetPlan.position < attemptRow.current_position) {
+      if (
+        targetPlan.position < attemptRow.current_position ||
+        canRecoverTimelyFinalAnswer
+      ) {
         const existingAns = this.storage.exec<{
           timeout: number;
           issued_at_ms: number;

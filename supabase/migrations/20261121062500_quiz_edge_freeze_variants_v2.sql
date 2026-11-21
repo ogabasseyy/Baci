@@ -40,3 +40,40 @@ CREATE TRIGGER guard_quiz_edge_variants_immutable_v2
   BEFORE UPDATE OR DELETE ON public.quiz_question_variants
   FOR EACH ROW
   EXECUTE FUNCTION private.guard_quiz_edge_variants_immutable_v2();
+
+-- Also guard parent quiz_question_slots against deletion while an edge_rooms
+-- event is active or completed so ON DELETE CASCADE cannot remove frozen variants.
+CREATE OR REPLACE FUNCTION private.guard_quiz_edge_slots_immutable_v2()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_locked boolean := false;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.quiz_events AS event
+    WHERE event.id = OLD.event_id
+      AND event.backend_mode = 'edge_rooms'
+      AND event.status IN ('active', 'completed')
+  )
+  INTO v_locked;
+
+  IF v_locked THEN
+    RAISE EXCEPTION 'quiz_edge_variants_locked_while_active'
+      USING ERRCODE = 'QZ063';
+  END IF;
+
+  RETURN OLD;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS guard_quiz_edge_slots_immutable_v2
+  ON public.quiz_question_slots;
+
+CREATE TRIGGER guard_quiz_edge_slots_immutable_v2
+  BEFORE DELETE ON public.quiz_question_slots
+  FOR EACH ROW
+  EXECUTE FUNCTION private.guard_quiz_edge_slots_immutable_v2();

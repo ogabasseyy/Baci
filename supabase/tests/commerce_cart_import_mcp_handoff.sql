@@ -30,6 +30,7 @@ DECLARE
   guest_cart uuid;
   source_version integer;
   imported_version integer;
+  catalog_gate text;
   result jsonb;
 BEGIN
   INSERT INTO public.product_variants(id, merchant_id, product_id, attributes, condition, price_override, stock_quantity)
@@ -102,15 +103,42 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-condition-protected', source_version);
   IF result->>'code' IS DISTINCT FROM 'invalid_item'
   THEN RAISE EXCEPTION 'Import bypassed assurance on a condition-carrying product-only line: %', result; END IF;
+  UPDATE public.products SET condition = 'open_box' WHERE id = product AND merchant_id = merchant;
+  UPDATE public.commerce_cart_lines SET condition = 'refurbished' WHERE cart_id = legacy_destination;
+  result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-alias-protected', source_version);
+  IF result->>'code' IS DISTINCT FROM 'invalid_item'
+  THEN RAISE EXCEPTION 'Import bypassed assurance on a legacy condition alias: %', result; END IF;
   UPDATE public.commerce_cart_lines SET has_assurance = false WHERE cart_id = legacy_destination;
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-add', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true'
      OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = legacy_destination) <> 1
      OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = legacy_destination
-       AND product_id = product AND variant_id IS NULL AND condition = 'new' AND quantity = 2)
+       AND product_id = product AND variant_id IS NULL AND condition = 'refurbished' AND quantity = 2)
   THEN RAISE EXCEPTION 'Import split an existing product-only line: %', result; END IF;
+  UPDATE public.products SET condition = 'new' WHERE id = product AND merchant_id = merchant;
 
   PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
+  FOREACH catalog_gate IN ARRAY ARRAY['active-offer', 'different-price', 'different-condition'] LOOP
+    BEGIN
+      CASE catalog_gate
+        WHEN 'active-offer' THEN
+          INSERT INTO public.product_offers(merchant_id, product_id, condition, price, stock_quantity, status)
+          VALUES (merchant, product, 'used', 12, 20, 'active');
+        WHEN 'different-price' THEN
+          UPDATE public.product_variants SET price_override = 16 WHERE id = default_variant;
+        WHEN 'different-condition' THEN
+          UPDATE public.product_variants SET condition = 'used' WHERE id = default_variant;
+      END CASE;
+      result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, catalog_gate, source_version);
+      IF result->>'ok' IS DISTINCT FROM 'true'
+         OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = destination
+           AND product_id = product AND variant_id IS NULL AND condition IS NULL AND quantity = 1)
+      THEN RAISE EXCEPTION 'Catalog gate % must retain the product-only identity: %', catalog_gate, result; END IF;
+      RAISE EXCEPTION USING ERRCODE = 'ZT001';
+    EXCEPTION WHEN SQLSTATE 'ZT001' THEN
+      NULL; -- Restore the catalog and leave the handoff available for the main test.
+    END;
+  END LOOP;
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'import-attempt', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM destination_grant::text
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 2::bigint

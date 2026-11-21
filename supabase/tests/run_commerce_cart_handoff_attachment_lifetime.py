@@ -72,7 +72,8 @@ try:
                '20261121103700_commerce_cart_mcp_import_default_variant.sql',
                '20261121103800_commerce_cart_mcp_import_inherited_variant.sql',
                '20261121103900_commerce_cart_mcp_import_legacy_destination.sql',
-               '20261121104000_commerce_cart_mcp_import_condition_destination.sql']:
+               '20261121104000_commerce_cart_mcp_import_condition_destination.sql',
+               '20261121104100_commerce_cart_mcp_import_condition_alias.sql']:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'

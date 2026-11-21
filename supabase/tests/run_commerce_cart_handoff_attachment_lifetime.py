@@ -65,7 +65,8 @@ try:
                '20261121103200_commerce_cart_mcp_handoff_incremental_import.sql',
                '20261121103300_commerce_cart_mcp_import_destination_identity.sql',
                '20261121103400_commerce_cart_mcp_import_refresh_grant.sql',
-               '20261121103500_commerce_cart_mcp_import_quantity_high_water.sql']:
+               '20261121103500_commerce_cart_mcp_import_quantity_high_water.sql',
+               '20261121103600_commerce_cart_mcp_import_merge_continuity.sql']:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'

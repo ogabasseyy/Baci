@@ -215,7 +215,9 @@ describe('CartHandoff', () => {
         return jsonResponse({
           status: 'pending',
           importMcp: true,
-          snapshot: incoming,
+          snapshot: posted.length
+            ? { ...incoming, version: incoming.version + 1 }
+            : incoming,
           merchant: { id: incoming.merchantId, slug: 'ogabassey' },
         });
       return jsonResponse({ cart: website });
@@ -223,6 +225,9 @@ describe('CartHandoff', () => {
     render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1]).toMatchObject({
+      expectedIncomingVersion: incoming.version + 1,
+    });
     expect(posted[1]).not.toHaveProperty('expectedDestVersion');
     expect(replaceMock).toHaveBeenCalledWith('/cart');
   });

@@ -19,6 +19,10 @@ DECLARE
   linked_recovery_handoff uuid := gen_random_uuid();
   restored_handoff uuid := gen_random_uuid();
   linked_grant uuid := gen_random_uuid();
+  saved_cart uuid := gen_random_uuid();
+  customer uuid := gen_random_uuid();
+  account_user uuid := gen_random_uuid();
+  after_merge_handoff uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
   result jsonb;
@@ -205,6 +209,39 @@ BEGIN
   IF result->>'ok' IS DISTINCT FROM 'true'
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination AND product_id = product) IS DISTINCT FROM 2::bigint
   THEN RAISE EXCEPTION 'Restoring a source quantity duplicated units already transferred: %', result; END IF;
+
+  -- An account merge keeps the saved cart ID and retires the guest cart.
+  UPDATE public.merchants SET premium_features = '["shared_cart","shared_cart_accounts"]'
+  WHERE id = merchant;
+  INSERT INTO public.customers(id, merchant_id, user_id) VALUES (customer, merchant, account_user);
+  INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
+  VALUES (saved_cart, merchant, now() + interval '1 day');
+  INSERT INTO public.commerce_cart_customer_carts(merchant_id, customer_id, cart_id)
+  VALUES (merchant, customer, saved_cart);
+  PERFORM set_config('request.jwt.claims', (auth.jwt() || jsonb_build_object(
+    'role', 'commerce_cart_account_linker', 'cart_customer_id', customer,
+    'cart_account_user_id', account_user
+  ))::text, true);
+  result := public.commerce_cart_link_account(jsonb_build_object(
+    'operationId', 'after-mcp-import-merge', 'choice', 'merge', 'expectedSavedCartId', saved_cart,
+    'expectedSavedVersion', 1, 'expectedCurrentVersion',
+    (SELECT version FROM public.commerce_carts WHERE id = destination),
+    'lines', (SELECT jsonb_agg(jsonb_build_object(
+      'item', jsonb_build_object('productId', product_id), 'quantity', quantity
+    )) FROM public.commerce_cart_lines WHERE cart_id = destination)
+  ), 'import-account-merge', gen_random_uuid(), '{"type":"web"}');
+  IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'cartId' IS DISTINCT FROM saved_cart::text
+  THEN RAISE EXCEPTION 'Account merge fixture failed: %', result; END IF;
+  PERFORM pg_temp.handoff_claim(saved_cart, (result->>'grantId')::uuid, result->>'principalId');
+  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
+    origin_principal_id, operation_id, destination, expires_at)
+  VALUES (after_merge_handoff, 'import-after-account-merge', merchant, source, 'legacy:mcp:test-import',
+    'legacy-handoff:mcp-import:after-account-merge', '{"type":"web"}', now() + interval '5 minutes');
+  result := public.commerce_cart_import_mcp_handoff('import-after-account-merge', after_merge_handoff,
+    'after-account-merge', source_version);
+  IF result->>'replayed' IS DISTINCT FROM 'true'
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = saved_cart AND product_id = product) IS DISTINCT FROM 2::bigint
+  THEN RAISE EXCEPTION 'Account merge lost the website import history: %', result; END IF;
 END $$;
 
 DO $$

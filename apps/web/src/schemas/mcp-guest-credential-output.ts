@@ -5,14 +5,16 @@ export const mcpGuestCredentialOutputSchema = mcpGuestCartOutputBase
   .omit({ cart_token: true })
   .extend({ cartCredential: modelCartCredentialSchema.optional() })
   .refine(
-    (value) =>
-      value.success === false ||
-      (value.cartCredential !== undefined &&
-        value.items !== undefined &&
-        value.expires_at !== undefined &&
-        value.cart_url !== undefined),
+    (value) => {
+      if (!value.success) return true;
+      if (!value.items || !value.expires_at || !value.cart_url) return false;
+      if (value.cart_emptied) {
+        return value.items.length === 0 && value.cartCredential === undefined;
+      }
+      return value.cartCredential !== undefined;
+    },
     {
       message:
-        'Successful guest-cart output must include its credential and handoff fields',
+        'Successful guest-cart output must include cart details and the appropriate credential state',
     }
   );

@@ -51,7 +51,7 @@ BEGIN
     )
     SELECT pg_catalog.jsonb_build_object(
       'count', (SELECT pg_catalog.count(*) FROM flagged),
-      'totalBalance', (SELECT COALESCE(pg_catalog.sum(flagged.available_balance), 0)::numeric(14,2)::text FROM flagged),
+      'totalBalance', (SELECT COALESCE(pg_catalog.sum(flagged.available_balance), 0.00)::text FROM flagged),
       'wallets', COALESCE((SELECT pg_catalog.jsonb_agg(item) FROM (
           SELECT pg_catalog.jsonb_build_object(
                    'walletId', flagged.id,

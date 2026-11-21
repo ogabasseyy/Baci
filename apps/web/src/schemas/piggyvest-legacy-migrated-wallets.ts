@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-const naira = z.string().regex(/^\d{1,14}\.\d{2}$/);
+// Kobo precision; the total is unbounded (a sum of numeric(12,2) balances).
+const naira = z.string().regex(/^\d{1,30}\.\d{2}$/);
 
 /**
  * piggyvest_primary.read_migrated_legacy_wallet_balances(...) rows: old

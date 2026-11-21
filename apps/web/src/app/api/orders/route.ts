@@ -100,6 +100,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
+import { checkoutOrderNotReusable } from './checkout-order-not-reusable';
 import { rejectMobileOxygenCreditCombination } from './mobile-oxygen-order-admission';
 import { resolveOrderCreationMerchant } from './order-creation-merchant';
 import { authenticateOrderRequest } from './order-request-auth';
@@ -2458,16 +2459,7 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      if (message === 'order_not_reusable') {
-        return NextResponse.json(
-          {
-            code: 'CHECKOUT_ORDER_NOT_REUSABLE',
-            error:
-              'This checkout order can no longer be reused. Refresh checkout and start a new order.',
-          },
-          { status: 409 }
-        );
-      }
+      if (message === 'order_not_reusable') return checkoutOrderNotReusable();
       // Discount-code limit outcomes are race/state conflicts, not malformed
       // input — surface as 409 so the client shows "no longer available".
       if (

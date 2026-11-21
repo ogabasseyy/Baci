@@ -74,3 +74,27 @@ it('preserves the rollout rejection when no exact owned Oxygen order is found', 
   const { args } = setup(null);
   await expect(replayAdmittedOxygenOrder(args)).resolves.toBe(args.rejection);
 });
+
+it.each([
+  { shipping_status: 'cancelled' },
+  { shipping_status: 'processing' },
+  { shipping_status: 'delivered' },
+  { payment_status: 'bnpl_approved' },
+  { payment_status: 'refunded' },
+  { cancelled_at: '2026-11-21T09:00:00Z' },
+  { total: 0 },
+])('does not report a closed or unfinanceable order as replayed: %j', async (patch) => {
+  const { args } = setup({
+    id: 'order',
+    payment_status: 'unpaid',
+    shipping_status: 'pending',
+    total: 120,
+    ...patch,
+  });
+  const response = await replayAdmittedOxygenOrder(args);
+  expect(response.status).toBe(409);
+  expect(response.headers.get('x-idempotency-replayed')).toBeNull();
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'CHECKOUT_ORDER_NOT_REUSABLE',
+  });
+});

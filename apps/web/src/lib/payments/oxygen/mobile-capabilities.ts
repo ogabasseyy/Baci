@@ -64,6 +64,9 @@ export async function readOxygenMobileCapabilities(
     if (!authPins) return { ok: false, status: 503 };
     const origins = readOxygenHostedOrigins();
     const runtime = readOxygenRuntimeConfiguration();
+    // start_workflow takes the environment from the enabled merchant binding
+    // (20261106150000_oxygen_production_pilot_guard.sql). Runtime execution
+    // requires the same binding environment as the persisted workflow.
     const rolloutEnabled =
       environment === 'staging'
         ? process.env.OXYGEN_STAGING_MOBILE_ENABLED === 'true'

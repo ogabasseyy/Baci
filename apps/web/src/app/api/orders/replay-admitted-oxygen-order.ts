@@ -1,6 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+import { checkoutOrderNotReusable } from './checkout-order-not-reusable';
+
+const closedShippingStatuses = [
+  'processing',
+  'shipped',
+  'out_for_delivery',
+  'delivered',
+  'completed',
+  'cancelled',
+  'canceled',
+  'returned',
+  'refunded',
+];
+
 export async function replayAdmittedOxygenOrder({
   client,
   merchantId,
@@ -23,7 +37,7 @@ export async function replayAdmittedOxygenOrder({
   const { data, error } = await client
     .from('orders')
     .select(
-      'id,order_number,total,payment_status,payment_method,currency,shipping_status,created_at,tracking_token,amount_paid,customers!inner(user_id,merchant_id)'
+      'id,order_number,total,payment_status,payment_method,currency,shipping_status,created_at,tracking_token,amount_paid,cancelled_at,customers!inner(user_id,merchant_id)'
     )
     .eq('merchant_id', merchantId)
     .eq('customers.merchant_id', merchantId)
@@ -36,16 +50,20 @@ export async function replayAdmittedOxygenOrder({
 
   // An exact existing order can be reported, even during a rollout pause. The
   // denied admission never reaches the create RPC or its replay mutations.
-  const { customers: _owner, amount_paid, ...order } = data;
+  const { customers: _owner, amount_paid, cancelled_at, ...order } = data;
+  if (
+    cancelled_at ||
+    order.payment_status !== 'unpaid' ||
+    closedShippingStatuses.includes(order.shipping_status) ||
+    !(order.total > 0)
+  )
+    return checkoutOrderNotReusable();
   return NextResponse.json(
     {
       order,
       wallet: null,
       savings: null,
-      amountDueToGateway:
-        order.payment_status === 'unpaid'
-          ? Math.max(order.total - (amount_paid ?? 0), 0)
-          : 0,
+      amountDueToGateway: Math.max(order.total - (amount_paid ?? 0), 0),
       idempotency: { replayed: true },
     },
     { headers: { 'x-idempotency-replayed': 'true' } }

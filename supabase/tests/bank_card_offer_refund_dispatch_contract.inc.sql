@@ -68,7 +68,14 @@ BEGIN
     WHERE txn_id = v_transaction AND metadata->>'source' = 'bank_card_offer_initialization'
       AND metadata->>'provider_status' = 'failed' AND resolved_at IS NULL
   ) THEN RAISE EXCEPTION 'Terminal status must use the review that suppresses stale checkout URLs'; END IF;
-  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
+  UPDATE public.reconciliation_review
+    SET metadata = metadata || jsonb_build_object('paystack_reported_reversal_amount_kobo', 800)
+    WHERE txn_id = v_transaction AND metadata->>'provider_status' = 'failed';
+  IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference)
+    IS DISTINCT FROM 9500
+    OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 800)
+  THEN RAISE EXCEPTION 'Reported reversal amount metadata must not change the verified capture'; END IF;
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed', 800)
   THEN RAISE EXCEPTION 'Unable to persist the capture reversal before refund verification'; END IF;
   UPDATE private.bank_card_offer_payment_attempts SET paid_recheck_after = now()
     WHERE transaction_id = v_transaction;
@@ -78,6 +85,7 @@ BEGIN
   ) THEN RAISE EXCEPTION 'A recorded reversal must leave the paid recheck queue'; END IF;
   RESET ROLE;
   IF public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 9500)
+    OR public.bank_card_offer_refund_capture_matches(v_order, v_merchant, v_transaction, v_reference, 800)
     OR public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS NOT NULL
   THEN RAISE EXCEPTION 'Reconciled reversal must block another cancellation refund'; END IF;
   SET LOCAL ROLE service_role;
@@ -90,6 +98,7 @@ BEGIN
     SELECT 1 FROM public.reconciliation_review
     WHERE txn_id = v_transaction AND metadata->>'provider_status' = 'reversed'
       AND metadata->>'refund_dispatch_admitted' = 'true'
+      AND metadata->'paystack_reported_reversal_amount_kobo' = '800'::jsonb
   ) THEN RAISE EXCEPTION 'A late reversal must carry the admitted refund evidence'; END IF;
 
   -- Exercise the dispute fence without the terminal verification review.

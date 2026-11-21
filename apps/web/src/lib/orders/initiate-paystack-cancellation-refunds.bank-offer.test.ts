@@ -42,14 +42,14 @@ describe('bank-offer cancellation refunds', () => {
   }
 
   it.each([
-    'NGN',
-    'ngn',
-  ])('uses the exact saved kobo amount for a bank-offer refund (%s)', async (currency) => {
+    [9501, 'NGN'],
+    ['9501', 'ngn'],
+  ])('uses the exact saved kobo amount for a bank-offer refund (%j, %s)', async (savedAmount, currency) => {
     const reference = `BCO-${'a'.repeat(32)}`;
     acceptedRefund({ transaction: { id: 55, reference } });
     const rpc = vi
       .fn()
-      .mockResolvedValueOnce({ data: 9501, error: null })
+      .mockResolvedValueOnce({ data: savedAmount, error: null })
       .mockResolvedValueOnce({ data: 'dispatch', error: null });
     mocks.verifyTransaction.mockResolvedValueOnce({
       success: true,
@@ -97,6 +97,7 @@ describe('bank-offer cancellation refunds', () => {
   it.each([
     { currency: null },
     { id: 55 },
+    { status: 'reversed', amount: 800 },
   ])('quarantines malformed successful verification %j before refund dispatch', async (invalidFields) => {
     const reference = `BCO-${'a'.repeat(32)}`;
     const leg = { ...transaction, gateway_reference: reference };

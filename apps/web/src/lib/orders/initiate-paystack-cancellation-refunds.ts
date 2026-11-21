@@ -7,6 +7,7 @@ import {
 } from '@/lib/orders/begin-bank-card-offer-refund-dispatch';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-paystack-cancellation-refund-failure';
+import { parseBankOfferRefundableKobo } from '@/lib/orders/parse-bank-offer-refundable-kobo';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
@@ -123,11 +124,11 @@ export async function initiatePaystackCancellationRefunds({
         if (isLastAttempt) bankOfferLegsForReview.push(transaction);
         continue;
       }
-      if (!Number.isSafeInteger(capture.data) || capture.data <= 0) {
+      koboAmount = parseBankOfferRefundableKobo(capture.data) ?? 0;
+      if (koboAmount === 0) {
         bankOfferLegsForReview.push(transaction);
         continue;
       }
-      koboAmount = capture.data;
       const verifyBudgetMs =
         deadlineMs === undefined
           ? BANK_OFFER_VERIFY_BUDGET_MS

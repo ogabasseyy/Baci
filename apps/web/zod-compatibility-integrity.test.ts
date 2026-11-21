@@ -1,4 +1,6 @@
 /** @vitest-environment node */
+
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,7 +9,20 @@ import { findInstalledRoots } from './security-integrity-find-installed-roots';
 import { overrideRoots } from './security-integrity-override-roots';
 import { packageMain } from './security-integrity-package-main';
 import { packageModule } from './security-integrity-package-module';
+import { resolveExportTarget } from './security-integrity-resolve-export-target';
 import { versionAt } from './security-integrity-version-at';
+
+function packageSubpath(root: string, subpath: string, conditions: string[]) {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+    exports?: Record<string, unknown>;
+  };
+  const target = resolveExportTarget(pkg.exports?.[`./${subpath}`], conditions);
+  if (!target)
+    throw new Error(
+      `Cannot resolve zod package export ./${subpath} at ${root}`
+    );
+  return target;
+}
 
 const require = createRequire(import.meta.url);
 const roots =
@@ -49,14 +64,25 @@ describe('Zod legacy schema compatibility and bounded collection validation', ()
       : [main];
   });
   for (const { root, version, subpath } of entrypoints) {
-    const entryRoot = join(root, subpath);
     for (const format of ['cjs', 'esm'] as const) {
       for (const asynchronous of [false, true]) {
         it(`rejects oversized bounded collections before visiting children in ${root}/${subpath} (${format}, async=${asynchronous})`, async () => {
-          const entryPath = join(
-            entryRoot,
-            format === 'cjs' ? packageMain(entryRoot) : packageModule(entryRoot)
-          );
+          const entryPath =
+            subpath === '.'
+              ? join(
+                  root,
+                  format === 'cjs' ? packageMain(root) : packageModule(root)
+                )
+              : join(
+                  root,
+                  packageSubpath(
+                    root,
+                    subpath,
+                    format === 'cjs'
+                      ? ['require', 'node', 'default']
+                      : ['import', 'node', 'default']
+                  )
+                );
           const entry = (
             format === 'cjs'
               ? require(entryPath)

@@ -11,6 +11,35 @@ import { mocks, userId } from './bank-card-offer-flow-mocks.test-support';
 import { POST as verify } from './verify/route';
 
 describe('bank card offer verification', () => {
+  it.each([
+    'cookie',
+    'bearer',
+  ] as const)('keeps a processing Paystack transaction pending for %s checkout', async (authMode) => {
+    const { data } = setup('035', 'Wema Bank');
+    mocks.cookieAuth.mockResolvedValueOnce({
+      authMode,
+      user: { id: userId },
+      supabase: mocks,
+    });
+    mocks.verify.mockResolvedValueOnce({
+      success: true,
+      data: { ...data, status: 'processing' },
+    });
+    const input = request('verify', { reference });
+    if (authMode === 'bearer')
+      input.headers.set('authorization', 'Bearer test-only');
+    const result = await verify(input);
+    expect(result.status).toBe(202);
+    await expect(result.json()).resolves.toMatchObject({
+      success: false,
+      status: 'pending',
+    });
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+  });
+
   it('records the terminal review for a buyer using native verification', async () => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
     const { data } = setup('035', 'Wema Bank');
@@ -135,7 +164,9 @@ describe('bank card offer verification', () => {
       success: false,
       code: 'NETWORK_ERROR',
     });
-    expect((await verify(request('verify', { reference }))).status).toBe(500);
+    const outage = await verify(request('verify', { reference }));
+    expect(outage.status).toBe(503);
+    expect(outage.headers.get('Retry-After')).toBe('15');
     expect(
       mocks.rpc.mock.calls.filter(
         ([name]) => name === 'complete_order_gateway_payment'

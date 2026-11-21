@@ -59,6 +59,19 @@ export async function finalizeVerificationResponse(
       !isBankOfferReference && transaction.status !== 'completed',
   });
 
+  if (finalizeOutcome.kind === 'bank_offer_verification_wait') {
+    return NextResponse.json(
+      {
+        success: false,
+        status: 'pending',
+        orderId,
+        orderNumber: existingOrder?.order_number ?? undefined,
+      },
+      finalizeOutcome.providerUnavailable
+        ? { status: 503, headers: { 'Retry-After': '15' } }
+        : { status: 202 }
+    );
+  }
   if (finalizeOutcome.kind === 'bank_offer_terminal') {
     return NextResponse.json({
       success: false,

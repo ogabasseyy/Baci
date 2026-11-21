@@ -45,10 +45,8 @@ export async function resolveOrderGatewayCompletion({
         },
       };
     }
-    // Capture moves money and must not ride the route's service-role client:
-    // classification and capture run through the short-lived scoped route
-    // client (merchant-bound authenticated claims), which the REDVAULT
-    // RPCs accept alongside service_role.
+    // Use the short-lived merchant-bound client for capture classification
+    // and approval. REDVAULT RPCs also accept the service worker's role.
     const redvaultScopedClient = createStorefrontOrderRpcClient({
       fallbackClient: supabase,
       hasCanonicalDeliveryMetadata: false,
@@ -68,7 +66,16 @@ export async function resolveOrderGatewayCompletion({
               transactionId,
             })
           : null;
-      if (!verified || verified.kind === 'unavailable') {
+      if (verified?.kind === 'pending' || verified?.kind === 'unavailable') {
+        return {
+          ok: false as const,
+          outcome: {
+            kind: 'bank_offer_verification_wait' as const,
+            providerUnavailable: verified.kind === 'unavailable',
+          },
+        };
+      }
+      if (!verified) {
         return {
           ok: false as const,
           outcome: {

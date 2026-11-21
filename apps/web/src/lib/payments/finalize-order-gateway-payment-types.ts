@@ -36,6 +36,7 @@ export type FinalizeOrderGatewayPaymentOutcome =
   | { kind: 'captured_held'; duplicate: boolean; reason: string }
   | { kind: 'capture_evidence_review'; duplicate: boolean; reason: string }
   | { kind: 'bank_offer_capture_review' }
+  | { kind: 'bank_offer_verification_wait'; providerUnavailable: boolean }
   | {
       kind: 'bank_offer_terminal';
       status: BankCardOfferTerminalStatus;

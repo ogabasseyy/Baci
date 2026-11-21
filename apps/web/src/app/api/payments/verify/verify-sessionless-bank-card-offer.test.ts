@@ -156,6 +156,25 @@ it('reports a verified payment that already settled with confirmed inventory', a
   expect(buyerRpc).not.toHaveBeenCalled();
 });
 
+it('rechecks settled attempts for reversals before reporting history success', async () => {
+  verify.mockResolvedValueOnce({ kind: 'terminal', status: 'reversed' });
+  rpc.mockResolvedValueOnce({ data: true, error: null });
+  const result = await verifyNative(
+    {
+      ...snapshot,
+      transactionStatus: 'completed',
+      orderPaymentStatus: 'paid',
+      inventoryConfirmed: true,
+    },
+    buyerClient
+  );
+  expect(verify).toHaveBeenCalledOnce();
+  await expect(result.json()).resolves.toMatchObject({
+    success: false,
+    status: 'reversed',
+  });
+});
+
 it('records a capture mismatch without authorizing settlement', async () => {
   verify.mockResolvedValueOnce({ kind: 'mismatch' });
   rpc.mockResolvedValueOnce({ data: true, error: null });
@@ -177,8 +196,8 @@ it('records a capture mismatch without authorizing settlement', async () => {
   expect(buyerRpc).not.toHaveBeenCalled();
 });
 
-it('keeps a provider outage pending without recording a capture mismatch', async () => {
-  verify.mockResolvedValueOnce(null);
+it('keeps a pending provider transaction out of capture review', async () => {
+  verify.mockResolvedValueOnce({ kind: 'pending' });
 
   const result = await verifyNative(snapshot, buyerClient);
 

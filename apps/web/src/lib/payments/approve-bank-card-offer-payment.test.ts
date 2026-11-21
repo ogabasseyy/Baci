@@ -34,7 +34,10 @@ it('rejects context for another reference before verifying with Paystack', async
 });
 
 it.each([
-  { verification: null, label: 'verification is unavailable' },
+  {
+    verification: { kind: 'unavailable' } as const,
+    label: 'verification is unavailable',
+  },
   {
     verification: { kind: 'terminal', status: 'reversed' } as const,
     label: 'Paystack confirms a reversal',

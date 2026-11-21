@@ -37,7 +37,9 @@ it('verifies the saved reference and retains the exact provider ID', async () =>
 it('leaves pending transactions without settlement evidence', async () => {
   respond({ ...captureFixture, status: 'pending' });
 
-  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'pending',
+  });
 });
 
 it('holds the saved reference for operations when Paystack reports a partial reversal', async () => {
@@ -88,7 +90,9 @@ it.each([
 ])('leaves a missing provider reference pending (%j)', async (failure) => {
   verify.mockResolvedValueOnce({ success: false, ...failure });
 
-  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'pending',
+  });
 });
 
 it.each([
@@ -116,5 +120,7 @@ it.each([
     code,
     error: 'Verification unavailable',
   });
-  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'pending',
+  });
 });

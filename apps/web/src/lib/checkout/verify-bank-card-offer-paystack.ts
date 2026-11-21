@@ -23,7 +23,7 @@ export async function verifyBankCardOfferPaystack(
       code === 'HTTP_429' ||
       code?.startsWith('HTTP_5')
       ? ({ kind: 'unavailable' } as const)
-      : null;
+      : ({ kind: 'pending' } as const);
   }
   const { data } = response;
   if (!data || typeof data !== 'object' || typeof data.status !== 'string') {
@@ -47,7 +47,7 @@ export async function verifyBankCardOfferPaystack(
         ? ({ kind: 'terminal', status: terminal.data } as const)
         : ({ kind: 'mismatch' } as const);
     }
-    return null;
+    return { kind: 'pending' } as const;
   }
   const evidence = verifyBankCardOfferAttempt(attempt, {
     status: true,

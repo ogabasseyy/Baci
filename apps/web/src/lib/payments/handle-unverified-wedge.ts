@@ -1,3 +1,4 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-terminal-status';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
@@ -46,7 +47,8 @@ export async function handleUnverifiedWedge({
 
   if (
     candidate.gateway === 'paystack' &&
-    reference?.startsWith('BCO-') &&
+    reference &&
+    BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference) &&
     terminal.success
   ) {
     // The shared finalizer verifies the original domain, reference and

@@ -1,3 +1,7 @@
+import {
+  BANK_CARD_OFFER_REFERENCE_PATTERN,
+  hasBankCardOfferReferencePrefix,
+} from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-terminal-status';
@@ -32,10 +36,22 @@ export async function resolveOrderGatewayCompletion({
   supabase: SupabaseClient;
   transactionId: string;
 }) {
+  const bankOffer = hasBankCardOfferReferencePrefix(reference);
   try {
+    // Reserve all casing variants for bank offers, but require the original
+    // canonical reference before allowing any payment path to act on it.
+    if (bankOffer && !BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)) {
+      return {
+        ok: false as const,
+        outcome: {
+          kind: 'completion_failed' as const,
+          error: new Error('invalid_bank_offer_reference'),
+        },
+      };
+    }
     if (
       expectedBankOfferTerminalStatus &&
-      (gateway !== 'paystack' || !reference.startsWith('BCO-'))
+      (gateway !== 'paystack' || !bankOffer)
     ) {
       return {
         ok: false as const,
@@ -53,7 +69,7 @@ export async function resolveOrderGatewayCompletion({
       merchantId,
       userId: null,
     });
-    if (reference.startsWith('BCO-')) {
+    if (bankOffer) {
       const verified =
         gateway === 'paystack'
           ? await approveBankCardOfferPayment({

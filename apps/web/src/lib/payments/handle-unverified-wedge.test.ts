@@ -41,9 +41,12 @@ function setup() {
   };
 }
 
-it('retires an ordinary terminal outcome', async () => {
+it.each([
+  'BAC-transaction',
+  'BCO-malformed',
+])('retires a terminal outcome outside a canonical bank offer: %s', async (reference) => {
   const args = setup();
-  args.candidate = { ...candidate, gateway_reference: 'BAC-transaction' };
+  args.candidate = { ...candidate, gateway_reference: reference };
   await handleUnverifiedWedge(args);
   expect(args.retire).toHaveBeenCalledWith(
     expect.objectContaining({ resolution: 'gateway_verification_negative' })

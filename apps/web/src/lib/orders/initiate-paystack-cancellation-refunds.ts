@@ -1,3 +1,4 @@
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
 import {
@@ -78,7 +79,7 @@ export async function initiatePaystackCancellationRefunds({
     if (
       !isBankOffer &&
       (order.payment_method === 'bank_card_offer' ||
-        transaction.gateway_reference?.startsWith('BCO-'))
+        hasBankCardOfferReferencePrefix(transaction.gateway_reference))
     ) {
       bankOfferLegsForReview.push(transaction);
       continue;

@@ -108,16 +108,21 @@ describe('checkReferenceSettled transport selection', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
-  it('never treats a contradictory reversal and completed envelope as paid', async () => {
+  it.each([
+    { success: true, finalizationOutcome: 'completed' },
+    { finalizationOutcome: 'completed' },
+    { reference: `BCO-${'b'.repeat(32)}` },
+    { orderId: 42 },
+  ])('does not trust an inconsistent or unbound reversal envelope %j', async (overrides) => {
     mockGetSession.mockResolvedValue({
       access_token: 'session-token',
     } as never);
     mockFetchWithTimeout.mockResolvedValue(
       jsonResponse({
         orderId: 'order-1',
-        success: true,
-        finalizationOutcome: 'completed',
+        success: false,
         status: 'reversed',
+        ...overrides,
       }) as never
     );
     await expect(

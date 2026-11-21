@@ -1,3 +1,4 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
@@ -214,7 +215,7 @@ export async function reconcileWedgedGatewayOrders({
       // currency and files its own capture review before the row is stamped.
       const isBankOffer =
         candidate.gateway === 'paystack' &&
-        candidate.gateway_reference.startsWith('BCO-');
+        BANK_CARD_OFFER_REFERENCE_PATTERN.test(candidate.gateway_reference);
       if (
         !isBankOffer &&
         candidate.gateway !== 'juicyway' &&

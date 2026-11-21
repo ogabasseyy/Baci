@@ -239,6 +239,7 @@ describe('bank-offer cancellation refunds', () => {
   it.each([
     ['bank_card_offer', 'PSK-1'],
     ['paystack', 'BCO-malformed'],
+    ['paystack', `bco-${'a'.repeat(32)}`],
   ])('quarantines unexpected %s refund reference %s before lookup', async (paymentMethod, reference) => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
 

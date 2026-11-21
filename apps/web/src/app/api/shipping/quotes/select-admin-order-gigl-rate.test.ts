@@ -75,6 +75,9 @@ describe('admin GIG delivery rate selection', () => {
       [settled]
     );
     expect(malformed.error?.status).toBe(503);
+    expect(await malformed.error?.json()).toMatchObject({
+      code: 'PARTNER_DELIVERY_UNAVAILABLE',
+    });
   });
 
   it('preserves normal cheapest-rate selection for other orders', async () => {
@@ -104,6 +107,9 @@ describe('admin GIG delivery rate selection', () => {
         cheaper,
       ]);
       expect(result.error?.status).toBe(503);
+      expect(await result.error?.json()).toMatchObject({
+        code: 'PARTNER_DELIVERY_UNAVAILABLE',
+      });
     }
   });
 });

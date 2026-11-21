@@ -5,6 +5,11 @@ import type { ShippingQuote } from '@/lib/shipping/types';
 import { settledDeliverySchema } from '@/schemas/settled-partner-delivery';
 import { selectEligibleAdminGiglQuote } from './admin-order-gigl-quote.helpers';
 
+const settledDeliveryUnavailable = {
+  code: 'PARTNER_DELIVERY_UNAVAILABLE',
+  error: 'Unable to load settled delivery',
+};
+
 export async function selectAdminOrderGiglRate(
   supabase: SupabaseClient,
   order: { id: string; merchant_id: string; source?: string | null },
@@ -18,10 +23,7 @@ export async function selectAdminOrderGiglRate(
   // a source we cannot classify the order until the accepted-order lookup works.
   if (error && (!order.source || order.source === 'partner')) {
     return {
-      error: NextResponse.json(
-        { error: 'Unable to load settled delivery' },
-        { status: 503 }
-      ),
+      error: NextResponse.json(settledDeliveryUnavailable, { status: 503 }),
     };
   }
   // A settlement is read through the accepted-order mapping for this exact
@@ -41,10 +43,7 @@ export async function selectAdminOrderGiglRate(
     const settled = settledDeliverySchema.safeParse(data);
     if (!settled.success) {
       return {
-        error: NextResponse.json(
-          { error: 'Unable to load settled delivery' },
-          { status: 503 }
-        ),
+        error: NextResponse.json(settledDeliveryUnavailable, { status: 503 }),
       };
     }
     const candidate = selectEligibleAdminGiglQuote(

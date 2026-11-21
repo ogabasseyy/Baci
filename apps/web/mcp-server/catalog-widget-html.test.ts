@@ -15,3 +15,7 @@ it('preserves the original tag case and rejects fragments in catalog-only mode',
   );
   expect(() => configureCatalogWidgetHtml('<section></section>', true)).toThrow();
 });
+
+it('fails closed when only comment text contains an HTML opening tag', () => {
+  expect(() => configureCatalogWidgetHtml('<!-- <html> --><section></section>', true)).toThrow();
+});

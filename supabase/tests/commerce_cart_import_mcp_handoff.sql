@@ -240,6 +240,7 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-after-account-merge', after_merge_handoff,
     'after-account-merge', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true'
+     OR result->'state'->>'cartId' IS DISTINCT FROM saved_cart::text
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = saved_cart AND product_id = product) IS DISTINCT FROM 2::bigint
   THEN RAISE EXCEPTION 'Account merge lost the website import history: %', result; END IF;
 END $$;

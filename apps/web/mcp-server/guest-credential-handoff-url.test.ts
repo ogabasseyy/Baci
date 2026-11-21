@@ -24,7 +24,7 @@ it('only returns exact signed handoff URLs on an allowed storefront origin', () 
     'MCP_CANONICAL_CART_BRIDGE_URL',
     'https://shop.example/api/storefront/cart/legacy'
   );
-  expect(guestCredentialHandoffUrl({ ...cart, items: [] })).toBe(
+  expect(guestCredentialHandoffUrl({ ...cart, items: [], cart_url: 'https://shop.example/cart' })).toBe(
     'https://shop.example/cart'
   );
   expect(guestCredentialHandoffUrl({ ...cart, cart_url: configuredUrl })).toBe(

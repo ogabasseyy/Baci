@@ -31,7 +31,7 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
   function state(cart_token: string) {
     return {
       cart_token,
-      cart_url: handoffUrl,
+      cart_url: items.size ? handoffUrl : 'https://ogabassey.com/cart',
       canonical_cart_id: cartId,
       version,
       expires_at: new Date(Date.now() + 3600000).toISOString(),
@@ -50,9 +50,10 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
         if (edit.quantity === 0) items.delete(edit.product_id);
         else items.set(edit.product_id, edit.quantity);
         version += 1;
+        const cart = state(token);
         return {
-          ...state(token),
-          cart_url: urlAvailable ? handoffUrl : undefined,
+          ...cart,
+          cart_url: urlAvailable || items.size === 0 ? cart.cart_url : undefined,
         };
       }
     ),

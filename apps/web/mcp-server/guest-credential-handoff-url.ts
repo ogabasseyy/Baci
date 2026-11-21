@@ -27,12 +27,15 @@ export function guestCredentialHandoffUrl(cart: {
   if (!cart.canonical_cart_id || !cart.version)
     throw new GuestCartStorageUnavailableError('Canonical cart unavailable');
   if (!cart.items.length) {
-    const endpoint = URL.parse(
-      process.env.MCP_CANONICAL_CART_BRIDGE_URL || 'https://ogabassey.com'
-    );
-    if (endpoint?.protocol !== 'https:' || !allowedOrigins.includes(endpoint.origin))
-      throw new GuestCartStorageUnavailableError('Storefront origin unavailable');
-    return new URL('/cart', endpoint.origin).href;
+    if (
+      !handoff ||
+      url?.protocol !== 'https:' ||
+      !allowedOrigins.includes(url.origin) ||
+      handoff !== new URL('/cart', url.origin).href
+    ) {
+      throw new GuestCartStorageUnavailableError('Storefront cart URL unavailable');
+    }
+    return handoff;
   }
   if (
     !handoff ||

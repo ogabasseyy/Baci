@@ -10,7 +10,7 @@ export function configureCatalogWidgetHtml(
   ];
   if (!attributes.length) return html;
   const tagged = html.replace(
-    /<html(?=[\s>])/i,
+    /^\s*(?:<!doctype html\s*>\s*)?<html(?=[\s>])/i,
     (root) => `${root} ${attributes.join(' ')}`
   );
   if (catalogOnly && tagged === html)

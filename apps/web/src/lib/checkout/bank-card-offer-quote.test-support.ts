@@ -23,7 +23,7 @@ export const items = [
   { itemId: 'first', productId, unitPriceKobo: 10_000, quantity: 2 },
   {
     itemId: 'second',
-    productId: 'unlisted',
+    productId: '34b1824d-57c5-4bbf-b297-18c99062a534',
     unitPriceKobo: 2_000,
     quantity: 1,
   },

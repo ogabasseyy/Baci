@@ -9,6 +9,20 @@ import {
 } from './bank-card-offer-quote.test-support';
 
 describe('bank card offer quotes', () => {
+  it.each([
+    '',
+    'unlisted',
+  ])('rejects a cart line with invalid product ID %j', (invalidProductId) => {
+    expect(() =>
+      quoteBankCardOffer({
+        offer,
+        merchantId,
+        items: [items[0], { ...items[1], productId: invalidProductId }],
+        now,
+      })
+    ).toThrow('product ID');
+  });
+
   it('rejects a quote when kobo rounding discounts the entire basket', () => {
     expect(
       quoteBankCardOffer({

@@ -169,18 +169,23 @@ export async function prepareBankCardOfferOrder({
   });
   if (replay.error) {
     const conflict = replay.error.message === 'checkout_idempotency_conflict';
+    const retired = replay.error.message === 'order_not_reusable';
     return {
       kind: 'response',
       response: NextResponse.json(
         {
           code: conflict
             ? 'CHECKOUT_IDEMPOTENCY_CONFLICT'
-            : 'BANK_CARD_OFFER_REPLAY_UNAVAILABLE',
+            : retired
+              ? 'CHECKOUT_ORDER_NOT_REUSABLE'
+              : 'BANK_CARD_OFFER_REPLAY_UNAVAILABLE',
           error: conflict
             ? 'This checkout key has already been used for a different order'
-            : 'Unable to load this bank card offer order',
+            : retired
+              ? 'This checkout order can no longer be reused. Refresh checkout and start a new order.'
+              : 'Unable to load this bank card offer order',
         },
-        { status: conflict ? 409 : 503 }
+        { status: conflict || retired ? 409 : 503 }
       ),
     } as const;
   }

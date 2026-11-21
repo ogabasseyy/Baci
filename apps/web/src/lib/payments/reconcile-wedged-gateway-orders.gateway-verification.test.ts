@@ -186,6 +186,39 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
     );
   });
 
+  it.each([
+    { amount: 100, currency: 'NGN' },
+    { amount: 5829060, currency: 'USD' },
+  ])('files bank-offer capture review for mismatched evidence (%j)', async (evidence) => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const supabase = buildSupabase([
+      { ...wedgedCandidate, gateway_reference: reference },
+    ]);
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { ...evidence, status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment.mockResolvedValue({
+      kind: 'bank_offer_capture_review',
+    });
+
+    const summary = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+
+    expect(mocks.finalizeOrderGatewayPayment).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ reference, gateway: 'paystack' })
+    );
+    expect(summary.reviewsFiled).toEqual([
+      { orderId: wedgedCandidate.order_id, transactionId: wedgedCandidate.id },
+    ]);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.objectContaining({ p_resolution: 'bank_offer_capture_review' })
+    );
+  });
+
   it('skips on gateway/database amount mismatch', async () => {
     const supabase = buildSupabase([wedgedCandidate]);
     mocks.verifyPaystackPayment.mockResolvedValue({

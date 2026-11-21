@@ -152,6 +152,16 @@ export async function finishBankCardOfferOrder({
       { status: 409 }
     );
   }
+  if (result.error?.message === 'order_not_reusable') {
+    return NextResponse.json(
+      {
+        code: 'CHECKOUT_ORDER_NOT_REUSABLE',
+        error:
+          'This checkout order can no longer be reused. Refresh checkout and start a new order.',
+      },
+      { status: 409 }
+    );
+  }
   if (result.error || !result.data) {
     logger.warn({
       message: 'Bank card offer checkout was rejected',

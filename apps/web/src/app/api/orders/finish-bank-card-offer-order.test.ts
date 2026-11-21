@@ -91,10 +91,13 @@ it.each([
   expect(repairEffects).not.toHaveBeenCalled();
 });
 
-it('returns the standard conflict when the key belongs to another checkout', async () => {
+it.each([
+  ['checkout_idempotency_conflict', 'CHECKOUT_IDEMPOTENCY_CONFLICT'],
+  ['order_not_reusable', 'CHECKOUT_ORDER_NOT_REUSABLE'],
+])('returns the standard conflict for %s', async (message, code) => {
   const { options, rpc, repairEffects } = setup();
   rpc.mockResolvedValue({
-    error: { message: 'checkout_idempotency_conflict' },
+    error: { message },
     data: null,
   });
 
@@ -102,7 +105,7 @@ it('returns the standard conflict when the key belongs to another checkout', asy
 
   expect(response.status).toBe(409);
   await expect(response.json()).resolves.toMatchObject({
-    code: 'CHECKOUT_IDEMPOTENCY_CONFLICT',
+    code,
   });
   expect(repairEffects).not.toHaveBeenCalled();
 });

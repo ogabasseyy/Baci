@@ -128,6 +128,27 @@ BEGIN
     IF SQLERRM <> 'checkout_idempotency_conflict' THEN RAISE; END IF;
   END;
   BEGIN
+    UPDATE public.orders SET shipping_status = 'cancelled', cancelled_at = now()
+      WHERE id = v_order;
+    BEGIN
+      PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash);
+      RAISE EXCEPTION 'A cancelled bank offer was returned as a payable replay';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM <> 'order_not_reusable' THEN RAISE; END IF;
+    END;
+    PERFORM public.create_storefront_bank_card_offer_order(v_checkout_order, v_checkout_quote, v_proof);
+    RAISE EXCEPTION 'The atomic checkout replay returned a cancelled order';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'order_not_reusable' THEN RAISE; END IF;
+  END;
+  BEGIN
+    UPDATE public.orders SET payment_status = 'refunded' WHERE id = v_order;
+    PERFORM public.get_bank_card_offer_checkout_replay(v_merchant, 'bank-test-key', v_hash);
+    RAISE EXCEPTION 'A refunded bank offer was returned as a payable replay';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'order_not_reusable' THEN RAISE; END IF;
+  END;
+  BEGIN
     -- Give the replay guard an inconsistent saved fixture. The expected
     -- exception rolls back the fixture update before the payment checks.
     UPDATE private.bank_card_offer_order_snapshots

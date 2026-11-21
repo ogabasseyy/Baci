@@ -246,6 +246,7 @@ export async function finalizeVerifiedWedge({
       orderNumber: outcome.orderNumber,
     });
   } else if (
+    outcome.kind === 'bank_offer_capture_review' ||
     outcome.kind === 'order_cancelled' ||
     outcome.kind === 'order_skipped'
   ) {

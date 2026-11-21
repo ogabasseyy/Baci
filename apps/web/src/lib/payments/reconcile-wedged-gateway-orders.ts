@@ -210,7 +210,13 @@ export async function reconcileWedgedGatewayOrders({
       }
 
       const expectedAmount = Number(candidate.amount) || 0;
+      // The bank-offer finalizer re-verifies the exact saved amount and
+      // currency and files its own capture review before the row is stamped.
+      const isBankOffer =
+        candidate.gateway === 'paystack' &&
+        candidate.gateway_reference.startsWith('BCO-');
       if (
+        !isBankOffer &&
         candidate.gateway !== 'juicyway' &&
         Math.abs(verification.amount - expectedAmount) >
           AMOUNT_TOLERANCE_MAJOR_UNITS
@@ -230,6 +236,7 @@ export async function reconcileWedgedGatewayOrders({
         continue;
       }
       if (
+        !isBankOffer &&
         normalizePaymentGateway(candidate.gateway) !== 'JUICYWAY' &&
         candidate.currency &&
         verification.currency &&

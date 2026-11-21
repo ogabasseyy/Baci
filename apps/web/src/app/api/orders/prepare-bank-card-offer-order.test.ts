@@ -132,6 +132,11 @@ it.each([
     status: 409,
   },
   {
+    message: 'order_not_reusable',
+    code: 'CHECKOUT_ORDER_NOT_REUSABLE',
+    status: 409,
+  },
+  {
     message: 'database unavailable',
     code: 'BANK_CARD_OFFER_REPLAY_UNAVAILABLE',
     status: 503,

@@ -13,6 +13,8 @@ import {
   mcpGuestCartInputSchema,
   mcpGuestCartOutputSchema,
 } from '../src/schemas/mcp-guest-cart';
+import { mcpGuestCredentialOutputSchema } from '../src/schemas/mcp-guest-credential-output';
+import { mcpGuestCredentialUpdateInputSchema } from '../src/schemas/mcp-guest-credential-update-input';
 import { prepareCartHandoff } from './cart-handoff';
 import {
   type GuestCartQuotaReservation,
@@ -26,6 +28,10 @@ import {
   VariantSelectionRequired,
   mapGuestCartToolError,
 } from './guest-cart-tool-responses';
+import { guestCredentialDescriptions } from './guest-credential-descriptions';
+import { guestCredentialHandoffUrl } from './guest-credential-handoff-url';
+import { guestCredentialReply } from './guest-credential-reply';
+import { parseGuestCredentialUpdateInput } from './parse-guest-credential-update-input';
 
 export function registerGuestCartTool(
   server: McpServer,
@@ -38,6 +44,8 @@ export function registerGuestCartTool(
     connectionCart?: { resolveToken: () => Promise<string> };
     /** Server-only candidate opt-in; keep production off until live exposure QA passes. */
     enablePrivateTextContinuation?: boolean;
+    guestCredentialMode?: boolean;
+    modelCredentialTool?: boolean;
   },
 ) {
   function transcript<T extends Parameters<typeof withGuestCartTranscript>[0]>(
@@ -55,6 +63,7 @@ export function registerGuestCartTool(
             ), connection_bound: true },
           }
         : reply;
+    if (options.modelCredentialTool) return guestCredentialReply(safeReply);
     return withGuestCartTranscript(safeReply, {
       enabled:
         !options.connectionCart &&
@@ -62,18 +71,26 @@ export function registerGuestCartTool(
     });
   }
   server.registerTool(
-    'update_ogabassey_guest_cart',
+    options.modelCredentialTool
+      ? 'update_ogabassey_cart'
+      : 'update_ogabassey_guest_cart',
     {
       outputSchema: options.connectionCart
         ? guestOAuthCartOutputSchema
-        : mcpGuestCartOutputSchema,
+        : options.modelCredentialTool
+          ? mcpGuestCredentialOutputSchema
+          : mcpGuestCartOutputSchema,
       title: 'Update Ogabassey Guest Cart',
       description: options.connectionCart
-        ? 'Add, change or remove items in this connection’s persistent Ogabassey guest cart. The server holds cart authority; never ask for or supply a cart token. Call get_ogabassey_guest_cart when current cart details are missing or before website checkout. For remove it or remove the charger, resolve the product from the last returned items; ask which item if ambiguous. Quantity is the desired absolute total; zero removes. Retain the version as expectedVersion and the same operationId when retrying an indeterminate write. Do not create another cart to simulate removal. Guest website checkout is optional; this tool never places an order or starts payment.'
-        : MCP_GUEST_CART_DESCRIPTION,
+        ? 'Add, change or remove items in this connection’s persistent Ogabassey guest cart. The server holds cart authority; never ask for or supply a cart token. Call get_ogabassey_guest_cart when current cart details are missing or before website checkout. If the shopper reports a broken or ended cart link, use get_ogabassey_guest_cart to refresh that link; do not repeat this mutation to repair it. For remove it or remove the charger, resolve the product from the last returned items; ask which item if ambiguous. Quantity is the desired absolute total; zero removes. Retain the version as expectedVersion and the same operationId when retrying an indeterminate write. Do not create another cart to simulate removal. Guest website checkout is optional; this tool never places an order or starts payment.'
+        : options.modelCredentialTool
+          ? guestCredentialDescriptions.update
+          : MCP_GUEST_CART_DESCRIPTION,
       inputSchema: options.connectionCart
         ? guestOAuthCartInputSchema
-        : mcpGuestCartInputSchema,
+        : options.modelCredentialTool
+          ? mcpGuestCredentialUpdateInputSchema
+          : mcpGuestCartInputSchema,
       annotations: {
         readOnlyHint: false,
         // Quantity 0 removes a line and a lowered absolute quantity shrinks
@@ -89,24 +106,29 @@ export function registerGuestCartTool(
         securitySchemes: options.connectionCart
           ? [{ type: 'oauth2', scopes: ['cart:write'] }]
           : [{ type: 'noauth' }],
-        ui: { visibility: ['model', 'app'] },
-        'openai/widgetAccessible': true,
+        ui: {
+          visibility: options.modelCredentialTool
+            ? ['model']
+            : ['model', 'app'],
+        },
+        ...(!options.modelCredentialTool && { 'openai/widgetAccessible': true }),
         'openai/toolInvocation/invoking': 'Saving to your guest cart…',
         'openai/toolInvocation/invoked': 'Guest cart saved',
       },
     },
     async (input) => {
       try {
-        const args = {
-          ...input,
-          ...(options.connectionCart
-            ? { cart_token: await options.connectionCart.resolveToken() }
-            : {}),
-        };
         // Defensive validation for direct callers and tests. The SDK already
         // enforces the full schema, including cross-field refinements, before
         // invoking this registered handler.
-        const parsed = mcpGuestCartInputSchema.safeParse(args);
+        const parsed = options.modelCredentialTool
+          ? parseGuestCredentialUpdateInput(input)
+          : mcpGuestCartInputSchema.safeParse({
+              ...input,
+              ...(options.connectionCart
+                ? { cart_token: await options.connectionCart.resolveToken() }
+                : {}),
+            });
         if (!parsed.success) {
           return transcript({
             isError: true,
@@ -121,6 +143,7 @@ export function registerGuestCartTool(
             structuredContent: { success: false },
           });
         }
+        const validated = parsed.data;
         // Tokenless calls mint a fresh cart file, so anonymous creation (but
         // never token-bound updates) is capped per caller IP. Reserve
         // atomically before doing work: concurrent creations must observe
@@ -131,7 +154,7 @@ export function registerGuestCartTool(
         // this call reserved from (undefined for token-bound updates,
         // which never reserve).
         let quota: GuestCartQuotaReservation | undefined;
-        if (!args.cart_token) {
+        if (!validated.cart_token) {
           quota = reserveGuestCartCreation(options.clientIp ?? 'unknown');
           if (!quota.allowed) {
             // Ops alert trail: quota denials are otherwise silent here,
@@ -166,17 +189,17 @@ export function registerGuestCartTool(
         // store does before persistence: an uppercase ID must select
         // options like its lowercase twin instead of missing every
         // variant and reporting the product unavailable.
-        const productId = args.product_id.toLowerCase();
+        const productId = validated.product_id.toLowerCase();
         const cart = await options.store
           .update(
-            args.cart_token,
-            { ...args, product_id: productId },
+            validated.cart_token,
+            { ...validated, product_id: productId },
             async () => {
               // Only the changed line is validated: a stale survivor must not
               // freeze unrelated adds. Stale lines stay visible in the chat
               // cart and the website re-checks stock at transfer, so handoff
               // can only carry lines the catalog still honors.
-              if (args.quantity === 0) return;
+              if (validated.quantity === 0) return;
               // Resolve the merchant inside the positive-quantity path: a
               // removal needs only the cart token and the local file, so it
               // must stay available when the catalog is unreachable.
@@ -186,7 +209,7 @@ export function registerGuestCartTool(
                 supabase: options.supabase,
                 merchantId,
                 productId,
-                quantity: args.quantity,
+                quantity: validated.quantity,
                 formatPrice: options.formatPrice,
               });
               const handoff = result.structuredContent;
@@ -215,7 +238,7 @@ export function registerGuestCartTool(
             // error. A persisted cart keeps its reservation: the quota was
             // already consumed atomically by the reserve call above.
             if (
-              !args.cart_token &&
+              !validated.cart_token &&
               !(error instanceof GuestCartBridgePendingError) &&
               !(error instanceof GuestCartPersistedError)
             )
@@ -226,25 +249,28 @@ export function registerGuestCartTool(
             throw error;
           });
         const canonicalUrl =
-          'cart_url' in cart && typeof cart.cart_url === 'string'
-            ? cart.cart_url
-            : null;
+          options.guestCredentialMode
+            ? guestCredentialHandoffUrl(cart)
+            : (cart.cart_url ?? null);
         const url = new URL(canonicalUrl ?? 'https://ogabassey.com/cart');
         // An emptied cart transfers nothing, so advertise the bare cart
         // page instead of a guest_cart=[] link the website would reject.
         if (!canonicalUrl && cart.items.length > 0)
           url.searchParams.set('guest_cart', JSON.stringify(cart.items));
+        const cartUrl = options.guestCredentialMode && canonicalUrl
+          ? canonicalUrl
+          : url.toString();
         return transcript({
           content: [
             {
               type: 'text' as const,
-              text: `Saved to your Ogabassey guest cart. No sign-in required.\n\n[Review cart and checkout](${url})`,
+              text: `Saved to your Ogabassey guest cart. No sign-in required.\n\n[Review cart and checkout](${cartUrl})`,
             },
           ],
           structuredContent: {
             success: true,
             ...cart,
-            cart_url: url.toString(),
+            cart_url: cartUrl,
           },
         });
       } catch (error) {

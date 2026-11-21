@@ -1,6 +1,16 @@
 import 'server-only';
 
 import { createHash, createPrivateKey, createPublicKey } from 'node:crypto';
+import {
+  CHATWOOT_BINDING_UUID_PATTERN,
+  CHATWOOT_BINDING_WEBSITE_TOKEN_PATTERN,
+  type ChatwootTenantBinding,
+  normalizeHttpsOrigin,
+  parseChatwootTenantBindings,
+} from './commerce-context-bindings';
+
+export type { ChatwootTenantBinding } from './commerce-context-bindings';
+export { normalizeHttpsOrigin } from './commerce-context-bindings';
 
 export const CHATWOOT_CHALLENGE_SCOPE = 'chatwoot-ekaette-commerce-context';
 export const CHATWOOT_CONTEXT_AUDIENCE = 'baci-ekaette-commerce-context';
@@ -10,19 +20,11 @@ export const CHATWOOT_CONTEXT_TTL_SECONDS = 60;
 export const CHATWOOT_SESSION_TTL_SECONDS = 600;
 
 export const TOKEN_MAX_LENGTH = 12_000;
-export const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const UUID_PATTERN = CHATWOOT_BINDING_UUID_PATTERN;
 export const HEX_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 export const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,80}$/;
 export const NONCE_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
-export const WEBSITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
-
-export type ChatwootTenantBinding = {
-  merchantId: string;
-  origin: string;
-  websiteToken: string;
-  inboxId: number;
-};
+export const WEBSITE_TOKEN_PATTERN = CHATWOOT_BINDING_WEBSITE_TOKEN_PATTERN;
 
 export type ChatwootCommerceContextState = {
   merchantId: string;
@@ -58,83 +60,9 @@ export class ChatwootCommerceContextError extends Error {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-export function normalizeHttpsOrigin(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length > 512) return null;
-  try {
-    const url = new URL(value);
-    if (
-      url.protocol !== 'https:' ||
-      !url.hostname ||
-      url.username ||
-      url.password ||
-      (url.port && url.port !== '443') ||
-      (url.pathname && url.pathname !== '/') ||
-      url.search ||
-      url.hash
-    ) {
-      return null;
-    }
-    return `https://${url.hostname.toLowerCase()}`;
-  } catch {
-    return null;
-  }
-}
-
 function readBindings(raw: string | undefined): ChatwootTenantBinding[] {
-  if (!raw?.trim() || raw.length > 64_000) {
-    throw new ChatwootCommerceContextError('invalid_config');
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new ChatwootCommerceContextError('invalid_config');
-  }
-  if (!Array.isArray(parsed) || parsed.length > 256) {
-    throw new ChatwootCommerceContextError('invalid_config');
-  }
-
-  const bindings: ChatwootTenantBinding[] = [];
-  const seenMerchants = new Set<string>();
-  const seenWebsiteTokens = new Set<string>();
-  const seenInboxIds = new Set<number>();
-  for (const candidate of parsed) {
-    if (!isRecord(candidate)) {
-      throw new ChatwootCommerceContextError('invalid_config');
-    }
-    const merchantId = candidate.merchantId;
-    const origin = normalizeHttpsOrigin(candidate.origin);
-    const websiteToken = candidate.websiteToken;
-    const inboxId = candidate.inboxId;
-    if (
-      typeof merchantId !== 'string' ||
-      !UUID_PATTERN.test(merchantId) ||
-      !origin ||
-      typeof websiteToken !== 'string' ||
-      !WEBSITE_TOKEN_PATTERN.test(websiteToken) ||
-      typeof inboxId !== 'number' ||
-      !Number.isSafeInteger(inboxId) ||
-      inboxId <= 0 ||
-      seenMerchants.has(merchantId.toLowerCase()) ||
-      seenWebsiteTokens.has(websiteToken) ||
-      seenInboxIds.has(inboxId)
-    ) {
-      throw new ChatwootCommerceContextError('invalid_config');
-    }
-    seenMerchants.add(merchantId.toLowerCase());
-    seenWebsiteTokens.add(websiteToken);
-    seenInboxIds.add(inboxId);
-    bindings.push({
-      merchantId: merchantId.toLowerCase(),
-      origin,
-      websiteToken,
-      inboxId,
-    });
-  }
+  const bindings = parseChatwootTenantBindings(raw);
+  if (!bindings) throw new ChatwootCommerceContextError('invalid_config');
   return bindings;
 }
 

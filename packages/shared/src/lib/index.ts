@@ -27,6 +27,7 @@ export * from './is-finite-number';
 export * from './is-same-facet-choice';
 export * from './kuda-data-plan-bill-items';
 export * from './kuda-electricity-bill-items';
+export * from './kuda-electricity-meter-item-code';
 export * from './location-state-aliases';
 export * from './merchant-contact-phone';
 export * from './merchant-sender-phone';

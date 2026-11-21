@@ -21,7 +21,7 @@ const merchantKinds = [
   ['pickup_delayed', 'GIG pickup delayed'],
   ['failed', 'Delivery issue'],
   ['returned', 'Order returned'],
-  ['cancelled', 'Shipment cancelled'],
+  ['cancelled', 'GIG shipment cancelled'],
 ] as const;
 
 const customerKinds = [

@@ -83,6 +83,7 @@ describe('Chatwoot session renewal races', () => {
             ok: true,
             json: async () => ({
               authorized: true,
+              cartId: 'cart-1',
               conversationId: 905,
               sessionExpiresAt: Math.floor(Date.now() / 1000) + 300,
               sessionToken: token,

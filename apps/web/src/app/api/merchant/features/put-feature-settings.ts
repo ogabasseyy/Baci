@@ -13,7 +13,9 @@ import {
   preserveZohoCampaignSecretCustomSettings,
   redactMerchantFeatureSettingsResponse,
 } from '@/lib/merchant-feature-settings-redaction';
+import { extractZohoCampaignSecrets } from '@/lib/zoho-campaign-secret-settings';
 import { merchantFeatureSettingsPatchSchema } from '@/schemas/merchant-features';
+import { attachIntegrationSecretPresence } from './attach-integration-secret-presence';
 import type { MerchantFeatureCacheRevalidator } from './feature-settings-handler-utils';
 import { hasNonEmptyGrowthIntegrationSetting } from './feature-settings-handler-utils';
 import { jsonNoStore, withNoStore } from './feature-settings-response';
@@ -23,6 +25,7 @@ import {
 } from './merchant-feature-settings-contract';
 import { parseMerchantFeatureSettingsPatchBody } from './parse-feature-settings-patch-body';
 import { resolveFeatureSettingsAccess } from './resolve-feature-settings-access';
+import { saveZohoRefreshToken } from './save-zoho-refresh-token';
 
 export function createPutFeatureSettings(
   revalidateMerchantFeatureCaches: MerchantFeatureCacheRevalidator
@@ -101,9 +104,7 @@ export function createPutFeatureSettings(
       const { data: existingSettings, error: existingSettingsError } =
         await auth.supabase
           .from('merchant_feature_settings')
-          .select(
-            'custom_settings, facebook_capi_token, tiktok_access_token, snapchat_capi_token, ga4_api_secret'
-          )
+          .select('custom_settings')
           .eq('merchant_id', access.merchantId)
           .maybeSingle();
       if (existingSettingsError) {
@@ -121,19 +122,39 @@ export function createPutFeatureSettings(
           sanitizedSettings.custom_settings,
           existingSettings?.custom_settings
         );
+      const extractedZoho = extractZohoCampaignSecrets(
+        sanitizedSettings.custom_settings
+      );
+      sanitizedSettings.custom_settings = extractedZoho.customSettings;
+      const zohoSave = await saveZohoRefreshToken(
+        auth.supabase,
+        access.merchantId,
+        extractedZoho.refreshToken
+      );
+      if (!zohoSave.ok) {
+        return jsonNoStore(
+          { error: 'Failed to save settings' },
+          { status: zohoSave.status }
+        );
+      }
       const completeSettings = {
         ...defaultMerchantFeatureSettings,
-        ...Object.fromEntries(
-          INTEGRATION_SECRET_FIELDS.map((key) => [
-            key,
-            existingSettings?.[key] ?? null,
-          ])
-        ),
         ...sanitizedSettings,
         merchant_id: access.merchantId,
         updated_at: new Date().toISOString(),
       };
       completeSettings.rewards_page_enabled = completeSettings.loyalty_enabled;
+      // The session cannot read the stored secrets (audit R2), so a replace must
+      // not write them back, and an upsert that mentions a secret column fails
+      // (ON CONFLICT DO UPDATE reads EXCLUDED.<col>, which needs SELECT on it).
+      // Secrets therefore never travel in the upsert: omitting one keeps the
+      // stored value, and a value (or null) is written by a plain UPDATE below.
+      const secretUpdates: Record<string, unknown> = {};
+      for (const key of INTEGRATION_SECRET_FIELDS) {
+        if (key in sanitizedSettings)
+          secretUpdates[key] = sanitizedSettings[key];
+        delete completeSettings[key];
+      }
       const { data: settings, error } = await auth.supabase
         .from('merchant_feature_settings')
         .upsert(completeSettings, { onConflict: 'merchant_id' })
@@ -146,8 +167,32 @@ export function createPutFeatureSettings(
           { status: 500 }
         );
       }
+      if (Object.keys(secretUpdates).length > 0) {
+        const { error: secretError } = await auth.supabase
+          .from('merchant_feature_settings')
+          .update(secretUpdates)
+          .eq('merchant_id', access.merchantId);
+        if (secretError) {
+          console.error('Error saving integration secrets:', secretError);
+          return jsonNoStore(
+            { error: 'Failed to save settings' },
+            { status: 500 }
+          );
+        }
+      }
       revalidateMerchantFeatureCaches(access.merchantId, sanitizedSettings);
-      return jsonNoStore(redactMerchantFeatureSettingsResponse(settings));
+      const withPresence = await attachIntegrationSecretPresence(
+        auth.supabase,
+        access.merchantId,
+        settings
+      );
+      if (!withPresence) {
+        return jsonNoStore(
+          { error: 'Failed to save settings' },
+          { status: 500 }
+        );
+      }
+      return jsonNoStore(redactMerchantFeatureSettingsResponse(withPresence));
     } catch (error) {
       console.error('Feature settings PUT error:', error);
       return jsonNoStore({ error: 'Internal server error' }, { status: 500 });

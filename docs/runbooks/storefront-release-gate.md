@@ -57,6 +57,34 @@ Start from the Actions tab on `main`, or push a tag on a commit that is on
 | iOS | "iOS Storefront Production Release": builds, uploads to TestFlight and submits for App Review with automatic release. Leave the build number empty to use the next one. | `v<build>-storefront-ios`: the number becomes the build number and must be higher than the last one |
 | Android | "Android Storefront Production Release" with `publish_to_play` on and the `internal` track, to test first. | `v<version code>-storefront`: publishes straight to 100% of production; the number must be higher than every version code already uploaded, including the internal test build |
 
+For an iOS device test, run "iOS Storefront Production Release" on `main`
+with `testflight_only` enabled. This manual option uploads the signed build to
+TestFlight without submitting it for App Review. Tag pushes always attempt
+App Review submission, but the submit lane can skip when the App Store version
+slot is occupied.
+The automatic build number uses the workflow run number plus the configured
+base, so a TestFlight-only build consumes a number and gaps are expected. A
+tag build number must exceed every previously uploaded build, including these
+TestFlight-only uploads. Select the build in TestFlight on the
+device after processing and tester assignment. Record the tested app version
+and build number. To submit that exact build later, enter both required values
+in "iOS Storefront Submit for Review". Requiring both values pins the tested
+build even if another upload happens concurrently. Check the latest App Store
+release date and confirm that App Store Connect still offers the tested build. If a release
+since the upload makes the build unavailable, rebuild and retest. Use a newer
+version if the tested version has already gone live.
+[Apple's build selection rules](https://developer.apple.com/help/app-store-connect/manage-builds/choose-a-build-to-submit/).
+
+The production workflow summary identifies a TestFlight-only upload, a
+completed App Review submission, a failed/cancelled submission, or a submission
+skipped because the App Store version slot is occupied. A skipped submit step
+is expected for TestFlight-only runs; the summary states that submission was
+intentionally skipped. In the separate "iOS Storefront Submit for Review"
+workflow, submission is skipped if another build occupies the App Review slot
+unless the owner explicitly selects `cancel_review_for_resubmit` to withdraw
+the existing review. That cancellation option is only available in the manual
+submit workflow; the production release never withdraws an active review.
+
 To resubmit a build that is already on TestFlight, run "iOS Storefront Submit
 for Review".
 

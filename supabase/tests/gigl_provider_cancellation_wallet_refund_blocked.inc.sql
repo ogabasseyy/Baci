@@ -245,3 +245,36 @@ BEGIN
   END IF;
 END;
 $t10$;
+
+-- T24: a lingering 'reserved' wallet charge on the order still blocks reopening
+-- via shipment cancellation with 55P03 instead of leaving the reserved debit
+-- stranded when the order clears its shipment link.
+DO $t24$
+DECLARE
+  v_order constant uuid := pg_temp.fixture_id(2, 24);
+  v_shipment constant uuid := pg_temp.fixture_id(4, 24);
+  v_charge constant uuid := pg_temp.fixture_id(5, 24);
+  v_balance numeric := pg_temp.wallet_balance();
+BEGIN
+  BEGIN
+    PERFORM pg_temp.apply_gig_events(
+      v_shipment, 'cancelled', pg_temp.fresh_cancel_history(24, 'MSCC')
+    );
+    RAISE EXCEPTION 'T24: shipment cancellation with reserved charge must be blocked';
+  EXCEPTION WHEN SQLSTATE '55P03' THEN
+    IF SQLERRM IS DISTINCT FROM 'active_merchant_shipping_charge' THEN
+      RAISE EXCEPTION 'T24: unexpected 55P03 %', SQLERRM;
+    END IF;
+  END;
+  IF (SELECT status FROM public.merchant_shipping_charges WHERE id = v_charge)
+       IS DISTINCT FROM 'reserved'
+     OR pg_temp.refund_count(24) <> 0
+     OR pg_temp.wallet_balance() IS DISTINCT FROM v_balance
+     OR (SELECT status FROM public.shipments WHERE id = v_shipment)
+       IS DISTINCT FROM 'booked'
+     OR (SELECT shipping_status FROM public.orders WHERE id = v_order)
+       IS DISTINCT FROM 'shipped' THEN
+    RAISE EXCEPTION 'T24: reserved charge block must leave order and wallet untouched';
+  END IF;
+END;
+$t24$;

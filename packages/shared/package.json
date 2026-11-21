@@ -31,6 +31,7 @@
     "./piggyvest": "./src/piggyvest/index.ts",
     "./schemas": "./src/schemas/index.ts",
     "./schemas/merchant-settings": "./src/schemas/merchant-settings.ts",
+    "./schemas/oxygen-order-plan": "./src/schemas/oxygen-order-plan.ts",
     "./receipt": "./src/receipt/index.ts",
     "./money": "./src/money/index.ts",
     "./repairs": "./src/repairs/index.ts",
@@ -54,6 +55,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "typecheck:ci": "pnpm run typecheck",
     "test": "node --test resolve-mobile-react.node-test.cjs && vitest run"
   },
   "peerDependencies": {

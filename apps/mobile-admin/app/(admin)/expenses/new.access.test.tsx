@@ -1,7 +1,11 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getExpenseNavigationMocks,
+  pressNativeBack,
+} from '@/components/expenses/add-expense-navigation.test-fixtures';
 
 const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
@@ -12,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   isLoading: false,
   merchantCalls: 0,
   mutate: vi.fn(),
-  router: { back: vi.fn() },
   saveCalls: 0,
 }));
 
@@ -104,13 +107,16 @@ vi.mock('@/components/ui/AppFormScreen', () => ({
 vi.mock('@/components/expenses/ExpenseFormFields', () => ({
   ExpenseFormFields: ({
     amount,
+    disabled,
     onAmountChange,
   }: {
     amount: string;
+    disabled: boolean;
     onAmountChange: (value: string) => void;
   }) => (
     <input
       aria-label="Expense amount"
+      disabled={disabled}
       onChange={(event) => onAmountChange(event.target.value)}
       value={amount}
     />
@@ -123,18 +129,6 @@ vi.mock('@/components/expenses/ExpenseGroupManagerSheet', () => ({
   ExpenseGroupManagerSheet: () => null,
 }));
 vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn() }));
-vi.mock('expo-router', () => ({
-  Stack: {
-    Screen: ({ options }: { options?: { headerLeft?: () => ReactNode } }) => (
-      <>{options?.headerLeft?.()}</>
-    ),
-  },
-  useNavigation: () => ({ dispatch: vi.fn() }),
-  useRouter: () => mocks.router,
-}));
-vi.mock('expo-router/react-navigation', () => ({
-  usePreventRemove: vi.fn(),
-}));
 vi.mock('@react-native-vector-icons/ionicons', () => ({ default: () => null }));
 vi.mock('react-native', () => ({
   ActivityIndicator: () => null,
@@ -164,10 +158,12 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: (value: unknown) => value },
 }));
 
-import AddExpenseScreen from './new';
+const { default: AddExpenseScreen } = await import('./new');
+const navigation = getExpenseNavigationMocks();
 
 describe('AddExpenseScreen access boundary', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.branchCalls = 0;
     mocks.alert.mockReset();
     mocks.canCreate = true;
@@ -227,6 +223,73 @@ describe('AddExpenseScreen access boundary', () => {
       'Your unsaved changes will be lost.',
       expect.any(Array)
     );
-    expect(mocks.router.back).not.toHaveBeenCalled();
+    expect(navigation.exitScreen).not.toHaveBeenCalled();
+  });
+
+  it('resumes hardware Back only when the user discards the draft', () => {
+    render(<AddExpenseScreen />);
+    const amount = screen.getByLabelText('Expense amount');
+    fireEvent.change(amount, {
+      target: { value: '2500' },
+    });
+
+    pressNativeBack();
+
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'Discard changes?',
+      expect.any(String),
+      expect.any(Array)
+    );
+    expect(navigation.exitScreen).not.toHaveBeenCalled();
+    const actions = mocks.alert.mock.calls[0]?.[2] as Array<{
+      text: string;
+      onPress?: () => void;
+    }>;
+    act(() => actions.find(({ text }) => text === 'Discard')?.onPress?.());
+
+    expect(amount).toHaveValue('');
+    expect(navigation.exitScreen).toHaveBeenCalledOnce();
+    expect(navigation.removalPrevented).toBe(false);
+  });
+
+  it('returns to the expenses list after saving with no back history', () => {
+    navigation.router.canGoBack.mockReturnValueOnce(false);
+    mocks.mutate.mockImplementationOnce(
+      (_input: unknown, options: { onSuccess: () => void }) =>
+        options.onSuccess()
+    );
+    render(<AddExpenseScreen />);
+    fireEvent.change(screen.getByLabelText('Expense amount'), {
+      target: { value: '2500' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
+
+    expect(navigation.router.replace).toHaveBeenCalledWith('/(admin)/expenses');
+    expect(navigation.exitScreen).toHaveBeenCalledOnce();
+    expect(mocks.alert).not.toHaveBeenCalled();
+  });
+
+  it('prevents saving again if the form stays open after saving', () => {
+    navigation.router.back.mockImplementationOnce(() => undefined);
+    mocks.mutate.mockImplementationOnce(
+      (_input: unknown, options: { onSuccess: () => void }) =>
+        options.onSuccess()
+    );
+    render(<AddExpenseScreen />);
+    const amount = screen.getByLabelText('Expense amount');
+    fireEvent.change(amount, { target: { value: '2500' } });
+    const save = screen.getByRole('button', { name: 'Save expense' });
+    fireEvent.click(save);
+    expect(save).toBeDisabled();
+    expect(amount).toBeDisabled();
+    fireEvent.click(save);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close add expense screen' })
+    );
+
+    expect(mocks.mutate).toHaveBeenCalledOnce();
+    expect(navigation.router.replace).toHaveBeenCalledWith('/(admin)/expenses');
+    expect(navigation.exitScreen).toHaveBeenCalledOnce();
+    expect(mocks.alert).not.toHaveBeenCalled();
   });
 });

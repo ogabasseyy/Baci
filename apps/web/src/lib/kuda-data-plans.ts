@@ -5,6 +5,8 @@ import {
   getDataProviders,
   type NetworkProvider,
 } from '@/lib/kuda';
+import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-messages';
+import { logger } from '@/lib/logger';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -23,15 +25,26 @@ export interface ResolvedKudaDataPlan {
   resolvedFrom: 'exact_item_code' | 'provider_amount';
 }
 
+/** Same window as the bill price recheck: apps cache plan lists a day. */
+const DATA_PLAN_LAST_GOOD_MS = 24 * 60 * 60 * 1000;
+/** After a failed or unusable fetch, wait this long before asking Kuda again. */
+const DATA_PLAN_RETRY_AFTER_MS = 30_000;
+/** A fixed plan price under ₦10 means the list's units are in doubt. */
+const IMPLAUSIBLE_PLAN_PRICE_NAIRA = 10;
+
+let lastFailedDataPlanFetchAt: number | undefined;
+
 let dataProvidersCache:
   | {
       expiresAt: number;
+      loadedAt: number;
       providers: Biller[];
     }
   | undefined;
 
 export function clearKudaDataPlanCacheForTests() {
   dataProvidersCache = undefined;
+  lastFailedDataPlanFetchAt = undefined;
 }
 
 function normalizeComparable(value: string) {
@@ -101,15 +114,58 @@ function providerMatchesNetwork(
   return normalizedProviderName.includes(normalizedNetwork);
 }
 
-async function loadDataProviders() {
+/**
+ * The current Kuda data plans, or the last good list from the past day when
+ * Kuda fails or answers without any packages (which never replaces a good
+ * list). After such a fetch Kuda is not asked again for 30 seconds. Null
+ * when neither exists: the
+ * caller must not trust the client's amount then, since apps may still hold
+ * plan prices from before Kuda's kobo amounts were converted (100x).
+ */
+async function loadDataProviders(): Promise<Biller[] | null> {
   const now = Date.now();
   if (dataProvidersCache && dataProvidersCache.expiresAt > now) {
     return dataProvidersCache.providers;
   }
+  const lastGood =
+    dataProvidersCache &&
+    now - dataProvidersCache.loadedAt < DATA_PLAN_LAST_GOOD_MS
+      ? dataProvidersCache.providers
+      : null;
 
-  const providers = await getDataProviders();
+  if (
+    lastFailedDataPlanFetchAt !== undefined &&
+    now - lastFailedDataPlanFetchAt < DATA_PLAN_RETRY_AFTER_MS
+  ) {
+    return lastGood;
+  }
+
+  let providers: Biller[];
+  try {
+    providers = await getDataProviders();
+  } catch (error) {
+    lastFailedDataPlanFetchAt = now;
+    logger.warn({
+      message: 'Kuda data plan list unavailable',
+      error: error instanceof Error ? error.message : String(error),
+      hasLastGoodList: lastGood !== null,
+      type: 'data',
+    });
+    return lastGood;
+  }
+  if (collectDataPlanCandidates(providers).length === 0) {
+    lastFailedDataPlanFetchAt = now;
+    logger.warn({
+      message: 'Kuda data plan list came back without packages',
+      hasLastGoodList: lastGood !== null,
+      type: 'data',
+    });
+    return lastGood;
+  }
+  lastFailedDataPlanFetchAt = undefined;
   dataProvidersCache = {
     expiresAt: now + DATA_PLAN_CACHE_TTL_MS,
+    loadedAt: now,
     providers,
   };
   return providers;
@@ -132,26 +188,6 @@ function mapResolvedCandidate(
   };
 }
 
-function mapUnverifiedDataPlan({
-  amount,
-  originalDataPlanCode,
-  providerName,
-}: {
-  amount: number;
-  originalDataPlanCode: string;
-  providerName: string;
-}): ResolvedKudaDataPlan {
-  return {
-    amount,
-    isAmountFixed: false,
-    itemCode: originalDataPlanCode,
-    itemName: originalDataPlanCode,
-    originalDataPlanCode,
-    providerName,
-    resolvedFrom: 'exact_item_code',
-  };
-}
-
 function hasLeafBillItems(provider: Biller) {
   return flattenKudaDataPlanBillItems<BillItem>(provider.billItems).length > 0;
 }
@@ -170,15 +206,12 @@ export async function resolveKudaDataPlanForPurchase({
     throw new Error('Data plan code is required for data purchases');
   }
 
-  let providers: Biller[];
-  try {
-    providers = await loadDataProviders();
-  } catch {
-    return mapUnverifiedDataPlan({
-      amount,
-      originalDataPlanCode,
-      providerName: networkProvider,
-    });
+  const providers = await loadDataProviders();
+  if (providers === null) {
+    // Data bundles are only sold through Kuda, so with its plan list down
+    // the purchase could not go through anyway; failing here stops a saved
+    // 100x price from being charged.
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
   const selectedProviderByCode =
@@ -186,16 +219,16 @@ export async function resolveKudaDataPlanForPurchase({
       providerMatchesCode(provider, originalDataPlanCode)
     ) ?? null;
   const candidates = collectDataPlanCandidates(providers);
+  if (candidates.length === 0) {
+    // A list with no packages at all is a broken answer, not a price list:
+    // the client's (possibly 100x) amount cannot be checked against it.
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
 
-  if (
-    candidates.length === 0 ||
-    (selectedProviderByCode && !hasLeafBillItems(selectedProviderByCode))
-  ) {
-    return mapUnverifiedDataPlan({
-      amount,
-      originalDataPlanCode,
-      providerName: selectedProviderByCode?.billerName ?? networkProvider,
-    });
+  // A selected provider listed without packages gives no price to check the
+  // app's (possibly 100x) amount against, so it fails closed too.
+  if (selectedProviderByCode && !hasLeafBillItems(selectedProviderByCode)) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   }
 
   const normalizedCode = normalizeComparable(originalDataPlanCode);
@@ -203,6 +236,13 @@ export async function resolveKudaDataPlanForPurchase({
     ({ item }) => normalizeComparable(item.itemCode) === normalizedCode
   );
   if (exactMatch) {
+    // Includes an unreadable fixed price (mapped to 0).
+    if (
+      exactMatch.item.isAmountFixed &&
+      exactMatch.item.amount < IMPLAUSIBLE_PLAN_PRICE_NAIRA
+    ) {
+      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    }
     if (
       exactMatch.item.isAmountFixed &&
       exactMatch.item.amount > 0 &&
@@ -231,6 +271,10 @@ export async function resolveKudaDataPlanForPurchase({
   );
 
   if (amountMatchesForProvider.length === 1) {
+    const { item } = amountMatchesForProvider[0];
+    if (item.isAmountFixed && item.amount < IMPLAUSIBLE_PLAN_PRICE_NAIRA) {
+      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    }
     return mapResolvedCandidate(
       amountMatchesForProvider[0],
       originalDataPlanCode,

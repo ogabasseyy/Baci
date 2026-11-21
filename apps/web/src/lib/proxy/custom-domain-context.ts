@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getSlugForCustomDomain } from '@/lib/domain-cache-simple';
 import { isValidCustomDomain, normalizeHostname } from '@/lib/proxy/host';
 import { annotateMerchantTrace } from '@/lib/proxy/merchant-tracing';
+import { isBrilStashFeedPath } from '@/lib/proxy/routing-policy';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 
 export interface CustomDomainContext {
@@ -16,7 +17,10 @@ export async function resolveCustomDomainContext(
   request: NextRequest,
   hostname: string
 ): Promise<CustomDomainContext | null> {
-  if (!isValidCustomDomain(hostname)) {
+  if (
+    isBrilStashFeedPath(request.nextUrl.pathname) ||
+    !isValidCustomDomain(hostname)
+  ) {
     return null;
   }
 

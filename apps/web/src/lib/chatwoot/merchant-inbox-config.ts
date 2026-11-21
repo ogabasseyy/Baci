@@ -18,6 +18,12 @@ export type MerchantInboxBinding = {
   inboxId: number;
   /** Server-only agent credential. Never return it to a client or log it. */
   apiAccessToken: string;
+  /**
+   * Optional administrator credential, used only for account reports: the
+   * provider lets just administrators read them, and an agent credential is
+   * refused. Server-only, like `apiAccessToken`.
+   */
+  reportsApiAccessToken?: string;
   apiOrigin: string;
 };
 
@@ -71,13 +77,17 @@ function parseBindings(
   for (const candidate of parsed) {
     if (!isRecord(candidate)) return null;
     const { merchantId, accountId, inboxId, apiAccessToken } = candidate;
+    const { reportsApiAccessToken } = candidate;
     if (
       typeof merchantId !== 'string' ||
       !UUID_PATTERN.test(merchantId) ||
       !isPositiveId(accountId) ||
       !isPositiveId(inboxId) ||
       typeof apiAccessToken !== 'string' ||
-      !API_TOKEN_PATTERN.test(apiAccessToken)
+      !API_TOKEN_PATTERN.test(apiAccessToken) ||
+      (reportsApiAccessToken !== undefined &&
+        (typeof reportsApiAccessToken !== 'string' ||
+          !API_TOKEN_PATTERN.test(reportsApiAccessToken)))
     ) {
       return null;
     }
@@ -94,6 +104,9 @@ function parseBindings(
       accountId,
       inboxId,
       apiAccessToken,
+      ...(typeof reportsApiAccessToken === 'string'
+        ? { reportsApiAccessToken }
+        : {}),
       apiOrigin,
     });
   }

@@ -291,5 +291,6 @@ export function useOrderDetailsController() {
     merchantInfo,
     order,
     receiptPreview,
+    userId: user?.id,
   };
 }

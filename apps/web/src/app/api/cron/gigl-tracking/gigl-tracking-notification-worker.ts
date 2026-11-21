@@ -46,7 +46,8 @@ async function processNotification(
   const copy = copyFor(
     notification.notification_kind,
     event.description ?? '',
-    notification.audience
+    notification.audience,
+    notification.order_id === null
   );
   if (
     notification.notification_kind === 'delivered' &&

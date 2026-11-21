@@ -1,3 +1,8 @@
+import {
+  KUDA_BILL_PRICE_CHANGED_MESSAGE,
+  KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE,
+} from './kuda-bill-item-price-messages';
+
 /**
  * User-facing error classifier for VTU checkout routes. The catch-all
  * must not echo raw errors (PostgREST fragments can leak Supabase URL /
@@ -20,6 +25,8 @@ export const MONNIFY_VALIDATION_FAILED_MESSAGE =
   'Monnify validation failed. Please verify the details and try again.';
 
 const USER_FACING_CHECKOUT_ERRORS = new Set([
+  KUDA_BILL_PRICE_CHANGED_MESSAGE,
+  KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE,
   'Biller name or provider key is required for bill payment',
   'Customer account not found for this storefront',
   'Failed to initiate purchase',

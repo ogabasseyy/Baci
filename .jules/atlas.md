@@ -16,3 +16,9 @@
 **Learning:** `/api/ai/grade-device` returns un-converted Naira (`NGN`) integer prices, so delegating directly to `useCurrency().formatCurrency()` both introduces `.00` decimals on whole-number estimates and mislabels NGN values as another merchant currency without conversion.
 **Action:** Format device-grading estimates through shared `formatCurrency(amount, 'NG', COMPACT_OPTIONS)` from `@/lib/currency` instead of raw `'₦' + value.toLocaleString()` templates or `useCurrency()`.
 **Source:** `apps/web/src/lib/currency.ts` and `apps/web/src/app/api/ai/grade-device/route.ts`.
+
+## 2026-11-18 — Extract budget hardcoded format to shared money util
+
+**Learning:** Manual en-NG and hardcoded ₦ budget formatting should be routed through `formatMoney` from `@baci/shared/money` to support multi-currency seamlessly.
+**Action:** Replace manual `Intl` formatting loops with `formatMoney` and use `try/catch` to maintain fallback behavior for unrecognized currencies.
+**Source:** `packages/shared/src/lib/search-suggestions.ts`

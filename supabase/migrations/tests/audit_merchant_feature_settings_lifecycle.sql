@@ -32,7 +32,7 @@ INSERT INTO public.merchant_feature_settings (
   pg_catalog.jsonb_build_object(
     'google_store_widget_enabled', true,
     'zohoCampaigns', pg_catalog.jsonb_build_object(
-      'refreshToken', 'task5-custom-settings-secret-sentinel-QWZX',
+      'signingSecret', 'task5-custom-settings-secret-sentinel-QWZX',
       'nested', pg_catalog.jsonb_build_object('token', 'task5-nested-secret-fragment-RSTV')
     ),
     'task5-secret-key', 'task5-suffix-q7w9'
@@ -194,7 +194,7 @@ SET credit_direct_public_key = 'task5-credit-direct-public-key-delete-WXQR',
     ga4_api_secret = 'task5-ga4-secret-delete-QXWZ',
     custom_settings = pg_catalog.jsonb_build_object(
       'zohoCampaigns', pg_catalog.jsonb_build_object(
-        'refreshToken', 'task5-custom-settings-secret-delete-RSTV',
+        'signingSecret', 'task5-custom-settings-secret-delete-RSTV',
         'nested', pg_catalog.jsonb_build_object('token', 'task5-nested-secret-delete-QWZX')
       )
     )

@@ -30,14 +30,25 @@ function createSupabaseMock({
   brandColors = { primary: '#dc2626' },
   businessName = 'Merchant Store',
   customSettings,
+  refreshToken = null,
   settingsError = null,
+  tokenError = null,
 }: {
   brandColors?: unknown;
   businessName?: string | null;
   customSettings?: unknown;
+  refreshToken?: string | null;
   settingsError?: { message: string } | null;
+  tokenError?: { message: string } | null;
 }) {
   return {
+    rpc(name: string) {
+      if (name !== 'get_merchant_zoho_refresh_token')
+        throw new Error(`Unexpected rpc ${name}`);
+      return tokenError
+        ? { data: null, error: tokenError }
+        : { data: refreshToken, error: null };
+    },
     from(table: string) {
       return {
         select() {
@@ -152,6 +163,7 @@ describe('merchant Zoho Campaigns settings', () => {
       config,
       merchantId: 'merchant-1',
       supabase: createSupabaseMock({
+        refreshToken: 'merchant-refresh-token',
         customSettings: {
           zohoCampaigns: {
             apiRootUrl: 'https://campaigns.zoho.com.au/api/v1.1',
@@ -179,6 +191,7 @@ describe('merchant Zoho Campaigns settings', () => {
       config,
       merchantId: 'merchant-1',
       supabase: createSupabaseMock({
+        refreshToken: 'merchant-refresh-token',
         customSettings: {
           zohoCampaigns: {
             apiDomain: 'https://example.com',
@@ -207,6 +220,7 @@ describe('merchant Zoho Campaigns settings', () => {
       merchantId: 'merchant-1',
       supabase: createSupabaseMock({
         businessName: 'Oga Gadgets',
+        refreshToken: 'merchant-refresh-token',
         customSettings: {
           zohoCampaigns: {
             autoSend: true,

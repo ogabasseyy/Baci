@@ -11,11 +11,11 @@
 #   4. post.mjs     posts the review and sets the `Gemini review` commit status (holds the GitHub
 #                   token, no Gemini key)
 #
-# The status is the vote Diff Guardian tallies:
+# The status means:
 #   success  reviewed, no critical/high finding
 #   failure  reviewed, a critical/high finding on a changed file (the job fails too)
 #   error    Gemini could not review (quota, outage, bad key or model). An abstention: the job
-#            stays green and Diff Guardian ignores it, so an outage never reads as a finding.
+#            stays green, so an outage never reads as a finding.
 #
 # The scripts come from the DEFAULT branch (trusted-scripts/), never from the pull request being
 # reviewed: an `@gemini-cli /review` comment on a fork PR runs with secrets, so pull request code is
@@ -29,8 +29,7 @@
 #   - Optional repository variables: GEMINI_MODEL (default below), GEMINI_PAID_TIER_CONFIRMED=true
 #     (required before a PRIVATE repository is sent to Gemini).
 #   - Do NOT add `Gemini review` to the required checks: GitHub treats the `error` state like a
-#     failure, so a Gemini outage would then block every merge. Diff Guardian tallies it instead
-#     and treats `error` as an abstention.
+#     failure, so a Gemini outage would then block every merge.
 name: Gemini Code Review
 
 on:

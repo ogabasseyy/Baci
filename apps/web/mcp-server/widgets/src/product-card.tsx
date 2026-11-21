@@ -12,11 +12,13 @@ export function ProductCard({
   isInCart,
   onAddToCart,
   onViewCart,
+  catalogOnly = false,
   isSavingCart = false,
 }: {
   product: Product;
   isInCart: boolean;
   isSavingCart?: boolean;
+  catalogOnly?: boolean;
   onAddToCart: (product: Product) => void;
   onViewCart: () => void;
 }) {
@@ -77,7 +79,7 @@ export function ProductCard({
         )}
       </div>
       <div className="product-actions">
-        <button type="button"
+        {!catalogOnly && <button type="button"
           className={`btn-add-cart ${isInCart ? 'in-cart' : ''}`}
           onClick={() => isInCart ? onViewCart() : onAddToCart(product)}
           disabled={isSavingCart || product.in_stock === false}
@@ -115,7 +117,7 @@ export function ProductCard({
               Add to cart
             </>
           )}
-        </button>
+        </button>}
         <button type="button"
           className="btn-buy-now"
           onClick={() => {

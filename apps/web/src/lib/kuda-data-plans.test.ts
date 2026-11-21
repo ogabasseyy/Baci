@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkProvider } from './kuda';
+import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from './kuda-bill-item-price-messages';
 import {
   clearKudaDataPlanCacheForTests,
   resolveKudaDataPlanForPurchase,
@@ -64,25 +65,7 @@ describe('resolveKudaDataPlanForPurchase', () => {
     });
   });
 
-  it('keeps the submitted package code when provider refresh fails', async () => {
-    mockGetDataProviders.mockRejectedValueOnce(new Error('Kuda timeout'));
-
-    await expect(
-      resolveKudaDataPlanForPurchase({
-        amount: 3500,
-        dataPlanCode: 'MTN-35GB-MONTHLY',
-        networkProvider: NetworkProvider.MTN,
-      })
-    ).resolves.toMatchObject({
-      amount: 3500,
-      itemCode: 'MTN-35GB-MONTHLY',
-      originalDataPlanCode: 'MTN-35GB-MONTHLY',
-      providerName: 'MTN',
-      resolvedFrom: 'exact_item_code',
-    });
-  });
-
-  it('keeps provider-level data plans when the selected provider has no nested items', async () => {
+  it('bugfix: fails closed for a selected provider listed without packages', async () => {
     mockGetDataProviders.mockResolvedValueOnce([
       {
         billerId: '2082751a-89c7-4862-86c5-5498194b32f3',
@@ -116,12 +99,7 @@ describe('resolveKudaDataPlanForPurchase', () => {
         dataPlanCode: '2082751a-89c7-4862-86c5-5498194b32f3',
         networkProvider: NetworkProvider.MTN,
       })
-    ).resolves.toMatchObject({
-      amount: 1000,
-      itemCode: '2082751a-89c7-4862-86c5-5498194b32f3',
-      providerName: 'MTN',
-      resolvedFrom: 'exact_item_code',
-    });
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
 
   it('rejects stale amounts for exact fixed-price package codes', async () => {
@@ -197,5 +175,65 @@ describe('resolveKudaDataPlanForPurchase', () => {
     ).rejects.toThrow(
       'Data bundle not found for MTN at ₦9,999. Please refresh data bundles and select a package.'
     );
+  });
+
+  it('cannot confirm a fixed plan price that could not be read', async () => {
+    mockGetDataProviders.mockResolvedValueOnce([
+      {
+        billerId: 'mtn',
+        billerName: 'MTN',
+        billerType: 'Internet Data',
+        categoryId: 'data',
+        categoryName: 'Internet Data',
+        billItems: [
+          {
+            amount: 0,
+            isAmountFixed: true,
+            itemCode: 'MTN-35GB-MONTHLY',
+            itemCurrencySymbol: 'NGN',
+            itemFee: 0,
+            itemName: 'MTN 3.5GB Monthly',
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 350000,
+        dataPlanCode: 'MTN-35GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
+
+  it('cannot confirm an implausibly low price matched by provider and amount', async () => {
+    mockGetDataProviders.mockResolvedValueOnce([
+      {
+        billerId: '2082751a-89c7-4862-86c5-5498194b32f3',
+        billerName: 'MTN',
+        billerType: 'Internet Data',
+        categoryId: 'data',
+        categoryName: 'Internet Data',
+        billItems: [
+          {
+            amount: 5,
+            isAmountFixed: true,
+            itemCode: 'MTN-35GB-MONTHLY',
+            itemCurrencySymbol: 'NGN',
+            itemFee: 0,
+            itemName: 'MTN 3.5GB Monthly',
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 5,
+        dataPlanCode: '2082751a-89c7-4862-86c5-5498194b32f3',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
 });

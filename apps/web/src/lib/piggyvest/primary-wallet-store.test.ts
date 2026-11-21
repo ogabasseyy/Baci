@@ -42,6 +42,48 @@ describe('primary wallet storage boundary', () => {
     );
   });
 
+  it('refreshes through the parameterized lookup-gated statement as a fresh claim', async () => {
+    const execute = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          result: { status: 'claimed', intentId, claimToken, reclaimed: false },
+        },
+      ],
+    });
+    const store = createPrimaryWalletStore({ scope, execute });
+    await expect(
+      store.refreshUnknown({ ...scope, requestFingerprint: 'b'.repeat(64) })
+    ).resolves.toEqual({
+      status: 'claimed',
+      intentId,
+      claimToken,
+      reclaimed: false,
+    });
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining('piggyvest_primary.refresh_unknown_onboarding'),
+      [JSON.stringify(scope), 'b'.repeat(64)]
+    );
+  });
+
+  it('refuses a refresh for substituted ownership or a malformed answer', async () => {
+    const execute = vi.fn();
+    const store = createPrimaryWalletStore({ scope, execute });
+    await expect(
+      store.refreshUnknown({
+        ...scope,
+        userId: intentId,
+        requestFingerprint: 'b'.repeat(64),
+      })
+    ).rejects.toThrow('Primary wallet storage unavailable');
+    expect(execute).not.toHaveBeenCalled();
+    execute.mockResolvedValue({
+      rows: [{ result: { status: 'claimed', intentId } }],
+    });
+    await expect(
+      store.refreshUnknown({ ...scope, requestFingerprint: 'b'.repeat(64) })
+    ).rejects.toThrow('Primary wallet storage unavailable');
+  });
+
   it('rejects malformed database claims rather than contacting the provider', async () => {
     const execute = vi.fn().mockResolvedValue({
       rows: [{ result: { status: 'claimed', intentId } }],

@@ -81,8 +81,14 @@ const purchaseUrlSnippet = serverSource.slice(
 );
 
 function runEmbeddedPurchaseUrl(p: unknown) {
-  const context: { URL: typeof URL; p: unknown; result?: string } = {
+  const context: {
+    URL: typeof URL;
+    document: { documentElement: { dataset: Record<string, string> } };
+    p: unknown;
+    result?: string;
+  } = {
     URL,
+    document: { documentElement: { dataset: {} } },
     p,
   };
   runInNewContext(
@@ -217,7 +223,6 @@ describe('MCP streamable HTTP probe compatibility', () => {
       .sort();
 
     expect(toolNames).toEqual([
-      'add_to_cart',
       'browse_categories',
       'get_brands',
       'get_delivery_fee_info',
@@ -230,6 +235,7 @@ describe('MCP streamable HTTP probe compatibility', () => {
       'update_ogabassey_guest_cart',
     ]);
     expect(toolNames).not.toContain('check_order');
+    expect(toolNames).not.toContain('add_to_cart');
     expect(toolNames).not.toContain('check_payment_status');
     expect(toolNames).not.toContain('create_agentic_checkout_session');
     expect(toolNames).not.toContain('generate_payment_account');

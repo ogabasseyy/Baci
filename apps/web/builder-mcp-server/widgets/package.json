@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:ci": "pnpm run typecheck",
     "test": "pnpm --filter @baci/web exec vitest run builder-mcp-server/widgets --maxWorkers=1",
     "lint": "biome check src build.mjs package.json tsconfig.json"
   },

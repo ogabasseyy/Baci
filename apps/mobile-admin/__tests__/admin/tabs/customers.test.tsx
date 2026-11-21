@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest';
+import '@/test/fixtures/customer-screen-follow-up-mocks';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,7 +41,6 @@ vi.mock('@shopify/flash-list', async () => {
   };
 });
 
-// Mock other components/dependencies
 vi.mock('@react-native-vector-icons/ionicons', async () => {
   const React = await import('react');
   return {

@@ -9,6 +9,7 @@ vi.mock('@/lib/csrf', () => ({
 
 import {
   fetchMerchantInboxConversations,
+  fetchMerchantInboxInsights,
   fetchMerchantInboxThread,
   sendMerchantInboxReply,
 } from './merchant-inbox-api';
@@ -225,6 +226,58 @@ describe('sendMerchantInboxReply', () => {
     await expect(sendMerchantInboxReply(7, 'In stock')).resolves.toEqual({
       ok: false,
       code: expected,
+    });
+  });
+});
+
+describe('fetchMerchantInboxInsights', () => {
+  const insights = {
+    days: 30,
+    conversations: 9,
+    customerMessages: 31,
+    storeReplies: 22,
+    resolved: 6,
+    avgFirstResponseSeconds: 720,
+    avgResolutionSeconds: null,
+  };
+
+  it('requests the chosen window and returns validated insights', async () => {
+    const fetchMock = stubFetch({ body: insights });
+    await expect(fetchMerchantInboxInsights(30)).resolves.toEqual({
+      ok: true,
+      insights,
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      '/api/merchant/inbox/insights?days=30'
+    );
+  });
+
+  it('reports an unreadable success body as unavailable', async () => {
+    stubFetch({ body: { days: 30 } });
+    await expect(fetchMerchantInboxInsights(30)).resolves.toEqual({
+      ok: false,
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it('maps a not-set-up store and a server error to their codes', async () => {
+    stubFetch({ status: 404, body: { code: 'inbox_unavailable' } });
+    await expect(fetchMerchantInboxInsights(7)).resolves.toEqual({
+      ok: false,
+      code: 'inbox_unavailable',
+    });
+    stubFetch({ status: 503, body: { code: 'temporarily_unavailable' } });
+    await expect(fetchMerchantInboxInsights(7)).resolves.toEqual({
+      ok: false,
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it('reports a network failure as unavailable, not a delivery problem', async () => {
+    stubFetch(new Error('offline'));
+    await expect(fetchMerchantInboxInsights(7)).resolves.toEqual({
+      ok: false,
+      code: 'temporarily_unavailable',
     });
   });
 });

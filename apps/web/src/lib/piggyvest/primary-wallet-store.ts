@@ -42,6 +42,19 @@ export function createPrimaryWalletStore(input: {
         throw new Error('Primary wallet storage unavailable');
       }
     },
+    async refreshUnknown(command) {
+      try {
+        const parsed = schemas.claim.parse(command);
+        assertScope(parsed);
+        const response = await input.execute(
+          PRIMARY_WALLET_STATEMENTS.refreshUnknown,
+          [scopeJson, parsed.requestFingerprint]
+        );
+        return schemas.claimedRows.parse(response.rows)[0].result;
+      } catch {
+        throw new Error('Primary wallet storage unavailable');
+      }
+    },
     async recordAccepted(command) {
       try {
         const parsed = schemas.accepted.parse(command);

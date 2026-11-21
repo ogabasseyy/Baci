@@ -91,17 +91,18 @@ export function FollowUpOrderCard({
           style={[
             styles.errorText,
             {
-              color:
-                (item.oxygen_follow_up_status &&
-                  item.oxygen_follow_up_status !== 'needs_review') ||
-                item.payment_status === 'pending' ||
-                item.payment_status === 'unpaid' ||
-                item.payment_status === 'expired'
+              color: item.staff_follow_up_only
+                ? colors.textSecondary
+                : (item.oxygen_follow_up_status &&
+                      item.oxygen_follow_up_status !== 'needs_review') ||
+                    item.payment_status === 'pending' ||
+                    item.payment_status === 'unpaid' ||
+                    item.payment_status === 'expired'
                   ? colors.warning
                   : colors.error,
             },
           ]}
-          numberOfLines={item.oxygen_follow_up_status ? 2 : 1}
+          numberOfLines={2}
         >
           {displayTotal} • {errorMessage}
         </Text>

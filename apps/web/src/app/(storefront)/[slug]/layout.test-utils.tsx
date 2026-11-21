@@ -117,6 +117,7 @@ export const notFound = vi.fn(() => {
 
 vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
+  usePathname: () => '/',
 }));
 
 vi.mock('next/headers', () => ({

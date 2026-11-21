@@ -7591,6 +7591,7 @@ export type Database = {
       notification_preferences: {
         Row: {
           banner_enabled: boolean | null;
+          chat_message_push_enabled: boolean;
           follow_up_notifications_enabled: boolean;
           in_app_enabled: boolean | null;
           merchant_id: string;
@@ -7602,6 +7603,7 @@ export type Database = {
         };
         Insert: {
           banner_enabled?: boolean | null;
+          chat_message_push_enabled?: boolean;
           follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
           merchant_id: string;
@@ -7613,6 +7615,7 @@ export type Database = {
         };
         Update: {
           banner_enabled?: boolean | null;
+          chat_message_push_enabled?: boolean;
           follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
           merchant_id?: string;
@@ -18502,6 +18505,14 @@ export type Database = {
           total_sent: number;
         }[];
       };
+      get_chat_message_push_preference: {
+        Args: { p_merchant_id: string };
+        Returns: boolean;
+      };
+      set_chat_message_push_preference: {
+        Args: { p_enabled: boolean; p_merchant_id: string };
+        Returns: boolean;
+      };
       get_follow_up_notification_preference: {
         Args: { p_order_id: string };
         Returns: boolean;
@@ -18739,6 +18750,18 @@ export type Database = {
       get_merchant_analytics_config: {
         Args: { p_merchant_id: string };
         Returns: Json;
+      };
+      get_merchant_integration_secret_presence: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
+      get_merchant_zoho_refresh_token: {
+        Args: { p_merchant_id: string };
+        Returns: string | null;
+      };
+      set_merchant_zoho_refresh_token: {
+        Args: { p_merchant_id: string; p_refresh_token: string };
+        Returns: undefined;
       };
       get_google_ads_connection_secret: {
         Args: { p_merchant_id: string };

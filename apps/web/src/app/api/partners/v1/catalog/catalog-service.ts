@@ -1,5 +1,5 @@
 import { collectGoogleMerchantListings } from '@/app/api/feed/google-merchant/collect-google-merchant-listings';
-import { getCachedGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
+import { getGoogleMerchantFeedData } from '@/app/api/feed/google-merchant/feed-data';
 import { buildMerchantBaseUrl } from '@/app/api/feed/google-merchant/route-utils';
 import { resolveFeedMerchant } from '@/lib/feed-identifier';
 import { logger } from '@/lib/logger';
@@ -7,7 +7,9 @@ import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { crossRemCatalogConfig } from './catalog-bindings';
 import { projectCatalog } from './project-catalog';
 
-export async function loadCrossRemCatalog() {
+export async function loadCrossRemCatalog(
+  stockByListing?: Map<string, number>
+) {
   const { merchantId, bindings } = crossRemCatalogConfig;
   const activeCount = bindings.filter((binding) => !binding.retired).length;
   if (!merchantId || bindings.length === 0) {
@@ -44,9 +46,9 @@ export async function loadCrossRemCatalog() {
     };
   }
 
-  // The full partner response is too large for a single hosted cache entry.
-  // Reuse Google's cached source data and build the response per request.
-  const data = await getCachedGoogleMerchantFeedData(
+  // A builder must read current data so a previous Google cache generation
+  // cannot be published under the new CrossRem version.
+  const data = await getGoogleMerchantFeedData(
     merchant.id,
     merchant.slug
   ).catch((error: unknown) => {
@@ -63,7 +65,7 @@ export async function loadCrossRemCatalog() {
     }),
     data.imageManifest
   );
-  const listings = projectCatalog(rows, bindings);
+  const listings = projectCatalog(rows, bindings, stockByListing);
   if (listings.length !== activeCount) {
     const resolvedIds = new Set(listings.map((listing) => listing.listing_id));
     const sampleListingIds = bindings

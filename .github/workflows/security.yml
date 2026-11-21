@@ -145,7 +145,9 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository &&
         needs.changes.outputs.semgrep_relevant == 'true'
       )
-    timeout-minutes: 60
+    # Full scans cover the entire repository and exceeded the previous
+    # one-hour job limit. Keep targeted PR and push scans bounded as before.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 180 || 60 }}
     permissions:
       contents: read
       security-events: write
@@ -467,6 +469,6 @@ jobs:
 
       - name: TruffleHog OSS
         # Pin to full SHA for supply-chain security
-        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        uses: trufflesecurity/trufflehog@3bd2b5887eb0efb8fa18bfd1d296032924e4ffdc # v3.99.9
         with:
           extra_args: --only-verified --exclude-paths=.trufflehogignore

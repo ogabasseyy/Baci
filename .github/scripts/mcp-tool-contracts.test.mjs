@@ -10,8 +10,7 @@ import {
 test('defines the current required public MCP inventory', () => {
   assert.deepEqual(DEFAULT_REQUIRED_TOOLS, [
     'prepare_storefront_cart_link',
-    'add_to_cart',
-  'update_ogabassey_guest_cart',
+    'update_ogabassey_guest_cart',
     'browse_categories',
     'get_brands',
     'get_product',
@@ -22,6 +21,7 @@ test('defines the current required public MCP inventory', () => {
     'render_ogabassey_catalog',
   ]);
   assert.equal(DEFAULT_REQUIRED_TOOLS.includes('get_recommendations'), false);
+  assert.equal(DEFAULT_REQUIRED_TOOLS.includes('add_to_cart'), false);
   assert.equal(DEFAULT_REQUIRED_TOOLS.includes('get_shipping_quote'), false);
 });
 
@@ -40,6 +40,9 @@ test('production smoke watches and runs the extracted contract tests', () => {
   const paths = workflow.split('  schedule:')[0];
   const command = workflow.split('run: node --test ')[1]?.split('\n')[0];
   assert.ok(command);
+  assert.ok(paths.includes('.github/scripts/check-live-mcp-inventory.test.mjs'));
+  assert.ok(paths.includes('.github/scripts/mcp-retired-tool-inventory.mjs'));
+  assert.ok(command.includes('.github/scripts/check-live-mcp-inventory.test.mjs'));
   for (const name of ['mcp-tool-inventory', 'mcp-checkout-tool-schema-contracts']) {
     assert.ok(paths.includes(`.github/scripts/${name}.*`));
     assert.ok(command.includes(`.github/scripts/${name}.test.mjs`));

@@ -4,6 +4,7 @@ import Ionicons, {
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
+  Platform,
   StyleSheet,
   Text,
   useColorScheme,
@@ -107,7 +108,7 @@ export function Toast({
   // M35 fix: Use onDismissRef instead of onDismiss in deps to prevent infinite re-render
   // when onDismiss is an inline function that changes identity every render.
   useEffect(() => {
-    if (visible && duration > 0) {
+    if (visible && duration > 0 && message.trim()) {
       // Clear any existing timer
       if (timerRef.current) {
         clearTimeout(timerRef.current);
@@ -117,11 +118,6 @@ export function Toast({
         onDismissRef.current();
         timerRef.current = null;
       }, duration);
-
-      // Announce to screen readers for accessibility
-      if (message.trim()) {
-        AccessibilityInfo.announceForAccessibility(message);
-      }
     }
 
     return () => {
@@ -131,6 +127,15 @@ export function Toast({
       }
     };
   }, [visible, duration, message]);
+
+  // iOS VoiceOver ignores accessibilityLiveRegion, so announce imperatively
+  // regardless of duration. Android relies on accessibilityLiveRegion below,
+  // and web maps accessibilityLiveRegion to aria-live declaratively.
+  useEffect(() => {
+    if (visible && message.trim() && Platform.OS === 'ios') {
+      AccessibilityInfo.announceForAccessibility(message);
+    }
+  }, [visible, message]);
 
   // Never show an icon-only bar: a toast without text tells the user nothing.
   if (!visible || !message.trim()) return null;
@@ -155,7 +160,7 @@ export function Toast({
       ]}
       accessible={true}
       accessibilityRole="alert"
-      accessibilityLiveRegion="polite"
+      accessibilityLiveRegion={variant === 'error' ? 'assertive' : 'polite'}
       accessibilityLabel={message}
     >
       <Ionicons name={icon} size={20} color={config.iconColor} />

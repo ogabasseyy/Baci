@@ -1,5 +1,6 @@
 import type { MerchantData, StaffAccess } from '@/hooks/merchant/types';
 import { isRepairsBusinessType } from '@/lib/repairs/repairs-feature';
+import { isAgenticTenantVisible } from './agentic-tenant-navigation';
 import type { DashboardNavItem } from './dashboard-nav-items';
 import { isSantaCampaignVisible } from './santa-navigation';
 
@@ -18,6 +19,7 @@ const resourceMap: Record<string, string> = {
   Products: 'products',
   Repairs: 'repairs',
   Customers: 'customers',
+  Messages: 'customers', // Same permission as the inbox API
   Staff: 'staff',
   Loyalty: 'marketing', // Loyalty is part of marketing permissions
   Quiz: 'marketing',
@@ -44,6 +46,14 @@ function canShowNavItem(
   if (
     item.label === 'Santa Campaign' &&
     !isSantaCampaignVisible(ctx.merchant?.slug, ctx.agenticMerchantSlug)
+  ) {
+    return false;
+  }
+
+  // Customer chat is live for the configured agentic tenant only for now.
+  if (
+    item.label === 'Messages' &&
+    !isAgenticTenantVisible(ctx.merchant?.slug, ctx.agenticMerchantSlug)
   ) {
     return false;
   }

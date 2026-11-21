@@ -38,6 +38,7 @@ vi.mock('@/components/analytics/facebook-pixel', () => ({
 
 vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
+  usePathname: () => '/shop',
 }));
 
 vi.mock('@/hooks/merchant/storefront-merchant-provider', () => ({

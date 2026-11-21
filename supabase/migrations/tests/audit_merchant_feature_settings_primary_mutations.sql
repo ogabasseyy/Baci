@@ -73,7 +73,7 @@ SET paystack_enabled = false,
     custom_settings = pg_catalog.jsonb_build_object(
       'google_store_widget_enabled', true,
       'zohoCampaigns', pg_catalog.jsonb_build_object(
-        'refreshToken', 'task5-custom-settings-secret-sentinel-QWZX',
+        'signingSecret', 'task5-custom-settings-secret-sentinel-QWZX',
         'nested', pg_catalog.jsonb_build_object(
           'token', 'task5-nested-secret-fragment-RSTV'
         )
@@ -234,7 +234,7 @@ SET credit_direct_public_key = 'task5-credit-direct-public-key-rotated-RSTV',
     custom_settings = pg_catalog.jsonb_build_object(
       'google_store_widget_enabled', true,
       'zohoCampaigns', pg_catalog.jsonb_build_object(
-        'refreshToken', 'task5-custom-settings-secret-rotated-XQTR'
+        'signingSecret', 'task5-custom-settings-secret-rotated-XQTR'
       )
     )
 WHERE merchant_id = '7e3f2e50-0000-4000-8000-000000000002';

@@ -17,7 +17,11 @@ import {
   PLATFORM_ROOT_ROUTE_SEGMENTS,
   ROOT_DOMAIN_ONLY_MAIN_APP_ROUTES,
 } from '@/lib/proxy/routing-constants';
-import { getRouteType, matchesMainAppRoute } from '@/lib/proxy/routing-policy';
+import {
+  getRouteType,
+  isBrilStashFeedPath,
+  matchesMainAppRoute,
+} from '@/lib/proxy/routing-policy';
 import { runStorefrontPreflight } from '@/lib/proxy/storefront-preflight';
 import { normalizeStorefrontTermsAliasPath } from '@/lib/proxy/terms-redirects';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
@@ -149,7 +153,8 @@ export async function runSlugRoutingStage(
   hostname: string,
   userAgent: string
 ): Promise<NextResponse | null> {
-  if (!isRootOrPreviewStorefrontHost(hostname)) return null;
+  if (isBrilStashFeedPath(pathname) || !isRootOrPreviewStorefrontHost(hostname))
+    return null;
 
   const segments = pathname.split('/').filter(Boolean);
   const slug = segments[0];

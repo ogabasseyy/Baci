@@ -29,7 +29,7 @@ const PINS: [string, readonly [number, number, number]][] = [
   ['proxy-addr', [2, 0, 8]],
   ['source-map-js', [1, 2, 2]],
   ['smol-toml', [1, 9, 0]],
-  ['next', [16, 4, 1]],
+  ['next', [16, 4, 5]],
   ['undici', [7, 30, 1]],
   ['@vitest/mocker', [4, 1, 12]],
   ['vite', [8, 1, 6]],

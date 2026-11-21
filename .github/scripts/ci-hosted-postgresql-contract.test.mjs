@@ -22,6 +22,19 @@ const POSTGRESQL_STEPS = [
 const INSTALLER_CALLERS = [...POSTGRESQL_STEPS, REPLAY_STEP];
 const scriptOf = (job, name) => scriptText(workflow.jobs[job].steps.find((step) => step.name === name));
 
+test('disposable SQL CI replays all BrilStash fixtures in UTC and Lagos', () => {
+  const job = workflow.jobs['quality-disposable-sql'];
+  const step = job.steps.find(({ name }) => name === 'Run disposable BrilStash suites');
+  assert.ok(step);
+  assert.match(job.if, /outputs\.stage == 'full'/);
+  assert.match(step.env.PGPORT, /job\.services\.postgres\.ports/);
+  assert.match(step.run, /for timezone in UTC Africa\/Lagos/);
+  for (const suite of ['storage', 'assortment', 'sources']) {
+    assert.match(step.run, new RegExp(`supabase/tests/brilstash_catalogue_${suite}\\.sql`));
+  }
+  assert.match(step.run, /ON_ERROR_STOP=1/);
+});
+
 test('jobs that need PostgreSQL verify the pre-installed toolchain on the private runner', () => {
   const replay = scriptOf(...REPLAY_STEP);
   const afterGuard = replay.slice(replay.lastIndexOf('\nfi\n'));

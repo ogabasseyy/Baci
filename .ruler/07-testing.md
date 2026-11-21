@@ -121,7 +121,16 @@ These rules apply to ALL code written by ANY agent:
 Before marking any task as complete, verify:
 
 1. New source files have colocated test files
-2. Tests pass: `pnpm turbo test`
+2. Tests pass for the affected packages: `base=$(sh ci_scripts/quality-gate-affected-base.sh); env ${base:+TURBO_SCM_BASE=$base} pnpm turbo test ${base:+--affected}` (CI's Quality Gate runs the tests for every PR)
 3. No files exceed 300 lines
 4. No duplicated logic across files (extract to shared)
 5. All exports are typed (no implicit `any`)
+
+## Local Runs vs CI
+
+Many agents share one Mac, and CI's Quality Gate already runs lint, typecheck and tests for every PR, with its own affected and targeted selection. Locally:
+
+- Run the tests your change touches: each new or changed test file, failing first and then passing.
+- For broader checks, use the affected scope: `base=$(sh ci_scripts/quality-gate-affected-base.sh)`, then `env ${base:+TURBO_SCM_BASE=$base} pnpm turbo <lint|typecheck|test> ${base:+--affected}`. When the helper prints nothing (no `origin/main` merge base, `QUALITY_GATE_FULL=1`, a change outside the `apps/<name>/` and `packages/<name>/` workspaces such as a migration or a file directly under `apps/`, a change inside a nested workspace listed in `pnpm-workspace.yaml`, or a changed file whose old or new path another workspace names; Markdown outside those folders is exempt unless a file in them names it), this runs the full task, and the `env` prefix leaves `TURBO_SCM_BASE` unset instead of exporting an empty value. The helper checks literal paths only: imports between packages are covered by Turbo's own package graph, but a path built at run time goes undetected, and CI's Quality Gate still runs on every PR. Plain `--affected` compares against the local `main` branch, which is often stale and selects every package.
+- Do not run full monorepo suites locally unless a task requires it, and never in a loop or in parallel with another full run.
+- The Claude and Codex Stop hooks use this affected scope automatically. Set `QUALITY_GATE_FULL=1` to force the full gate.

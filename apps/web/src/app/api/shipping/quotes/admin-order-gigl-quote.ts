@@ -8,6 +8,7 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
 import { resolveAdminGiglQuoteFunding } from '@/lib/shipping/gigl-shipping-funding-mode';
+import { mapPartnerDeliveryConflict } from '@/lib/shipping/map-partner-delivery-conflict';
 import { readMerchantShippingWalletBalance } from '@/lib/shipping/merchant-shipping-wallet-balance';
 import { persistAdminGiglQuote } from '@/lib/shipping/persist-admin-gigl-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
@@ -19,7 +20,6 @@ import {
 } from './admin-order-gigl-customer-paid-conflict';
 import {
   calculateAdminWalletFunding,
-  selectEligibleAdminGiglQuote,
   toAdminPublicQuote,
 } from './admin-order-gigl-quote.helpers';
 import { resolveAdminOrderGiglQuoteInput } from './admin-order-gigl-quote-input';
@@ -36,6 +36,7 @@ import {
   shouldReuseBoundAdminWalletGiglQuote,
 } from './load-bound-admin-wallet-gigl-quote';
 import { resolveAdminGiglEligibility } from './resolve-admin-gigl-eligibility';
+import { selectAdminOrderGiglRate } from './select-admin-order-gigl-rate';
 import { toShippingQuoteUpsert } from './shipping-quote-persistence';
 
 export {
@@ -165,12 +166,13 @@ export async function postAdminOrderGiglQuote(
       { status: 503 }
     );
   }
-  const quote = selectEligibleAdminGiglQuote(quotes);
-  if (!quote)
-    return NextResponse.json(
-      { error: 'No eligible GIGL address-delivery quote' },
-      { status: 503 }
-    );
+  const candidate = await selectAdminOrderGiglRate(
+    auth.supabase,
+    order,
+    quotes
+  );
+  if (candidate.error) return candidate.error;
+  const quote = candidate.quote;
   if (isPreview) {
     const previewSupabase = auth.supabase;
     const funding = await resolveAdminGiglQuoteFunding(
@@ -226,7 +228,6 @@ export async function postAdminOrderGiglQuote(
       { status: 500 }
     );
   }
-
   const { data: binding, error: bindError } = await auth.supabase.rpc(
     'bind_admin_gigl_quote' as never,
     {
@@ -240,6 +241,8 @@ export async function postAdminOrderGiglQuote(
     // Settlement can land between the check above and this bind.
     if (bindError.message?.includes(CUSTOMER_CHECKOUT_REBIND_FORBIDDEN))
       return customerPaidGiglShippingResponse();
+    const partnerConflict = mapPartnerDeliveryConflict(bindError.message);
+    if (partnerConflict) return partnerConflict;
     const already = bindError.message?.includes('already');
     const staleInputs = bindError.message?.includes('stale_order_quote_inputs');
     return NextResponse.json(

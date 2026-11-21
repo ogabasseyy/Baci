@@ -88,4 +88,50 @@ describe('filterDashboardNavItems', () => {
     const marketing = items.find((item) => item.id === 'marketing');
     expect(marketing).toBeUndefined();
   });
+
+  it('shows Messages only for the configured agentic tenant', () => {
+    const hidden = filterDashboardNavItems(
+      buildDashboardNavItems(0),
+      makeContext()
+    ).map((item) => item.id);
+    expect(hidden).not.toContain('messages');
+
+    const shown = filterDashboardNavItems(
+      buildDashboardNavItems(0),
+      makeContext({ agenticMerchantSlug: 'acme' })
+    ).map((item) => item.id);
+    expect(shown).toContain('messages');
+  });
+
+  describe('Messages for staff on the configured tenant', () => {
+    const staff = (hasPermission: (r: string, a: string) => boolean) =>
+      filterDashboardNavItems(
+        buildDashboardNavItems(0),
+        makeContext({
+          agenticMerchantSlug: 'acme',
+          staffAccess: {
+            isStaff: true,
+            isOwner: false,
+            role: 'sales_rep',
+            permissions: {},
+          },
+          hasPermission,
+        })
+      ).map((item) => item.id);
+
+    it('shows Messages to staff who can view customers', () => {
+      const hasPermission = vi.fn(
+        (resource: string, action: string) =>
+          resource === 'customers' && action === 'view'
+      );
+      expect(staff(hasPermission)).toContain('messages');
+      expect(hasPermission).toHaveBeenCalledWith('customers', 'view');
+    });
+
+    it('hides Messages from staff who cannot view customers', () => {
+      expect(staff((resource) => resource !== 'customers')).not.toContain(
+        'messages'
+      );
+    });
+  });
 });

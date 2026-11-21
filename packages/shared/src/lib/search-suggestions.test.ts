@@ -45,7 +45,7 @@ describe('catalog search suggestions', () => {
       { currency: 'USD' }
     );
     const budget = suggestions.find((item) => item.label.includes('up to'));
-    expect(budget?.label).toBe('iphone up to US$400');
+    expect(budget?.label).toBe('iphone up to $400');
     expect(budget?.proposal.filters.maxPrice).toBe(400);
   });
   it('falls back to a plain code label for unknown currencies', () => {
@@ -61,6 +61,20 @@ describe('catalog search suggestions', () => {
     const budget = suggestions.find((item) => item.label.includes('up to'));
     expect(budget?.label).toBe('iphone up to XX 400');
     expect(budget?.proposal.filters.maxPrice).toBe(400);
+  });
+  it('preserves fractional budget thresholds in the suggestion label', () => {
+    const suggestions = buildCatalogSearchSuggestions(
+      'cable',
+      'cable',
+      [
+        { price: 0.38, condition: 'used' },
+        { price: 1.2, condition: 'new' },
+      ],
+      { currency: 'USD' }
+    );
+    const budget = suggestions.find((item) => item.label.includes('up to'));
+    expect(budget?.label).toBe('cable up to $0.4');
+    expect(budget?.proposal.filters.maxPrice).toBe(0.4);
   });
   it('recognizes catalog condition aliases via canonical mapping', () => {
     expect(

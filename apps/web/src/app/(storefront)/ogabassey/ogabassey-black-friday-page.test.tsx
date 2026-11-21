@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import type { PropsWithChildren } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { asRoute } from '@/lib/routes';
+import { BlackFridayCountdown } from './black-friday-countdown';
 import { OgabasseyBlackFridayHomeLink } from './ogabassey-black-friday-home-link';
 import {
   BlackFridayHeroDetails,
@@ -11,6 +12,22 @@ import {
 
 const { getBlackFridayProducts } = vi.hoisted(() => ({
   getBlackFridayProducts: vi.fn(),
+}));
+
+vi.mock('@/assets/campaigns/black-friday-2026-hero-384.webp', () => ({
+  default: {
+    src: '/_next/static/media/black-friday-2026-hero-384.test.webp',
+    width: 384,
+    height: 192,
+  },
+}));
+
+vi.mock('@/assets/campaigns/black-friday-2026-hero-768.webp', () => ({
+  default: {
+    src: '/_next/static/media/black-friday-2026-hero-768.test.webp',
+    width: 768,
+    height: 384,
+  },
 }));
 
 vi.mock('@/lib/ogabassey-black-friday', () => ({ getBlackFridayProducts }));
@@ -38,10 +55,15 @@ beforeEach(() => {
   }));
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('Black Friday storefront page', () => {
   it('renders the hero and keeps the placeholder below it while offers load', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-26T22:00:00Z'));
     getBlackFridayProducts.mockReturnValue(new Promise(() => {}));
     render(<OgabasseyBlackFridayPage pathPrefix="" />);
 
@@ -53,11 +75,35 @@ describe('Black Friday storefront page', () => {
       screen.getByRole('region', { name: 'Black Friday offers' })
     ).toContainElement(document.getElementById('black-friday-offers'));
     expect(screen.getByRole('heading', { name: 'Black Friday' })).toBeVisible();
+    expect(screen.getByText('Friday, 27 November 2026')).toHaveAttribute(
+      'datetime',
+      '2026-11-27T00:00:00+01:00'
+    );
+    expect(screen.getByRole('timer')).toHaveTextContent('01Hours');
+    expect(document.querySelector('header img')).toHaveAttribute(
+      'src',
+      '/_next/static/media/black-friday-2026-hero-768.test.webp'
+    );
     expect(
       screen.getByRole('region', { name: 'Black Friday offers' })
     ).toContainElement(
       screen.getByRole('status', { name: 'Loading Black Friday offers' })
     );
+  });
+
+  it('reaches launch at midnight in Lagos', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-26T22:59:59Z'));
+    render(<BlackFridayCountdown />);
+
+    expect(screen.getByRole('timer')).toHaveTextContent('01Seconds');
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(screen.getByRole('timer')).toHaveTextContent(
+      'Black Friday has started.'
+    );
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it.each([
@@ -69,14 +115,11 @@ describe('Black Friday storefront page', () => {
       : Promise.resolve([]);
     render(await BlackFridayHeroDetails({ lineup }));
     expect(
-      screen.queryByText('Friday, 27 November 2026')
-    ).not.toBeInTheDocument();
-    expect(
       screen.queryByRole('link', { name: 'Shop the lineup' })
     ).not.toBeInTheDocument();
   });
 
-  it('shows the dated shop action when the lineup contains offers', async () => {
+  it('shows the shop action when the lineup contains offers', async () => {
     const lineup = Promise.resolve([
       {
         id: 'phone',
@@ -100,7 +143,6 @@ describe('Black Friday storefront page', () => {
       },
     ]);
     render(await BlackFridayHeroDetails({ lineup }));
-    expect(screen.getByText('Friday, 27 November 2026')).toBeVisible();
     expect(
       screen.getByRole('link', { name: 'Shop the lineup' })
     ).toHaveAttribute('href', '#black-friday-offers');
@@ -117,7 +159,7 @@ describe('Black Friday storefront page', () => {
           priceAmount: 2,
           price: '₦2',
           compareAtPrice: '₦4',
-          image: '/campaigns/black-friday-hero-384.webp',
+          image: '/campaigns/black-friday-2026-hero-384.webp',
         },
         {
           id: '1',

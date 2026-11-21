@@ -55,6 +55,7 @@ jobs:
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
       piggyvest_runbook: ${{ steps.gate.outputs.piggyvest_runbook }}
+      agent_gate_scripts: ${{ steps.gate.outputs.agent_gate_scripts }}
       private_ci_trusted: ${{ github.event.repository.private && vars.BACI_PRIVATE_CI_ENABLED == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,11 +80,15 @@ jobs:
         run: node --test .github/actions/setup-pnpm-store/setup-pnpm-store-allowlist.test.mjs .github/actions/pnpm-install-cached/pnpm-install-cached-allowlist.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
+      - name: Test chat env pass-through guard
+        run: node --test .github/scripts/turbo-chat-env-passthrough.test.mjs
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
+      - name: Test pre-push behind-base guard
+        run: node --test .github/scripts/lefthook-behind-base.test.mjs .github/scripts/lefthook-behind-base-bounds.test.mjs
       # Unfiltered on purpose; see docs/runbooks/storefront-release-gate.md.
       - name: Test storefront release gate
-        run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
+        run: node --test .github/scripts/storefront-release-gate.test.mjs .github/scripts/storefront-release-gate-mode.test.mjs .github/scripts/storefront-release-gate-dispatch.test.mjs .github/scripts/storefront-release-gate-references.test.mjs .github/scripts/storefront-release-gate-scripts.test.mjs .github/scripts/storefront-release-gate-steps.test.mjs .github/scripts/storefront-release-gate-git.test.mjs .github/scripts/storefront-release-gate-server-off.test.mjs .github/scripts/storefront-release-gate-workflows.test.mjs
       - name: Test CI change-scope resolver
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
       - name: Test PiggyVest stuck-funds runbook CI wiring
@@ -107,6 +112,7 @@ jobs:
           FILTER_CWV_RUNNER: ${{ steps.filter.outputs.cwv_runner }}
           FILTER_DEPLOY_SCRIPTS: ${{ steps.filter.outputs.deploy_scripts }}
           FILTER_PIGGYVEST_RUNBOOK: ${{ steps.filter.outputs.piggyvest_runbook }}
+          FILTER_AGENT_GATE_SCRIPTS: ${{ steps.filter.outputs.agent_gate_scripts }}
           # Generated Muse pin PRs must run the real gates in their
           # pull_request context; workflow_dispatch checks do not satisfy
           # required PR checks.
@@ -179,8 +185,10 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run Lint
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             pnpm turbo lint --affected
           else
             pnpm turbo lint
@@ -213,12 +221,36 @@ jobs:
         timeout-minutes: 2
         run: node .github/scripts/cleanup-builder-ci-containers.mjs
       - name: Run Typecheck
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            pnpm turbo typecheck --affected
+          # CI type-checks the application graph only: the full web program
+          # (including ~9k test files) peaks near 11 GB and is killed on the
+          # 8 GB hosted runners. `typecheck:ci` excludes tests for @baci/web and
+          # delegates to the full `typecheck` for every other package; the full
+          # `pnpm turbo typecheck` stays available locally.
+          # `--concurrency=1` runs one compiler at a time: turbo defaults to 10
+          # parallel tasks, and the ~6.8 GB web program must not overlap another
+          # package's tsc on an 8 GB runner when shared code is affected.
+          set -o pipefail
+          LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
+          STATUS=0
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            pnpm turbo typecheck:ci --affected --concurrency=1 2>&1 | tee "$LOG_FILE" || STATUS=$?
           else
-            pnpm turbo typecheck
+            pnpm turbo typecheck:ci --concurrency=1 2>&1 | tee "$LOG_FILE" || STATUS=$?
           fi
+          # Only the @baci/web main program (tsconfig.ci.json) passes
+          # `--extendedDiagnostics`; every other tsc pass is silent, so these
+          # lines are that one program's budget (turbo prefixes each line with
+          # the package and task).
+          {
+            echo "### Typecheck budget (@baci/web main program, tsconfig.ci.json)"
+            echo '```'
+            grep -E 'Instantiations|Memory used|Check time' "$LOG_FILE" || echo 'no diagnostics reported (@baci/web was not type-checked in this run)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$STATUS"
 
   # Split out of "Quality Gate - Typecheck" (2026-11-15): the two compiler passes ran one after
   # the other (~2 + ~2.5 min) and made Typecheck the slowest quick job. Same condition, same runner.
@@ -443,6 +475,8 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
       - name: Test shared cart validated-price order binding
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_remaining_review.py
+      - name: Test MCP website cart handoff and replay
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_handoff_attachment_lifetime.py --mcp-import
       - name: Test Chatwoot cart add receipt authority
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_chatwoot_cart_add_receipts.py
       - name: Test shared cart reviewed assurance binding
@@ -481,6 +515,8 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_eligibility_failure_reason_guard.sh
       - name: Test Oxygen merchant follow-up privacy and status
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_follow_up.sh
+      - name: Test quiz identity email index build retry
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/quiz_identity_email_lookup_index_retry.sh
       # Every replay SQL suite is registered in
       # apps/web/tools/db/replay-registry/*/sql-checks.txt, one folder per
       # change, and --sql-check-registry expands them in sorted folder
@@ -576,6 +612,20 @@ jobs:
           # The suites run on these binaries: fail on a server with older ones instead of testing the wrong release.
           /usr/lib/postgresql/18/bin/postgres --version | grep -Eq '^postgres \(PostgreSQL\) 18\.6( \(.+\))?$'
           /usr/lib/postgresql/18/bin/psql --version | grep -Eq '^psql \(PostgreSQL\) 18\.6( \(.+\))?$'
+      - name: Run disposable BrilStash suites
+        env:
+          PGHOST: localhost
+          PGPORT: ${{ job.services.postgres.ports['5432'] }}
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          for timezone in UTC Africa/Lagos; do
+            PGTZ="$timezone" /usr/lib/postgresql/18/bin/psql -X --dbname postgres -v ON_ERROR_STOP=1 \
+              -f supabase/tests/brilstash_catalogue_storage.sql \
+              -f supabase/tests/brilstash_catalogue_assortment.sql \
+              -f supabase/tests/brilstash_catalogue_sources.sql
+          done
       - name: Test storefront order explicit delegation
         env:
           PG_BIN: /usr/lib/postgresql/18/bin
@@ -637,7 +687,7 @@ jobs:
   quality-migration-applier:
     name: Quality Gate - Migration Applier
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true' || needs.changes.outputs.agent_gate_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
@@ -653,7 +703,7 @@ jobs:
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true' || needs.changes.outputs.agent_gate_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     steps:
@@ -679,6 +729,14 @@ jobs:
         run: bash .github/scripts/check-mobile-gem-floors.sh
       - name: Test background CI step helper
         run: node --test .github/scripts/background-step.test.mjs
+      - name: Test agent quality-gate scripts
+        run: |
+          node --test ci_scripts/quality-gate-affected-base.test.mjs ci_scripts/quality-gate-affected-base.change-set.test.mjs ci_scripts/quality-gate-affected-base.nested.test.mjs ci_scripts/quality-gate-affected-base.turbo.test.mjs ci_scripts/quality-gate-ci-wiring.test.mjs ci_scripts/quality-gate-docs.test.mjs ci_scripts/resolve-turbo-cmd.test.mjs
+          bash .claude/hooks/quality-gate-affected-scope.test.sh
+          bash .claude/hooks/quality-gate.test.sh
+          bash .claude/hooks/quality-gate-environment.test.sh
+          bash .codex/hooks/quality-gate-affected-scope.test.sh
+          bash .codex/hooks/quality-gate.test.sh
       - name: Run CI Test Planner Unit Tests
         if: needs.changes.outputs.web == 'true'
         run: node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/quiz-production-approval-workflow.test.mjs

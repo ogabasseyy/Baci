@@ -1,81 +1,109 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { after } from 'next/server';
 import { logger } from '@/lib/logger';
 import { captureServerEvent } from '@/lib/posthog/server';
-import { loadCrossRemCatalog } from './catalog-service';
+import { checkTenantRateLimitDetailed } from '@/lib/tenant-rate-limit';
+import { authorizePartnerProfile } from '../partner-profile';
+import { getPartnerProfiles } from '../partner-profiles';
 
-// 32 random bytes encoded as unpadded base64url need at least 43 characters.
-const bearerTokenPattern = /^[A-Za-z0-9_-]{43,}$/;
-const errorHeaders = { 'Cache-Control': 'private, no-store' };
-
-function digest(value: string) {
-  return createHash('sha256').update(value).digest();
-}
-
-function matchesValidator(value: string | null, etag: string) {
-  if (value?.trim() === '*') return true;
-  return value
-    ?.split(',')
-    .some((candidate) => candidate.trim().replace(/^W\//, '') === etag);
-}
-
-function unavailable() {
-  return Response.json(
-    { error: 'CrossRem catalog unavailable' },
-    { status: 503, headers: errorHeaders }
-  );
-}
-
-function unauthorized() {
-  return Response.json(
-    { error: 'Unauthorized' },
-    {
-      status: 401,
-      headers: { ...errorHeaders, 'WWW-Authenticate': 'Bearer' },
-    }
-  );
-}
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
-  const token = process.env.CROSSREM_CATALOG_TOKEN;
+  const requestId = randomUUID();
+  const reject = (
+    status: number,
+    error: string,
+    headers: Record<string, string> = {}
+  ) =>
+    Response.json(
+      { error, request_id: requestId },
+      {
+        status,
+        headers: { 'Cache-Control': 'private, no-store', ...headers },
+      }
+    );
+  const access = authorizePartnerProfile(
+    request.headers.get('authorization'),
+    'catalog:read',
+    getPartnerProfiles()
+  );
+  if (!access.ok) {
+    if (access.reason === 'scope_required') {
+      return reject(403, 'Catalog scope required');
+    }
+    if (access.reason === 'unconfigured') {
+      logger.warn({
+        message: 'Partner catalog credential is unconfigured',
+        requestId,
+      });
+    } else if (access.reason === 'ambiguous') {
+      logger.warn({
+        message: 'Partner catalog credential matches multiple grants',
+        requestId,
+      });
+    }
+    return reject(401, 'Unauthorized', { 'WWW-Authenticate': 'Bearer' });
+  }
 
-  const credential = /^Bearer +(.+)$/i.exec(
-    request.headers.get('authorization') ?? ''
-  )?.[1];
-  if (!credential || !bearerTokenPattern.test(credential)) {
-    return unauthorized();
-  }
-  if (!token || !bearerTokenPattern.test(token)) {
-    logger.warn({ message: 'CrossRem catalog credential is unconfigured' });
-    return unauthorized();
-  }
-  if (!timingSafeEqual(digest(credential), digest(token))) {
-    return unauthorized();
-  }
-
+  const { connectionId, profile } = access;
+  const { catalogFailure } = profile;
+  const unavailableMessage =
+    catalogFailure?.message ?? 'Partner catalog unavailable';
   try {
-    const snapshot = JSON.stringify(await loadCrossRemCatalog());
-    const etag = `"${digest(snapshot).toString('hex')}"`;
+    const limit = await checkTenantRateLimitDetailed(
+      'partner-catalog-read',
+      connectionId,
+      { maxRequests: 120, windowMs: 60_000 }
+    );
+    if (limit.verdict === 'unavailable') {
+      logger.warn({
+        message: 'Partner catalog rate limiter unavailable',
+        connectionId,
+        requestId,
+      });
+      return reject(503, unavailableMessage);
+    }
+    if (limit.verdict === 'denied') {
+      const now = Date.now();
+      const retryAfter = Math.max(
+        1,
+        Math.ceil(((limit.resetAt ?? now + 60_000) - now) / 1000)
+      );
+      return reject(429, 'Too many requests', {
+        'Retry-After': String(retryAfter),
+      });
+    }
+    const { body, etag } = await profile.readCatalogSnapshot(
+      request.headers.get('if-none-match')
+    );
     const headers = {
       'Cache-Control': 'private, no-cache',
       ETag: etag,
       Vary: 'Authorization',
     };
 
-    if (matchesValidator(request.headers.get('if-none-match'), etag)) {
+    if (body === null) {
       return new Response(null, { status: 304, headers });
     }
 
-    return new Response(snapshot, {
+    return new Response(body, {
       headers: { ...headers, 'Content-Type': 'application/json' },
     });
   } catch {
-    after(async () => {
-      await captureServerEvent('crossrem_catalog_snapshot_unavailable', {
-        deployment_environment:
-          process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
-      });
+    logger.warn({
+      message: 'Partner catalog snapshot unavailable',
+      connectionId,
+      requestId,
     });
-    return unavailable();
+    after(async () => {
+      await captureServerEvent(
+        catalogFailure?.event ?? 'partner_catalog_snapshot_unavailable',
+        {
+          deployment_environment:
+            process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
+        }
+      );
+    });
+    return reject(503, unavailableMessage);
   }
 }

@@ -1,0 +1,2 @@
+supabase/tests/brilstash_catalogue_privileges.sql
+supabase/tests/brilstash_catalogue_digest.sql

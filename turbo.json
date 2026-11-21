@@ -28,12 +28,33 @@
     "BACI_REMOTE_CACHE_DISTRUST_MS",
     "BACI_REMOTE_CACHE_DROPPED_BUST_DISTRUST_MS",
     "PIGGYVEST_EGRESS_RELAY_URL",
-    "PIGGYVEST_EGRESS_RELAY_SECRET"
+    "PIGGYVEST_EGRESS_RELAY_SECRET",
+    "EKAETTE_CHATWOOT_CHALLENGE_ISSUER",
+    "EKAETTE_CHATWOOT_CHALLENGE_PRIVATE_KEY",
+    "EKAETTE_CHATWOOT_CHECKOUT_ENABLED",
+    "EKAETTE_CHATWOOT_CONTEXT_BINDINGS",
+    "EKAETTE_CHATWOOT_CONTEXT_ENABLED",
+    "EKAETTE_CHATWOOT_INBOX_API_ORIGIN",
+    "EKAETTE_CHATWOOT_INBOX_BINDINGS",
+    "EKAETTE_CHATWOOT_INBOX_ENABLED",
+    "EKAETTE_CHATWOOT_NOTIFICATIONS_ENABLED",
+    "EKAETTE_CHATWOOT_PLATFORM_ORIGIN",
+    "EKAETTE_CHATWOOT_WEBHOOK_BINDINGS",
+    "EKAETTE_CHATWOOT_WIDGET_ENABLED",
+    "EKAETTE_CHAT_EVENT_RPC_SECRET",
+    "CHATWOOT_EKAETTE_CONTEXT_ISSUER",
+    "CHATWOOT_EKAETTE_CONTEXT_PUBLIC_KEY"
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ],
       "env": [
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
@@ -163,6 +184,13 @@
         "BACI_BUILDER_LOCAL_PG",
         "BACI_BUILDER_LOCAL_PG_MAJOR",
         "BACI_BUILDER_LOCAL_PG_BIN"
+      ]
+    },
+    "typecheck:ci": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "next.config*.ts",
+        "$TURBO_ROOT$/tsconfig*.json"
       ]
     },
     "qualify:experience:release": {

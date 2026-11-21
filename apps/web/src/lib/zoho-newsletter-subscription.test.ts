@@ -8,12 +8,13 @@ const merchantZohoSettings = {
     enabled: true,
     fromEmail: 'news@merchant.test',
     listKey: 'merchant-list-key',
-    refreshToken: 'merchant-refresh-token',
   },
 };
 
 function createSupabaseMock(customSettings: unknown = merchantZohoSettings) {
   return {
+    // The refresh token is stored apart from custom_settings (read via RPC).
+    rpc: () => ({ data: 'merchant-refresh-token', error: null }),
     from(table: string) {
       const maybeSingle = () =>
         table === 'merchant_feature_settings'

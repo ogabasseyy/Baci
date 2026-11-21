@@ -20,7 +20,10 @@ const routeMocks = vi.hoisted(() => ({
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: () =>
     Promise.resolve({
-      supabase: { from: routeMocks.from },
+      supabase: {
+        from: routeMocks.from,
+        rpc: () => Promise.resolve({ data: {}, error: null }),
+      },
       user: { id: 'task5-user' },
     }),
   hasPermission: (...args: unknown[]) => routeMocks.hasPermission(...args),

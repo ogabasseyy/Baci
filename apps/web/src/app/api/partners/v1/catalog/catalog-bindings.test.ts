@@ -15,9 +15,17 @@ describe('CrossRem catalog configuration', () => {
   it('pins the reviewed active and retired counts and rejects duplicate identities', () => {
     const { bindings } = crossRemCatalogConfig;
     const active = bindings.filter((row) => !row.retired);
-    const retiredCount = bindings.length - active.length;
-    expect(active).toHaveLength(4501);
-    expect(retiredCount).toBe(0);
+    const retiredIds = bindings
+      .filter((row) => row.retired)
+      .map((row) => row.listingId);
+    expect(retiredIds.sort()).toEqual([
+      '30f0d807-0dde-49e5-837a-5bd9c7efbd5d',
+      'afb7842c-f744-4f8c-8be1-87d940242600',
+      'b91bfaf7-dc9d-4f75-a3af-cc023e7d7a47',
+      'caf2702f-9b16-49f0-b97c-142538a37c1b',
+      'd6b58ad5-860e-495e-8ba9-5ac5ca8f366a',
+    ]);
+    expect(active).toHaveLength(4496);
     expect(new Set(bindings.map((row) => row.listingId)).size).toBe(
       bindings.length
     );

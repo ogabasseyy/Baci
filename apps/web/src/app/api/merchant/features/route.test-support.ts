@@ -49,7 +49,12 @@ interface TestState {
   insertData: unknown;
   insertError: unknown;
   insertPayload: unknown;
+  presenceData: unknown;
+  presenceError: unknown;
+  rpcCalls: Array<{ name: string; args: unknown }>;
+  rpcError: { code?: string; message: string } | null;
   selectColumns: string | null;
+  selectLog: string[];
   selectFilter: { column: string; value: unknown } | null;
   settingsData: unknown;
   settingsError: unknown;
@@ -74,7 +79,17 @@ function createInitialTestState(): TestState {
     insertData: null,
     insertError: null,
     insertPayload: null,
+    presenceData: {
+      facebook_capi_token: false,
+      tiktok_access_token: false,
+      snapchat_capi_token: false,
+      ga4_api_secret: false,
+    },
+    presenceError: null,
+    rpcCalls: [],
+    rpcError: null,
     selectColumns: null,
+    selectLog: [],
     selectFilter: null,
     settingsData: {
       id: 'settings-1',
@@ -173,11 +188,22 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
 
 function createMockSupabase() {
   return {
+    rpc: vi.fn((name: string, args: unknown) => {
+      testState.rpcCalls.push({ name, args });
+      if (name === 'get_merchant_integration_secret_presence') {
+        return Promise.resolve({
+          data: testState.presenceData,
+          error: testState.presenceError,
+        });
+      }
+      return Promise.resolve({ data: null, error: testState.rpcError });
+    }),
     from: vi.fn((table: string) => {
       if (table === 'merchant_feature_settings') {
         return {
           select: vi.fn((columns: string) => {
             testState.selectColumns = columns;
+            testState.selectLog.push(columns);
             return {
               eq: vi.fn((column: string, value: unknown) => {
                 testState.selectFilter = { column, value };
@@ -206,6 +232,7 @@ function createMockSupabase() {
             return {
               select: vi.fn((columns: string) => {
                 testState.selectColumns = columns;
+                testState.selectLog.push(columns);
                 return {
                   single: vi.fn(() =>
                     Promise.resolve({
@@ -223,6 +250,7 @@ function createMockSupabase() {
               eq: vi.fn().mockReturnValue({
                 select: vi.fn((columns: string) => {
                   testState.selectColumns = columns;
+                  testState.selectLog.push(columns);
                   return {
                     single: vi.fn(() =>
                       Promise.resolve({
@@ -240,6 +268,7 @@ function createMockSupabase() {
             return {
               select: vi.fn((columns: string) => {
                 testState.selectColumns = columns;
+                testState.selectLog.push(columns);
                 return {
                   single: vi.fn(() =>
                     Promise.resolve({

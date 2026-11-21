@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { OgabasseyBlackFridayPage } from '@/app/(storefront)/ogabassey/ogabassey-black-friday-page';
+import heroLarge from '@/assets/campaigns/black-friday-2026-hero-768.webp';
 import { IS_BLACK_FRIDAY_PREVIEW } from '@/config/ogabassey-black-friday';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import {
@@ -57,7 +58,7 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
       description,
       url: canonical,
       type: 'website',
-      images: ['/campaigns/black-friday-hero-768.webp'],
+      images: [heroLarge.src],
     },
   };
 }

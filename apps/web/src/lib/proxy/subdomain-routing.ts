@@ -26,6 +26,7 @@ import { applySecurityHeaders } from '@/lib/proxy/response-headers';
 import { resolveRetiredSlugRedirect } from '@/lib/proxy/retired-slug';
 import {
   getRouteType,
+  isBrilStashFeedPath,
   isPublicMachineReadablePath,
   matchesMainAppRoute,
   shouldPartitionStorefrontMetadataCache,
@@ -80,7 +81,7 @@ async function runSubdomainRoutingInternal(
   userAgent: string,
   subdomain: string | null
 ): Promise<NextResponse | null> {
-  if (!subdomain) return null;
+  if (!subdomain || isBrilStashFeedPath(pathname)) return null;
   annotateSubdomainTrace(subdomain, hostname);
   if (RESERVED_SUBDOMAINS.has(subdomain) && !isLocalhost(hostname)) {
     if (pathname.startsWith('/api')) {

@@ -22,6 +22,7 @@ function validAuthorization(overrides: Record<string, unknown> = {}) {
   return {
     authorized: true,
     conversationId: 905,
+    cartId: 'server-cart-1',
     sessionExpiresAt: Math.floor(Date.now() / 1000) + 60,
     cartSnapshot: snapshot,
     ...overrides,
@@ -39,6 +40,7 @@ describe('authorizeChatwootBridgeSession', () => {
       authorizeChatwootBridgeSession('signed-session-token', 'store-a')
     ).resolves.toEqual({
       conversationId: 905,
+      cartId: 'server-cart-1',
       sessionExpiresAt: expect.any(Number),
       snapshot,
     });
@@ -67,6 +69,7 @@ describe('authorizeChatwootBridgeSession', () => {
     ['non-numeric conversation id', response(validAuthorization({ conversationId: '905' }))],
     ['non-numeric expiry', response(validAuthorization({ sessionExpiresAt: 'never' }))],
     ['malformed cart snapshot', response(validAuthorization({ cartSnapshot: {} }))],
+    ['missing cart identity', response(validAuthorization({ cartId: undefined }))],
   ])('rejects %s', async (_label, result) => {
     vi.stubGlobal('fetch', vi.fn(async () => result));
 

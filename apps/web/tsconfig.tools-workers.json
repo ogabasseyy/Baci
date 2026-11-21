@@ -12,6 +12,9 @@
     ]
   },
   "include": [
+    "src/scripts/build-brilstash-catalogue.ts",
+    "src/scripts/manage-brilstash-catalogue.ts",
+    "src/scripts/verify-brilstash-feed.ts",
     "../../tools/staging/prefunded-card/treasury-snapshot-cli.ts",
     "../../tools/staging/prefunded-card/treasury-snapshot-cli.test.ts",
     "tools/events/**/*.ts",

@@ -267,3 +267,24 @@ it('reads current contents and a fresh handoff without submitting a cart mutatio
   expect(first).toEqual({ handoff: true, operationId: expect.any(String) });
   expect(second.operationId).not.toBe(first.operationId);
 });
+
+it('requests import-only links when automatic guest carts are enabled', async () => {
+  vi.stubEnv('BACI_MCP_GUEST_CREDENTIAL_ENABLED', 'true');
+  try {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => Response.json({ ok: true, state }));
+    const bridge = createGuestCanonicalBridge(endpoint, fetcher);
+    await bridge?.read?.(token);
+    await bridge?.update(token, { product_id: state.lines[0].productId, quantity: 0 });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    for (const call of fetcher.mock.calls) {
+      const [, request] = call;
+      expect(JSON.parse(String(request?.body))).toMatchObject({
+        handoff: 'import_mcp',
+      });
+    }
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

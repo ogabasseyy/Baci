@@ -160,6 +160,26 @@ it('keeps version conflicts definitive without preparing a handoff', async () =>
   expect(deps.handoff).not.toHaveBeenCalled();
 });
 
+it('signs an import-only operation only when the MCP caller requests it', async () => {
+  const { deps } = setup();
+  const cart = await openLegacyCanonicalCart(
+    { provider: 'mcp', handle: 'a'.repeat(64), merchant },
+    deps as never
+  );
+  await operateLegacyCanonicalCart(cart, { handoff: 'import_mcp' });
+  expect(deps.handoff.mock.calls[0]?.[2]).toMatchObject({
+    operationId: expect.stringMatching(/^legacy-handoff:mcp-import:/),
+  });
+  await operateLegacyCanonicalCart(cart, { handoff: 'import_mcp' });
+  expect(deps.handoff.mock.calls[1]?.[2]?.operationId).not.toBe(
+    deps.handoff.mock.calls[0]?.[2]?.operationId
+  );
+  await operateLegacyCanonicalCart(cart, { handoff: true });
+  expect(deps.handoff.mock.calls[2]?.[2]).toMatchObject({
+    operationId: expect.stringMatching(/^legacy-handoff:[a-f0-9]{64}$/),
+  });
+});
+
 it('refuses product-only changes that could select voucher or condition siblings', async () => {
   const { deps } = setup();
   deps.read.mockResolvedValue({

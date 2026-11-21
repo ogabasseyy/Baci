@@ -51,7 +51,8 @@ export async function postHandoffRedeem(
         () =>
           withCartRequestDeadline(
             null,
-            (requestSignal) => requestHandoff(deps, body, requestSignal),
+            (requestSignal) =>
+              completeHandoffRequest(deps, body, requestSignal),
             signal
           ),
         { isSuccessful: (reply) => reply?.response.ok === true, signal }
@@ -132,6 +133,16 @@ export async function postHandoffRedeem(
       );
       return false;
     }
+    if (
+      body.choice === 'import_mcp' &&
+      (payload.code === 'invalid_item' || payload.code === 'too_many_lines')
+    ) {
+      deps.onAttemptConsumed();
+      deps.setRedeemError(
+        'These items could not be added together. Review your website cart before trying again.'
+      );
+      return false;
+    }
     deps.setRedeemError('Could not continue this cart. Please try again.');
     return false;
   } catch {
@@ -142,6 +153,24 @@ export async function postHandoffRedeem(
   }
 }
 
+async function completeHandoffRequest(
+  deps: HandoffRedeemDeps,
+  body: Record<string, unknown>,
+  signal: AbortSignal
+) {
+  const first = await requestHandoff(deps, body, signal);
+  if (
+    body.choice !== 'import_mcp' ||
+    !first?.response.ok ||
+    first.payload.resumeImport !== true
+  )
+    return first;
+  // The first response installed the recovered cookie without importing.
+  // Send the exact attempt once more with the recovered session.
+  const resumed = await requestHandoff(deps, body, signal);
+  return resumed?.payload.resumeImport === true ? null : resumed;
+}
+
 /** Only network/cookie work holds the lock; recovery callbacks run after release. */
 async function requestHandoff(
   deps: HandoffRedeemDeps,
@@ -149,7 +178,11 @@ async function requestHandoff(
   signal: AbortSignal
 ): Promise<{
   response: Response;
-  payload: { code?: string; conflicts?: MergeConflictView[] };
+  payload: {
+    code?: string;
+    conflicts?: MergeConflictView[];
+    resumeImport?: boolean;
+  };
 } | null> {
   const slug = deps.merchantSlug;
   if (isCartDeviceRevocationPending(slug)) return null;
@@ -183,6 +216,7 @@ async function requestHandoff(
   const payload = (await response.json()) as {
     code?: string;
     conflicts?: MergeConflictView[];
+    resumeImport?: boolean;
   };
   if (signal.aborted) return null;
   return { response, payload };

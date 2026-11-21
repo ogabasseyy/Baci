@@ -1,29 +1,36 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type ExpenseFormHandlerForm,
   useExpenseFormHandlers,
 } from './useExpenseFormHandlers';
 
+type PreventRemoveEvent = {
+  data: { action: { type: 'GO_BACK' } };
+  repeat: () => void;
+};
+
 const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
   picker: vi.fn(),
   prevent: false,
-  preventCallback: null as (() => void) | null,
-  dispatch: vi.fn(),
+  preventCallback: null as ((event: PreventRemoveEvent) => void) | null,
 }));
 
 vi.mock('react-native', () => ({ Alert: { alert: mocks.alert } }));
-vi.mock('expo-router', () => ({
-  useNavigation: () => ({ dispatch: mocks.dispatch }),
-}));
 vi.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: mocks.picker,
 }));
 vi.mock('expo-router/react-navigation', () => ({
-  usePreventRemove: (prevent: boolean, callback: () => void) => {
+  usePreventRemove: (
+    prevent: boolean,
+    callback: (event: PreventRemoveEvent) => void
+  ) => {
     mocks.prevent = prevent;
     mocks.preventCallback = callback;
+    return () => {
+      mocks.prevent = false;
+    };
   },
 }));
 
@@ -57,12 +64,23 @@ describe('useExpenseFormHandlers', () => {
     );
 
     expect(mocks.prevent).toBe(true);
-    mocks.preventCallback?.();
+    const repeat = vi.fn();
+    mocks.preventCallback?.({ data: { action: { type: 'GO_BACK' } }, repeat });
     expect(mocks.alert).toHaveBeenCalledWith(
       'Discard changes?',
       'Your unsaved changes will be lost.',
       expect.any(Array)
     );
+    expect(repeat).not.toHaveBeenCalled();
+    const actions = mocks.alert.mock.calls[0]?.[2] as Array<{
+      text: string;
+      onPress?: () => void;
+    }>;
+    act(() => {
+      actions.find(({ text }) => text === 'Discard')?.onPress?.();
+    });
+    expect(repeat).toHaveBeenCalledOnce();
+    expect(mocks.prevent).toBe(false);
   });
 
   it('clears a newly selected archived group but preserves the original group', async () => {
@@ -104,10 +122,10 @@ describe('useExpenseFormHandlers', () => {
       })
     );
 
-    result.current.navigateBackAfterSave();
+    act(() => result.current.navigateBackAfterSave());
 
     expect(onNavigateBack).toHaveBeenCalledTimes(1);
-    mocks.preventCallback?.();
+    expect(mocks.prevent).toBe(false);
     expect(mocks.alert).not.toHaveBeenCalled();
   });
 

@@ -120,7 +120,10 @@ describe('ExpenseEditForm', () => {
     });
 
     expect(editFormMocks.preventRemoveEnabled).toBe(true);
-    editFormMocks.preventRemoveCallback?.();
+    editFormMocks.preventRemoveCallback?.({
+      data: { action: { type: 'GO_BACK' } },
+      repeat: vi.fn(),
+    });
 
     expect(editFormMocks.alert).toHaveBeenCalledWith(
       'Discard changes?',

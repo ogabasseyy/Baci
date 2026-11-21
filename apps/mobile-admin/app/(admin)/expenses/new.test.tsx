@@ -47,7 +47,9 @@ const mocks = vi.hoisted(() => ({
   isAccessLoading: false,
   invalidateQueries: vi.fn(),
   mutate: vi.fn(),
+  removalPrevented: false,
   router: { back: vi.fn() },
+  exitScreen: vi.fn(),
 }));
 vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ isPending: false, mutate: vi.fn() }),
@@ -201,7 +203,12 @@ vi.mock('expo-router', () => ({
   useRouter: () => mocks.router,
 }));
 vi.mock('expo-router/react-navigation', () => ({
-  usePreventRemove: vi.fn(),
+  usePreventRemove: (prevent: boolean) => {
+    mocks.removalPrevented = prevent;
+    return () => {
+      mocks.removalPrevented = false;
+    };
+  },
 }));
 vi.mock('@react-native-vector-icons/ionicons', () => ({
   default: () => null,
@@ -260,6 +267,9 @@ describe('AddExpenseScreen', () => {
       (_input: unknown, options?: { onSuccess?: () => void }) =>
         options?.onSuccess?.()
     );
+    mocks.router.back.mockImplementation(() => {
+      if (!mocks.removalPrevented) mocks.exitScreen();
+    });
   });
   afterEach(() => vi.useRealTimers());
   it('uses today and sends every editable field through the save mutation in the authoritative branch', async () => {
@@ -306,7 +316,8 @@ describe('AddExpenseScreen', () => {
       },
       expect.any(Object)
     );
-    expect(mocks.router.back).toHaveBeenCalled();
+    expect(mocks.exitScreen).toHaveBeenCalledOnce();
+    expect(mocks.alert).not.toHaveBeenCalled();
   });
   it('clears a selected group after it is archived', async () => {
     render(<AddExpenseScreen />);
@@ -329,6 +340,25 @@ describe('AddExpenseScreen', () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it('keeps the draft protected when saving fails', () => {
+    mocks.mutate.mockImplementationOnce(
+      (_input: unknown, options: { onError: () => void }) => options.onError()
+    );
+    render(<AddExpenseScreen />);
+
+    const amount = screen.getByLabelText('Expense amount');
+    fireEvent.change(amount, { target: { value: '2500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
+
+    expect(amount).toHaveValue('2500');
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'Could not save expense',
+      'Please try again.'
+    );
+    expect(mocks.removalPrevented).toBe(true);
+    expect(mocks.exitScreen).not.toHaveBeenCalled();
   });
 
   it('rejects save when the selected branch is no longer active', () => {

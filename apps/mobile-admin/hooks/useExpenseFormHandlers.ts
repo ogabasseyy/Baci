@@ -1,7 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useRef } from 'react';
+import { useState } from 'react';
 import { Alert } from 'react-native';
 import type { ExpenseEditFormDraft } from '@/schemas/expense-form';
 import type { useExpenseFormState } from './useExpenseFormState';
@@ -26,9 +25,8 @@ export function useExpenseFormHandlers({
   onNavigateBack,
   originalGroupId = null,
 }: UseExpenseFormHandlersInput) {
-  const navigation = useNavigation();
-  const bypassNextPrevent = useRef(false);
-  type NavigationAction = Parameters<typeof navigation.dispatch>[0];
+  const [isLeaving, setIsLeaving] = useState(false);
+  const shouldPreventRemoval = form.isDirty && !isLeaving;
 
   const archiveGroup = async (groupId: string) => {
     await archiveGroupMutation(groupId);
@@ -37,50 +35,36 @@ export function useExpenseFormHandlers({
     }
   };
 
-  const close = () => {
-    if (!form.isDirty) {
-      onNavigateBack();
-      return;
-    }
+  const confirmDiscard = (onDiscard: () => void) => {
     Alert.alert('Discard changes?', 'Your unsaved changes will be lost.', [
       { style: 'cancel', text: 'Keep editing' },
-      {
-        onPress: () => {
-          bypassNextPrevent.current = true;
-          onNavigateBack();
-        },
-        style: 'destructive',
-        text: 'Discard',
-      },
-    ]);
-  };
-  const handlePreventRemove = (blockedAction?: NavigationAction) => {
-    if (bypassNextPrevent.current) {
-      bypassNextPrevent.current = false;
-      if (blockedAction) navigation.dispatch(blockedAction);
-      return;
-    }
-    const navigateBack = () => {
-      if (blockedAction) {
-        navigation.dispatch(blockedAction);
-        return;
-      }
-      onNavigateBack();
-    };
-    if (!form.isDirty) {
-      navigateBack();
-      return;
-    }
-
-    Alert.alert('Discard changes?', 'Your unsaved changes will be lost.', [
-      { style: 'cancel', text: 'Keep editing' },
-      { onPress: navigateBack, style: 'destructive', text: 'Discard' },
+      { onPress: onDiscard, style: 'destructive', text: 'Discard' },
     ]);
   };
 
-  usePreventRemove(form.isDirty, (event) =>
-    handlePreventRemove(event?.data?.action)
+  const disablePrevention = usePreventRemove(
+    shouldPreventRemoval,
+    ({ repeat }) => {
+      confirmDiscard(() => {
+        setIsLeaving(true);
+        repeat();
+      });
+    }
   );
+
+  const leave = () => {
+    setIsLeaving(true);
+    disablePrevention();
+    onNavigateBack();
+  };
+
+  const close = () => {
+    if (shouldPreventRemoval) {
+      confirmDiscard(leave);
+    } else {
+      onNavigateBack();
+    }
+  };
 
   const pickReceipt = async () => {
     try {
@@ -102,10 +86,5 @@ export function useExpenseFormHandlers({
     }
   };
 
-  const navigateBackAfterSave = () => {
-    bypassNextPrevent.current = true;
-    onNavigateBack();
-  };
-
-  return { archiveGroup, close, navigateBackAfterSave, pickReceipt };
+  return { archiveGroup, close, navigateBackAfterSave: leave, pickReceipt };
 }

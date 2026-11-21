@@ -1,4 +1,3 @@
-import type { OxygenMobileCapabilities } from '@baci/shared/oxygen';
 import { router, useIsFocused } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -23,7 +22,6 @@ export function OxygenCheckoutWorkflow({
   orderId: string;
   context: {
     session: NativeSession;
-    capabilities: OxygenMobileCapabilities | null;
     total: number;
     orderNumber?: string;
     orderPaymentStatus: string;
@@ -42,16 +40,14 @@ export function OxygenCheckoutWorkflow({
   const [refreshing, setRefreshing] = useState<false | 'progress' | 'recovery'>(
     false
   );
-  const [capabilities, setCapabilities] = useState(context.capabilities);
+  const { capabilities } = workflow;
   const [selfieRetryAttempt, setSelfieRetryAttempt] = useState(0);
-  const capabilitiesReady =
-    Boolean(capabilities) && workflow.capabilitiesVerified;
-  const capabilityUnavailable = !capabilities && !workflow.busy;
+  const capabilityUnavailable =
+    Boolean(workflow.controller) && !capabilities && !workflow.busy;
   const showRecovery =
     Boolean(workflow.error) ||
     capabilityUnavailable ||
-    refreshing === 'recovery' ||
-    (Boolean(workflow.snapshot) && !workflow.busy && !capabilitiesReady);
+    refreshing === 'recovery';
   const activated = workflow.snapshot?.stage === 'activated';
   const orderPaymentConfirmed = ['paid', 'bnpl_approved'].includes(
     context.orderPaymentStatus
@@ -61,15 +57,8 @@ export function OxygenCheckoutWorkflow({
     setRefreshing(showRecovery ? 'recovery' : 'progress');
     try {
       await workflow.refresh?.();
-      const refreshed = workflow.controller?.getCapabilities() ?? null;
-      setCapabilities(refreshed);
       const state = workflow.controller?.getState();
-      if (
-        showRecovery &&
-        refreshed &&
-        state?.capabilitiesVerified &&
-        !state.error
-      )
+      if (showRecovery && state?.capabilities && !state.error)
         setSelfieRetryAttempt((attempt) => attempt + 1);
     } finally {
       setRefreshing(false);
@@ -142,14 +131,12 @@ export function OxygenCheckoutWorkflow({
                 snapshot={workflow.snapshot}
                 client={context.session.client}
                 controller={workflow.controller}
-                capabilities={
-                  workflow.capabilitiesVerified ? capabilities : null
-                }
+                capabilities={capabilities}
                 busy={
                   Boolean(completion) ||
                   workflow.busy ||
                   Boolean(refreshing) ||
-                  !capabilitiesReady
+                  !capabilities
                 }
                 productAmount={context.total}
                 scopeKey={`${context.session.profile.storagePrefix}:${context.session.userId}:${context.session.profile.merchantId}:${orderId}`}

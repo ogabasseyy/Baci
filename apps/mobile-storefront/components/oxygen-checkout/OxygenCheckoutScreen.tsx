@@ -1,4 +1,3 @@
-import type { OxygenMobileCapabilities } from '@baci/shared/oxygen';
 import { router, Stack, useIsFocused } from 'expo-router';
 import {
   type ComponentRef,
@@ -63,7 +62,6 @@ function CheckoutSession({
   );
   const [context, setContext] = useState<{
     session: NativeSession;
-    capabilities: OxygenMobileCapabilities | null;
     total: number;
     orderNumber?: string;
     orderPaymentStatus: string;
@@ -77,16 +75,14 @@ function CheckoutSession({
     setError('');
     void (async () => {
       const session = oxygenNativeSession();
-      const capabilities = await session
-        .capabilities(false)
-        .catch((failure: unknown) => {
-          if (
-            failure instanceof OxygenClientError &&
-            (failure.code === 'transport' || failure.status === 503)
-          )
-            return null;
-          throw failure;
-        });
+      await session.capabilities(false).catch((failure: unknown) => {
+        if (
+          failure instanceof OxygenClientError &&
+          (failure.code === 'transport' || failure.status === 503)
+        )
+          return null;
+        throw failure;
+      });
       const customerId = useAuthStore.getState().customer?.id;
       if (!customerId)
         throw new Error('Sign in with your linked customer account.');
@@ -98,7 +94,6 @@ function CheckoutSession({
       if (live)
         setContext({
           session,
-          capabilities,
           total: order.total,
           orderNumber: order.order_number ?? undefined,
           orderPaymentStatus: order.payment_status,

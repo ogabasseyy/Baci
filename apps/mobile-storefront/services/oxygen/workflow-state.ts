@@ -1,4 +1,7 @@
-import type { OxygenRuntimeSnapshot } from '@baci/shared/oxygen';
+import type {
+  OxygenMobileCapabilities,
+  OxygenRuntimeSnapshot,
+} from '@baci/shared/oxygen';
 import type { OxygenClientError } from './errors';
 export interface OxygenApprovalBinding {
   version: number;
@@ -7,6 +10,6 @@ export interface OxygenApprovalBinding {
 export interface OxygenWorkflowState {
   snapshot: OxygenRuntimeSnapshot | null;
   busy: boolean;
-  capabilitiesVerified: boolean;
+  capabilities: OxygenMobileCapabilities | null;
   error: OxygenClientError | null;
 }

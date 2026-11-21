@@ -47,10 +47,12 @@ describe('saved native Oxygen checkout', () => {
         },
       },
       controller: {
-        getCapabilities: () => ({ mobileEnabled: false }),
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       error: null,
       refresh,
@@ -64,10 +66,12 @@ describe('saved native Oxygen checkout', () => {
     jest.mocked(useOxygenWorkflow).mockReturnValue({
       snapshot: { stage: 'payment_required', state: {} },
       controller: {
-        getCapabilities: () => ({ mobileEnabled: false }),
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       error: null,
       refresh,
@@ -94,10 +98,12 @@ describe('saved native Oxygen checkout', () => {
         },
       },
       controller: {
-        getCapabilities: () => ({ mobileEnabled: false }),
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       error: new Error('Connection lost'),
       refresh,
@@ -110,10 +116,12 @@ describe('saved native Oxygen checkout', () => {
     const state = {
       snapshot: { stage: 'plan_required', state: { validated: true } },
       controller: {
-        getCapabilities: () => ({ mobileEnabled: false }),
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       error: new Error('Unconfirmed booking') as Error | null,
       refresh,
@@ -158,10 +166,12 @@ describe('saved native Oxygen checkout', () => {
     const state = {
       snapshot: { stage: 'plan_required', state: {} },
       controller: {
-        getCapabilities: () => refreshedCapabilities,
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       refresh,
     };
@@ -174,9 +184,11 @@ describe('saved native Oxygen checkout', () => {
           refreshedCapabilities = { mobileEnabled: false };
         setError(null);
       });
-      return { ...state, error } as unknown as ReturnType<
-        typeof useOxygenWorkflow
-      >;
+      return {
+        ...state,
+        error,
+        capabilities: refreshedCapabilities,
+      } as unknown as ReturnType<typeof useOxygenWorkflow>;
     });
     capabilities.mockResolvedValueOnce({ mobileEnabled: false });
     render(<OxygenCheckoutScreen orderId="order" />);
@@ -195,25 +207,22 @@ describe('saved native Oxygen checkout', () => {
     expect(capabilities).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('See payment breakdown')).toBeTruthy();
   });
-  it('recovers an initially verified order when its local capabilities read fails', async () => {
+  it('shows the saved workflow when its controller recovers the initial capability read', async () => {
     capabilities.mockRejectedValueOnce(new OxygenClientError('transport'));
     render(<OxygenCheckoutScreen orderId="order" />);
-    const retry = await screen.findByRole('button', {
-      name: 'Check for an update',
-    });
-    expect(screen.getByText('Oxygen is temporarily unavailable')).toBeTruthy();
-    await act(async () => fireEvent.press(retry));
-    expect(refresh).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Saved workflow')).toBeTruthy();
+    expect(refresh).not.toHaveBeenCalled();
   });
   it('keeps plan selection to one primary action without a duplicate update button', async () => {
     jest.mocked(useOxygenWorkflow).mockReturnValue({
       snapshot: { stage: 'plan_required', state: { validated: true } },
       controller: {
-        getCapabilities: () => ({ mobileEnabled: false }),
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       error: null,
       refresh,

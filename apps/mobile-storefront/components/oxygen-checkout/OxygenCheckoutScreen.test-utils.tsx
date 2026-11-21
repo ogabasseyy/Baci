@@ -103,10 +103,12 @@ export function savedCheckoutFixture() {
     jest.mocked(useOxygenWorkflow).mockReturnValue({
       snapshot: { stage: 'ready_for_activation' },
       controller: {
-        getCapabilities: () => ({ mobileEnabled: false }),
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       error: null,
       refresh,

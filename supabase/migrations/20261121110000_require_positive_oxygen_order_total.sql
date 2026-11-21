@@ -3,6 +3,12 @@
 CREATE FUNCTION oxygen_private.require_positive_oxygen_order_total()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
+  -- Preserve updates to historical orders when the amount itself is unchanged.
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.total IS NOT DISTINCT FROM OLD.total THEN
+      RETURN NEW;
+    END IF;
+  END IF;
   IF NEW.total IS NULL OR NEW.total <= 0 THEN
     RAISE EXCEPTION 'oxygen_order_total_must_be_positive' USING ERRCODE = '23514';
   END IF;
@@ -11,6 +17,6 @@ END;
 $$;
 REVOKE ALL ON FUNCTION oxygen_private.require_positive_oxygen_order_total() FROM PUBLIC, anon, authenticated, service_role;
 CREATE TRIGGER oxygen_positive_order_total
-  BEFORE INSERT ON public.orders
+  BEFORE INSERT OR UPDATE OF total ON public.orders
   FOR EACH ROW WHEN (NEW.payment_method = 'oxygen')
   EXECUTE FUNCTION oxygen_private.require_positive_oxygen_order_total();

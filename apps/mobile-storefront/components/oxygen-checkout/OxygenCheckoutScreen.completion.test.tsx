@@ -49,10 +49,12 @@ describe('saved native Oxygen checkout completion', () => {
     jest.mocked(useOxygenWorkflow).mockReturnValue({
       snapshot: { stage: 'activated' },
       controller: {
-        getCapabilities: () => ({ mobileEnabled: false }),
-        getState: () => ({ error: null, capabilitiesVerified: true }),
+        getState: () => ({
+          error: null,
+          capabilities: { mobileEnabled: false },
+        }),
       },
-      capabilitiesVerified: true,
+      capabilities: { mobileEnabled: false },
       busy: false,
       error: null,
       refresh,
@@ -109,10 +111,9 @@ it('keeps transient workflow state mounted during the confirmed OTP presentation
       state: { applicationReference: 'reference', validated: false },
     },
     controller: {
-      getCapabilities: () => ({ mobileEnabled: false }),
-      getState: () => ({ error: null, capabilitiesVerified: true }),
+      getState: () => ({ error: null, capabilities: { mobileEnabled: false } }),
     },
-    capabilitiesVerified: true,
+    capabilities: { mobileEnabled: false },
     busy: false,
     error: null,
     refresh: jest.fn(),

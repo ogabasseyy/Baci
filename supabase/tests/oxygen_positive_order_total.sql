@@ -24,4 +24,15 @@ INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency
 VALUES
   ('eb200000-0000-4000-8000-000000000005','eb200000-0000-4000-8000-000000000002','eb200000-0000-4000-8000-000000000003','OXYGEN-POSITIVE',100,'NGN','unpaid','oxygen'),
   ('eb200000-0000-4000-8000-000000000006','eb200000-0000-4000-8000-000000000002','eb200000-0000-4000-8000-000000000003','CARD-ZERO',0,'NGN','unpaid','card');
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.orders SET total = 0
+    WHERE id = 'eb200000-0000-4000-8000-000000000005';
+    RAISE EXCEPTION 'An Oxygen order was edited to zero';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'oxygen_order_total_must_be_positive' THEN RAISE; END IF;
+  END;
+END
+$test$;
 ROLLBACK;

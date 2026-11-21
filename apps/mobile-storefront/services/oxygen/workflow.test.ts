@@ -14,7 +14,7 @@ it('reads authenticated hosted progress without re-fetching verified capabilitie
   await controller.pollHostedStatus();
   expect(client.capabilities).toHaveBeenCalledTimes(1);
   expect(client.snapshot.mock.calls).toEqual([[id], [id], [id]]);
-  expect(controller.getState().capabilitiesVerified).toBe(true);
+  expect(controller.getState().capabilities).not.toBeNull();
 });
 it('does not poll hosted status until capabilities have been verified', async () => {
   const { controller, client } = setup();

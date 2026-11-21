@@ -5,7 +5,7 @@ import type { OxygenWorkflowState } from './workflow-state';
 const initial = {
   busy: false,
   error: null,
-  capabilitiesVerified: true,
+  capabilities: { mobileEnabled: true },
   snapshot: {
     workflowId: 'same',
     version: 1,

@@ -1,5 +1,4 @@
 import {
-  type OxygenMobileCapabilities,
   type OxygenRuntimeAction,
   type OxygenRuntimeSnapshot,
   type OxygenTransientFile,
@@ -34,9 +33,8 @@ export function createOxygenWorkflow(options: {
     snapshot: null,
     busy: false,
     error: null,
-    capabilitiesVerified: false,
+    capabilities: null,
   };
-  let verifiedCapabilities: OxygenMobileCapabilities | null = null;
   let alive = true;
   let ownedWorkflowId: string | null = null;
   let revision = 0;
@@ -81,13 +79,9 @@ export function createOxygenWorkflow(options: {
     return snapshot;
   }
   async function refreshCapabilities() {
-    verifiedCapabilities = null;
-    publish({ capabilitiesVerified: false });
+    publish({ capabilities: null });
     const capabilities = await readVerifiedOxygenCapabilities(options.client);
-    if (alive) {
-      verifiedCapabilities = capabilities;
-      publish({ capabilitiesVerified: capabilities !== null });
-    }
+    publish({ capabilities });
     return capabilities;
   }
   async function initializeWorkflow(generation: number) {
@@ -132,7 +126,7 @@ export function createOxygenWorkflow(options: {
   }
   const retireQueued = (kind: 'address' | 'phone') =>
     run(async (generation) => {
-      if (!state.capabilitiesVerified) throw new OxygenClientError('recovery');
+      if (!state.capabilities) throw new OxygenClientError('recovery');
       const snapshot = await read(generation);
       if (!alive || generation !== revision) return;
       await retireOxygenQueued(options.client, snapshot, kind);
@@ -142,7 +136,6 @@ export function createOxygenWorkflow(options: {
     });
   return {
     getState: () => state,
-    getCapabilities: () => verifiedCapabilities,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
@@ -159,8 +152,7 @@ export function createOxygenWorkflow(options: {
     pollHostedStatus: () =>
       run(async (generation) => {
         // The snapshot request still authenticates and checks the owned workflow.
-        if (!state.capabilitiesVerified)
-          throw new OxygenClientError('recovery');
+        if (!state.capabilities) throw new OxygenClientError('recovery');
         await read(generation);
       }),
     execute: (
@@ -169,8 +161,7 @@ export function createOxygenWorkflow(options: {
       approvalBinding?: OxygenApprovalBinding
     ) =>
       run(async (generation) => {
-        if (!state.capabilitiesVerified)
-          throw new OxygenClientError('recovery');
+        if (!state.capabilities) throw new OxygenClientError('recovery');
         const parsed = oxygenRuntimeActionSchema.parse(command);
         assertOxygenActionFile(parsed, file);
         const snapshot = await read(generation);
@@ -248,8 +239,7 @@ export function createOxygenWorkflow(options: {
       run(async (generation) => {
         const snapshot = await read(generation);
         if (!alive || generation !== revision) return;
-        if (!state.capabilitiesVerified)
-          throw new OxygenClientError('recovery');
+        if (!state.capabilities) throw new OxygenClientError('recovery');
         const action = pendingReadRecovery(snapshot);
         const pending = snapshot.pending;
         // File commands require an explicit new proof/retirement flow. Never replay OTP/signature.

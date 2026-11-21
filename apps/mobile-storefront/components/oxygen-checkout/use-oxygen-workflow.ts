@@ -19,7 +19,7 @@ export function useOxygenWorkflow(
   const [state, setState] = useState<OxygenWorkflowState>({
     snapshot: null,
     busy: false,
-    capabilitiesVerified: false,
+    capabilities: null,
     error: null,
   });
   const [controller, setController] = useState<OxygenWorkflowController | null>(

@@ -22,7 +22,7 @@ export async function issueAuthenticatedGiftCardQuote(
 ) {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error('Sign in to get a wallet quote');
+  if (error || !data.user) throw new Error('Sign in to use your wallet.');
 
   const { cardId } = inputSchema.parse(input);
   const merchant = await getRequestScopedMerchant('ogabassey');

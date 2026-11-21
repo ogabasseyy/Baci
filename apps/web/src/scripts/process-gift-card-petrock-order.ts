@@ -6,6 +6,11 @@ import {
   runGiftCardWorker,
 } from '../lib/gift-cards/petrock-worker';
 import { readPilotPetrockOffer } from '../lib/gift-cards/pilot-petrock-offer';
+import {
+  PILOT_APPROVED_KOBO,
+  PILOT_PRODUCT_ID,
+  PILOT_SUPPLIER_USD,
+} from '../lib/gift-cards/pilot-wallet-config';
 import { createPetrockClient } from '../lib/imei-providers/petrock/petrock-client';
 
 const config = z.object({
@@ -16,9 +21,6 @@ const config = z.object({
   petrockToken: z.string().min(1),
   feedbackUrl: z.url({ protocol: /^https$/ }),
   evidenceKey: z.string().regex(/^[a-fA-F0-9]{64}$/),
-  supplierUsd: z.string().regex(/^\d{1,6}\.\d{2}$/),
-  productId: z.string().regex(/^\d{1,16}$/),
-  amountKobo: z.coerce.number().int().positive(),
 });
 
 async function main() {
@@ -30,9 +32,6 @@ async function main() {
     petrockToken: process.env.PETROCK_API_TOKEN,
     feedbackUrl: process.env.GIFT_CARD_PETROCK_FEEDBACK_URL,
     evidenceKey: process.env.GIFT_CARD_EVIDENCE_KEY_HEX,
-    supplierUsd: process.env.GIFT_CARD_PILOT_SUPPLIER_USD,
-    productId: process.env.GIFT_CARD_PILOT_PRODUCT_ID,
-    amountKobo: process.env.GIFT_CARD_PILOT_AMOUNT_KOBO,
   });
   const petrockUrl = options.petrockUrl.replace(/\/+$/, '');
   const provider = createPetrockClient({ baseUrl: petrockUrl, token: options.petrockToken });
@@ -54,7 +53,7 @@ async function main() {
           select id, product_id, amount_kobo, status, provider_order_id
           from public.read_gift_card_worker_order(${id}::uuid)
         `;
-        if (!row || row.product_id !== options.productId || Number(row.amount_kobo) !== options.amountKobo) return null;
+        if (!row || row.product_id !== PILOT_PRODUCT_ID || Number(row.amount_kobo) !== PILOT_APPROVED_KOBO) return null;
         return { id: row.id, productId: row.product_id, amountKobo: Number(row.amount_kobo), status: row.status, providerOrderId: row.provider_order_id ?? undefined };
       },
       async claim(order: GiftCardWorkerOrder) {
@@ -76,8 +75,8 @@ async function main() {
         if (!row?.ok) throw new Error('Fulfillment evidence was not persisted');
       },
       async verifySupplierPrice(order) {
-        if (order.productId !== '2844') return false;
-        return readPilotPetrockOffer(Number(options.supplierUsd), petrockUrl, options.petrockToken);
+        if (order.productId !== PILOT_PRODUCT_ID) return false;
+        return readPilotPetrockOffer(PILOT_SUPPLIER_USD, petrockUrl, options.petrockToken);
       },
       submit: (order) => provider.submitGiftCardOrder({
         productId: order.productId,

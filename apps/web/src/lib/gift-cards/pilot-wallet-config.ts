@@ -10,6 +10,7 @@ const settings = z.object({
 });
 
 export const PILOT_PRODUCT_ID = '2844';
+export const PILOT_SUPPLIER_USD = 10.28;
 // This single supervised purchase is approved for exactly ₦16,735.73.
 // A different live quote requires a new approval before any wallet debit.
 export const PILOT_APPROVED_KOBO = 1673573;

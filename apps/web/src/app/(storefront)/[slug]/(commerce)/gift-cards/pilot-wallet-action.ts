@@ -9,7 +9,10 @@ import {
   confirmGiftCardPilot,
   issueGiftCardPilotQuote,
 } from '@/lib/gift-cards/pilot-wallet';
-import { getGiftCardPilotConfig } from '@/lib/gift-cards/pilot-wallet-config';
+import {
+  getGiftCardPilotConfig,
+  PILOT_SUPPLIER_USD,
+} from '@/lib/gift-cards/pilot-wallet-config';
 import { createClient } from '@/lib/supabase/server';
 
 type PilotWalletState =
@@ -23,6 +26,7 @@ const customerMessages = new Set([
   'Gift card pilot is unavailable.',
   'Petrock price or availability could not be verified.',
   'Gift card pricing is temporarily unavailable',
+  'Gift card payment could not be confirmed',
   'Price changed. No wallet debit was made.',
   'Please request a fresh price before confirming.',
   'The displayed price expired. Get a fresh quote.',
@@ -45,7 +49,7 @@ export async function runPilotWalletAction(
       const { data, error } = await supabase.auth.getUser();
       return error ? undefined : data.user?.id;
     },
-    readPetrockOffer: () => readPilotPetrockOffer(10.28),
+    readPetrockOffer: () => readPilotPetrockOffer(PILOT_SUPPLIER_USD),
     issue: issueAuthenticatedGiftCardQuote,
     confirm: confirmAuthenticatedGiftCardQuote,
   };

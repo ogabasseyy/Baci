@@ -40,7 +40,13 @@ async function freshPilotQuote(config: PilotConfig, deps: PilotDependencies) {
   }
   const quote = await deps
     .issue({ cardId: PILOT_PRODUCT_ID }, config.orderId)
-    .catch(() => {
+    .catch((error: unknown) => {
+      if (
+        error instanceof Error &&
+        error.message === 'Sign in to use your wallet.'
+      ) {
+        throw error;
+      }
       throw new Error('Gift card pricing is temporarily unavailable');
     });
   if (quote.totalKobo !== PILOT_APPROVED_KOBO) {

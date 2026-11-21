@@ -2,6 +2,7 @@ import 'server-only';
 
 import { z } from 'zod';
 import { createPetrockClient } from '../imei-providers/petrock/petrock-client';
+import { PILOT_PRODUCT_ID } from './pilot-wallet-config';
 
 function toUsdCents(amount: string | number) {
   const match = /^(\d{1,6})(?:\.(\d{1,2})0*)?$/.exec(String(amount));
@@ -41,7 +42,7 @@ export async function readPilotPetrockOffer(
     const base = url.href.replace(/\/+$/, '');
     const client = createPetrockClient({ baseUrl: base, token });
     const [product, account] = await Promise.all([
-      fetch(`${base}/products?product_id=2844`, {
+      fetch(`${base}/products?product_id=${PILOT_PRODUCT_ID}`, {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
         redirect: 'error',

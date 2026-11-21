@@ -49,7 +49,7 @@ export async function issueAuthenticatedGiftCardQuote(
 
   const totalKobo = await getGiftCardQuote(card.usdCents, markup, rateKey);
   if (totalKobo > 9_999_999_999)
-    throw new Error('Gift card price is out of range');
+    throw new Error('Gift card pricing is temporarily unavailable');
 
   const quote = {
     id: orderId === undefined ? randomUUID() : z.uuid().parse(orderId),

@@ -74,6 +74,19 @@ BEGIN
     RAISE EXCEPTION 'Expected exactly one durable debit and order';
   END IF;
 
+  UPDATE public.customer_wallets SET available_balance = NULL;
+  BEGIN
+    SET LOCAL ROLE authenticated;
+    PERFORM public.confirm_gift_card_wallet_quote(payload::text,proof);
+    RAISE EXCEPTION 'Null wallet balance was accepted' USING ERRCODE = 'XX000';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'insufficient_wallet_balance' THEN RAISE; END IF;
+  END;
+  IF (SELECT count(*) FROM public.customer_wallet_transactions) <> 1
+     OR (SELECT count(*) FROM public.gift_card_wallet_orders) <> 1 THEN
+    RAISE EXCEPTION 'Null wallet balance created an order or debit';
+  END IF;
+
   INSERT INTO public.customers VALUES
     ('30000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');
   payload := payload || jsonb_build_object(

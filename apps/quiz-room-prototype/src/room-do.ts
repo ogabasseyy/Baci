@@ -1826,6 +1826,31 @@ export class QuizRoomEngine {
 
   private static readonly MAX_REPLAY_BATCH_IDS = 200;
 
+  private static isQuizPackedQueueMessage(
+    value: unknown
+  ): value is QuizPackedQueueMessage {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+    const candidate = value as Record<string, unknown>;
+    return (
+      typeof candidate.batchId === 'string' &&
+      candidate.batchId.length > 0 &&
+      typeof candidate.eventId === 'string' &&
+      candidate.eventId.length > 0 &&
+      typeof candidate.roomId === 'string' &&
+      candidate.roomId.length > 0 &&
+      typeof candidate.seq === 'number' &&
+      Number.isFinite(candidate.seq) &&
+      typeof candidate.createdAtMs === 'number' &&
+      Number.isFinite(candidate.createdAtMs) &&
+      typeof candidate.bundleCount === 'number' &&
+      Number.isFinite(candidate.bundleCount) &&
+      Array.isArray(candidate.bundles) &&
+      typeof candidate.payloadSha256 === 'string'
+    );
+  }
+
   private async replayJournaledBatchesSerialized(
     batchIds?: readonly string[]
   ): Promise<{
@@ -1891,14 +1916,14 @@ export class QuizRoomEngine {
     const corruptBatchIds: string[] = [];
     for (const row of selectedRows) {
       try {
-        const message = JSON.parse(row.payload_json) as QuizPackedQueueMessage;
-        if (!message || typeof message !== 'object' || !message.batchId) {
+        const parsed: unknown = JSON.parse(row.payload_json);
+        if (!QuizRoomEngine.isQuizPackedQueueMessage(parsed)) {
           corruptBatchIds.push(row.batch_id);
           continue;
         }
         const byteLength = Number(row.byte_length);
         toReplay.push({
-          message,
+          message: parsed,
           serializedJson: row.payload_json,
           byteLength,
           queueOperations: Math.max(1, Math.ceil(byteLength / 65_536)),

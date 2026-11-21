@@ -1198,12 +1198,11 @@ export default {
             400
           );
         }
-        const MAX_HEARTBEAT_FUTURE_SKEW_MS = 60_000;
         const nowMs = Date.now();
         const updatedAtMs =
           typeof body.updatedAtMs === 'number' &&
           Number.isFinite(body.updatedAtMs)
-            ? Math.min(body.updatedAtMs, nowMs + MAX_HEARTBEAT_FUTURE_SKEW_MS)
+            ? Math.min(body.updatedAtMs, nowMs)
             : nowMs;
         const coordStub = getWeurStub(env.EVENT_COORDINATOR, body.eventId);
         const refreshRes = await coordStub.fetch(

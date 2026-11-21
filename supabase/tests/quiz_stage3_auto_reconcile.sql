@@ -15,6 +15,10 @@ BEGIN
   IF pg_catalog.strpos(v_reconcile_def, 'SECURITY DEFINER') = 0
     OR pg_catalog.strpos(v_reconcile_def, 'score_and_materialize_edge_quiz_event_v2') = 0
     OR pg_catalog.strpos(v_reconcile_def, 'quiz_edge_reconciliation_snapshot_v2') = 0
+    OR pg_catalog.strpos(v_reconcile_def, '''active''') = 0
+    OR pg_catalog.strpos(v_reconcile_def, '''completed''') = 0
+    OR pg_catalog.strpos(v_reconcile_def, '''cancelled''') = 0
+    OR pg_catalog.strpos(v_reconcile_def, 'v_reconciled >= 10') = 0
   THEN
     RAISE EXCEPTION 'reconcile_due_edge_quiz_events_v2 missing expected security/reconciliation wiring';
   END IF;

@@ -219,7 +219,7 @@ describe('Stage 3 operational hardening', () => {
       status: 400,
     });
 
-    // Corrupt journal row is isolated and does not block healthy sibling batches
+    // Corrupt and incomplete-envelope journal rows are isolated and left unacknowledged
     adapter.exec(
       `INSERT INTO room_batches (batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -231,13 +231,31 @@ describe('Stage 3 operational hardening', () => {
       15,
       0
     );
+    adapter.exec(
+      `INSERT INTO room_batches (batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      'incomplete-envelope-1',
+      1000,
+      nowMs,
+      JSON.stringify({ batchId: 'incomplete-envelope-1' }),
+      '0'.repeat(64),
+      37,
+      0
+    );
     const partialCorruptRes = await engine.replayJournaledBatches();
     expect(partialCorruptRes).toEqual({
       replayedCount: 1,
       batchIds: [originalBatch.message.batchId],
-      corruptBatchIds: ['corrupt-batch-1'],
+      corruptBatchIds: ['corrupt-batch-1', 'incomplete-envelope-1'],
     });
     expect(published).toHaveLength(4);
+    const unackRows = adapter.exec<{ batch_id: string; acknowledged: number }>(
+      `SELECT batch_id, acknowledged FROM room_batches WHERE batch_id IN ('corrupt-batch-1', 'incomplete-envelope-1') ORDER BY seq ASC`
+    ).rows;
+    expect(unackRows).toEqual([
+      { batch_id: 'corrupt-batch-1', acknowledged: 0 },
+      { batch_id: 'incomplete-envelope-1', acknowledged: 0 },
+    ]);
 
     // Uninitialized / expired room returns empty without throwing
     const freshEngine = new QuizRoomEngine({
@@ -317,7 +335,7 @@ describe('Stage 3 operational hardening', () => {
       },
     ]);
 
-    // Far-future updatedAtMs is clamped to now + 60s skew
+    // Far-future updatedAtMs is clamped to server time so control state is immediately fresh
     const farFutureTs = Date.now() + 86_400_000;
     const clampedRes = await worker.fetch(
       new Request('https://quiz.test/api/quiz/admin/heartbeat', {
@@ -329,8 +347,13 @@ describe('Stage 3 operational hardening', () => {
     );
     expect(clampedRes.status).toBe(200);
     const clampedJson = (await clampedRes.json()) as { updatedAtMs: number };
-    expect(clampedJson.updatedAtMs).toBeLessThanOrEqual(Date.now() + 61_000);
+    const afterMs = Date.now();
+    expect(clampedJson.updatedAtMs).toBeLessThanOrEqual(afterMs);
     expect(clampedJson.updatedAtMs).toBeLessThan(farFutureTs);
+    const freshnessStore = new QuizControlStateStore(
+      createEmptyControlState(clampedJson.updatedAtMs, 1)
+    );
+    expect(freshnessStore.isFresh(afterMs)).toBe(true);
   });
 
   it('enforces coordinator auth and routes /api/quiz/admin/replay-batches across rooms', async () => {

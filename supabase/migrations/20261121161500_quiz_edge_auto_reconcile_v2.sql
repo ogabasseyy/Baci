@@ -28,13 +28,12 @@ BEGIN
       AND event.backend_mode = 'edge_rooms'
       AND event.edge_completed_scoring_run_id IS NULL
       AND event.results_published_at IS NULL
-      AND event.status IN ('live', 'ended', 'cancelled')
+      AND event.status IN ('active', 'completed', 'cancelled')
       AND (
         event.ends_at <= pg_catalog.clock_timestamp()
         OR event.status = 'cancelled'
       )
     ORDER BY event.ends_at ASC, event.id ASC
-    LIMIT 10
   LOOP
     BEGIN
       v_reconcile := private.quiz_edge_reconciliation_snapshot_v2(v_event_id);
@@ -45,6 +44,7 @@ BEGIN
 
       PERFORM private.score_and_materialize_edge_quiz_event_v2(v_event_id, NULL);
       v_reconciled := v_reconciled + 1;
+      EXIT WHEN v_reconciled >= 10;
     EXCEPTION WHEN OTHERS THEN
       v_failed := v_failed + 1;
     END;

@@ -17,6 +17,13 @@ def refute_includes(string, substring, message)
   raise "#{message}: unexpectedly found #{substring.inspect}" if string.include?(substring)
 end
 
+def assert_raises(exception_class, message)
+  yield
+  raise "#{message}: expected #{exception_class}"
+rescue exception_class
+  true
+end
+
 def with_fixture
   source_path = File.join(
     Gem.loaded_specs.fetch("activesupport").full_gem_path,
@@ -54,6 +61,18 @@ run_test("patches pinned source, removes regex helper, and preserves normal look
     load fixture_path
     assert_equal(String, ActiveSupport::Inflector.safe_constantize("String"), "ordinary constant lookup")
     assert_equal(nil, ActiveSupport::Inflector.safe_constantize("DefinitelyMissingConstant"), "unknown constant lookup")
+
+    original_constantize = ActiveSupport::Inflector.method(:constantize)
+    ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
+      raise LoadError, "Unable to autoload constant UnrelatedName"
+    end
+    begin
+      assert_raises(LoadError, "nonmatching autoload error") do
+        ActiveSupport::Inflector.safe_constantize("String")
+      end
+    ensure
+      ActiveSupport::Inflector.define_singleton_method(:constantize, original_constantize)
+    end
   end
 end
 

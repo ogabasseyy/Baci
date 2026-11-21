@@ -30,6 +30,17 @@ function clearGeocodedFields<T extends object>(previous: T): T {
   };
 }
 
+function clearGeocodedStreetFields<T extends object>(previous: T): T {
+  return {
+    ...previous,
+    country: '',
+    countryCode: '',
+    postalCode: '',
+    latitude: undefined,
+    longitude: undefined,
+  };
+}
+
 export function NewOrderAddressInput({
   controller,
   googleMapsApiKey,
@@ -160,7 +171,7 @@ export function NewOrderAddressInput({
                 setDetailsRecovery(false);
                 setManualLocality(Boolean(text.trim()));
                 setDeliveryInfo((previous) => ({
-                  ...clearGeocodedFields(previous),
+                  ...clearGeocodedStreetFields(previous),
                   address: text,
                 }));
               },
@@ -183,6 +194,13 @@ export function NewOrderAddressInput({
           (deliveryInfo.address.trim() &&
             !(deliveryInfo.city.trim() && deliveryInfo.state.trim())) ? (
             <View style={{ marginTop: 8 }}>
+              {manualLocality &&
+              deliveryInfo.city.trim() &&
+              deliveryInfo.state.trim() ? (
+                <Text style={[styles.listSubValue, { color: colors.warning }]}>
+                  Confirm the city and state still match this street address.
+                </Text>
+              ) : null}
               {detailsRecovery ? (
                 <Text
                   accessibilityRole="alert"

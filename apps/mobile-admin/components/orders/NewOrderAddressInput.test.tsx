@@ -4,6 +4,7 @@ import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
 import { NewOrderAddressInput } from './NewOrderAddressInput';
+import { applyCustomerDeliveryAddressUpdate } from './NewOrderCustomerDeliveryAddress';
 
 const googlePlacesState: {
   lastProps?: Record<string, unknown>;
@@ -86,6 +87,39 @@ function makeController(
 }
 
 describe('NewOrderAddressInput', () => {
+  it('does not allow an object address update to overwrite customer identity', () => {
+    const previous = {
+      id: 'customer-1',
+      name: 'Ada Lovelace',
+      email: 'ada@example.test',
+      phone: '08030000000',
+      address: 'Old street',
+      city: 'Ikeja',
+      state: 'Lagos',
+    };
+    const update = {
+      address: '12 Marina',
+      city: 'Lagos Island',
+      state: 'Lagos',
+      name: 'Changed name',
+      phone: '00000000000',
+      id: 'wrong-customer',
+      email: 'wrong@example.test',
+    } as unknown as React.SetStateAction<
+      import('./new-order.types').DeliveryInfo
+    >;
+
+    expect(applyCustomerDeliveryAddressUpdate(previous, update)).toMatchObject({
+      id: 'customer-1',
+      name: 'Ada Lovelace',
+      email: 'ada@example.test',
+      phone: '08030000000',
+      address: '12 Marina',
+      city: 'Lagos Island',
+      state: 'Lagos',
+    });
+  });
+
   it('renders a plain TextInput when googleMapsApiKey is undefined', () => {
     render(
       <NewOrderAddressInput
@@ -504,7 +538,14 @@ describe('NewOrderAddressInput', () => {
       }
     );
     await Promise.resolve();
-    textInputProps?.onChangeText?.('42 Marina, Ikeja, Lago');
+    await act(async () => {
+      textInputProps?.onChangeText?.('42 Marina, Ikeja, Lago');
+    });
+    expect(
+      screen.getByText(
+        'Confirm the city and state still match this street address.'
+      )
+    ).toBeInTheDocument();
 
     expect(setDeliveryInfo).toHaveBeenCalledTimes(2);
     const editUpdater = setDeliveryInfo.mock.calls[1][0] as (
@@ -525,10 +566,10 @@ describe('NewOrderAddressInput', () => {
       })
     ).toEqual({
       address: '42 Marina, Ikeja, Lago',
-      city: '',
+      city: 'Ikeja',
       name: '',
       phone: '',
-      state: '',
+      state: 'Lagos',
       country: '',
       countryCode: '',
       postalCode: '',

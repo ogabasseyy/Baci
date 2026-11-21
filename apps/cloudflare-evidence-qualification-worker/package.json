@@ -6,7 +6,8 @@
   "scripts": {
     "lint": "biome check .",
     "test": "vitest run --config ../../packages/shared/vitest.config.ts",
-    "typecheck": "mkdir -p .qualification-dist/types && wrangler types .qualification-dist/types/version-a.d.ts --config wrangler.version-a.jsonc && wrangler types .qualification-dist/types/version-b.d.ts --config wrangler.version-b.jsonc && tsc -p tsconfig.json && tsc -p tsconfig.version-b.json && tsc -p tsconfig.artifact-receipt.json"
+    "typecheck": "mkdir -p .qualification-dist/types && wrangler types .qualification-dist/types/version-a.d.ts --config wrangler.version-a.jsonc && wrangler types .qualification-dist/types/version-b.d.ts --config wrangler.version-b.jsonc && tsc -p tsconfig.json && tsc -p tsconfig.version-b.json && tsc -p tsconfig.artifact-receipt.json",
+    "typecheck:ci": "pnpm run typecheck"
   },
   "devDependencies": {
     "comment-json": "4.6.2",

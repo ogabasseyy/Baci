@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { readOxygenCallbackBacklog } from '@/lib/payments/oxygen/runtime-callback-backlog';
 import { readOxygenRuntimeConfiguration } from '@/lib/payments/oxygen/runtime-configuration';
@@ -8,6 +8,7 @@ import {
   readSupportedBanks,
   refreshSupportedBanks,
 } from '@/lib/payments/oxygen/supported-bank-cache';
+import { bankRefreshLockKey } from '@/lib/payments/oxygen/supported-bank-refresh-lock';
 import { getRedis } from '@/lib/redis';
 
 // Next.js requires a statically analyzable route-config literal.
@@ -43,10 +44,8 @@ async function refreshBankCache(onlyIfMissing = false): Promise<Response> {
       );
       if (existing) return Response.json({ status: 'available' }, { headers });
     }
-    const partnerHash = createHash('sha256')
-      .update(config.reference)
-      .digest('hex');
-    const lockKey = `oxygen:supported-banks-recovery:${config.environment}:${partnerHash}`;
+    // Shared with the checkout refresh so only one of them calls Oxygen at a time.
+    const lockKey = bankRefreshLockKey(config.environment, config.reference);
     const token = randomUUID();
     const lock = await cache.set(lockKey, token, {
       nx: true,

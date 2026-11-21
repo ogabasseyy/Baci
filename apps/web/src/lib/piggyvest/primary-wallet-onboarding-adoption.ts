@@ -23,18 +23,31 @@ import { emitPiggyvestWebhookAlert } from './webhook-alerts';
  *   returnIfExist may have matched another identity, or the listing may lag
  *   a just-created customer: never adopted, and the intent stays reclaimable
  *   so a later lookup decides.
+ * - `refreshed_review`: any customer created or returned after an identity
+ *   refresh. Never adopted automatically; its ids are kept for review and
+ *   closure, since it may hold a live DVA.
  */
 export type CreatedCustomerVerdict =
   | 'adopt'
   | 'foreign'
   | 'duplicate'
-  | 'unproven';
+  | 'unproven'
+  | 'refreshed_review';
 
 export function judgeCreatedCustomer(input: {
   lookup: PrimaryWalletCustomerLookup | null;
   created: { customer_id: string; new_customer: boolean };
+  identityRefreshed?: boolean;
 }): CreatedCustomerVerdict {
-  const { lookup, created } = input;
+  const { lookup, created, identityRefreshed } = input;
+  // After an identity refresh, the earlier, ambiguous dispatch under the
+  // replaced BVN may still land at any time, and the old and replacement
+  // requests share one third-party identifier. No listing, before or after
+  // the create, can prove it never will, so nothing created or returned
+  // after a refresh is adopted automatically: its ids are kept and the
+  // intent goes to ownership review (OWNERSHIP_REVIEW_REQUIRED). The
+  // accepted cost is a manual review for every refreshed onboarding.
+  if (identityRefreshed) return 'refreshed_review';
   if (lookup === null) return created.new_customer ? 'adopt' : 'foreign';
   if (lookup.kind === 'none')
     return created.new_customer ? 'adopt' : 'unproven';

@@ -4,6 +4,12 @@
 
 Order details read the authenticated customer's saved Oxygen workflow and project only upfront amount/confirmation, tenure and payment dates. This read neither calls Oxygen nor creates a workflow. RLS scopes the workflow lookup and the status RPC rechecks ownership. Identity, bank details, signed payment links and provider references are not returned. Saved schedules do not establish which monthly payments have been made.
 
+Order details can show up to 50 recent repayment reports from Oxygen for an activated booking with a recorded booking partner and environment. Each report comes from a matching authenticated callback and leaves paid status, balances, settlement and fulfilment alone. Older bookings without that metadata still show their saved dates.
+
+Booking attribution is captured on the authenticated Oxygen worker claim. The runtime requires the configured worker's JWT for claims and rejects claims from customers or sessions without that identity. The webhook contract requires both `amount_sent` and `amount_deducted`. The order page displays a repayment report when the callback records a positive `amount_sent`. A positive deduction by itself does not tell us that funds were sent.
+
+Drain executing Oxygen booking commands before applying the repayment-history migration. Reconcile any stuck booking through the existing recovery flow, then retry the migration. When changing a callback binding, keep delivery tied to the original partner and environment for any active loans still receiving repayments. The current receiver cannot safely recover the booking environment from the callback body. An event stored under the replacement environment stays outside the original booking's customer history.
+
 Oxygen has reportedly wiped the staging application. Existing local records remain historical evidence; do not reset or reuse their provider references for new mutations. Start a new cart/order through the normal UI for the next test, preserving old applications and indeterminate attempts. General activation and settlement remain disabled; do not extend the completed single-booking trial to the new application.
 
 ## Remaining provider wiring

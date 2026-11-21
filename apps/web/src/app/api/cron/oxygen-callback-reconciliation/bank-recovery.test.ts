@@ -26,6 +26,7 @@ vi.mock('@/lib/payments/oxygen/supported-bank-cache', () => ({
 }));
 vi.mock('@/lib/redis', () => ({ getRedis: mocks.getRedis }));
 
+import { bankRefreshLockKey } from '@/lib/payments/oxygen/supported-bank-refresh-lock';
 import { GET } from './route';
 
 describe('Oxygen bank-list refresh task', () => {
@@ -105,8 +106,9 @@ describe('Oxygen bank-list refresh task', () => {
     expect(mocks.connect).not.toHaveBeenCalled();
     mocks.readBanks.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     expect((await GET(ensure)).status).toBe(200);
+    // The checkout refresh claims this same key, so the two never overlap.
     expect(cache.set).toHaveBeenCalledWith(
-      expect.stringMatching(/^oxygen:supported-banks-recovery:production:/),
+      bankRefreshLockKey('production', 'partner'),
       expect.any(String),
       { nx: true, ex: 330 }
     );

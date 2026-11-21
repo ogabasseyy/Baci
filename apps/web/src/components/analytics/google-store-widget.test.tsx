@@ -125,6 +125,54 @@ describe('GoogleStoreWidget', () => {
     expect(wrapperRule?.textContent).toContain('@media (min-width:768px)');
   });
 
+  it('keeps the injected badge frame on the light scheme inside a dark store', () => {
+    window.merchantwidget = { start: vi.fn() };
+    // Dark storefront: the frame would otherwise inherit this scheme, and a
+    // browser paints an opaque white canvas behind a frame whose scheme
+    // differs from its (light-only) document.
+    document.documentElement.style.setProperty('color-scheme', 'dark');
+    // What Google's script injects: its wrapper with the badge frame inside.
+    const wrapper = document.createElement('div');
+    wrapper.id = 'google-merchantwidget-iframe-wrapper';
+    const frame = document.createElement('iframe');
+    frame.id = 'merchantwidgetiframe';
+    wrapper.append(frame);
+    const unrelatedFrame = document.createElement('iframe');
+    document.body.append(wrapper, unrelatedFrame);
+
+    try {
+      const { container } = render(
+        <GoogleStoreWidget
+          merchant={baseMerchant}
+          hostname="www.ogabassey.com"
+        />
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(20000);
+      });
+
+      // The rule ships in this render's own style element.
+      const shippedRule = Array.from(container.querySelectorAll('style')).find(
+        (style) =>
+          style.textContent?.includes('#google-merchantwidget-iframe-wrapper')
+      );
+      expect(shippedRule).toBeDefined();
+
+      expect(getComputedStyle(frame).getPropertyValue('color-scheme')).toBe(
+        'light'
+      );
+      // Only the badge frame is pinned; other frames keep the store scheme.
+      expect(
+        getComputedStyle(unrelatedFrame).getPropertyValue('color-scheme')
+      ).not.toBe('light');
+    } finally {
+      wrapper.remove();
+      unrelatedFrame.remove();
+      document.documentElement.style.removeProperty('color-scheme');
+    }
+  });
+
   it('renders when the merchant has no custom domain configured', () => {
     const start = vi.fn();
     window.merchantwidget = { start };

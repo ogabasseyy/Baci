@@ -104,14 +104,15 @@ describe('primary wallet onboarding: intents stored before interest routing', ()
     expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
   });
 
-  it('stays in conflict, contacting no provider, when neither commitment matches', async () => {
+  it('stays in conflict, creating nothing, when neither commitment matches and PiggyVest lists a customer', async () => {
     const input = onboardingFixture();
     input.storage.claim.mockResolvedValue({ status: 'conflict' });
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
       status: 'conflict',
     });
     expect(input.storage.claim).toHaveBeenCalledTimes(2);
-    expect(input.findCustomers).not.toHaveBeenCalled();
+    expect(input.findCustomers).toHaveBeenCalledOnce();
+    expect(input.storage.refreshUnknown).not.toHaveBeenCalled();
     expect(input.createCustomer).not.toHaveBeenCalled();
   });
 

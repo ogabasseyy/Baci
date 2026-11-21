@@ -9,6 +9,9 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
     expect(PRIMARY_WALLET_STATEMENTS.claim).toBe(
       'SELECT piggyvest_primary.claim_onboarding($1::jsonb, $2::text) AS result'
     );
+    expect(PRIMARY_WALLET_STATEMENTS.refreshUnknown).toBe(
+      'SELECT piggyvest_primary.refresh_unknown_onboarding($1::jsonb, $2::text) AS result'
+    );
   });
 
   it('pins the read-only onboarding presence statement', () => {

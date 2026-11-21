@@ -185,8 +185,10 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run Lint
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             pnpm turbo lint --affected
           else
             pnpm turbo lint
@@ -219,12 +221,36 @@ jobs:
         timeout-minutes: 2
         run: node .github/scripts/cleanup-builder-ci-containers.mjs
       - name: Run Typecheck
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            pnpm turbo typecheck --affected
+          # CI type-checks the application graph only: the full web program
+          # (including ~9k test files) peaks near 11 GB and is killed on the
+          # 8 GB hosted runners. `typecheck:ci` excludes tests for @baci/web and
+          # delegates to the full `typecheck` for every other package; the full
+          # `pnpm turbo typecheck` stays available locally.
+          # `--concurrency=1` runs one compiler at a time: turbo defaults to 10
+          # parallel tasks, and the ~6.8 GB web program must not overlap another
+          # package's tsc on an 8 GB runner when shared code is affected.
+          set -o pipefail
+          LOG_FILE="${RUNNER_TEMP:-/tmp}/typecheck.log"
+          STATUS=0
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            pnpm turbo typecheck:ci --affected --concurrency=1 2>&1 | tee "$LOG_FILE" || STATUS=$?
           else
-            pnpm turbo typecheck
+            pnpm turbo typecheck:ci --concurrency=1 2>&1 | tee "$LOG_FILE" || STATUS=$?
           fi
+          # Only the @baci/web main program (tsconfig.ci.json) passes
+          # `--extendedDiagnostics`; every other tsc pass is silent, so these
+          # lines are that one program's budget (turbo prefixes each line with
+          # the package and task).
+          {
+            echo "### Typecheck budget (@baci/web main program, tsconfig.ci.json)"
+            echo '```'
+            grep -E 'Instantiations|Memory used|Check time' "$LOG_FILE" || echo 'no diagnostics reported (@baci/web was not type-checked in this run)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$STATUS"
 
   # Split out of "Quality Gate - Typecheck" (2026-11-15): the two compiler passes ran one after
   # the other (~2 + ~2.5 min) and made Typecheck the slowest quick job. Same condition, same runner.

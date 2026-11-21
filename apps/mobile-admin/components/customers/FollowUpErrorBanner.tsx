@@ -5,6 +5,7 @@ import { useTheme } from '@/hooks/useTheme';
 
 interface FollowUpErrorBannerProps {
   hasError?: boolean;
+  hasWriteAccessError?: boolean;
   isLimited?: boolean;
   isRetrying: boolean;
   onRetry: () => void;
@@ -22,11 +23,13 @@ export function FollowUpErrorBanner({
   isRetrying,
   onRetry,
   hasError = true,
+  hasWriteAccessError = false,
   isLimited = false,
 }: FollowUpErrorBannerProps) {
   const { colors } = useTheme();
 
-  if (!hasError && !isLimited) return null;
+  const showRetry = hasError || hasWriteAccessError;
+  if (!showRetry && !isLimited) return null;
 
   return (
     <View
@@ -38,12 +41,14 @@ export function FollowUpErrorBanner({
         {isLimited
           ? 'This queue has reached its limit; more follow-ups may be available.'
           : ''}
-        {isLimited && hasError ? ' ' : ''}
+        {isLimited && showRetry ? ' ' : ''}
         {hasError
           ? "Some follow-ups couldn't be loaded or may be out of date."
           : ''}
+        {hasError && hasWriteAccessError ? ' ' : ''}
+        {hasWriteAccessError ? "Couldn't check who can edit follow-ups." : ''}
       </Text>
-      {hasError ? (
+      {showRetry ? (
         <Pressable
           style={({ pressed }) => [
             styles.retryButton,

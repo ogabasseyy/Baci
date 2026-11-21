@@ -167,6 +167,44 @@ describe('NewOrderDetailsSection address behavior', () => {
     expect(screen.getByText('google-places')).toBeInTheDocument();
   });
 
+  it('resets Places on customer reselection but keeps the input mounted while typing', () => {
+    const controller = makeController({ sameAsCustomer: true });
+    const customer = {
+      ...controller.customer,
+      id: 'existing',
+      address: 'Saved street',
+    };
+    const { rerender } = render(
+      <NewOrderDetailsSection
+        allowOrderAddressEdit
+        controller={{ ...controller, customer, customerSelectionRevision: 1 }}
+      />
+    );
+    const originalInput = screen.getByText('google-places');
+    rerender(
+      <NewOrderDetailsSection
+        allowOrderAddressEdit
+        controller={{
+          ...controller,
+          customer: { ...customer, address: 'Typed street' },
+          customerSelectionRevision: 1,
+        }}
+      />
+    );
+    expect(screen.getByText('google-places')).toBe(originalInput);
+    rerender(
+      <NewOrderDetailsSection
+        allowOrderAddressEdit
+        controller={{
+          ...controller,
+          customer: { ...customer, address: 'Reselected street' },
+          customerSelectionRevision: 2,
+        }}
+      />
+    );
+    expect(screen.getByText('google-places')).not.toBe(originalInput);
+  });
+
   it('clears stale city and state when the selected address omits those components', () => {
     const setDeliveryInfo = vi.fn();
     const controller = makeController({

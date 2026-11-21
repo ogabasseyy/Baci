@@ -39,6 +39,7 @@ interface CreateNewOrderCustomerActionsParams {
   }) => Promise<SelectableCustomer>;
   merchantId?: string;
   newCustomer: NewCustomerDraft;
+  onCustomerSelected?: () => void;
   setCustomer: Dispatch<SetStateAction<CustomerInfo>>;
   setCustomerSearch: Dispatch<SetStateAction<string>>;
   setDuplicateCustomer: Dispatch<SetStateAction<SelectableCustomer | null>>;
@@ -77,6 +78,7 @@ export function createNewOrderCustomerActions({
   createCustomer,
   merchantId,
   newCustomer,
+  onCustomerSelected,
   setCustomer,
   setCustomerSearch,
   setDuplicateCustomer,
@@ -143,6 +145,7 @@ export function createNewOrderCustomerActions({
       latitude: hasPin ? latitude : undefined,
       longitude: hasPin ? longitude : undefined,
     });
+    onCustomerSelected?.();
     setShowCustomerModal(false);
     setCustomerSearch('');
   };

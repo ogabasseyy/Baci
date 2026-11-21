@@ -5,7 +5,7 @@ import { NewOrderAddressInput } from './NewOrderAddressInput';
 interface Props {
   controller: Pick<
     ReturnType<typeof useNewOrderController>,
-    'colors' | 'customer' | 'setCustomer'
+    'colors' | 'customer' | 'customerSelectionRevision' | 'setCustomer'
   >;
   googleMapsApiKey: string | undefined;
 }
@@ -14,11 +14,12 @@ export function NewOrderCustomerDeliveryAddress({
   controller,
   googleMapsApiKey,
 }: Props) {
-  const { colors, customer, setCustomer } = controller;
+  const { colors, customer, customerSelectionRevision, setCustomer } =
+    controller;
   return (
     <View style={{ padding: 16 }}>
       <NewOrderAddressInput
-        key={customer.id}
+        key={customerSelectionRevision}
         controller={{
           colors,
           deliveryInfo: {

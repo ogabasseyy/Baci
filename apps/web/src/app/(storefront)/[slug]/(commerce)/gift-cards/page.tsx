@@ -63,6 +63,7 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
     !!configuredMarkup && Number.isSafeInteger(markup) && markup >= 0;
   const requestHeaders = await headers();
   const prefix = getStorefrontPathPrefix(requestHeaders, merchant);
+  // Development and explicit opt-in are required, even on a loopback host.
   const mockCheckout =
     process.env.NODE_ENV === 'development' &&
     process.env.OGABASSEY_GIFT_CARD_MOCK_CHECKOUT === 'true' &&

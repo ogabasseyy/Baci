@@ -1,5 +1,7 @@
 -- Apply the gift-card fixture and the gift-card migrations to a disposable database first.
 BEGIN;
+INSERT INTO vault.decrypted_secrets VALUES
+  ('gift_card_petrock_pilot_order_id', '50000000-0000-4000-8000-000000000001');
 INSERT INTO public.merchants VALUES ('20000000-0000-4000-8000-000000000001', 'ogabassey');
 INSERT INTO public.customers VALUES
   ('30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001');
@@ -7,6 +9,11 @@ INSERT INTO public.customer_wallet_transactions (id,wallet_id,customer_id,mercha
 VALUES ('40000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001');
 INSERT INTO public.gift_card_wallet_orders (id,merchant_id,customer_id,product_id,amount_kobo,wallet_transaction_id)
 VALUES ('50000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','2844',1673573,'40000000-0000-4000-8000-000000000001');
+
+INSERT INTO public.customer_wallet_transactions (id,wallet_id,customer_id,merchant_id)
+VALUES ('40000000-0000-4000-8000-000000000003','40000000-0000-4000-8000-000000000002','30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001');
+INSERT INTO public.gift_card_wallet_orders (id,merchant_id,customer_id,product_id,amount_kobo,wallet_transaction_id)
+VALUES ('50000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','2844',1673573,'40000000-0000-4000-8000-000000000003');
 
 DO $$
 DECLARE v_order_id uuid := '50000000-0000-4000-8000-000000000001';
@@ -16,6 +23,10 @@ BEGIN
     RAISE EXCEPTION 'worker privilege boundary is too broad';
   END IF;
   SET LOCAL ROLE gift_card_petrock_worker;
+  IF EXISTS (SELECT FROM public.read_gift_card_worker_order('50000000-0000-4000-8000-000000000002'))
+     OR public.claim_gift_card_petrock_attempt('50000000-0000-4000-8000-000000000002','2844',1673573) THEN
+    RAISE EXCEPTION 'Worker could access a different order with identical economics';
+  END IF;
   IF public.claim_gift_card_petrock_attempt(v_order_id,'2844',1) THEN RAISE EXCEPTION 'Wrong amount claimed'; END IF;
   IF NOT public.claim_gift_card_petrock_attempt(v_order_id,'2844',1673573)
      OR public.claim_gift_card_petrock_attempt(v_order_id,'2844',1673573) THEN
@@ -42,6 +53,8 @@ $$;
 ROLLBACK;
 
 BEGIN;
+INSERT INTO vault.decrypted_secrets VALUES
+  ('gift_card_petrock_pilot_order_id', '50000000-0000-4000-8000-000000000001');
 INSERT INTO public.merchants VALUES ('20000000-0000-4000-8000-000000000001', 'ogabassey');
 INSERT INTO public.customers VALUES
   ('30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001');

@@ -1801,6 +1801,92 @@ export class QuizRoomEngine {
   }
 
   /**
+   * Re-publishes immutable journaled batches from `room_batches` verbatim
+   * (preserving original `batchId`, `seq`, and `serializedJson` payload) so
+   * operators can recover DLQ'd or dropped queue messages without mutating
+   * attempt state or allocating new batch IDs.
+   */
+  async replayJournaledBatches(
+    batchIds?: readonly string[]
+  ): Promise<{ replayedCount: number; batchIds: readonly string[] }> {
+    const prev = this.flushChain;
+    let release!: () => void;
+    this.flushChain = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await prev;
+    try {
+      return await this.replayJournaledBatchesSerialized(batchIds);
+    } finally {
+      release();
+    }
+  }
+
+  private async replayJournaledBatchesSerialized(
+    batchIds?: readonly string[]
+  ): Promise<{ replayedCount: number; batchIds: readonly string[] }> {
+    if (batchIds !== undefined && batchIds.length === 0) {
+      return { replayedCount: 0, batchIds: [] };
+    }
+
+    this.ensureSchemaSync();
+
+    let selectedRows: BatchRow[];
+    if (batchIds === undefined) {
+      selectedRows = this.storage.exec<BatchRow>(
+        `SELECT batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged
+         FROM room_batches ORDER BY seq ASC`
+      ).rows;
+    } else {
+      const normalizedIds = Array.from(
+        new Set(batchIds.map((id) => id.trim()).filter((id) => id.length > 0))
+      );
+      if (normalizedIds.length === 0) {
+        return { replayedCount: 0, batchIds: [] };
+      }
+      const placeholders = normalizedIds.map(() => '?').join(', ');
+      selectedRows = this.storage.exec<BatchRow>(
+        `SELECT batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged
+         FROM room_batches WHERE batch_id IN (${placeholders}) ORDER BY seq ASC`,
+        ...normalizedIds
+      ).rows;
+    }
+
+    if (selectedRows.length === 0) {
+      return { replayedCount: 0, batchIds: [] };
+    }
+
+    const toReplay: PackedMessageWithMetrics[] = selectedRows.map((row) => {
+      const message = JSON.parse(row.payload_json) as QuizPackedQueueMessage;
+      const byteLength = Number(row.byte_length);
+      return {
+        message,
+        serializedJson: row.payload_json,
+        byteLength,
+        queueOperations: Math.max(1, Math.ceil(byteLength / 65_536)),
+      };
+    });
+
+    if (this.hooks.onPublishBatches) {
+      await this.hooks.onPublishBatches(toReplay);
+    }
+
+    this.storage.transactionSync(() => {
+      for (const packed of toReplay) {
+        this.storage.exec(
+          `UPDATE room_batches SET acknowledged = 1 WHERE batch_id = ?`,
+          packed.message.batchId
+        );
+      }
+    });
+
+    return {
+      replayedCount: toReplay.length,
+      batchIds: toReplay.map((packed) => packed.message.batchId),
+    };
+  }
+
+  /**
    * Seals the room at `persistedCloseAtMs` (or `scheduled_ends_at` for fairness replay,
    * or `cancelled`). Handles never-opened rooms, 0-answer started attempts, and partial
    * attempts, flushes all remaining bundles (even 1 underfilled bundle), and persists

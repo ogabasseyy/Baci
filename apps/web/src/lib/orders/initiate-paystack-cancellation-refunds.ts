@@ -149,8 +149,11 @@ export async function initiatePaystackCancellationRefunds({
         if (
           data?.status !== 'success' ||
           data.reference !== reference ||
+          typeof data.currency !== 'string' ||
           data.currency.toUpperCase() !== 'NGN' ||
           data.amount !== koboAmount ||
+          typeof data.id !== 'string' ||
+          !/^[1-9][0-9]*$/.test(data.id) ||
           !('domain' in data) ||
           (data.domain !== 'test' && data.domain !== 'live')
         ) {

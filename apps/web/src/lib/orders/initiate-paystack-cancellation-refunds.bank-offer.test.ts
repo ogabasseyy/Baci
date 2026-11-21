@@ -95,6 +95,43 @@ describe('bank-offer cancellation refunds', () => {
   });
 
   it.each([
+    { currency: null },
+    { id: 55 },
+  ])('quarantines malformed successful verification %j before refund dispatch', async (invalidFields) => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const leg = { ...transaction, gateway_reference: reference };
+    const rpc = vi.fn().mockResolvedValueOnce({ data: 9501, error: null });
+    mocks.verifyTransaction.mockResolvedValueOnce({
+      success: true,
+      data: {
+        status: 'success',
+        reference,
+        amount: 9501,
+        currency: 'NGN',
+        domain: 'test',
+        id: '55',
+        ...invalidFields,
+      },
+    });
+    await expect(
+      initiatePaystackCancellationRefunds({
+        claimToken: 'claim-1',
+        order,
+        refundedPaymentIds: new Set(),
+        supabase: { rpc } as never,
+        transactions: [leg],
+      })
+    ).resolves.toEqual([]);
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactions: [leg],
+      })
+    );
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+  });
+
+  it.each([
     'reversed',
     'raced',
     'admitted',

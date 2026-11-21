@@ -7,11 +7,30 @@ DECLARE
   v_reference text := v_capture->>'reference';
   v_transaction uuid := (v_capture->>'transaction')::uuid;
   v_refund_claim uuid := gen_random_uuid();
+  v_other_order uuid := gen_random_uuid();
+  v_constraint text;
 BEGIN
+  BEGIN
+    INSERT INTO public.orders (id, merchant_id, order_number, currency, payment_method,
+      payment_status, customer_email, total, discount_amount, tax_basis)
+    VALUES (v_other_order, v_merchant, 'BANK-OFFER-DUPLICATE-REFERENCE', 'NGN', 'paystack',
+      'unpaid', 'buyer@example.test', 95, 0, 'exclusive');
+    INSERT INTO public.transactions (merchant_id, order_id, transaction_type,
+      amount, currency, gateway, gateway_reference, status)
+    VALUES (v_merchant, v_other_order, 'payment', 95, 'NGN', 'paystack', v_reference, 'pending');
+    RAISE EXCEPTION 'A duplicate bank-offer reference could identify another order';
+  EXCEPTION WHEN unique_violation THEN
+    GET STACKED DIAGNOSTICS v_constraint = CONSTRAINT_NAME;
+    IF v_constraint <> 'transactions_bank_offer_reference_uidx' THEN RAISE; END IF;
+  END;
   SET LOCAL ROLE service_role;
   IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS DISTINCT FROM 9500
     OR public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, 'BCO-other') IS NOT NULL
+    OR public.get_bank_card_offer_refundable_amount(v_order, gen_random_uuid(), v_transaction, v_reference) IS NOT NULL
   THEN RAISE EXCEPTION 'Refund worker must read only the verified discounted capture'; END IF;
+  IF public.get_bank_card_offer_webhook_transaction(v_reference)->>'merchant_id' IS DISTINCT FROM v_merchant::text
+    OR public.get_bank_card_offer_webhook_transaction(v_reference)->>'id' IS DISTINCT FROM v_transaction::text
+  THEN RAISE EXCEPTION 'Webhook lookup must resolve the saved transaction and merchant'; END IF;
   SET LOCAL ROLE authenticated;
   BEGIN
     PERFORM public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference);

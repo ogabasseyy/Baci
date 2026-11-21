@@ -123,7 +123,10 @@ describe('bank card offer refund', () => {
       })
     );
 
-    mocks.verify.mockResolvedValue({ success: true, data });
+    mocks.verify.mockResolvedValue({
+      success: true,
+      data: { ...data, id: String(data.id) },
+    });
     const { executeOrderCancellationSideEffect } = await import(
       '@/lib/orders/execute-order-cancellation-side-effect'
     );

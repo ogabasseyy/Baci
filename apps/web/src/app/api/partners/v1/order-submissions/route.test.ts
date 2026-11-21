@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '@/lib/logger';
 import { GET } from './route';
 
 const mocks = vi.hoisted(() => ({
@@ -122,5 +123,24 @@ describe('partner order submission lookup', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
     mocks.rpc.mockResolvedValue({ data: null, error: null });
     expect((await GET(request())).status).toBe(404);
+  });
+  it('reports server proof rejection without exposing database details', async () => {
+    using log = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'private error' },
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toEqual({
+      error: { code: 'ORDER_LOOKUP_UNAVAILABLE' },
+      request_id: expect.any(String),
+    });
+    expect(log).toHaveBeenCalledExactlyOnceWith({
+      message: 'Partner order lookup database authorization rejected',
+      connectionId: 'crossrem-ogabassey',
+      requestId: body.request_id,
+    });
   });
 });

@@ -134,4 +134,23 @@ describe('partner tracking lookup', () => {
       { payment_status_unknown: false, shipping_status_unknown: true }
     );
   });
+  it('reports server proof rejection without exposing database details', async () => {
+    using log = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'private error' },
+    });
+    const response = await request();
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toEqual({
+      error: { code: 'ORDER_LOOKUP_UNAVAILABLE' },
+      request_id: expect.any(String),
+    });
+    expect(log).toHaveBeenCalledExactlyOnceWith({
+      message: 'Partner tracking database authorization rejected',
+      connectionId: 'crossrem-ogabassey',
+      requestId: body.request_id,
+    });
+  });
 });

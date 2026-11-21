@@ -75,6 +75,15 @@ export async function GET(
         p_route_proof: proof,
       }
     );
+    // Baci mints the proof after partner credential and scope validation.
+    if (error?.code === '42501') {
+      logger.error({
+        message: 'Partner tracking database authorization rejected',
+        connectionId,
+        requestId,
+      });
+      return invalid(503, 'ORDER_LOOKUP_UNAVAILABLE');
+    }
     if (error) throw new Error('Partner tracking storage unavailable');
     if (data === null) return invalid(404, 'ORDER_NOT_FOUND');
 

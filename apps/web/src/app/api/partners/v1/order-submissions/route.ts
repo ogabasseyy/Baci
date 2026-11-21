@@ -81,6 +81,15 @@ export async function GET(request: Request) {
         p_route_proof: proof,
       }
     );
+    // Baci mints the proof after partner credential and scope validation.
+    if (error?.code === '42501') {
+      logger.error({
+        message: 'Partner order lookup database authorization rejected',
+        connectionId,
+        requestId,
+      });
+      return invalid(503, 'ORDER_LOOKUP_UNAVAILABLE');
+    }
     if (error) throw new Error('Partner order lookup storage unavailable');
     if (data === null) return invalid(404, 'ORDER_SUBMISSION_NOT_FOUND');
 

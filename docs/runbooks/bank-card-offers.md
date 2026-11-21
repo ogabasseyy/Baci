@@ -2,7 +2,7 @@
 
 ## Release and activation
 
-The shipped offer list is empty. Before merging checkout or payment changes, require the full web tests, database migration replay, and both bank card offer SQL contracts on the reviewed commit. The SQL contracts cover saved quotes, exact capture and refund amounts, replay fences, and the paid-capture reversal queue.
+The shipped offer list is empty. Before merging checkout or payment changes, require the full web tests and the DB Replay job on the reviewed commit. That job runs `bank_card_offer_order_snapshots.sql` and `bank_card_offer_payment_attempts.sql` against PostgreSQL after migration replay. Both suites are listed in their original migration folders' `sql-checks.txt` files. They cover saved quotes, buyer ownership, exact capture and refund amounts, replay fences, and the paid-capture reversal queue.
 
 Before enabling a bank offer, the payments team records the bank approval, confirms the exact issuer label and refund behavior with Paystack, and assigns a duty owner for capture and terminal reviews. With the offer still disabled, confirm that both review types reach the team's alerting and agree on a response target. Review-gated checkout directs buyers to order history or support while that owner reconciles the original payment reference.
 

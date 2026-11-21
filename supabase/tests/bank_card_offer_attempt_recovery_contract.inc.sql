@@ -36,6 +36,12 @@ BEGIN
     RAISE EXCEPTION 'A bank offer must claim a pending Paystack reference';
   END IF;
   SELECT id INTO STRICT v_transaction FROM public.transactions WHERE gateway_reference = v_reference;
+  SET LOCAL ROLE authenticated;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.get_sessionless_payment_reference_snapshot(v_reference) s
+    WHERE s.transaction_id = v_transaction AND s.order_id = v_order AND s.merchant_id = v_merchant
+  ) THEN RAISE EXCEPTION 'The buyer must resolve only the saved merchant and payment'; END IF;
+  RESET ROLE;
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction) IS NOT NULL THEN
     RAISE EXCEPTION 'Customer scope cannot read internal capture context';
   END IF;
@@ -49,8 +55,11 @@ BEGIN
   IF NOT public.ensure_bank_card_offer_capture_sweep(v_reference)
     THEN RAISE EXCEPTION 'An existing sweep marker was not acknowledged idempotently'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', gen_random_uuid())::text, true);
-  IF public.ensure_bank_card_offer_capture_sweep(v_reference)
-    THEN RAISE EXCEPTION 'A different buyer could claim the bank-offer capture marker'; END IF;
+  SET LOCAL ROLE authenticated;
+  IF EXISTS (SELECT 1 FROM public.get_sessionless_payment_reference_snapshot(v_reference))
+    OR public.ensure_bank_card_offer_capture_sweep(v_reference)
+  THEN RAISE EXCEPTION 'A different buyer must not read the payment or mark it for recovery'; END IF;
+  RESET ROLE;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
   IF NOT public.request_bank_card_offer_initialization_review(v_order, v_merchant, v_reference, true)

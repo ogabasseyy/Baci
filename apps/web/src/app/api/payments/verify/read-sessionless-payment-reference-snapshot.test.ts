@@ -20,3 +20,21 @@ it('preserves database errors and distinguishes them from an absent row', async 
     }
   );
 });
+
+it('only accepts a snapshot for the exact requested reference', async () => {
+  const row = {
+    transaction_id: 'payment',
+    order_id: 'order',
+    merchant_id: 'merchant',
+    gateway_reference: 'saved-reference',
+    amount: 95,
+  };
+  const rpc = vi.fn().mockResolvedValue({ data: [row], error: null });
+  const client = { rpc } as never;
+  await expect(
+    readSessionlessPaymentReferenceSnapshot(client, 'other-reference')
+  ).resolves.toBeNull();
+  await expect(
+    readSessionlessPaymentReferenceSnapshot(client, row.gateway_reference)
+  ).resolves.toMatchObject({ orderId: 'order', merchantId: 'merchant' });
+});

@@ -11,6 +11,12 @@ DECLARE
   v_gateway_response jsonb;
 BEGIN
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
+    'storefront_order_context', 'route', 'storefront_order_merchant_id', gen_random_uuid())::text, true);
+  SET LOCAL ROLE authenticated;
+  IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction) IS NOT NULL
+  THEN RAISE EXCEPTION 'A route scoped to another merchant must not read capture evidence'; END IF;
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
   v_evidence := jsonb_build_object('contractVersion', 'paystack_verified_card_v1',
     'cardChannel', 'card', 'cardBrand', 'visa', 'currency', 'NGN', 'domain', 'test',

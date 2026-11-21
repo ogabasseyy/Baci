@@ -16,5 +16,8 @@ export async function readSessionlessPaymentReferenceSnapshot(
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : null;
   if (!row || typeof row !== 'object') return null;
-  return parsePaymentReferenceSnapshotRow(row as Record<string, unknown>);
+  const snapshot = parsePaymentReferenceSnapshotRow(
+    row as Record<string, unknown>
+  );
+  return snapshot?.gatewayReference === reference ? snapshot : null;
 }

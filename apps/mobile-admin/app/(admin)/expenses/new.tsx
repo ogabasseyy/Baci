@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable } from 'react-native';
 import { AddExpenseFooter } from '@/components/expenses/AddExpenseFooter';
@@ -60,7 +60,6 @@ function AddExpenseForm({
   );
   const fatalGroupsError = isFatalDependencyError(groupsError, hasCachedGroups);
   const saveExpense = useSaveExpense();
-  const router = useRouter();
   const activeBranches = branches.filter((branch) => branch.active);
   const defaultBranchId =
     activeBranches.find((branch) => branch.is_default)?.id ??
@@ -101,7 +100,6 @@ function AddExpenseForm({
     useExpenseFormHandlers({
       archiveGroupMutation,
       form,
-      onNavigateBack: router.back,
     });
   if (fatalBranchesError) {
     return (

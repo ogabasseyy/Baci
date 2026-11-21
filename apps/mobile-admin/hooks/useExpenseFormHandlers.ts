@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { useRouter } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useState } from 'react';
 import { Alert } from 'react-native';
@@ -15,18 +16,25 @@ export type ExpenseFormHandlerForm = Pick<
 interface UseExpenseFormHandlersInput {
   archiveGroupMutation: (groupId: string) => Promise<unknown>;
   form: ExpenseFormHandlerForm;
-  onNavigateBack: () => void;
   originalGroupId?: string | null;
 }
 
 export function useExpenseFormHandlers({
   archiveGroupMutation,
   form,
-  onNavigateBack,
   originalGroupId = null,
 }: UseExpenseFormHandlersInput) {
+  const router = useRouter();
   const [isLeaving, setIsLeaving] = useState(false);
   const shouldPreventRemoval = form.isDirty && !isLeaving;
+
+  const navigateBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(admin)/expenses');
+    }
+  };
 
   const archiveGroup = async (groupId: string) => {
     await archiveGroupMutation(groupId);
@@ -55,14 +63,14 @@ export function useExpenseFormHandlers({
   const leave = () => {
     setIsLeaving(true);
     disablePrevention();
-    onNavigateBack();
+    navigateBack();
   };
 
   const close = () => {
     if (shouldPreventRemoval) {
       confirmDiscard(leave);
     } else {
-      onNavigateBack();
+      navigateBack();
     }
   };
 

@@ -58,7 +58,7 @@ const editFormMocks = vi.hoisted(() => ({
   privateReceiptUrl: 'https://signed.example.com/receipt.jpg',
   preventRemoveCallback: null as PreventRemoveCallback | null,
   preventRemoveEnabled: false,
-  router: { back: vi.fn() },
+  router: { back: vi.fn(), canGoBack: () => true },
 }));
 
 export function getExpenseEditFormMocks() {

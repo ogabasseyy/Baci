@@ -15,9 +15,11 @@ const mocks = vi.hoisted(() => ({
   picker: vi.fn(),
   prevent: false,
   preventCallback: null as ((event: PreventRemoveEvent) => void) | null,
+  router: { back: vi.fn(), canGoBack: () => true },
 }));
 
 vi.mock('react-native', () => ({ Alert: { alert: mocks.alert } }));
+vi.mock('expo-router', () => ({ useRouter: () => mocks.router }));
 vi.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: mocks.picker,
 }));
@@ -54,12 +56,10 @@ describe('useExpenseFormHandlers', () => {
   });
 
   it('routes native Back through the dirty-form discard confirmation', () => {
-    const onNavigateBack = vi.fn();
     renderHook(() =>
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
         form: makeForm(true),
-        onNavigateBack,
       })
     );
 
@@ -90,7 +90,6 @@ describe('useExpenseFormHandlers', () => {
       useExpenseFormHandlers({
         archiveGroupMutation,
         form,
-        onNavigateBack: vi.fn(),
         originalGroupId: 'original-group',
       })
     );
@@ -104,7 +103,6 @@ describe('useExpenseFormHandlers', () => {
       useExpenseFormHandlers({
         archiveGroupMutation,
         form: originalForm,
-        onNavigateBack: vi.fn(),
         originalGroupId: 'original-group',
       })
     );
@@ -113,18 +111,16 @@ describe('useExpenseFormHandlers', () => {
   });
 
   it('bypasses the dirty guard when navigating back after a successful save', () => {
-    const onNavigateBack = vi.fn();
     const { result } = renderHook(() =>
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
         form: makeForm(true),
-        onNavigateBack,
       })
     );
 
     act(() => result.current.navigateBackAfterSave());
 
-    expect(onNavigateBack).toHaveBeenCalledTimes(1);
+    expect(mocks.router.back).toHaveBeenCalledTimes(1);
     expect(mocks.prevent).toBe(false);
     expect(mocks.alert).not.toHaveBeenCalled();
   });
@@ -135,7 +131,6 @@ describe('useExpenseFormHandlers', () => {
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
         form: makeForm(false),
-        onNavigateBack: vi.fn(),
       })
     );
 

@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { ExpenseCategorySheet } from '@/components/expenses/ExpenseCategorySheet';
@@ -73,7 +72,6 @@ export function ExpenseEditForm({
     receiptStoragePath: expense.receipt_storage_path,
   });
   const saveExpense = useSaveExpense();
-  const router = useRouter();
   const form = useExpenseFormState({
     initialUpdatedAt: expense.updated_at,
     initialValues: {
@@ -122,7 +120,6 @@ export function ExpenseEditForm({
     useExpenseFormHandlers({
       archiveGroupMutation,
       form,
-      onNavigateBack: router.back,
       originalGroupId: expense.group_id,
     });
   if (fatalBranchesError || fatalGroupsError) {

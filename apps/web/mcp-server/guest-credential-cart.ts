@@ -1,9 +1,14 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import {
+  cartHandoffPairingTokenSchema,
+  cartHandoffPreviewQuerySchema,
+} from '../src/schemas/cart';
+import {
   mcpGuestCredentialOutputSchema,
   mcpGuestCartReadInputSchema,
   modelCartCredentialSchema,
 } from '../src/schemas/mcp-guest-cart';
+import { canonicalBridgeAllowedOrigins } from './guest-cart-canonical-bridge';
 import {
   GuestCartCanonicalError,
   GuestCartStorageUnavailableError,
@@ -13,6 +18,10 @@ import { mapGuestCartToolError } from './guest-cart-tool-responses';
 
 export const GUEST_CREDENTIAL_UPDATE_DESCRIPTION =
   'Add, change or remove items in the same Ogabassey guest cart. The first add creates the cart automatically without sign-in; omit cartCredential only when starting a new cart. On later messages reuse the exact cartCredential from structuredContent and never display it. For "remove it" or "remove the charger", match the referenced item to a product_id from the last cart result and set quantity to zero. Ask which item if ambiguous. If cart details are missing, call get_ogabassey_guest_cart with the same credential. If the credential is missing or expired, explain that the existing cart could not be updated. Never guess a credential or create a replacement cart to simulate removal. Quantity is the desired total for that product. Send the returned version as expectedVersion and a new operationId for each distinct edit. Preserve operationId on retries when the result is unknown. Use cart_url exactly as returned to open the remaining items on the website; call get_ogabassey_guest_cart to refresh a link. Account creation at checkout is optional. This tool never places an order or starts payment.';
+
+const signedHandoffTokenSchema = cartHandoffPairingTokenSchema.regex(
+  /^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+);
 
 export function guestCredentialModeEnabled(
   canonicalEnabled: boolean,
@@ -48,12 +57,16 @@ export function guestCredentialHandoffUrl(cart: {
   if (
     !handoff ||
     url?.protocol !== 'https:' ||
+    !canonicalBridgeAllowedOrigins().includes(url.origin) ||
     url.username ||
     url.password ||
     url.pathname !== '/cart' ||
     url.search ||
-    !fragment.get('handoff') ||
-    !fragment.get('hid')
+    fragment.size !== 2 ||
+    url.href !== handoff ||
+    !signedHandoffTokenSchema.safeParse(fragment.get('handoff')).success ||
+    !cartHandoffPreviewQuerySchema.safeParse({ handoff_id: fragment.get('hid') })
+      .success
   ) {
     throw new GuestCartCanonicalError(
       'refresh_required',
@@ -117,7 +130,10 @@ export function registerGuestCredentialRead(
 
 /** Represent the same server-minted 256-bit capability on the model tool. */
 export function decodeGuestCartCredential(credential: string): string {
-  return Buffer.from(modelCartCredentialSchema.parse(credential), 'base64url').toString('hex');
+  return Buffer.from(
+    modelCartCredentialSchema.parse(credential),
+    'base64url'
+  ).toString('hex');
 }
 
 export function guestCredentialReply<
@@ -130,6 +146,16 @@ export function guestCredentialReply<
       : undefined;
   return {
     ...reply,
+    ...(state.cart_expired === true
+      ? {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'This guest cart expired or is no longer available. Explain that the existing cart could not be opened or updated. Do not start another cart unless the shopper asks.',
+            },
+          ],
+        }
+      : {}),
     structuredContent: {
       ...state,
       ...(credential && state.cart_emptied !== true

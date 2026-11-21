@@ -1,10 +1,15 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server';
 import { afterEach, expect, it, vi } from 'vitest';
+import { GuestCartExpiredError } from './guest-cart-errors';
 import { createFakeGuestCartSupabase } from './guest-cart-fake-supabase';
 import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 import { GuestCartStore } from './guest-cart-store';
-import { decodeGuestCartCredential, guestCredentialModeEnabled } from './guest-credential-cart';
+import {
+  decodeGuestCartCredential,
+  guestCredentialHandoffUrl,
+  guestCredentialModeEnabled,
+} from './guest-credential-cart';
 
 vi.mock('./cart-handoff', () => ({
   prepareCartHandoff: vi
@@ -16,7 +21,7 @@ const charger = '11111111-1111-4111-8111-111111111111';
 const camera = '22222222-2222-4222-8222-222222222222';
 const cartId = '33333333-3333-4333-8333-333333333333';
 const handoffUrl =
-  'https://ogabassey.com/cart#handoff=synthetic&hid=44444444-4444-4444-8444-444444444444';
+  'https://ogabassey.com/cart#handoff=ch1.fixture.signature&hid=44444444-4444-4444-8444-444444444444';
 const updateName = 'update_ogabassey_cart';
 const readName = 'get_ogabassey_guest_cart';
 
@@ -162,6 +167,53 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
     code: 'refresh_required',
   });
   expect(JSON.stringify(noHandoff)).not.toContain('guest_cart=');
+
+  bridge.read.mockRejectedValueOnce(new GuestCartExpiredError());
+  bridge.update.mockRejectedValueOnce(new GuestCartExpiredError());
+  const expiredRead = await call(readName, { cartCredential: token });
+  const expiredUpdate = await call(updateName, {
+    product_id: camera,
+    quantity: 0,
+    cartCredential: token,
+    expectedVersion: 4,
+    operationId: 'expired-remove',
+  });
+  for (const expired of [expiredRead, expiredUpdate]) {
+    expect(expired.structuredContent).toMatchObject({
+      success: false,
+      cart_expired: true,
+    });
+    expect(JSON.stringify(expired.content)).toContain(
+      'Do not start another cart'
+    );
+  }
+  expect(rows.size).toBe(1);
+});
+
+it('only returns exact signed handoff URLs on an allowed storefront origin', () => {
+  vi.stubEnv(
+    'MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS',
+    'https://ogabassey.com,https://shop.example'
+  );
+  const cart = {
+    cart_token: '0'.repeat(64),
+    canonical_cart_id: cartId,
+    items: [{ product_id: camera, quantity: 1 }],
+    version: 2,
+  };
+  const configuredUrl = handoffUrl.replace('ogabassey.com', 'shop.example');
+  expect(guestCredentialHandoffUrl({ ...cart, cart_url: configuredUrl })).toBe(
+    configuredUrl
+  );
+  for (const cart_url of [
+    handoffUrl.replace('ogabassey.com', 'outside.example'),
+    handoffUrl.replace('ch1.fixture.signature', 'malformed'),
+    handoffUrl.replace('44444444-4444-4444-8444-444444444444', 'malformed'),
+    handoffUrl + '&handoff=ch1.duplicate.signature',
+    handoffUrl + ' ',
+  ]) {
+    expect(() => guestCredentialHandoffUrl({ ...cart, cart_url })).toThrow();
+  }
 });
 
 it('keeps credential mode opt-in and requires an independent cart-only canonical instance', () => {
@@ -185,11 +237,15 @@ it('keeps credential mode opt-in and requires an independent cart-only canonical
   ).toThrow('cart-only');
 });
 
-
 it('rejects noncanonical and malformed cart credential encodings before decoding', () => {
   const token = Buffer.alloc(32).toString('base64url');
   expect(decodeGuestCartCredential(token)).toBe('0'.repeat(64));
-  for (const invalid of [token + '=', token + '!', token.slice(1), token.slice(0, -1) + 'B']) {
+  for (const invalid of [
+    token + '=',
+    token + '!',
+    token.slice(1),
+    token.slice(0, -1) + 'B',
+  ]) {
     expect(() => decodeGuestCartCredential(invalid)).toThrow();
   }
 });

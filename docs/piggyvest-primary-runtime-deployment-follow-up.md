@@ -133,10 +133,11 @@ Goal provisioning additionally requires
 base-runtime requirements, including the onboarding database password. A
 provisioning flag is not the separate savings-transfer activation flag.
 
-### Client build floors and onboarding rollout cohort (gate not wired yet)
+### Client build floors (gate not wired yet) and onboarding rollout cohort
 
 `apps/web/src/lib/piggyvest/primary-client-capability.ts` holds the
-build-aware capability gate; no route calls it yet. When wired, it reads:
+build-aware client capability gate; no route calls it yet. When that gate is
+wired, it reads:
 
 - `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS` and
   `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID`: the lowest storefront native

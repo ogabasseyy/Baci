@@ -1,6 +1,7 @@
 -- Minimal synthetic schema for a disposable PostgreSQL database only.
 CREATE ROLE anon;
 CREATE ROLE authenticated;
+CREATE ROLE service_role;
 CREATE SCHEMA auth;
 CREATE SCHEMA extensions;
 CREATE SCHEMA vault;

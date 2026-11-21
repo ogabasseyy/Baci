@@ -6,6 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "process:gift-card-petrock-order": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/process-gift-card-petrock-order.ts",
     "brilstash:build": "tsx src/scripts/build-brilstash-catalogue.ts",
     "brilstash:verify": "tsx src/scripts/verify-brilstash-feed.ts",
     "brilstash:manage": "tsx src/scripts/manage-brilstash-catalogue.ts",

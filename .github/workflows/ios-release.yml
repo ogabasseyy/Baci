@@ -82,6 +82,10 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: bundle install --jobs 4 --retry 3
 
+      - name: Apply ActiveSupport security backport
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.rb
+
       - name: Disable Node type stripping
         run: echo "NODE_OPTIONS=--no-strip-types" >> "$GITHUB_ENV"
 

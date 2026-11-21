@@ -52,6 +52,10 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: bundle install --jobs 4 --retry 3
 
+      - name: Apply ActiveSupport security backport
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.rb
+
       - name: Materialize App Store Connect API key
         env:
           ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}

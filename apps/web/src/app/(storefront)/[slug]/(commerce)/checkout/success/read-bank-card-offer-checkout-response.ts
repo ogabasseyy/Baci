@@ -11,7 +11,8 @@ export async function readBankCardOfferCheckoutResponse(
   {
     setOrderNumber,
     setStatus,
-  }: Pick<VerifyCheckoutPaymentHandlers, 'setOrderNumber' | 'setStatus'>
+  }: Pick<VerifyCheckoutPaymentHandlers, 'setOrderNumber' | 'setStatus'>,
+  expectedOrderId?: string | null
 ) {
   const raw: unknown = await response.json().catch((error: unknown) => {
     if (!isAbortError(error)) {
@@ -22,6 +23,15 @@ export async function readBankCardOfferCheckoutResponse(
     return null;
   });
   const data = isVerificationResponse(raw) ? raw : {};
+  if (
+    response.status === 200 &&
+    expectedOrderId &&
+    data.orderId !== expectedOrderId
+  ) {
+    setOrderNumber(null);
+    setStatus('verification_unavailable');
+    return { handled: true as const };
+  }
   const status = getBankCardOfferCheckoutStatus(response.status, data);
   if (!status) return { handled: false as const, data };
 

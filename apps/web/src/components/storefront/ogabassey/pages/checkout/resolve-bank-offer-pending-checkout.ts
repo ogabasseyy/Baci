@@ -11,6 +11,7 @@ import {
   isProgressedButUnpaidOrderState,
   paidOrderIdentity,
 } from './pending-checkout-redvault-fence';
+import { readBankOfferCheckoutReference } from './persist-pending-checkout-order';
 import { recoverBankOfferCheckoutOrder } from './recover-bank-offer-checkout-order';
 
 export async function resolveBankOfferPendingCheckout({
@@ -51,6 +52,22 @@ export async function resolveBankOfferPendingCheckout({
   if (existing.id !== pendingOrder.orderId) throw new Error(message);
   if (isPaidOrderState(existing)) {
     if (!emailMatches) throw new Error(message);
+    if (
+      pendingOrder.paymentMethod === 'bank_card_offer' ||
+      existing.payment_method === 'bank_card_offer'
+    ) {
+      const reference = readBankOfferCheckoutReference(merchantId, pendingOrder.orderId);
+      if (!reference || !checkoutFingerprintsMatch(checkoutFingerprint, pendingOrder.checkoutFingerprint)) {
+        throw new Error(message);
+      }
+      // A paid snapshot can outlive a Paystack reversal. The success
+      // route must verify the reference before clearing checkout state.
+      return {
+        reusableOrder: null,
+        clearStoredOrder: false,
+        bankOfferVerification: { orderId: pendingOrder.orderId, reference },
+      };
+    }
     return {
       reusableOrder: null,
       clearStoredOrder: true,

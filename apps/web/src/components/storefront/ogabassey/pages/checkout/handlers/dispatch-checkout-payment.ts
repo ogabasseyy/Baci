@@ -4,6 +4,7 @@ import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-com
 import { captureCheckoutPaymentFailed } from '../capture-checkout-payment-failed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
 import { oxygenLocalAttempt } from '../oxygen-local-attempt';
+import { persistBankOfferCheckoutReference } from '../persist-pending-checkout-order';
 import type { CheckoutPaymentDispatchContext } from './checkout-payment-dispatch-context';
 import { completeCheckoutOrder } from './complete-checkout-order';
 import { initializeCheckoutGateway } from './initialize-checkout-gateway';
@@ -136,6 +137,13 @@ export async function dispatchCheckoutPayment(
       isOrderInFlightRef.current = false;
       return;
     } else if (paymentResult.success && paymentResult.authorization_url) {
+      if (order.payment_method === 'bank_card_offer') {
+        persistBankOfferCheckoutReference(
+          merchant.id,
+          order.id,
+          paymentResult.reference
+        );
+      }
       // NOTE: Don't clear cart here - it causes a flash of empty state
       // Cart will be cleared on the payment callback page after successful payment
       // (location.assign over `href =` — global assignment bails React Compiler)

@@ -137,12 +137,44 @@ describe('verifyCheckoutPayment bank card offer', () => {
   });
 
   it.each([
+    'completed',
+    undefined,
+  ])('clears the cart only for a completed recovered capture (%s)', async (finalizationOutcome) => {
+    const callbacks = handlers();
+    request.mockResolvedValue(
+      Response.json({
+        orderId: params.orderId,
+        success: true,
+        status: 'success',
+        finalizationOutcome,
+      })
+    );
+
+    await verifyCheckoutPayment(
+      { ...params, reference: `BCO-${'a'.repeat(32)}` },
+      callbacks
+    );
+
+    expect(callbacks.clearCart).toHaveBeenCalledTimes(
+      finalizationOutcome ? 1 : 0
+    );
+    expect(callbacks.setStatus).toHaveBeenCalledWith(
+      finalizationOutcome ? 'success' : 'pending'
+    );
+  });
+
+  it.each([
     'failed',
     'cancelled',
     'abandoned',
   ])('shows review for a bank-offer attempt reported %s', async (status) => {
     request.mockResolvedValue(
-      Response.json({ success: false, status, orderNumber: 'ORD-1' })
+      Response.json({
+        success: false,
+        status,
+        orderId: params.orderId,
+        orderNumber: 'ORD-1',
+      })
     );
     const callbacks = handlers();
 
@@ -166,6 +198,7 @@ describe('verifyCheckoutPayment bank card offer', () => {
       Response.json({
         success: false,
         status: 'reversed',
+        orderId: params.orderId,
         orderNumber: 'ORD-1',
       })
     );

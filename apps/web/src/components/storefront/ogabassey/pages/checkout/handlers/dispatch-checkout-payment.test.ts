@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readBankOfferCheckoutReference } from '../persist-pending-checkout-order';
 import { paymentDispatchContext } from './checkout-payment-dispatch-context.test-support';
 import { completeCheckoutOrder } from './complete-checkout-order';
 import { dispatchCheckoutPayment } from './dispatch-checkout-payment';
@@ -72,10 +73,15 @@ describe('dispatchCheckoutPayment', () => {
     context.order.payment_method = 'bank_card_offer';
     vi.mocked(initializeCheckoutGateway).mockResolvedValue({
       success: true,
-      reference: 'BCO-reference',
+      reference: `BCO-${'a'.repeat(32)}`,
       authorization_url: 'https://checkout.paystack.com/example',
     });
 
+    vi.mocked(context.redirect).mockImplementationOnce(() => {
+      expect(
+        readBankOfferCheckoutReference(context.merchant.id, context.order.id)
+      ).toBe(`BCO-${'a'.repeat(32)}`);
+    });
     await dispatchCheckoutPayment(context);
 
     expect(initializeCheckoutGateway).toHaveBeenCalledWith(

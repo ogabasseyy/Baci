@@ -57,3 +57,21 @@ it.each([
   expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
   expect(callbacks.setOrderNumber).toHaveBeenCalledExactlyOnceWith(null);
 });
+
+it.each([
+  undefined,
+  'another-order',
+])('rejects a terminal recovery response for %s', async (orderId) => {
+  const callbacks = { setOrderNumber: vi.fn(), setStatus: vi.fn() };
+  const response = Response.json({
+    orderId,
+    status: 'success',
+    success: true,
+    finalizationOutcome: 'completed',
+  });
+  await expect(
+    readBankCardOfferCheckoutResponse(response, callbacks, 'expected-order')
+  ).resolves.toEqual({ handled: true });
+  expect(callbacks.setStatus).toHaveBeenCalledWith('verification_unavailable');
+  expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+});

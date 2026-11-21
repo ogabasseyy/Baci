@@ -155,10 +155,14 @@ export async function verifyCheckoutPayment(
       signal,
     });
     const bankOfferResponse = isBankOffer
-      ? await readBankCardOfferCheckoutResponse(response, {
-          setOrderNumber,
-          setStatus,
-        })
+      ? await readBankCardOfferCheckoutResponse(
+          response,
+          {
+            setOrderNumber,
+            setStatus,
+          },
+          orderId
+        )
       : null;
     if (bankOfferResponse?.handled) return;
 
@@ -219,6 +223,10 @@ export async function verifyCheckoutPayment(
         if (data.paymentMethod) {
           setPaymentMethod(data.paymentMethod);
         }
+        return;
+      }
+      if (isBankOffer && data.finalizationOutcome !== 'completed') {
+        setStatus('pending');
         return;
       }
       clearCart();

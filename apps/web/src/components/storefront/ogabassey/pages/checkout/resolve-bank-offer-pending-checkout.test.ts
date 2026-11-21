@@ -1,8 +1,11 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { clearCheckoutIdempotencyKey } from './checkout-idempotency';
+import { persistBankOfferCheckoutReference } from './persist-pending-checkout-order';
 import { resolveBankOfferPendingCheckout } from './resolve-bank-offer-pending-checkout';
 
 vi.mock('./checkout-idempotency', () => ({ clearCheckoutIdempotencyKey: vi.fn() }));
+
+afterEach(() => window.sessionStorage.clear());
 
 const pendingOrder = {
   orderId: 'order-1',
@@ -44,23 +47,38 @@ it.each([
   expect(fetchImpl).toHaveBeenCalledTimes(1);
 });
 
-it('returns the paid order instead of starting another payment', async () => {
+it('hands a matching saved attempt to reference verification without declaring it paid', async () => {
+  const reference = `BCO-${'a'.repeat(32)}`;
+  persistBankOfferCheckoutReference(pendingOrder.merchantId, pendingOrder.orderId, reference);
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-    Response.json({
-      id: pendingOrder.orderId,
-      order_number: 'OG-1',
-      payment_status: 'paid',
-    })
+    Response.json({ id: pendingOrder.orderId, payment_status: 'paid' })
   );
   await expect(
     resolveBankOfferPendingCheckout({ ...options, fetchImpl })
-  ).resolves.toMatchObject({
+  ).resolves.toEqual({
     reusableOrder: null,
-    paidOrder: {
-      orderId: pendingOrder.orderId,
-      trackingToken: pendingOrder.trackingToken,
-    },
+    clearStoredOrder: false,
+    bankOfferVerification: { orderId: pendingOrder.orderId, reference },
   });
+});
+
+it('keeps a paid row without a matching reference fenced', async () => {
+  persistBankOfferCheckoutReference(pendingOrder.merchantId, 'other-order', `BCO-${'a'.repeat(32)}`);
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+    Response.json({ id: pendingOrder.orderId, payment_status: 'paid' })
+  );
+  await expect(resolveBankOfferPendingCheckout({ ...options, fetchImpl }))
+    .rejects.toThrow('Check your existing order');
+});
+
+it('keeps an edited cart fenced even when the saved paid order has a reference', async () => {
+  persistBankOfferCheckoutReference(pendingOrder.merchantId, pendingOrder.orderId, `BCO-${'a'.repeat(32)}`);
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+    Response.json({ id: pendingOrder.orderId, payment_status: 'paid' })
+  );
+  await expect(resolveBankOfferPendingCheckout({
+    ...options, checkoutFingerprint: 'edited', fetchImpl,
+  })).rejects.toThrow('Check your existing order');
 });
 
 it.each(['pending', 'paid'])('keeps a %s saved offer fenced when the email changes', async (payment_status) => {

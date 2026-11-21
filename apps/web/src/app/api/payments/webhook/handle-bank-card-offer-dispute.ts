@@ -1,10 +1,9 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
+import { paystackDisputeObjectSchema } from '@/schemas/paystack-dispute-object';
 
-const disputeObjectSchema = z.record(z.string(), z.unknown());
 type DisputeClient = Pick<SupabaseClient, 'from' | 'rpc'>;
 
 async function reviewMalformedDispute(
@@ -42,13 +41,15 @@ export async function handleBankCardOfferDispute(
   if (event !== 'charge.dispute.create' && event !== 'charge.dispute.resolve') {
     return null;
   }
-  const parsed = disputeObjectSchema.safeParse(data);
+  const parsed = paystackDisputeObjectSchema.safeParse(data);
   if (!parsed.success) return null;
   const payload = parsed.data;
   // Paystack's Dispute API shows transaction_reference may be null while
   // transaction.reference identifies the payment. Keep the abbreviated
   // transaction_ref field for existing webhook deliveries.
-  const transaction = disputeObjectSchema.safeParse(payload.transaction);
+  const transaction = paystackDisputeObjectSchema.safeParse(
+    payload.transaction
+  );
   const references = [
     transaction.data?.reference,
     payload.transaction_reference,

@@ -134,6 +134,7 @@ export interface ResolvePendingCheckoutOrderResult {
     amountDueToGateway: number;
   } | null;
   clearStoredOrder: boolean;
+  bankOfferVerification?: { orderId: string; reference: string };
   /** Stored REDVAULT order still unresolved: do not open a second order with another method. */
   redvaultUnresolved?: boolean;
   /**

@@ -11,7 +11,6 @@ export function bankCardOfferRetryDelay(response: Response): number {
   const serverTime = Date.parse(response.headers.get('Date') ?? '');
   const delay = /^\d+$/.test(retryAfter)
     ? Number(retryAfter) * 1000
-    : Date.parse(retryAfter) -
-      (Number.isFinite(serverTime) ? serverTime : Date.now());
+    : Date.parse(retryAfter) - serverTime;
   return delay > 0 ? Math.min(MAX_RETRY_AFTER_MS, delay) : fallback;
 }

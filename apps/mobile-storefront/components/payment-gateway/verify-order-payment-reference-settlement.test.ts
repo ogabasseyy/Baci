@@ -108,6 +108,23 @@ describe('checkReferenceSettled transport selection', () => {
     expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
+  it('never treats a contradictory reversal and completed envelope as paid', async () => {
+    mockGetSession.mockResolvedValue({
+      access_token: 'session-token',
+    } as never);
+    mockFetchWithTimeout.mockResolvedValue(
+      jsonResponse({
+        orderId: 'order-1',
+        success: true,
+        finalizationOutcome: 'completed',
+        status: 'reversed',
+      }) as never
+    );
+    await expect(
+      checkReferenceSettled('order-1', `BCO-${'a'.repeat(32)}`)
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+  });
+
   it.each([
     'BCO-',
     'BCO-invalid',

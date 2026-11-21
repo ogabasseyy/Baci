@@ -100,6 +100,18 @@ export async function verifyOrderPaymentForCompletion({
       // A cached paid row cannot confirm a bank offer after a reversal.
       return hasBankCardOfferReferencePrefix(reference) ? settled : tracked;
     }
+    if (
+      tracked.reconciliation &&
+      reference &&
+      hasBankCardOfferReferencePrefix(reference)
+    ) {
+      const settled = await checkReferenceSettled(
+        orderId,
+        reference,
+        trackingToken
+      );
+      return settled.reconciliation === 'payment_reversed' ? settled : tracked;
+    }
     if (tracked.paid || tracked.reconciliation) {
       return tracked;
     }

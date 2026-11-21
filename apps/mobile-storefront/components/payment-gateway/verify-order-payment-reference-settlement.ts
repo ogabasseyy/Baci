@@ -110,6 +110,16 @@ export async function checkReferenceSettled(
       return { paid: false, inconclusive: true };
     }
     const data = toVerifyReferenceResponse(rawBody);
+    if (bankOffer && data.status === 'reversed') {
+      // Both authenticated verify paths report a proven reversal as a
+      // terminal 200 for the bound order. Other envelopes prove neither
+      // reversal nor settlement, even if they also claim success.
+      return response.status === 200 &&
+        data.orderId === orderId &&
+        data.success === false
+        ? { paid: false, reconciliation: 'payment_reversed' }
+        : { paid: false, inconclusive: true };
+    }
     // Only a completed finalization counts: the endpoint also reports
     // success for cancelled/skipped orders, which are not paid conversions.
     // The identity check fails closed: the route's orderId and the
@@ -122,17 +132,6 @@ export async function checkReferenceSettled(
       data.finalizationOutcome !== 'completed' ||
       data.orderId !== orderId
     ) {
-      // The authenticated verify endpoint checks the saved attempt and
-      // Paystack before reporting a reversal for this order.
-      if (
-        bankOffer &&
-        response.ok &&
-        data.orderId === orderId &&
-        response.status === 200 &&
-        data.status === 'reversed'
-      ) {
-        return { paid: false, reconciliation: 'payment_reversed' };
-      }
       // A definitive failed/cancelled envelope for THIS order is terminal:
       // collapsing it into the transient pending shape would clear the
       // cart and present "Order Confirmed" for a payment that cannot

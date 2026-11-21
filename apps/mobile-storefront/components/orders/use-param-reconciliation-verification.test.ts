@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
 import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
+import { logger } from '@/lib/logger';
 import { useParamReconciliationVerification } from './use-param-reconciliation-verification';
 
 jest.mock('@/components/payment-gateway/verify-order-payment', () => ({
@@ -9,6 +10,7 @@ jest.mock('@/components/payment-gateway/verify-order-payment', () => ({
 jest.mock('@/lib/deferred-bank-offer-cart', () => ({
   deferredBankOfferCart: { clearIfUnchanged: jest.fn(async () => undefined) },
 }));
+jest.mock('@/lib/logger', () => ({ logger: { warn: jest.fn() } }));
 
 const mockedVerify = verifyOrderPaymentForCompletion as jest.Mock;
 
@@ -51,6 +53,32 @@ describe('useParamReconciliationVerification', () => {
     );
     expect(result.current.verified).toBe(false);
     expect(result.current.bankOfferPaid).toBe(true);
+  });
+
+  it('logs the order when cart cleanup fails and still reports the verified payment', async () => {
+    mockedVerify.mockResolvedValueOnce({ paid: true });
+    jest
+      .mocked(deferredBankOfferCart.clearIfUnchanged)
+      .mockRejectedValueOnce(new Error('private storage details'));
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        reference: `BCO-${'d'.repeat(32)}`,
+      })
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.bankOfferPaid).toBe(true);
+    expect(jest.mocked(logger.warn).mock.calls).toEqual([
+      [
+        'Bank card checkout',
+        'Could not clear the verified cart',
+        { orderId: 'order-1' },
+      ],
+    ]);
   });
 
   it('resolves true for a verified reconciliation arrival', async () => {

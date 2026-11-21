@@ -20,7 +20,7 @@ it('backs off when rate limited without a Retry-After header', () => {
   );
 });
 
-it('honors an HTTP-date Retry-After', () => {
+it('honors an HTTP-date Retry-After only against the server clock', () => {
   vi.useFakeTimers();
   try {
     vi.setSystemTime(new Date('2026-11-20T12:00:00Z'));
@@ -28,6 +28,8 @@ it('honors an HTTP-date Retry-After', () => {
       status: 429,
       headers: { 'Retry-After': 'Fri, 20 Nov 2026 12:01:00 GMT' },
     });
+    expect(bankCardOfferRetryDelay(response)).toBe(15_000);
+    response.headers.set('Date', 'Fri, 20 Nov 2026 12:00:00 GMT');
     expect(bankCardOfferRetryDelay(response)).toBe(60_000);
     response.headers.set('Retry-After', 'Fri, 20 Nov 2026 11:59:00 GMT');
     expect(bankCardOfferRetryDelay(response)).toBe(15_000);

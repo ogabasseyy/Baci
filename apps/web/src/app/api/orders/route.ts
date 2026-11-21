@@ -100,11 +100,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import {
-  isMobileOxygenOrder,
-  rejectMobileOxygenCreditCombination,
-  rejectMobileOxygenZeroBalance,
-} from './mobile-oxygen-order-admission';
+import { rejectMobileOxygenCreditCombination } from './mobile-oxygen-order-admission';
 import { resolveOrderCreationMerchant } from './order-creation-merchant';
 import { authenticateOrderRequest } from './order-request-auth';
 import { replayAdmittedOxygenOrder } from './replay-admitted-oxygen-order';
@@ -1794,61 +1790,48 @@ export async function POST(request: NextRequest) {
     // (empty) offer economics the subtotal recompute below would throw and
     // 500 a retry the RPC would otherwise replay. The RPC's request-hash
     // check rejects true conflicts first.
-    const needsMerchantRateSubtotal =
-      Boolean(body.shipping_rate_id) &&
-      !isIdempotentMerchantRateReplay &&
-      !isIdempotentOfferOrderReplay;
-    const needsOxygenSubtotal =
-      !merchantResult.oxygenAdmission &&
-      replaySnapshot === null &&
-      isMobileOxygenOrder(request, body.payment_method, body.source);
-    if (
-      canonicalOrderSubtotal === null &&
-      (needsMerchantRateSubtotal || needsOxygenSubtotal)
-    ) {
-      try {
-        canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
-          allowUnavailableConditionPrices: isConditionReplay,
-          conditionPriceOverrides,
-          items: orderItemsPayload,
-          merchantId: merchant_id,
-          offerPrices: liveOfferPrices,
-          supabase,
-        });
-      } catch (subtotalError) {
-        if (subtotalError instanceof OrderConditionUnavailableError)
-          return conditionOfferUnavailableResponse();
-        if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
-          return NextResponse.json(
-            { error: 'Failed to create order', details: 'invalid_items' },
-            { status: 400 }
-          );
-        }
-        logger.error({
-          error: subtotalError,
-          merchantId: merchant_id,
-          message: 'Checkout canonical subtotal recompute failed',
-        });
-        return NextResponse.json(
-          { error: 'Internal server error' },
-          { status: 500 }
-        );
-      }
-    }
-    if (
-      (needsMerchantRateSubtotal || needsOxygenSubtotal) &&
-      canonicalOrderSubtotal === null
-    ) {
-      return NextResponse.json(
-        { error: 'Failed to create order', details: 'invalid_items' },
-        { status: 400 }
-      );
-    }
     if (
       body.shipping_rate_id &&
-      needsMerchantRateSubtotal &&
-      canonicalOrderSubtotal !== null
+      !isIdempotentMerchantRateReplay &&
+      !isIdempotentOfferOrderReplay
     ) {
+      if (canonicalOrderSubtotal == null) {
+        try {
+          canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+            allowUnavailableConditionPrices: isConditionReplay,
+            conditionPriceOverrides,
+            items: orderItemsPayload,
+            merchantId: merchant_id,
+            offerPrices: liveOfferPrices,
+            supabase,
+          });
+        } catch (subtotalError) {
+          if (subtotalError instanceof OrderConditionUnavailableError)
+            return conditionOfferUnavailableResponse();
+          if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
+            return NextResponse.json(
+              { error: 'Failed to create order', details: 'invalid_items' },
+              { status: 400 }
+            );
+          }
+          logger.error({
+            error: subtotalError,
+            merchantId: merchant_id,
+            message: 'Shipping-rate canonical subtotal recompute failed',
+          });
+          return NextResponse.json(
+            { error: 'Internal server error' },
+            { status: 500 }
+          );
+        }
+      }
+      if (canonicalOrderSubtotal == null) {
+        return NextResponse.json(
+          { error: 'Failed to create order', details: 'invalid_items' },
+          { status: 400 }
+        );
+      }
+
       // Published merchant rates are exposed through the anonymous-safe RPC.
       // Verification must not depend on a privileged credential or read the
       // underlying private tables. Recompute the fee and destination as before.
@@ -2109,24 +2092,6 @@ export async function POST(request: NextRequest) {
     if (idempotencyPayload && adoptedAlternateShippingProvider) {
       idempotencyPayload.shipping_provider = adoptedAlternateShippingProvider;
     }
-
-    const zeroBalanceRejection = rejectMobileOxygenZeroBalance(
-      request,
-      body,
-      canonicalOrderSubtotal === null
-        ? null
-        : Math.max(
-            canonicalOrderSubtotal -
-              (discountCodeId || loyaltyRedemptionId
-                ? discountCodeAmount
-                : serverDerivedDiscountAmount),
-            0
-          ) +
-            effectiveShippingFee +
-            orderTaxAmount +
-            giftWrappingFeeValue
-    );
-    if (zeroBalanceRejection) return zeroBalanceRejection;
 
     const savingsRedemptionIdempotencyKey = requestedSavingsRedemption
       ? getSavingsRedemptionIdempotencyKey({
@@ -2469,6 +2434,18 @@ export async function POST(request: NextRequest) {
                 ? 400
                 : 409,
           }
+        );
+      }
+      if (
+        code === '23514' &&
+        message === 'oxygen_order_total_must_be_positive'
+      ) {
+        return NextResponse.json(
+          {
+            code: 'OXYGEN_MOBILE_ZERO_BALANCE',
+            error: 'Choose another payment option for this zero-balance order.',
+          },
+          { status: 400 }
         );
       }
       if (message === 'checkout_idempotency_conflict') {

@@ -264,6 +264,29 @@ test('local anon bootstrap and authenticated API requests validate different ind
   expect(transport).toHaveBeenCalledTimes(2);
 });
 
+const workflowLookup = [
+  'select=id',
+  'environment=eq.staging',
+  'order_id=eq.aebdc237-5363-4e2b-b0ee-5be12ea9edab',
+  'customer_id=eq.c434e49c-8a56-4a4f-82f7-2f4d0e165546',
+  'merchant_id=eq.3adf89f9-67ec-4dda-9037-e691eec1ff9b',
+].join('&');
+
+test.each([
+  `${workflowLookup}&select=id`,
+  `${workflowLookup}&order=created_at`,
+  'select=id&environment=eq.staging',
+])('rejects broadened staging workflow lookups (%s)', async (query) => {
+  const transport = jest.fn().mockResolvedValue(new Response('{}'));
+  const guardedFetch = createOxygenStagingFetch(transport, profile);
+  await expect(
+    guardedFetch(`${profile.authOrigin}/rest/v1/oxygen_workflows?${query}`, {
+      headers: { authorization: `Bearer ${token()}` },
+    })
+  ).rejects.toThrow('blocked an unapproved request');
+  expect(transport).not.toHaveBeenCalled();
+});
+
 test.each([
   'customers',
   'orders',
@@ -272,10 +295,7 @@ test.each([
 ])('requires a signed-in staging session for %s reads', async (table) => {
   const transport = jest.fn().mockResolvedValue(new Response('{}'));
   const guardedFetch = createOxygenStagingFetch(transport, profile);
-  const query =
-    table === 'oxygen_workflows'
-      ? 'select=id&environment=eq.staging'
-      : 'select=id';
+  const query = table === 'oxygen_workflows' ? workflowLookup : 'select=id';
   const url = `${profile.authOrigin}/rest/v1/${table}?${query}`;
   await expect(
     guardedFetch(url, {

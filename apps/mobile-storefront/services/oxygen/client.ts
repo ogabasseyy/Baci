@@ -1,6 +1,7 @@
 import {
   type OxygenTransientFile,
   oxygenAccountNameSchema,
+  oxygenActionNotDispatchedCode,
   oxygenApprovalCodeResponseSchema,
   oxygenBankListSchema,
   oxygenBankRequestSchema,
@@ -136,7 +137,10 @@ export function createOxygenClient(options: {
               .union([
                 z.object({ code: z.literal(oxygenRuntimeUnavailableCode) }),
                 z.object({
-                  code: z.literal('OXYGEN_ACTIVE_LOAN'),
+                  code: z.enum([
+                    'OXYGEN_ACTIVE_LOAN',
+                    oxygenActionNotDispatchedCode,
+                  ]),
                   dispatchState: z.literal('not_dispatched'),
                 }),
               ])

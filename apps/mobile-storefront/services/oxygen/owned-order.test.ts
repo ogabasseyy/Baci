@@ -61,3 +61,13 @@ it('rejects an unpaid order with cancelled shipping', async () => {
     readOwnedOxygenOrder(orderId, customerId, merchantId)
   ).rejects.toThrow('This order is closed');
 });
+
+it.each([
+  'delivered',
+  'completed',
+])('sends a delivered or completed order to history (%s)', async (status) => {
+  mockOrder('paid', status);
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).rejects.toThrow('This order is closed');
+});

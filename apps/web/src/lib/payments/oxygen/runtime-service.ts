@@ -6,6 +6,7 @@ import {
   oxygenProviderStateSchema,
   oxygenRuntimeSubmissionSchema,
 } from '@/schemas/oxygen-runtime';
+import { OxygenActionPreflightError } from './action-preflight-error';
 import { OxygenActiveLoanPreflightError } from './booking-rejection';
 import { oxygenLocalValidationDiagnostic } from './local-validation-diagnostic';
 import {
@@ -76,7 +77,7 @@ export async function performOxygenAction(
   const request = oxygenRuntimeSubmissionSchema.parse(input);
   const current = await readOxygenSnapshot(user, request.workflowId);
   if (!current.executionEnabled || current.version !== request.version)
-    throw new Error('Workflow unavailable');
+    throw new OxygenActionPreflightError();
   if (
     request.command.action === 'book' &&
     current.bookingBlock === 'active_loan'
@@ -93,9 +94,9 @@ export async function performOxygenAction(
       request.command
     )
   )
-    throw new Error('Action unavailable at this stage');
+    throw new OxygenActionPreflightError();
   if (request.command.action === 'approve_booking' && !current.approvalOtpReady)
-    throw new Error('Approval OTP required');
+    throw new OxygenActionPreflightError();
   const { action } = request.command;
   const command =
     request.command.action === 'book'

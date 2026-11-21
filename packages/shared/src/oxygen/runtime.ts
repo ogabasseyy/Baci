@@ -5,6 +5,7 @@ import { oxygenEligibilityProgressSchema } from './eligibility-progress';
 const field = z.string().trim().min(1).max(200);
 const action = <T extends string>(value: T) =>
   z.object({ action: z.literal(value) }).strict();
+export const oxygenActionNotDispatchedCode = 'OXYGEN_ACTION_NOT_DISPATCHED';
 export const oxygenRuntimeUnavailableCode = 'OXYGEN_RUNTIME_UNAVAILABLE';
 
 export const oxygenRuntimeActionSchema = z.discriminatedUnion('action', [

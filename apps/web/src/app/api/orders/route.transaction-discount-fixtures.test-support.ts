@@ -122,10 +122,6 @@ export const { POST } = await import('./route');
 export const MERCHANT_ID = '123e4567-e89b-12d3-a456-426614174000';
 let latestRpc: ReturnType<typeof vi.fn>;
 
-export function setNextOrderTax(total: number) {
-  mockComputeAgenticOrderTax.mockResolvedValueOnce(total);
-}
-
 export function getLatestRpc() {
   return latestRpc;
 }

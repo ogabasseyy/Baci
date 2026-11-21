@@ -6,6 +6,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { OxygenActionPreflightError } from '@/lib/payments/oxygen/action-preflight-error';
 import {
   OxygenActiveLoanPreflightError,
   oxygenActiveLoanCode,
@@ -213,7 +214,10 @@ export async function POST(request: NextRequest) {
       { headers }
     );
   } catch (failure) {
-    if (failure instanceof OxygenActiveLoanPreflightError)
+    if (
+      failure instanceof OxygenActiveLoanPreflightError ||
+      failure instanceof OxygenActionPreflightError
+    )
       return NextResponse.json(
         {
           code: failure.code,

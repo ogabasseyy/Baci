@@ -99,8 +99,12 @@ it.each([
     { code: 'OXYGEN_ACTIVE_LOAN', dispatchState: 'not_dispatched' },
     'not_dispatched',
   ],
+  [
+    { code: 'OXYGEN_ACTION_NOT_DISPATCHED', dispatchState: 'not_dispatched' },
+    'not_dispatched',
+  ],
   [{ code: 'OXYGEN_ACTIVE_LOAN' }, 'unknown'],
-] as const)('distinguishes preflight from provider-side active-loan rejections: %j', async (body, dispatchState) => {
+] as const)('distinguishes definitive and unknown action conflicts: %j', async (body, dispatchState) => {
   const client = createOxygenClient({
     profile,
     getSession: session,

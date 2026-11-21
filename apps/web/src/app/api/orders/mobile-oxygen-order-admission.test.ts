@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capabilities';
-import {
-  rejectMobileOxygenZeroBalance,
-  rejectUnavailableMobileOxygenOrder,
-} from './mobile-oxygen-order-admission';
+import { rejectUnavailableMobileOxygenOrder } from './mobile-oxygen-order-admission';
 
 vi.mock('@/lib/payments/oxygen/mobile-capabilities', () => ({
   readOxygenMobileCapabilities: vi.fn(),
@@ -120,21 +117,4 @@ describe('mobile Oxygen order admission', () => {
     ).resolves.toBeNull();
     expect(declarations).not.toHaveBeenCalled();
   });
-});
-
-it('rejects a mobile Oxygen order with no amount to finance', async () => {
-  const order = { payment_method: 'oxygen', source: 'mobile_app' } as const;
-  const rejection = rejectMobileOxygenZeroBalance(args.request, order, 0);
-  expect(rejection?.status).toBe(400);
-  await expect(rejection?.json()).resolves.toMatchObject({
-    code: 'OXYGEN_MOBILE_ZERO_BALANCE',
-  });
-  expect(rejectMobileOxygenZeroBalance(args.request, order, 0.01)).toBeNull();
-  expect(
-    rejectMobileOxygenZeroBalance(
-      args.request,
-      { ...order, source: 'online_store' },
-      0
-    )
-  ).toBeNull();
 });

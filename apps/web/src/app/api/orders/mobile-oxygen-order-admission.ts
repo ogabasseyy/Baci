@@ -11,7 +11,7 @@ import type { OrderCreateInput } from '@/schemas/orders';
 // Mobile admission covers every Bearer Oxygen order regardless of source.
 // Existing web checkout uses cookies to save an unpaid order. Its separate
 // Oxygen workflow entrypoint verifies the signed-in owner and merchant rollout.
-export function isMobileOxygenOrder(
+function isMobileOxygenOrder(
   request: Request,
   paymentMethod: string,
   source: string
@@ -53,26 +53,6 @@ export function rejectMobileOxygenCreditCombination(
       code: 'OXYGEN_MOBILE_COMBINATION_UNSUPPORTED',
       error:
         'Oxygen cannot be combined with vouchers, wallet credit, or savings.',
-    },
-    { status: 400 }
-  );
-}
-
-export function rejectMobileOxygenZeroBalance(
-  request: Request,
-  order: Pick<OrderCreateInput, 'payment_method' | 'source'>,
-  total: number | null
-) {
-  if (
-    total === null ||
-    Math.round(total * 100) > 0 ||
-    !isMobileOxygenOrder(request, order.payment_method, order.source)
-  )
-    return null;
-  return NextResponse.json(
-    {
-      code: 'OXYGEN_MOBILE_ZERO_BALANCE',
-      error: 'Choose another payment option for this zero-balance order.',
     },
     { status: 400 }
   );

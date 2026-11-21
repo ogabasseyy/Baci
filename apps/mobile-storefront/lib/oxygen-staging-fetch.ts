@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { decodeBase64UrlToUtf8 } from './cart/base64url';
 import type { OxygenStagingProfile } from './oxygen-staging-profile';
 
@@ -67,6 +68,32 @@ function hasExpectedStagingTokenClaims(
   }
 }
 
+function isStagingWorkflowLookup(params: URLSearchParams): boolean {
+  const expectedKeys = [
+    'select',
+    'environment',
+    'order_id',
+    'customer_id',
+    'merchant_id',
+  ];
+  let count = 0;
+  params.forEach(() => {
+    count++;
+  });
+  return (
+    count === expectedKeys.length &&
+    expectedKeys.every((key) => params.getAll(key).length === 1) &&
+    params.get('select') === 'id' &&
+    params.get('environment') === 'eq.staging' &&
+    ['order_id', 'customer_id', 'merchant_id'].every((key) => {
+      const filter = params.get(key);
+      return (
+        filter?.startsWith('eq.') && z.uuid().safeParse(filter.slice(3)).success
+      );
+    })
+  );
+}
+
 export function createOxygenStagingFetch(
   transport: typeof fetch,
   profile: OxygenStagingProfile
@@ -103,8 +130,7 @@ export function createOxygenStagingFetch(
       hasSignedInClaims &&
       (ownedReadTables.has(table) ||
         (table === 'oxygen_workflows' &&
-          url.searchParams.get('select') === 'id' &&
-          url.searchParams.get('environment') === 'eq.staging'));
+          isStagingWorkflowLookup(url.searchParams)));
     const allowedAuth =
       isAuth &&
       ((authPath &&

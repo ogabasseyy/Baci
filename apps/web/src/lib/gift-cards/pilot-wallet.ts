@@ -76,7 +76,10 @@ export async function confirmGiftCardPilot(
     throw new Error('Please request a fresh price before confirming.');
   }
   const fresh = await freshPilotQuote(config, deps);
-  if (expiresAt <= Date.now())
+  const confirmationTime = Date.now();
+  if (expiresAt <= confirmationTime)
     throw new Error('The displayed price expired. Get a fresh quote.');
+  if (fresh.expiresAt <= confirmationTime)
+    throw new Error('Fresh price expired. Get a fresh quote.');
   return deps.confirm(fresh.proof);
 }

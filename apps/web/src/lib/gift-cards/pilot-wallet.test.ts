@@ -69,3 +69,13 @@ it('refuses another customer and never calls the wallet or provider', async () =
   expect(deps.readPetrockOffer).not.toHaveBeenCalled();
   expect(deps.confirm).not.toHaveBeenCalled();
 });
+
+it('refuses a fresh quote that is already expired even when the displayed quote is still valid', async () => {
+  const { deps, config, proof } = setup();
+  const shown = await issueGiftCardPilotQuote(config, deps);
+  deps.issue.mockResolvedValue({ totalKobo: approved, proof, expiresAt: 1 });
+  await expect(confirmGiftCardPilot(shown, config, deps)).rejects.toThrow(
+    'Fresh price expired'
+  );
+  expect(deps.confirm).not.toHaveBeenCalled();
+});

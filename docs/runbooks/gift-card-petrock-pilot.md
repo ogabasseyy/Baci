@@ -11,6 +11,6 @@ pnpm --filter @baci/web process:gift-card-petrock-order submit <paid-order-uuid>
 pnpm --filter @baci/web process:gift-card-petrock-order poll <paid-order-uuid>
 ```
 
-The worker durably claims the order before placing it with Petrock. If it stops in `submitting` or `submission_unknown`, reconcile with Petrock by the paid order UUID as the supplier reference. Do not run another placement or refund until supplier acceptance or non-placement is confirmed. Polling is read-only once the provider order ID is recorded. The callback acknowledges but does not interpret the provider payload.
+The worker durably claims the order before placing it with Petrock. If it stops in `submitting` or `submission_unknown`, reconcile with Petrock by the paid order UUID as the supplier reference. Do not run another placement or refund until supplier acceptance or non-placement is confirmed. Polling is read-only once the provider order ID is recorded. The callback returns 503 while no durable callback processor is configured. Petrock may retry it. The supervised pilot must poll the authenticated order API until a terminal response is captured; do not treat callback delivery as fulfillment.
 
 The terminal audit prints the order reference, normalized supplier state, and `[redacted]` in place of the replay. The replay itself is encrypted with an order-bound AES-GCM key for restricted inspection. The voucher format and customer delivery still need a sanitized completed response. Never copy the raw replay or voucher into PRs, logs, or shared fixtures.

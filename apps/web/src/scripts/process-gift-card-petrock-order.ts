@@ -57,7 +57,10 @@ async function main() {
       async read(id) {
         const [row] = await sql<{
           id: string; product_id: string; amount_kobo: string; status: string; provider_order_id: string | null;
-        }[]>`select * from public.read_gift_card_worker_order(${id}::uuid)`;
+        }[]>`
+          select id, product_id, amount_kobo, status, provider_order_id
+          from public.read_gift_card_worker_order(${id}::uuid)
+        `;
         if (!row || row.product_id !== options.productId || Number(row.amount_kobo) !== options.amountKobo) return null;
         return { id: row.id, productId: row.product_id, amountKobo: Number(row.amount_kobo), status: row.status, providerOrderId: row.provider_order_id ?? undefined };
       },

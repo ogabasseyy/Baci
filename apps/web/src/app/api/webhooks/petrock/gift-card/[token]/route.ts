@@ -19,7 +19,10 @@ export async function POST(
     return new Response(null, { status: 404 });
   }
 
-  // Authenticate fulfillment using Petrock's authenticated order read.
-  // The callback body can contain a voucher and is never read or logged.
-  return new Response(null, { status: 200 });
+  // The pilot uses authenticated polling. Do not acknowledge completion until
+  // there is durable callback processing, and keep the voucher out of logs.
+  return new Response(null, {
+    status: 503,
+    headers: { 'Retry-After': '60' },
+  });
 }

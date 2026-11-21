@@ -67,6 +67,9 @@ end
 def run_test(name)
   yield
   puts "PASS #{name}"
+rescue SystemExit => error
+  warn "FAIL #{name}: exited with status #{error.status}: #{error.message}"
+  exit error.status
 rescue StandardError => error
   warn "FAIL #{name}: #{error.message}"
   exit 1

@@ -93,6 +93,26 @@ BEGIN
   THEN RAISE EXCEPTION 'MCP import bypassed assurance on a default SKU with JSON-null options: %', result; END IF;
   UPDATE public.commerce_cart_lines SET has_assurance = false, options = '{}' WHERE cart_id = destination;
 
+  BEGIN
+    UPDATE public.commerce_cart_lines SET condition = NULL, has_assurance = true
+    WHERE cart_id = destination AND variant_id = default_variant;
+    result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'protected-default-sku', source_version);
+    IF result->>'code' IS DISTINCT FROM 'invalid_item'
+       OR EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE id = handoff AND redeemed_at IS NOT NULL)
+    THEN RAISE EXCEPTION 'Import bypassed assurance on a default SKU with no stored condition: %', result; END IF;
+    UPDATE public.commerce_cart_lines SET has_assurance = false
+    WHERE cart_id = destination AND variant_id = default_variant;
+    result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'existing-default-sku', source_version);
+    IF result->>'ok' IS DISTINCT FROM 'true'
+       OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = destination) <> 1
+       OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = destination
+         AND product_id = product AND variant_id = default_variant AND condition IS NULL AND quantity = 2)
+    THEN RAISE EXCEPTION 'Import split a default SKU whose stored condition is null: %', result; END IF;
+    RAISE EXCEPTION USING ERRCODE = 'ZT001';
+  EXCEPTION WHEN SQLSTATE 'ZT001' THEN
+    NULL; -- Restore the explicit-condition fixture for the main import.
+  END;
+
   INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
   VALUES (legacy_destination, merchant, now() + interval '1 day');
   INSERT INTO public.commerce_cart_grants(id, merchant_id, cart_id, principal_id, expires_at)
@@ -185,6 +205,8 @@ BEGIN
      OR EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE cart_id = destination AND principal_id = 'legacy:mcp:test-import')
   THEN RAISE EXCEPTION 'Import modified the source or shared recipient access'; END IF;
   imported_version := (result->'state'->>'version')::integer;
+  IF imported_version IS DISTINCT FROM (SELECT version FROM public.commerce_carts WHERE id = destination)
+  THEN RAISE EXCEPTION 'Import did not report the persisted destination version: %', result; END IF;
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'reopen-new-attempt', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true'
      OR (result->'state'->>'version')::integer IS DISTINCT FROM imported_version
@@ -366,7 +388,9 @@ BEGIN
     'after-account-merge', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true'
      OR result->'state'->>'cartId' IS DISTINCT FROM saved_cart::text
-     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = saved_cart AND product_id = product) IS DISTINCT FROM 2::bigint
+     OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = saved_cart AND product_id = product) <> 1
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = saved_cart
+       AND product_id = product AND variant_id = default_variant AND condition = 'new' AND quantity = 2)
   THEN RAISE EXCEPTION 'Account merge lost the website import history: %', result; END IF;
 END $$;
 

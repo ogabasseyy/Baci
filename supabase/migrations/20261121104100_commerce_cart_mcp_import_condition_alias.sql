@@ -1,5 +1,6 @@
 -- The catalog treats refurbished as open_box, while older cart rows
--- can store either spelling. Send the exact stored key to the writer.
+-- can store either spelling. A default new SKU can also be stored with
+-- no condition. Send the selected line's exact key to the writer.
 DO $migration$
 DECLARE
   definition text := pg_catalog.pg_get_functiondef(
@@ -20,18 +21,30 @@ DECLARE
     ) AS condition
   ) resolved ON variant.id IS NOT NULL
   LEFT JOIN LATERAL (
-    SELECT legacy_line.condition
+    SELECT legacy_line.variant_id, legacy_line.condition
     FROM public.commerce_cart_lines legacy_line
     WHERE legacy_line.merchant_id = merchant AND legacy_line.cart_id = destination_id
-      AND legacy_line.product_id = product.id AND legacy_line.variant_id IS NULL
-      AND discovery.canonical_product_condition(legacy_line.condition) = resolved.condition
+      AND legacy_line.product_id = product.id
+      AND (
+        (legacy_line.variant_id IS NULL
+          AND discovery.canonical_product_condition(legacy_line.condition) = resolved.condition)
+        OR (legacy_line.variant_id = variant.id AND resolved.condition = 'new'
+          AND (legacy_line.condition = resolved.condition OR legacy_line.condition IS NULL))
+      )
       AND coalesce(nullif(legacy_line.options, 'null'::jsonb), '{}'::jsonb) = '{}'::jsonb
       AND legacy_line.voucher_token IS NULL AND legacy_line.voucher_award_id IS NULL
-    ORDER BY (legacy_line.condition = resolved.condition) DESC, legacy_line.condition
+    ORDER BY (legacy_line.variant_id IS NULL) DESC,
+      (legacy_line.condition = resolved.condition) DESC NULLS LAST, legacy_line.condition
     LIMIT 1
   ) legacy_match ON resolved.condition IS NOT NULL;$join$;
-  projection constant text := $projection$'variantId', CASE WHEN legacy_match.condition IS NULL THEN variant.id END,
-      'condition', coalesce(legacy_match.condition, resolved.condition)$projection$;
+  projection constant text := $projection$'variantId', CASE
+        WHEN legacy_match.variant_id IS NULL AND legacy_match.condition IS NOT NULL THEN NULL
+        ELSE variant.id
+      END,
+      'condition', CASE
+        WHEN legacy_match.variant_id IS NOT NULL THEN legacy_match.condition
+        ELSE coalesce(legacy_match.condition, resolved.condition)
+      END$projection$;
   anchor text;
 BEGIN
   FOREACH anchor IN ARRAY ARRAY[

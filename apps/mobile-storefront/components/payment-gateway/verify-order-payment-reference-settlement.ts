@@ -2,10 +2,10 @@ import {
   BANK_CARD_OFFER_REFERENCE_PATTERN,
   hasBankCardOfferReferencePrefix,
 } from '@baci/shared/constants';
-import { z } from 'zod';
 import { CHECKOUT_API_BASE_URL } from '@/components/checkout/checkout-screen.constants';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { getSession } from '@/lib/supabase';
+import { bankOfferReversalResponseSchema } from '@/schemas/bank-offer-reversal-response';
 import type { OrderPaymentVerification } from './verify-order-payment';
 import { VERIFY_TIMEOUT_MS } from './verify-order-payment-tracked-lookup';
 
@@ -13,14 +13,6 @@ const RECONCILING_FINALIZATION_OUTCOMES = new Set([
   'order_cancelled',
   'order_skipped',
 ]);
-
-const bankOfferReversalResponseSchema = z.object({
-  orderId: z.string(),
-  status: z.literal('reversed'),
-  success: z.literal(false),
-  finalizationOutcome: z.never().optional(),
-  reference: z.string(),
-});
 
 // Permanent reference defects: the attempt itself is invalid (wrong
 // amount/currency, unknown reference, non-order reference), so no webhook

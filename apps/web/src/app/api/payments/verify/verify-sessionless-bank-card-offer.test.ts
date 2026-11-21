@@ -1,62 +1,14 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { beforeEach, expect, it, vi } from 'vitest';
-import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
-import { verifyBankCardOfferPaystack } from '@/lib/checkout/verify-bank-card-offer-paystack';
-import { bankCardOfferContextFixture } from '@/schemas/bank-card-offer-payment-context.test-support';
-import type { GuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
-import { verifySessionlessBankCardOffer } from './verify-sessionless-bank-card-offer';
-
-vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
-  createStorefrontOrderRpcClient: vi.fn(),
-}));
-vi.mock('@/lib/checkout/verify-bank-card-offer-paystack', () => ({
-  verifyBankCardOfferPaystack: vi.fn(),
-}));
-
-const verify = vi.mocked(verifyBankCardOfferPaystack);
-const verifyNative = (
-  snapshot: GuestPaymentReferenceSnapshot,
-  client: SupabaseClient
-) =>
-  verifySessionlessBankCardOffer(
-    snapshot,
-    client,
-    createStorefrontOrderRpcClient
-  );
-const rpc = vi.fn();
-const buyerRpc = vi.fn();
-const buyerClient = { rpc: buyerRpc } as unknown as SupabaseClient;
-const reference = `BCO-${'a'.repeat(32)}`;
-const saved = {
-  ...bankCardOfferContextFixture,
+import { expect, it } from 'vitest';
+import {
+  buyerClient,
+  buyerRpc,
   reference,
-  domain: 'test',
-  acceptedFilterPolicyHash: 'a'.repeat(64),
-};
-const snapshot: GuestPaymentReferenceSnapshot = {
-  orderId: 'order-1',
-  transactionId: 'transaction-1',
-  merchantId: saved.quote.merchantId,
-  orderNumber: 'ORD-1',
-  amount: 95,
-  currency: 'NGN',
-  transactionStatus: 'pending',
-  gateway: 'paystack',
-  gatewayReference: reference,
-  orderPaymentStatus: 'pending',
-  orderShippingStatus: 'pending',
-  orderTotal: 95,
-  inventoryConfirmed: false,
-};
-
-beforeEach(() => {
-  vi.resetAllMocks();
-  vi.mocked(createStorefrontOrderRpcClient).mockReturnValue({
-    rpc,
-  } as unknown as SupabaseClient);
-  rpc.mockResolvedValueOnce({ data: saved, error: null });
-  buyerRpc.mockResolvedValue({ data: true, error: null });
-});
+  rpc,
+  saved,
+  snapshot,
+  verify,
+  verifyNative,
+} from './verify-sessionless-bank-card-offer.test-support';
 
 it.each([
   'failed',
@@ -130,107 +82,6 @@ it('keeps the verified capture pending and flags it for reconciliation without s
   expect(buyerRpc).toHaveBeenCalledExactlyOnceWith(
     'ensure_bank_card_offer_capture_sweep',
     { p_reference: reference }
-  );
-});
-
-it('reports a verified payment that already settled with confirmed inventory', async () => {
-  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
-
-  const result = await verifyNative(
-    {
-      ...snapshot,
-      transactionStatus: 'completed',
-      orderPaymentStatus: 'paid',
-      inventoryConfirmed: true,
-    },
-    buyerClient
-  );
-
-  await expect(result.json()).resolves.toMatchObject({
-    success: true,
-    status: 'success',
-    finalizationOutcome: 'completed',
-  });
-  expect(verify).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({ reference })
-  );
-  expect(buyerRpc).not.toHaveBeenCalled();
-});
-
-it.each([
-  { payment: 'pending', shipping: 'cancelled', outcome: 'order_cancelled' },
-  { payment: 'canceled', shipping: 'pending', outcome: 'order_cancelled' },
-  { payment: 'refunded', shipping: 'pending', outcome: 'order_skipped' },
-] as const)('reports a verified terminal order as $outcome', async ({
-  payment,
-  shipping,
-  outcome,
-}) => {
-  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
-
-  const response = await verifyNative(
-    {
-      ...snapshot,
-      transactionStatus: 'completed',
-      orderPaymentStatus: payment,
-      orderShippingStatus: shipping,
-    },
-    buyerClient
-  );
-
-  expect(response.status).toBe(200);
-  await expect(response.json()).resolves.toMatchObject({
-    orderId: snapshot.orderId,
-    success: true,
-    status: 'success',
-    finalizationOutcome: outcome,
-  });
-  expect(buyerRpc).not.toHaveBeenCalled();
-});
-
-it('waits for durable capture when a cancelled order still has a pending transaction', async () => {
-  verify.mockResolvedValueOnce({ kind: 'verified' } as never);
-
-  const response = await verifyNative(
-    { ...snapshot, orderShippingStatus: 'cancelled' },
-    buyerClient
-  );
-
-  expect(response.status).toBe(202);
-  expect(buyerRpc).toHaveBeenCalledExactlyOnceWith(
-    'ensure_bank_card_offer_capture_sweep',
-    { p_reference: reference }
-  );
-});
-
-it('rechecks settled attempts for reversals before reporting history success', async () => {
-  verify.mockResolvedValueOnce({
-    kind: 'terminal',
-    status: 'reversed',
-    reportedReversalAmountKobo: 875,
-  });
-  rpc.mockResolvedValueOnce({ data: true, error: null });
-  const result = await verifyNative(
-    {
-      ...snapshot,
-      transactionStatus: 'completed',
-      orderPaymentStatus: 'paid',
-      inventoryConfirmed: true,
-    },
-    buyerClient
-  );
-  expect(verify).toHaveBeenCalledOnce();
-  await expect(result.json()).resolves.toMatchObject({
-    success: false,
-    status: 'reversed',
-    reference,
-  });
-  expect(rpc).toHaveBeenLastCalledWith(
-    'flag_bank_card_offer_terminal_review',
-    expect.objectContaining({
-      p_status: 'reversed',
-      p_reported_amount_kobo: 875,
-    })
   );
 });
 

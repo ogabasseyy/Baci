@@ -15,6 +15,8 @@ BEGIN
   SET LOCAL ROLE authenticated;
   IF public.get_bank_card_offer_verification_context(v_order, v_merchant, v_transaction) IS NOT NULL
   THEN RAISE EXCEPTION 'A route scoped to another merchant must not read capture evidence'; END IF;
+  IF public.get_bank_card_offer_verification_hold(v_order, v_merchant, v_transaction) IS NOT NULL
+  THEN RAISE EXCEPTION 'A route scoped to another merchant must not read the capture hold'; END IF;
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
     'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
@@ -67,6 +69,11 @@ BEGIN
     #>> '{completedGatewayResponse,reference}' IS DISTINCT FROM v_reference
   THEN RAISE EXCEPTION 'Completed capture could not replay its approved evidence'; END IF;
   UPDATE public.orders SET payment_status = 'paid' WHERE id = v_order;
+  SET LOCAL ROLE authenticated;
+  IF public.get_bank_card_offer_verification_hold(v_order, v_merchant, v_transaction) IS DISTINCT FROM false
+    OR has_function_privilege('anon', 'public.get_bank_card_offer_verification_hold(uuid,uuid,uuid)', 'EXECUTE')
+  THEN RAISE EXCEPTION 'An unheld capture should be readable only in the scoped verification path'; END IF;
+  RESET ROLE;
 
   IF has_function_privilege('authenticated', 'public.claim_paid_bank_card_offer_recheck()', 'EXECUTE')
     OR has_function_privilege('anon', 'public.claim_paid_bank_card_offer_recheck()', 'EXECUTE')

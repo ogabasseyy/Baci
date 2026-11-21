@@ -102,6 +102,10 @@ BEGIN
   THEN RAISE EXCEPTION 'Reported reversal amount metadata must not change the verified capture'; END IF;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed', 800)
   THEN RAISE EXCEPTION 'Unable to persist the capture reversal before refund verification'; END IF;
+  SET LOCAL ROLE authenticated;
+  IF public.get_bank_card_offer_verification_hold(v_order, v_merchant, v_transaction) IS DISTINCT FROM true
+  THEN RAISE EXCEPTION 'Native verification must observe the recorded reversal'; END IF;
+  RESET ROLE;
   UPDATE private.bank_card_offer_payment_attempts SET paid_recheck_after = now()
     WHERE transaction_id = v_transaction;
   SET LOCAL ROLE service_role;
@@ -137,6 +141,9 @@ BEGIN
   IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
     v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM 'blocked'
   THEN RAISE EXCEPTION 'A dispute recorded before dispatch must block the refund'; END IF;
+  SET LOCAL ROLE authenticated;
+  IF public.get_bank_card_offer_verification_hold(v_order, v_merchant, v_transaction) IS DISTINCT FROM true
+  THEN RAISE EXCEPTION 'Native verification must observe the durable dispute hold'; END IF;
   RESET ROLE;
   IF NOT EXISTS (
     SELECT 1 FROM public.reconciliation_review

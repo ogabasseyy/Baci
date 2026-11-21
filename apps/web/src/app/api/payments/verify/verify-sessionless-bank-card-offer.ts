@@ -32,9 +32,14 @@ export async function verifySessionlessBankCardOffer(
     orderId: snapshot.orderId,
     orderNumber: snapshot.orderNumber ?? undefined,
   };
-  const pending = () =>
+  const pending = (code?: string) =>
     NextResponse.json(
-      { ...orderDetails, success: false, status: 'pending' },
+      {
+        ...orderDetails,
+        success: false,
+        status: 'pending',
+        ...(code && { code }),
+      },
       { status: 202 }
     );
 
@@ -121,21 +126,23 @@ export async function verifySessionlessBankCardOffer(
         });
         return unavailable();
       }
-      return NextResponse.json(
-        {
-          ...orderDetails,
-          code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
-          success: false,
-          status: 'pending',
-        },
-        { status: 202 }
-      );
+      return pending('BANK_CARD_OFFER_CAPTURE_REVIEW');
     }
     if (verified?.kind !== 'verified') return pending();
 
     // The provider proof and completed transaction establish capture. A
     // terminal order remains closed and the caller shows reconciliation.
     const finalizationOutcome = getRecordedCaptureOutcome(snapshot);
+    if (finalizationOutcome === 'completed') {
+      // Read after Paystack verification so a dispute or reversal recorded
+      // while the provider call was in flight can still block confirmation.
+      const hold = await client.rpc(
+        'get_bank_card_offer_verification_hold',
+        args
+      );
+      if (hold.error || typeof hold.data !== 'boolean') return unavailable();
+      if (hold.data) return pending('BANK_CARD_OFFER_CAPTURE_REVIEW');
+    }
     if (finalizationOutcome) {
       return NextResponse.json({
         ...orderDetails,

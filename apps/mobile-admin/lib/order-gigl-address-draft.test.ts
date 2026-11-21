@@ -13,12 +13,19 @@ const picked = {
 };
 
 describe('order-gigl-address-draft', () => {
-  it('bugfix: clears the picked pin when the address is edited by hand', () => {
+  it('requires fresh locality when the street destination changes by hand', () => {
     const next = applyAddressField(picked, 'address', '12 Allen Ave');
     expect(next).toEqual({
       address: '12 Allen Ave',
-      city: 'Ikeja',
-      state: 'Lagos',
+      city: '',
+      state: '',
+    });
+  });
+
+  it('preserves locality and pin for formatting-only street edits', () => {
+    expect(applyAddressField(picked, 'address', '12 Allen,')).toEqual({
+      ...picked,
+      address: '12 Allen,',
     });
   });
 

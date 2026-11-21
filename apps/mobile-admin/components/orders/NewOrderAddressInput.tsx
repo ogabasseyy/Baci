@@ -30,15 +30,10 @@ function clearGeocodedFields<T extends object>(previous: T): T {
   };
 }
 
-function clearGeocodedStreetFields<T extends object>(previous: T): T {
-  return {
-    ...previous,
-    country: '',
-    countryCode: '',
-    postalCode: '',
-    latitude: undefined,
-    longitude: undefined,
-  };
+function isFormattingOnlyStreetEdit(previous: string, next: string): boolean {
+  const normalize = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return normalize(previous) === normalize(next);
 }
 
 export function NewOrderAddressInput({
@@ -169,9 +164,15 @@ export function NewOrderAddressInput({
                 }
                 selectedDescriptionRef.current = null;
                 setDetailsRecovery(false);
-                setManualLocality(Boolean(text.trim()));
+                const keepsDestination = isFormattingOnlyStreetEdit(
+                  selectedDescription ?? deliveryInfo.address,
+                  text
+                );
+                setManualLocality(!keepsDestination && Boolean(text.trim()));
                 setDeliveryInfo((previous) => ({
-                  ...clearGeocodedStreetFields(previous),
+                  ...(keepsDestination
+                    ? previous
+                    : clearGeocodedFields(previous)),
                   address: text,
                 }));
               },
@@ -194,11 +195,10 @@ export function NewOrderAddressInput({
           (deliveryInfo.address.trim() &&
             !(deliveryInfo.city.trim() && deliveryInfo.state.trim())) ? (
             <View style={{ marginTop: 8 }}>
-              {manualLocality &&
-              deliveryInfo.city.trim() &&
-              deliveryInfo.state.trim() ? (
+              {manualLocality ? (
                 <Text style={[styles.listSubValue, { color: colors.warning }]}>
-                  Confirm the city and state still match this street address.
+                  Street changed. Confirm or re-enter the city and state before
+                  saving.
                 </Text>
               ) : null}
               {detailsRecovery ? (
@@ -222,14 +222,19 @@ export function NewOrderAddressInput({
       ) : (
         <>
           <TextInput
-            onChangeText={(text) =>
+            onChangeText={(text) => {
+              const keepsDestination = isFormattingOnlyStreetEdit(
+                deliveryInfo.address,
+                text
+              );
+              setManualLocality(!keepsDestination && Boolean(text.trim()));
               setDeliveryInfo((previous) => ({
-                ...previous,
+                ...(keepsDestination
+                  ? previous
+                  : clearGeocodedFields(previous)),
                 address: text,
-                latitude: undefined,
-                longitude: undefined,
-              }))
-            }
+              }));
+            }}
             placeholder="Enter delivery address"
             placeholderTextColor={colors.textMuted}
             style={[

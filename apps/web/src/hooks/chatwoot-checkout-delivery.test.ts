@@ -45,6 +45,15 @@ describe('resolveChatwootCheckoutDelivery', () => {
     });
   });
 
+  it('refuses a matching rate priced in another currency', async () => {
+    stub(merchantQuote({ currency: 'USD' }));
+
+    expect(await resolveChatwootCheckoutDelivery(input())).toEqual({
+      ok: false,
+      code: 'delivery_unavailable',
+    });
+  });
+
   it('asks for the delivery type the shopper chose, merchant rates only', async () => {
     const door = stub(merchantQuote());
     await resolveChatwootCheckoutDelivery(input());

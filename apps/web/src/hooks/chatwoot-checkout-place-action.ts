@@ -72,12 +72,21 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
   if (!merchant) return fail('order_failed');
   const keys = await deriveChatwootCheckoutKeys(request.requestId, merchant.id);
   if (!keys) return fail('order_failed');
-  // One at a time per cart: a second attempt that arrives mid-flight, under
-  // the same or a new request id, waits and then answers from the order the
-  // first one placed instead of racing it into a second payment setup.
+  // One at a time per cart, then per order: a second attempt that arrives
+  // mid-flight waits and answers from the order the first one placed instead
+  // of racing it into a second payment setup. The order lock covers a copy
+  // authorized against the cart that replaced the one the order completed.
   return runChatwootCheckoutSerially(
-    `${merchant.id}:${input.authorizedCartId}`,
-    () => placeForKeys(input, merchant, keys)
+    `cart:${merchant.id}:${input.authorizedCartId}`,
+    () => {
+      const orderKey =
+        findChatwootCheckoutOrderForCart(input.authorizedCartId)?.key ??
+        keys.idempotencyKey;
+      return runChatwootCheckoutSerially(
+        `order:${merchant.id}:${orderKey}`,
+        () => placeForKeys(input, merchant, keys)
+      );
+    }
   );
 }
 

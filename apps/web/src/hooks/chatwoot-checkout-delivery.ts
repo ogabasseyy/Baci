@@ -106,6 +106,8 @@ export async function resolveChatwootCheckoutDelivery(
     (quote) =>
       isMerchantQuote(quote) &&
       getMerchantRateId(String(quote.id)) !== null &&
+      // Chat checkout is naira-only; a rate in another currency never matches.
+      String(quote.currency).trim().toUpperCase() === 'NGN' &&
       quote.displayName.trim().slice(0, 120) === wantedName &&
       (quote.isStationPickup === true) === input.choice.pickup &&
       toMinor(quote.price) === toMinor(input.choice.priceMajor)

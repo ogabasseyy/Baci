@@ -69,7 +69,8 @@ describe('local Oxygen step navigation', () => {
             fail = reject;
           })
       )
-      .mockResolvedValue({ version: 1 });
+      .mockResolvedValueOnce({ version: 1 })
+      .mockResolvedValueOnce({ version: 2 });
     const client = {
       draft: {
         read: jest.fn().mockResolvedValue({ version: 0, draft: null }),
@@ -100,5 +101,12 @@ describe('local Oxygen step navigation', () => {
       expect(await result.current.save(2)).toBe(true);
     });
     expect(result.current.error).toBeNull();
+    expect(write.mock.calls[1][0]).toEqual(write.mock.calls[0][0]);
+    expect(write.mock.calls[2][0]).toEqual(
+      expect.objectContaining({ version: 1, draft: { step: 2, fields: {} } })
+    );
+    expect(write.mock.calls[2][0].idempotencyKey).not.toBe(
+      write.mock.calls[0][0].idempotencyKey
+    );
   });
 });

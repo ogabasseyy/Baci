@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { OxygenClient } from '@/services/oxygen/client';
+import { OxygenClientError } from '@/services/oxygen/errors';
 import { restoreCheckoutHomeAddress } from './oxygen-draft-home-prefill';
 import type { OxygenFields } from './oxygen-form-utils';
 export function useOxygenApplicationDraft(
@@ -19,6 +20,9 @@ export function useOxygenApplicationDraft(
   const [saving, setSaving] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const version = useRef(0);
+  const pendingWrite = useRef<
+    Parameters<OxygenClient['draft']['write']>[0] | null
+  >(null);
   const saveLock = useRef(false);
   const saveCompletion = useRef<Promise<void>>(Promise.resolve());
   const currentStep = useRef(step);
@@ -41,6 +45,7 @@ export function useOxygenApplicationDraft(
     setError(null);
     setRestoreError(null);
     version.current = 0;
+    pendingWrite.current = null;
     fingerprint.current = JSON.stringify({ step: 0, fields: {} });
     // Submitted identity drafts may be minimized. OTP does not need to reread PII.
     if (!editing) {
@@ -102,33 +107,42 @@ export function useOxygenApplicationDraft(
       release = resolve;
     });
     if (mounted.current) setSaving(true);
-    const savedFingerprint = JSON.stringify({
-      step: nextStep,
-      fields: nextFields,
-    });
+    const nextDraft = { step: nextStep, fields: { ...nextFields } };
+    const savedFingerprint = JSON.stringify(nextDraft);
+    const isCurrent = () =>
+      scope.current === startedScope &&
+      generation.current === startedGeneration;
     try {
-      const result = await client.draft.write({
-        workflowId,
-        version: version.current,
-        idempotencyKey: Crypto.randomUUID(),
-        draft: { step: nextStep, fields: nextFields },
-      });
-      if (
-        scope.current !== startedScope ||
-        generation.current !== startedGeneration
-      )
-        return false;
-      version.current = result.version;
-      fingerprint.current = savedFingerprint;
+      // Resolve a lost response using its original key and exact payload before
+      // saving changed input. Identity data stays in memory within this scope.
+      while (true) {
+        const request = pendingWrite.current ?? {
+          workflowId,
+          version: version.current,
+          idempotencyKey: Crypto.randomUUID(),
+          draft: nextDraft,
+        };
+        pendingWrite.current = request;
+        const result = await client.draft.write(request);
+        if (!isCurrent()) return false;
+        pendingWrite.current = null;
+        version.current = result.version;
+        fingerprint.current = JSON.stringify(request.draft);
+        if (fingerprint.current === savedFingerprint) break;
+      }
       if (mounted.current) setError(null);
       return true;
-    } catch {
-      if (
-        mounted.current &&
-        scope.current === startedScope &&
-        generation.current === startedGeneration
-      )
-        setError('Could not save your application. Try again.');
+    } catch (failure) {
+      if (mounted.current && isCurrent()) {
+        if (failure instanceof OxygenClientError && failure.status === 409) {
+          setLoaded(false);
+          setRestoreError(
+            'This application changed elsewhere. Reload saved progress before continuing.'
+          );
+        } else {
+          setError('Could not save your application. Try again.');
+        }
+      }
       return false;
     } finally {
       release();
@@ -155,8 +169,9 @@ export function useOxygenApplicationDraft(
     )
       return false;
     if (
+      pendingWrite.current === null &&
       fingerprint.current ===
-      JSON.stringify({ step: snapshotStep, fields: snapshotFields })
+        JSON.stringify({ step: snapshotStep, fields: snapshotFields })
     )
       return true;
     return save(snapshotStep, snapshotFields, finalFlush);

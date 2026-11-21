@@ -24,18 +24,21 @@ function prepareOxygenOrderItem({
   voucherAwardId,
   ...item
 }: OxygenOrderItem) {
-  for (const value of [
+  for (const [voucherField, value] of Object.entries({
     voucher_token,
     voucher_award_id,
     voucherToken,
     voucherAwardId,
-  ]) {
+  })) {
     if (value === undefined || value === null) continue;
+    // The field name helps diagnose malformed carts without logging the code.
+    const options = { cause: voucherField };
     if (typeof value !== 'string')
-      throw new Error('Invalid voucher identifier');
+      throw new Error('Invalid voucher identifier', options);
     if (value.trim())
       throw new Error(
-        'Oxygen requires a cart without vouchers or store credit'
+        'Oxygen requires a cart without vouchers or store credit',
+        options
       );
   }
   return item;

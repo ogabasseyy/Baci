@@ -272,7 +272,7 @@ export async function recoverQuizEdgeAttempt(
         502
       );
     }
-    if (parsed.data.status === 'active') {
+    if (parsed.data.attempt) {
       await saveQuizEdgeAttemptSession(parsed.data.attempt.attemptId, session);
     }
     return parsed.data;

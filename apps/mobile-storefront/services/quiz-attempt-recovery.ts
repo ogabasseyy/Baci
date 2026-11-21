@@ -2,11 +2,11 @@ import { quizV2ActiveAttemptResponseSchema } from '@/schemas/quiz-schemas';
 import { requestQuizV2 } from './quiz';
 import { resolveQuizEdgeSessionForEvent } from './quiz-edge-session';
 import { recoverQuizEdgeAttempt } from './quiz-edge-transport';
-import { QuizServiceError } from './quiz-errors';
-import type {
-  QuizActiveAttemptResponse,
-  QuizEventBackendMode,
-  QuizServiceOptions,
+import {
+  type QuizActiveAttemptResponse,
+  type QuizEventBackendMode,
+  QuizServiceError,
+  type QuizServiceOptions,
 } from './quiz-types';
 
 export interface RecoverQuizAttemptInput extends QuizServiceOptions {

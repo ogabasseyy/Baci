@@ -43,7 +43,7 @@ export function NewOrderAddressInput({
   const setLocality = (field: 'city' | 'state', text: string) => {
     setManualLocality(true);
     setDeliveryInfo((previous) => {
-      if (previous[field].trim() === text.trim()) {
+      if (previous[field].trim().toLowerCase() === text.trim().toLowerCase()) {
         return { ...previous, [field]: text };
       }
       return {

@@ -36,7 +36,6 @@ export function useOrderGiglAddressEditor({
   const editingAddressRef = useRef(false);
   const scopeRef = useRef({ orderId, preview });
   const initialAddressRef = useRef(initialAddress);
-  initialAddressRef.current = initialAddress;
   const [missingFields, setMissingFields] = useState<OrderGiglMissingField[]>(
     []
   );
@@ -67,6 +66,7 @@ export function useOrderGiglAddressEditor({
     editDraft((draft) => applySelectedPlace(draft, place));
   // biome-ignore lint/correctness/useExhaustiveDependencies: scalar address deps
   useLayoutEffect(() => {
+    initialAddressRef.current = initialAddress;
     const scope = scopeRef.current;
     if (
       editingAddressRef.current &&

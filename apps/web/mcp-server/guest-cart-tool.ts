@@ -28,12 +28,10 @@ import {
   VariantSelectionRequired,
   mapGuestCartToolError,
 } from './guest-cart-tool-responses';
-import {
-  GUEST_CREDENTIAL_UPDATE_DESCRIPTION,
-  guestCredentialHandoffUrl,
-  guestCredentialReply,
-  parseGuestCredentialUpdateInput,
-} from './guest-credential-cart';
+import { guestCredentialDescriptions } from './guest-credential-descriptions';
+import { guestCredentialHandoffUrl } from './guest-credential-handoff-url';
+import { guestCredentialReply } from './guest-credential-reply';
+import { parseGuestCredentialUpdateInput } from './parse-guest-credential-update-input';
 
 export function registerGuestCartTool(
   server: McpServer,
@@ -86,7 +84,7 @@ export function registerGuestCartTool(
       description: options.connectionCart
         ? 'Add, change or remove items in this connection’s persistent Ogabassey guest cart. The server holds cart authority; never ask for or supply a cart token. Call get_ogabassey_guest_cart when current cart details are missing or before website checkout. If the shopper reports a broken or ended cart link, use get_ogabassey_guest_cart to refresh that link; do not repeat this mutation to repair it. For remove it or remove the charger, resolve the product from the last returned items; ask which item if ambiguous. Quantity is the desired absolute total; zero removes. Retain the version as expectedVersion and the same operationId when retrying an indeterminate write. Do not create another cart to simulate removal. Guest website checkout is optional; this tool never places an order or starts payment.'
         : options.modelCredentialTool
-          ? GUEST_CREDENTIAL_UPDATE_DESCRIPTION
+          ? guestCredentialDescriptions.update
           : MCP_GUEST_CART_DESCRIPTION,
       inputSchema: options.connectionCart
         ? guestOAuthCartInputSchema

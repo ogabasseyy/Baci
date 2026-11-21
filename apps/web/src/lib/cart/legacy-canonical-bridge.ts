@@ -1,10 +1,8 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { CartCommand, CartErrorCode } from '@baci/shared/cart';
-import {
-  legacyOwnerContextSchema,
-  MCP_IMPORT_HANDOFF_OPERATION_PREFIX,
-} from '@/schemas/cart-legacy-bridge';
+import { legacyOwnerContextSchema } from '@/schemas/cart-legacy-bridge';
+import { buildLegacyHandoffOperationId } from './build-legacy-handoff-operation-id';
 import {
   getCartProofEnvironment,
   getCartSessionSecret,
@@ -258,10 +256,6 @@ export async function operateLegacyCanonicalCart(
   }
   let continueUrl: string | null = null;
   if (input.handoff) {
-    const operationPrefix =
-      input.handoff === 'import_mcp'
-        ? MCP_IMPORT_HANDOFF_OPERATION_PREFIX
-        : 'legacy-handoff:';
     const issued = await cart.deps.handoff(
       {
         client: cart.client,
@@ -274,11 +268,11 @@ export async function operateLegacyCanonicalCart(
       },
       cart.principal,
       {
-        operationId: `${operationPrefix}${createHash('sha256')
-          .update(
-            `${state.cartId}|${operationId ?? `read-window:${Math.floor(Date.now() / 240000)}`}`
-          )
-          .digest('hex')}`,
+        operationId: buildLegacyHandoffOperationId(
+          state.cartId,
+          operationId,
+          input.handoff === 'import_mcp'
+        ),
         destination: { type: 'web' },
       }
     );

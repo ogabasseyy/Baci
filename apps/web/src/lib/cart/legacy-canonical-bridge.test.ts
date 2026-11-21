@@ -170,8 +170,12 @@ it('signs an import-only operation only when the MCP caller requests it', async 
   expect(deps.handoff.mock.calls[0]?.[2]).toMatchObject({
     operationId: expect.stringMatching(/^legacy-handoff:mcp-import:/),
   });
+  await operateLegacyCanonicalCart(cart, { handoff: 'import_mcp' });
+  expect(deps.handoff.mock.calls[1]?.[2]?.operationId).not.toBe(
+    deps.handoff.mock.calls[0]?.[2]?.operationId
+  );
   await operateLegacyCanonicalCart(cart, { handoff: true });
-  expect(deps.handoff.mock.calls[1]?.[2]).toMatchObject({
+  expect(deps.handoff.mock.calls[2]?.[2]).toMatchObject({
     operationId: expect.stringMatching(/^legacy-handoff:[a-f0-9]{64}$/),
   });
 });

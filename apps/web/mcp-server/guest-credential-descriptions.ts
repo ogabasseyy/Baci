@@ -1,0 +1,9 @@
+const WEBSITE_CART_IMPORT_GUIDANCE =
+  'After the first website handoff, fresh links add only new or increased quantities. Review or remove items already copied on the website.';
+
+export const guestCredentialDescriptions = {
+  update: 'Add, change or remove items in the same Ogabassey guest cart. The first add creates the cart automatically without sign-in; omit cartCredential only when starting a new cart. On later messages reuse the exact cartCredential from structuredContent and never display it. For "remove it" or "remove the charger", match the referenced item to a product_id from the last cart result and set quantity to zero. Ask which item if ambiguous. If cart details are missing, call get_ogabassey_guest_cart with the same credential. If the credential is missing or expired, explain that the existing cart could not be updated. Never guess a credential or create a replacement cart to simulate removal. Quantity is the desired total for that product. Send the returned version as expectedVersion and a new operationId for each distinct edit. Retry an uncertain edit only with the same cartCredential and operationId. If the first add returns no credential, do not retry automatically. Explain that the cart could not be confirmed and ask before starting another. Use cart_url exactly as returned to open the website cart; call get_ogabassey_guest_cart to refresh a link. Account creation at checkout is optional. This tool never places an order or starts payment. ' +
+  WEBSITE_CART_IMPORT_GUIDANCE,
+  read: 'Read the existing guest cart and return a fresh website checkout link. Reuse the exact private cartCredential from the last successful cart tool result in this chat. Use this when a cart link is invalid or has ended. Show the cart_url exactly as returned. Never repeat an add or removal to refresh a link. Do not expose the cart credential. This tool never places an order or starts payment. ' +
+        WEBSITE_CART_IMPORT_GUIDANCE,
+};

@@ -16,6 +16,7 @@ DECLARE
   changed_handoff uuid := gen_random_uuid();
   reduced_handoff uuid := gen_random_uuid();
   linked_handoff uuid := gen_random_uuid();
+  linked_recovery_handoff uuid := gen_random_uuid();
   linked_grant uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
@@ -172,6 +173,19 @@ BEGIN
   IF result->>'replayed' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM linked_grant::text
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 3::bigint
   THEN RAISE EXCEPTION 'Changing the website grant duplicated an already transferred source revision: %', result; END IF;
+
+  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
+    origin_principal_id, operation_id, destination, expires_at)
+  VALUES (linked_recovery_handoff, 'import-linked-recovery', merchant, source, 'legacy:mcp:test-import',
+    'legacy-handoff:mcp-import:linked-recovery', '{"type":"web"}', now() + interval '5 minutes');
+  PERFORM set_config('request.jwt.claims', jsonb_build_object(
+    'role','commerce_cart_shopper','exp',9999999999,'cart_scope','bootstrap',
+    'cart_merchant_id',merchant,'cart_principal_id','linked-website-import-test'
+  )::text, true);
+  result := public.commerce_cart_import_mcp_handoff('import-linked-recovery', linked_recovery_handoff, 'recover-account-link', source_version);
+  IF result->>'replayed' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM linked_grant::text
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 3::bigint
+  THEN RAISE EXCEPTION 'Bootstrap recovery did not use the renewed website authority: %', result; END IF;
 END $$;
 
 DO $$

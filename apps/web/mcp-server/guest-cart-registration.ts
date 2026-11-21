@@ -2,7 +2,7 @@ import { registerCartLinkTools } from './cart-link-tool';
 import { registerConnectedCartRead } from './register-connected-cart-read';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { registerGuestCartTool } from './guest-cart-tool';
-import { registerGuestCredentialRead } from './guest-credential-cart';
+import { registerGuestCredentialRead } from './register-guest-credential-read';
 import { privateCartContinuationEnabled } from './private-cart-continuation-config';
 
 /** The production and QA registration boundary shares one default-off policy. */

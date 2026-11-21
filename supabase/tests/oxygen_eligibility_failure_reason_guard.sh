@@ -131,6 +131,45 @@ SQL
 psql -Xq -v ON_ERROR_STOP=1 -f "$check_dir/assertions.sql" >"$check_dir/assertions.log"
 echo 'Unique migration and bounded eligibility state passed'
 
+psql -Xq -v ON_ERROR_STOP=1 -f "$check_root/supabase/migrations/20261118192000_oxygen_eligibility_progress.sql" >"$check_dir/progress-migration.log"
+psql -Xq -v ON_ERROR_STOP=1 >"$check_dir/progress.log" <<'SQL'
+DO $test$
+DECLARE
+  id constant uuid := '60000000-0000-4000-8000-000000000006';
+  opt_in constant jsonb := '{"includeEligibilityProgress":true}';
+BEGIN
+  PERFORM oxygen_private.runtime('finish', id,
+    '{"state":{"eligibilityStatus":"pending","eligibilityProgress":"bank_statement"}}');
+  IF oxygen_private.runtime('status', id) ? 'eligibilityProgress'
+     OR oxygen_private.runtime('claim', id, opt_in) ? 'eligibilityProgress' THEN
+    RAISE EXCEPTION 'Legacy runtime projection exposed progress';
+  END IF;
+  IF oxygen_private.runtime('status', id, opt_in)->>'eligibilityProgress' IS DISTINCT FROM 'bank_statement' THEN
+    RAISE EXCEPTION 'Opted-in client lost progress';
+  END IF;
+  PERFORM oxygen_private.runtime('finish', id,
+    '{"action":"refresh_kyc","state":{"eligibilityStatus":"pending"}}');
+  IF oxygen_private.runtime('status', id, opt_in)->>'eligibilityProgress' IS DISTINCT FROM 'bank_statement' THEN
+    RAISE EXCEPTION 'Unrelated check cleared current progress';
+  END IF;
+  PERFORM oxygen_private.runtime('finish', id,
+    '{"state":{"eligibilityStatus":"pending","eligibilityProgress":"credit_score"}}');
+  IF oxygen_private.runtime('status', id, opt_in)->>'eligibilityProgress' IS DISTINCT FROM 'credit_score' THEN
+    RAISE EXCEPTION 'New eligibility observation failed to replace prior progress';
+  END IF;
+  PERFORM oxygen_private.runtime('finish', id, '{"state":{"eligibilityStatus":"pending"}}');
+  IF oxygen_private.runtime('status', id, opt_in) ? 'eligibilityProgress' THEN
+    RAISE EXCEPTION 'Generic pending response kept stale progress';
+  END IF;
+  BEGIN
+    PERFORM oxygen_private.runtime('finish', id,
+      '{"state":{"eligibilityStatus":"pending","eligibilityProgress":"private provider text"}}');
+    RAISE EXCEPTION 'Unrecognized provider text accepted';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+END $test$;
+SQL
+echo 'Bounded progress and legacy projections passed'
+
 # Exercise the actual runtime's owner and worker checks as well as its old
 # strict projection. The fixture supplies only the runtime's dependencies.
 createdb oxygen_real_runtime
@@ -143,7 +182,10 @@ for source in \
   supabase/migrations/20261111141410_oxygen_offer_tenure_consistency.sql \
   supabase/migrations/20261111143604_oxygen_offer_amount_precision.sql \
   supabase/migrations/20261116191630_oxygen_eligibility_failure_reason.sql \
-  supabase/tests/oxygen_eligibility_status.sql; do
+  supabase/migrations/20261118192000_oxygen_eligibility_progress.sql \
+  supabase/migrations/20261118203000_oxygen_eligibility_background.sql \
+  supabase/tests/oxygen_eligibility_status.sql \
+  supabase/tests/oxygen_eligibility_background.sql; do
   psql -Xq -v ON_ERROR_STOP=1 -f "$check_root/$source" >"$check_dir/runtime.log"
 done
 echo 'Real runtime owner, worker and rollback projections passed'

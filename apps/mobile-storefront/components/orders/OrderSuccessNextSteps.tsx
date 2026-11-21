@@ -8,12 +8,14 @@ export interface OrderSuccessNextStepsProps {
   colors: typeof Colors.light;
   nextDocumentTitle: string;
   nextDocumentText: string;
+  processingText?: string;
 }
 
 export function OrderSuccessNextSteps({
   colors,
   nextDocumentTitle,
   nextDocumentText,
+  processingText = 'Your order will be prepared and you can track it in real time.',
 }: OrderSuccessNextStepsProps) {
   return (
     <View style={styles.nextSteps}>
@@ -52,7 +54,7 @@ export function OrderSuccessNextSteps({
             Processing & delivery
           </Text>
           <Text style={[styles.nextStepText, { color: colors.textSecondary }]}>
-            Your order will be prepared and you can track it in real time.
+            {processingText}
           </Text>
         </View>
       </View>

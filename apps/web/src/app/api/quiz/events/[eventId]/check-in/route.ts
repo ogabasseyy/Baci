@@ -25,9 +25,12 @@ import {
   rpcErrorResponse,
 } from '@/app/api/quiz/_shared/route-helpers';
 import { enforceQuizStartGuards } from '@/app/api/quiz/attempts/start/v2-start-guards';
-import { getQuizEdgeWorkerUrl, getQuizTicketSecret } from '@/env';
 import { logger } from '@/lib/logger';
 import { resolveQuizDevice } from '@/lib/quiz/quiz-device-hash';
+import {
+  getQuizEdgeWorkerUrl,
+  getQuizTicketSecret,
+} from '@/lib/quiz/quiz-edge-config';
 import { signQuizEdgeAdmissionTicket } from '@/lib/quiz/quiz-edge-ticket';
 import { QuizProductionNotApprovedError } from '@/lib/quiz-compliance-gate';
 import {

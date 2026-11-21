@@ -41,7 +41,7 @@ vi.mock('@/lib/quiz/quiz-device-hash', () => ({
   resolveQuizDevice: mocks.resolveQuizDevice,
 }));
 
-vi.mock('@/env', () => ({
+vi.mock('@/lib/quiz/quiz-edge-config', () => ({
   getQuizEdgeWorkerUrl: mocks.getQuizEdgeWorkerUrl,
   getQuizTicketSecret: mocks.getQuizTicketSecret,
 }));

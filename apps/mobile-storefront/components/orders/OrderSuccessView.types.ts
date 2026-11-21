@@ -13,6 +13,8 @@ export interface OrderSuccessViewProps {
    */
   isCommercialDocument?: boolean;
   isPaid?: boolean;
+  /** Set only after the owned Oxygen workflow confirms activation. */
+  oxygenPlanConfirmed?: boolean;
   /**
    * While true the notification permission flow is in progress — including
    * the native system prompt after the soft-ask modal closes — so the
@@ -30,7 +32,7 @@ export interface OrderSuccessViewProps {
    */
   isFullscreenAdActive?: boolean;
   onContinueShopping: () => void;
-  onLeaveGoogleReview: () => void;
+  onLeaveGoogleReview?: () => void;
   onPermissionDeny: () => void;
   onPermissionGrant: () => void;
   onViewDocument?: () => void;

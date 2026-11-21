@@ -50,6 +50,7 @@ BEGIN
          AND EXISTS (
            SELECT 1 FROM public.customer_wallet_transactions AS moved
             WHERE moved.wallet_id = wallet.id
+              AND moved.merchant_id = wallet.merchant_id
               AND moved.source_type = 'piggyvest_legacy_migration')
     )
     SELECT pg_catalog.jsonb_build_object(

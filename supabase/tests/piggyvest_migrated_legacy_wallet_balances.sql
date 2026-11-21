@@ -70,6 +70,16 @@ VALUES ('f9b20000-0000-4000-8000-000000000006', 'f9b20000-0000-4000-8000-0000000
 INSERT INTO piggyvest_primary.inflow_authorities (integration_id, executor_login, enabled)
 VALUES ('f9b20000-0000-4000-8000-000000000006', SESSION_USER, true);
 
+-- A mis-attributed migration row (another merchant) on a merchant A wallet
+-- that holds money must not flag it.
+INSERT INTO public.customer_wallets (id, customer_id, merchant_id, available_balance) VALUES
+  ('f9b20000-0000-4000-8000-0000000000c5', 'f9b20000-0000-4000-8000-0000000000a3',
+   'f9b20000-0000-4000-8000-000000000002', 42.00);
+INSERT INTO public.customer_wallet_transactions (
+  wallet_id, customer_id, merchant_id, type, amount, balance_after, source_type, status
+) VALUES ('f9b20000-0000-4000-8000-0000000000c5', 'f9b20000-0000-4000-8000-0000000000a3',
+  'f9b20000-0000-4000-8000-000000000012', 'debit', 1.00, 0, 'piggyvest_legacy_migration', 'completed');
+
 DO $behaviour$
 DECLARE
   c_integration constant uuid := 'f9b20000-0000-4000-8000-000000000006';

@@ -150,7 +150,12 @@ export async function verifyCheckoutPayment(
   }
 
   setIsVerifying(true);
-  const isBankOffer = bankCardOfferReferenceSchema.safeParse(reference).success;
+  const bankOfferReference = bankCardOfferReferenceSchema.safeParse(
+    `BCO-${reference.slice(4).toLowerCase()}`
+  );
+  const isBankOffer =
+    reference.slice(0, 4).toUpperCase() === 'BCO-' &&
+    bankOfferReference.success;
   const fallbackOrderNumber = isBankOffer
     ? null
     : reference.slice(0, 8).toUpperCase();
@@ -158,7 +163,7 @@ export async function verifyCheckoutPayment(
   try {
     const response = await fetchWithCsrf('/api/payments/verify', {
       body: JSON.stringify({
-        reference,
+        reference: isBankOffer ? bankOfferReference.data : reference,
         ...(isBankOffer ? { merchantSlug } : {}),
       }),
       headers: { 'Content-Type': 'application/json' },

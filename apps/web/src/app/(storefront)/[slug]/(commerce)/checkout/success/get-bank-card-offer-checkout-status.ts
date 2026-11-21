@@ -12,7 +12,8 @@ export function getBankCardOfferCheckoutStatus(
       ? 'access_required'
       : 'verification_unavailable';
   }
-  // Transient responses leave the capture unknown. Keep polling this reference.
+  // A proxy or server failure can carry invalid or stale data. Only a
+  // successful verification response can establish a terminal outcome.
   if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)
     return 'pending';
   if (httpStatus === 409 && payment.code === 'reference_not_order_payment')

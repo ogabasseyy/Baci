@@ -72,7 +72,7 @@ describe('CheckoutReconciliationView', () => {
   it('directs an unauthorized shopper to their orders without showing an order number', () => {
     render(
       <CheckoutReconciliationView
-        orderNumber={null}
+        orderNumber="BAC-42"
         getHref={getHref}
         outcome="access_required"
       />
@@ -108,7 +108,7 @@ describe('CheckoutReconciliationView', () => {
   it('suggests refreshing after verification is unavailable without offering another payment', () => {
     render(
       <CheckoutReconciliationView
-        orderNumber={null}
+        orderNumber="BAC-42"
         getHref={getHref}
         outcome="verification_unavailable"
       />
@@ -118,6 +118,7 @@ describe('CheckoutReconciliationView', () => {
       screen.getByRole('heading', { name: 'Payment verification unavailable' })
     ).toBeInTheDocument();
     expect(screen.getByText(/Refresh this page/)).toBeInTheDocument();
+    expect(screen.queryByText('#BAC-42')).not.toBeInTheDocument();
     expect(
       screen.queryByRole('link', { name: /try again/i })
     ).not.toBeInTheDocument();

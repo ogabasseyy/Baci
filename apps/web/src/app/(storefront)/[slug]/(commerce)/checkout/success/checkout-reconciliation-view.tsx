@@ -55,6 +55,8 @@ export function CheckoutReconciliationView({
   getHref,
   outcome = 'reconciling',
 }: CheckoutReconciliationViewProps) {
+  const showOrderNumber =
+    outcome !== 'verification_unavailable' && outcome !== 'access_required';
   // Storefront theme tokens throughout (never hardcoded palette): this
   // state must honor merchant palettes and dark-mode storefronts like the
   // rest of the checkout flow.
@@ -77,7 +79,7 @@ export function CheckoutReconciliationView({
         <h1 className="text-2xl font-bold text-store-background-text mb-3">
           {copy[outcome].title}
         </h1>
-        {orderNumber && (
+        {showOrderNumber && orderNumber && (
           <p className="font-mono font-bold text-store-background-text mb-3">
             #{orderNumber}
           </p>

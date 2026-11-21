@@ -435,6 +435,23 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
     });
   }
 
+  private async refreshControlStateIfStale(
+    eventId: string,
+    nowMs: number
+  ): Promise<void> {
+    if (this.controlState.isFresh(nowMs) || !this.env.EVENT_COORDINATOR) {
+      return;
+    }
+    const coordStub = getWeurStub(this.env.EVENT_COORDINATOR, eventId);
+    const csRes = await coordStub.fetch(
+      `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(eventId)}`
+    );
+    if (csRes.ok) {
+      const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+      this.controlState.applySnapshot(snapshot);
+    }
+  }
+
   async fetch(request: Request): Promise<Response> {
     try {
       const url = new URL(request.url);
@@ -484,6 +501,7 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
           callerCustomerId?: string;
           callerMerchantId?: string;
         }>(request);
+        await this.refreshControlStateIfStale(body.eventId, Date.now());
         return jsonResponse(await this.engine.getPublishedLeaderboard(body));
       }
       return jsonResponse({ error: 'Not found', code: 'NOT_FOUND' }, 404);

@@ -204,7 +204,7 @@ export async function handleDemoTelemetry(
     asOrganization: netInfo.asOrganization,
     isMismatched: isSelfReportMismatch(selfReportedCarrier, netInfo),
     nickname: ticket.leaderboardUsername,
-    attemptId,
+    attemptId: `${ticket.userId}:${attemptId}`,
     questionIndex,
     tapToAckMs,
     serverCommitMs:

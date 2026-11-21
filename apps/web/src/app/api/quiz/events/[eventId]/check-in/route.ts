@@ -27,10 +27,7 @@ import {
 import { enforceQuizStartGuards } from '@/app/api/quiz/attempts/start/v2-start-guards';
 import { getQuizEdgeWorkerUrl, getQuizTicketSecret } from '@/env';
 import { logger } from '@/lib/logger';
-import {
-  QUIZ_DEVICE_COOKIE,
-  resolveQuizDevice,
-} from '@/lib/quiz/quiz-device-hash';
+import { resolveQuizDevice } from '@/lib/quiz/quiz-device-hash';
 import { signQuizEdgeAdmissionTicket } from '@/lib/quiz/quiz-edge-ticket';
 import { QuizProductionNotApprovedError } from '@/lib/quiz-compliance-gate';
 import {
@@ -120,14 +117,8 @@ export async function POST(
     return rpcErrorResponse();
   }
 
-  const shouldResolveDevice =
-    auth.authMethod === 'cookie' ||
-    Boolean(fingerprint) ||
-    Boolean(request.cookies.get(QUIZ_DEVICE_COOKIE)?.value?.trim());
-  const device = shouldResolveDevice
-    ? resolveQuizDevice(request, fingerprint ?? undefined)
-    : { deviceHash: null };
-  const deviceHash = device.deviceHash ?? '';
+  const device = resolveQuizDevice(request, fingerprint ?? undefined);
+  const deviceHash = device.deviceHash;
   const withCookie = (result: NextResponse) => {
     if ('cookieToSet' in device && device.cookieToSet) {
       result.cookies.set(device.cookieToSet);

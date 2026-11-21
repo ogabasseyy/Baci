@@ -12,11 +12,12 @@ afterEach(() => {
 });
 
 it.each([
-  [10.28, 20, true],
-  ['10.28000', 20, true],
-  ['10.28001', 20, false],
-  ['10.28', 10, false],
-])('checks price %s and balance %s before placement', async (price, balance, allowed) => {
+  [10.28, 20, true, []],
+  ['10.28000', 20, true, []],
+  ['10.28001', 20, false, []],
+  ['10.28', 10, false, []],
+  ['10.28', 20, false, [{ name: 'Email', type: 'text', required: true }]],
+])('checks price %s and balance %s before placement', async (price, balance, allowed, otherFields) => {
   getAccount.mockResolvedValue({
     ok: true,
     data: { currency: 'USD', balance },
@@ -30,7 +31,10 @@ it.each([
           product: {
             name: 'PlayStation Gift Card [PSN] USA $10',
             price,
-            fields: [{ name: 'Quantity' }],
+            fields: [
+              { name: 'Quantity', type: 'quantity', required: true },
+              ...otherFields,
+            ],
           },
         },
       })

@@ -14,7 +14,7 @@ describe('createPetrockClient', () => {
     fetchMock.mockReset();
   });
 
-  it('submits gift cards with quantity only and preserves the checkout reference', async () => {
+  it('submits the US $10 PlayStation card with quantity and standard reseller metadata', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
         data: [[{ order_uuid: 'order-123', reference_id: 'gift-quote-123' }]],
@@ -22,14 +22,14 @@ describe('createPetrockClient', () => {
     );
     await expect(
       client.submitGiftCardOrder({
-        productId: '3007',
+        productId: '2844',
         referenceId: 'gift-quote-123',
         feedbackUrl: 'https://example.com/petrock/feedback/token',
       })
     ).resolves.toMatchObject({ ok: true, data: { orderUuid: 'order-123' } });
     expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body)).toEqual([
       {
-        product_id: 3007,
+        product_id: 2844,
         fields: [
           {
             Quantity: 1,

@@ -25,6 +25,8 @@ export async function issueAuthenticatedGiftCardQuote(
   if (error || !data.user) throw new Error('Sign in to use your wallet.');
 
   const { cardId } = inputSchema.parse(input);
+  // Quotes are for Ogabassey wallets only. The signed merchant ID is checked
+  // again against wallet ownership in the database.
   const merchant = await getRequestScopedMerchant('ogabassey');
   const card = getGiftCardPreviewCatalog().find((item) => item.id === cardId);
   const signingKey = process.env.GIFT_CARD_WALLET_QUOTE_HMAC;

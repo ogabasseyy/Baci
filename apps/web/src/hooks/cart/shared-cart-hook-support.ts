@@ -10,12 +10,11 @@ import type { CartMergeConflict } from '@/lib/cart/merge';
 import type { Product } from '@/lib/products';
 import type {
   AddToCartOptions,
-  CartItem,
   SharedCartDisplayItem,
   SharedCartImportStatus,
   SharedCartSyncStatus,
 } from './cart-types';
-import { isFallbackCartProduct } from './shared-cart-display';
+import { isLegacyFallbackCartProduct } from './shared-cart-display';
 import type { ExperienceCartHostPort } from './shared-cart-experience-runtime';
 
 import {
@@ -155,11 +154,17 @@ export function targetForLine(
   return { kind: 'identity', key: cartLineIdentity(cartItemToIdentity(line)) };
 }
 
-export function seedProducts(cached: CartItem[]): Record<string, Product> {
+export function seedProducts(
+  cached: SharedCartDisplayItem[]
+): Record<string, Product> {
   const products: Record<string, Product> = {};
   for (const item of cached) {
-    // A saved fallback retains the line but must not suppress catalog reads.
-    if (isFallbackCartProduct(item)) continue;
+    // Only older confirmed cache entries need the display-field check.
+    const isPlaceholder =
+      typeof item.catalogPlaceholder === 'boolean'
+        ? item.catalogPlaceholder
+        : item.serverLineId && isLegacyFallbackCartProduct(item);
+    if (isPlaceholder) continue;
     products[cartLineIdentity(cartItemToIdentity(item))] = item as Product;
   }
   return products;

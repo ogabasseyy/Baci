@@ -48,7 +48,7 @@ export function minorToMajor(minor: number): number {
 
 const FALLBACK_PRODUCT_NAME = 'Unavailable item';
 
-export function isFallbackCartProduct(product: Product): boolean {
+export function isLegacyFallbackCartProduct(product: Product): boolean {
   return (
     product.slug === product.id &&
     product.name === FALLBACK_PRODUCT_NAME &&
@@ -81,15 +81,17 @@ export function confirmedLineToDisplay(
   products: Record<string, Product>
 ): SharedCartDisplayItem {
   const key = cartLineIdentity(line.item);
-  const product = products[key] ?? fallbackProduct(line.item.productId);
+  const catalogProduct = products[key];
+  const product = catalogProduct ?? fallbackProduct(line.item.productId);
   const options = line.item.options ?? {};
   const { color, colorValue, secondaryColor, secondaryColorValue, storage } =
     options;
   const display: SharedCartDisplayItem = {
     ...(product as CartItem),
     cartItemId: line.id,
+    catalogPlaceholder: !catalogProduct,
     condition: line.item.condition,
-    hydrationFailed: products[key] ? undefined : true,
+    hydrationFailed: catalogProduct ? undefined : true,
     id: line.item.productId,
     pendingTempId: null,
     price: minorToMajor(line.unitPriceMinor),

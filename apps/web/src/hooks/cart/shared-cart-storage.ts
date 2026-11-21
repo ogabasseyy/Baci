@@ -221,8 +221,8 @@ export const subscribeCartSessionGeneration = (
 
 /**
  * Persistable view of the linked display: temp optimistic lines never
- * persist, and link markers stay out of storage (the stable server id
- * is the one marker kept, so a reload still matches confirmed lines).
+ * persist. Keep the server line id and catalog placeholder status so
+ * a reload can match confirmed lines and retry missing catalog details.
  * Voucher credentials never persist either: the token/award pair is a
  * replayable credential, and the authorized snapshot rehydrates it
  * in memory on reload, so the at-rest display shell keeps no secret.

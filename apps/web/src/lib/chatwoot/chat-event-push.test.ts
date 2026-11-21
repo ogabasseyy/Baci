@@ -32,9 +32,18 @@ const input = {
   preview: 'Is it in stock?',
 };
 
+/** Answers the mute switch and the claim separately. */
+function answer(preference: unknown, claim: unknown) {
+  mocks.rpc.mockImplementation(async (name: string) =>
+    name === 'get_chat_message_push_preference' ? preference : claim
+  );
+}
+const claimCall = () =>
+  mocks.rpc.mock.calls.find(([name]) => name === 'chat_event_claim_push');
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.rpc.mockResolvedValue({ data: true, error: null });
+  answer({ data: true, error: null }, { data: true, error: null });
   mocks.notify.mockResolvedValue({ sent: 2, failed: 0, errors: [] });
 });
 
@@ -46,7 +55,7 @@ describe('sendChatEventPush', () => {
       failed: 0,
     });
 
-    const [name, args] = mocks.rpc.mock.calls[0];
+    const [name, args] = claimCall() ?? [];
     expect(name).toBe('chat_event_claim_push');
     expect(args).toMatchObject({
       p_merchant_id: input.merchantId,
@@ -82,7 +91,7 @@ describe('sendChatEventPush', () => {
   });
 
   it('does not push when the claim was already taken', async () => {
-    mocks.rpc.mockResolvedValue({ data: false, error: null });
+    answer({ data: true, error: null }, { data: false, error: null });
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'skipped',
       reason: 'already_claimed',
@@ -91,7 +100,10 @@ describe('sendChatEventPush', () => {
   });
 
   it('does not push when the claim call fails', async () => {
-    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'boom' } });
+    answer(
+      { data: true, error: null },
+      { data: null, error: { message: 'boom' } }
+    );
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
     });
@@ -145,6 +157,26 @@ describe('sendChatEventPush', () => {
     mocks.notify.mockRejectedValue(new Error('expo down'));
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+    });
+  });
+
+  it('does not claim or push when the merchant turned chat push off', async () => {
+    answer({ data: false, error: null }, { data: true, error: null });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'skipped',
+      reason: 'muted',
+    });
+    expect(claimCall()).toBeUndefined();
+    expect(mocks.notify).not.toHaveBeenCalled();
+  });
+
+  it('still pushes when the switch cannot be read, so messages are not missed', async () => {
+    answer(
+      { data: null, error: { message: 'down' } },
+      { data: true, error: null }
+    );
+    await expect(sendChatEventPush(input, env)).resolves.toMatchObject({
+      status: 'sent',
     });
   });
 });

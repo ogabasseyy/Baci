@@ -109,7 +109,7 @@ describe('bank card offer refund', () => {
     });
     expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 2);
     mocks.verify.mockResolvedValue({ success: false, code: 'NETWORK_ERROR' });
-    expect((await callCallback()).status).toBe(500);
+    expect((await callCallback()).status).toBe(503);
     expect((await callWebhook()).status).toBe(503);
     expect(mocks.verify).toHaveBeenCalledTimes(providerCallsBeforeSuccess + 4);
     expect(mocks.rpc).toHaveBeenCalledWith(

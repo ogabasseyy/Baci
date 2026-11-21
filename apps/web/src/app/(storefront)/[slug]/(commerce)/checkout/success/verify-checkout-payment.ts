@@ -1,6 +1,6 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { CAPTURED_PAYMENT_FINALIZATION_OUTCOMES } from './captured-payment-finalization-outcomes';
+import { isCapturedPaymentFinalizationOutcome } from './captured-payment-finalization-outcomes';
 import { normalizeCheckoutBankCardOfferReference } from './normalize-checkout-bank-card-offer-reference';
 import { readBankCardOfferCheckoutResponse } from './read-bank-card-offer-checkout-response';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
@@ -181,10 +181,7 @@ export async function verifyCheckoutPayment(
       setStatus('pending');
       if (orderNumber) setOrderNumber(orderNumber);
     } else if (!response.ok) {
-      if (
-        typeof data.finalizationOutcome === 'string' &&
-        CAPTURED_PAYMENT_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
-      ) {
+      if (isCapturedPaymentFinalizationOutcome(data.finalizationOutcome)) {
         // Order/inventory finalization failed after the provider captured
         // the money: the payment is not failed — reconciliation or the
         // next reverify pass can still complete it — so stay pending

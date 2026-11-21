@@ -34,8 +34,11 @@ BEGIN
   THEN RAISE EXCEPTION 'bank offer attempt privileges are incorrect'; END IF;
 
   INSERT INTO auth.users (id, email) VALUES (v_user, 'bank-attempt-buyer@example.test');
+  -- Merchant creation is audited in the full replay schema.
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   INSERT INTO public.merchants (id, email, business_name, slug, paystack_subaccount_code)
     VALUES (v_merchant, 'bank-attempt-store@example.test', 'Bank Attempt Store', 'bank-attempt-store', 'ACCT_synthetic');
+  PERFORM set_config('request.jwt.claim.role', '', true);
   INSERT INTO public.customers (id, merchant_id, user_id, email)
     VALUES (v_customer, v_merchant, v_user, 'bank-attempt-buyer@example.test');
   INSERT INTO public.products (id, merchant_id, name, slug, price, status)

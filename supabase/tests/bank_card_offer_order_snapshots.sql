@@ -32,8 +32,11 @@ BEGIN
     IF SQLERRM <> 'bank_card_offer_checkout_not_authorized' THEN RAISE; END IF;
   END;
 
+  -- Merchant creation is audited in the full replay schema.
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   INSERT INTO public.merchants (id, email, business_name, slug)
     VALUES (v_merchant, 'bank-offer-fixture@example.test', 'Bank Offer Fixture', 'bank-offer-fixture');
+  PERFORM set_config('request.jwt.claim.role', '', true);
   BEGIN
     INSERT INTO public.orders (merchant_id, order_number, currency, payment_method,
       payment_status, customer_email, total, discount_amount, tax_basis)

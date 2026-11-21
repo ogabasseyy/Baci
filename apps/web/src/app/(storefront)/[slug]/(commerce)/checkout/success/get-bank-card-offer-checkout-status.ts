@@ -1,4 +1,4 @@
-import { CAPTURED_PAYMENT_FINALIZATION_OUTCOMES } from './captured-payment-finalization-outcomes';
+import { isCapturedPaymentFinalizationOutcome } from './captured-payment-finalization-outcomes';
 import type { VerificationResponse } from './verify-checkout-payment-response';
 
 export function getBankCardOfferCheckoutStatus(
@@ -15,8 +15,7 @@ export function getBankCardOfferCheckoutStatus(
   }
   if (
     httpStatus >= 400 &&
-    payment.finalizationOutcome &&
-    CAPTURED_PAYMENT_FINALIZATION_OUTCOMES.has(payment.finalizationOutcome)
+    isCapturedPaymentFinalizationOutcome(payment.finalizationOutcome)
   )
     return 'pending';
 

@@ -92,14 +92,17 @@ export async function submitOxygenCheckout(
   );
   // A receipt must be usable by the owned-order screen before we hand off
   // and clear the cart. The generic order decoder accepts string order IDs.
+  const { order } = result;
   if (
-    !z.uuid().safeParse(result.order.id).success ||
-    !Number.isFinite(result.order.total)
+    !z.uuid().safeParse(order.id).success ||
+    !Number.isFinite(order.total) ||
+    order.payment_method !== 'oxygen' ||
+    order.currency !== 'NGN'
   )
     throw new Error(
       'Could not confirm the saved Oxygen order. Please try again.'
     );
-  if (result.order.total <= 0)
+  if (order.total <= 0)
     throw new Error(
       'Choose another payment option for this zero-balance order.'
     );

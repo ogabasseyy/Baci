@@ -5,6 +5,12 @@ const request = {
   payment_method: 'oxygen',
   items: [{ id: 'a', quantity: 1, price: 20000 }],
 } as CreateOrderRequest;
+const receipt = {
+  id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab',
+  total: 20000,
+  payment_method: 'oxygen',
+  currency: 'NGN',
+};
 jest.mock('@/services/orders', () => ({ createOrder: jest.fn() }));
 describe('native Oxygen order admission', () => {
   const createOrder = jest.fn();
@@ -16,7 +22,7 @@ describe('native Oxygen order admission', () => {
       userId: 'buyer-one',
     });
     createOrder.mockResolvedValue({
-      order: { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab', total: 20000 },
+      order: receipt,
     });
   });
   it('creates Oxygen initially using the unchanged durable checkout generation', async () => {
@@ -140,7 +146,7 @@ describe('native Oxygen order admission', () => {
   });
   it('keeps an old zero-balance order out of the financing handoff', async () => {
     createOrder.mockResolvedValueOnce({
-      order: { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab', total: 0 },
+      order: { ...receipt, total: 0 },
     });
     await expect(
       submitOxygenCheckout(
@@ -157,11 +163,15 @@ describe('native Oxygen order admission', () => {
   });
 
   it.each([
-    { id: 'malformed-id', total: 100 },
-    { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab', total: Number.NaN },
-    { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab', total: '100' },
-  ])('rejects an unusable order receipt before the cart handoff: %j', async (order) => {
-    createOrder.mockResolvedValueOnce({ order });
+    { id: 'malformed-id' },
+    { total: Number.NaN },
+    { total: '100' },
+    { payment_method: 'paystack' },
+    { currency: 'USD' },
+    { payment_method: undefined },
+    { currency: undefined },
+  ])('rejects an unusable order receipt before the cart handoff: %j', async (patch) => {
+    createOrder.mockResolvedValueOnce({ order: { ...receipt, ...patch } });
     await expect(
       submitOxygenCheckout(
         {

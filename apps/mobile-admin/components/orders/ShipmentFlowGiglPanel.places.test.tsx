@@ -104,7 +104,7 @@ describe('ShipmentFlowGiglPanel places autocomplete', () => {
     expect(screen.getByText('Deliver to 1 Allen, Ikeja, Lagos')).toBeTruthy();
     expect(screen.queryByLabelText('Shipping address')).toBeNull();
     fireEvent.click(
-      screen.getByRole('button', { name: 'Edit delivery address' })
+      screen.getByRole('button', { name: 'Edit shipping address' })
     );
     expect(onEditAddress).toHaveBeenCalledOnce();
     expect(onRetryQuote).not.toHaveBeenCalled();
@@ -122,6 +122,24 @@ describe('ShipmentFlowGiglPanel places autocomplete', () => {
       screen.getByRole('button', { name: 'Save address and get quote' })
     );
     expect(onRetryQuote).toHaveBeenCalledOnce();
+  });
+
+  it('allows street correction when only locality is missing', () => {
+    const onEditAddress = vi.fn();
+    render(
+      <ShipmentFlowGiglPanel
+        {...props}
+        addressDraft={{ address: '1 Allen', city: '', state: '' }}
+        missingFields={['city', 'state']}
+        onEditAddress={onEditAddress}
+        selected
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit shipping address' })
+    );
+    expect(onEditAddress).toHaveBeenCalledOnce();
   });
 
   it('sends address, city, state and pin from the selected place', () => {

@@ -57,10 +57,10 @@ export function ShipmentFlowGiglAddress({
           Deliver to {destination}
         </Text>
       ) : null}
-      {selected && missingFields.length === 0 && onEditAddress ? (
+      {selected && onEditAddress ? (
         <ShipmentFlowActionButton
           disabled={loading}
-          label="Edit delivery address"
+          label="Edit shipping address"
           onPress={onEditAddress}
         />
       ) : null}

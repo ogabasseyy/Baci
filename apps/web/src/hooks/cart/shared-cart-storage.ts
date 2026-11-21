@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import { CART_STORAGE_KEY } from './cart-storage';
-import type { CartItem, SharedCartDisplayItem } from './cart-types';
+import type { SharedCartDisplayItem } from './cart-types';
 
 // --- Shared-cart link support ---
 //
@@ -221,8 +221,8 @@ export const subscribeCartSessionGeneration = (
 
 /**
  * Persistable view of the linked display: temp optimistic lines never
- * persist, and link markers stay out of storage (the stable server id
- * is the one marker kept, so a reload still matches confirmed lines).
+ * persist. Keep the server line id and catalog placeholder status so
+ * a reload can match confirmed lines and retry missing catalog details.
  * Voucher credentials never persist either: the token/award pair is a
  * replayable credential, and the authorized snapshot rehydrates it
  * in memory on reload, so the at-rest display shell keeps no secret.
@@ -231,7 +231,10 @@ export const subscribeCartSessionGeneration = (
  */
 export const stripUnconfirmedDisplayLines = (
   display: SharedCartDisplayItem[]
-): CartItem[] =>
+): Omit<
+  SharedCartDisplayItem,
+  'pendingTempId' | 'hydrationFailed' | 'quizVoucherToken' | 'quizAwardId'
+>[] =>
   display
     .filter((line) => line.pendingTempId == null)
     .map((line) => {
@@ -242,5 +245,5 @@ export const stripUnconfirmedDisplayLines = (
         quizAwardId: _quizAwardId,
         ...rest
       } = line;
-      return rest as CartItem;
+      return rest;
     });

@@ -1,5 +1,5 @@
 import { oxygenRuntimeSnapshotSchema } from '@baci/shared/oxygen';
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import type { OxygenClient } from '@/services/oxygen/client';
 import type { OxygenWorkflowController } from '@/services/oxygen/workflow';
 import { OxygenWorkflowBody } from './OxygenWorkflowBody';
@@ -85,4 +85,39 @@ it('does not retry eligibility from a checkout screen hidden behind another rout
   } finally {
     jest.useRealTimers();
   }
+});
+
+it('lets a saved payment checkpoint reconcile without reopening the hosted payment', async () => {
+  const execute = jest.fn().mockResolvedValue(undefined);
+  const controller = {
+    execute,
+    getState: () => ({ error: null }),
+  } as unknown as OxygenWorkflowController;
+  const view = render(
+    <OxygenWorkflowBody
+      snapshot={{
+        ...snapshot,
+        stage: 'ready_for_activation',
+        state: {
+          ...snapshot.state,
+          paymentComplete: true,
+          setupComplete: true,
+        },
+      }}
+      client={{} as OxygenClient}
+      controller={controller}
+      capabilities={null}
+      busy={false}
+      focused
+      productAmount={198000}
+      scopeKey="checkpoint-test"
+      onViewOrders={jest.fn()}
+    />
+  );
+
+  expect(view.queryByRole('button', { name: 'Continue payment' })).toBeNull();
+  await act(async () => {
+    fireEvent.press(view.getByRole('button', { name: 'Check payment status' }));
+  });
+  expect(execute).toHaveBeenCalledWith({ action: 'refresh_payment_setup' });
 });

@@ -112,7 +112,12 @@ describe('encrypted native Oxygen draft lifecycle', () => {
       },
     } as unknown as OxygenClient;
     const { result, unmount } = renderHook(() =>
-      useOxygenApplicationDraft(client, 'workflow', 'owner/order', true)
+      useOxygenApplicationDraft(
+        client,
+        '11111111-1111-4111-8111-111111111111',
+        'owner/order',
+        true
+      )
     );
     await act(async () => {});
     act(() => result.current.setFields({ first_name: 'First' }));

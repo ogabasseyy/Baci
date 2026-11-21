@@ -83,6 +83,9 @@ export function OxygenWorkflowBody({
     equity ?? defaultOxygenEquity(limits, selectedTenure) ?? 25;
   const disabled =
     !focused || busy || !snapshot.executionEnabled || Boolean(snapshot.pending);
+  const paymentConfirmed =
+    snapshot.stage === 'ready_for_activation' ||
+    (s.paymentComplete && s.setupComplete);
   const unfinishedPayment = oxygenUnfinishedPayment(snapshot);
   const paymentUrl =
     unfinishedPayment &&
@@ -224,8 +227,7 @@ export function OxygenWorkflowBody({
       snapshot.stage === 'ready_for_activation' ? (
         <OxygenPaymentStep
           state={
-            (s.paymentComplete && s.setupComplete) ||
-            snapshot.stage === 'ready_for_activation'
+            paymentConfirmed
               ? 'checkpoint'
               : snapshot.pending
                 ? 'confirming'
@@ -234,7 +236,10 @@ export function OxygenWorkflowBody({
                   : 'unavailable'
           }
           busy={disabled}
-          showRefresh={!snapshot.pending && (paymentOpened || !paymentUrl)}
+          showRefresh={
+            !snapshot.pending &&
+            (paymentConfirmed || paymentOpened || !paymentUrl)
+          }
           paymentComplete={s.paymentComplete}
           upfrontAmount={s.booking?.total_upfront_payment ?? undefined}
           onContinue={() => setHosted('payment')}

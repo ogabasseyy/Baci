@@ -1,3 +1,4 @@
+import { oxygenDraftWriteSchema } from '@baci/shared/oxygen';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
@@ -122,7 +123,10 @@ export function useOxygenApplicationDraft(
           idempotencyKey: Crypto.randomUUID(),
           draft: nextDraft,
         };
-        pendingWrite.current = request;
+        if (!pendingWrite.current) {
+          oxygenDraftWriteSchema.parse(request);
+          pendingWrite.current = request;
+        }
         const result = await client.draft.write(request);
         if (!isCurrent()) return false;
         pendingWrite.current = null;

@@ -87,7 +87,7 @@ export function OxygenPaymentStep({
           />
         </OxygenActionFooter>
       )}
-      {state !== 'checkpoint' && showRefresh && (
+      {showRefresh && (
         <OxygenAction
           secondary
           label="Check payment status"

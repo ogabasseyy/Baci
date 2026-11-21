@@ -1,3 +1,4 @@
+import { oxygenDraftWriteSchema } from '@baci/shared/oxygen';
 import { act, renderHook } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import type { OxygenClient } from '@/services/oxygen/client';
@@ -109,4 +110,38 @@ describe('local Oxygen step navigation', () => {
       write.mock.calls[0][0].idempotencyKey
     );
   });
+});
+
+it('lets a corrected identity field save after local validation rejects an earlier value', async () => {
+  const write = jest.fn(async (input: unknown) => {
+    oxygenDraftWriteSchema.parse(input);
+    return { version: 1 };
+  });
+  const client = {
+    draft: {
+      read: jest.fn().mockResolvedValue({ version: 0, draft: null }),
+      write,
+    },
+  } as unknown as OxygenClient;
+  const { result } = renderHook(() =>
+    useOxygenApplicationDraft(
+      client,
+      '11111111-1111-4111-8111-111111111111',
+      'owner/order',
+      true
+    )
+  );
+  await act(async () => {});
+  await act(async () => {
+    expect(await result.current.save(0, { bvn: '123456789012' })).toBe(false);
+  });
+  await act(async () => {
+    expect(await result.current.save(0, { bvn: '12345678901' })).toBe(true);
+  });
+  expect(write).toHaveBeenCalledTimes(1);
+  expect(write).toHaveBeenCalledWith(
+    expect.objectContaining({
+      draft: { step: 0, fields: { bvn: '12345678901' } },
+    })
+  );
 });

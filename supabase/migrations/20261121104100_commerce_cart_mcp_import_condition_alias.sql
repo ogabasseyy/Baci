@@ -5,8 +5,10 @@ DECLARE
   definition text := pg_catalog.pg_get_functiondef(
     'public.commerce_cart_import_mcp_handoff(text,uuid,text,integer)'::regprocedure
   );
-  projection_start integer := strpos(definition, '''variantId'', CASE WHEN EXISTS (');
-  projection_end integer := strpos(definition, ')) END ORDER BY entry.ordinality)');
+  start_anchor constant text := '''variantId'', CASE WHEN EXISTS (';
+  end_anchor constant text := ')) END ORDER BY entry.ordinality)';
+  projection_start integer := strpos(definition, start_anchor);
+  projection_end integer := strpos(definition, end_anchor);
   offer_anchor constant text := $offer$AND offer.status = 'active'
     );$offer$;
   alias_join constant text := $join$AND offer.status = 'active'
@@ -32,9 +34,9 @@ DECLARE
       'condition', coalesce(legacy_match.condition, resolved.condition)$projection$;
   anchor text;
 BEGIN
-  IF projection_start = 0 OR projection_end <= projection_start
-  THEN RAISE EXCEPTION 'MCP cart import condition alias projection mismatch'; END IF;
   FOREACH anchor IN ARRAY ARRAY[
+    start_anchor,
+    end_anchor,
     offer_anchor,
     'coalesce(item.identity->''options'', ''{}''::jsonb) = ''{}''::jsonb',
     'coalesce(nullif(variant.attributes, ''null''::jsonb), ''{}''::jsonb) = ''{}''::jsonb',
@@ -44,6 +46,8 @@ BEGIN
     IF length(definition) - length(replace(definition, anchor, '')) <> length(anchor)
     THEN RAISE EXCEPTION 'MCP cart import condition alias anchor mismatch'; END IF;
   END LOOP;
+  IF projection_end <= projection_start
+  THEN RAISE EXCEPTION 'MCP cart import condition alias projection mismatch'; END IF;
   definition := overlay(definition PLACING projection FROM projection_start FOR projection_end - projection_start);
   EXECUTE replace(definition, offer_anchor, alias_join);
 END $migration$;

@@ -119,6 +119,21 @@ BEGIN
   IF result->>'code' IS DISTINCT FROM 'invalid_item'
   THEN RAISE EXCEPTION 'Import bypassed assurance on a legacy condition alias: %', result; END IF;
   UPDATE public.commerce_cart_lines SET has_assurance = false, options = '{}' WHERE cart_id = legacy_destination;
+  BEGIN
+    INSERT INTO public.commerce_cart_lines(merchant_id, cart_id, product_id, condition, quantity, last_unit_price_minor)
+    VALUES (merchant, legacy_destination, product, 'open_box', 1, 1500);
+    result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-exact-condition', source_version);
+    IF result->>'ok' IS DISTINCT FROM 'true'
+       OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = legacy_destination) <> 2
+       OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = legacy_destination
+         AND product_id = product AND variant_id IS NULL AND condition = 'open_box' AND quantity = 2)
+       OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = legacy_destination
+         AND product_id = product AND variant_id IS NULL AND condition = 'refurbished' AND quantity = 1)
+    THEN RAISE EXCEPTION 'Import must increment the exact condition and preserve its alias: %', result; END IF;
+    RAISE EXCEPTION USING ERRCODE = 'ZT001';
+  EXCEPTION WHEN SQLSTATE 'ZT001' THEN
+    NULL; -- Restore the alias-only fixture for the next import.
+  END;
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-add', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true'
      OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = legacy_destination) <> 1
@@ -128,7 +143,7 @@ BEGIN
   UPDATE public.products SET condition = 'new' WHERE id = product AND merchant_id = merchant;
 
   PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
-  FOREACH catalog_gate IN ARRAY ARRAY['active-offer', 'different-price', 'different-condition'] LOOP
+  FOREACH catalog_gate IN ARRAY ARRAY['active-offer', 'different-price', 'different-condition', 'unknown-condition'] LOOP
     BEGIN
       CASE catalog_gate
         WHEN 'active-offer' THEN
@@ -138,6 +153,8 @@ BEGIN
           UPDATE public.product_variants SET price_override = 16 WHERE id = default_variant;
         WHEN 'different-condition' THEN
           UPDATE public.product_variants SET condition = 'used' WHERE id = default_variant;
+        WHEN 'unknown-condition' THEN
+          UPDATE public.products SET condition = 'unknown' WHERE id = product AND merchant_id = merchant;
       END CASE;
       result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, catalog_gate, source_version);
       IF result->>'ok' IS DISTINCT FROM 'true'

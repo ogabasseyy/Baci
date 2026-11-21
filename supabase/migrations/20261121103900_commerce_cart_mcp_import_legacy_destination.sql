@@ -15,7 +15,7 @@ DECLARE
         AND legacy_line.voucher_token IS NULL AND legacy_line.voucher_award_id IS NULL
     )$legacy$;
 BEGIN
-  IF strpos(definition, options_anchor) = 0
+  IF length(definition) - length(replace(definition, options_anchor, '')) <> length(options_anchor)
   THEN RAISE EXCEPTION 'MCP cart import legacy destination source mismatch'; END IF;
   EXECUTE replace(definition, options_anchor, options_anchor || legacy_destination);
 END $migration$;

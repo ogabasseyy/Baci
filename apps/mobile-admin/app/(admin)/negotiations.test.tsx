@@ -21,7 +21,7 @@ describe('NegotiationsScreen', () => {
     expect(mocks.queryCalls).toContainEqual({
       method: 'select',
       args: [
-        'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_email, customer_phone, created_at, evidence_url',
+        'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_email, customer_phone, counter_offer, created_at, evidence_url',
       ],
     });
     expect(mocks.queryCalls).toContainEqual({

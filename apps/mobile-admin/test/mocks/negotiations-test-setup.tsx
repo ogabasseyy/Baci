@@ -56,7 +56,7 @@ function makeQueryChain() {
       return chain;
     };
 
-  for (const method of ['select', 'order', 'update', 'eq']) {
+  for (const method of ['select', 'order', 'update', 'eq', 'in']) {
     chain[method] = passthrough(method);
   }
 

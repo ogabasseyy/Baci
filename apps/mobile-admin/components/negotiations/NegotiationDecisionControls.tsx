@@ -1,4 +1,11 @@
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import type {
   NegotiationCardColors,
   NegotiationStatus,
@@ -10,6 +17,7 @@ interface NegotiationDecisionControlsProps {
   actionsDisabled: boolean;
   colors: NegotiationCardColors;
   itemId: string;
+  onCounterOffer?: (id: string, amount: number) => void;
   onAction: (id: string, status: 'accepted' | 'rejected') => void;
   status: NegotiationStatus;
 }
@@ -23,9 +31,17 @@ export function NegotiationDecisionControls({
   actionsDisabled,
   colors,
   itemId,
+  onCounterOffer,
   onAction,
   status,
 }: NegotiationDecisionControlsProps) {
+  const [counterAmount, setCounterAmount] = useState('');
+  const [showCounter, setShowCounter] = useState(false);
+  const amount = Number(counterAmount);
+  const validAmount =
+    /^\d+(\.\d{1,2})?$/.test(counterAmount) &&
+    amount > 0 &&
+    amount <= 9999999999.99;
   if (status !== 'pending') {
     return (
       <View style={styles.statusOutcomeRow}>
@@ -64,47 +80,101 @@ export function NegotiationDecisionControls({
   }
 
   return (
-    <View style={styles.actionRow}>
-      <Pressable
-        style={[
-          styles.actionButton,
-          styles.rejectButton,
-          { borderColor: colors.border },
-          (actionLoading || actionsDisabled) && styles.disabledButton,
-        ]}
-        onPress={() => onAction(itemId, 'rejected')}
-        disabled={actionsDisabled}
-      >
-        {actionLoading ? (
-          <ActivityIndicator size="small" color={colors.textSecondary} />
-        ) : (
-          <Text
-            style={[styles.rejectButtonText, { color: colors.textSecondary }]}
+    <View style={{ gap: 12 }}>
+      {onCounterOffer ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            disabled={actionsDisabled}
+            onPress={() => setShowCounter(!showCounter)}
           >
-            Reject
-          </Text>
-        )}
-      </Pressable>
-      <Pressable
-        style={[
-          styles.actionButton,
-          styles.acceptButton,
-          { backgroundColor: colors.primary },
-          (actionLoading || actionsDisabled) && styles.disabledButton,
-        ]}
-        onPress={() => onAction(itemId, 'accepted')}
-        disabled={actionsDisabled}
-      >
-        {actionLoading ? (
-          <ActivityIndicator size="small" color={colors.textOnPrimary} />
-        ) : (
-          <Text
-            style={[styles.acceptButtonText, { color: colors.textOnPrimary }]}
-          >
-            Accept Offer
-          </Text>
-        )}
-      </Pressable>
+            <Text style={{ color: colors.primary, paddingVertical: 12 }}>
+              Counter Offer
+            </Text>
+          </Pressable>
+          {showCounter ? (
+            <View style={{ gap: 8 }}>
+              <Text style={{ color: colors.textSecondary }}>
+                Counter offer amount (NGN)
+              </Text>
+              <TextInput
+                accessibilityLabel="Counter offer amount (NGN)"
+                keyboardType="decimal-pad"
+                value={counterAmount}
+                onChangeText={setCounterAmount}
+                editable={!actionsDisabled}
+                style={{
+                  color: colors.text,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: 8,
+                  padding: 12,
+                }}
+              />
+              <Text style={{ color: colors.textSecondary }}>
+                The customer will receive a push notification or email when
+                available.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                disabled={actionsDisabled || !validAmount}
+                onPress={() => onCounterOffer(itemId, amount)}
+                style={[
+                  styles.actionButton,
+                  { backgroundColor: colors.primary, flex: undefined },
+                  (actionsDisabled || !validAmount) && styles.disabledButton,
+                ]}
+              >
+                <Text style={{ color: colors.textOnPrimary }}>
+                  {actionLoading ? 'Sending…' : 'Send Counter Offer'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </>
+      ) : null}
+      <View style={styles.actionRow}>
+        <Pressable
+          style={[
+            styles.actionButton,
+            styles.rejectButton,
+            { borderColor: colors.border },
+            (actionLoading || actionsDisabled) && styles.disabledButton,
+          ]}
+          onPress={() => onAction(itemId, 'rejected')}
+          disabled={actionsDisabled}
+        >
+          {actionLoading ? (
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+          ) : (
+            <Text
+              style={[styles.rejectButtonText, { color: colors.textSecondary }]}
+            >
+              Reject
+            </Text>
+          )}
+        </Pressable>
+        <Pressable
+          style={[
+            styles.actionButton,
+            styles.acceptButton,
+            { backgroundColor: colors.primary },
+            (actionLoading || actionsDisabled) && styles.disabledButton,
+          ]}
+          onPress={() => onAction(itemId, 'accepted')}
+          disabled={actionsDisabled}
+        >
+          {actionLoading ? (
+            <ActivityIndicator size="small" color={colors.textOnPrimary} />
+          ) : (
+            <Text
+              style={[styles.acceptButtonText, { color: colors.textOnPrimary }]}
+            >
+              Accept Offer
+            </Text>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }

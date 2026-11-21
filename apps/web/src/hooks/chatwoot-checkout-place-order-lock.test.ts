@@ -71,13 +71,13 @@ describe('handleChatwootCheckoutPlace', () => {
     });
 
     it('a retry of the first request and a new request on its cart share one payment setup', async () => {
-      const paymentFails = { ...happyHandlers() };
-      paymentFails['/api/payments/initialize'] = () => ({
-        ok: false,
-        status: 502,
-        body: { error: 'unavailable' },
+      stubCheckoutFetch({
+        ...happyHandlers(),
+        '/api/payments/initialize': () => ({
+          status: 502,
+          body: { error: 'unavailable' },
+        }),
       });
-      stubCheckoutFetch(paymentFails);
       const original = placeInput();
       await handleChatwootCheckoutPlace(original);
       expect(lastResult(original)).toMatchObject({

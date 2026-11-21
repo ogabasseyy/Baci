@@ -194,6 +194,43 @@ describe('useSharedCart link', () => {
     );
   });
 
+  it('reloads catalog details for a cached fallback from a handoff', async () => {
+    saveCartToStorage(
+      [
+        cartItem({
+          cartItemId: 'line-1',
+          image: '',
+          imageLarge: '',
+          name: 'Unavailable item',
+          serverLineId: 'line-1',
+          slug: 'prod-1',
+        }),
+      ],
+      SLUG
+    );
+    mockAdopted();
+    vi.mocked(fetchSharedCartProducts).mockResolvedValue(
+      new Map([['prod-1', product({ name: 'Xiaomi Smart Camera C300' })]])
+    );
+
+    const { result } = renderHook(() =>
+      useSharedCart({
+        merchantId: MERCHANT_ID,
+        merchantSlug: SLUG,
+        sessionGeneration: 1,
+      })
+    );
+
+    await waitFor(() =>
+      expect(result.current.cart[0]).toMatchObject({
+        name: 'Xiaomi Smart Camera C300',
+        quantity: 1,
+        serverLineId: 'line-1',
+      })
+    );
+    expect(sendSharedCartCommand).not.toHaveBeenCalled();
+  });
+
   it('stays idle without a session until the first action bootstraps', async () => {
     vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
       code: 'unauthorized',

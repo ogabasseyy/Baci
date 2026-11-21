@@ -15,6 +15,7 @@ import type {
   SharedCartImportStatus,
   SharedCartSyncStatus,
 } from './cart-types';
+import { isFallbackCartProduct } from './shared-cart-display';
 import type { ExperienceCartHostPort } from './shared-cart-experience-runtime';
 
 import {
@@ -157,6 +158,8 @@ export function targetForLine(
 export function seedProducts(cached: CartItem[]): Record<string, Product> {
   const products: Record<string, Product> = {};
   for (const item of cached) {
+    // A saved fallback retains the line but must not suppress catalog reads.
+    if (isFallbackCartProduct(item)) continue;
     products[cartLineIdentity(cartItemToIdentity(item))] = item as Product;
   }
   return products;

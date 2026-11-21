@@ -238,12 +238,12 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
     expect(splitRpcPayloads).toEqual(
       [
         {
-          p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:split:${bigBundle.attemptId}`,
+          p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:b1`,
           p_part_index: 0,
           p_total_parts: 2,
         },
         {
-          p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:split:${bigBundle.attemptId}`,
+          p_batch_id: `${bigBundle.eventId}:${bigBundle.roomId}:b2`,
           p_part_index: 1,
           p_total_parts: 2,
         },

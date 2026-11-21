@@ -254,9 +254,7 @@ export async function handleQuizQueueBatch(
         {
           p_event_id: packed.eventId,
           p_room_id: packed.roomId,
-          p_batch_id: isSplitPart
-            ? `${packed.eventId}:${packed.roomId}:split:${firstSplit.attemptId}`
-            : packed.batchId,
+          p_batch_id: packed.batchId,
           p_batch_checksum_sha256: batchChecksum,
           p_attempt_count: bundlesToSend.length,
           p_answer_count: answerCount,

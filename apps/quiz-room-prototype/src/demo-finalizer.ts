@@ -219,6 +219,13 @@ export async function reconcileDemoRound(
     pushToShard(`${eventId}:shard:${eventShard}`, record);
   }
 
+  for (let s = 0; s < shardCount; s += 1) {
+    const eventShardName = `${eventId}:shard:${s}`;
+    if (!recordsByShard.has(eventShardName)) {
+      recordsByShard.set(eventShardName, []);
+    }
+  }
+
   await Promise.all(
     Array.from(recordsByShard.entries()).map(([shardName, records]) =>
       env.materializeShard(shardName, eventMeta, records)

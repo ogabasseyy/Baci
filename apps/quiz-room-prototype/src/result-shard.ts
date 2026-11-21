@@ -337,16 +337,20 @@ export class ResultShardEngine {
       };
     }
 
-    if (
-      nowMs >= row.retention_expires_at_ms &&
-      this.hooks.recoverExpiredResultFromOrigin
-    ) {
-      this.originCalls += 1;
-      return this.hooks.recoverExpiredResultFromOrigin({
-        attemptId: row.attempt_id,
-        userId: params.callerUserId,
-        authorizationHeader: params.authorizationHeader,
-      });
+    if (nowMs >= row.retention_expires_at_ms) {
+      this.storage.exec(
+        `DELETE FROM shard_attempt_results WHERE attempt_id = ?`,
+        row.attempt_id
+      );
+      if (this.hooks.recoverExpiredResultFromOrigin) {
+        this.originCalls += 1;
+        return this.hooks.recoverExpiredResultFromOrigin({
+          attemptId: row.attempt_id,
+          userId: params.callerUserId,
+          authorizationHeader: params.authorizationHeader,
+        });
+      }
+      throw new QuizRoomError('QZ004', 'quiz_attempt_not_found', 404);
     }
 
     let claim: QuizResultClaim | undefined;

@@ -15,10 +15,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/app/api/quiz/_shared/route-helpers', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/app/api/quiz/_shared/route-helpers')
-    >();
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     requireQuizUser: mocks.requireQuizUser,
@@ -27,10 +24,7 @@ vi.mock('@/app/api/quiz/_shared/route-helpers', async (importOriginal) => {
 });
 
 vi.mock('@/app/api/quiz/_shared/quiz-v2-contract', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/app/api/quiz/_shared/quiz-v2-contract')
-    >();
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     requireQuizV2Contract: mocks.requireQuizV2Contract,

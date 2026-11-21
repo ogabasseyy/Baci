@@ -171,9 +171,7 @@ export async function initiatePaystackCancellationRefunds({
         };
       }
     }
-    // Compute the budget after reading the saved capture. A plain
-    // Error keeps the step retryable, so unattempted legs run on the
-    // next tick instead of stranding a mid-flight claim. Legs start
+    // Compute the retryable budget after reading the saved capture. Legs start
     // only when a full provider call plus the audit reserve both fit;
     // the provider timeout excludes the reserve so an accepted refund
     // always has margin to persist before the worker is killed.
@@ -253,6 +251,7 @@ export async function initiatePaystackCancellationRefunds({
     );
     if (!paystackRefund.success) {
       await handlePaystackCancellationRefundFailure({
+        dispatchEvidence,
         isLastAttempt,
         order,
         paystackRefund,

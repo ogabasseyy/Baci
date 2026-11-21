@@ -7,6 +7,7 @@ DECLARE
   v_reference text := v_capture->>'reference';
   v_transaction uuid := (v_capture->>'transaction')::uuid;
   v_refund_claim uuid := gen_random_uuid();
+  v_next_claim uuid := gen_random_uuid();
   v_other_order uuid := gen_random_uuid();
   v_constraint text;
 BEGIN
@@ -60,6 +61,30 @@ BEGIN
   IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
     v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM 'already_admitted'
   THEN RAISE EXCEPTION 'An accepted dispatch claim must survive retries'; END IF;
+  IF has_function_privilege('authenticated', 'public.release_rejected_bank_card_offer_refund_dispatch(uuid,uuid,uuid,text,uuid,text)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.release_rejected_bank_card_offer_refund_dispatch(uuid,uuid,uuid,text,uuid,text)', 'EXECUTE')
+  THEN RAISE EXCEPTION 'Dispatch release must be service-only'; END IF;
+  IF public.release_rejected_bank_card_offer_refund_dispatch(
+    v_order, v_merchant, v_transaction, v_reference, v_refund_claim, 'HTTP_408')
+    OR public.release_rejected_bank_card_offer_refund_dispatch(
+      v_order, gen_random_uuid(), v_transaction, v_reference, v_refund_claim, 'HTTP_429')
+    OR public.release_rejected_bank_card_offer_refund_dispatch(
+      v_order, v_merchant, v_transaction, v_reference, v_next_claim, 'HTTP_429')
+  THEN RAISE EXCEPTION 'Ambiguous outcomes or unbound claims must retain admission'; END IF;
+  IF public.release_rejected_bank_card_offer_refund_dispatch(
+    v_order, v_merchant, v_transaction, v_reference, v_refund_claim, 'HTTP_429') IS DISTINCT FROM true
+  THEN RAISE EXCEPTION 'A proven transient rejection must release the matching admission'; END IF;
+  RESET ROLE;
+  UPDATE public.order_cancellation_side_effects SET claim_token = v_next_claim
+    WHERE order_id = v_order AND merchant_id = v_merchant AND step = 'refund';
+  SET LOCAL ROLE service_role;
+  IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+    v_next_claim, '42', 'test', 9500) IS DISTINCT FROM 'dispatch'
+  THEN RAISE EXCEPTION 'A fresh worker claim must be able to retry after a definite rejection'; END IF;
+  IF public.release_rejected_bank_card_offer_refund_dispatch(
+    v_order, v_merchant, v_transaction, v_reference, v_refund_claim, 'HTTP_429')
+  THEN RAISE EXCEPTION 'A replayed release must not remove the fresh admission'; END IF;
+  v_refund_claim := v_next_claim;
   RESET ROLE;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'failed')
   THEN RAISE EXCEPTION 'The sweep must record a confirmed failed status for a completed attempt'; END IF;

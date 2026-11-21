@@ -71,6 +71,14 @@ it.each([
 it.each([
   { data: null },
   { data: {} },
+  {
+    data: {
+      ...captureFixture,
+      status: 'reversed',
+      customer: { email: 'different-buyer@example.test' },
+    },
+  },
+  { data: { ...captureFixture, status: 'failed', customer: null } },
   { data: { ...captureFixture, status: 'reversed', currency: null } },
   { data: { ...captureFixture, status: 'failed', currency: 566 } },
 ])('routes malformed provider data to capture review (%j)', async ({

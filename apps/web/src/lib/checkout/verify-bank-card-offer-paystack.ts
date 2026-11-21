@@ -1,10 +1,14 @@
 import 'server-only';
 import { verifyTransaction } from '@/lib/paystack';
 import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-reference';
+import { paystackVerifyResponseSchema } from '@/schemas/paystack-card-offer-verification';
 import {
   type BankCardOfferAttempt,
   verifyBankCardOfferAttempt,
 } from './bank-card-offer-payment';
+
+const paystackTerminalCustomerSchema =
+  paystackVerifyResponseSchema.shape.data.pick({ customer: true });
 
 export async function verifyBankCardOfferPaystack(
   attempt: BankCardOfferAttempt,
@@ -40,10 +44,14 @@ export async function verifyBankCardOfferPaystack(
     // amount here could hide a legitimate reversal. Successful capture
     // approval below still requires the full saved amount.
     if (terminal.success) {
+      const customer = paystackTerminalCustomerSchema.safeParse(data);
       return 'domain' in data &&
         data.domain === attempt.domain &&
         typeof data.currency === 'string' &&
-        data.currency.toUpperCase() === attempt.currency
+        data.currency.toUpperCase() === attempt.currency &&
+        customer.success &&
+        customer.data.customer.email.toLowerCase() ===
+          attempt.customerEmail.trim().toLowerCase()
         ? ({ kind: 'terminal', status: terminal.data } as const)
         : ({ kind: 'mismatch' } as const);
     }

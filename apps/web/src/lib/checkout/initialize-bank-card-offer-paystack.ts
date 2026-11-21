@@ -30,6 +30,8 @@ export async function initializeBankCardOfferPaystack({
     metadata,
   });
   const url = new URL(result.authorization_url);
+  // The Paystack client returns the raw provider object after validation.
+  // Amount and currency are optional on initialization and required at verification.
   if (
     result.reference !== attempt.reference ||
     ('amount' in result && result.amount !== attempt.amountKobo) ||

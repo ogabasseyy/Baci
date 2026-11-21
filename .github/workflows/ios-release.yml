@@ -82,7 +82,7 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: bundle install --jobs 4 --retry 3
 
-      - name: Verify ActiveSupport security backport
+      - name: Test ActiveSupport backport on source fixture
         working-directory: ${{ env.WORKING_DIR }}
         run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.test.rb
 

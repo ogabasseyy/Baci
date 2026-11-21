@@ -97,7 +97,7 @@ jobs:
           bundler-cache: true
           working-directory: ${{ env.WORKING_DIR }}
 
-      - name: Verify ActiveSupport security backport
+      - name: Test ActiveSupport backport on source fixture
         working-directory: ${{ env.WORKING_DIR }}
         run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.test.rb
 

@@ -90,10 +90,15 @@ run_test("patches pristine or preserves cached patched source and normal lookups
     assert_equal(nil, ActiveSupport::Inflector.safe_constantize("DefinitelyMissingConstant"), "unknown constant lookup")
 
     original_constantize = ActiveSupport::Inflector.method(:constantize)
-    ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
-      raise LoadError, "Unable to autoload constant UnrelatedName"
-    end
     begin
+      ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
+        raise LoadError, "Unable to autoload constant String"
+      end
+      assert_equal(nil, ActiveSupport::Inflector.safe_constantize("String"), "matching autoload error")
+
+      ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
+        raise LoadError, "Unable to autoload constant UnrelatedName"
+      end
       assert_raises(LoadError, "nonmatching autoload error") do
         ActiveSupport::Inflector.safe_constantize("String")
       end

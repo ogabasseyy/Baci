@@ -1,3 +1,4 @@
+import { withTimeout } from '@baci/shared';
 import { router } from 'expo-router';
 import { logger } from '@/lib/logger';
 import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
@@ -35,14 +36,18 @@ export async function completeOxygenCheckout({
   if (sharedCartBinding) {
     // The bound order already consumed its cart atomically on the server.
     // Never send a second clear that could target a new server cart.
-    void shared
-      .refresh?.()
-      .catch(() =>
+    // Give the cart a chance to catch up without holding a saved order
+    // behind an offline refresh. The cart can retry its own synchronization.
+    if (shared.refresh) {
+      try {
+        await withTimeout(shared.refresh(), 1_000);
+      } catch {
         logger.warn(
           'Checkout',
           'Shared cart refresh failed after saving the Oxygen order'
-        )
-      );
+        );
+      }
+    }
   } else if (
     !shared.enabled &&
     live.checkoutGeneration === generation &&

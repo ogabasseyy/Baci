@@ -10,6 +10,8 @@ import type { OrderCreateInput } from '@/schemas/orders';
 
 // Bearer or a declared mobile source can only add mobile admission checks.
 // A cookie request claiming mobile_app must pass those same extra checks.
+// A malformed Bearer header still selects the stricter admission path. Order
+// authentication separately rejects it before cookie or guest fallback.
 // Existing web checkout uses cookies to save an unpaid order. Its separate
 // Oxygen workflow entrypoint verifies the signed-in owner and merchant rollout.
 // The SQL regression is supabase/tests/oxygen_storefront_pilot_availability.sql.

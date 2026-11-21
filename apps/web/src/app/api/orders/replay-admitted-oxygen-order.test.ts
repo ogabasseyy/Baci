@@ -30,9 +30,9 @@ it('returns an exact owned Oxygen order without writing or exposing owner detail
     id: 'order',
     payment_method: 'oxygen',
     payment_status: 'unpaid',
-    total: 120,
+    total: '120',
     currency: 'NGN',
-    amount_paid: 20,
+    amount_paid: '20',
     customers: { user_id: 'user', merchant_id: 'merchant' },
   });
   const response = await replayAdmittedOxygenOrder(args);
@@ -85,6 +85,8 @@ it.each([
   { payment_status: 'refunded' },
   { cancelled_at: '2026-11-21T09:00:00Z' },
   { total: 0 },
+  { total: Number.POSITIVE_INFINITY },
+  { amount_paid: 'invalid' },
   { currency: 'USD' },
 ])('does not report a closed or unfinanceable order as replayed: %j', async (patch) => {
   const { args } = setup({

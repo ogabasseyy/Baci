@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { toFiniteNumber } from '@/lib/immediate-order/order-item-primitives';
 
 import { checkoutOrderNotReusable } from './checkout-order-not-reusable';
 
@@ -52,20 +53,24 @@ export async function replayAdmittedOxygenOrder({
   // An exact existing order can be reported, even during a rollout pause. The
   // denied admission never reaches the create RPC or its replay mutations.
   const { customers: _owner, amount_paid, cancelled_at, ...order } = data;
+  const total = toFiniteNumber(order.total);
+  const paid = toFiniteNumber(amount_paid ?? 0);
   if (
     cancelled_at ||
     order.payment_status !== 'unpaid' ||
     order.currency !== 'NGN' ||
     closedShippingStatuses.includes(order.shipping_status) ||
-    !(order.total > 0)
+    total === null ||
+    total <= 0 ||
+    paid === null
   )
     return checkoutOrderNotReusable();
   return NextResponse.json(
     {
-      order,
+      order: { ...order, total },
       wallet: null,
       savings: null,
-      amountDueToGateway: Math.max(order.total - (amount_paid ?? 0), 0),
+      amountDueToGateway: Math.max(total - paid, 0),
       idempotency: { replayed: true },
     },
     { headers: { 'x-idempotency-replayed': 'true' } }

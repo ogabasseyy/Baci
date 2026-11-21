@@ -124,3 +124,43 @@ it('records an unsuccessful refresh and opens the saved order without clearing t
     warn.mockRestore();
   }
 });
+
+it('gives a bound cart time to refresh before opening the saved order', async () => {
+  let finish: () => void = () => undefined;
+  const refresh = jest.fn().mockReturnValue(
+    new Promise<void>((resolve) => {
+      finish = resolve;
+    })
+  );
+  jest.mocked(useNativeSharedCartStore.getState).mockReturnValue({
+    ...localMode,
+    enabled: true,
+    refresh,
+  });
+
+  const completing = completeOxygenCheckout({ ...args, sharedCartBinding });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(router.replace).not.toHaveBeenCalled();
+  finish();
+  await completing;
+  expect(router.replace).toHaveBeenCalledTimes(1);
+});
+
+it('opens the saved order if the shared-cart refresh stalls', async () => {
+  jest.useFakeTimers();
+  jest.mocked(useNativeSharedCartStore.getState).mockReturnValue({
+    ...localMode,
+    enabled: true,
+    refresh: jest.fn().mockReturnValue(new Promise<void>(() => undefined)),
+  });
+  try {
+    const completing = completeOxygenCheckout({ ...args, sharedCartBinding });
+    expect(router.replace).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1_000);
+    await completing;
+    expect(router.replace).toHaveBeenCalledTimes(1);
+    expect(clearAndPersistCheckoutCart).not.toHaveBeenCalled();
+  } finally {
+    jest.useRealTimers();
+  }
+});

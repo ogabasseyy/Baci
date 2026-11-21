@@ -152,7 +152,7 @@ export async function initiatePaystackCancellationRefunds({
         if (
           data?.status !== 'success' ||
           data.reference !== reference ||
-          data.currency !== 'NGN' ||
+          data.currency.toUpperCase() !== 'NGN' ||
           data.amount !== koboAmount ||
           !('domain' in data) ||
           (data.domain !== 'test' && data.domain !== 'live')

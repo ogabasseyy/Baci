@@ -47,10 +47,13 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
     const scheduleAfter = (task: () => Promise<void>) => after(task);
-    // The abandoned-attempt, wedge, and side-effect passes retain their
-    // cumulative deadlines. The paid-offer pass uses up to 20 seconds
-    // from the remaining window before the side-effect deadline.
     const invocationStartedAt = Date.now();
+    // Keep the full existing side-effect window. Reserve the paid-offer
+    // pass from the end of the wedge sweep's share of the invocation.
+    const recheckDeadlineMs = reconcileGatewayPassDeadlineMs(
+      invocationStartedAt,
+      1
+    );
     let abandonedAttemptSweep: AbandonedPaystackAttemptSummary = {
       checked: 0,
       completed: [],
@@ -86,7 +89,7 @@ export async function GET(request: NextRequest) {
           });
         }
       },
-      deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 1),
+      deadlineMs: recheckDeadlineMs - BANK_OFFER_RECHECK_BUDGET_MS,
       scheduleAfter,
       supabase,
     });
@@ -96,7 +99,7 @@ export async function GET(request: NextRequest) {
       2
     );
     const bankOfferStartedAt = Date.now();
-    const bankOfferRecheckSkipped = bankOfferStartedAt >= sideEffectDeadlineMs;
+    const bankOfferRecheckSkipped = bankOfferStartedAt >= recheckDeadlineMs;
     const emptyRecheck = { checked: 0, failed: 0, retrying: 0, reversed: 0 };
     if (bankOfferRecheckSkipped) {
       logger.warn({
@@ -108,7 +111,7 @@ export async function GET(request: NextRequest) {
       ? emptyRecheck
       : await recheckPaidBankCardOfferCaptures({
           deadlineMs: Math.min(
-            sideEffectDeadlineMs,
+            recheckDeadlineMs,
             bankOfferStartedAt + BANK_OFFER_RECHECK_BUDGET_MS
           ),
           finalizePayment: authorities.finalizePayment,

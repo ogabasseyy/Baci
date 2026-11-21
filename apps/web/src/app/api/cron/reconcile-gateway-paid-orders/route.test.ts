@@ -160,7 +160,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
         expect.objectContaining({ deadlineMs: 1_090_000 })
       );
       expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalledWith(
-        expect.objectContaining({ deadlineMs: 1_180_000 })
+        expect.objectContaining({ deadlineMs: 1_160_000 })
       );
       expect(mocks.recheckPaidBankCardOfferCaptures).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -183,7 +183,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
         finalizePayment: mocks.finalizeOrderGatewayPayment,
         fileWedgeReview: mocks.fileWedgeReview,
       });
-      now.mockReturnValue(1_270_001);
+      now.mockReturnValue(1_180_001);
       return { checked: 0 };
     });
 

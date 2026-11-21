@@ -41,7 +41,10 @@ describe('bank-offer cancellation refunds', () => {
     mockAcceptedRefund(mocks.initiatePaystackRefund, overrides);
   }
 
-  it('uses the exact saved kobo amount for a bank-offer refund', async () => {
+  it.each([
+    'NGN',
+    'ngn',
+  ])('uses the exact saved kobo amount for a bank-offer refund (%s)', async (currency) => {
     const reference = `BCO-${'a'.repeat(32)}`;
     acceptedRefund({ transaction: { id: 55, reference } });
     const rpc = vi
@@ -54,7 +57,7 @@ describe('bank-offer cancellation refunds', () => {
         status: 'success',
         reference,
         amount: 9501,
-        currency: 'NGN',
+        currency,
         domain: 'test',
         id: '55',
       },

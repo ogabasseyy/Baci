@@ -1260,7 +1260,10 @@ export class QuizRoomEngine {
               targetPlan.position
             );
             let nextSubmittedAtMs = attemptRow.submitted_at_ms;
-            if (canRecoverTimelyFinalAnswer) {
+            const isRepairedFinalQuestion =
+              canRecoverTimelyFinalAnswer &&
+              targetPlan.position === plans.length;
+            if (isRepairedFinalQuestion) {
               nextSubmittedAtMs = receivedAtMs;
               this.storage.exec(
                 `UPDATE room_attempts
@@ -1277,14 +1280,16 @@ export class QuizRoomEngine {
                 attemptRow.attempt_id
               );
             }
-            const nextAlarmState = canRecoverTimelyFinalAnswer
-              ? this.enqueueSubmittedAttemptSync(
-                  attemptRow.attempt_id,
-                  config,
-                  alarmState,
-                  nowMs
-                )
-              : alarmState;
+            const nextAlarmState =
+              isRepairedFinalQuestion ||
+              (canRecoverTimelyFinalAnswer && timelyScoreDelta > 0)
+                ? this.enqueueSubmittedAttemptSync(
+                    attemptRow.attempt_id,
+                    config,
+                    alarmState,
+                    nowMs
+                  )
+                : alarmState;
             const refreshed = {
               ...attemptRow,
               score: attemptRow.score + timelyScoreDelta,
@@ -2142,9 +2147,11 @@ export class QuizRoomEngine {
         }
         this.storage.exec(
           `DELETE FROM room_scoreboard_outbox
-           WHERE attempt_id NOT IN (
-             SELECT attempt_id FROM room_attempts
-             WHERE status = 'submitted' AND submitted_at_ms IS NOT NULL
+           WHERE NOT EXISTS (
+             SELECT 1 FROM room_attempts AS a
+             WHERE a.attempt_id = room_scoreboard_outbox.attempt_id
+               AND a.status = 'submitted'
+               AND a.submitted_at_ms IS NOT NULL
            )`
         );
         const remainingRow = this.storage.exec<{ c: number }>(

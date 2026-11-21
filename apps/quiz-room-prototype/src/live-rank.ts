@@ -335,7 +335,8 @@ export class LiveRankIndexEngine {
         existing &&
         existing.attemptId === entry.attemptId &&
         existing.score === entry.score &&
-        existing.elapsedMs === entry.elapsedMs
+        existing.elapsedMs === entry.elapsedMs &&
+        existing.submittedAtMs === entry.submittedAtMs
       ) {
         continue;
       }
@@ -705,11 +706,12 @@ export class LiveRankIndexEngine {
     }
     state.deletedRangeIds.clear();
 
+    const encoder = new TextEncoder();
     for (const range of dirtyRanges) {
       range.version = nextVersion;
       range.dirty = false;
       const encoded = JSON.stringify(range.entries);
-      bytesWrittenThisTick += encoded.length;
+      bytesWrittenThisTick += encoder.encode(encoded).byteLength;
       const res = this.storage.exec(
         `INSERT INTO live_rank_ranges (event_id, range_id, entries_json, version)
          VALUES (?, ?, ?, ?)
@@ -750,7 +752,7 @@ export class LiveRankIndexEngine {
       ranges: rangeMetas,
     };
     const manifestEncoded = JSON.stringify(manifest);
-    bytesWrittenThisTick += manifestEncoded.length;
+    bytesWrittenThisTick += encoder.encode(manifestEncoded).byteLength;
     const manifestRes = this.storage.exec(
       `INSERT INTO live_rank_manifest (event_id, manifest_json)
        VALUES (?, ?)

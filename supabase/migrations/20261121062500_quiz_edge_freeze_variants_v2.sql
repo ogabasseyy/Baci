@@ -52,6 +52,10 @@ AS $$
 DECLARE
   v_locked boolean := false;
 BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.event_id IS NOT DISTINCT FROM OLD.event_id THEN
+    RETURN NEW;
+  END IF;
+
   SELECT EXISTS (
     SELECT 1
     FROM public.quiz_events AS event
@@ -66,7 +70,10 @@ BEGIN
       USING ERRCODE = 'QZ063';
   END IF;
 
-  RETURN OLD;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -74,6 +81,6 @@ DROP TRIGGER IF EXISTS guard_quiz_edge_slots_immutable_v2
   ON public.quiz_question_slots;
 
 CREATE TRIGGER guard_quiz_edge_slots_immutable_v2
-  BEFORE DELETE ON public.quiz_question_slots
+  BEFORE DELETE OR UPDATE OF event_id ON public.quiz_question_slots
   FOR EACH ROW
   EXECUTE FUNCTION private.guard_quiz_edge_slots_immutable_v2();

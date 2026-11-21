@@ -882,7 +882,8 @@ BEGIN
   IF COALESCE((v_run1 ->> 'tailBatchesScored')::integer, -1) <> 1
     OR COALESCE((v_run1 ->> 'questionsWritten')::integer, -1) <> 0
     OR COALESCE((v_run1 ->> 'answersWritten')::integer, -1) <> 0 THEN
-    RAISE EXCEPTION 'expected 1 tail batch scored and deferred answer backfill, got %', v_run1;
+    RAISE EXCEPTION 'expected 1 tail batch scored and deferred answer backfill, got %', v_run1
+      USING ERRCODE = 'S1011';
   END IF;
 
   -- Attach block signal flag to BlockedFive's attempt and re-score (simulating moderation before publication)
@@ -894,21 +895,24 @@ BEGIN
   IF COALESCE((v_run2 ->> 'attemptsWritten')::integer, -1) <> 0
     OR COALESCE((v_run2 ->> 'questionsWritten')::integer, -1) <> 0
     OR COALESCE((v_run2 ->> 'answersWritten')::integer, -1) <> 0 THEN
-    RAISE EXCEPTION 'second scoring pass should write 0 new attempt/question/answer rows, got %', v_run2;
+    RAISE EXCEPTION 'second scoring pass should write 0 new attempt/question/answer rows, got %', v_run2
+      USING ERRCODE = 'S1012';
   END IF;
 
   -- Trigger isolation: zero rows in quiz_live_standings_v2 for edge event
   SELECT pg_catalog.count(*)::integer INTO v_live_standings_count
   FROM public.quiz_live_standings_v2 WHERE event_id = v_event_id;
   IF v_live_standings_count <> 0 THEN
-    RAISE EXCEPTION 'edge scoring leaked % rows into quiz_live_standings_v2', v_live_standings_count;
+    RAISE EXCEPTION 'edge scoring leaked % rows into quiz_live_standings_v2', v_live_standings_count
+      USING ERRCODE = 'S1013';
   END IF;
 
   -- Partial attempt Carol received persisted_close_at
   SELECT submitted_at INTO v_carol_submitted_at
   FROM public.quiz_attempts WHERE id = '88000000-0000-4000-8000-000000000803';
   IF v_carol_submitted_at IS DISTINCT FROM '2026-11-18T10:05:00.250Z'::timestamptz THEN
-    RAISE EXCEPTION 'partial attempt did not receive persisted_close_at (got %)', v_carol_submitted_at;
+    RAISE EXCEPTION 'partial attempt did not receive persisted_close_at (got %)', v_carol_submitted_at
+      USING ERRCODE = 'S1014';
   END IF;
 
   -- Run real deadline orchestration -> publishes and mints exactly 1 award for Bob (1ms tiebreak)
@@ -917,23 +921,26 @@ BEGIN
   SELECT pg_catalog.count(*)::integer INTO v_results_count
   FROM public.quiz_event_results_v2 WHERE event_id = v_event_id;
   IF v_results_count <> 3 THEN
-    RAISE EXCEPTION 'expected 3 ranked results (BlockedFive excluded, NoShowSix absent), got %', v_results_count;
+    RAISE EXCEPTION 'expected 3 ranked results (BlockedFive excluded, NoShowSix absent), got %', v_results_count
+      USING ERRCODE = 'S1015';
   END IF;
 
   SELECT attempt_id INTO v_rank1_attempt FROM public.quiz_event_results_v2 WHERE event_id = v_event_id AND rank = 1;
   SELECT attempt_id INTO v_rank2_attempt FROM public.quiz_event_results_v2 WHERE event_id = v_event_id AND rank = 2;
   SELECT attempt_id INTO v_rank3_attempt FROM public.quiz_event_results_v2 WHERE event_id = v_event_id AND rank = 3;
-  IF v_rank1_attempt <> '88000000-0000-4000-8000-000000000802'
-    OR v_rank2_attempt <> '88000000-0000-4000-8000-000000000801'
-    OR v_rank3_attempt <> '88000000-0000-4000-8000-000000000803' THEN
-    RAISE EXCEPTION 'unexpected ranking order: r1=%, r2=%, r3=%', v_rank1_attempt, v_rank2_attempt, v_rank3_attempt;
+  IF v_rank1_attempt IS DISTINCT FROM '88000000-0000-4000-8000-000000000802'
+    OR v_rank2_attempt IS DISTINCT FROM '88000000-0000-4000-8000-000000000801'
+    OR v_rank3_attempt IS DISTINCT FROM '88000000-0000-4000-8000-000000000803' THEN
+    RAISE EXCEPTION 'unexpected ranking order: r1=%, r2=%, r3=%', v_rank1_attempt, v_rank2_attempt, v_rank3_attempt
+      USING ERRCODE = 'S1016';
   END IF;
 
   SELECT pg_catalog.count(*)::integer, pg_catalog.max(customer_id::text)::uuid
   INTO v_awards_count, v_award_customer
   FROM public.quiz_awards WHERE event_id = v_event_id;
-  IF v_awards_count <> 1 OR v_award_customer <> '88000000-0000-4000-8000-000000000313' THEN
-    RAISE EXCEPTION 'expected 1 award for Bob (313), got count=%, customer=%', v_awards_count, v_award_customer;
+  IF v_awards_count <> 1 OR v_award_customer IS DISTINCT FROM '88000000-0000-4000-8000-000000000313' THEN
+    RAISE EXCEPTION 'expected 1 award for Bob (313), got count=%, customer=%', v_awards_count, v_award_customer
+      USING ERRCODE = 'S1017';
   END IF;
 
   -- Post-publish idempotent canonical question/answer backfill in chunks of 2 attempts
@@ -947,7 +954,8 @@ BEGIN
     OR COALESCE((v_bf3 ->> 'attemptsBackfilled')::integer, -1) <> 0
     OR COALESCE((v_bf3 ->> 'questionsWritten')::integer, -1) <> 0
     OR COALESCE((v_bf3 ->> 'answersWritten')::integer, -1) <> 0 THEN
-    RAISE EXCEPTION 'canonical answer backfill chunking/idempotency mismatch: %, %, %', v_bf1, v_bf2, v_bf3;
+    RAISE EXCEPTION 'canonical answer backfill chunking/idempotency mismatch: %, %, %', v_bf1, v_bf2, v_bf3
+      USING ERRCODE = 'S1018';
   END IF;
 
   SELECT pg_catalog.count(*)::integer
@@ -964,7 +972,8 @@ BEGIN
   WHERE a.event_id = v_event_id;
 
   IF v_q_count <> 7 OR v_a_count <> 7 THEN
-    RAISE EXCEPTION 'expected 7 backfilled canonical questions & answers, got q=%, a=%', v_q_count, v_a_count;
+    RAISE EXCEPTION 'expected 7 backfilled canonical questions & answers, got q=%, a=%', v_q_count, v_a_count
+      USING ERRCODE = 'S1019';
   END IF;
 END
 $$;

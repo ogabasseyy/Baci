@@ -247,10 +247,18 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
     const csRes = await coordStub.fetch(
       `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(eventId)}`
     );
-    if (csRes.ok) {
-      const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
-      this.controlState.applySnapshot(snapshot);
+    if (!csRes.ok) {
+      if (!this.controlState.isFresh(Date.now())) {
+        throw new QuizRoomError(
+          'QUIZ_CONTROL_STATE_UNAVAILABLE',
+          `Failed to refresh control state for event ${eventId} (${csRes.status})`,
+          503
+        );
+      }
+      return;
     }
+    const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+    this.controlState.applySnapshot(snapshot);
   }
 
   async alarm(): Promise<void> {
@@ -393,10 +401,18 @@ export class LiveRankIndexDO extends DurableObject<WorkerEnv> {
     const csRes = await coordStub.fetch(
       `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(eventId)}`
     );
-    if (csRes.ok) {
-      const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
-      this.controlState.applySnapshot(snapshot);
+    if (!csRes.ok) {
+      if (!this.controlState.isFresh(Date.now())) {
+        throw new QuizRoomError(
+          'QUIZ_CONTROL_STATE_UNAVAILABLE',
+          `Failed to refresh control state for event ${eventId} (${csRes.status})`,
+          503
+        );
+      }
+      return;
     }
+    const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+    this.controlState.applySnapshot(snapshot);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -696,10 +712,13 @@ export class EventCoordinatorDO extends DurableObject<WorkerEnv> {
           const uuidRe =
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           if (uuidRe.test(eventId)) {
-            if (!env.SUPABASE_URL || !env.QUIZ_BATCH_WORKER_JWT) {
+            if (
+              !env.SUPABASE_URL?.startsWith('https://') ||
+              !env.QUIZ_BATCH_WORKER_JWT
+            ) {
               throw new QuizRoomError(
                 'QUIZ_CONFIG_MISSING',
-                'SUPABASE_URL and QUIZ_BATCH_WORKER_JWT are required to persist room seal',
+                'HTTPS SUPABASE_URL and QUIZ_BATCH_WORKER_JWT are required to persist room seal',
                 503
               );
             }

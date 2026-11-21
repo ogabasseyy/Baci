@@ -75,9 +75,12 @@ describe('bank card offer verification', () => {
     );
   });
 
-  it('records the terminal review for a buyer using native verification', async () => {
+  it.each([
+    ['035', 'Wema Bank'],
+    ['232', 'Sterling Bank'],
+  ] as const)('records the terminal review for a %s buyer using native verification', async (bankCode, issuerName) => {
     vi.stubEnv('PAYSTACK_SECRET_KEY', secret);
-    const { data } = setup('035', 'Wema Bank');
+    const { data } = setup(bankCode, issuerName);
     mocks.cookieAuth.mockResolvedValueOnce({
       authMode: 'bearer',
       user: { id: userId },

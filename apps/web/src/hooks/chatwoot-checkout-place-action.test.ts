@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ prepare: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  prepare: vi.fn(),
+  user: vi.fn(),
+  staging: vi.fn(),
+}));
+vi.mock('@/config/oxygen-storefront-staging', () => ({
+  isOxygenStorefrontStagingEnabled: mocks.staging,
+}));
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({ auth: { getUser: mocks.user } }),
+}));
 
 vi.mock('@/hooks/cart/shared-cart-checkout-client', async (importActual) => ({
   ...(await importActual<
@@ -31,6 +41,11 @@ beforeEach(() => {
   resetChatwootCheckoutOrderMemory();
   mocks.prepare.mockReset();
   mocks.prepare.mockResolvedValue(preparedCheckout());
+  mocks.staging.mockReturnValue(true);
+  mocks.user.mockResolvedValue({
+    data: { user: { email: 'ada@example.com' } },
+    error: null,
+  });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -189,5 +204,60 @@ describe('handleChatwootCheckoutPlace', () => {
     await handleChatwootCheckoutPlace(input);
 
     expect(input.postResult).not.toHaveBeenCalled();
+  });
+});
+
+it('places an Oxygen staging order and returns its secure handoff without starting bank transfer', async () => {
+  const { calls } = stubCheckoutFetch({
+    ...happyHandlers(),
+    '/api/orders': () => ({
+      body: {
+        order: {
+          id: '60000000-0000-4000-8000-000000000001',
+          order_number: 'ORD-1001',
+          currency: 'NGN',
+        },
+        amountDueToGateway: 4650,
+      },
+    }),
+  });
+  const input = placeInput({
+    request: { ...checkoutPlaceRequest, paymentMethod: 'oxygen' },
+  });
+  await handleChatwootCheckoutPlace(input);
+  expect(paths(calls)).toEqual(['/api/shipping/quotes', '/api/orders']);
+  expect(JSON.parse(String(calls[1]?.init.body))).toMatchObject({
+    payment_method: 'oxygen',
+  });
+  expect(lastResult(input)).toEqual({
+    requestId: 'place-request-1',
+    status: 'secure_handoff',
+    href: '/payments/oxygen/60000000-0000-4000-8000-000000000001',
+  });
+});
+
+it.each([
+  'guest',
+  'different customer',
+  'outside staging',
+])('refuses Oxygen before placing an order for %s', async (scenario) => {
+  const { calls } = stubCheckoutFetch(happyHandlers());
+  if (scenario === 'outside staging') mocks.staging.mockReturnValue(false);
+  else
+    mocks.user.mockResolvedValue({
+      data: {
+        user: scenario === 'guest' ? null : { email: 'other@example.com' },
+      },
+      error: null,
+    });
+  const input = placeInput({
+    request: { ...checkoutPlaceRequest, paymentMethod: 'oxygen' },
+  });
+  await handleChatwootCheckoutPlace(input);
+  expect(calls).toEqual([]);
+  expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(lastResult(input)).toMatchObject({
+    status: 'failed',
+    code: 'payment_unavailable',
   });
 });

@@ -1,4 +1,12 @@
+import {
+  CHATWOOT_CHECKOUT_PLACE_PREFIX,
+  CHATWOOT_CHECKOUT_STATUS_PREFIX,
+  type ChatwootCheckoutFailureCode,
+} from './chatwoot-checkout-result';
+
 type ChatwootActionEvent =
+  | 'baci-checkout-place-request'
+  | 'baci-checkout-payment-status-request'
   | 'baci-cart-add'
   | 'baci-cart-request'
   | 'baci-cart-quantity'
@@ -10,8 +18,21 @@ export function postChatwootInlineCartActionFailure(input: {
   event: ChatwootActionEvent;
   requestId: string;
   post: (prefix: string, value: unknown) => void;
+  /** Checkout place requests only; defaults to a stale-context failure. */
+  checkoutCode?: ChatwootCheckoutFailureCode;
 }) {
-  if (input.event === 'baci-checkout-review-request') {
+  if (input.event === 'baci-checkout-place-request') {
+    input.post(CHATWOOT_CHECKOUT_PLACE_PREFIX, {
+      requestId: input.requestId,
+      status: 'failed',
+      code: input.checkoutCode ?? 'cart_changed',
+    });
+  } else if (input.event === 'baci-checkout-payment-status-request') {
+    input.post(CHATWOOT_CHECKOUT_STATUS_PREFIX, {
+      requestId: input.requestId,
+      status: 'unavailable',
+    });
+  } else if (input.event === 'baci-checkout-review-request') {
     input.post('baci-checkout-review:', {
       requestId: input.requestId,
       status: 'unavailable',

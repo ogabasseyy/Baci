@@ -188,6 +188,7 @@ export function QuizScreen({
     });
   const lifecycleHandlers = createQuizV2LifecycleHandlers({
     attempt: v2Attempt,
+    backendMode: events.find((e) => e.id === v2Attempt?.eventId)?.backendMode,
     expire: expireActiveEvent,
     lockedOptionId,
     retry: retryLockedAnswer,

@@ -816,10 +816,40 @@ export class LiveRankIndexEngine {
       };
     }
     if (
-      options.isTestEvent &&
       this.controlState.isTesterRevoked(options.eventId, options.callerUserId)
     ) {
       throw new QuizRoomError('QZ031', 'not_authorized', 403);
+    }
+
+    // Prune any attempts that became blocked, disqualified, or tester-revoked
+    // after their submission was recorded, then republish before serving.
+    this.ensureSchemaSync();
+    const persistedSubs = this.storage.exec<{
+      attempt_id: string;
+      customer_id: string;
+      user_id: string;
+    }>(
+      `SELECT attempt_id, customer_id, user_id FROM live_submissions WHERE event_id = ?`,
+      options.eventId
+    ).rows;
+    let prunedCount = 0;
+    for (const sub of persistedSubs) {
+      if (
+        this.controlState.isAttemptBlocked(
+          options.eventId,
+          sub.attempt_id,
+          sub.customer_id
+        ) ||
+        this.controlState.isAttemptDisqualified(sub.attempt_id) ||
+        this.controlState.isTesterRevoked(options.eventId, sub.user_id)
+      ) {
+        if (this.removeAttempt(options.eventId, sub.attempt_id)) {
+          prunedCount += 1;
+        }
+      }
+    }
+    if (prunedCount > 0) {
+      this.publishSnapshot(options.eventId, Date.now());
     }
 
     const manifest = this.getPublishedManifest(options.eventId);

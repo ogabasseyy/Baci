@@ -232,6 +232,15 @@ export class ResultShardEngine {
    * Does NOT require a play ticket or original deviceHash.
    * Zero origin/PostgREST calls for ordinary non-winner viewers (`hasAward === false`).
    */
+  getEventIdForAttempt(attemptId: string): string | null {
+    this.ensureSchemaSync();
+    const row = this.storage.exec<{ event_id: string }>(
+      `SELECT event_id FROM shard_results WHERE attempt_id = ?`,
+      attemptId
+    ).rows[0];
+    return row?.event_id ?? null;
+  }
+
   async getAttemptResult(params: {
     attemptId: string;
     callerUserId: string;

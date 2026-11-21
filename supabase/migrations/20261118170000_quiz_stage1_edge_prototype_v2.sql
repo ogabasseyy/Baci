@@ -836,6 +836,9 @@ CREATE INDEX IF NOT EXISTS idx_quiz_edge_scored_attempts_event_batch
 CREATE INDEX IF NOT EXISTS idx_quiz_edge_scored_attempts_backfill
   ON private.quiz_edge_scored_attempts (event_id, attempt_id)
   WHERE canonical_answers_backfilled_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_quiz_edge_scored_attempts_customer
+  ON private.quiz_edge_scored_attempts (customer_id)
+  WHERE customer_id IS NOT NULL;
 
 ALTER TABLE private.quiz_edge_attempt_batches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE private.quiz_edge_attempt_staging ENABLE ROW LEVEL SECURITY;
@@ -993,6 +996,7 @@ BEGIN
       seal.attempt_count AS seal_attempts,
       seal.batch_count AS seal_batches,
       seal.persisted_close_at AS seal_close_at,
+      seal.answer_count AS seal_answers,
       (
         SELECT pg_catalog.count(DISTINCT b.batch_id)::integer
         FROM private.quiz_edge_attempt_batches AS b
@@ -1002,13 +1006,20 @@ BEGIN
         SELECT pg_catalog.count(*)::integer
         FROM private.quiz_edge_attempt_staging AS s
         WHERE s.event_id = p_event_id AND s.room_id = seal.room_id
-      ) AS actual_attempts
+      ) AS actual_attempts,
+      (
+        SELECT COALESCE(pg_catalog.sum(pg_catalog.jsonb_array_length(s.answers)), 0)::integer
+        FROM private.quiz_edge_attempt_staging AS s
+        WHERE s.event_id = p_event_id AND s.room_id = seal.room_id
+      ) AS actual_answers
     FROM private.quiz_edge_room_seals AS seal
     WHERE seal.event_id = p_event_id
   )
   SELECT
     pg_catalog.count(*) FILTER (
-      WHERE actual_batches <> seal_batches OR actual_attempts <> seal_attempts
+      WHERE actual_batches <> seal_batches
+         OR actual_attempts <> seal_attempts
+         OR actual_answers <> seal_answers
     )::integer,
     pg_catalog.count(*) FILTER (
       WHERE v_event.edge_persisted_close_at IS NULL
@@ -1890,6 +1901,9 @@ BEGIN
   WHERE run.id = v_run_id;
 
   IF v_existing_run.id IS NOT NULL THEN
+    IF v_existing_run.event_id IS DISTINCT FROM p_event_id THEN
+      RAISE EXCEPTION 'quiz_scoring_run_event_mismatch' USING ERRCODE = '22023';
+    END IF;
     IF v_existing_run.event_id = p_event_id
       AND v_existing_run.status = 'completed'
       AND v_existing_run.manifest_checksum_sha256 = v_manifest_checksum THEN

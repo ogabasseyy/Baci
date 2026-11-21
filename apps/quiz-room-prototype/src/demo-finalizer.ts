@@ -147,7 +147,7 @@ export async function reconcileDemoRound(
       eventId,
       endsAtMs,
       roomIds,
-      nowMs,
+      nowMs: params.forceAdmin ? Math.max(nowMs, endsAtMs) : nowMs,
     });
     if (!sweep.allRoomsSealed) {
       return {

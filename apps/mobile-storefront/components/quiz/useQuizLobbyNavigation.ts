@@ -77,6 +77,9 @@ export function useQuizLobbyNavigation({
           answer,
           questionId,
           attemptId: recoveredAttempt.attemptId,
+          backendMode: useQuizStore
+            .getState()
+            .events.find((e) => e.id === eventId)?.backendMode,
           expectedUserId: userId,
           clientAnsweredAt: new Date().toISOString(),
         });

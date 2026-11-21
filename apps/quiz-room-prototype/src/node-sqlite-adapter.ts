@@ -314,8 +314,8 @@ export class NodeSqliteAdapter implements RoomStorageBackend {
     if (this.txDepth > 0) {
       return fn();
     }
-    this.txDepth += 1;
     this.db.exec('BEGIN IMMEDIATE');
+    this.txDepth += 1;
     try {
       const result = fn();
       this.db.exec('COMMIT');

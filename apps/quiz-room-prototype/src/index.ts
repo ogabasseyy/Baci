@@ -123,11 +123,20 @@ function errorResponse(error: unknown): Response {
 }
 
 async function readJsonBody<T>(request: Request): Promise<T> {
+  let parsed: unknown;
   try {
-    return (await request.json()) as T;
+    parsed = await request.json();
   } catch {
     throw new QuizRoomError('QUIZ_INVALID_JSON', 'Malformed JSON body', 400);
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new QuizRoomError(
+      'QUIZ_INVALID_INPUT',
+      'Request body must be a JSON object',
+      400
+    );
+  }
+  return parsed as T;
 }
 
 export class QuizRoomDO extends DurableObject<WorkerEnv> {
@@ -146,24 +155,45 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
       controlState: this.controlState,
       hooks: {
         onPublishBatches: async (messages) => {
-          if (
-            !env.QUIZ_BATCH_QUEUE ||
-            !env.SUPABASE_URL ||
-            !env.QUIZ_BATCH_WORKER_JWT ||
-            messages.length === 0
-          ) {
-            return;
-          }
+          if (messages.length === 0) return;
           const uuidRe =
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           const sendable = messages.filter((m) =>
             uuidRe.test(m.message.eventId)
           );
           if (sendable.length === 0) return;
-          for (let i = 0; i < sendable.length; i += 100) {
-            await env.QUIZ_BATCH_QUEUE.sendBatch(
-              sendable.slice(i, i + 100).map((m) => ({ body: m.message }))
+          if (
+            !env.QUIZ_BATCH_QUEUE ||
+            !env.SUPABASE_URL ||
+            !env.QUIZ_BATCH_WORKER_JWT
+          ) {
+            throw new QuizRoomError(
+              'QUIZ_QUEUE_NOT_CONFIGURED',
+              'Production quiz batch queue delivery is not configured',
+              503
             );
+          }
+          // Enforce Cloudflare Queue sendBatch limits: <= 100 messages AND <= 256 KB total.
+          const MAX_BATCH_MESSAGES = 100;
+          const MAX_BATCH_BYTES = 240_000;
+          let chunk: { body: QuizPackedQueueMessage }[] = [];
+          let chunkBytes = 0;
+          for (const m of sendable) {
+            const msgBytes = Math.max(1, m.byteLength);
+            if (
+              chunk.length > 0 &&
+              (chunk.length >= MAX_BATCH_MESSAGES ||
+                chunkBytes + msgBytes > MAX_BATCH_BYTES)
+            ) {
+              await env.QUIZ_BATCH_QUEUE.sendBatch(chunk);
+              chunk = [];
+              chunkBytes = 0;
+            }
+            chunk.push({ body: m.message });
+            chunkBytes += msgBytes;
+          }
+          if (chunk.length > 0) {
+            await env.QUIZ_BATCH_QUEUE.sendBatch(chunk);
           }
         },
         onScoreboardTick: async (tick) => {
@@ -233,12 +263,14 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
       if (request.method === 'POST' && url.pathname === '/internal/init') {
         const config = await readJsonBody<QuizEventConfig>(request);
         this.engine.initialize(config);
-        this.controlState.applySnapshot(
-          createEmptyControlState(
-            Date.now(),
-            this.controlState.getVersion() + 1
-          )
-        );
+        if (this.env.EVENT_COORDINATOR) {
+          await this.refreshControlStateIfStale(config.eventId, Date.now());
+        }
+        if (this.controlState.getVersion() === 0) {
+          this.controlState.applySnapshot(
+            createEmptyControlState(Date.now(), 1)
+          );
+        }
         return jsonResponse({ ok: true, roomId: this.engine.roomId });
       }
       if (
@@ -263,9 +295,10 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
           appVersion: string;
           platform: QuizPlatform;
         }>(request);
-        const nowMs = Date.now();
-        await this.refreshControlStateIfStale(body.ticket.eventId, nowMs);
-        return jsonResponse(this.engine.startAttempt({ ...body, nowMs }));
+        await this.refreshControlStateIfStale(body.ticket.eventId, Date.now());
+        return jsonResponse(
+          this.engine.startAttempt({ ...body, nowMs: Date.now() })
+        );
       }
       if (request.method === 'POST' && url.pathname === '/internal/answer') {
         const body = await readJsonBody<{
@@ -512,6 +545,10 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
           callerUserId: string;
           authorizationHeader?: string;
         }>(request);
+        const eventId = this.engine.getEventIdForAttempt(body.attemptId);
+        if (eventId) {
+          await this.refreshControlStateIfStale(eventId, Date.now());
+        }
         return jsonResponse(
           await this.engine.getAttemptResult({
             ...body,
@@ -936,15 +973,25 @@ export default {
           env.EVENT_COORDINATOR,
           body.config.eventId
         );
-        await coordStub.fetch('https://coord.internal/internal/freeze', {
-          method: 'POST',
-          body: JSON.stringify({
-            eventId: body.config.eventId,
-            endsAtMs: body.config.endsAtMs,
-            expectedRoomIds: body.roomIds,
-          }),
-        });
-        await coordStub.fetch(
+        const freezeRes = await coordStub.fetch(
+          'https://coord.internal/internal/freeze',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              eventId: body.config.eventId,
+              endsAtMs: body.config.endsAtMs,
+              expectedRoomIds: body.roomIds,
+            }),
+          }
+        );
+        if (!freezeRes.ok) {
+          throw new QuizRoomError(
+            'QUIZ_COORDINATOR_FREEZE_FAILED',
+            `Failed to freeze coordinator for ${body.config.eventId}`,
+            freezeRes.status
+          );
+        }
+        const refreshRes = await coordStub.fetch(
           'https://coord.internal/internal/control-state/refresh',
           {
             method: 'POST',
@@ -954,6 +1001,13 @@ export default {
             }),
           }
         );
+        if (!refreshRes.ok) {
+          throw new QuizRoomError(
+            'QUIZ_CONTROL_STATE_REFRESH_FAILED',
+            `Failed to refresh coordinator control state for ${body.config.eventId}`,
+            refreshRes.status
+          );
+        }
         return jsonResponse({
           ok: true,
           eventId: body.config.eventId,
@@ -1294,18 +1348,28 @@ export default {
         const csRes = await coordStub.fetch(
           `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(eventId)}`
         );
-        const snapshot = csRes.ok
-          ? ((await csRes.json()) as QuizControlStateSnapshot)
-          : null;
+        if (!csRes.ok) {
+          return jsonResponse(
+            {
+              error: 'Coordinator status unavailable',
+              code: 'QUIZ_STATUS_UNAVAILABLE',
+            },
+            503
+          );
+        }
+        const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
         const pub = snapshot?.publishedEvents?.[eventId];
-        const cancelled = Boolean(snapshot?.cancelledEvents?.[eventId]);
+        const cancelled =
+          Boolean(snapshot?.cancelledEvents?.[eventId]) ||
+          pub?.eventStatus === 'cancelled';
         return jsonResponse(
           {
             eventId,
             status: cancelled ? 'cancelled' : pub ? 'completed' : 'active',
-            resultsPublishedAt: pub
-              ? new Date(pub.publishedAtMs).toISOString()
-              : null,
+            resultsPublishedAt:
+              !cancelled && pub
+                ? new Date(pub.publishedAtMs).toISOString()
+                : null,
           },
           200,
           { 'Cache-Control': 'public, max-age=3' }

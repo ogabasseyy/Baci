@@ -1,10 +1,14 @@
 import { getQuizDeviceFingerprint } from '@/lib/get-quiz-device-fingerprint';
 import { recoverActiveQuizAttempt } from '@/services/quiz-attempt-recovery';
 import { submitQuizAnswerV2 } from '@/services/quiz-attempts';
-import type { QuizV2Attempt } from '@/services/quiz-types';
+import type {
+  QuizEventBackendMode,
+  QuizV2Attempt,
+} from '@/services/quiz-types';
 
 interface LifecycleHandlerInput {
   attempt: QuizV2Attempt | null;
+  backendMode?: QuizEventBackendMode;
   lockedOptionId: string | null;
   userId: string | undefined;
   expire: (
@@ -35,6 +39,7 @@ export function createQuizV2LifecycleHandlers(input: LifecycleHandlerInput) {
         submitQuizAnswerV2({
           answer,
           attemptId: input.attempt?.attemptId ?? '',
+          backendMode: input.backendMode,
           clientAnsweredAt: new Date().toISOString(),
           expectedUserId: input.userId ?? '',
           questionId: question.id,

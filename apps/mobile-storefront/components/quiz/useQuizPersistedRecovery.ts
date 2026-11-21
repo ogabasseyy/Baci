@@ -6,6 +6,7 @@ import {
   loadQuizRecoveryEnvelopes,
   type QuizV2StoreActions,
 } from '@/stores/quiz-recovery-envelope';
+import { useQuizStore } from '@/stores/quiz-store';
 
 interface UseQuizPersistedRecoveryInput {
   canRecover?: (eventId?: string) => boolean;
@@ -166,6 +167,9 @@ export function useQuizPersistedRecovery({
               return submitQuizAnswerV2({
                 answer: optionId,
                 attemptId: envelope.attemptId,
+                backendMode: useQuizStore
+                  .getState()
+                  .events.find((e) => e.id === envelope.eventId)?.backendMode,
                 clientAnsweredAt: new Date().toISOString(),
                 expectedUserId: userId,
                 questionId,

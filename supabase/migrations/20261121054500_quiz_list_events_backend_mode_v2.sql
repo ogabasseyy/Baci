@@ -18,7 +18,7 @@ BEGIN
   IF auth.uid() IS NULL THEN
     RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '28000';
   END IF;
-  IF p_limit NOT BETWEEN 1 AND 50 OR p_offset < 0 THEN
+  IF p_limit IS NULL OR p_offset IS NULL OR p_limit NOT BETWEEN 1 AND 50 OR p_offset < 0 THEN
     RAISE EXCEPTION 'invalid_pagination' USING ERRCODE = '22023';
   END IF;
   IF NOT EXISTS (

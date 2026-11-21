@@ -242,6 +242,12 @@ export async function handleQuizQueueBatch(
         ? reassembled.completedBundles
         : packed.bundles;
 
+    if (bundlesToSend.some((b) => !Array.isArray(b.answers))) {
+      msg.ack();
+      result.acked += 1;
+      continue;
+    }
+
     const partIndex = isSplitPart ? firstSplit.partIndex : 0;
     const totalParts = isSplitPart ? firstSplit.totalParts : 1;
     const answerCount = bundlesToSend.reduce(

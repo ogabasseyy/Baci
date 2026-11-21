@@ -1557,9 +1557,20 @@ export class QuizRoomEngine {
           packed.message.batchId
         );
       }
+      const remainingOutbox = Number(
+        this.storage.exec<{ c: number }>(
+          `SELECT count(*) AS c FROM room_outbox`
+        ).rows[0]?.c ?? 0
+      );
       const nextAlarm: RoomAlarmState = {
         ...alarmState,
-        nextFlushTickMs: null,
+        nextFlushTickMs:
+          remainingOutbox > 0
+            ? Math.max(
+                alarmState.nextFlushTickMs ?? 0,
+                Date.now() + (config.flushTickMs ?? DEFAULT_FLUSH_TICK_MS)
+              )
+            : null,
       };
       this.writeAlarmStateSync(nextAlarm);
       this.scheduleNextAlarmSync(config, nextAlarm);
@@ -1584,12 +1595,18 @@ export class QuizRoomEngine {
     }
   ): Promise<QuizRoomSealManifest> {
     const existing = this.getSealManifest();
-    if (
-      existing &&
-      existing.persistedCloseAtMs === persistedCloseAtMs &&
-      existing.sealMode === mode
-    ) {
-      return existing;
+    if (existing) {
+      if (
+        existing.persistedCloseAtMs === persistedCloseAtMs &&
+        existing.sealMode === mode
+      ) {
+        return existing;
+      }
+      throw new QuizRoomError(
+        'QUIZ_SEAL_CONFLICT',
+        `Room ${this.roomId} is already sealed at ${existing.persistedCloseAtMs} (${existing.sealMode})`,
+        409
+      );
     }
 
     const prep = this.storage.transactionSync(() => {
@@ -1942,10 +1959,21 @@ export class QuizRoomEngine {
     const config = this.readMetaSync<QuizEventConfig>('config');
     if (!config) return;
     const alarmState = this.getAlarmStateSync(config);
-    if (!alarmState.sealed || alarmState.retentionExpiresAtMs === null) {
+    const sealManifest = this.getSealManifest();
+    const unackedBatches = Number(
+      this.storage.exec<{ c: number }>(
+        `SELECT count(*) AS c FROM room_batches WHERE acknowledged = 0`
+      ).rows[0]?.c ?? 0
+    );
+    if (
+      !alarmState.sealed ||
+      !sealManifest ||
+      unackedBatches > 0 ||
+      alarmState.retentionExpiresAtMs === null
+    ) {
       throw new QuizRoomError(
         'QUIZ_ROOM_NOT_SEALED',
-        `Cannot deleteAll() on unsealed room ${this.roomId}`,
+        `Cannot deleteAll() on unsealed or unacknowledged room ${this.roomId}`,
         409
       );
     }

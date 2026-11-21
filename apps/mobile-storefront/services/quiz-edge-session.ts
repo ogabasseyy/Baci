@@ -108,9 +108,14 @@ export function clearQuizEdgeSession(
   const key = sessionKey(eventId, expectedUserId);
   const existing = activeEdgeSessions.get(key);
   activeEdgeSessions.delete(key);
-  if (!existing) return;
+  const matchesSession = (session: QuizEdgeCheckInSession): boolean =>
+    session === existing ||
+    (session.eventId === eventId &&
+      (!expectedUserId ||
+        !session.expectedUserId ||
+        session.expectedUserId === expectedUserId));
   for (const [attemptId, session] of activeAttemptSessions.entries()) {
-    if (session === existing) {
+    if (matchesSession(session)) {
       activeAttemptSessions.delete(attemptId);
       AsyncStorage.removeItem(
         `${EDGE_ATTEMPT_STORAGE_PREFIX}${attemptId}`

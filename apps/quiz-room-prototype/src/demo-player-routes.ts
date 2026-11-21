@@ -50,11 +50,25 @@ export async function handleDemoCheckIn(
     env.QUIZ_JWT_SECRET,
     'QUIZ_JWT_SECRET'
   );
-  const body = (await parseJsonObject(request)) as {
+  const rawBody = await parseJsonObject(request);
+  if (rawBody.nickname !== undefined && typeof rawBody.nickname !== 'string') {
+    throw new QuizRoomError(
+      'QUIZ_INVALID_INPUT',
+      'nickname must be a string when provided',
+      400
+    );
+  }
+  const body: {
     carrier?: string;
     nickname?: string;
     roomId?: string;
     inviteCode?: string;
+  } = {
+    carrier: typeof rawBody.carrier === 'string' ? rawBody.carrier : undefined,
+    nickname: rawBody.nickname,
+    roomId: typeof rawBody.roomId === 'string' ? rawBody.roomId : undefined,
+    inviteCode:
+      typeof rawBody.inviteCode === 'string' ? rawBody.inviteCode : undefined,
   };
   const providedInvite = (
     typeof body.inviteCode === 'string' && body.inviteCode.trim()

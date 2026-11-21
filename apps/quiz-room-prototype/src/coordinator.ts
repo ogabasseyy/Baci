@@ -237,8 +237,19 @@ export class EventCoordinatorEngine {
       const mode: QuizRoomSealMode =
         (params.mode ?? (meta.seal_mode as QuizRoomSealMode | null)) ||
         'persisted_close';
-      const persistedCloseAtMs =
-        meta.persisted_close_at_ms ?? params.nowMs ?? Date.now();
+      const nowMs = params.nowMs ?? Date.now();
+      if (
+        meta.persisted_close_at_ms === null &&
+        mode !== 'cancelled' &&
+        nowMs < meta.ends_at_ms
+      ) {
+        throw new QuizRoomError(
+          'QUIZ_EVENT_STILL_ACTIVE',
+          `Cannot close active event ${params.eventId} before endsAtMs`,
+          409
+        );
+      }
+      const persistedCloseAtMs = meta.persisted_close_at_ms ?? nowMs;
 
       if (meta.persisted_close_at_ms === null || meta.seal_mode === null) {
         this.storage.exec(
@@ -254,7 +265,7 @@ export class EventCoordinatorEngine {
       const pendingRows = this.storage.exec<CoordRoomSealRow>(
         `SELECT * FROM coordinator_room_seals
          WHERE event_id = ? AND status <> 'sealed'
-         ORDER BY room_id ASC`,
+         ORDER BY attempts ASC, room_id ASC`,
         params.eventId
       ).rows;
 
@@ -293,7 +304,7 @@ export class EventCoordinatorEngine {
           this.storage.exec(
             `UPDATE coordinator_room_seals
              SET status = 'retry', last_error = ?, attempts = attempts + 1
-             WHERE event_id = ? AND room_id = ?`,
+             WHERE event_id = ? AND room_id = ? AND status <> 'sealed'`,
             message,
             params.eventId,
             roomId

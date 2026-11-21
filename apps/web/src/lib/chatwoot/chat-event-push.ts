@@ -21,12 +21,16 @@ export type ChatEventPushInput = {
 export type ChatEventPushResult =
   | { status: 'sent'; sent: number; failed: number }
   | { status: 'partial'; sent: number; failed: number }
-  | { status: 'skipped'; reason: 'not_configured' | 'already_claimed' }
+  | {
+      status: 'skipped';
+      reason: 'not_configured' | 'already_claimed' | 'muted';
+    }
   | { status: 'failed' };
 
 /**
  * Pushes a "new customer message" notification to the store's merchant-app
- * devices for one notified chat event. Best effort and at most once: the
+ * devices for one notified chat event, unless the merchant turned chat push
+ * alerts off. Best effort and at most once: the
  * database hands out a single claim per event, so a redelivered webhook
  * never pushes twice, and a failed push is not retried here.
  */
@@ -45,6 +49,14 @@ export async function sendChatEventPush(
   };
   try {
     const client = createAnonClient();
+    // The merchant can mute chat pushes. An unreadable switch is treated as
+    // on, so a store never silently misses customer messages.
+    const preference = await client.rpc('get_chat_message_push_preference', {
+      p_merchant_id: input.merchantId,
+    });
+    if (!preference.error && preference.data === false) {
+      return { status: 'skipped', reason: 'muted' };
+    }
     const claimed = await client.rpc(
       'chat_event_claim_push',
       chatEventPushArgs(secret, scope, 'claim')

@@ -12,6 +12,7 @@ interface ParamVerificationGateInput {
   isDark: boolean;
   orderNumber?: string;
   onContinueShopping: () => void;
+  onViewOrders: () => void;
 }
 
 /**
@@ -32,6 +33,7 @@ export function renderParamVerificationGate({
   isDark,
   orderNumber,
   onContinueShopping,
+  onViewOrders,
 }: ParamVerificationGateInput): ReactNode | undefined {
   const unresolved =
     isParamReconciliation && paramReconciliationVerified === undefined;
@@ -43,6 +45,7 @@ export function renderParamVerificationGate({
         invalidPaymentLink={invalidPaymentLink}
         orderNumber={invalidPaymentLink ? undefined : orderNumber}
         onRetry={invalidPaymentLink ? undefined : retryParamVerification}
+        onViewOrders={invalidPaymentLink ? onViewOrders : undefined}
         onContinueShopping={onContinueShopping}
       />
     );

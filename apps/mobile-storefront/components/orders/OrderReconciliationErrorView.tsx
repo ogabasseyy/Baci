@@ -12,6 +12,7 @@ interface OrderReconciliationErrorViewProps {
   invalidPaymentLink?: boolean;
   orderNumber?: string;
   onRetry?: () => void;
+  onViewOrders?: () => void;
   onContinueShopping: () => void;
 }
 
@@ -27,6 +28,7 @@ export function OrderReconciliationErrorView({
   invalidPaymentLink,
   orderNumber,
   onRetry,
+  onViewOrders,
   onContinueShopping,
 }: OrderReconciliationErrorViewProps) {
   return (
@@ -101,10 +103,12 @@ export function OrderReconciliationErrorView({
             )}
             <View style={styles.actions}>
               <View style={styles.actionRow}>
-                {onRetry && (
+                {(onViewOrders || onRetry) && (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Retry verification"
+                    accessibilityLabel={
+                      onViewOrders ? 'View orders' : 'Retry verification'
+                    }
                     style={[
                       styles.secondaryButton,
                       {
@@ -112,7 +116,7 @@ export function OrderReconciliationErrorView({
                         backgroundColor: colors.card,
                       },
                     ]}
-                    onPress={onRetry}
+                    onPress={onViewOrders ?? onRetry}
                   >
                     <Text
                       style={[
@@ -120,7 +124,7 @@ export function OrderReconciliationErrorView({
                         { color: colors.text },
                       ]}
                     >
-                      Try Again
+                      {onViewOrders ? 'View orders' : 'Try Again'}
                     </Text>
                   </Pressable>
                 )}

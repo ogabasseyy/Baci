@@ -236,6 +236,7 @@ export default function OrderSuccessScreen() {
     isDark: colorScheme === 'dark',
     orderNumber,
     onContinueShopping: handleContinueShopping,
+    onViewOrders: () => router.replace('/orders'),
   });
   if (paramVerificationGate !== undefined) {
     return paramVerificationGate;

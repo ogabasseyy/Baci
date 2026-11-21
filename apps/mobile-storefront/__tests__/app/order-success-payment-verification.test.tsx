@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {
   mockMaybeShowPostOrderInterstitial,
   mockOrderReconciliationView,
@@ -26,6 +26,11 @@ describe('OrderSuccessScreen payment verification', () => {
     const view = render(<OrderSuccessScreen />);
     expect(view.getByText('Invalid payment link')).toBeTruthy();
     expect(view.queryByLabelText('Retry verification')).toBeNull();
+    fireEvent.press(view.getByRole('button', { name: 'View orders' }));
+    expect(
+      jest.requireMock<typeof import('expo-router')>('expo-router').router
+        .replace
+    ).toHaveBeenCalledWith('/orders');
     expect(mockOrderReconciliationView).not.toHaveBeenCalled();
     expect(mockVerifyOrderPaymentForCompletion).not.toHaveBeenCalled();
   });

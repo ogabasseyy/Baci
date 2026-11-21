@@ -163,6 +163,45 @@ describe('bank card offer quotes', () => {
     });
   });
 
+  it.each([
+    { lastUnitKobo: 5, maximumDiscountKobo: 3 },
+    { lastUnitKobo: 5, maximumDiscountKobo: 123 },
+    { lastUnitKobo: 6, maximumDiscountKobo: 3 },
+    { lastUnitKobo: 6, maximumDiscountKobo: 123 },
+  ])('allocates the full discount across all units with %j', ({
+    lastUnitKobo,
+    maximumDiscountKobo,
+  }) => {
+    const quote = quoteBankCardOffer({
+      offer: { ...offer, discountBasisPoints: 2375, maximumDiscountKobo },
+      merchantId,
+      items: [
+        { ...items[0], unitPriceKobo: 23, quantity: 2 },
+        {
+          itemId: 'last-eligible',
+          productId,
+          unitPriceKobo: lastUnitKobo,
+          quantity: 1,
+        },
+        { ...items[1], unitPriceKobo: 9 },
+      ],
+      now,
+    });
+    if (!quote) throw new Error('Expected an applicable bank offer');
+    const unitDiscountTotal = quote.allocations.reduce(
+      (total, line) =>
+        total +
+        line.unitNetAmountsKobo.reduce(
+          (discount, net) => discount + line.unitPriceKobo - net,
+          0
+        ),
+      0
+    );
+    expect(quote.discountKobo).toBe(Math.min(12, maximumDiscountKobo));
+    expect(unitDiscountTotal).toBe(quote.discountKobo);
+    expect(quote.allocations[2].unitNetAmountsKobo).toEqual([9]);
+  });
+
   it('matches uppercase catalog UUIDs and preserves integer kobo for decimal prices', () => {
     expect(
       quoteBankCardOffer({

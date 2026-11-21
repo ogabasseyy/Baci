@@ -9,6 +9,7 @@ jest.mock('@/lib/deferred-bank-offer-cart', () => ({
   deferredBankOfferCart: {
     capture: jest.fn(() => 'cart-identity'),
     remember: jest.fn(async () => undefined),
+    clearIfUnchanged: jest.fn(async () => undefined),
   },
 }));
 jest.mock('@/services/analytics', () => ({
@@ -44,6 +45,7 @@ it('leaves the gateway pending and preserves the cart while the order screen ver
 
   expect(setPaymentStatus).toHaveBeenLastCalledWith('pending');
   expect(clearCart).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
   expect(deferredBankOfferCart.remember).toHaveBeenCalledWith(
     'order-1',
     reference,
@@ -103,7 +105,14 @@ it.each([
       clearPendingLoadTimeout: jest.fn(),
       isMountedRef: { current: true },
       paymentCompletionStartedRef: { current: false },
-      scheduleDelayedNavigation: (navigate) => navigate(),
+      scheduleDelayedNavigation: (navigate) => {
+        expect(deferredBankOfferCart.clearIfUnchanged).toHaveBeenCalledWith(
+          'order-1',
+          reference,
+          expect.any(Function)
+        );
+        navigate();
+      },
       setErrorMessage: jest.fn(),
       setPaymentStatus,
     },

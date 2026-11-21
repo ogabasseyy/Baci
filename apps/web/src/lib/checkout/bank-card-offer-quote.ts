@@ -84,8 +84,9 @@ export function quoteBankCardOffer({
   );
   if (discount === 0n || discount >= productSubtotal) return null;
 
-  // Allocate against running eligible value so the stored unit discounts sum
-  // to the capped total, including when the proportion contains half a kobo.
+  // Unit discounts are differences between rounded cumulative shares. The
+  // final share divides eligibleSubtotal * discount by eligibleSubtotal,
+  // so those differences add up to the exact capped discount.
   let eligibleValue = 0n;
   let allocatedDiscount = 0n;
   const allocations = items.map((item) => {

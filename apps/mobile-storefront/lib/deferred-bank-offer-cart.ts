@@ -81,6 +81,8 @@ export const deferredBankOfferCart = {
       }
     });
   },
+  // Call only after server verification confirms this exact order and
+  // reference are paid. With no matching snapshot, leave the cart intact.
   async clearIfUnchanged(
     orderId: string,
     reference: string,

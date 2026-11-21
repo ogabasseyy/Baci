@@ -128,6 +128,16 @@ export async function settleOrderCompletion(
       if (!isMountedRef.current) return;
     }
     if (verification.paid) {
+      if (bankOfferReference) {
+        await deferredBankOfferCart
+          .clearIfUnchanged(
+            orderId,
+            bankOfferReference,
+            () => isMountedRef.current
+          )
+          .catch(() => undefined);
+        if (!isMountedRef.current) return;
+      }
       // The tracked order already carries the checkout identity,
       // breakdown, and line items: forward them so the durable claim is
       // consumed with full attribution (later polling cannot enrich it).
@@ -222,8 +232,7 @@ export async function settleOrderCompletion(
     }
   }
   setPaymentStatus('success');
-  // The order screen clears a verified bank-offer cart only with a saved
-  // identity. A missing snapshot gives no authority over the current cart.
+  // Bank offers use the saved cart identity in the verified-paid branch.
   if (!bankOfferReference) await clearCart();
   scheduleDelayedNavigation(() => {
     router.replace({

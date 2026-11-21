@@ -97,8 +97,8 @@ vi.mock('@/lib/routes', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/test-store',
   useRouter: () => ({ push: mockPush }),
+  usePathname: () => '/',
 }));
 
 vi.mock('next/image', () => ({

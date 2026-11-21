@@ -220,7 +220,6 @@ export async function postAdminOrderGiglQuote(
       { status: 500 }
     );
   }
-
   const { data: binding, error: bindError } = await auth.supabase.rpc(
     'bind_admin_gigl_quote' as never,
     {
@@ -254,7 +253,15 @@ export async function postAdminOrderGiglQuote(
         { status: 409 }
       );
     }
-    if (bindError.message === 'partner_delivery_service_changed') {
+    if (bindError.message === 'partner_delivery_destination_changed')
+      return NextResponse.json(
+        {
+          code: 'PARTNER_DELIVERY_DESTINATION_CHANGED',
+          error: 'Use the destination on the paid partner quote.',
+        },
+        { status: 409 }
+      );
+    if (bindError.message === 'partner_delivery_service_changed')
       return NextResponse.json(
         {
           code: 'PARTNER_DELIVERY_SERVICE_CHANGED',
@@ -263,7 +270,6 @@ export async function postAdminOrderGiglQuote(
         },
         { status: 409 }
       );
-    }
     const already = bindError.message?.includes('already');
     const staleInputs = bindError.message?.includes('stale_order_quote_inputs');
     return NextResponse.json(

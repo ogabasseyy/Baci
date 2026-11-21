@@ -183,6 +183,21 @@ BEGIN
     RAISE EXCEPTION 'partner order failed real writer, payment, or offer identity checks';
   END IF;
 
+  BEGIN
+    UPDATE public.orders SET shipping_address = shipping_address || '{"address":"2 Other Road"}'
+    WHERE id = accepted_id;
+    RAISE EXCEPTION 'settled destination was editable' USING ERRCODE = '22023';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'partner_delivery_destination_changed' THEN RAISE; END IF;
+  END;
+
+  UPDATE public.orders SET shipping_address = shipping_address || '{"phone":"08011112222"}'
+  WHERE id = accepted_id;
+  IF (SELECT shipping_address->>'phone' FROM public.orders WHERE id = accepted_id)
+     IS DISTINCT FROM '08011112222' THEN
+    RAISE EXCEPTION 'accepted partner contact-only update was lost';
+  END IF;
+
   UPDATE public.products AS p SET vat_rate = 7.75 WHERE p.id = fixture.product_id;
   BEGIN
     PERFORM private.accept_settled_partner_order('7a100000-0000-4000-8000-000000000042', merchant_id, connection_id);

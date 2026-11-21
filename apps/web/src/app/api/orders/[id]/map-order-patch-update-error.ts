@@ -10,6 +10,16 @@ export function mapOrderPatchUpdateError(updateError: {
 }): NextResponse | null {
   const message = updateError.message ?? '';
 
+  if (message === 'partner_delivery_destination_changed') {
+    return NextResponse.json(
+      {
+        code: 'PARTNER_DELIVERY_DESTINATION_CHANGED',
+        error: 'Use the destination on the paid partner quote.',
+      },
+      { status: 409 }
+    );
+  }
+
   if (message.includes('active_shipping_charge_address_edit_blocked')) {
     return NextResponse.json(
       {

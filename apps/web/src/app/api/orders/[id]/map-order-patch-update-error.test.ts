@@ -30,6 +30,17 @@ describe('mapOrderPatchUpdateError', () => {
     });
   });
 
+  it('maps settled partner address edits to 409', async () => {
+    const response = mapOrderPatchUpdateError({
+      code: 'P0001',
+      message: 'partner_delivery_destination_changed',
+    });
+    expect(response?.status).toBe(409);
+    await expect(response?.json()).resolves.toMatchObject({
+      code: 'PARTNER_DELIVERY_DESTINATION_CHANGED',
+    });
+  });
+
   it('returns null for unrelated update errors', () => {
     expect(
       mapOrderPatchUpdateError({ message: 'Failed to update order' })

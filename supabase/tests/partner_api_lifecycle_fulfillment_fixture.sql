@@ -39,7 +39,8 @@ CREATE FUNCTION private.order_settled_gigl_retained_amount(uuid, uuid)
 RETURNS numeric LANGUAGE sql STABLE AS $$ SELECT 0::numeric; $$;
 
 CREATE FUNCTION private.seed_fixture_gigl_quote(
-  p_order_id uuid, p_price numeric, p_service text DEFAULT 'Standard'
+  p_order_id uuid, p_price numeric, p_service text DEFAULT 'Standard',
+  p_destination_override jsonb DEFAULT '{}'
 )
 RETURNS uuid LANGUAGE plpgsql AS $$
 DECLARE
@@ -55,7 +56,7 @@ BEGIN
     jsonb_build_object(
       'shipmentType', 'domestic',
       'admin_order_provenance', 'server_gigl_v1',
-      'receiver', o.shipping_address,
+      'receiver', o.shipping_address || p_destination_override,
       'items', (SELECT jsonb_agg(jsonb_build_object('name', i.name,
         'quantity', i.quantity, 'value', i.price))
         FROM public.order_items i WHERE i.order_id = o.id)

@@ -39,7 +39,7 @@ Keep one active quote per purchase and reuse its ID while it remains valid. A qu
 
 ## 3. Submit the purchase
 
-After payment captures, call `POST /orders` using the order credential and an `Idempotency-Key` that matches `^[A-Za-z0-9_.:-]{16,128}$`. A UUID works. Keep that key and the original body for retries. Send the original quote ID and the same partner order reference each time. Baci uses the delivery address stored on the quote. Include the recipient’s name, phone number, and email.
+After payment captures, call `POST /orders` using the order credential and an `Idempotency-Key` that matches `^[A-Za-z0-9_.:-]{16,128}$`. A UUID works. Keep that key and the original body for retries. Send the original quote ID and the same partner order reference each time. The paid quote fixes the delivery destination for fulfillment. If the destination changes, reconcile the original payment with Baci before starting a new purchase. Include the recipient’s name, phone number, and email.
 
 ```json
 {

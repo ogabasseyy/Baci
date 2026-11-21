@@ -83,6 +83,16 @@ function verifyGiglWalletBinding(orderId: string) {
       EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'partner_delivery_price_changed' THEN RAISE; END IF;
       END;
+      v_quote_id := private.seed_fixture_gigl_quote(
+        v_order.id, 1500, 'Standard', '{"postalCode":"999999"}'
+      );
+      BEGIN
+        PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+          v_quote_id, v_order.shipping_address || '{"postalCode":"999999"}');
+        RAISE EXCEPTION 'a different destination was bound at the same price' USING ERRCODE = '22023';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'partner_delivery_destination_changed' THEN RAISE; END IF;
+      END;
       v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499.999);
       PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
         v_quote_id, v_order.shipping_address);

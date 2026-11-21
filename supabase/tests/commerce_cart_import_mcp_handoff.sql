@@ -15,6 +15,9 @@ DECLARE
   destination uuid := gen_random_uuid();
   source_grant uuid := gen_random_uuid();
   destination_grant uuid := gen_random_uuid();
+  legacy_destination uuid := gen_random_uuid();
+  legacy_destination_grant uuid := gen_random_uuid();
+  legacy_handoff uuid := gen_random_uuid();
   handoff uuid := gen_random_uuid();
   second_handoff uuid := gen_random_uuid();
   third_handoff uuid := gen_random_uuid();
@@ -85,6 +88,30 @@ BEGIN
   THEN RAISE EXCEPTION 'MCP import must not add to a resolved SKU with assurance: %', result; END IF;
   UPDATE public.commerce_cart_lines SET options = '{}' WHERE cart_id = source AND product_id = product;
   UPDATE public.commerce_cart_lines SET has_assurance = false WHERE cart_id = destination;
+
+  INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
+  VALUES (legacy_destination, merchant, now() + interval '1 day');
+  INSERT INTO public.commerce_cart_grants(id, merchant_id, cart_id, principal_id, expires_at)
+  VALUES (legacy_destination_grant, merchant, legacy_destination, 'website-legacy-import-test', now() + interval '1 day');
+  INSERT INTO public.commerce_cart_lines(merchant_id, cart_id, product_id, quantity, last_unit_price_minor, has_assurance)
+  VALUES (merchant, legacy_destination, product, 1, 1500, true);
+  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
+    origin_principal_id, operation_id, destination, expires_at)
+  VALUES (legacy_handoff, 'import-legacy-link', merchant, source, 'legacy:mcp:test-import',
+    'legacy-handoff:mcp-import:legacy-dest', '{"type":"web"}', now() + interval '5 minutes');
+  PERFORM pg_temp.handoff_claim(legacy_destination, legacy_destination_grant, 'website-legacy-import-test');
+  result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-protected', source_version);
+  IF result->>'code' IS DISTINCT FROM 'invalid_item'
+  THEN RAISE EXCEPTION 'Import bypassed assurance on a legacy product-only line: %', result; END IF;
+  UPDATE public.commerce_cart_lines SET has_assurance = false WHERE cart_id = legacy_destination;
+  result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-add', source_version);
+  IF result->>'ok' IS DISTINCT FROM 'true'
+     OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = legacy_destination) <> 1
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = legacy_destination
+       AND product_id = product AND variant_id IS NULL AND quantity = 2)
+  THEN RAISE EXCEPTION 'Import split an existing product-only line: %', result; END IF;
+
+  PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'import-attempt', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM destination_grant::text
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 2::bigint

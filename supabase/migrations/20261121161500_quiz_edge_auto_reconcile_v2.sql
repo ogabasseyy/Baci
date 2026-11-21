@@ -33,6 +33,12 @@ BEGIN
         event.ends_at <= pg_catalog.clock_timestamp()
         OR event.status = 'cancelled'
       )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM private.quiz_edge_scoring_runs AS active_run
+        WHERE active_run.event_id = event.id
+          AND active_run.status = 'running'
+      )
     ORDER BY event.ends_at ASC, event.id ASC
   LOOP
     BEGIN

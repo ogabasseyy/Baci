@@ -441,19 +441,29 @@ export class LiveRankIndexDO extends DurableObject<WorkerEnv> {
 }
 
 export class ResultShardDO extends DurableObject<WorkerEnv> {
-  private readonly controlState: QuizControlStateStore;
-  private readonly engine: ResultShardEngine;
+  private readonly adapter: CloudflareSqlStorageAdapter;
+  private readonly defaultControlState: QuizControlStateStore;
+  private readonly defaultEngine: ResultShardEngine;
+  private readonly eventShards = new Map<
+    string,
+    { controlState: QuizControlStateStore; engine: ResultShardEngine }
+  >();
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env);
-    const adapter = new CloudflareSqlStorageAdapter(
+    this.adapter = new CloudflareSqlStorageAdapter(
       ctx.storage as unknown as CloudflareDoStorageLike
     );
-    this.controlState = new QuizControlStateStore();
-    this.engine = new ResultShardEngine({
+    this.defaultControlState = new QuizControlStateStore();
+    this.defaultEngine = this.createEngine(this.defaultControlState);
+  }
+
+  private createEngine(controlState: QuizControlStateStore): ResultShardEngine {
+    const env = this.env;
+    return new ResultShardEngine({
       shardIndex: 0,
-      storage: adapter,
-      controlState: this.controlState,
+      storage: this.adapter,
+      controlState,
       hooks: {
         fetchWinnerAwardFromOrigin: async ({
           attemptId,
@@ -496,12 +506,29 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
     });
   }
 
+  private getEventShard(eventId: string): {
+    controlState: QuizControlStateStore;
+    engine: ResultShardEngine;
+  } {
+    let entry = this.eventShards.get(eventId);
+    if (!entry) {
+      const controlState = new QuizControlStateStore();
+      entry = { controlState, engine: this.createEngine(controlState) };
+      this.eventShards.set(eventId, entry);
+    }
+    return entry;
+  }
+
   private async refreshControlStateIfStale(
     eventId: string,
     nowMs: number
-  ): Promise<void> {
-    if (this.controlState.isFresh(nowMs) || !this.env.EVENT_COORDINATOR) {
-      return;
+  ): Promise<{
+    controlState: QuizControlStateStore;
+    engine: ResultShardEngine;
+  }> {
+    const shard = this.getEventShard(eventId);
+    if (shard.controlState.isFresh(nowMs) || !this.env.EVENT_COORDINATOR) {
+      return shard;
     }
     const coordStub = getWeurStub(this.env.EVENT_COORDINATOR, eventId);
     const csRes = await coordStub.fetch(
@@ -509,8 +536,9 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
     );
     if (csRes.ok) {
       const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
-      this.controlState.applySnapshot(snapshot);
+      shard.controlState.applySnapshot(snapshot);
     }
+    return shard;
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -520,12 +548,28 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
         request.method === 'POST' &&
         url.pathname === '/internal/control-state'
       ) {
-        const snapshot = await readJsonBody<QuizControlStateSnapshot>(request);
-        const applied = this.controlState.applySnapshot(snapshot);
+        const snapshot = await readJsonBody<
+          QuizControlStateSnapshot & { eventId?: string }
+        >(request);
+        const eventId =
+          snapshot.eventId ?? url.searchParams.get('eventId') ?? undefined;
+        if (eventId) {
+          const shard = this.getEventShard(eventId);
+          const applied = shard.controlState.applySnapshot(snapshot);
+          return jsonResponse({
+            ok: true,
+            applied,
+            version: shard.controlState.getVersion(),
+          });
+        }
+        const applied = this.defaultControlState.applySnapshot(snapshot);
+        for (const shard of this.eventShards.values()) {
+          shard.controlState.applySnapshot(snapshot);
+        }
         return jsonResponse({
           ok: true,
           applied,
-          version: this.controlState.getVersion(),
+          version: this.defaultControlState.getVersion(),
         });
       }
       if (
@@ -536,7 +580,10 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
           eventMeta: PublishedShardEventMetadata;
           records: readonly QuizPrivateResultRecord[];
         }>(request);
-        this.engine.materializeResultsBatch(body.eventMeta, body.records);
+        this.defaultEngine.materializeResultsBatch(
+          body.eventMeta,
+          body.records
+        );
         return jsonResponse({ ok: true });
       }
       if (request.method === 'POST' && url.pathname === '/internal/result') {
@@ -545,12 +592,12 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
           callerUserId: string;
           authorizationHeader?: string;
         }>(request);
-        const eventId = this.engine.getEventIdForAttempt(body.attemptId);
-        if (eventId) {
-          await this.refreshControlStateIfStale(eventId, Date.now());
-        }
+        const eventId = this.defaultEngine.getEventIdForAttempt(body.attemptId);
+        const engine = eventId
+          ? (await this.refreshControlStateIfStale(eventId, Date.now())).engine
+          : this.defaultEngine;
         return jsonResponse(
-          await this.engine.getAttemptResult({
+          await engine.getAttemptResult({
             ...body,
             nowMs: Date.now(),
           })
@@ -566,8 +613,11 @@ export class ResultShardDO extends DurableObject<WorkerEnv> {
           callerCustomerId?: string;
           callerMerchantId?: string;
         }>(request);
-        await this.refreshControlStateIfStale(body.eventId, Date.now());
-        return jsonResponse(await this.engine.getPublishedLeaderboard(body));
+        const { engine } = await this.refreshControlStateIfStale(
+          body.eventId,
+          Date.now()
+        );
+        return jsonResponse(await engine.getPublishedLeaderboard(body));
       }
       return jsonResponse({ error: 'Not found', code: 'NOT_FOUND' }, 404);
     } catch (error) {
@@ -1213,14 +1263,19 @@ export default {
       }
 
       const activeMatch = /^\/api\/quiz\/attempts\/([^/]+)\/active$/.exec(path);
-      if (request.method === 'GET' && activeMatch?.[1]) {
+      if (
+        request.method === 'GET' &&
+        (path === '/api/quiz/attempts/active' || activeMatch?.[1])
+      ) {
         const ticketSecret = requireConfiguredSecret(
           env.QUIZ_TICKET_SECRET,
           'QUIZ_TICKET_SECRET'
         );
         const ticketHeader = request.headers.get('X-Baci-Quiz-Ticket') ?? '';
+        const expectedEventId = url.searchParams.get('eventId') ?? undefined;
         const ticket = await verifyAdmissionTicket(ticketHeader, {
           secret: ticketSecret,
+          expectedEventId,
           nowMs: Date.now(),
         });
         const roomStub = getWeurStub(env.QUIZ_ROOM, ticket.roomId);

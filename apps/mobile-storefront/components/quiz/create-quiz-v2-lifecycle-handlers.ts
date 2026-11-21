@@ -25,6 +25,7 @@ export function createQuizV2LifecycleHandlers(input: LifecycleHandlerInput) {
       if (!input.attempt || !input.userId) return;
       void input.expire(async () =>
         recoverActiveQuizAttempt({
+          backendMode: input.backendMode,
           deviceFingerprint: await getQuizDeviceFingerprint().catch(() => null),
           eventId: input.attempt?.eventId ?? '',
           expectedUserId: input.userId ?? '',

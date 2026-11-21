@@ -27,6 +27,7 @@ export type QuizEdgeCheckInSession = z.infer<
 const activeEdgeSessions = new Map<string, QuizEdgeCheckInSession>();
 const activeAttemptSessions = new Map<string, QuizEdgeCheckInSession>();
 const EDGE_ATTEMPT_STORAGE_PREFIX = '@baci/quiz-edge-attempt:';
+const EDGE_EVENT_STORAGE_PREFIX = '@baci/quiz-edge-event:';
 
 function sessionKey(eventId: string, expectedUserId?: string): string {
   return `${eventId}:${expectedUserId ?? 'anon'}`;
@@ -36,7 +37,50 @@ export function saveQuizEdgeSession(
   eventId: string,
   session: QuizEdgeCheckInSession
 ): void {
-  activeEdgeSessions.set(sessionKey(eventId, session.expectedUserId), session);
+  const key = sessionKey(eventId, session.expectedUserId);
+  activeEdgeSessions.set(key, session);
+  AsyncStorage.setItem(
+    `${EDGE_EVENT_STORAGE_PREFIX}${key}`,
+    JSON.stringify(session)
+  ).catch(() => undefined);
+}
+
+export async function resolveQuizEdgeSessionForEvent(
+  eventId: string,
+  expectedUserId?: string
+): Promise<QuizEdgeCheckInSession | undefined> {
+  const key = sessionKey(eventId, expectedUserId);
+  const cached = activeEdgeSessions.get(key);
+  if (cached) return cached;
+  try {
+    const raw = await AsyncStorage.getItem(
+      `${EDGE_EVENT_STORAGE_PREFIX}${key}`
+    );
+    if (!raw) return undefined;
+    const rawJson = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = quizEdgeCheckInResponseSchema.safeParse(rawJson);
+    if (!parsed.success) return undefined;
+    const storedExpectedUserId =
+      typeof rawJson.expectedUserId === 'string'
+        ? rawJson.expectedUserId
+        : undefined;
+    if (
+      expectedUserId &&
+      storedExpectedUserId &&
+      storedExpectedUserId !== expectedUserId
+    ) {
+      return undefined;
+    }
+    const session: QuizEdgeCheckInSession = {
+      ...parsed.data,
+      edgeBaseUrl: parsed.data.edgeBaseUrl.replace(/\/$/, ''),
+      expectedUserId: storedExpectedUserId,
+    };
+    activeEdgeSessions.set(key, session);
+    return session;
+  } catch {
+    return undefined;
+  }
 }
 
 export function getQuizEdgeSession(
@@ -108,6 +152,9 @@ export function clearQuizEdgeSession(
   const key = sessionKey(eventId, expectedUserId);
   const existing = activeEdgeSessions.get(key);
   activeEdgeSessions.delete(key);
+  AsyncStorage.removeItem(`${EDGE_EVENT_STORAGE_PREFIX}${key}`).catch(
+    () => undefined
+  );
   const matchesSession = (session: QuizEdgeCheckInSession): boolean =>
     session === existing ||
     (session.eventId === eventId &&

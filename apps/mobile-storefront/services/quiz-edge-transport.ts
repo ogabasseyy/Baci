@@ -1,5 +1,8 @@
 import type { z } from 'zod';
-import { quizV2AttemptResponseSchema } from '@/schemas/quiz-schemas';
+import {
+  quizV2ActiveAttemptResponseSchema,
+  quizV2AttemptResponseSchema,
+} from '@/schemas/quiz-schemas';
 import { getQuizAttestationHeaders } from './quiz-app-attestation';
 import {
   clearQuizEdgeSession,
@@ -24,6 +27,7 @@ import {
   readQuizJson,
 } from './quiz-service-utils';
 import type {
+  QuizActiveAttemptResponse,
   QuizV2Attempt,
   StartQuizAttemptV2Input,
   SubmitQuizAnswerV2Input,
@@ -226,4 +230,63 @@ export function submitQuizEdgeAnswer(
     quizV2AttemptResponseSchema,
     2
   );
+}
+
+export async function recoverQuizEdgeAttempt(
+  session: QuizEdgeCheckInSession,
+  eventId: string
+): Promise<QuizActiveAttemptResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), QUIZ_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(
+      `${session.edgeBaseUrl}/api/quiz/attempts/active?eventId=${encodeURIComponent(eventId)}`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'X-Baci-Quiz-Contract': '2',
+          'X-Baci-Quiz-Ticket': session.ticket,
+        },
+        signal: controller.signal,
+      }
+    );
+    const payload = (await response.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (!response.ok) {
+      throw new QuizServiceError(
+        typeof payload?.error === 'string'
+          ? payload.error
+          : `Edge quiz recovery failed (${response.status})`,
+        typeof payload?.code === 'string' ? payload.code : 'QUIZ_EDGE_ERROR',
+        response.status
+      );
+    }
+    const parsed = quizV2ActiveAttemptResponseSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw new QuizServiceError(
+        'Edge quiz room returned an invalid recovery response.',
+        'QUIZ_INVALID_RESPONSE',
+        502
+      );
+    }
+    if (parsed.data.status === 'active') {
+      await saveQuizEdgeAttemptSession(parsed.data.attempt.attemptId, session);
+    }
+    return parsed.data;
+  } catch (error) {
+    if (error instanceof QuizServiceError) throw error;
+    const isAbort = error instanceof Error && error.name === 'AbortError';
+    throw new QuizServiceError(
+      isAbort
+        ? 'Quiz room recovery timed out. Please try again.'
+        : 'Network request failed. Please try again.',
+      isAbort ? 'QUIZ_REQUEST_TIMEOUT' : 'QUIZ_EDGE_NETWORK_ERROR',
+      isAbort ? 504 : 503
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }

@@ -87,7 +87,11 @@ async function runOpenLoopPoint({
           integrityTier: 'device',
           acceptedRulesVersion: 'live-v1',
           termsAccepted: true,
-          startRequestId: `ol-${offeredRps}-${i}`,
+          startRequestId: `00000000-0000-4000-8000-${String(
+            offeredRps * 100000 + i
+          )
+            .padStart(12, '0')
+            .slice(-12)}`,
           appVersion: '2.10.0',
           platform: 'android',
         }),

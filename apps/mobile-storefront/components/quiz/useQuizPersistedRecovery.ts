@@ -154,6 +154,9 @@ export function useQuizPersistedRecovery({
             envelope.eventId,
             () =>
               recoverActiveQuizAttempt({
+                backendMode: useQuizStore
+                  .getState()
+                  .events.find((e) => e.id === envelope.eventId)?.backendMode,
                 deviceFingerprint,
                 eventId: envelope.eventId,
                 expectedUserId: userId,

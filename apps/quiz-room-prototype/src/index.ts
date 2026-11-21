@@ -364,6 +364,17 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
         );
       }
       if (
+        request.method === 'POST' &&
+        url.pathname === '/internal/replay-batches'
+      ) {
+        const body = await readJsonBody<{
+          batchIds?: readonly string[];
+        }>(request);
+        return jsonResponse(
+          await this.engine.replayJournaledBatches(body.batchIds)
+        );
+      }
+      if (
         url.pathname === '/internal/batches' ||
         url.pathname === '/internal/bundles'
       ) {
@@ -1166,6 +1177,206 @@ export default {
             body: JSON.stringify(body),
           }
         );
+      }
+
+      if (request.method === 'POST' && path === '/api/quiz/admin/heartbeat') {
+        verifyInternalCoordinatorAuth(
+          request.headers.get('Authorization'),
+          env.QUIZ_INTERNAL_COORDINATOR_SECRET
+        );
+        const body = await readJsonBody<{
+          eventId: string;
+          updatedAtMs?: number;
+        }>(request);
+        if (
+          typeof body.eventId !== 'string' ||
+          body.eventId.trim().length === 0
+        ) {
+          throw new QuizRoomError(
+            'INVALID_EVENT_ID',
+            'eventId must be a non-empty string',
+            400
+          );
+        }
+        const nowMs = Date.now();
+        const updatedAtMs =
+          typeof body.updatedAtMs === 'number' &&
+          Number.isFinite(body.updatedAtMs)
+            ? Math.min(body.updatedAtMs, nowMs)
+            : nowMs;
+        const coordStub = getWeurStub(env.EVENT_COORDINATOR, body.eventId);
+        const refreshRes = await coordStub.fetch(
+          'https://coord.internal/internal/control-state/refresh',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              eventId: body.eventId,
+              updatedAtMs,
+            }),
+          }
+        );
+        if (!refreshRes.ok) {
+          throw new QuizRoomError(
+            'QUIZ_CONTROL_STATE_REFRESH_FAILED',
+            `Failed to refresh coordinator control state for ${body.eventId}`,
+            refreshRes.status
+          );
+        }
+        const snapshot = (await refreshRes.json()) as QuizControlStateSnapshot;
+        return jsonResponse({
+          ok: true,
+          eventId: body.eventId,
+          updatedAtMs: snapshot.updatedAtMs,
+          snapshot,
+        });
+      }
+
+      if (
+        request.method === 'POST' &&
+        path === '/api/quiz/admin/replay-batches'
+      ) {
+        const MAX_ADMIN_REPLAY_ROOMS = 50;
+        const MAX_ADMIN_REPLAY_BATCH_IDS = 200;
+        const ADMIN_REPLAY_CONCURRENCY = 5;
+
+        verifyInternalCoordinatorAuth(
+          request.headers.get('Authorization'),
+          env.QUIZ_INTERNAL_COORDINATOR_SECRET
+        );
+        const body = await readJsonBody<{
+          roomIds?: readonly string[];
+          roomId?: string;
+          batchIds?: readonly string[];
+        }>(request);
+        const rawRoomIds =
+          Array.isArray(body.roomIds) && body.roomIds.length > 0
+            ? body.roomIds
+            : typeof body.roomId === 'string' && body.roomId.trim().length > 0
+              ? [body.roomId]
+              : [];
+        if (
+          rawRoomIds.length === 0 ||
+          rawRoomIds.some(
+            (id) => typeof id !== 'string' || id.trim().length === 0
+          )
+        ) {
+          throw new QuizRoomError(
+            'INVALID_ROOM_IDS',
+            'Provide a non-empty roomId or roomIds array',
+            400
+          );
+        }
+        const roomIds = Array.from(new Set(rawRoomIds.map((id) => id.trim())));
+        if (roomIds.length > MAX_ADMIN_REPLAY_ROOMS) {
+          throw new QuizRoomError(
+            'INVALID_ROOM_IDS',
+            `roomIds may contain at most ${MAX_ADMIN_REPLAY_ROOMS} rooms per request`,
+            400
+          );
+        }
+        let validatedBatchIds: readonly string[] | undefined;
+        if (body.batchIds !== undefined) {
+          if (!Array.isArray(body.batchIds)) {
+            throw new QuizRoomError(
+              'INVALID_BATCH_IDS',
+              'batchIds must be an array of strings',
+              400
+            );
+          }
+          if (body.batchIds.length > MAX_ADMIN_REPLAY_BATCH_IDS) {
+            throw new QuizRoomError(
+              'INVALID_BATCH_IDS',
+              `batchIds may contain at most ${MAX_ADMIN_REPLAY_BATCH_IDS} entries`,
+              400
+            );
+          }
+          if (body.batchIds.some((id) => typeof id !== 'string')) {
+            throw new QuizRoomError(
+              'INVALID_BATCH_IDS',
+              'Each batchId must be a string',
+              400
+            );
+          }
+          validatedBatchIds = body.batchIds;
+        }
+        const results: {
+          roomId: string;
+          ok: boolean;
+          replayedCount: number;
+          batchIds: readonly string[];
+          corruptBatchIds?: readonly string[];
+          error?: string;
+          status?: number;
+        }[] = [];
+        for (let i = 0; i < roomIds.length; i += ADMIN_REPLAY_CONCURRENCY) {
+          const chunk = roomIds.slice(i, i + ADMIN_REPLAY_CONCURRENCY);
+          const chunkResults = await Promise.all(
+            chunk.map(async (roomId) => {
+              try {
+                const roomStub = getWeurStub(env.QUIZ_ROOM, roomId);
+                const res = await roomStub.fetch(
+                  'https://room.internal/internal/replay-batches',
+                  {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      ...(validatedBatchIds !== undefined
+                        ? { batchIds: validatedBatchIds }
+                        : {}),
+                    }),
+                  }
+                );
+                if (!res.ok) {
+                  return {
+                    roomId,
+                    ok: false,
+                    replayedCount: 0,
+                    batchIds: [] as readonly string[],
+                    error: `Failed to replay journaled batches for room ${roomId}`,
+                    status: res.status,
+                  };
+                }
+                const data = (await res.json()) as {
+                  replayedCount: number;
+                  batchIds: readonly string[];
+                  corruptBatchIds?: readonly string[];
+                };
+                return {
+                  roomId,
+                  ok: true,
+                  replayedCount: data.replayedCount,
+                  batchIds: data.batchIds,
+                  ...(data.corruptBatchIds && data.corruptBatchIds.length > 0
+                    ? { corruptBatchIds: data.corruptBatchIds }
+                    : {}),
+                };
+              } catch (err) {
+                return {
+                  roomId,
+                  ok: false,
+                  replayedCount: 0,
+                  batchIds: [] as readonly string[],
+                  error:
+                    err instanceof Error
+                      ? err.message
+                      : `Failed to replay journaled batches for room ${roomId}`,
+                  status: 500,
+                };
+              }
+            })
+          );
+          results.push(...chunkResults);
+        }
+        const totalReplayed = results.reduce(
+          (sum, item) => sum + item.replayedCount,
+          0
+        );
+        const failedRooms = results.filter((item) => !item.ok).length;
+        return jsonResponse({
+          ok: failedRooms === 0,
+          totalReplayed,
+          failedRooms,
+          rooms: results,
+        });
       }
 
       if (request.method === 'POST' && path === '/api/quiz/coordinator/sweep') {

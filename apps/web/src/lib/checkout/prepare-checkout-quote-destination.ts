@@ -220,6 +220,14 @@ export async function prepareCheckoutQuoteDestination({
     };
   } catch (error) {
     if (error instanceof OrderQuoteDestinationMismatchError) {
+      logger.warn({
+        message: 'Checkout shipping quote rejected',
+        code: error.code,
+        status: error.status,
+        merchantId,
+        selectedQuoteId,
+        mismatchFields: error.mismatchFields,
+      });
       return {
         ok: false,
         status: error.status,

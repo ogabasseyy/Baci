@@ -73,6 +73,39 @@ describe('handleCheckoutSubmitError', () => {
     jest.restoreAllMocks();
   });
 
+  it('refreshes a rejected quote and tracks the fixed error code without request details', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    );
+    const refresh = jest.fn();
+    trackCheckoutPaymentFailed.mockClear();
+    handleCheckoutSubmitError(
+      new OrderError(
+        'private address',
+        'VALIDATION_ERROR',
+        'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH'
+      ),
+      'credit_direct',
+      undefined,
+      refresh
+    );
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Delivery quote changed',
+      expect.stringContaining('delivery'),
+      expect.any(Array)
+    );
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_shipping_quote_rejected',
+      'Delivery quote rejected before order creation',
+      expect.objectContaining({
+        error_code: 'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
+        payment_method: 'credit_direct',
+      })
+    );
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
   it('directs the customer to the existing order for an idempotency conflict', () => {
     handleCheckoutSubmitError(
       new OrderError(

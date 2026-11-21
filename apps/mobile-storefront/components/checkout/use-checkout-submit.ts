@@ -32,6 +32,7 @@ export type { UseCheckoutSubmitParams };
 export function useCheckoutSubmit({
   accountPassword,
   onRedvaultOrder,
+  onShippingQuoteRejected,
   appliedDiscountCode,
   availablePaymentMethods,
   clearCart,
@@ -287,11 +288,17 @@ export function useCheckoutSubmit({
           itemsSnapshot,
         });
       }
-      handleCheckoutSubmitError(
-        error,
-        selectedPayment,
-        orderIdentity.createdOrderId
-      );
+      const orderId = orderIdentity.createdOrderId;
+      if (onShippingQuoteRejected && isMountedRef.current) {
+        handleCheckoutSubmitError(
+          error,
+          selectedPayment,
+          orderId,
+          onShippingQuoteRejected
+        );
+      } else {
+        handleCheckoutSubmitError(error, selectedPayment, orderId);
+      }
     } finally {
       setIsProcessing(false);
       isOrderInFlight.current = false;

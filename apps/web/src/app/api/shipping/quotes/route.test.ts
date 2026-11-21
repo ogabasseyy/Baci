@@ -338,6 +338,7 @@ describe('POST /api/shipping/quotes', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ receiverState: 'Lagos' });
     expect(mockGetQuotes).toHaveBeenCalledWith(
       expect.objectContaining({
         receiver: expect.objectContaining({ city: 'Ikeja', state: 'Lagos' }),

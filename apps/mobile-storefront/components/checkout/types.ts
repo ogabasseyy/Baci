@@ -13,6 +13,8 @@ export interface ShippingQuote {
   isStationPickup?: boolean;
   /** Receiver street sent with this quote request, separate from station display metadata. */
   receiverAddress?: string;
+  /** State stored with the carrier quote and the form value it was quoted for. */
+  receiverState?: { quoted: string; requested: string };
   /** Station metadata normalized for checkout display. */
   stationName?: string;
   stationAddress?: string;

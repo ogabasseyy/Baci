@@ -209,6 +209,14 @@ export async function verifyCheckoutPayment(
         scheduleFailedRedirect();
       }
     } else if (data.success && data.status === 'success') {
+      if (
+        !isBankOffer &&
+        (!data.orderId || (orderId && data.orderId !== orderId))
+      ) {
+        setOrderNumber(null);
+        setStatus('verification_unavailable');
+        return;
+      }
       // The verify API reports success for completed, order_cancelled, and
       // order_skipped outcomes alike: the latter two captured the money but
       // left no active paid order, so the shopper sees the

@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { OrderGiglShippingState } from '@/hooks/orders/useOrderGiglShipping';
 import { useTheme } from '@/hooks/useTheme';
 import { formatMerchantPrice } from '@/lib/format-merchant-currency';
@@ -10,7 +10,8 @@ import type {
   OrderGiglReceiver,
   OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
-import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
+import { ShipmentFlowActionButton } from './ShipmentFlowActionButton';
+import { ShipmentFlowGiglAddress } from './ShipmentFlowGiglAddress';
 import {
   ShipmentOptionCard,
   type ShipmentOptionDetail,
@@ -56,6 +57,7 @@ interface Props {
   fundingAccount: MerchantWalletFundingAccount | null;
   missingFields: OrderGiglMissingField[];
   onAddressFieldChange: (field: OrderGiglMissingField, value: string) => void;
+  onEditAddress?: () => void;
   onFundWallet: () => void;
   onPlaceSelect: (place: OrderGiglSelectedPlace) => void;
   onRefreshFundingAccount: () => void;
@@ -74,45 +76,13 @@ interface Props {
   } | null;
 }
 
-const FIELD_LABELS: Record<OrderGiglMissingField, string> = {
-  address: 'Shipping address',
-  city: 'Shipping city',
-  state: 'Shipping state',
-  phone: 'Shipping phone',
-};
-
-function ActionButton({
-  disabled = false,
-  label,
-  onPress,
-}: {
-  disabled?: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={[panelStyles.button, { backgroundColor: colors.primary }]}
-    >
-      <Text style={{ color: colors.textOnPrimary, fontWeight: '700' }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 export function ShipmentFlowGiglPanel({
   addressDraft,
   error,
   fundingAccount,
   missingFields,
   onAddressFieldChange,
+  onEditAddress,
   onFundWallet,
   onPlaceSelect,
   onRefreshFundingAccount,
@@ -158,45 +128,16 @@ export function ShipmentFlowGiglPanel({
         title={`Ship with ${providerName}`}
       />
 
-      {missingFields.includes('address') ? (
-        <CheckoutRecoveryAddressInput
-          accessibilityLabel="Search shipping address"
-          address={addressDraft.address ?? ''}
-          disabled={loading}
-          onSearchChange={(text) => onAddressFieldChange('address', text)}
-          onSelect={(place) => {
-            const latitude = Number.parseFloat(place.latitude);
-            const longitude = Number.parseFloat(place.longitude);
-            const hasPin =
-              Number.isFinite(latitude) && Number.isFinite(longitude);
-            onPlaceSelect({
-              address: place.address,
-              city: place.city,
-              state: place.state,
-              latitude: hasPin ? latitude : undefined,
-              longitude: hasPin ? longitude : undefined,
-            });
-          }}
-          placeholder="Search delivery address"
-        />
-      ) : null}
-      {missingFields.map((field) => (
-        <View key={field} style={panelStyles.field}>
-          <Text style={{ color: colors.text }}>{FIELD_LABELS[field]}</Text>
-          <TextInput
-            accessibilityLabel={FIELD_LABELS[field]}
-            onChangeText={(value) => onAddressFieldChange(field, value)}
-            style={[
-              panelStyles.input,
-              { borderColor: colors.border, color: colors.text },
-            ]}
-            value={addressDraft[field] ?? ''}
-          />
-        </View>
-      ))}
-      {missingFields.length > 0 ? (
-        <ActionButton label="Retry quote" onPress={onRetryQuote} />
-      ) : null}
+      <ShipmentFlowGiglAddress
+        addressDraft={addressDraft}
+        loading={loading}
+        missingFields={missingFields}
+        onAddressFieldChange={onAddressFieldChange}
+        onEditAddress={onEditAddress}
+        onPlaceSelect={onPlaceSelect}
+        onRetryQuote={onRetryQuote}
+        selected={selected}
+      />
 
       {selected &&
       quote &&
@@ -204,7 +145,7 @@ export function ShipmentFlowGiglPanel({
       !wallet.canBook &&
       !fundingAccount &&
       state !== 'funding_pending' ? (
-        <ActionButton
+        <ShipmentFlowActionButton
           disabled={state === 'funding'}
           label="Fund wallet"
           onPress={onFundWallet}
@@ -215,7 +156,7 @@ export function ShipmentFlowGiglPanel({
           <Text style={{ color: colors.textSecondary }}>
             Your bank transfer account is being prepared. Check again shortly.
           </Text>
-          <ActionButton
+          <ShipmentFlowActionButton
             label="Check funding status"
             onPress={onRefreshFundingAccount}
           />
@@ -242,13 +183,13 @@ export function ShipmentFlowGiglPanel({
             {fundingAccount.accountName ?? 'Merchant wallet'}
           </Text>
           <View style={panelStyles.copyRow}>
-            <ActionButton
+            <ShipmentFlowActionButton
               label="Copy account number"
               onPress={() =>
                 void Clipboard.setStringAsync(fundingAccount.accountNumber)
               }
             />
-            <ActionButton
+            <ShipmentFlowActionButton
               label="Copy account name"
               onPress={() =>
                 void Clipboard.setStringAsync(
@@ -257,7 +198,10 @@ export function ShipmentFlowGiglPanel({
               }
             />
           </View>
-          <ActionButton label="I've transferred" onPress={onTransferred} />
+          <ShipmentFlowActionButton
+            label="I've transferred"
+            onPress={onTransferred}
+          />
         </View>
       ) : null}
 
@@ -280,18 +224,5 @@ const panelStyles = StyleSheet.create({
     padding: 12,
   },
   accountNumber: { fontSize: 20, fontWeight: '700', letterSpacing: 1 },
-  button: {
-    alignItems: 'center',
-    borderRadius: 20,
-    marginBottom: 10,
-    padding: 10,
-  },
   copyRow: { flexDirection: 'row', gap: 8 },
-  field: { gap: 6, marginBottom: 10 },
-  input: {
-    borderRadius: 10,
-    borderWidth: 1,
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
 });

@@ -12,6 +12,7 @@ interface DuplicateCustomerBannerProps {
   colors: ThemeColors;
   duplicateCustomer: SelectableCustomer;
   handleSelectCustomer: (customer: SelectableCustomer) => void;
+  keepsEnteredAddress?: boolean;
   resetNewCustomerForm: () => void;
   setDuplicateCustomer: Dispatch<SetStateAction<SelectableCustomer | null>>;
   setIsCreatingCustomer: Dispatch<SetStateAction<boolean>>;
@@ -21,6 +22,7 @@ export function DuplicateCustomerBanner({
   colors,
   duplicateCustomer,
   handleSelectCustomer,
+  keepsEnteredAddress = false,
   resetNewCustomerForm,
   setDuplicateCustomer,
   setIsCreatingCustomer,
@@ -39,6 +41,11 @@ export function DuplicateCustomerBanner({
       <Text style={{ color: colors.warning, fontWeight: '600' }}>
         ⚠️ Customer Already Exists
       </Text>
+      {keepsEnteredAddress ? (
+        <Text style={{ color: colors.text }}>
+          The address you entered will be used for this order.
+        </Text>
+      ) : null}
       <Pressable
         accessibilityLabel="Use existing customer"
         accessibilityRole="button"

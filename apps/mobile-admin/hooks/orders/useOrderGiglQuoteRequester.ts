@@ -56,13 +56,14 @@ export function useOrderGiglQuoteRequester({
   const fetchQuote = async (
     orderId: string,
     preview: boolean,
-    signal: AbortSignal
+    signal: AbortSignal,
+    saveAddress = true
   ) => {
     let addressSaved = false;
     try {
       return await requestOrderGiglQuote({
         cacheScope: previewCacheScope,
-        draft: addressRef.current,
+        draft: preview || saveAddress ? addressRef.current : {},
         onAddressSaved: (shippingAddress) => {
           addressSaved = true;
           savedRef.current = {

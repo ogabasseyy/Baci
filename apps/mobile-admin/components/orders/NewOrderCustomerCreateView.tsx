@@ -113,7 +113,14 @@ export function NewOrderCustomerCreateView({
         <DuplicateCustomerBanner
           colors={colors}
           duplicateCustomer={duplicateCustomer}
-          handleSelectCustomer={handleSelectCustomer}
+          handleSelectCustomer={(customer) => {
+            if (newCustomer.address.trim()) {
+              handleSelectCustomer(customer, true);
+            } else {
+              handleSelectCustomer(customer);
+            }
+          }}
+          keepsEnteredAddress={Boolean(newCustomer.address.trim())}
           resetNewCustomerForm={resetNewCustomerForm}
           setDuplicateCustomer={setDuplicateCustomer}
           setIsCreatingCustomer={setIsCreatingCustomer}

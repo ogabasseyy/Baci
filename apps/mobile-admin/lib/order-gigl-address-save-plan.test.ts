@@ -132,6 +132,19 @@ describe('planOrderGiglAddressSave', () => {
     expect(plan).toEqual({ kind: 'save', shippingAddress: storedAddress });
   });
 
+  it('drops the old map pin when only the city or state changes', () => {
+    const plan = planOrderGiglAddressSave(
+      {
+        shipping_address: { ...storedAddress, latitude: 6.6, longitude: 3.35 },
+      },
+      { ...receiver, city: 'Lokoja', state: 'Kogi' }
+    );
+    expect(plan).toEqual({
+      kind: 'save',
+      shippingAddress: { ...storedAddress, city: 'Lokoja', state: 'Kogi' },
+    });
+  });
+
   it('replaces a legacy string address with a complete address object', () => {
     expect(
       planOrderGiglAddressSave(

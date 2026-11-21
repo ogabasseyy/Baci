@@ -1,0 +1,92 @@
+import { useLayoutEffect, useRef, useState } from 'react';
+import {
+  applyAddressField,
+  applySelectedPlace,
+  type DraftEdit,
+} from '@/lib/order-gigl-address-draft';
+import type {
+  OrderGiglMissingField,
+  OrderGiglReceiver,
+  OrderGiglSelectedPlace,
+} from '@/lib/order-gigl-shipping';
+import {
+  type OrderGiglInitialAddress,
+  toOrderGiglAddressDraft,
+} from '@/lib/order-gigl-shipping-state';
+
+const DELIVERY_FIELDS: OrderGiglMissingField[] = [
+  'address',
+  'city',
+  'state',
+  'phone',
+];
+
+interface Props {
+  initialAddress?: OrderGiglInitialAddress;
+  orderId: string;
+  preview: boolean;
+  invalidateQuote: () => void;
+}
+
+export function useOrderGiglAddressEditor({
+  initialAddress,
+  orderId,
+  preview,
+  invalidateQuote,
+}: Props) {
+  const [addressDraft, setAddressDraft] = useState<Partial<OrderGiglReceiver>>(
+    toOrderGiglAddressDraft(initialAddress)
+  );
+  const addressRef = useRef(addressDraft);
+  const editingAddressRef = useRef(false);
+  const [missingFields, setMissingFields] = useState<OrderGiglMissingField[]>(
+    []
+  );
+  const reset = () => {
+    editingAddressRef.current = false;
+    addressRef.current = toOrderGiglAddressDraft(initialAddress);
+    setAddressDraft(addressRef.current);
+  };
+  const begin = () => {
+    editingAddressRef.current = true;
+    invalidateQuote();
+    setMissingFields(DELIVERY_FIELDS);
+  };
+  const editDraft = (edit: DraftEdit) => {
+    editingAddressRef.current = true;
+    addressRef.current = edit(addressRef.current);
+    setAddressDraft(addressRef.current);
+    invalidateQuote();
+  };
+  const updateAddressField = (field: OrderGiglMissingField, value: string) =>
+    editDraft((draft) => applyAddressField(draft, field, value));
+  const selectAddressPlace = (place: OrderGiglSelectedPlace) =>
+    editDraft((draft) => applySelectedPlace(draft, place));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scalar address deps
+  useLayoutEffect(() => {
+    editingAddressRef.current = false;
+    const next = toOrderGiglAddressDraft(initialAddress);
+    setAddressDraft(next);
+    addressRef.current = next;
+  }, [
+    initialAddress?.address,
+    initialAddress?.city,
+    initialAddress?.latitude,
+    initialAddress?.longitude,
+    initialAddress?.phone,
+    initialAddress?.state,
+    preview,
+    orderId,
+  ]);
+  return {
+    addressDraft,
+    addressRef,
+    begin,
+    editingAddressRef,
+    missingFields,
+    reset,
+    selectAddressPlace,
+    setMissingFields,
+    updateAddressField,
+  };
+}

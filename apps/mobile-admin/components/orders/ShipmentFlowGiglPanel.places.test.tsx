@@ -86,6 +86,42 @@ afterEach(() => {
 });
 
 describe('ShipmentFlowGiglPanel places autocomplete', () => {
+  it('shows the saved destination and asks before editing it', () => {
+    const onEditAddress = vi.fn();
+    const onRetryQuote = vi.fn();
+    const { rerender } = render(
+      <ShipmentFlowGiglPanel
+        {...props}
+        onRetryQuote={onRetryQuote}
+        selected
+        missingFields={[]}
+        addressDraft={{ address: '1 Allen', city: 'Ikeja', state: 'Lagos' }}
+        onEditAddress={onEditAddress}
+      />
+    );
+    expect(screen.getByText('Deliver to 1 Allen, Ikeja, Lagos')).toBeTruthy();
+    expect(screen.queryByLabelText('Shipping address')).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit delivery address' })
+    );
+    expect(onEditAddress).toHaveBeenCalledOnce();
+    expect(onRetryQuote).not.toHaveBeenCalled();
+
+    rerender(
+      <ShipmentFlowGiglPanel
+        {...props}
+        onRetryQuote={onRetryQuote}
+        selected
+        missingFields={['city']}
+        onEditAddress={onEditAddress}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save address and get quote' })
+    );
+    expect(onRetryQuote).toHaveBeenCalledOnce();
+  });
+
   it('sends address, city, state and pin from the selected place', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'key');
     render(<ShipmentFlowGiglPanel {...props} />);

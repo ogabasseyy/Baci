@@ -100,20 +100,27 @@ export function createNewOrderCustomerActions({
     setCustomerSearch('');
   };
 
-  const handleSelectCustomer = (item: SelectableCustomer) => {
+  const handleSelectCustomer = (
+    item: SelectableCustomer,
+    keepEnteredAddress = false
+  ) => {
+    const entered = keepEnteredAddress
+      ? normalizeNewCustomerDraft(newCustomer)
+      : null;
+    const address = entered?.address ? entered : null;
     setCustomer({
-      address: item.address || '',
+      address: address?.address ?? (item.address || ''),
       email: item.email || '',
       id: item.id,
       name: getCustomerDisplayName(item),
       phone: item.phone || '',
-      city: item.city || '',
-      state: item.state || '',
-      country: item.country || '',
-      countryCode: item.country_code || '',
-      postalCode: item.zip_code || '',
-      latitude: item.latitude ?? undefined,
-      longitude: item.longitude ?? undefined,
+      city: address?.city ?? (item.city || ''),
+      state: address?.state ?? (item.state || ''),
+      country: address?.country ?? (item.country || ''),
+      countryCode: address?.countryCode ?? (item.country_code || ''),
+      postalCode: address?.postalCode ?? (item.zip_code || ''),
+      latitude: address ? address.latitude : (item.latitude ?? undefined),
+      longitude: address ? address.longitude : (item.longitude ?? undefined),
     });
     setShowCustomerModal(false);
     setCustomerSearch('');

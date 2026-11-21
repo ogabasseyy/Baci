@@ -7,6 +7,7 @@ import type { useNewOrderController } from '@/hooks/useNewOrderController';
 import { getTranslucentColor } from '@/lib/colors/sanitize-css-color';
 import { NewOrderAddressInput } from './NewOrderAddressInput';
 import { NewOrderBranchSelector } from './NewOrderBranchSelector';
+import { NewOrderCustomerDeliveryAddress } from './NewOrderCustomerDeliveryAddress';
 import { styles } from './new-order.styles';
 
 const GOOGLE_MAPS_PIN_COLOR = '#EA4335';
@@ -14,11 +15,13 @@ const GOOGLE_MAPS_PIN_COLOR = '#EA4335';
 interface NewOrderDetailsSectionProps {
   controller: ReturnType<typeof useNewOrderController>;
   showDateField?: boolean;
+  allowOrderAddressEdit?: boolean;
 }
 
 export function NewOrderDetailsSection({
   controller,
   showDateField = true,
+  allowOrderAddressEdit = false,
 }: NewOrderDetailsSectionProps) {
   const {
     colors,
@@ -37,6 +40,8 @@ export function NewOrderDetailsSection({
     showDatePicker,
   } = controller;
 
+  const editCustomerAddress =
+    allowOrderAddressEdit && sameAsCustomer && customer.id;
   const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   useEffect(() => {
@@ -188,10 +193,11 @@ export function NewOrderDetailsSection({
           style={[
             styles.listRow,
             {
-              borderBottomColor: !sameAsCustomer
-                ? colors.border
-                : 'transparent',
-              borderBottomWidth: !sameAsCustomer ? 1 : 0,
+              borderBottomColor:
+                !sameAsCustomer || editCustomerAddress
+                  ? colors.border
+                  : 'transparent',
+              borderBottomWidth: !sameAsCustomer || editCustomerAddress ? 1 : 0,
             },
           ]}
         >
@@ -226,7 +232,7 @@ export function NewOrderDetailsSection({
             </Text>
           </View>
           <Switch
-            accessibilityHint="Toggles whether the delivery address is the same as the customer's address"
+            accessibilityHint="Toggles whether the recipient is the selected customer"
             accessibilityLabel="Deliver to same person"
             accessibilityRole="switch"
             accessibilityState={{ checked: sameAsCustomer }}
@@ -239,6 +245,12 @@ export function NewOrderDetailsSection({
           />
         </View>
 
+        {editCustomerAddress ? (
+          <NewOrderCustomerDeliveryAddress
+            controller={controller}
+            googleMapsApiKey={googleMapsApiKey}
+          />
+        ) : null}
         {!sameAsCustomer ? (
           <View style={{ gap: 12, padding: 16 }}>
             <View>

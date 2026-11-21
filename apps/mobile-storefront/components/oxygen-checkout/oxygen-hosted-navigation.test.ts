@@ -25,6 +25,16 @@ describe('Oxygen hosted navigation', () => {
       canOpenOxygenHostedUrl('https://pay.example/pay', 'selfie', caps)
     ).toBe(false);
   });
+  it.each([
+    undefined,
+    null,
+    [],
+  ])('blocks a hosted link without a configured origin list', (hostedOrigins) => {
+    const incomplete = { ...caps, hostedOrigins } as typeof caps;
+    expect(
+      canOpenOxygenHostedUrl('https://pay.example/pay', 'payment', incomplete)
+    ).toBe(false);
+  });
   it('coalesces refresh and bounds attempts without trusting event contents', async () => {
     let resolve!: () => void;
     const refresh = jest.fn(

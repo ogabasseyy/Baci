@@ -12,6 +12,7 @@ import type { OrderCreateInput } from '@/schemas/orders';
 // A cookie request claiming mobile_app must pass those same extra checks.
 // Existing web checkout uses cookies to save an unpaid order. Its separate
 // Oxygen workflow entrypoint verifies the signed-in owner and merchant rollout.
+// The SQL regression is supabase/tests/oxygen_storefront_pilot_availability.sql.
 function isMobileOxygenOrder(
   request: Request,
   paymentMethod: string,

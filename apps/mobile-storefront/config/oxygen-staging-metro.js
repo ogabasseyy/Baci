@@ -5,6 +5,7 @@ function resolveOxygenStagingModule(moduleName, env) {
     env.EXPO_PUBLIC_OXYGEN_STAGING === '1' && env.NODE_ENV === 'development';
   const localStaging =
     stagingDevelopment && !env.EAS_BUILD && !env.EAS_BUILD_PROFILE && !env.CI;
+  // The single visual-QA entry is pinned by oxygen-staging-metro.test.mjs.
   if (
     !localStaging &&
     /(?:^|\/)oxygen-preview\/visual-qa-route(?:\.[jt]sx?)?$/.test(

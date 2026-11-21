@@ -26,7 +26,7 @@ export function canOpenOxygenHostedUrl(
       kind === 'selfie'
         ? capabilities.selfieOrigins
         : capabilities.hostedOrigins;
-    return origins.includes(target.origin);
+    return Array.isArray(origins) && origins.includes(target.origin);
   } catch {
     return false;
   }

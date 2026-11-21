@@ -49,12 +49,12 @@ export default function OrderSuccessScreen() {
     deliveryEstimate,
     reconciliation,
   } = useLocalSearchParams<Record<string, string>>();
-  // Captured-but-cancelled/refunded arrivals (see the gateway completion
-  // handlers): the money moved but no active paid order exists, so this
-  // screen renders the reconciliation state with no settlement polling,
-  // success notification, interstitial, or permission soft-ask.
+  const requireVerifiedPayment = Boolean(reference?.startsWith('BCO-'));
   const isParamReconciliation =
-    reconciliation === 'order_cancelled' || reconciliation === 'order_skipped';
+    requireVerifiedPayment ||
+    reconciliation === 'order_cancelled' ||
+    reconciliation === 'order_skipped' ||
+    reconciliation === 'payment_reversed';
   const customer = useAuthStore((s) => s.customer);
   // An invoice or Pay for Me order paid externally after checkout must not
   // keep showing proforma/request copy when the shopper returns: resolve
@@ -103,15 +103,10 @@ export default function OrderSuccessScreen() {
   // same commercial presentation on both authenticated and guest paths.
   const isCreditedOrder =
     receiptAmountPaid > 0 || guestInvoice.status === 'credited';
-  // The reconciliation route parameter is caller-controlled (public
-  // scheme/universal links): a crafted deep link must not render
-  // "Payment Received" on its word alone. Verified proof-bound (with
-  // bounded retries for transient failures) before rendering the
-  // reconciliation state; a verified-absent param falls through to the
-  // ordinary success flow, while an inconclusive lookup stays pending
-  // instead of coercing to either view.
+  // Confirm the outcome with the server before trusting a route parameter.
   const {
     verified: paramReconciliationVerified,
+    reconciliation: verifiedReconciliation,
     exhausted: isParamVerificationExhausted,
     retry: retryParamVerification,
   } = useParamReconciliationVerification({
@@ -119,6 +114,7 @@ export default function OrderSuccessScreen() {
     orderId,
     trackingToken,
     reference,
+    requireVerifiedPayment,
   });
   const isParamVerificationUnresolved =
     isParamReconciliation && paramReconciliationVerified === undefined;
@@ -152,7 +148,7 @@ export default function OrderSuccessScreen() {
   // so this screen stays under the 300-line route limit.
   useOrderSuccessCompletionPolling({
     customerEmail: customer?.email,
-    disabled: isReconciliation,
+    disabled: isReconciliation || isParamVerificationUnresolved,
     orderId,
     orderNumber,
     paymentMethod,
@@ -253,6 +249,7 @@ export default function OrderSuccessScreen() {
       <OrderReconciliationView
         colors={colors}
         isDark={colorScheme === 'dark'}
+        reversed={verifiedReconciliation === 'payment_reversed'}
         orderNumber={orderNumber}
         onContinueShopping={handleContinueShopping}
         onViewOrders={handleViewOrders}
@@ -268,7 +265,10 @@ export default function OrderSuccessScreen() {
         isDark={colorScheme === 'dark'}
         isCommercialDocument={isPartiallyPaidOrder || isCreditedOrder}
         isDocumentLoading={receiptPreview.isLoading}
-        isPaid={isPaidOrder}
+        isPaid={
+          isPaidOrder ||
+          (requireVerifiedPayment && paramReconciliationVerified === false)
+        }
         onContinueShopping={handleContinueShopping}
         onLeaveGoogleReview={handleLeaveGoogleReview}
         onPermissionDeny={handlePermissionDeny}

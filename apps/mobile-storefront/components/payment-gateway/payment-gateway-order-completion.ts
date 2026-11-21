@@ -146,12 +146,14 @@ export async function settleOrderCompletion(
           : 'Payment could not be confirmed. Please try again.'
       );
       return;
-    } else if (verification.reconciliation) {
-      // Captured money with no active paid order: route to the
-      // reconciliation state instead of the generic confirmation. The
-      // cart stays intact for a fresh attempt; settlement polling is
-      // skipped there since a cancelled order can never become paid.
-      setPaymentStatus('success');
+    } else if (verification.reconciliation || reference?.startsWith('BCO-')) {
+      // Keep the cart for reconciliation or a bank offer still awaiting
+      // verification. The order screen checks the reference before rendering.
+      if (
+        verification.reconciliation &&
+        verification.reconciliation !== 'payment_reversed'
+      )
+        setPaymentStatus('success');
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',

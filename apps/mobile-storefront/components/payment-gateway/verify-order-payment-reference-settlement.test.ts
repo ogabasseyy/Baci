@@ -18,6 +18,7 @@ function jsonResponse(body: unknown) {
   return {
     json: async () => body,
     ok: true,
+    status: 200,
   };
 }
 
@@ -86,7 +87,7 @@ describe('checkReferenceSettled transport selection', () => {
       checkReferenceSettled('order-1', reference, 'track-1')
     ).resolves.toEqual({
       paid: false,
-      reconciliation: 'order_skipped',
+      reconciliation: 'payment_reversed',
     });
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       expect.stringMatching(/\/api\/payments\/verify$/),

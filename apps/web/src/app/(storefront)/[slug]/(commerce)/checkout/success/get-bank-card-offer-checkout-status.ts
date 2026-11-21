@@ -28,7 +28,10 @@ export function getBankCardOfferCheckoutStatus(
   if (payment.code === 'BANK_CARD_OFFER_CAPTURE_REVIEW') {
     return 'bank_offer_review';
   }
-  if (payment.status === 'reversed') return 'reversed';
+  // Paystack terminal evidence arrives with HTTP 200. A 202 is a poll
+  // still awaiting confirmation, even if an intermediary supplied a body.
+  if (payment.status === 'reversed')
+    return httpStatus === 200 ? 'reversed' : 'pending';
   if (
     payment.status === 'failed' ||
     payment.status === 'cancelled' ||

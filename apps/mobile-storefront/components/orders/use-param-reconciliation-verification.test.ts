@@ -58,6 +58,31 @@ describe('useParamReconciliationVerification', () => {
     expect(result.current.exhausted).toBe(false);
   });
 
+  it('leaves a bank offer pending until provider verification confirms a verdict', async () => {
+    mockedVerify.mockResolvedValueOnce({ paid: false }).mockResolvedValueOnce({
+      paid: false,
+      reconciliation: 'payment_reversed',
+    });
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        retryDelayMs: 100,
+      })
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.verified).toBeUndefined();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(100);
+    });
+    expect(result.current.verified).toBe(true);
+    expect(result.current.reconciliation).toBe('payment_reversed');
+  });
+
   it('recovers when a transient failure resolves before the retry budget', async () => {
     mockedVerify
       .mockResolvedValueOnce({ paid: false, inconclusive: true })

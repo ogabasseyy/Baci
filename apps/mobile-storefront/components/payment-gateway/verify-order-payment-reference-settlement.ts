@@ -118,9 +118,10 @@ export async function checkReferenceSettled(
         bankOffer &&
         response.ok &&
         data.orderId === orderId &&
+        response.status === 200 &&
         data.status === 'reversed'
       ) {
-        return { paid: false, reconciliation: 'order_skipped' };
+        return { paid: false, reconciliation: 'payment_reversed' };
       }
       // A definitive failed/cancelled envelope for THIS order is terminal:
       // collapsing it into the transient pending shape would clear the

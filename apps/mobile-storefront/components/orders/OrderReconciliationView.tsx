@@ -10,6 +10,7 @@ interface OrderReconciliationViewProps {
   colors: typeof Colors.light;
   isDark: boolean;
   orderNumber?: string;
+  reversed?: boolean;
   onContinueShopping: () => void;
   onViewOrders: () => void;
 }
@@ -24,6 +25,7 @@ export function OrderReconciliationView({
   colors,
   isDark,
   orderNumber,
+  reversed = false,
   onContinueShopping,
   onViewOrders,
 }: OrderReconciliationViewProps) {
@@ -60,12 +62,14 @@ export function OrderReconciliationView({
               <Text style={styles.eyebrowText}>Payment under review</Text>
             </View>
             <Text style={[styles.title, { color: colors.text }]}>
-              Payment Received — Order Under Review
+              {reversed
+                ? 'Payment reversed'
+                : 'Payment Received — Order Under Review'}
             </Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              Your payment went through, but this order was cancelled before it
-              could be confirmed. Our team is reconciling it now — any amount
-              due back to you will be refunded automatically.
+              {reversed
+                ? 'Paystack reversed this payment. Check your order or contact support before paying again.'
+                : 'Your payment went through, but this order was cancelled before it could be confirmed. Our team is reconciling it now. Any amount due back to you will be refunded automatically.'}
             </Text>
             <View
               style={[

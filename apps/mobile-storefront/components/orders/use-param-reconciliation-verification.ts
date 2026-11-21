@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
+import {
+  type OrderPaymentVerification,
+  verifyOrderPaymentForCompletion,
+} from '@/components/payment-gateway/verify-order-payment';
 
 interface ParamReconciliationVerificationInput {
   isParamReconciliation: boolean;
   orderId?: string;
   trackingToken?: string;
   reference?: string;
+  requireVerifiedPayment?: boolean;
   /**
    * Bounded retries for inconclusive (transient) verification. A
    * reconciliation deep link that hits a network/parse failure must
@@ -23,6 +27,7 @@ export interface ParamReconciliationVerification {
    * success, and exhaustion (below) is never success either.
    */
   verified: boolean | undefined;
+  reconciliation: OrderPaymentVerification['reconciliation'];
   /**
    * True once the bounded retries are spent while the lookup stays
    * inconclusive (e.g. a network/API outage), or immediately when the
@@ -51,16 +56,19 @@ export function useParamReconciliationVerification({
   orderId,
   trackingToken,
   reference,
+  requireVerifiedPayment = false,
   maxAttempts = 3,
   retryDelayMs = 750,
 }: ParamReconciliationVerificationInput): ParamReconciliationVerification {
-  const [verified, setVerified] = useState<boolean | undefined>(undefined);
+  const [outcome, setOutcome] = useState<
+    OrderPaymentVerification['reconciliation'] | false
+  >(undefined);
   const [exhausted, setExhausted] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers bounded verification after exhaustion; the attempt counter restarts inside the effect on each run.
   useEffect(() => {
-    setVerified(undefined);
+    setOutcome(undefined);
     setExhausted(false);
     if (!isParamReconciliation) {
       return;
@@ -85,7 +93,11 @@ export function useParamReconciliationVerification({
         if (cancelled) {
           return;
         }
-        if (result.inconclusive && !result.reconciliation) {
+        if (
+          !result.reconciliation &&
+          !result.paid &&
+          (result.inconclusive || requireVerifiedPayment)
+        ) {
           attempt += 1;
           if (attempt < maxAttempts) {
             retryTimer = setTimeout(runVerification, retryDelayMs * attempt);
@@ -97,7 +109,7 @@ export function useParamReconciliationVerification({
           setExhausted(true);
           return;
         }
-        setVerified(!!result.reconciliation);
+        setOutcome(result.reconciliation ?? false);
       });
     };
     runVerification();
@@ -112,6 +124,7 @@ export function useParamReconciliationVerification({
     orderId,
     trackingToken,
     reference,
+    requireVerifiedPayment,
     maxAttempts,
     retryDelayMs,
     retryNonce,
@@ -122,5 +135,10 @@ export function useParamReconciliationVerification({
     setRetryNonce((nonce) => nonce + 1);
   };
 
-  return { verified, exhausted, retry };
+  return {
+    verified: outcome === undefined ? undefined : outcome !== false,
+    reconciliation: outcome || undefined,
+    exhausted,
+    retry,
+  };
 }

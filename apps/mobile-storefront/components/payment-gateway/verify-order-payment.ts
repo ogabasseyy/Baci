@@ -35,7 +35,7 @@ export interface OrderPaymentVerification extends TrackedCompletionAttribution {
    * make such an order paid. Ordinary cancelled rows (no proven
    * capture) use `terminalFailure` instead.
    */
-  reconciliation?: 'order_cancelled' | 'order_skipped';
+  reconciliation?: 'order_cancelled' | 'order_skipped' | 'payment_reversed';
   /**
    * Transport/parse failure (not a verified unpaid row): callers that
    * must not treat absence-of-proof as proof-of-absence — the

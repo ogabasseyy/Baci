@@ -121,9 +121,11 @@ it.each([
 it.each([
   'NETWORK_ERROR',
   'CONFIG_ERROR',
+  'HTTP_401',
+  'HTTP_403',
   'HTTP_503',
   'HTTP_429',
-])('signals a transient verification outage for %s', async (code) => {
+])('signals that verification is unavailable for %s', async (code) => {
   verify.mockResolvedValueOnce({
     success: false,
     code,
@@ -134,13 +136,10 @@ it.each([
   });
 });
 
-it.each([
-  'HTTP_401',
-  'HTTP_400',
-])('has no terminal evidence for %s', async (code) => {
+it('has no terminal evidence for HTTP 400', async () => {
   verify.mockResolvedValueOnce({
     success: false,
-    code,
+    code: 'HTTP_400',
     error: 'Verification unavailable',
   });
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({

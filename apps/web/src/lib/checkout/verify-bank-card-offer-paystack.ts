@@ -15,11 +15,13 @@ export async function verifyBankCardOfferPaystack(
     textIds: true,
   });
   // A missing transaction still needs the same reference checked later.
-  // Transport failures additionally tell the caller to back off.
+  // Transport and credential failures tell the caller to back off.
   if (!response.success) {
     const code = response.code;
     return code === 'NETWORK_ERROR' ||
       code === 'CONFIG_ERROR' ||
+      code === 'HTTP_401' ||
+      code === 'HTTP_403' ||
       code === 'HTTP_408' ||
       code === 'HTTP_429' ||
       code?.startsWith('HTTP_5')

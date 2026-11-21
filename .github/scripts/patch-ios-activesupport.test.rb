@@ -70,6 +70,9 @@ def run_test(name)
 rescue SystemExit => error
   warn "FAIL #{name}: exited with status #{error.status}: #{error.message}"
   exit error.status
+rescue LoadError => error
+  warn "FAIL #{name}: #{error.message}"
+  exit 1
 rescue StandardError => error
   warn "FAIL #{name}: #{error.message}"
   exit 1

@@ -100,8 +100,10 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
       ? getGiftCardPilotConfig()
       : null;
   const pilotBuyer = pilot
-    ? (await (await createClient()).auth.getUser()).data.user?.id ===
-      pilot.userId
+    ? await createClient()
+        .then((client) => client.auth.getUser())
+        .then(({ data, error }) => !error && data.user?.id === pilot.userId)
+        .catch(() => false)
     : false;
 
   return (

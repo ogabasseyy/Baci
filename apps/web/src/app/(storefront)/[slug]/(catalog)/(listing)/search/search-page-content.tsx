@@ -121,7 +121,7 @@ export async function SearchPageContent({
 
   // Gift-card preview links carry no product offer or live quote.
   const giftCardResultsOnly = giftCards.length > 0 && visibleCount === 0;
-  const summaryText = giftCardResultsOnly
+  const productSummaryText = giftCardResultsOnly
     ? 'Gift cards matching your search'
     : searchFailed
       ? `We couldn't load results for “${query}”.`
@@ -131,6 +131,11 @@ export async function SearchPageContent({
           visibleCount,
           page,
         });
+
+  const summaryText =
+    giftCards.length > 0 && !giftCardResultsOnly
+      ? `${productSummaryText} Gift cards also match your search.`
+      : productSummaryText;
 
   return (
     <V2ComparisonScope storageNamespace={merchant.id}>

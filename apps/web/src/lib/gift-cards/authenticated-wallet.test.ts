@@ -83,7 +83,7 @@ it('prices with a fresh quote before confirmation and submits only its exact sig
 it('refuses confirmation without an authenticated user', async () => {
   supabase.auth.getUser.mockResolvedValue({ data: { user: null } });
   await expect(confirmAuthenticatedGiftCardQuote(null)).rejects.toThrow(
-    'Sign in'
+    'Sign in to use your wallet.'
   );
   expect(supabase.rpc).not.toHaveBeenCalled();
 });

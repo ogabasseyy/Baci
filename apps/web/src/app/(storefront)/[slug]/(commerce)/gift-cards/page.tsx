@@ -47,6 +47,8 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
   const merchant = await getRequestScopedMerchant(slug);
   if (!merchant || !isGiftCardPreviewEnabled(merchant.slug)) notFound();
 
+  // Search selects a catalog item via selection. Only submitting the price
+  // form (card) explicitly requests a preview. Wallet confirmation requotes.
   const card = Array.isArray(query.card) ? query.card[0] : query.card;
   const selection = Array.isArray(query.selection)
     ? query.selection[0]
@@ -131,6 +133,11 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
               </option>
             ))}
           </select>
+          {selection !== undefined && card === undefined && selected && (
+            <p className="text-sm">
+              Select Get current price to see the naira price.
+            </p>
+          )}
           <button
             type="submit"
             className="min-h-11 rounded-md bg-store-primary px-4 py-2 text-white"

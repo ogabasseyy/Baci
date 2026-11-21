@@ -72,7 +72,7 @@ export async function issueAuthenticatedGiftCardQuote(
 export async function confirmAuthenticatedGiftCardQuote(input: unknown) {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error('Sign in before confirming');
+  if (error || !data.user) throw new Error('Sign in to use your wallet.');
 
   const proof = proofSchema.parse(input);
   // The migration is append-only. Regenerate Supabase types after schema rollout.

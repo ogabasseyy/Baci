@@ -204,7 +204,7 @@ describe('assertKudaBillItemPriceCurrent', () => {
       await expect(
         assertKudaBillItemPriceCurrent({
           ...superPackage,
-          billerName: '  startimes ng - Group ',
+          billerName: '  startimes ng - Group / DTT super monthly 9500NGN ',
         })
       ).resolves.toBeUndefined();
       await expect(

@@ -20,9 +20,13 @@
  * known failure (safe retry/refund).
  */
 export class KudaPreDispatchError extends Error {
-  constructor(message: string) {
+  /** The token endpoint's HTTP status, when it answered with an error. */
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = 'KudaPreDispatchError';
+    if (status !== undefined) this.status = status;
   }
 }
 

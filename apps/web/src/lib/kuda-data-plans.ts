@@ -7,6 +7,10 @@ import {
 } from '@/lib/kuda';
 import { KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE } from '@/lib/kuda-bill-item-price-messages';
 import { logger } from '@/lib/logger';
+import { formatNaira } from './kuda-format-naira';
+import { normalizeKudaItemCode } from './kuda-item-code';
+import { isKudaNoResponse } from './kuda-no-response';
+import { providerMatchesNetwork } from './kuda-provider-matches-network';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -32,7 +36,8 @@ const DATA_PLAN_RETRY_AFTER_MS = 30_000;
 /** A fixed plan price under ₦10 means the list's units are in doubt. */
 const IMPLAUSIBLE_PLAN_PRICE_NAIRA = 10;
 
-let lastFailedDataPlanFetchAt: number | undefined;
+/** When the last fetch failed, and whether Kuda's answer was refused. */
+let lastFailedDataPlanFetch: { at: number; refused: boolean } | undefined;
 
 let dataProvidersCache:
   | {
@@ -44,7 +49,7 @@ let dataProvidersCache:
 
 export function clearKudaDataPlanCacheForTests() {
   dataProvidersCache = undefined;
-  lastFailedDataPlanFetchAt = undefined;
+  lastFailedDataPlanFetch = undefined;
 }
 
 function normalizeComparable(value: string) {
@@ -56,27 +61,6 @@ function normalizeComparable(value: string) {
 
 function amountMatches(a: number, b: number) {
   return Math.round(a * 100) === Math.round(b * 100);
-}
-
-// Module-scope cache: only minimumFractionDigits varies (0 for integers, 2 otherwise).
-const nairaFormatterCache = new Map<number, Intl.NumberFormat>();
-function getNairaFormatter(minimumFractionDigits: number): Intl.NumberFormat {
-  let formatter = nairaFormatterCache.get(minimumFractionDigits);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat('en-NG', {
-      currency: 'NGN',
-      currencyDisplay: 'narrowSymbol',
-      maximumFractionDigits: 2,
-      minimumFractionDigits,
-      style: 'currency',
-    });
-    nairaFormatterCache.set(minimumFractionDigits, formatter);
-  }
-  return formatter;
-}
-
-function formatNaira(amount: number) {
-  return getNairaFormatter(Number.isInteger(amount) ? 0 : 2).format(amount);
 }
 
 function collectDataPlanCandidates(providers: Biller[]): DataPlanCandidate[] {
@@ -96,76 +80,66 @@ function providerMatchesCode(provider: Biller, dataPlanCode: string) {
   );
 }
 
-function providerMatchesNetwork(
-  provider: Biller,
-  networkProvider: NetworkProvider
-) {
-  const normalizedProviderName = normalizeComparable(provider.billerName);
-  const normalizedNetwork = normalizeComparable(networkProvider);
-  if (normalizedNetwork === '9mobile') {
-    return (
-      normalizedProviderName.includes('9mobile') ||
-      normalizedProviderName.includes('9') ||
-      normalizedProviderName.includes('t2') ||
-      normalizedProviderName.includes('etisalat')
-    );
-  }
-
-  return normalizedProviderName.includes(normalizedNetwork);
+/** The saved data plans, while they are under a day old at `at`. */
+function lastGoodDataProviders(at: number): Biller[] | null {
+  return dataProvidersCache &&
+    at - dataProvidersCache.loadedAt < DATA_PLAN_LAST_GOOD_MS
+    ? dataProvidersCache.providers
+    : null;
 }
 
 /**
- * The current Kuda data plans, or the last good list from the past day when
- * Kuda fails or answers without any packages (which never replaces a good
- * list). After such a fetch Kuda is not asked again for 30 seconds. Null
- * when neither exists: the
- * caller must not trust the client's amount then, since apps may still hold
- * plan prices from before Kuda's kobo amounts were converted (100x).
+ * The current Kuda data plans, or the last good list from the past day only
+ * when Kuda gave no answer (an HTTP error, timeout or dropped connection).
+ * An answer Baci can't trust (no packages, wrong unit, broken body) is
+ * refused, never covered by the saved list. After a failed fetch Kuda is not
+ * asked again for 30 seconds. Null when no list can be used: the caller must
+ * not trust the client's amount then (apps may hold 100x kobo prices).
  */
 async function loadDataProviders(): Promise<Biller[] | null> {
   const now = Date.now();
   if (dataProvidersCache && dataProvidersCache.expiresAt > now) {
     return dataProvidersCache.providers;
   }
-  const lastGood =
-    dataProvidersCache &&
-    now - dataProvidersCache.loadedAt < DATA_PLAN_LAST_GOOD_MS
-      ? dataProvidersCache.providers
-      : null;
-
-  if (
-    lastFailedDataPlanFetchAt !== undefined &&
-    now - lastFailedDataPlanFetchAt < DATA_PLAN_RETRY_AFTER_MS
-  ) {
-    return lastGood;
+  const failure = lastFailedDataPlanFetch;
+  if (failure && now - failure.at < DATA_PLAN_RETRY_AFTER_MS) {
+    return failure.refused ? null : lastGoodDataProviders(now);
   }
+
+  // Kuda can take a while to answer, so after a failure the backup list's
+  // age and the retry pause are both measured from when the fetch ended.
+  const failFetch = (message: string, refused: boolean, error?: unknown) => {
+    const failedAt = Date.now();
+    lastFailedDataPlanFetch = { at: failedAt, refused };
+    if (refused) dataProvidersCache = undefined; // not revived by a timeout
+    const backup = refused ? null : lastGoodDataProviders(failedAt);
+    logger.warn({
+      message,
+      ...(error !== undefined && {
+        error: error instanceof Error ? error.message : String(error),
+      }),
+      hasLastGoodList: backup !== null,
+      type: 'data',
+    });
+    return backup;
+  };
 
   let providers: Biller[];
   try {
     providers = await getDataProviders();
   } catch (error) {
-    lastFailedDataPlanFetchAt = now;
-    logger.warn({
-      message: 'Kuda data plan list unavailable',
-      error: error instanceof Error ? error.message : String(error),
-      hasLastGoodList: lastGood !== null,
-      type: 'data',
-    });
-    return lastGood;
+    return isKudaNoResponse(error)
+      ? failFetch('Kuda data plan list unavailable', false, error)
+      : failFetch('Kuda data plan list answer refused', true, error);
   }
   if (collectDataPlanCandidates(providers).length === 0) {
-    lastFailedDataPlanFetchAt = now;
-    logger.warn({
-      message: 'Kuda data plan list came back without packages',
-      hasLastGoodList: lastGood !== null,
-      type: 'data',
-    });
-    return lastGood;
+    return failFetch('Kuda data plan list came back without packages', true);
   }
-  lastFailedDataPlanFetchAt = undefined;
+  lastFailedDataPlanFetch = undefined;
+  const loadedAt = Date.now(); // from when Kuda answered, like failures
   dataProvidersCache = {
-    expiresAt: now + DATA_PLAN_CACHE_TTL_MS,
-    loadedAt: now,
+    expiresAt: loadedAt + DATA_PLAN_CACHE_TTL_MS,
+    loadedAt,
     providers,
   };
   return providers;
@@ -232,10 +206,27 @@ export async function resolveKudaDataPlanForPurchase({
   }
 
   const normalizedCode = normalizeComparable(originalDataPlanCode);
+  // A plan Kuda listed with an unusable price was dropped by the mapper. It
+  // fails closed here instead of falling through to the amount fallback
+  // below, which could sell a different plan at the same price.
+  if (
+    providers.some((provider) =>
+      provider.unreadableItemCodes?.some(
+        (code) => normalizeKudaItemCode(code) === normalizedCode
+      )
+    )
+  ) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
   const exactMatch = candidates.find(
     ({ item }) => normalizeComparable(item.itemCode) === normalizedCode
   );
   if (exactMatch) {
+    // A provider with a malformed plan list can't confirm any plan, even a
+    // readable one: the hidden part may hold the same code at another price.
+    if (exactMatch.provider.packagesUnreadable) {
+      throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+    }
     // Includes an unreadable fixed price (mapped to 0).
     if (
       exactMatch.item.isAmountFixed &&
@@ -261,6 +252,19 @@ export async function resolveKudaDataPlanForPurchase({
     );
   }
 
+  // The amount fallback can't tell a dropped plan from a stale one, so a
+  // provider in scope with a dropped plan or an unreadable package list
+  // (including one named instead of a plan code) makes it fail closed.
+  if (
+    providers.some(
+      (provider) =>
+        (provider.unreadableItemCodes?.length || provider.packagesUnreadable) &&
+        (providerMatchesCode(provider, originalDataPlanCode) ||
+          providerMatchesNetwork(provider, networkProvider))
+    )
+  ) {
+    throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  }
   const providerScopedCandidates = candidates.filter(
     ({ provider }) =>
       providerMatchesCode(provider, originalDataPlanCode) ||

@@ -83,7 +83,12 @@ BEGIN
      OR EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE id = handoff AND redeemed_at IS NOT NULL)
   THEN RAISE EXCEPTION 'MCP import must not add to a resolved SKU with assurance: %', result; END IF;
   UPDATE public.commerce_cart_lines SET options = '{}' WHERE cart_id = source AND product_id = product;
-  UPDATE public.commerce_cart_lines SET has_assurance = false WHERE cart_id = destination;
+  UPDATE public.commerce_cart_lines SET options = 'null' WHERE cart_id = destination;
+  result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'protected-destination-options', source_version);
+  IF result->>'code' IS DISTINCT FROM 'invalid_item'
+     OR EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE id = handoff AND redeemed_at IS NOT NULL)
+  THEN RAISE EXCEPTION 'MCP import bypassed assurance on a default SKU with JSON-null options: %', result; END IF;
+  UPDATE public.commerce_cart_lines SET has_assurance = false, options = '{}' WHERE cart_id = destination;
 
   INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
   VALUES (legacy_destination, merchant, now() + interval '1 day');
@@ -99,6 +104,11 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-protected', source_version);
   IF result->>'code' IS DISTINCT FROM 'invalid_item'
   THEN RAISE EXCEPTION 'Import bypassed assurance on a legacy product-only line: %', result; END IF;
+  UPDATE public.commerce_cart_lines SET options = 'null' WHERE cart_id = legacy_destination;
+  result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-null-options', source_version);
+  IF result->>'code' IS DISTINCT FROM 'invalid_item'
+     OR EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE id = legacy_handoff AND redeemed_at IS NOT NULL)
+  THEN RAISE EXCEPTION 'Import bypassed assurance on a legacy line with JSON-null options: %', result; END IF;
   UPDATE public.commerce_cart_lines SET condition = 'new' WHERE cart_id = legacy_destination;
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-condition-protected', source_version);
   IF result->>'code' IS DISTINCT FROM 'invalid_item'
@@ -108,7 +118,7 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-alias-protected', source_version);
   IF result->>'code' IS DISTINCT FROM 'invalid_item'
   THEN RAISE EXCEPTION 'Import bypassed assurance on a legacy condition alias: %', result; END IF;
-  UPDATE public.commerce_cart_lines SET has_assurance = false WHERE cart_id = legacy_destination;
+  UPDATE public.commerce_cart_lines SET has_assurance = false, options = '{}' WHERE cart_id = legacy_destination;
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-add', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true'
      OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = legacy_destination) <> 1

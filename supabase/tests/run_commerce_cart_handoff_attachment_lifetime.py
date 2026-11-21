@@ -74,7 +74,11 @@ try:
                '20261121103900_commerce_cart_mcp_import_legacy_destination.sql',
                '20261121104000_commerce_cart_mcp_import_condition_destination.sql',
                '20261121104100_commerce_cart_mcp_import_condition_alias.sql']:
-   sql+='\n'+(root/'supabase/migrations'/name).read_text()
+   migration=(root/'supabase/migrations'/name).read_text()
+   if name == '20261121103800_commerce_cart_mcp_import_inherited_variant.sql':
+    sql+='\n'+(root/'supabase/tests/commerce_cart_mcp_import_source_drift.sql').read_text()
+    sql+='\nSELECT pg_temp.check_mcp_import_source_drift($repair$'+migration+'$repair$);'
+   sql+='\n'+migration
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-handoff-attachment-lifetime.log','w'),stderr=subprocess.STDOUT,cwd=root)

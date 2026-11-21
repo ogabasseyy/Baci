@@ -11,7 +11,7 @@ DECLARE
       SELECT 1 FROM public.commerce_cart_lines legacy_line
       WHERE legacy_line.merchant_id = merchant AND legacy_line.cart_id = destination_id
         AND legacy_line.product_id = product.id AND legacy_line.variant_id IS NULL
-        AND legacy_line.condition IS NULL AND legacy_line.options = '{}'::jsonb
+        AND legacy_line.condition IS NULL AND coalesce(nullif(legacy_line.options, 'null'::jsonb), '{}'::jsonb) = '{}'::jsonb
         AND legacy_line.voucher_token IS NULL AND legacy_line.voucher_award_id IS NULL
     )$legacy$;
 BEGIN

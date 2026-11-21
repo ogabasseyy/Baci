@@ -214,6 +214,31 @@ describe('NewOrderAddressInput', () => {
     expect(address.longitude).toBeUndefined();
   });
 
+  it('keeps a pin when locality changes only in capitalization', () => {
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({ setDeliveryInfo })}
+        googleMapsApiKey={undefined}
+      />
+    );
+    fireEvent.change(screen.getByPlaceholderText('City'), {
+      target: { value: 'Ikeja' },
+    });
+    const update = setDeliveryInfo.mock.calls[0][0];
+    expect(
+      update({
+        address: 'Saved street',
+        city: 'ikeja',
+        state: 'Lagos',
+        name: 'Ada',
+        phone: '08030000000',
+        latitude: 6.6,
+        longitude: 3.4,
+      })
+    ).toMatchObject({ city: 'Ikeja', latitude: 6.6, longitude: 3.4 });
+  });
+
   it('updates city and state through dedicated fallback inputs', () => {
     const setDeliveryInfo = vi.fn();
     render(

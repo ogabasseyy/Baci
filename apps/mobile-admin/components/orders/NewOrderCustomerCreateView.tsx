@@ -127,6 +127,14 @@ export function NewOrderCustomerCreateView({
         />
       ) : null}
 
+      {duplicateCustomer &&
+      !newCustomer.address.trim() &&
+      (newCustomer.city?.trim() || newCustomer.state?.trim()) ? (
+        <Text style={{ color: colors.warning }}>
+          Add a street address to use the entered city or state for this order.
+        </Text>
+      ) : null}
+
       <View style={customerStyles.section}>
         <View style={customerStyles.sectionHeader}>
           <View

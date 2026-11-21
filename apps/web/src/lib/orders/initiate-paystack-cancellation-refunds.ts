@@ -11,10 +11,8 @@ import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-c
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import { verifyTransaction } from '@/lib/paystack';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
-import {
-  DeferredError,
-  PartialCancellationRefundError,
-} from './run-order-cancellation-side-effect';
+import { PartialCancellationRefundError } from './partial-cancellation-refund-error';
+import { DeferredError } from './run-order-cancellation-side-effect';
 
 // Reserve a complete provider call and time to persist its outcome.
 const REFUND_PROVIDER_CALL_WORST_MS = 30_000;

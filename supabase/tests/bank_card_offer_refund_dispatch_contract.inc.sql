@@ -90,6 +90,22 @@ BEGIN
     WHERE txn_id = v_transaction AND metadata->>'bank_offer_dispute' = 'true'
   ) THEN RAISE EXCEPTION 'Dispute evidence must be durable'; END IF;
 
+  IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
+  THEN RAISE EXCEPTION 'Unable to record the later reversal on the disputed charge'; END IF;
+  IF (SELECT count(*) FROM public.reconciliation_review WHERE txn_id = v_transaction) <> 1
+    OR NOT EXISTS (
+      SELECT 1 FROM public.reconciliation_review WHERE txn_id = v_transaction
+        AND metadata->>'source' = 'bank_card_offer_dispute'
+        AND metadata->>'provider_status' = 'reversed'
+    )
+  THEN RAISE EXCEPTION 'The reversal must merge into the existing dispute review'; END IF;
+  UPDATE private.bank_card_offer_payment_attempts SET paid_recheck_after = now()
+    WHERE transaction_id = v_transaction;
+  SET LOCAL ROLE service_role;
+  IF EXISTS (SELECT 1 FROM public.claim_paid_bank_card_offer_recheck() c WHERE c.transaction_id = v_transaction)
+  THEN RAISE EXCEPTION 'A verified reversal on a dispute must leave the recheck queue'; END IF;
+  RESET ROLE;
+
   -- Inventory can leave a completed transaction attached to a pending order.
   UPDATE public.orders SET payment_status = 'pending' WHERE id = v_order;
   BEGIN

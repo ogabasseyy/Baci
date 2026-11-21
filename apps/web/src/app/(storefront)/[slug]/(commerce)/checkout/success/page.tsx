@@ -5,16 +5,10 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
-  Clock,
-  Download,
-  FileText,
   Loader2,
-  Mail,
-  MapPin,
   Package,
   ShoppingBag,
   Star,
-  Truck,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -25,6 +19,9 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { usePrivateSearchParamsState } from '@/hooks/use-private-search-params';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
+import { CheckoutOrderDocuments } from './checkout-order-documents';
+import { CheckoutOrderNextSteps } from './checkout-order-next-steps';
+import { CheckoutOrderProgress } from './checkout-order-progress';
 import { CheckoutReconciliationView } from './checkout-reconciliation-view';
 import { CheckoutSuccessLoading } from './checkout-success-loading';
 import { useCheckoutSuccessVerification } from './use-checkout-success-verification';
@@ -37,13 +34,6 @@ import { useCheckoutSuccessVerification } from './use-checkout-success-verificat
  * - Mobile-first responsive design
  * - Micro-animations for engagement
  */
-
-const orderSteps = [
-  { id: 'received', label: 'Order Received', icon: CheckCircle2 },
-  { id: 'processing', label: 'Processing', icon: Package },
-  { id: 'shipped', label: 'Shipped', icon: Truck },
-  { id: 'delivered', label: 'Delivered', icon: MapPin },
-];
 
 export default function CheckoutSuccessPage() {
   return (
@@ -227,165 +217,14 @@ function CheckoutSuccessContent() {
             </motion.div>
           )}
 
-          {/* Order Progress Timeline */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6"
-          >
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-6">
-              Order Progress
-            </h2>
-            <div className="relative">
-              {/* Progress Line */}
-              <div className="absolute top-5 left-5 right-5 h-0.5 bg-gray-100 hidden md:block" />
-              <div
-                className="absolute top-5 left-5 h-0.5 bg-green-500 hidden md:block transition-all duration-500"
-                style={{ width: isConfirmed ? 'calc(25% - 10px)' : '0%' }}
-              />
+          <CheckoutOrderProgress
+            isConfirmed={isConfirmed}
+            isInvoice={isInvoice}
+          />
 
-              {/* Steps */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {orderSteps.map((step, index) => {
-                  const isActive = index === 0;
-                  const isCompleted = isConfirmed && index === 0;
-                  const StepIcon = step.icon;
-                  let stepLabel = step.label;
-                  if (step.id === 'received' && isInvoice) {
-                    stepLabel = 'Invoice Generated';
-                  }
+          <CheckoutOrderNextSteps isInvoice={isInvoice} />
 
-                  return (
-                    <motion.div
-                      key={step.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.6 + index * 0.1 }}
-                      className="flex flex-col items-center text-center"
-                    >
-                      <div
-                        className={`size-10 rounded-full flex items-center justify-center mb-2 transition-all ${
-                          isCompleted
-                            ? 'bg-green-500 text-white'
-                            : isActive
-                              ? 'bg-green-100 text-green-600 ring-2 ring-green-500 ring-offset-2'
-                              : 'bg-gray-100 text-gray-400'
-                        }`}
-                      >
-                        <StepIcon className="size-5" />
-                      </div>
-                      <span
-                        className={`text-xs font-medium ${
-                          isActive ? 'text-green-600' : 'text-gray-500'
-                        }`}
-                      >
-                        {stepLabel}
-                      </span>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-          </motion.div>
-
-          {/* What Happens Next Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6"
-          >
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
-              What Happens Next?
-            </h2>
-            <div className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="size-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                  <Mail className="size-5 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-1">
-                    {isInvoice
-                      ? 'Invoice Sent to Email'
-                      : 'Order Confirmation Email'}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {isInvoice
-                      ? "We've prepared your proforma invoice and sent it to your email. Share it with your company or procurement team."
-                      : "You'll receive an email with your order details and tracking information once your order is confirmed."}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="size-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
-                  <Clock className="size-5 text-amber-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-1">
-                    Order Processing
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Our team will verify your payment and prepare your order for
-                    shipping. This usually takes 1-2 business days.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="size-10 bg-purple-100 rounded-xl flex items-center justify-center shrink-0">
-                  <Truck className="size-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-1">
-                    Shipping Updates
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Once shipped, you&apos;ll receive SMS and email updates with
-                    real-time tracking information.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Receipt Info Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="bg-linear-to-br from-gray-900 to-gray-800 rounded-3xl p-6 text-white"
-          >
-            <div className="flex items-start gap-4">
-              <div className="size-12 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
-                <FileText className="size-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-lg mb-1">
-                  Your Receipt & Invoice
-                </h3>
-                <p className="text-gray-300 text-sm mb-4">
-                  {isInvoice
-                    ? 'Your proforma invoice is ready to download and share with your company or procurement team.'
-                    : 'Your invoice is available from your order details in your account. Your receipt will appear there and in the documents archive once the order has shipped.'}
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Link
-                    href={asRoute(
-                      getHref(isInvoice ? '/receipts' : '/account/orders')
-                    )}
-                    className="inline-flex items-center justify-center gap-2 bg-white text-gray-900 px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-100 transition-colors"
-                  >
-                    <Download className="size-4" />
-                    {isInvoice
-                      ? 'Download Proforma Invoice PDF'
-                      : 'View Order Documents'}
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          <CheckoutOrderDocuments isInvoice={isInvoice} getHref={getHref} />
 
           {/* Action Buttons */}
           <motion.div

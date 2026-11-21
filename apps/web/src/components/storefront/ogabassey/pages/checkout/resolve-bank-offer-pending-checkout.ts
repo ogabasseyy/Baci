@@ -1,3 +1,4 @@
+import { clearCheckoutIdempotencyKey } from './checkout-idempotency';
 import { checkoutFingerprintsMatch } from './checkout-fingerprints-match';
 import type {
   ResolvePendingCheckoutOrderOptions,
@@ -59,6 +60,7 @@ export async function resolveBankOfferPendingCheckout({
     !isProgressedButUnpaidOrderState(existing) &&
     isNonReusableOrderState(existing)
   ) {
+    await clearCheckoutIdempotencyKey(pendingOrder.checkoutFingerprint);
     return { reusableOrder: null, clearStoredOrder: true };
   }
   if (

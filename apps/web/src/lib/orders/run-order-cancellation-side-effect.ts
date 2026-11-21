@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { Json } from '@/types/supabase';
+import { PartialCancellationRefundError } from './partial-cancellation-refund-error';
 
 export type OrderCancellationSideEffectStep = 'refund' | 'customer_email';
 export type OrderCancellationSideEffectStatus =
@@ -15,14 +16,6 @@ interface ClaimResult {
 }
 
 export class DeliveryUncertainError extends Error {}
-
-// Keep accepted refund IDs on the failed attempt for reconciliation. The
-// retry still reads authoritative payment/refund rows before sending anything.
-export class PartialCancellationRefundError extends Error {
-  constructor(public readonly refundIds: number[]) {
-    super('Unable to verify bank card offer refund capture');
-  }
-}
 
 // Thrown when the step cannot advance until provider reconciliation moves
 // (e.g. a refund leg is still pending at Paystack). Unlike a failure this

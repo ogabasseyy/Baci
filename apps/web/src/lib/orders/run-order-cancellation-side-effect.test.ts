@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PartialCancellationRefundError } from './partial-cancellation-refund-error';
 import {
   DeferredError,
   DeliveryUncertainError,
-  PartialCancellationRefundError,
   runOrderCancellationSideEffect,
 } from './run-order-cancellation-side-effect';
 

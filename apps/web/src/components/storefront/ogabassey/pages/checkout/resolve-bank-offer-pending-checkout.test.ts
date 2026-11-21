@@ -1,5 +1,8 @@
 import { expect, it, vi } from 'vitest';
+import { clearCheckoutIdempotencyKey } from './checkout-idempotency';
 import { resolveBankOfferPendingCheckout } from './resolve-bank-offer-pending-checkout';
+
+vi.mock('./checkout-idempotency', () => ({ clearCheckoutIdempotencyKey: vi.fn() }));
 
 const pendingOrder = {
   orderId: 'order-1',
@@ -58,4 +61,17 @@ it('returns the paid order instead of starting another payment', async () => {
       trackingToken: pendingOrder.trackingToken,
     },
   });
+});
+
+it('rotates the saved offer key before retiring a cancelled order', async () => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+    id: pendingOrder.orderId,
+    shipping_status: 'cancelled',
+    payment_status: 'refunded',
+  }));
+  await expect(resolveBankOfferPendingCheckout({ ...options, fetchImpl })).resolves.toEqual({
+    reusableOrder: null,
+    clearStoredOrder: true,
+  });
+  expect(clearCheckoutIdempotencyKey).toHaveBeenCalledWith(pendingOrder.checkoutFingerprint);
 });

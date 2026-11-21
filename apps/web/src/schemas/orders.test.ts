@@ -5,51 +5,9 @@ import {
   reuseCheckoutOrderSchema,
 } from './orders';
 
-const validOrder = {
-  merchant_id: '123e4567-e89b-12d3-a456-426614174000',
-  customer_email: 'test@example.com',
-  customer_name: 'John Doe',
-  customer_phone: '+234 800 123 4567',
-  items: [
-    {
-      name: 'Test Product',
-      quantity: 1,
-      price: 1000,
-      productId: 'prod-1',
-    },
-  ],
-  subtotal: 1000,
-  payment_method: 'card',
-};
+import { validOrder } from './orders.test-support';
 
 describe('orderCreateSchema', () => {
-  it('rejects a bank card offer ID attached to a standard payment', () => {
-    const result = orderCreateSchema.safeParse({
-      ...validOrder,
-      bank_card_offer_id: 'black-friday',
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['bank_card_offer_id']);
-    }
-  });
-
-  it('requires an offer ID when bank-card-offer payment is selected', () => {
-    expect(
-      orderCreateSchema.safeParse({
-        ...validOrder,
-        payment_method: 'bank_card_offer',
-      }).error?.issues[0]?.path
-    ).toEqual(['bank_card_offer_id']);
-    expect(
-      orderCreateSchema.safeParse({
-        ...validOrder,
-        payment_method: 'bank_card_offer',
-        bank_card_offer_id: 'black-friday',
-      }).success
-    ).toBe(true);
-  });
-
   it('accepts valid input', () => {
     const result = orderCreateSchema.safeParse(validOrder);
     expect(result.success).toBe(true);

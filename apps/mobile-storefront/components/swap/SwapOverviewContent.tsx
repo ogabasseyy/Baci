@@ -42,8 +42,8 @@ export function SwapOverviewContent({
           Get an Instant AI{'\n'}Valuation in Seconds
         </Text>
         <Text style={[styles.heroSubtitle, { color: colors.white }]}>
-          Upload a short video of your device. Our AI will analyze the condition
-          and give you an instant trade-in offer.
+          Upload a few photos or a short video of your device. Our AI will
+          analyze the condition and give you an instant trade-in offer.
         </Text>
         <Pressable
           style={[styles.heroButton, { backgroundColor: colors.white }]}

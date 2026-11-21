@@ -141,8 +141,10 @@ export function createNewOrderCustomerActions({
       id: item.id,
       name: getCustomerDisplayName(item),
       phone: item.phone || '',
-      city: address?.city || profile?.city || '',
-      state: address?.state || profile?.state || '',
+      city: (address?.city || profile?.city || '').trim().replace(/,\s*$/, ''),
+      state: (address?.state || profile?.state || '')
+        .trim()
+        .replace(/,\s*$/, ''),
       country: address?.country || profile?.country || '',
       countryCode: address?.countryCode || profile?.country_code || '',
       postalCode: address?.postalCode || profile?.zip_code || '',

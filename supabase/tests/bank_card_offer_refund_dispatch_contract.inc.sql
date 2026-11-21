@@ -131,6 +131,15 @@ BEGIN
   IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference)
     IS DISTINCT FROM 9500
   THEN RAISE EXCEPTION 'Won disputes alone should permit a legitimate cancellation refund'; END IF;
+  IF NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.create', '45', 'open')
+    OR NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve', '45', 'won')
+  THEN RAISE EXCEPTION 'Unable to receive a dispute and close it as won'; END IF;
+  RESET ROLE;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.reconciliation_review WHERE txn_id = v_transaction
+      AND resolved_at IS NOT NULL AND metadata->>'provider_dispute_id' = '45'
+  ) THEN RAISE EXCEPTION 'A clean merchant win must resolve its dispute-only review'; END IF;
+  SET LOCAL ROLE service_role;
   IF NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve', '44', 'lost')
   THEN RAISE EXCEPTION 'Unable to record a lost dispute'; END IF;
   IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS NOT NULL

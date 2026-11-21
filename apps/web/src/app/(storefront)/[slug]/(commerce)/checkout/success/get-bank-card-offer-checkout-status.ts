@@ -1,3 +1,4 @@
+import { CAPTURED_PAYMENT_FINALIZATION_OUTCOMES } from './captured-payment-finalization-outcomes';
 import type { VerificationResponse } from './verify-checkout-payment-response';
 
 export function getBankCardOfferCheckoutStatus(
@@ -12,6 +13,13 @@ export function getBankCardOfferCheckoutStatus(
       ? 'access_required'
       : 'verification_unavailable';
   }
+  if (
+    httpStatus >= 400 &&
+    payment.finalizationOutcome &&
+    CAPTURED_PAYMENT_FINALIZATION_OUTCOMES.has(payment.finalizationOutcome)
+  )
+    return 'pending';
+
   // A proxy or server failure can carry invalid or stale data. Only a
   // successful verification response can establish a terminal outcome.
   if ([408, 429, 502, 503, 504].includes(httpStatus)) return 'pending';

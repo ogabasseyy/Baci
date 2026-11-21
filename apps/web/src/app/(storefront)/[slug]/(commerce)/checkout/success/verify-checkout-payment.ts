@@ -1,5 +1,6 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { CAPTURED_PAYMENT_FINALIZATION_OUTCOMES } from './captured-payment-finalization-outcomes';
 import { normalizeCheckoutBankCardOfferReference } from './normalize-checkout-bank-card-offer-reference';
 import { readBankCardOfferCheckoutResponse } from './read-bank-card-offer-checkout-response';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
@@ -39,19 +40,6 @@ export function hasMatchingPendingRedvaultOrder(
     return false;
   }
 }
-
-// captured the money (mirrors finalizeOrderGatewayPayment kinds): never
-// payment failures — the reverify loop keeps polling for completion.
-// capture_hold_failed joins them: the hold record failed but the capture
-// is durable, so the shopper must keep waiting, never re-pay.
-const CAPTURED_PAYMENT_FINALIZATION_OUTCOMES = new Set([
-  'capture_hold_failed',
-  'completion_failed',
-  'inventory_cleanup_failed',
-  'inventory_failed',
-  'order_fetch_failed',
-  'review_failed',
-]);
 
 // Captured money with no active paid order left to complete: the finalizer
 // filed a reconciliation review (order_cancelled) or the order was refunded

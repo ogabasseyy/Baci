@@ -205,4 +205,22 @@ describe('verifyCheckoutPayment bank card offer', () => {
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [500, 'completion_failed'],
+    [500, 'order_fetch_failed'],
+    [409, 'inventory_failed'],
+  ])('continues polling captured payments on HTTP %s with %s', async (status, finalizationOutcome) => {
+    request.mockResolvedValue(
+      Response.json({ finalizationOutcome }, { status })
+    );
+    const callbacks = handlers();
+    await verifyCheckoutPayment(
+      { ...params, reference: `BCO-${'a'.repeat(32)}` },
+      callbacks
+    );
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+    expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+  });
 });

@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { createHmac } from 'node:crypto';
 import { z } from 'zod';
 
 const settings = z.object({
@@ -18,5 +19,11 @@ export function getGiftCardPilotConfig() {
     orderId: process.env.GIFT_CARD_PILOT_ORDER_ID,
     presentationKey: process.env.GIFT_CARD_WALLET_QUOTE_HMAC,
   });
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) return null;
+  return {
+    ...parsed.data,
+    presentationKey: createHmac('sha256', parsed.data.presentationKey)
+      .update('baci:gift-card-pilot-presentation-key:v1')
+      .digest('hex'),
+  };
 }

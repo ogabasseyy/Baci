@@ -5,6 +5,7 @@ import {
   type GiftCardWorkerOrder,
   runGiftCardWorker,
 } from '../lib/gift-cards/petrock-worker';
+import { readPilotPetrockOffer } from '../lib/gift-cards/pilot-petrock-offer';
 import { createPetrockClient } from '../lib/imei-providers/petrock/petrock-client';
 
 const config = z.object({
@@ -18,17 +19,6 @@ const config = z.object({
   supplierUsd: z.string().regex(/^\d{1,6}\.\d{2}$/),
   productId: z.string().regex(/^\d{1,16}$/),
   amountKobo: z.coerce.number().int().positive(),
-});
-
-const productResponse = z.object({
-  data: z.object({
-    currency: z.literal('USD'),
-    product: z.object({
-      name: z.literal('PlayStation Gift Card [PSN] USA $10'),
-      price: z.union([z.number(), z.string()]).transform(Number),
-      fields: z.array(z.object({ name: z.string() })).length(1),
-    }),
-  }),
 });
 
 async function main() {
@@ -87,17 +77,7 @@ async function main() {
       },
       async verifySupplierPrice(order) {
         if (order.productId !== '2844') return false;
-        const response = await fetch(`${petrockUrl}/products?product_id=2844`, {
-          headers: { Authorization: `Bearer ${options.petrockToken}` },
-          cache: 'no-store',
-          redirect: 'error',
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!response.ok) return false;
-        const result = productResponse.safeParse(await response.json());
-        return result.success &&
-          result.data.data.product.price === Number(options.supplierUsd) &&
-          result.data.data.product.fields[0]?.name === 'Quantity';
+        return readPilotPetrockOffer(Number(options.supplierUsd), petrockUrl, options.petrockToken);
       },
       submit: (order) => provider.submitGiftCardOrder({
         productId: order.productId,

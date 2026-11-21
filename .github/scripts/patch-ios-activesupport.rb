@@ -6,7 +6,9 @@ require "tempfile"
 
 # CocoaPods Core requires ActiveSupport < 8. Port the literal LoadError match
 # from Rails 210ac22d446c8e2625b091e79256806b836eee20 (GHSA-8474-xrp6-wh69)
-# until CocoaPods can use a patched published gem.
+# until CocoaPods can use a patched published gem. A version/source change is
+# deliberately a release blocker: review the upstream fix, then update or remove
+# this backport and its digests alongside the lockfile change.
 module IosActiveSupportBackport
   VERSION = "7.2.3.1"
   ORIGINAL_DIGEST = "3b8028113ff51eac58aec28315a0acf95772decfd3f06f220b9431dcad911831"

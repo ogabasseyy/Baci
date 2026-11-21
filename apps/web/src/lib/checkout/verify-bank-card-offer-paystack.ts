@@ -1,7 +1,7 @@
 import 'server-only';
 import { verifyTransaction } from '@/lib/paystack';
 import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-terminal-status';
-import { paystackTerminalCustomerSchema } from '@/schemas/paystack-card-offer-verification';
+import { paystackTerminalCustomerSchema } from '@/schemas/paystack-terminal-customer';
 import {
   type BankCardOfferAttempt,
   verifyBankCardOfferAttempt,

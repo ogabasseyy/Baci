@@ -1,13 +1,5 @@
 import { z } from 'zod';
 
-const paystackCustomerEmailSchema = z.email();
-
-export const paystackTerminalCustomerSchema = z.object({
-  customer: z.object({
-    email: z.string().trim().pipe(paystackCustomerEmailSchema),
-  }),
-});
-
 export const paystackVerifyResponseSchema = z.object({
   data: z.object({
     amount: z.number().int().positive(),
@@ -18,7 +10,7 @@ export const paystackVerifyResponseSchema = z.object({
     }),
     channel: z.string().min(1),
     currency: z.string().min(1),
-    customer: z.object({ email: paystackCustomerEmailSchema }),
+    customer: z.object({ email: z.email() }),
     domain: z.string().min(1),
     id: z.union([z.number().int().positive(), z.string().min(1)]),
     paid_at: z.iso.datetime({ offset: true }),

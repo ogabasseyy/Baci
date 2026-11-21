@@ -1,8 +1,5 @@
 import { expect, it } from 'vitest';
-import {
-  paystackTerminalCustomerSchema,
-  paystackVerifyResponseSchema,
-} from './paystack-card-offer-verification';
+import { paystackVerifyResponseSchema } from './paystack-card-offer-verification';
 
 const data = {
   amount: 9500,
@@ -36,19 +33,6 @@ it.each([
     paystackVerifyResponseSchema.safeParse({
       status: true,
       data: { ...data, ...change },
-    }).success
-  ).toBe(false);
-});
-
-it('trims buyer email on terminal evidence and rejects malformed addresses', () => {
-  expect(
-    paystackTerminalCustomerSchema.parse({
-      customer: { email: ' customer@example.test ' },
-    })
-  ).toEqual({ customer: { email: 'customer@example.test' } });
-  expect(
-    paystackTerminalCustomerSchema.safeParse({
-      customer: { email: '   ' },
     }).success
   ).toBe(false);
 });

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 
@@ -60,4 +61,21 @@ test('resolves the Oxygen preview fixture graph only in staging development', ()
       assert.equal(require(stub).OxygenVisualQaRoute, null);
     }
   }
+});
+
+test('the app route resolves its preview import to the release stub', () => {
+  const source = readFileSync(
+    new URL('../app/oxygen-visual-qa.tsx', import.meta.url),
+    'utf8'
+  );
+  const specifier =
+    /import\s*\{\s*OxygenVisualQaRoute\s*\}\s*from\s*['"]([^'"]+)['"]/.exec(
+      source
+    )?.[1];
+  assert.ok(specifier, 'the Expo route must use a resolvable preview import');
+  const stub = resolveOxygenStagingModule(specifier, {
+    NODE_ENV: 'production',
+  });
+  assert.equal(stub, require.resolve('./oxygen-preview-release'));
+  assert.equal(require(stub).OxygenVisualQaRoute, null);
 });

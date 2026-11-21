@@ -1,0 +1,9 @@
+# Base-owned PR audit
+
+`base-owned-pr-audit.yml` runs the existing SARIF exemption hardening audit using trusted code from the immutable PR base. It fetches the PR head as Git objects and materializes `.github` blobs as inert data; it does not run head code, consume repository secrets, or upload SARIF. The existing `Security` workflow remains responsible for Semgrep and its SARIF filtering. This audit is an additional check, not a replacement scanner: in particular it does not close the fork-PR SAST coverage gap (#3624).
+
+The new check is **not an enforcement boundary** until a repository owner separately makes `Base-owned PR audit` a required status check. Strict up-to-date branch protection or an equivalent current-base merge-queue re-audit must also remain enabled: `pull_request_target` does not rerun an existing PR merely because the base advances. The snapshot helper additionally requires the event's base commit to be an ancestor of its head, and verifies the fetched PR head matches the immutable event SHA. A PR that is behind must update its branch and rerun.
+
+GitHub's public-repository Actions event policy may block `pull_request_target`; an owner must review the applicable policy and rollout before requiring the check. GitHub says its default policy will be enforced for affected public repositories on 2026-12-02. See [GitHub's secure `pull_request_target` guidance](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target). Do not enable a privileged checkout or execute PR code to work around policy restrictions.
+
+Trusted-tree changes remain advisory within the auditor to preserve a legitimate update path; the required code-owner review on `.github/**` remains necessary. The scanner workflow and its own invocation are still PR-controlled until a separate full base-owned SAST design lands. This is partial hardening, not closure of #3599, #3621, or #3624.

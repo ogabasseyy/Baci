@@ -99,6 +99,9 @@ it('shows the mocked price, debits once on confirmation, and delivers only after
 
 it('withholds the voucher when completion data is missing or for another order', () => {
   expect(
+    resolveGiftCardFulfillment(identity, { ...final, replay: null }, decode)
+  ).toEqual({ status: 'review' });
+  expect(
     resolveGiftCardFulfillment(
       identity,
       { ...final, referenceId: 'other' },

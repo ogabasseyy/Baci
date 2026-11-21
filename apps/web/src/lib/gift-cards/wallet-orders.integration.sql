@@ -1,4 +1,4 @@
--- Run wallet-orders.fixture.sql and the gift-card migration first, in a disposable database.
+-- Run wallet-orders.fixture.sql and the gift-card migrations first, in a disposable database.
 BEGIN;
 
 INSERT INTO vault.decrypted_secrets VALUES
@@ -73,6 +73,22 @@ BEGIN
      OR (SELECT count(*) FROM public.gift_card_wallet_orders) <> 1 THEN
     RAISE EXCEPTION 'Expected exactly one durable debit and order';
   END IF;
+
+  INSERT INTO public.customers VALUES
+    ('30000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002');
+  payload := payload || jsonb_build_object(
+    'id','50000000-0000-4000-8000-000000000003',
+    'userId','10000000-0000-4000-8000-000000000002'
+  );
+  proof := encode(extensions.hmac('baci:gift-card-wallet:v1' || chr(10) || payload::text, repeat('t',48),'sha256'),'hex');
+  PERFORM set_config('request.jwt.claim.sub','10000000-0000-4000-8000-000000000002',true);
+  BEGIN
+    SET LOCAL ROLE authenticated;
+    PERFORM public.confirm_gift_card_wallet_quote(payload::text,proof);
+    RAISE EXCEPTION 'Customer without a wallet was permitted';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    IF SQLERRM <> 'invalid_gift_card_quote' THEN RAISE; END IF;
+  END;
 END;
 $$;
 

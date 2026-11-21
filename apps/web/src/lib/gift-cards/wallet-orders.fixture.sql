@@ -3,6 +3,7 @@ CREATE ROLE anon;
 CREATE ROLE authenticated;
 CREATE ROLE service_role;
 CREATE SCHEMA auth;
+CREATE SCHEMA private;
 CREATE SCHEMA extensions;
 CREATE SCHEMA vault;
 CREATE EXTENSION pgcrypto WITH SCHEMA extensions;

@@ -98,6 +98,7 @@ export function useCheckoutShipping({
   });
   const resetQuotes = () => {
     shippingQuoteAbortRef.current?.abort();
+    setIsLoadingQuotes(false);
     setShippingQuotes([]);
     setSelectedQuoteId('');
     setResolvedQuoteKey('');
@@ -172,10 +173,9 @@ export function useCheckoutShipping({
     if (!watchedState) resetQuotes();
   }
   const quotesSuspendReason = watchedState && watchedCity ? null : 'address';
-  const [prevQuotesSuspendReason, setPrevQuotesSuspendReason] =
-    useState(quotesSuspendReason);
-  if (prevQuotesSuspendReason !== quotesSuspendReason) {
-    setPrevQuotesSuspendReason(quotesSuspendReason);
+  const [priorSuspend, setPriorSuspend] = useState(quotesSuspendReason);
+  if (priorSuspend !== quotesSuspendReason) {
+    setPriorSuspend(quotesSuspendReason);
     if (quotesSuspendReason !== null && deliveryMethod !== 'airport') {
       resetQuotes();
     }

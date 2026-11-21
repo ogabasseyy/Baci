@@ -13,7 +13,7 @@ interface NotifyNegotiationResponseWithFallbackParams {
   negotiationId: string;
   negotiationType: 'single' | 'total';
   productSlug?: string | null;
-  status: 'accepted' | 'rejected';
+  status: 'accepted' | 'rejected' | 'countered';
 }
 
 export type NegotiationResponseNotificationResult =

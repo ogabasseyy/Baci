@@ -9,13 +9,25 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { notifyNegotiationResponseWithFallback } from '@/lib/negotiation-response-notifier';
 
-const bodySchema = z.object({
-  negotiationId: z.uuid(),
-  status: z.enum(['accepted', 'rejected']),
-});
+const bodySchema = z
+  .object({
+    negotiationId: z.uuid(),
+    status: z.enum(['accepted', 'rejected', 'countered']),
+    counterOffer: z
+      .number()
+      .finite()
+      .positive()
+      .max(9999999999.99)
+      .multipleOf(0.01)
+      .optional(),
+  })
+  .refine((body) => body.status !== 'countered' || body.counterOffer != null, {
+    message: 'A positive counter offer is required',
+    path: ['counterOffer'],
+  });
 
 const NEGOTIATION_RESPONSE_SELECT =
-  'id, merchant_id, customer_id, customer_email, customer_phone, type, item_info, offered_price, status';
+  'id, merchant_id, customer_id, customer_email, customer_phone, type, item_info, offered_price, counter_offer, status';
 
 type ResolvedNegotiation = {
   customer_email: string | null;
@@ -25,6 +37,7 @@ type ResolvedNegotiation = {
   item_info: { name?: string | null; product_slug?: string | null } | null;
   merchant_id: string;
   offered_price: number | null;
+  counter_offer: number | null;
   status: string;
   type: string;
 };
@@ -41,10 +54,15 @@ function notifyResolvedNegotiation({
   negotiation: ResolvedNegotiation;
 }) {
   const negotiationStatus = negotiation.status;
-  if (negotiationStatus !== 'accepted' && negotiationStatus !== 'rejected') {
+  if (
+    negotiationStatus !== 'accepted' &&
+    negotiationStatus !== 'rejected' &&
+    negotiationStatus !== 'countered'
+  ) {
     throw new Error('Negotiation has not been resolved yet');
   }
-  const resolvedStatus: 'accepted' | 'rejected' = negotiationStatus;
+  const resolvedStatus: 'accepted' | 'rejected' | 'countered' =
+    negotiationStatus;
 
   const negotiationType = negotiation.type;
   if (negotiationType !== 'single' && negotiationType !== 'total') {
@@ -56,7 +74,9 @@ function notifyResolvedNegotiation({
   const acceptedPrice =
     negotiationStatus === 'accepted' && negotiation.offered_price != null
       ? Number(negotiation.offered_price)
-      : null;
+      : negotiationStatus === 'countered'
+        ? Number(negotiation.counter_offer)
+        : null;
   const productSlug = negotiation.item_info?.product_slug ?? null;
 
   return notifyNegotiationResponseWithFallback({
@@ -111,10 +131,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { negotiationId, status } = parsed.data;
+  const { negotiationId, status, counterOffer } = parsed.data;
   const { data: negotiation, error: updateError } = await supabase
     .from('negotiation_requests')
-    .update({ status })
+    .update({
+      status,
+      ...(status === 'countered' ? { counter_offer: counterOffer } : {}),
+    })
     .eq('id', negotiationId)
     .eq('merchant_id', access.merchantId)
     .eq('status', 'pending')
@@ -151,7 +174,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const { data: rolledBack, error: rollbackError } = await supabase
       .from('negotiation_requests')
-      .update({ status: 'pending' })
+      .update({
+        status: 'pending',
+        ...(status === 'countered' ? { counter_offer: null } : {}),
+      })
       .eq('id', negotiationId)
       .eq('merchant_id', access.merchantId)
       .eq('status', status)

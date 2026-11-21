@@ -46,7 +46,7 @@ RUBY
     return :already_patched if digest == PATCHED_DIGEST
     abort "Unexpected ActiveSupport source digest in #{path}" unless digest == ORIGINAL_DIGEST
 
-    patched = source.sub(ORIGINAL_MATCH, PATCHED_MATCH)
+    patched = source.sub(ORIGINAL_MATCH) { PATCHED_MATCH }
     abort "ActiveSupport backport helper was not found" if patched == source
     patched = patched.sub(UNUSED_HELPER, "")
     abort "ActiveSupport backport helper was not found" if patched.include?(UNUSED_HELPER)

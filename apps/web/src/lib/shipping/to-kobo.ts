@@ -1,6 +1,10 @@
 const decimalPattern = /^\+?(\d*)(?:\.(\d*))?(?:e([+-]?\d+))?$/i;
 
-/** Positive naira to safe whole kobo, using PostgreSQL numeric half-up rounding. */
+/**
+ * Round positive naira to safe whole kobo using PostgreSQL numeric half-up
+ * semantics. A positive amount below half a kobo rounds to zero. Callers
+ * requiring a payable amount must enforce a positive number of kobo.
+ */
 export function toKobo(
   value: number | string | null | undefined
 ): number | null {

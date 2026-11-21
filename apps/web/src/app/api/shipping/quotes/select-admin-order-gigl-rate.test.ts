@@ -22,14 +22,17 @@ function fixture(data: unknown) {
 }
 
 describe('admin GIG delivery rate selection', () => {
-  it('selects the settled price and service even when other rates are cheaper', async () => {
+  it.each([
+    1500, 1499.995,
+  ])('selects the settled service at %s when its rounded fee matches', async (price) => {
+    const candidate = { ...settled, price };
     const { db, rpc } = fixture({
       service: 'GoFaster',
       delivery_minor: 150000,
     });
     expect(
-      await selectAdminOrderGiglRate(db, order, [cheaper, settled])
-    ).toEqual({ quote: settled });
+      await selectAdminOrderGiglRate(db, order, [cheaper, candidate])
+    ).toEqual({ quote: candidate });
     expect(rpc).toHaveBeenCalledExactlyOnceWith(
       'read_settled_partner_delivery',
       {

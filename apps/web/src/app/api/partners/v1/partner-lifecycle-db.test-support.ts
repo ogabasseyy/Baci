@@ -75,7 +75,7 @@ function verifyGiglWalletBinding(orderId: string) {
       EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'partner_delivery_price_changed' THEN RAISE; END IF;
       END;
-      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499);
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499.9949);
       BEGIN
         PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
           v_quote_id, v_order.shipping_address);
@@ -106,7 +106,7 @@ function verifyGiglWalletBinding(orderId: string) {
           IF SQLERRM <> 'partner_delivery_origin_or_parcel_changed' THEN RAISE; END IF;
         END;
       END LOOP;
-      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499.999);
+      v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499.995);
       PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
         v_quote_id, v_order.shipping_address);
     END;

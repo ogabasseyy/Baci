@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { mapPartnerDeliveryConflict } from '@/lib/shipping/map-partner-delivery-conflict';
 
 /**
  * Map known wallet-charge trigger rejections to stable 409 responses so
@@ -10,15 +11,8 @@ export function mapOrderPatchUpdateError(updateError: {
 }): NextResponse | null {
   const message = updateError.message ?? '';
 
-  if (message === 'partner_delivery_destination_changed') {
-    return NextResponse.json(
-      {
-        code: 'PARTNER_DELIVERY_DESTINATION_CHANGED',
-        error: 'Use the destination on the paid partner quote.',
-      },
-      { status: 409 }
-    );
-  }
+  const partnerConflict = mapPartnerDeliveryConflict(message);
+  if (partnerConflict) return partnerConflict;
 
   if (message.includes('active_shipping_charge_address_edit_blocked')) {
     return NextResponse.json(

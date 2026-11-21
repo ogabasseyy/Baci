@@ -46,6 +46,8 @@ DECLARE
   receipt jsonb;
   accepted_id uuid;
   expired_submissions bigint;
+  expected_job record;
+  existing_job_id bigint;
   n integer;
 BEGIN
   FOR n IN 1..2 LOOP
@@ -277,21 +279,23 @@ BEGIN
      )) <> 3 THEN
     RAISE EXCEPTION 'quote expiry failed to remove abandoned data or keep protected quotes';
   END IF;
-  IF to_regclass('cron.job') IS NOT NULL THEN
-    IF NOT EXISTS (
-      SELECT 1 FROM cron.job
-      WHERE jobname = 'partner-unclaimed-quote-expiry' AND active
-        AND schedule = '22 * * * *' AND command = 'SELECT private.expire_unclaimed_partner_quotes();'
-    ) THEN
-      RAISE EXCEPTION 'quote expiry job is missing from the managed scheduler';
-    END IF;
-    IF NOT EXISTS (
-      SELECT 1 FROM cron.job
-      WHERE jobname = 'partner-unverified-submission-expiry' AND active
-        AND command = 'SELECT private.expire_unverified_partner_submissions();'
-    ) THEN
-      RAISE EXCEPTION 'submission expiry job is missing from the managed scheduler';
-    END IF;
+  IF to_regprocedure('cron.schedule(text,text,text)') IS NOT NULL THEN
+    FOR expected_job IN SELECT * FROM (VALUES
+      ('partner-unclaimed-quote-expiry', '22 * * * *', 'SELECT private.expire_unclaimed_partner_quotes();'),
+      ('partner-unverified-submission-expiry', '37 * * * *', 'SELECT private.expire_unverified_partner_submissions();')
+    ) AS expected(job_name, job_schedule, job_command)
+    LOOP
+      SELECT jobid INTO STRICT existing_job_id FROM cron.job
+      WHERE jobname = expected_job.job_name AND database = current_database();
+      IF NOT EXISTS (
+        SELECT 1 FROM cron.job WHERE jobid = existing_job_id AND active
+          AND username = current_user AND schedule = expected_job.job_schedule
+          AND command = expected_job.job_command
+      ) OR cron.schedule(expected_job.job_name, expected_job.job_schedule, expected_job.job_command)
+        IS DISTINCT FROM existing_job_id THEN
+        RAISE EXCEPTION 'partner expiry job is missing, duplicated or not reusable: %', expected_job.job_name;
+      END IF;
+    END LOOP;
   END IF;
 END;
 $$;

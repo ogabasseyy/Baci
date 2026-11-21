@@ -7,6 +7,7 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
+import { mapPartnerDeliveryConflict } from '@/lib/shipping/map-partner-delivery-conflict';
 import { readMerchantShippingWalletBalance } from '@/lib/shipping/merchant-shipping-wallet-balance';
 import { persistAdminGiglQuote } from '@/lib/shipping/persist-admin-gigl-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
@@ -18,7 +19,6 @@ import {
 } from './admin-order-gigl-customer-paid-conflict';
 import {
   calculateAdminWalletFunding,
-  getAdminPartnerDeliveryConflict,
   toAdminPublicQuote,
 } from './admin-order-gigl-quote.helpers';
 import { resolveAdminOrderGiglQuoteInput } from './admin-order-gigl-quote-input';
@@ -234,27 +234,7 @@ export async function postAdminOrderGiglQuote(
     // Settlement can land between the check above and this bind.
     if (bindError.message?.includes(CUSTOMER_CHECKOUT_REBIND_FORBIDDEN))
       return customerPaidGiglShippingResponse();
-    if (bindError.message === 'partner_settled_order_amounts_immutable') {
-      return NextResponse.json(
-        {
-          code: 'PARTNER_SETTLED_ORDER_AMOUNTS_IMMUTABLE',
-          error:
-            'The settled partner order amounts must be preserved. Review the settlement before booking.',
-        },
-        { status: 409 }
-      );
-    }
-    if (bindError.message?.includes('partner_delivery_price_changed')) {
-      return NextResponse.json(
-        {
-          code: 'PARTNER_DELIVERY_PRICE_CHANGED',
-          error:
-            'The current GIG rate differs from the settled delivery fee. Resolve the difference before booking.',
-        },
-        { status: 409 }
-      );
-    }
-    const partnerConflict = getAdminPartnerDeliveryConflict(bindError.message);
+    const partnerConflict = mapPartnerDeliveryConflict(bindError.message);
     if (partnerConflict) return partnerConflict;
     const already = bindError.message?.includes('already');
     const staleInputs = bindError.message?.includes('stale_order_quote_inputs');

@@ -1,13 +1,10 @@
-import type { CartLine, CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Product } from '@/lib/products';
 import {
   resetCartSessionHintForTests,
   writeCartSessionHint,
 } from './cart-session-hint';
 import { saveCartToStorage } from './cart-storage';
-import type { CartItem } from './cart-types';
 import {
   bootstrapSharedCart,
   createSharedCart,
@@ -15,6 +12,16 @@ import {
   fetchSharedCartSnapshot,
   sendSharedCartCommand,
 } from './shared-cart-client';
+import {
+  CART_ID,
+  cartItem,
+  cartLine,
+  MERCHANT_ID,
+  mockAdopted,
+  product,
+  SLUG,
+  snapshot,
+} from './use-cart-link-lifecycle.test-support';
 import { useSharedCart } from './use-shared-cart';
 
 vi.mock('./shared-cart-client', () => ({
@@ -24,81 +31,6 @@ vi.mock('./shared-cart-client', () => ({
   fetchSharedCartSnapshot: vi.fn(),
   sendSharedCartCommand: vi.fn(),
 }));
-
-const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
-
-const SLUG = 'ogabassey';
-
-const CART_ID = '22222222-2222-4222-8222-222222222222';
-
-function product(overrides: Record<string, unknown> = {}): Product {
-  return {
-    brand: 'Brand',
-    description: '',
-    gtin: '',
-    id: 'prod-1',
-    image: '/prod-1.png',
-    imageHint: 'product',
-    imageLarge: '/prod-1-large.png',
-    manage_stock: false,
-    mpn: '',
-    name: 'Phone',
-    price: 100,
-    slug: 'phone',
-    status: 'active',
-    stock: 10,
-    ...overrides,
-  } as Product;
-}
-
-function cartItem(overrides: Record<string, unknown> = {}): CartItem {
-  return {
-    ...product(),
-    cartItemId: 'prod-1',
-    quantity: 1,
-    ...overrides,
-  } as CartItem;
-}
-
-function cartLine(overrides: Record<string, unknown> = {}): CartLine {
-  return {
-    id: 'line-1',
-    item: { productId: 'prod-1' },
-    lineTotalMinor: 10000,
-    quantity: 1,
-    unitPriceMinor: 10000,
-    ...overrides,
-  } as CartLine;
-}
-
-function snapshot(overrides: Record<string, unknown> = {}): CartSnapshot {
-  const lines = (overrides.lines as CartLine[] | undefined) ?? [cartLine()];
-  const subtotalMinor = lines.reduce(
-    (sum, line) => sum + line.lineTotalMinor,
-    0
-  );
-  return {
-    cartId: CART_ID,
-    currency: 'NGN',
-    estimatedTotals: false,
-    expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-    lines,
-    merchantId: MERCHANT_ID,
-    state: 'active',
-    subtotalMinor,
-    totalMinor: subtotalMinor,
-    version: 3,
-    ...overrides,
-  } as CartSnapshot;
-}
-
-function mockAdopted(version = 3, lines: CartLine[] = [cartLine()]) {
-  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
-    ok: true,
-    snapshot: snapshot({ lines, version }),
-    warnings: [],
-  });
-}
 
 describe('useSharedCart link', () => {
   afterEach(() => {
@@ -192,43 +124,6 @@ describe('useSharedCart link', () => {
       ['prod-foreign'],
       MERCHANT_ID
     );
-  });
-
-  it('reloads catalog details for a cached fallback from a handoff', async () => {
-    saveCartToStorage(
-      [
-        cartItem({
-          cartItemId: 'line-1',
-          image: '',
-          imageLarge: '',
-          name: 'Unavailable item',
-          serverLineId: 'line-1',
-          slug: 'prod-1',
-        }),
-      ],
-      SLUG
-    );
-    mockAdopted();
-    vi.mocked(fetchSharedCartProducts).mockResolvedValue(
-      new Map([['prod-1', product({ name: 'Xiaomi Smart Camera C300' })]])
-    );
-
-    const { result } = renderHook(() =>
-      useSharedCart({
-        merchantId: MERCHANT_ID,
-        merchantSlug: SLUG,
-        sessionGeneration: 1,
-      })
-    );
-
-    await waitFor(() =>
-      expect(result.current.cart[0]).toMatchObject({
-        name: 'Xiaomi Smart Camera C300',
-        quantity: 1,
-        serverLineId: 'line-1',
-      })
-    );
-    expect(sendSharedCartCommand).not.toHaveBeenCalled();
   });
 
   it('stays idle without a session until the first action bootstraps', async () => {

@@ -13,6 +13,8 @@ DECLARE
   second_handoff uuid := gen_random_uuid();
   third_handoff uuid := gen_random_uuid();
   ordinary_handoff uuid := gen_random_uuid();
+  changed_handoff uuid := gen_random_uuid();
+  reduced_handoff uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
   result jsonb;
@@ -101,6 +103,47 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-test-link-3', third_handoff, 'bootstrap-retry', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true' OR (result->'state'->>'cartId')::uuid IS DISTINCT FROM guest_cart
   THEN RAISE EXCEPTION 'Lost bootstrap reply did not recover the same cart: %', result; END IF;
+
+  -- Link cleanup must not discard the quantity already imported.
+  DELETE FROM public.commerce_cart_handoffs WHERE id IN (handoff, second_handoff);
+  PERFORM pg_temp.handoff_claim(source, source_grant, 'legacy:mcp:test-import');
+  result := public.commerce_cart_mutate(source, 'add-after-handoff', source_version,
+    jsonb_build_object('type', 'add', 'item', jsonb_build_object('productId', removed_product), 'quantity', 1));
+  IF result->>'ok' IS DISTINCT FROM 'true'
+  THEN RAISE EXCEPTION 'Could not add a second source item: %', result; END IF;
+  source_version := (result->>'currentVersion')::integer;
+  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
+    origin_principal_id, operation_id, destination, expires_at)
+  VALUES (changed_handoff, 'import-updated-link', merchant, source, 'legacy:mcp:test-import',
+    'legacy-handoff:mcp-import:updated', '{"type":"web"}', now() + interval '5 minutes');
+  PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
+  result := public.commerce_cart_import_mcp_handoff('import-updated-link', changed_handoff, 'forward-update', source_version);
+  IF result->>'ok' IS DISTINCT FROM 'true'
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination AND product_id = product) IS DISTINCT FROM 2::bigint
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination AND product_id = removed_product) IS DISTINCT FROM 1::bigint
+  THEN RAISE EXCEPTION 'A new source version did not copy just new quantities: %', result; END IF;
+  result := public.commerce_cart_import_mcp_handoff('import-updated-link', changed_handoff, 'repeat-update', source_version);
+  IF result->>'replayed' IS DISTINCT FROM 'true'
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 3::bigint
+  THEN RAISE EXCEPTION 'Reopening an updated link duplicated imported quantities: %', result; END IF;
+
+  PERFORM pg_temp.handoff_claim(source, source_grant, 'legacy:mcp:test-import');
+  result := public.commerce_cart_mutate(source, 'remove-after-handoff', source_version,
+    jsonb_build_object('type', 'remove', 'lineId', (
+      SELECT id FROM public.commerce_cart_lines WHERE cart_id = source AND product_id = product
+    )));
+  IF result->>'ok' IS DISTINCT FROM 'true'
+  THEN RAISE EXCEPTION 'Could not remove an already transferred source item: %', result; END IF;
+  source_version := (result->>'currentVersion')::integer;
+  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
+    origin_principal_id, operation_id, destination, expires_at)
+  VALUES (reduced_handoff, 'import-reduced-link', merchant, source, 'legacy:mcp:test-import',
+    'legacy-handoff:mcp-import:reduced', '{"type":"web"}', now() + interval '5 minutes');
+  PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
+  result := public.commerce_cart_import_mcp_handoff('import-reduced-link', reduced_handoff, 'forward-reduction', source_version);
+  IF result->>'ok' IS DISTINCT FROM 'true'
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 3::bigint
+  THEN RAISE EXCEPTION 'A source reduction edited the independent website cart: %', result; END IF;
 END $$;
 
 DO $$
@@ -115,6 +158,9 @@ DECLARE
 BEGIN
   IF has_function_privilege('anon', 'public.commerce_cart_import_mcp_handoff(text,uuid,text,integer)', 'EXECUTE')
   THEN RAISE EXCEPTION 'Anonymous imports must be rejected'; END IF;
+  IF has_table_privilege('commerce_cart_shopper', 'private.commerce_cart_mcp_imports', 'SELECT')
+     OR has_table_privilege('commerce_cart_shopper', 'private.commerce_cart_mcp_imports', 'INSERT')
+  THEN RAISE EXCEPTION 'Shoppers must not directly access import snapshots'; END IF;
   INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
   VALUES (source, merchant, now() + interval '1 day'), (destination, merchant, now() + interval '1 day');
   INSERT INTO public.commerce_cart_grants(merchant_id, cart_id, principal_id, expires_at)

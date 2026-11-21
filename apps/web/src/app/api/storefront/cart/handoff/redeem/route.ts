@@ -1,5 +1,6 @@
 import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   detectHandoffCaller,
@@ -173,12 +174,19 @@ export async function POST(request: NextRequest) {
       ) {
         return cartErrorResponse('temporarily_unavailable');
       }
-      return cartJsonResponse({
+      const response = cartJsonResponse({
         cart: redeemed.cart,
         choice: redeemed.choice,
         replayed: redeemed.replayed,
         warnings: redeemed.warnings,
       });
+      applyCartSnapshotCookies(response, {
+        cart: redeemed.cart,
+        cookieMaxAge: 0,
+        merchantId: context.merchant.id,
+        proof: null,
+      });
+      return response;
     }
 
     let proof: string | null = null;

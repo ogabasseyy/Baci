@@ -18,8 +18,12 @@ import {
 import type { GuestCartStoreLike } from './guest-cart-health';
 import { mapGuestCartToolError } from './guest-cart-tool-responses';
 
+const WEBSITE_CART_IMPORT_GUIDANCE =
+  'After the first website handoff, fresh links add only new or increased quantities. Review or remove items already copied on the website.';
+
 export const GUEST_CREDENTIAL_UPDATE_DESCRIPTION =
-  'Add, change or remove items in the same Ogabassey guest cart. The first add creates the cart automatically without sign-in; omit cartCredential only when starting a new cart. On later messages reuse the exact cartCredential from structuredContent and never display it. For "remove it" or "remove the charger", match the referenced item to a product_id from the last cart result and set quantity to zero. Ask which item if ambiguous. If cart details are missing, call get_ogabassey_guest_cart with the same credential. If the credential is missing or expired, explain that the existing cart could not be updated. Never guess a credential or create a replacement cart to simulate removal. Quantity is the desired total for that product. Send the returned version as expectedVersion and a new operationId for each distinct edit. Preserve operationId on retries when the result is unknown. Use cart_url exactly as returned to open the remaining items on the website; call get_ogabassey_guest_cart to refresh a link. Account creation at checkout is optional. This tool never places an order or starts payment.';
+  'Add, change or remove items in the same Ogabassey guest cart. The first add creates the cart automatically without sign-in; omit cartCredential only when starting a new cart. On later messages reuse the exact cartCredential from structuredContent and never display it. For "remove it" or "remove the charger", match the referenced item to a product_id from the last cart result and set quantity to zero. Ask which item if ambiguous. If cart details are missing, call get_ogabassey_guest_cart with the same credential. If the credential is missing or expired, explain that the existing cart could not be updated. Never guess a credential or create a replacement cart to simulate removal. Quantity is the desired total for that product. Send the returned version as expectedVersion and a new operationId for each distinct edit. Preserve operationId on retries when the result is unknown. Use cart_url exactly as returned to open the website cart; call get_ogabassey_guest_cart to refresh a link. Account creation at checkout is optional. This tool never places an order or starts payment. ' +
+  WEBSITE_CART_IMPORT_GUIDANCE;
 
 const signedHandoffTokenSchema = cartHandoffPairingTokenSchema.regex(
   /^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
@@ -89,7 +93,8 @@ export function registerGuestCredentialRead(
     {
       title: 'Get Ogabassey Guest Cart',
       description:
-        'Read the existing guest cart and return a fresh website checkout link for its remaining items. Reuse the exact private cartCredential from the last successful cart tool result in this chat. Use this when a cart link is invalid or has ended. Show the cart_url exactly as returned. Never repeat an add or removal to refresh a link. Do not expose the cart token. This tool never places an order or starts payment.',
+        'Read the existing guest cart and return a fresh website checkout link. Reuse the exact private cartCredential from the last successful cart tool result in this chat. Use this when a cart link is invalid or has ended. Show the cart_url exactly as returned. Never repeat an add or removal to refresh a link. Do not expose the cart credential. This tool never places an order or starts payment. ' +
+        WEBSITE_CART_IMPORT_GUIDANCE,
       inputSchema: mcpGuestCartReadInputSchema,
       outputSchema: mcpGuestCredentialOutputSchema,
       annotations: {
@@ -132,10 +137,11 @@ export function registerGuestCredentialRead(
 
 /** Represent the same server-minted 256-bit capability on the model tool. */
 export function decodeGuestCartCredential(credential: string): string {
-  return Buffer.from(
-    modelCartCredentialSchema.parse(credential),
-    'base64url'
-  ).toString('hex');
+  return canonicalCredentialToHex(modelCartCredentialSchema.parse(credential));
+}
+
+function canonicalCredentialToHex(credential: string): string {
+  return Buffer.from(credential, 'base64url').toString('hex');
 }
 
 export function parseGuestCredentialUpdateInput(input: unknown) {
@@ -144,7 +150,7 @@ export function parseGuestCredentialUpdateInput(input: unknown) {
   const { cartCredential, ...update } = parsed.data;
   return mcpGuestCartInputSchema.safeParse({
     ...update,
-    cart_token: cartCredential && decodeGuestCartCredential(cartCredential),
+    cart_token: cartCredential && canonicalCredentialToHex(cartCredential),
   });
 }
 
@@ -156,17 +162,15 @@ export function guestCredentialReply<
     typeof cart_token === 'string' && /^[a-f0-9]{64}$/.test(cart_token)
       ? Buffer.from(cart_token, 'hex').toString('base64url')
       : undefined;
+  const recoveryText = state.cart_expired === true
+    ? 'This guest cart expired or is no longer available. Explain that the existing cart could not be opened or updated. Do not start another cart unless the shopper asks.'
+    : state.retryable === true && credential
+      ? 'Read the current cart with the returned cartCredential. If retrying an update whose outcome is unknown, retain its operationId. Do not create a second cart.'
+      : undefined;
   return {
     ...reply,
-    ...(state.cart_expired === true
-      ? {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'This guest cart expired or is no longer available. Explain that the existing cart could not be opened or updated. Do not start another cart unless the shopper asks.',
-            },
-          ],
-        }
+    ...(recoveryText
+      ? { content: [{ type: 'text' as const, text: recoveryText }] }
       : {}),
     structuredContent: {
       ...state,

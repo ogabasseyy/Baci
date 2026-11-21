@@ -109,8 +109,8 @@ export function registerGuestCartTool(
           ? [{ type: 'oauth2', scopes: ['cart:write'] }]
           : [{ type: 'noauth' }],
         ui: {
-          visibility: options.guestCredentialMode
-            ? [options.modelCredentialTool ? 'model' : 'app']
+          visibility: options.modelCredentialTool
+            ? ['model']
             : ['model', 'app'],
         },
         ...(!options.modelCredentialTool && { 'openai/widgetAccessible': true }),

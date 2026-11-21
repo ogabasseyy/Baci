@@ -93,7 +93,6 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
   expect(listed.tools.map(({ name }) => name).sort()).toEqual([
     readName,
     updateName,
-    'update_ogabassey_guest_cart',
   ]);
   expect(
     listed.tools.every(
@@ -101,12 +100,6 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
         JSON.stringify(tool._meta?.securitySchemes) === '[{"type":"noauth"}]'
     )
   ).toBe(true);
-  expect(
-    listed.tools.find(({ name }) => name === 'update_ogabassey_guest_cart')
-      ?._meta?.ui
-  ).toEqual({
-    visibility: ['app'],
-  });
   expect(
     listed.tools.find(({ name }) => name === updateName)?._meta?.ui
   ).toEqual({
@@ -175,6 +168,8 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
     code: 'refresh_required',
   });
   expect(JSON.stringify(noHandoff)).not.toContain('guest_cart=');
+  expect(JSON.stringify(noHandoff.content)).toContain('cartCredential');
+  expect(JSON.stringify(noHandoff.content)).not.toContain('cart_token');
 
   bridge.read.mockRejectedValueOnce(new GuestCartExpiredError());
   bridge.update.mockRejectedValueOnce(new GuestCartExpiredError());

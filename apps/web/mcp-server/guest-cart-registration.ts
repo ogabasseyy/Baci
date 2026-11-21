@@ -13,16 +13,17 @@ export function registerConfiguredGuestCartTool(
     'enablePrivateTextContinuation' | 'modelCredentialTool'
   >
 ) {
+  if (options.guestCredentialMode) {
+    registerGuestCartTool(server, { ...options, modelCredentialTool: true });
+    registerGuestCredentialRead(server, options.store);
+    return;
+  }
   registerGuestCartTool(server, {
     ...options,
-    enablePrivateTextContinuation:
-      !options.guestCredentialMode && privateCartContinuationEnabled(),
+    enablePrivateTextContinuation: privateCartContinuationEnabled(),
   });
   if (options.connectionCart) {
     registerConnectedCartRead(server, options.store, options.connectionCart);
-  } else if (options.guestCredentialMode) {
-    registerGuestCartTool(server, { ...options, modelCredentialTool: true });
-    registerGuestCredentialRead(server, options.store);
   } else {
     // Stateless links are only for legacy callers. Connected shoppers use the
     // persistent cart tools so additions, removals and handoffs share one cart.

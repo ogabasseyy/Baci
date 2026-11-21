@@ -16,7 +16,10 @@ export interface DestinationLoaderDeps {
   incoming?: { cart: CartSnapshot; handoffId: string };
 }
 
-/** Both channels already use this cart. Opening it needs no grant or write. */
+/**
+ * The browser already holds this cart's grant. Leave the pending link usable
+ * by the intended recipient until it expires, and discard only this tab's locator.
+ */
 function openAlreadySharedCart(
   destination: CartSnapshot | null,
   incoming: DestinationLoaderDeps['incoming']

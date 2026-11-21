@@ -214,7 +214,7 @@ function connectBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('POST /api/storefront/cart/handoff/redeem', () => {
-  it('imports into the website cart with its original grant and no cookie replacement', async () => {
+  it('sets the active hint after import without replacing the website session proof', async () => {
     mocks.cartPayload = {
       ok: true,
       currentVersion: 4,
@@ -230,7 +230,12 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
       headers: { cookie: `baci-cart-${MERCHANT_ID}=${destSessionProof()}` },
     });
     expect(response.status).toBe(200);
-    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(response.headers.get('set-cookie')).toContain(
+      `baci-cart-hint-${MERCHANT_ID}=1`
+    );
+    expect(response.headers.get('set-cookie')).not.toContain(
+      `baci-cart-${MERCHANT_ID}=`
+    );
     expect(await response.json()).toMatchObject({
       choice: 'import_mcp',
       cart: { cartId: DEST_CART_ID, lines: [{ quantity: 2 }] },

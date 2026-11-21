@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CLI v2.111.0 pins these database/schema-init jobs in:
+# CLI 3.1.0 starts exactly these database/schema-init images because the replay writes their tags into the
+# project's supabase/.temp/*-version pin files before `db start`
+# (apps/web/tools/db/supabase-replay-image-pins.ts). They are the images CLI v2.111.0 shipped as defaults:
 # https://github.com/supabase/cli/blob/v2.111.0/apps/cli-go/pkg/config/templates/Dockerfile
+# and they keep the replay on PostgreSQL 17.6 (server_version_num 170006) like the committed production
+# fixture. CLI 3.1.0's own, newer defaults are in:
+# https://github.com/supabase/cli/blob/v3.1.0/apps/cli/src/shared/services/Dockerfile
 # Both official registries publish identical linux/amd64 manifest digests.
 # This covers db start; optional gen-types additionally needs postgres-meta.
-if [[ "$(supabase --version)" != "2.111.0" ]]; then
-  echo "Supabase replay image pins require CLI 2.111.0" >&2
+if [[ "$(supabase --version)" != "3.1.0" ]]; then
+  echo "Supabase replay image pins require CLI 3.1.0" >&2
   exit 1
 fi
 

@@ -245,7 +245,7 @@ export async function verifySupabaseReplayContract(options: {
     mismatch('tsx-node');
   }
   if (
-    (await stdout(options.runCommand, 'supabase', ['--version'])) !== '2.111.0'
+    (await stdout(options.runCommand, 'supabase', ['--version'])) !== '3.1.0'
   ) {
     mismatch('supabase');
   }

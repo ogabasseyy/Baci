@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { useNewOrderController } from '@/hooks/useNewOrderController';
 import { NewOrderDetailsSection } from './NewOrderDetailsSection';
@@ -155,6 +155,16 @@ describe('NewOrderDetailsSection address behavior', () => {
     } else {
       process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY = originalGoogleMapsApiKey;
     }
+  });
+
+  it('offers a delivery address for a manual order to the selected customer', () => {
+    const controller = makeController({ sameAsCustomer: true });
+    controller.customer = { ...controller.customer, id: 'existing-customer' };
+    render(
+      <NewOrderDetailsSection allowOrderAddressEdit controller={controller} />
+    );
+    expect(screen.getByText('Delivery Address')).toBeInTheDocument();
+    expect(screen.getByText('google-places')).toBeInTheDocument();
   });
 
   it('clears stale city and state when the selected address omits those components', () => {

@@ -38,11 +38,16 @@ export function NewOrderAddressInput({
   const hasGoogleMapsApiKey = Boolean(googleMapsApiKey);
   const selectedDescriptionRef = useRef<string | null>(null);
   const [detailsRecovery, setDetailsRecovery] = useState(false);
+  const [manualLocality, setManualLocality] = useState(false);
 
-  const setCity = (text: string) =>
+  const setCity = (text: string) => {
+    setManualLocality(true);
     setDeliveryInfo((previous) => ({ ...previous, city: text }));
-  const setState = (text: string) =>
+  };
+  const setState = (text: string) => {
+    setManualLocality(true);
     setDeliveryInfo((previous) => ({ ...previous, state: text }));
+  };
 
   return (
     <View style={{ zIndex: 5 }}>
@@ -82,6 +87,7 @@ export function NewOrderAddressInput({
             }}
             onPress={(data, details = null) => {
               selectedDescriptionRef.current = data.description;
+              setManualLocality(false);
               if (!details) {
                 setDetailsRecovery(true);
                 setDeliveryInfo((previous) => ({
@@ -146,6 +152,7 @@ export function NewOrderAddressInput({
                 }
                 selectedDescriptionRef.current = null;
                 setDetailsRecovery(false);
+                setManualLocality(Boolean(text.trim()));
                 setDeliveryInfo((previous) => ({
                   ...clearGeocodedFields(previous),
                   address: text,
@@ -165,14 +172,19 @@ export function NewOrderAddressInput({
               value: deliveryInfo.address,
             }}
           />
-          {detailsRecovery ? (
+          {detailsRecovery ||
+          manualLocality ||
+          (deliveryInfo.address.trim() &&
+            !(deliveryInfo.city.trim() && deliveryInfo.state.trim())) ? (
             <View style={{ marginTop: 8 }}>
-              <Text
-                accessibilityRole="alert"
-                style={[styles.listSubValue, { color: colors.warning }]}
-              >
-                {DETAILS_RECOVERY_ERROR}
-              </Text>
+              {detailsRecovery ? (
+                <Text
+                  accessibilityRole="alert"
+                  style={[styles.listSubValue, { color: colors.warning }]}
+                >
+                  {DETAILS_RECOVERY_ERROR}
+                </Text>
+              ) : null}
               <NewOrderManualLocalityFields
                 city={deliveryInfo.city}
                 colors={colors}

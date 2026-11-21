@@ -1,29 +1,24 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import * as addressDraftEdit from '@/lib/order-gigl-address-draft';
 import {
   OrderGiglFundingPoller,
   type OrderGiglPollContext,
 } from '@/lib/order-gigl-funding-poller';
-import { resolveOrderGiglQuoteConfirmationGate } from '@/lib/order-gigl-quote-confirmation';
 import { resolveOrderGiglQuoteFailure } from '@/lib/order-gigl-quote-failure';
 import {
   getMerchantWalletSummary,
-  type OrderGiglMissingField,
   type OrderGiglQuoteResult,
-  type OrderGiglReceiver,
-  type OrderGiglSelectedPlace,
 } from '@/lib/order-gigl-shipping';
 import { bindOrderGiglShippingAppState } from '@/lib/order-gigl-shipping-app-state';
 import {
   getOrderGiglAddressSignature,
   invalidateOrderGiglFundingQueries,
-  isOrderGiglQuoteFresh,
   type OrderGiglShippingParams,
   type OrderGiglShippingState,
-  toOrderGiglAddressDraft,
+  toCompleteOrderGiglReceiver,
   toOrderGiglWalletState,
 } from '@/lib/order-gigl-shipping-state';
+import { useOrderGiglAddressEditor } from './useOrderGiglAddressEditor';
 import { useOrderGiglFunding } from './useOrderGiglFunding';
 import { useOrderGiglQuoteRequester } from './useOrderGiglQuoteRequester';
 import { useOrderGiglQuoteState } from './useOrderGiglQuoteState';
@@ -44,30 +39,41 @@ export function useOrderGiglShipping({
     invalidateQuote,
     isBoundTo,
     quote,
-    quoteBoundRef,
+    confirm,
+    resetConfirmation,
     quoteRef,
     setWallet,
     wallet,
     walletRef,
   } = useOrderGiglQuoteState();
-  const [addressDraft, setAddressDraft] = useState<Partial<OrderGiglReceiver>>(
-    toOrderGiglAddressDraft(initialAddress)
+  const addressEditor = useOrderGiglAddressEditor({
+    initialAddress,
+    orderId,
+    preview,
+    invalidateQuote,
+  });
+  const {
+    addressDraft,
+    addressRef,
+    editingAddressRef,
+    missingFields,
+    setMissingFields,
+  } = addressEditor;
+  const canEditAddress = Boolean(
+    storedOrder &&
+      !storedOrder.selected_quote_id &&
+      storedOrder.shipping_funding_source !== 'customer_checkout'
   );
-  const addressRef = useRef(addressDraft);
   const requester = useOrderGiglQuoteRequester({
     addressRef,
     previewCacheScope,
     storedOrder,
   });
-  const [missingFields, setMissingFields] = useState<OrderGiglMissingField[]>(
-    []
-  );
   const [state, setState] = useState<OrderGiglShippingState>('idle');
   const [error, setError] = useState<string | null>(null);
   const initialAddressSignature = getOrderGiglAddressSignature(initialAddress);
   const controllerRef = useRef<AbortController | null>(null);
   const pollerRef = useRef<OrderGiglFundingPoller | null>(null);
-  const confirmationRef = useRef(false);
   const enabledRef = useRef(enabled);
   const previewRef = useRef(preview);
   const appActiveRef = useRef(true);
@@ -93,12 +99,21 @@ export function useOrderGiglShipping({
   };
   const applyQuoteResult = (result: OrderGiglQuoteResult, bound: boolean) => {
     applyQuote(result, bound ? requester.storedAddressSignature() : null);
+    editingAddressRef.current = false;
     setMissingFields([]);
     setError(null);
     setState('ready');
   };
-  const requestQuote = async (isValid: () => boolean = () => true) => {
+  const requestQuote = async (
+    isValid: () => boolean = () => true,
+    saveAddress = false
+  ) => {
     if (!enabledRef.current || !orderId) return null;
+    if (editingAddressRef.current && !saveAddress) return null;
+    if (saveAddress && !toCompleteOrderGiglReceiver(addressRef.current)) {
+      setError('Complete the delivery address and phone before saving.');
+      return null;
+    }
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -106,7 +121,12 @@ export function useOrderGiglShipping({
     setError(null);
     try {
       const bound = !previewRef.current;
-      const result = await requester.fetch(orderId, !bound, controller.signal);
+      const result = await requester.fetch(
+        orderId,
+        !bound,
+        controller.signal,
+        saveAddress
+      );
       if (!controller.signal.aborted && isValid()) {
         applyQuoteResult(result, bound);
         return result;
@@ -120,23 +140,29 @@ export function useOrderGiglShipping({
         setState('missing_address');
         return;
       }
+      if (
+        failure.kind === 'edit_address' &&
+        canEditAddress &&
+        !previewRef.current
+      ) {
+        openAddressEditor();
+        setError(failure.message);
+        return null;
+      }
       setError(failure.message);
       setState('error');
     }
     return null;
   };
   requestQuoteRef.current = requestQuote;
-  const editDraft = (edit: addressDraftEdit.DraftEdit) => {
-    addressRef.current = edit(addressRef.current);
-    setAddressDraft(addressRef.current);
-    invalidateQuote();
+  const openAddressEditor = () => {
+    controllerRef.current?.abort();
+    addressEditor.begin();
+    setError(null);
+    setState('missing_address');
   };
-  const updateAddressField = (field: OrderGiglMissingField, value: string) =>
-    editDraft((draft) =>
-      addressDraftEdit.applyAddressField(draft, field, value)
-    );
-  const selectAddressPlace = (place: OrderGiglSelectedPlace) =>
-    editDraft((draft) => addressDraftEdit.applySelectedPlace(draft, place));
+  const beginAddressEdit =
+    canEditAddress && !preview ? openAddressEditor : undefined;
   const refreshBalance = async (context?: OrderGiglPollContext) => {
     const isCurrent = () =>
       !context ||
@@ -162,28 +188,6 @@ export function useOrderGiglShipping({
       return refreshed ? toOrderGiglWalletState(refreshed) : walletRef.current;
     }
     return next;
-  };
-  const ensureFreshQuoteForConfirmation = async () => {
-    const gate = resolveOrderGiglQuoteConfirmationGate({
-      confirmationInFlight: confirmationRef.current,
-      preview: previewRef.current,
-      quoteBound: quoteBoundRef.current,
-      hasQuote: Boolean(quoteRef.current),
-      canBook: Boolean(walletRef.current?.canBook),
-      quoteFresh: quoteRef.current
-        ? isOrderGiglQuoteFresh(quoteRef.current)
-        : false,
-      boundChargeRecovery: Boolean(walletRef.current?.boundChargeRecovery),
-    });
-    if (gate === 'deny') return false;
-    if (gate === 'allow') return true;
-    confirmationRef.current = true;
-    try {
-      await requestQuote();
-      return false;
-    } finally {
-      confirmationRef.current = false;
-    }
   };
   const startTransferPoll = () => {
     stopPolling();
@@ -219,13 +223,14 @@ export function useOrderGiglShipping({
     stopPolling();
     setError(null);
     setMissingFields([]);
+    addressEditor.reset();
     setState('idle');
   };
   const clearOrderScopedState = () => {
     reset();
     invalidateQuote();
     requester.clear();
-    confirmationRef.current = false;
+    resetConfirmation();
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: orderId boundary
   useLayoutEffect(() => {
@@ -233,19 +238,6 @@ export function useOrderGiglShipping({
     orderIdRef.current = orderId;
     clearOrderScopedState();
   }, [orderId]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scalar address deps
-  useLayoutEffect(() => {
-    const next = toOrderGiglAddressDraft(initialAddress);
-    setAddressDraft(next);
-    addressRef.current = next;
-  }, [
-    initialAddress?.address,
-    initialAddress?.city,
-    initialAddress?.latitude,
-    initialAddress?.longitude,
-    initialAddress?.phone,
-    initialAddress?.state,
-  ]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: render-local request
   useEffect(() => {
     // The order refetch after an address save carries the address the bound
@@ -281,20 +273,23 @@ export function useOrderGiglShipping({
 
   return {
     addressDraft,
+    beginAddressEdit,
     error,
-    ensureFreshQuoteForConfirmation,
+    ensureFreshQuoteForConfirmation: () =>
+      confirm(previewRef.current, requestQuote),
     fundingAccount,
     missingFields,
     quote,
     refreshBalance,
     refreshFundingAccount,
-    requestQuote,
+    requestQuote: () => requestQuote(),
+    saveAddressAndRequestQuote: () => requestQuote(undefined, true),
     reset,
     startFunding,
     startTransferPoll,
     state,
-    selectAddressPlace,
-    updateAddressField,
+    selectAddressPlace: addressEditor.selectAddressPlace,
+    updateAddressField: addressEditor.updateAddressField,
     wallet,
   };
 }

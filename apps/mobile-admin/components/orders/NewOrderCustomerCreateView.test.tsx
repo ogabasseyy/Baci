@@ -431,6 +431,39 @@ describe('NewOrderCustomerCreateView', () => {
     expect(screen.queryByText('Save Customer')).not.toBeInTheDocument();
   });
 
+  it('keeps the typed delivery address when choosing a duplicate customer', () => {
+    const duplicateCustomer: SelectableCustomer = {
+      address: null,
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({
+      duplicateCustomer,
+      newCustomer: {
+        ...createEmptyNewCustomerDraft(),
+        address: '10 Hospital Road',
+      },
+    });
+    render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
+
+    expect(
+      screen.getByText('The address you entered will be used for this order.')
+    ).toBeInTheDocument();
+    const button = screen.getByText('Use This').closest('button');
+    if (!button) throw new Error('Missing customer selection button');
+    fireEvent.click(button);
+    expect(harness.controller.handleSelectCustomer).toHaveBeenCalledWith(
+      duplicateCustomer,
+      true
+    );
+  });
+
   it('surfaces an existing duplicate customer and reuses it from the banner', () => {
     const duplicateCustomer: SelectableCustomer = {
       address: '12 Allen Avenue',

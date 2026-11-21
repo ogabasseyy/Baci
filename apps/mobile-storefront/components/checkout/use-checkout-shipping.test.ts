@@ -85,6 +85,39 @@ describe('useCheckoutShipping', () => {
     mockFetchShippingQuotes.mockResolvedValue(undefined);
   });
 
+  it('discards a rejected quote and requests a replacement for the current delivery', async () => {
+    const quote = (id: string): ShippingQuote => ({
+      id,
+      displayName: 'GIGL Standard',
+      price: 2500,
+      provider: 'GIGL',
+    });
+    mockFetchShippingQuotes.mockImplementationOnce(async (args) => {
+      args.setShippingQuotes([quote('rejected')]);
+      args.setSelectedQuoteId('rejected');
+      args.setResolvedShippingQuoteContextKey(args.quoteContextKey);
+    });
+    const { result } = renderHook(() =>
+      useCheckoutShipping(createLocatedParams('FCT - Abuja', 'Abuja'))
+    );
+    await waitFor(() =>
+      expect(result.current.selectedQuoteId).toBe('rejected')
+    );
+
+    act(() => result.current.invalidateShippingQuote());
+    expect(result.current.selectedQuoteId).toBe('');
+    expect(result.current.shippingQuotes).toEqual([]);
+    expect(mockFetchShippingQuotes).toHaveBeenCalledTimes(2);
+    expect(mockFetchShippingQuotes).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        city: 'Abuja',
+        state: 'FCT - Abuja',
+        shouldResetSelection: true,
+        previousSelectedQuoteId: null,
+      })
+    );
+  });
+
   it('loads shipping states on mount and clears the loading flag', async () => {
     const { result } = renderHook(
       (props: ShippingParams) => useCheckoutShipping(props),

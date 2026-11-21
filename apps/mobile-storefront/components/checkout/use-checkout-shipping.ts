@@ -268,6 +268,10 @@ export function useCheckoutShipping({
     deliveryMethod,
     getShippingProvider: () => getProvider(deliveryMethod, selectedQuote),
     ...handlers,
+    invalidateShippingQuote: () => {
+      shippingQuoteAbortRef.current?.abort();
+      resetQuotes();
+    },
     isLoadingCities,
     isLoadingLocations,
     isLoadingQuotes,

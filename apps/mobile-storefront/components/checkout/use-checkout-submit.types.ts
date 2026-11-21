@@ -30,6 +30,7 @@ export interface UseCheckoutSubmitParams {
   onRedvaultOrder?: (
     input: import('./redvault/RedvaultOrderReview').RedvaultReviewInput
   ) => void;
+  onShippingQuoteRejected?: () => void;
   accountPassword: string;
   appliedDiscountCode?: string | null;
   availablePaymentMethods: PaymentMethodType[];

@@ -22,6 +22,7 @@ function getQuoteMerchantId(): string | undefined {
 }
 
 export interface QuoteResponse {
+  receiverState?: unknown;
   quotes: {
     all: ShippingQuote[];
   };
@@ -212,6 +213,7 @@ export const fetchShippingQuotes = async ({
     if (response.ok) {
       const data: QuoteResponse & { warnings?: string[] } =
         await response.json();
+      if (signal?.aborted) return;
       const quotes = normalizeShippingQuotes(data.quotes?.all || []);
       const stationPickupQuotes =
         deliveryPreference === 'pickup_station'
@@ -233,8 +235,20 @@ export const fetchShippingQuotes = async ({
               ...merchantPickupQuotes,
             ]
           : stationPickupQuotes;
+      const quotedState =
+        typeof data.receiverState === 'string' && data.receiverState.trim()
+          ? data.receiverState.trim()
+          : undefined;
       setShippingQuotes(
-        selectableQuotes.map((quote) => ({ ...quote, receiverAddress }))
+        selectableQuotes.map((quote) => ({
+          ...quote,
+          receiverAddress,
+          ...(quotedState && quote.provider?.toUpperCase() === 'GIGL'
+            ? {
+                receiverState: { quoted: quotedState, requested: state.trim() },
+              }
+            : {}),
+        }))
       );
       setResolvedShippingQuoteContextKey(quoteContextKey);
       setSelectedQuoteId(

@@ -1,3 +1,4 @@
+import { areLocationStateLabelsEquivalent } from '@baci/shared/lib';
 import type { OrderCreateInput } from '@/schemas/orders';
 import type { parseStoredQuoteRequest } from './order-shipment-booking-utils';
 
@@ -38,47 +39,74 @@ export function normalizeAddressForQuoteMatch(
   return normalizedAddress;
 }
 
-function matchesDomesticQuoteAddress(
-  shippingAddress: OrderShippingAddressForQuote,
-  receiver: NonNullable<ReturnType<typeof parseStoredQuoteRequest>>['receiver']
-): boolean {
-  if (
-    normalizeText(shippingAddress.city) !== normalizeText(receiver.city) ||
-    normalizeText(shippingAddress.state) !== normalizeText(receiver.state)
-  ) {
-    return false;
-  }
+type DestinationField =
+  | 'address'
+  | 'city'
+  | 'state'
+  | 'country'
+  | 'countryCode'
+  | 'postalCode';
 
-  const quoteStreet = normalizeAddressForQuoteMatch(
-    receiver.address,
-    receiver.city,
-    receiver.state
-  );
-  const orderStreet = normalizeAddressForQuoteMatch(
-    shippingAddress.address,
-    shippingAddress.city,
-    shippingAddress.state
-  );
-  return orderStreet === quoteStreet;
+export function getQuoteDestinationMismatchFields(
+  shippingAddress: OrderShippingAddressForQuote,
+  quoteRequest: NonNullable<ReturnType<typeof parseStoredQuoteRequest>>
+): DestinationField[] {
+  const { receiver, shipmentType } = quoteRequest;
+  const mismatches: DestinationField[] = [];
+  const domestic = shipmentType === 'domestic';
+  const quoteCountryCode = normalizeText(receiver.countryCode);
+  const nigerian =
+    domestic &&
+    (quoteCountryCode
+      ? quoteCountryCode === 'ng'
+      : normalizeText(receiver.country) === 'nigeria');
+
+  if (normalizeText(shippingAddress.city) !== normalizeText(receiver.city)) {
+    mismatches.push('city');
+  }
+  if (
+    normalizeText(shippingAddress.state) !== normalizeText(receiver.state) &&
+    !(
+      nigerian &&
+      areLocationStateLabelsEquivalent(
+        shippingAddress.state ?? '',
+        receiver.state ?? ''
+      )
+    )
+  ) {
+    mismatches.push('state');
+  }
+  if (
+    normalizeText(shippingAddress.address) !==
+      normalizeText(receiver.address) &&
+    (!domestic ||
+      normalizeAddressForQuoteMatch(
+        shippingAddress.address,
+        shippingAddress.city,
+        shippingAddress.state
+      ) !==
+        normalizeAddressForQuoteMatch(
+          receiver.address,
+          receiver.city,
+          receiver.state
+        ))
+  ) {
+    mismatches.push('address');
+  }
+  for (const field of ['country', 'countryCode', 'postalCode'] as const) {
+    if (!matchesOptionalText(shippingAddress[field], receiver[field])) {
+      mismatches.push(field);
+    }
+  }
+  return mismatches;
 }
 
 export function matchesQuoteDestination(
   shippingAddress: OrderShippingAddressForQuote,
   quoteRequest: NonNullable<ReturnType<typeof parseStoredQuoteRequest>>
 ): boolean {
-  const receiver = quoteRequest.receiver;
-  const addressMatches =
-    quoteRequest.shipmentType === 'domestic'
-      ? matchesDomesticQuoteAddress(shippingAddress, receiver)
-      : normalizeText(shippingAddress.address) ===
-        normalizeText(receiver.address);
-
   return (
-    addressMatches &&
-    normalizeText(shippingAddress.city) === normalizeText(receiver.city) &&
-    normalizeText(shippingAddress.state) === normalizeText(receiver.state) &&
-    matchesOptionalText(shippingAddress.country, receiver.country) &&
-    matchesOptionalText(shippingAddress.countryCode, receiver.countryCode) &&
-    matchesOptionalText(shippingAddress.postalCode, receiver.postalCode)
+    getQuoteDestinationMismatchFields(shippingAddress, quoteRequest).length ===
+    0
   );
 }

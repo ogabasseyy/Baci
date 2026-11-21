@@ -33,6 +33,18 @@ describe('readMigratedLegacyWallets', () => {
     ['a missing count', { totalBalance: '0.00', wallets: [] }],
     ['a numeric balance', { count: 0, totalBalance: 0, wallets: [] }],
     [
+      'a count with no wallet ids',
+      { count: 1, totalBalance: '1.00', wallets: [] },
+    ],
+    [
+      'more wallet ids than the count',
+      {
+        count: 0,
+        totalBalance: '1.00',
+        wallets: [{ walletId: WALLET_A, balance: '1.00' }],
+      },
+    ],
+    [
       'an unexpected key',
       { count: 0, totalBalance: '0.00', wallets: [], names: [] },
     ],

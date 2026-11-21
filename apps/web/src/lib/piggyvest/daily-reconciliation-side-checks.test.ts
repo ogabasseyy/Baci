@@ -11,7 +11,16 @@ describe('readSideChecks', () => {
       rows: [
         {
           result: statement.includes('read_migrated_legacy_wallet_balances')
-            ? { count: 1, totalBalance: '5.00', wallets: [] }
+            ? {
+                count: 1,
+                totalBalance: '5.00',
+                wallets: [
+                  {
+                    walletId: '0b3f1e0a-0000-4000-8000-0000000000a1',
+                    balance: '5.00',
+                  },
+                ],
+              }
             : {
                 stuckPayments: [{ operationId: 'a' }],
                 undelivered: [],

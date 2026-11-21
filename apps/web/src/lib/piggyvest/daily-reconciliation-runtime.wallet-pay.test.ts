@@ -112,7 +112,9 @@ describe('runPiggyvestDailyReconciliation: moved legacy wallets', () => {
     const execute = executeWith(snapshot(), ledger(), undefined, {
       count: 2,
       totalBalance: '9.00',
-      wallets: [],
+      wallets: [
+        { walletId: '0b3f1e0a-0000-4000-8000-0000000000a1', balance: '9.00' },
+      ],
     });
     const { deps } = makeDeps({
       createExecutor: vi.fn(() => execute) as never,

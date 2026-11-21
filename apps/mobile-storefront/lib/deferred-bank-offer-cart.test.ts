@@ -14,7 +14,9 @@ jest.mock('@/stores/cart-store', () => ({
     persist: { hasHydrated: jest.fn(() => true) },
   },
 }));
-jest.mock('@/lib/logger', () => ({ logger: { warn: jest.fn() } }));
+jest.mock('@/lib/logger', () => ({
+  logger: { info: jest.fn(), warn: jest.fn() },
+}));
 
 const stored = new Map<string, string>();
 const clearCart = jest.fn<() => Promise<void>>();
@@ -138,6 +140,11 @@ it('keeps cart edits and does not replace the original marker on a repeat callba
   );
   expect(clearCart).not.toHaveBeenCalled();
   expect([...stored.values()]).toEqual(['consumed']);
+  expect(logger.info).toHaveBeenCalledTimes(1);
+  expect(logger.info).toHaveBeenCalledWith(
+    'Bank card checkout',
+    'Preserved an edited cart after payment'
+  );
 });
 
 it('retains the first snapshot when two callbacks save concurrently', async () => {

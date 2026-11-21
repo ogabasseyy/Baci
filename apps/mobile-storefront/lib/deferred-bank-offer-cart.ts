@@ -101,6 +101,11 @@ export const deferredBankOfferCart = {
           await runCartStep('cleanup', 'clear_cart', () =>
             useCartStore.getState().clearCart()
           );
+        } else {
+          logger.info(
+            'Bank card checkout',
+            'Preserved an edited cart after payment'
+          );
         }
       }
       // Payment is verified. Even if the snapshot was absent or the cart

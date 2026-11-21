@@ -32,6 +32,8 @@ const verification: PaymentVerificationDependencies = {
 // instead of POSTing through a CSRF failure.
 export function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
+  // GET rejects the whole reserved namespace with 405. Authenticated
+  // POST validates the exact stored reference and returns 400 for aliases.
   if (hasBankCardOfferReferencePrefix(searchParams.get('reference')?.trim())) {
     return NextResponse.json(
       { error: 'Bank card offer verification requires authenticated POST' },

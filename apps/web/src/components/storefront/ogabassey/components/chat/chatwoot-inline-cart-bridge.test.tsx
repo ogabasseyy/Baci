@@ -27,11 +27,28 @@ describe('ChatwootInlineCartBridge', () => {
 
     expect(mocks.useChatwootInlineCartBridge).toHaveBeenCalledWith(
       'store-a',
-      'https://chatwoot.example.com'
+      'https://chatwoot.example.com',
+      false
     );
     expect(view.container).toBeEmptyDOMElement();
 
     view.unmount();
     expect(view.container).toBeEmptyDOMElement();
+  });
+
+  it('forwards the checkout flag to the hook', () => {
+    render(
+      <ChatwootInlineCartBridge
+        storeSlug="store-a"
+        widgetOrigin="https://chatwoot.example.com"
+        checkoutEnabled
+      />
+    );
+
+    expect(mocks.useChatwootInlineCartBridge).toHaveBeenCalledWith(
+      'store-a',
+      'https://chatwoot.example.com',
+      true
+    );
   });
 });

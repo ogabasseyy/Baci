@@ -13,6 +13,7 @@ import {
   refreshOrderShipmentQuote,
 } from './refresh-order-shipment-quote';
 import { resolveBookingMerchantSender } from './resolve-booking-merchant-sender';
+import { selectOrderBookingSender } from './select-order-booking-sender';
 import {
   applyShippingQuoteBookingEconomicsToQuote,
   getShippingQuoteBookingEconomics,
@@ -30,7 +31,7 @@ export async function refreshWalletOrderShipmentQuote(
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(
-      'id, selected_quote_id, shipping_provider, shipping_address, order_items(name, quantity, price, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions))'
+      'id, source, selected_quote_id, shipping_provider, shipping_address, order_items(name, quantity, price, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -122,7 +123,11 @@ export async function refreshWalletOrderShipmentQuote(
         senderResult.code ?? 'MERCHANT_SENDER_REQUIRED'
       );
     }
-    sender = senderResult.sender;
+    sender = selectOrderBookingSender(
+      order.source,
+      senderResult.sender,
+      request.sender
+    );
   }
 
   // Reserved/provider_submitting charges already hold the attested quote.

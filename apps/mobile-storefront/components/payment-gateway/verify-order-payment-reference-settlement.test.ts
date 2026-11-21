@@ -77,6 +77,7 @@ describe('checkReferenceSettled transport selection', () => {
     } as never);
     mockFetchWithTimeout.mockResolvedValue(
       jsonResponse({
+        orderNumber: 'BAC-001',
         orderId: 'order-1',
         success: false,
         status: 'reversed',

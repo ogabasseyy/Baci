@@ -85,6 +85,45 @@ it('rejects a malformed bank offer reference before navigation or cart changes',
   expect(setPaymentStatus).toHaveBeenLastCalledWith('error');
 });
 
+it('retains the original cart snapshot when the gateway closes during verification', async () => {
+  jest.clearAllMocks();
+  const isMountedRef = { current: true };
+  jest
+    .mocked(verifyOrderPaymentForCompletion)
+    .mockImplementationOnce(async () => {
+      isMountedRef.current = false;
+      return { paid: false };
+    });
+  const reference = `BCO-${'a'.repeat(32)}`;
+  const clearCart = jest.fn<() => void>();
+  const navigate = jest.fn();
+
+  await settleOrderCompletion(
+    {
+      orderId: 'order-1',
+      reference,
+      clearCart,
+      clearPendingLoadTimeout: jest.fn(),
+      isMountedRef,
+      paymentCompletionStartedRef: { current: false },
+      scheduleDelayedNavigation: navigate,
+      setErrorMessage: jest.fn(),
+      setPaymentStatus: jest.fn(),
+    },
+    undefined,
+    false
+  );
+
+  expect(deferredBankOfferCart.remember).toHaveBeenCalledWith(
+    'order-1',
+    reference,
+    'cart-identity'
+  );
+  expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
+});
+
 it.each([
   'cart-identity',
   null,

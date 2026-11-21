@@ -109,13 +109,9 @@ export async function settleOrderCompletion(
       trackingToken,
       reference,
     });
-    // The shopper may have left while verification was pending (up to
-    // its full timeout): a late response must not record a conversion
-    // or erase the cart after unmount — a new storefront cart built
-    // since would be destroyed even though navigation refuses to run.
-    if (!isMountedRef.current) {
-      return;
-    }
+    // Keep the checkout-time identity even if the WebView closes during
+    // verification. A later visit can clear it only after verifying the
+    // same order and reference and matching the still-unchanged cart.
     if (
       bankOfferReference &&
       cartIdentity &&
@@ -125,7 +121,11 @@ export async function settleOrderCompletion(
       await deferredBankOfferCart
         .remember(orderId, bankOfferReference, cartIdentity)
         .catch(() => undefined);
-      if (!isMountedRef.current) return;
+    }
+    // A late response must not record a conversion, erase the cart, or
+    // navigate after the shopper has left the gateway.
+    if (!isMountedRef.current) {
+      return;
     }
     if (verification.paid) {
       if (bankOfferReference) {

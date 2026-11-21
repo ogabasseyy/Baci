@@ -1,10 +1,10 @@
 import { captureOxygenCheckoutSnapshot } from '@/components/payments/oxygen/oxygen-checkout-snapshot';
 import { toast } from '@/hooks/use-toast';
+import { bankOfferCheckoutReferenceStorage } from '../bank-offer-checkout-reference-storage';
 import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-completed';
 import { captureCheckoutPaymentFailed } from '../capture-checkout-payment-failed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
 import { oxygenLocalAttempt } from '../oxygen-local-attempt';
-import { persistBankOfferCheckoutReference } from '../persist-pending-checkout-order';
 import type { CheckoutPaymentDispatchContext } from './checkout-payment-dispatch-context';
 import { completeCheckoutOrder } from './complete-checkout-order';
 import { initializeCheckoutGateway } from './initialize-checkout-gateway';
@@ -138,7 +138,7 @@ export async function dispatchCheckoutPayment(
       return;
     } else if (paymentResult.success && paymentResult.authorization_url) {
       if (order.payment_method === 'bank_card_offer') {
-        persistBankOfferCheckoutReference(
+        bankOfferCheckoutReferenceStorage.write(
           merchant.id,
           order.id,
           paymentResult.reference

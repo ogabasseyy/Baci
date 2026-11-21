@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { clearCheckoutIdempotencyKey } from './checkout-idempotency';
-import { persistBankOfferCheckoutReference } from './persist-pending-checkout-order';
+import { bankOfferCheckoutReferenceStorage } from './bank-offer-checkout-reference-storage';
 import { resolveBankOfferPendingCheckout } from './resolve-bank-offer-pending-checkout';
 
 vi.mock('./checkout-idempotency', () => ({ clearCheckoutIdempotencyKey: vi.fn() }));
@@ -49,7 +49,7 @@ it.each([
 
 it('hands a matching saved attempt to reference verification without declaring it paid', async () => {
   const reference = `BCO-${'a'.repeat(32)}`;
-  persistBankOfferCheckoutReference(pendingOrder.merchantId, pendingOrder.orderId, reference);
+  bankOfferCheckoutReferenceStorage.write(pendingOrder.merchantId, pendingOrder.orderId, reference);
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
     Response.json({ id: pendingOrder.orderId, payment_status: 'paid' })
   );
@@ -63,7 +63,7 @@ it('hands a matching saved attempt to reference verification without declaring i
 });
 
 it('keeps a paid row without a matching reference fenced', async () => {
-  persistBankOfferCheckoutReference(pendingOrder.merchantId, 'other-order', `BCO-${'a'.repeat(32)}`);
+  bankOfferCheckoutReferenceStorage.write(pendingOrder.merchantId, 'other-order', `BCO-${'a'.repeat(32)}`);
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
     Response.json({ id: pendingOrder.orderId, payment_status: 'paid' })
   );
@@ -72,7 +72,7 @@ it('keeps a paid row without a matching reference fenced', async () => {
 });
 
 it('keeps an edited cart fenced even when the saved paid order has a reference', async () => {
-  persistBankOfferCheckoutReference(pendingOrder.merchantId, pendingOrder.orderId, `BCO-${'a'.repeat(32)}`);
+  bankOfferCheckoutReferenceStorage.write(pendingOrder.merchantId, pendingOrder.orderId, `BCO-${'a'.repeat(32)}`);
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
     Response.json({ id: pendingOrder.orderId, payment_status: 'paid' })
   );

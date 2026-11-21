@@ -173,6 +173,14 @@ it('includes server-computed exclusive tax in the exact amount before order crea
     'create_storefront_bank_card_offer_order',
     expect.objectContaining({
       p_order: expect.objectContaining({ tax_amount: taxAmount }),
+      p_quote: expect.objectContaining({
+        allocations: [
+          expect.objectContaining({
+            itemId: '1',
+            productId: options.items[0].product_id,
+          }),
+        ],
+      }),
     })
   );
 });

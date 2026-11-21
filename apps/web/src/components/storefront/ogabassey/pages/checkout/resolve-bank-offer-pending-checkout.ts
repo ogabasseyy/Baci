@@ -11,7 +11,7 @@ import {
   isProgressedButUnpaidOrderState,
   paidOrderIdentity,
 } from './pending-checkout-redvault-fence';
-import { readBankOfferCheckoutReference } from './persist-pending-checkout-order';
+import { bankOfferCheckoutReferenceStorage } from './bank-offer-checkout-reference-storage';
 import { recoverBankOfferCheckoutOrder } from './recover-bank-offer-checkout-order';
 
 export async function resolveBankOfferPendingCheckout({
@@ -56,7 +56,7 @@ export async function resolveBankOfferPendingCheckout({
       pendingOrder.paymentMethod === 'bank_card_offer' ||
       existing.payment_method === 'bank_card_offer'
     ) {
-      const reference = readBankOfferCheckoutReference(merchantId, pendingOrder.orderId);
+      const reference = bankOfferCheckoutReferenceStorage.read(merchantId, pendingOrder.orderId);
       if (!reference || !checkoutFingerprintsMatch(checkoutFingerprint, pendingOrder.checkoutFingerprint)) {
         throw new Error(message);
       }

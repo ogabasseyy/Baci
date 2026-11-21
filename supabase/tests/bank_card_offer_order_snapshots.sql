@@ -86,6 +86,19 @@ BEGIN
     );
     BEGIN
       PERFORM private.record_bank_card_offer_order(v_order, v_merchant,
+        jsonb_set(v_quote, '{allocations,0,itemId}', '"1"'));
+      RAISE EXCEPTION 'The order snapshot accepted a temporary checkout ordinal';
+    EXCEPTION WHEN invalid_text_representation THEN NULL;
+    END;
+    BEGIN
+      PERFORM private.record_bank_card_offer_order(v_order, v_merchant,
+        jsonb_set(v_quote, '{allocations,0,productId}', '""'));
+      RAISE EXCEPTION 'The order snapshot accepted an empty product ID';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM <> 'bank_card_offer_allocation_mismatch' THEN RAISE; END IF;
+    END;
+    BEGIN
+      PERFORM private.record_bank_card_offer_order(v_order, v_merchant,
         jsonb_set(v_quote, '{allocations,0,unitNetAmountsKobo,0}', '9400'));
       RAISE EXCEPTION 'Expected invalid refund allocation to fail';
     EXCEPTION WHEN raise_exception THEN

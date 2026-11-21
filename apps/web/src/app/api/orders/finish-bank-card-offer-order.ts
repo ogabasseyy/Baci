@@ -82,6 +82,8 @@ export async function finishBankCardOfferOrder({
       merchantId,
       now: Date.now(),
       items: items.map((item) => ({
+        // The atomic checkout RPC replaces this ordinal with the persisted
+        // order_items.id before recording the offer snapshot.
         itemId: String(item.__baci_line_ordinal),
         productId: item.product_id ?? '',
         unitPriceKobo: Math.round(item.price * 100),

@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-21T06:35:24+00:00",
-  "source_revision": "c39cd509b72d5c4a3b7790ea2cd83097986c5708",
-  "evidence_digest": "cadb5878dcbbadcca8bf7a067be932676806f46b23630c643dff35c6be6d63f9",
-  "claims_digest": "6f2ef450cff840dfb8eac889e08ff80ea08947fea1291570a6767fd5a7fa947a",
+  "reviewed_at": "2026-11-21T06:56:12+00:00",
+  "source_revision": "4369fb923d3c090e44eaa60e5ff05ac00fd73d52",
+  "evidence_digest": "6ccd308a87d847b496fe833021dcb3a9ea4e164b0ac8ce3e9c142cbc90020f74",
+  "claims_digest": "a63bccc44ba9e26445b345732f65f2dc9089246bfdab0f77ed7c2601954e69aa",
   "review_scope": "Source evidence only. Re-reviewed expense creation after the save navigation fix and duplicate submission guard. Branch validation and expense creation permissions still apply. Other bound capability source files were unchanged from the prior reviewed revision. Re-reviewed Shopping MCP discovery and the optional automatic Ogabassey guest cart. Existing OAuth, storefront MCP, payment, merchant protocol, and Oxygen pilot limitations still apply. No new production capability promotion.",
   "capabilities": [
     {

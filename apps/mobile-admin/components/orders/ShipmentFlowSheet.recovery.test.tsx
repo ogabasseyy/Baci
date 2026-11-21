@@ -427,6 +427,8 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
       addressDraft: {},
       error: null,
       fundingAccount: null,
+      beginAddressEdit: undefined,
+      saveAddressAndRequestQuote: vi.fn(),
       missingFields: [],
       quote: null,
       state: 'idle',

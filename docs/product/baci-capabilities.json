@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-21T08:22:47+00:00",
-  "source_revision": "c2ba3c99ea390e0dab89012d842d72b659b5ce4b",
-  "evidence_digest": "843e888e9bc4f09713486152adcf9263f7c517a449f79eca7a45f7fc948448ee",
-  "claims_digest": "1683fe9a99ec4b8e6d95346ba8e10b3ed36eaf1b808a18af530e29eccd80fe82",
-  "review_scope": "Source evidence only. Re-reviewed shipment booking after paid partner pickup and parcel binding. The partner path still requires merchant authorization, verified payment and settlement, and an attested matching GIG wallet quote. Provider booking and delivery still require live evidence. Other bound capability sources match the prior reviewed revision. No production capability promotion.",
+  "reviewed_at": "2026-11-21T16:06:44+00:00",
+  "source_revision": "f654c9b95780fec288bb25bf1f4201c0598dcce6",
+  "evidence_digest": "20872bf2af96e842aaeadac7fa1f724df03fe8f3c4c54e129d3c382a9b16ebdc",
+  "claims_digest": "e8a621c01662467d37c7d46f30acaad07844cca62b4e2b803bd7ddff171ba75c",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile orders after the delivery-address selection change. Existing permission, payment and cancellation limitations still apply. Other bound capability sources match the prior reviewed revision. No production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

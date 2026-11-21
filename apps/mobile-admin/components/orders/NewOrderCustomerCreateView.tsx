@@ -113,11 +113,26 @@ export function NewOrderCustomerCreateView({
         <DuplicateCustomerBanner
           colors={colors}
           duplicateCustomer={duplicateCustomer}
-          handleSelectCustomer={handleSelectCustomer}
+          handleSelectCustomer={(customer) => {
+            if (newCustomer.address.trim()) {
+              handleSelectCustomer(customer, true);
+            } else {
+              handleSelectCustomer(customer);
+            }
+          }}
+          keepsEnteredAddress={Boolean(newCustomer.address.trim())}
           resetNewCustomerForm={resetNewCustomerForm}
           setDuplicateCustomer={setDuplicateCustomer}
           setIsCreatingCustomer={setIsCreatingCustomer}
         />
+      ) : null}
+
+      {duplicateCustomer &&
+      !newCustomer.address.trim() &&
+      (newCustomer.city?.trim() || newCustomer.state?.trim()) ? (
+        <Text style={{ color: colors.warning }}>
+          Add a street address to use the entered city or state for this order.
+        </Text>
       ) : null}
 
       <View style={customerStyles.section}>

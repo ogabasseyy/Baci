@@ -132,6 +132,8 @@ function gigl(canBook: boolean, error: string | null = null) {
     error,
     ensureFreshQuoteForConfirmation: vi.fn().mockResolvedValue(true),
     fundingAccount: null,
+    beginAddressEdit: undefined,
+    saveAddressAndRequestQuote: vi.fn(),
     missingFields: [],
     quote,
     refreshBalance: vi.fn(),

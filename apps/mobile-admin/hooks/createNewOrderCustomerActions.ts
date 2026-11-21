@@ -12,6 +12,7 @@ import type {
   NewCustomerDraft,
   SelectableCustomer,
 } from '@/components/orders/new-order.types';
+import { normalizeStreetAddressForComparison } from '@/lib/normalize-street-address';
 import {
   sanitizeAddress,
   sanitizeCustomerName,
@@ -39,6 +40,7 @@ interface CreateNewOrderCustomerActionsParams {
   }) => Promise<SelectableCustomer>;
   merchantId?: string;
   newCustomer: NewCustomerDraft;
+  onCustomerSelected?: () => void;
   setCustomer: Dispatch<SetStateAction<CustomerInfo>>;
   setCustomerSearch: Dispatch<SetStateAction<string>>;
   setDuplicateCustomer: Dispatch<SetStateAction<SelectableCustomer | null>>;
@@ -77,6 +79,7 @@ export function createNewOrderCustomerActions({
   createCustomer,
   merchantId,
   newCustomer,
+  onCustomerSelected,
   setCustomer,
   setCustomerSearch,
   setDuplicateCustomer,
@@ -100,21 +103,55 @@ export function createNewOrderCustomerActions({
     setCustomerSearch('');
   };
 
-  const handleSelectCustomer = (item: SelectableCustomer) => {
+  const handleSelectCustomer = (
+    item: SelectableCustomer,
+    keepEnteredAddress = false
+  ) => {
+    const entered = keepEnteredAddress
+      ? normalizeNewCustomerDraft(newCustomer)
+      : null;
+    const address = entered?.address ? entered : null;
+    // Profile locality can fill gaps only when it describes the same destination.
+    const storedStreet = sanitizeAddress(item.address ?? '');
+    const sameDestination =
+      !address ||
+      (normalizeStreetAddressForComparison(address.address) ===
+        normalizeStreetAddressForComparison(storedStreet) &&
+        (!address.city ||
+          normalizeStreetAddressForComparison(address.city) ===
+            normalizeStreetAddressForComparison(item.city ?? '')) &&
+        (!address.state ||
+          normalizeStreetAddressForComparison(address.state) ===
+            normalizeStreetAddressForComparison(item.state ?? '')) &&
+        (!address.countryCode ||
+          address.countryCode.toLowerCase() ===
+            item.country_code?.trim().toLowerCase()));
+    const profile = sameDestination ? item : undefined;
+    // Coordinates describe one location; never combine a draft coordinate
+    // with the other half of a profile pin.
+    const pin =
+      address?.latitude === undefined && address?.longitude === undefined
+        ? profile
+        : address;
+    const { latitude, longitude } = pin ?? {};
+    const hasPin = latitude != null && longitude != null;
     setCustomer({
-      address: item.address || '',
+      address: address?.address ?? (item.address || ''),
       email: item.email || '',
       id: item.id,
       name: getCustomerDisplayName(item),
       phone: item.phone || '',
-      city: item.city || '',
-      state: item.state || '',
-      country: item.country || '',
-      countryCode: item.country_code || '',
-      postalCode: item.zip_code || '',
-      latitude: item.latitude ?? undefined,
-      longitude: item.longitude ?? undefined,
+      city: (address?.city || profile?.city || '').trim().replace(/,\s*$/, ''),
+      state: (address?.state || profile?.state || '')
+        .trim()
+        .replace(/,\s*$/, ''),
+      country: address?.country || profile?.country || '',
+      countryCode: address?.countryCode || profile?.country_code || '',
+      postalCode: address?.postalCode || profile?.zip_code || '',
+      latitude: hasPin ? latitude : undefined,
+      longitude: hasPin ? longitude : undefined,
     });
+    onCustomerSelected?.();
     setShowCustomerModal(false);
     setCustomerSearch('');
   };

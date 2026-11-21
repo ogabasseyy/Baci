@@ -6,6 +6,8 @@ The shipped offer list is empty. Before merging checkout or payment changes, req
 
 The configurable bank-code allowlist is Wema (`035`) and Sterling (`232`). UBA (`033`) continues on its existing REDVAULT checkout, capture, and refund paths. The bank-offer schema tests reject `033`, and the REDVAULT payment and refund suites exercise the separate UBA path.
 
+Activation for Wema or Sterling uses the server offer configuration. Adding an issuer outside that pair requires a reviewed database allowlist change and matching Paystack issuer validation as well as configuration.
+
 Before enabling a bank offer, the payments team records the bank approval, confirms the exact issuer label and refund behavior with Paystack, and assigns a duty owner for capture and terminal reviews. With the offer still disabled, confirm that both review types reach the team's alerting and agree on a response target. Review-gated checkout directs buyers to order history or support while that owner reconciles the original payment reference.
 
 Bank offers require a signed-in shopper whose account email matches the checkout email. The saved order must belong to that customer before a payment attempt can be claimed. Guest shoppers can still use standard checkout. A fresh bank-offer order requires Paystack to be enabled and a valid subaccount before inventory is reserved.
@@ -59,6 +61,8 @@ Before activating a campaign, verify the exact Paystack authorization issuer lab
 Native verification uses the buyer's authenticated POST, including when a tracking token is present, and checks the merchant when a storefront slug is supplied. It records a verified terminal review before returning the terminal status. A provider mismatch creates a scoped capture review and keeps the payment pending. A failed review write returns a retryable 503. Paystack is rechecked before reporting success even for an already-paid order with confirmed inventory. During a provider outage, the order screen offers a verification retry after its automatic checks run out. A confirmed reversal has its own message. A verified payment stays pending after the buyer-owned sweep marker is confirmed. A failed marker write returns a retryable 503. Settlement stays on the webhook and worker paths.
 
 Native checkout captures the submitted cart before creating the order and saves its identity against the returned bank-offer reference before opening Paystack. Replayed orders and payment completion cannot replace that snapshot. The cart is preserved while verification is pending and cleared only after confirmed payment and an exact match to the saved cart. A missing snapshot leaves the cart intact. Standard gateway redirects retain their existing order-screen polling and cart handling.
+
+For each verified bank-offer order, the app keeps a small consumed marker keyed to the order and reference. This also covers verification that finishes before the initial snapshot is stored. It prevents a delayed initializer from writing cleanup state after payment is confirmed.
 
 Automatic cancellation refunds use the exact kobo amount from the verified payment leg. The audit writes the corresponding decimal text to the numeric amount column. A primary key permits one saved attempt per order, and the completion guard rejects a second transaction outside that attempt. Partial-item refunds are handled by operations using the saved per-unit net allocations and the original capture.
 

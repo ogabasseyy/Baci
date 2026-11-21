@@ -25,12 +25,16 @@ export function formatChatAutoReplyProducts(
   return products
     .slice(0, 5)
     .map((product) => {
+      // A store that does not track inventory sells without a count, so a zero
+      // there is not "out of stock" (same rule as lib/product-stock.ts).
       const stock =
-        product.stock === null
-          ? 'availability unknown'
-          : product.stock > 0
-            ? 'in stock'
-            : 'out of stock';
+        product.manage_stock === false
+          ? 'in stock'
+          : product.stock === null
+            ? 'availability unknown'
+            : product.stock > 0
+              ? 'in stock'
+              : 'out of stock';
       return `- ${product.name} | ${currency} ${product.price} | ${stock}`;
     })
     .join('\n');

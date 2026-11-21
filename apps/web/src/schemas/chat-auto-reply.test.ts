@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CHAT_AUTO_REPLY_MAX_LENGTH,
   chatAutoReplySchema,
+  conversationSnapshotSchema,
 } from './chat-auto-reply';
 
 describe('chatAutoReplySchema', () => {
@@ -58,5 +59,27 @@ describe('chatAutoReplySchema', () => {
     });
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data.intent).toBeUndefined();
+  });
+});
+
+describe('conversationSnapshotSchema', () => {
+  it('defaults missing labels to none', () => {
+    expect(conversationSnapshotSchema.parse({ status: 'pending' })).toEqual({
+      status: 'pending',
+      labels: [],
+    });
+  });
+
+  it('rejects more than 50 labels', () => {
+    const labels = Array.from({ length: 51 }, (_, i) => `l${i}`);
+    expect(
+      conversationSnapshotSchema.safeParse({ status: 'open', labels }).success
+    ).toBe(false);
+    expect(
+      conversationSnapshotSchema.safeParse({
+        status: 'open',
+        labels: labels.slice(0, 50),
+      }).success
+    ).toBe(true);
   });
 });

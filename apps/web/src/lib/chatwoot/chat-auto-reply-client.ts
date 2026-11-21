@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { z } from 'zod';
+import { conversationSnapshotSchema } from '@/schemas/chat-auto-reply';
 import type { ChatAutoReplyBinding } from './chat-auto-reply-config';
 
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -87,11 +87,6 @@ export function setConversationLabels(
     { labels: input.labels }
   );
 }
-
-const conversationSnapshotSchema = z.object({
-  status: z.string(),
-  labels: z.array(z.string()).max(50).default([]),
-});
 
 export type ConversationSnapshot = { status: string; labels: string[] };
 

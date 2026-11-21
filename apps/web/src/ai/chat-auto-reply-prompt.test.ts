@@ -29,6 +29,18 @@ describe('formatChatAutoReplyProducts', () => {
     );
   });
 
+  it('does not call an unmanaged-inventory product out of stock', () => {
+    const unmanaged = {
+      name: 'Demo Service',
+      price: 1000,
+      stock: 0,
+      manage_stock: false,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([unmanaged], 'NGN')).toBe(
+      '- Demo Service | NGN 1000 | in stock'
+    );
+  });
+
   it('says so when nothing matched, so the model cannot invent a product', () => {
     expect(formatChatAutoReplyProducts([], 'NGN')).toBe(
       'No matching products were found.'

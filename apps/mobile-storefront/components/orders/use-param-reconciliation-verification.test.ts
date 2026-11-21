@@ -40,6 +40,7 @@ describe('useParamReconciliationVerification', () => {
       await Promise.resolve();
     });
     expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
+    expect(result.current.bankOfferPaid).toBe(false);
     await act(async () => {
       await jest.advanceTimersByTimeAsync(100);
     });
@@ -49,6 +50,7 @@ describe('useParamReconciliationVerification', () => {
       expect.any(Function)
     );
     expect(result.current.verified).toBe(false);
+    expect(result.current.bankOfferPaid).toBe(true);
   });
 
   it('resolves true for a verified reconciliation arrival', async () => {
@@ -89,6 +91,7 @@ describe('useParamReconciliationVerification', () => {
     });
     expect(result.current.verified).toBe(false);
     expect(result.current.exhausted).toBe(false);
+    expect(result.current.bankOfferPaid).toBe(false);
   });
 
   it('leaves a bank offer pending until provider verification confirms a verdict', async () => {

@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCartStore } from '@/stores/cart-store';
 
+const CONSUMED_MARKER = 'consumed';
+
 function cartIdentity() {
   const { checkoutGeneration, items, sharedCartRef } = useCartStore.getState();
   if (!checkoutGeneration || !items.length) return null;
@@ -39,10 +41,11 @@ export const deferredBankOfferCart = {
   ) {
     const key = storageKey(orderId, reference);
     const expected = await AsyncStorage.getItem(key);
-    // A freshly opened link, a changed cart, or a cancelled verification
-    // may still show the order, but never authorizes a cart mutation.
-    if (!isActive() || !expected || cartIdentity() !== expected) return;
-    await useCartStore.getState().clearCart();
-    await AsyncStorage.removeItem(key);
+    if (!isActive() || !expected || expected === CONSUMED_MARKER) return;
+    if (!useCartStore.persist.hasHydrated()) return;
+    if (cartIdentity() === expected) await useCartStore.getState().clearCart();
+    // Keep a small marker so a repeated callback cannot bind this paid
+    // order to a new cart, even if the original cart was edited.
+    await AsyncStorage.setItem(key, CONSUMED_MARKER);
   },
 };

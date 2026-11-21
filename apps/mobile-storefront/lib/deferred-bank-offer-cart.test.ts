@@ -5,11 +5,13 @@ import { deferredBankOfferCart } from './deferred-bank-offer-cart';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
-  removeItem: jest.fn(),
   setItem: jest.fn(),
 }));
 jest.mock('@/stores/cart-store', () => ({
-  useCartStore: { getState: jest.fn() },
+  useCartStore: {
+    getState: jest.fn(),
+    persist: { hasHydrated: jest.fn(() => true) },
+  },
 }));
 
 const stored = new Map<string, string>();
@@ -32,9 +34,6 @@ beforeEach(() => {
     .mockImplementation(async (key) => stored.get(key) ?? null);
   jest.mocked(AsyncStorage.setItem).mockImplementation(async (key, value) => {
     stored.set(key, value);
-  });
-  jest.mocked(AsyncStorage.removeItem).mockImplementation(async (key) => {
-    stored.delete(key);
   });
 });
 
@@ -60,6 +59,12 @@ it('clears only the unchanged cart for the matching verified order and reference
     'order-1',
     'BCO-test',
     () => false
+  );
+  jest.mocked(useCartStore.persist.hasHydrated).mockReturnValueOnce(false);
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-1',
+    'BCO-test',
+    () => true
   );
   expect(clearCart).not.toHaveBeenCalled();
 
@@ -94,4 +99,32 @@ it('keeps cart edits and does not replace the original marker on a repeat callba
     () => true
   );
   expect(clearCart).not.toHaveBeenCalled();
+  await deferredBankOfferCart.remember(
+    'order-1',
+    'BCO-test',
+    deferredBankOfferCart.capture() as string
+  );
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-1',
+    'BCO-test',
+    () => true
+  );
+  expect(clearCart).not.toHaveBeenCalled();
+  expect([...stored.values()]).toEqual(['consumed']);
+});
+
+it('preserves the original marker for retry when clearing fails', async () => {
+  const identity = deferredBankOfferCart.capture() as string;
+  await deferredBankOfferCart.remember('order-1', 'BCO-test', identity);
+  clearCart.mockRejectedValueOnce(new Error('retryable cart write'));
+  await expect(
+    deferredBankOfferCart.clearIfUnchanged('order-1', 'BCO-test', () => true)
+  ).rejects.toThrow('retryable cart write');
+  expect([...stored.values()]).toEqual([identity]);
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-1',
+    'BCO-test',
+    () => true
+  );
+  expect([...stored.values()]).toEqual(['consumed']);
 });

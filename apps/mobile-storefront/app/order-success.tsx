@@ -105,6 +105,7 @@ export default function OrderSuccessScreen() {
     receiptAmountPaid > 0 || guestInvoice.status === 'credited';
   const {
     verified: paramReconciliationVerified,
+    bankOfferPaid,
     reconciliation: verifiedReconciliation,
     exhausted: isParamVerificationExhausted,
     retry: retryParamVerification,
@@ -262,10 +263,7 @@ export default function OrderSuccessScreen() {
         isDark={colorScheme === 'dark'}
         isCommercialDocument={isPartiallyPaidOrder || isCreditedOrder}
         isDocumentLoading={receiptPreview.isLoading}
-        isPaid={
-          isPaidOrder ||
-          (requireVerifiedPayment && paramReconciliationVerified === false)
-        }
+        isPaid={isPaidOrder || bankOfferPaid}
         onContinueShopping={handleContinueShopping}
         onLeaveGoogleReview={handleLeaveGoogleReview}
         onPermissionDeny={handlePermissionDeny}

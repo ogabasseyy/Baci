@@ -28,6 +28,7 @@ export interface ParamReconciliationVerification {
    * success, and exhaustion (below) is never success either.
    */
   verified: boolean | undefined;
+  bankOfferPaid: boolean;
   reconciliation: OrderPaymentVerification['reconciliation'] | 'payment_failed';
   /**
    * True once the bounded retries are spent while the lookup stays
@@ -62,7 +63,9 @@ export function useParamReconciliationVerification({
   retryDelayMs = 750,
 }: ParamReconciliationVerificationInput): ParamReconciliationVerification {
   const [outcome, setOutcome] = useState<
-    ParamReconciliationVerification['reconciliation'] | false
+    | ParamReconciliationVerification['reconciliation']
+    | 'bank_offer_paid'
+    | false
   >(undefined);
   const [exhausted, setExhausted] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -121,7 +124,13 @@ export function useParamReconciliationVerification({
               console.warn('Could not clear the verified bank-offer cart')
             );
         }
-        if (!cancelled) setOutcome(result.reconciliation ?? false);
+        if (!cancelled)
+          setOutcome(
+            result.reconciliation ??
+              (requireVerifiedPayment && result.paid
+                ? 'bank_offer_paid'
+                : false)
+          );
       });
     };
     runVerification();
@@ -148,8 +157,13 @@ export function useParamReconciliationVerification({
   };
 
   return {
-    verified: outcome === undefined ? undefined : outcome !== false,
-    reconciliation: outcome || undefined,
+    verified:
+      outcome === undefined
+        ? undefined
+        : outcome !== false && outcome !== 'bank_offer_paid',
+    bankOfferPaid: outcome === 'bank_offer_paid',
+    reconciliation:
+      outcome === 'bank_offer_paid' ? undefined : outcome || undefined,
     exhausted,
     retry,
   };

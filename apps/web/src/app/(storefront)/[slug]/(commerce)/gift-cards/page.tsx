@@ -11,6 +11,7 @@ import {
   getGiftCardPreviewCatalog,
   isGiftCardPreviewEnabled,
 } from '@/lib/gift-cards/preview-catalog';
+import { getGiftCardPreviewQuote } from '@/lib/gift-cards/preview-quote';
 import { getGiftCardQuote } from '@/lib/gift-cards/quote';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { createClient } from '@/lib/supabase/server';
@@ -65,24 +66,23 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
     /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
       requestHeaders.get('host') ?? ''
     );
+  const quote = mockCheckout
+    ? (supplierUsdCents: number) =>
+        getGiftCardQuote(supplierUsdCents, markup, 'mock-rate-key', async () =>
+          Response.json({
+            data: {
+              symbol: 'USD-NGN',
+              type: 'sell',
+              locked: false,
+              rate: 147999,
+            },
+          })
+        )
+    : (supplierUsdCents: number) =>
+        getGiftCardPreviewQuote(supplierUsdCents, markup);
   const total =
     card !== undefined && selected && (mockCheckout || key) && markupIsValid
-      ? await getGiftCardQuote(
-          selected.usdCents,
-          markup,
-          mockCheckout ? 'mock-rate-key' : (key ?? ''),
-          mockCheckout
-            ? async () =>
-                Response.json({
-                  data: {
-                    symbol: 'USD-NGN',
-                    type: 'sell',
-                    locked: false,
-                    rate: 147999,
-                  },
-                })
-            : undefined
-        ).catch(() => null)
+      ? await quote(selected.usdCents).catch(() => null)
       : null;
   const testQuote =
     mockCheckout && total !== null && selected

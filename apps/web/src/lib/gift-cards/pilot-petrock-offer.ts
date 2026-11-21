@@ -3,12 +3,18 @@ import 'server-only';
 import { z } from 'zod';
 import { createPetrockClient } from '../imei-providers/petrock/petrock-client';
 
+function toUsdCents(amount: string | number) {
+  const match = /^(\d{1,6})(?:\.(\d{1,2})0*)?$/.exec(String(amount));
+  if (!match) return null;
+  return Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
+}
+
 const productResponse = z.object({
   data: z.object({
     currency: z.literal('USD'),
     product: z.object({
       name: z.literal('PlayStation Gift Card [PSN] USA $10'),
-      price: z.union([z.number(), z.string()]).transform(Number),
+      price: z.union([z.number(), z.string()]).transform(toUsdCents),
       fields: z.tuple([z.object({ name: z.literal('Quantity') })]),
     }),
   }),
@@ -19,7 +25,8 @@ export async function readPilotPetrockOffer(
   baseUrl = process.env.PETROCK_API_BASE_URL,
   token = process.env.PETROCK_API_TOKEN
 ) {
-  if (!baseUrl || !token) return false;
+  const expectedCents = toUsdCents(expectedUsd);
+  if (!baseUrl || !token || !expectedCents) return false;
   try {
     const url = new URL(baseUrl);
     if (
@@ -47,7 +54,7 @@ export async function readPilotPetrockOffer(
     const parsed = productResponse.safeParse(await product.json());
     return (
       parsed.success &&
-      parsed.data.data.product.price === expectedUsd &&
+      parsed.data.data.product.price === expectedCents &&
       account.data.balance >= expectedUsd
     );
   } catch {

@@ -68,6 +68,8 @@ For each verified bank-offer order, the app keeps a small consumed marker keyed 
 
 The snapshot identifies the submitted basket through its generation, shared-cart identity, and item details. Changing only delivery, tax, wrapping, or another checkout fee does not change the basket identity. The saved order and Paystack verification enforce the final payable separately.
 
+Snapshot storage failures report the operation and failure stage through existing app analytics. These events carry no order ID, payment reference, cart contents, or raw error. A failed cleanup keeps the snapshot available for a later verified visit.
+
 Automatic cancellation refunds use the exact kobo amount from the verified payment leg. The audit writes the corresponding decimal text to the numeric amount column. A primary key permits one saved attempt per order, and the completion guard rejects a second transaction outside that attempt. Partial-item refunds are handled by operations using the saved per-unit net allocations and the original capture.
 
 The refund worker handles whole-order cancellations. When its ledger already shows a partial refund, it withholds that payment leg before looking up or submitting the full capture amount. A linked manual record leaves the balance for Operations to complete. A completed provider refund that covers only part of the leg goes to reconciliation. The bank-offer refund flow tests exercise both cases against the cancellation worker with mocked Paystack.

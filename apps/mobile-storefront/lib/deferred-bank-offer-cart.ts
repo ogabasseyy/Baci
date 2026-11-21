@@ -18,6 +18,18 @@ async function runCartStep<T>(
       operation,
       stage,
     });
+    void import('@/services/analytics')
+      .then(({ trackError }) =>
+        trackError(
+          'bank_offer_cart_storage',
+          'Cart snapshot operation failed',
+          {
+            operation,
+            stage,
+          }
+        )
+      )
+      .catch(() => undefined);
     throw error;
   }
 }

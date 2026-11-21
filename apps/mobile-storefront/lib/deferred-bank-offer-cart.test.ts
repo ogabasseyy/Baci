@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '@/lib/logger';
+import { trackError } from '@/services/analytics';
 import { useCartStore } from '@/stores/cart-store';
 import { deferredBankOfferCart } from './deferred-bank-offer-cart';
 
@@ -17,6 +18,7 @@ jest.mock('@/stores/cart-store', () => ({
 jest.mock('@/lib/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn() },
 }));
+jest.mock('@/services/analytics', () => ({ trackError: jest.fn() }));
 
 const stored = new Map<string, string>();
 const clearCart = jest.fn<() => Promise<void>>();
@@ -207,7 +209,7 @@ it('preserves the original marker for retry when clearing fails', async () => {
   expect([...stored.values()]).toEqual(['consumed']);
 });
 
-it('logs only the failure stage when saving a snapshot fails', async () => {
+it('reports only the failure stage when saving a snapshot fails', async () => {
   jest
     .mocked(AsyncStorage.setItem)
     .mockRejectedValueOnce(new Error('private storage details'));
@@ -218,6 +220,13 @@ it('logs only the failure stage when saving a snapshot fails', async () => {
       'private-cart'
     )
   ).rejects.toThrow('private storage details');
+  expect(jest.mocked(trackError).mock.calls).toEqual([
+    [
+      'bank_offer_cart_storage',
+      'Cart snapshot operation failed',
+      { operation: 'save', stage: 'write_snapshot' },
+    ],
+  ]);
   expect(jest.mocked(logger.warn).mock.calls).toEqual([
     [
       'Bank card checkout',

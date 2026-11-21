@@ -1,4 +1,7 @@
-import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
+import {
+  BANK_CARD_OFFER_REFERENCE_PATTERN,
+  hasBankCardOfferReferencePrefix,
+} from '@baci/shared/constants';
 import { router } from 'expo-router';
 import type { RefObject } from 'react';
 import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
@@ -83,9 +86,11 @@ export async function settleOrderCompletion(
       reference && hasBankCardOfferReferencePrefix(reference)
         ? reference
         : null;
-    const cartIdentity = bankOfferReference
-      ? deferredBankOfferCart.capture()
-      : null;
+    const cartIdentity =
+      bankOfferReference &&
+      BANK_CARD_OFFER_REFERENCE_PATTERN.test(bankOfferReference)
+        ? deferredBankOfferCart.capture()
+        : null;
     // Prefer the canonical order total: `amount` is only the residual due
     // at the gateway after wallet/savings credits.
     const purchaseTotal = orderTotal ?? amount ?? 0;

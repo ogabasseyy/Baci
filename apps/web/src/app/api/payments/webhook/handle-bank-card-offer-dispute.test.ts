@@ -3,6 +3,46 @@ import { handleBankCardOfferDispute } from './handle-bank-card-offer-dispute';
 
 const reference = `BCO-${'a'.repeat(32)}`;
 
+it('uses the nested transaction reference when Paystack leaves the direct reference null', async () => {
+  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+  const result = await handleBankCardOfferDispute(
+    'charge.dispute.resolve',
+    {
+      id: 91,
+      transaction_reference: null,
+      merchant_transaction_reference: 'merchant-order-1',
+      status: 'resolved',
+      resolution: 'merchant-accepted',
+      transaction: { id: 719, reference, status: 'success', amount: 9500 },
+    },
+    () => ({ rpc }) as never
+  );
+  expect(result?.status).toBe(200);
+  expect(rpc).toHaveBeenCalledWith('record_bank_card_offer_dispute', {
+    p_dispute_id: '91',
+    p_event: 'charge.dispute.resolve',
+    p_outcome: 'lost',
+    p_reference: reference,
+  });
+});
+
+it('does not apply a dispute outcome when its Paystack payment references conflict', async () => {
+  const getClient = vi.fn();
+  const result = await handleBankCardOfferDispute(
+    'charge.dispute.resolve',
+    {
+      id: 91,
+      transaction_reference: `BCO-${'b'.repeat(32)}`,
+      transaction: { reference },
+      status: 'resolved',
+      resolution: 'declined',
+    },
+    getClient
+  );
+  expect(result?.status).toBe(503);
+  expect(getClient).not.toHaveBeenCalled();
+});
+
 describe('handleBankCardOfferDispute', () => {
   it.each([
     'charge.dispute.create',
@@ -65,16 +105,17 @@ describe('handleBankCardOfferDispute', () => {
 });
 
 it.each([
-  ['declined', 'won'],
-  ['merchant-accepted', 'lost'],
-  ['unknown', 'open'],
-])('records the signed resolution %s as %s', async (resolution, outcome) => {
+  ['resolved', 'declined', 'won'],
+  ['resolved', 'merchant-accepted', 'lost'],
+  ['resolved', 'unknown', 'open'],
+  ['pending', 'merchant-accepted', 'open'],
+])('records a %s dispute with resolution %s as %s', async (status, resolution, outcome) => {
   const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
   const result = await handleBankCardOfferDispute(
     'charge.dispute.resolve',
     {
       id: '9007199254740992',
-      status: 'resolved',
+      status,
       resolution,
       transaction: { reference },
     },

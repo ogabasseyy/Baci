@@ -54,3 +54,28 @@ it('leaves the gateway pending and preserves the cart while the order screen ver
     })
   );
 });
+
+it('never saves a deferred cart marker for a malformed bank offer reference', async () => {
+  jest.clearAllMocks();
+  jest
+    .mocked(verifyOrderPaymentForCompletion)
+    .mockResolvedValueOnce({ paid: false, inconclusive: true });
+  const clearCart = jest.fn<() => void>();
+  await settleOrderCompletion(
+    {
+      orderId: 'order-1',
+      reference: `bco-${'a'.repeat(32)}`,
+      clearCart,
+      clearPendingLoadTimeout: jest.fn(),
+      isMountedRef: { current: true },
+      paymentCompletionStartedRef: { current: false },
+      scheduleDelayedNavigation: (navigate) => navigate(),
+      setErrorMessage: jest.fn(),
+      setPaymentStatus: jest.fn(),
+    },
+    undefined,
+    false
+  );
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
+});

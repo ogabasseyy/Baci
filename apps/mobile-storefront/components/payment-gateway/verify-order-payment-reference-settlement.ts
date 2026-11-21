@@ -122,6 +122,8 @@ export async function checkReferenceSettled(
       data.finalizationOutcome !== 'completed' ||
       data.orderId !== orderId
     ) {
+      // The authenticated verify endpoint checks the saved attempt and
+      // Paystack before reporting a reversal for this order.
       if (
         bankOffer &&
         response.ok &&

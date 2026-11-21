@@ -65,6 +65,35 @@ BEGIN
   IF v_attempt->>'claimed' <> 'false' OR v_attempt->>'reference' <> v_reference
     OR v_attempt->>'checkoutUrl' <> 'https://checkout.paystack.com/trx/test?state=one%2Btwo&x=1'
   THEN RAISE EXCEPTION 'A retry must replay its existing Paystack reference'; END IF;
+  BEGIN
+    IF NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.create', '101', 'open')
+    THEN RAISE EXCEPTION 'Unable to record checkout dispute'; END IF;
+    v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
+    IF v_attempt->>'claimed' IS DISTINCT FROM 'false'
+      OR v_attempt->>'reference' IS DISTINCT FROM v_reference
+      OR v_attempt->>'checkoutUrl' IS NOT NULL
+      OR public.record_bank_card_offer_checkout_url(v_order, v_merchant, v_reference, 'https://checkout.paystack.com/trx/test?state=one%2Btwo&x=1')
+    THEN RAISE EXCEPTION 'An open dispute exposed a hosted checkout URL'; END IF;
+    PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',
+      'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+    IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'reversed')
+      OR NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve', '101', 'won')
+    THEN RAISE EXCEPTION 'Unable to resolve checkout dispute after reversal'; END IF;
+    IF EXISTS (SELECT 1 FROM private.bank_card_offer_payment_attempts
+      WHERE transaction_id = v_transaction AND dispute_hold_at IS NOT NULL)
+    THEN RAISE EXCEPTION 'A merchant win should clear the dispute hold'; END IF;
+    PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated', 'sub', v_user,
+      'storefront_order_context', 'route', 'storefront_order_merchant_id', v_merchant)::text, true);
+    v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
+    IF v_attempt->>'claimed' IS DISTINCT FROM 'false'
+      OR v_attempt->>'reference' IS DISTINCT FROM v_reference
+      OR v_attempt->>'checkoutUrl' IS NOT NULL
+      OR public.record_bank_card_offer_checkout_url(v_order, v_merchant, v_reference, 'https://checkout.paystack.com/trx/test?state=one%2Btwo&x=1')
+    THEN RAISE EXCEPTION 'A won dispute restored the URL of a reversed attempt'; END IF;
+    RAISE EXCEPTION 'checkout_dispute_test_complete';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'checkout_dispute_test_complete' THEN RAISE; END IF;
+  END;
   IF public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'abandoned')
     THEN RAISE EXCEPTION 'Shopper scope recorded a terminal provider status'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('role', 'authenticated',

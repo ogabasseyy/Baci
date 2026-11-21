@@ -13,10 +13,11 @@ export async function getGiftCardPreviewQuote(
   cacheLife({ stale: 30, revalidate: 30, expire: 60 });
   const rateKey = process.env.JUICYWAY_EXCHANGE_RATE_READ_KEY?.trim();
   if (!rateKey) throw new Error('Gift card pricing is temporarily unavailable');
-  const totalKobo = await getGiftCardQuote(
-    supplierUsdCents,
-    markupBps,
-    rateKey
-  );
-  return totalKobo;
+  try {
+    return await getGiftCardQuote(supplierUsdCents, markupBps, rateKey);
+  } catch {
+    // The customer sees an unavailable price. Logs contain no supplier body.
+    console.warn('[gift-card-preview] Juicyway quote unavailable');
+    throw new Error('Gift card pricing is temporarily unavailable');
+  }
 }

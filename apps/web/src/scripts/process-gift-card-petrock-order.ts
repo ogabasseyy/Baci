@@ -101,7 +101,18 @@ async function main() {
   }
 }
 
-main().catch(() => {
-  console.error('Gift card worker failed. Check the persisted order state before taking further action.');
+main().catch((error: unknown) => {
+  // Driver exceptions can contain connection settings or SQL values. Emit
+  // only a known category and a validated database error code.
+  const databaseError = error instanceof Error && error.name === 'PostgresError';
+  const errorCode = databaseError && 'code' in error && typeof error.code === 'string'
+    && /^[A-Z0-9]{5}$/.test(error.code) ? error.code : undefined;
+  console.error(JSON.stringify({
+    event: 'gift_card_worker_failed',
+    category: error instanceof z.ZodError ? 'invalid_configuration'
+      : databaseError ? 'database_failure' : 'worker_failure',
+    errorCode,
+    instruction: 'Check persisted order state before taking further action.',
+  }));
   process.exitCode = 1;
 });

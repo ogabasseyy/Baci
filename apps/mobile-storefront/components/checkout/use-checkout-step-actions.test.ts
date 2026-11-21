@@ -6,13 +6,17 @@ import type { ShippingAddressInput } from '@/lib/validation';
 import { useCheckoutStepActions } from './use-checkout-step-actions';
 
 const mockCheckoutSubmit = jest.fn();
+const mockUseCheckoutSubmit = jest.fn();
 const mockTrackCheckoutStep = jest.fn();
 const mockTrackCheckoutRoutePaymentInfo = jest.fn();
 
 // useCheckoutSubmit pulls in the full order-submission stack; the address-step
 // continue logic under test never calls it, so a no-op keeps the test focused.
 jest.mock('./use-checkout-submit', () => ({
-  useCheckoutSubmit: () => mockCheckoutSubmit,
+  useCheckoutSubmit: (params: unknown) => {
+    mockUseCheckoutSubmit(params);
+    return mockCheckoutSubmit;
+  },
 }));
 jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentMethodSelected: jest.fn(),
@@ -27,6 +31,7 @@ type Params = Parameters<typeof useCheckoutStepActions>[0];
 
 beforeEach(() => {
   mockCheckoutSubmit.mockClear();
+  mockUseCheckoutSubmit.mockClear();
   mockTrackCheckoutStep.mockClear();
   mockTrackCheckoutRoutePaymentInfo.mockClear();
 });
@@ -51,6 +56,7 @@ function renderStepActions(overrides: Partial<Params>) {
     setStep: jest.fn(),
     setIsContactCollapsed: jest.fn(),
     setIsDeliveryCollapsed: jest.fn(),
+    invalidateShippingQuote: jest.fn(),
     resetPaymentSelection,
     selectedPayment: 'paystack',
     step: 'address',
@@ -65,6 +71,26 @@ function renderStepActions(overrides: Partial<Params>) {
 }
 
 describe('useCheckoutStepActions — address continue', () => {
+  it('returns to expanded delivery details when a quote is rejected', () => {
+    const setStep = jest.fn();
+    const setIsDeliveryCollapsed = jest.fn();
+    const invalidateShippingQuote = jest.fn();
+    renderStepActions({
+      invalidateShippingQuote,
+      setIsDeliveryCollapsed,
+      setStep,
+    });
+
+    const submitOptions = mockUseCheckoutSubmit.mock.calls.at(-1)?.[0] as {
+      onShippingQuoteRejected: () => void;
+    };
+    submitOptions.onShippingQuoteRejected();
+
+    expect(setIsDeliveryCollapsed).toHaveBeenCalledWith(false);
+    expect(setStep).toHaveBeenCalledWith('address');
+    expect(invalidateShippingQuote).toHaveBeenCalledTimes(1);
+  });
+
   it('clears payment selection before entering the payment step', () => {
     const { resetPaymentSelection, result } = renderStepActions({});
 

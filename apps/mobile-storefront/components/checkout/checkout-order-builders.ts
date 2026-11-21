@@ -1,4 +1,7 @@
-import { parseMerchantRateQuoteId } from '@baci/shared/lib';
+import {
+  areLocationStateLabelsEquivalent,
+  parseMerchantRateQuoteId,
+} from '@baci/shared/lib';
 import { isProviderStationPickupQuote } from '@/components/checkout/checkout-station-pickup';
 import { isGiglGoFasterQuote } from '@/components/checkout/checkout-step-helpers';
 import type {
@@ -103,27 +106,33 @@ export function buildOrderShippingAddress(
   deliveryMethod: DeliveryMethod,
   selectedQuote?: ShippingQuote
 ): ShippingAddressInput {
+  const quotedState = selectedQuote?.receiverState;
+  const deliveryAddress =
+    quotedState &&
+    areLocationStateLabelsEquivalent(quotedState.requested, address.state)
+      ? { ...address, state: quotedState.quoted }
+      : address;
   if (deliveryMethod === 'pickup_station') {
     if (isProviderStationPickupQuote(selectedQuote)) {
       return {
-        ...address,
+        ...deliveryAddress,
         // The selected quote carries station booking metadata separately.
         // Replacing the receiver street with its display address breaks validation.
         address: selectedQuote.receiverAddress ?? address.address,
       };
     }
 
-    return address;
+    return deliveryAddress;
   }
 
   if (deliveryMethod === 'airport') {
     return {
-      ...address,
+      ...deliveryAddress,
       address: address.address || 'Airport Delivery (Outside Lagos)',
     };
   }
 
-  return address;
+  return deliveryAddress;
 }
 
 export function mapCartItemsToOrderItems(
@@ -214,7 +223,7 @@ export function buildCheckoutOrderRequest({
     shipping_address: buildOrderShippingAddress(
       address,
       deliveryMethod,
-      selectedQuote
+      canUseCarrierQuote ? selectedQuote : undefined
     ),
     // Intentionally omit expected_total/client_total here: the web order API
     // derives and validates the final payable total at the tax boundary.

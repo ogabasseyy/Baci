@@ -193,4 +193,36 @@ describe('useOgabasseyLogin', () => {
 
     expect(result.current.email).toBe('first@example.com');
   });
+
+  it('forwards non-default redirectTo for Google and Apple sign-in and omits default /account', async () => {
+    const { result: checkoutHook } = renderHook(() =>
+      useOgabasseyLogin({ redirectTo: '/ogabassey/checkout?step=delivery' })
+    );
+
+    await act(async () => {
+      await checkoutHook.current.handleGoogleSignIn();
+      await checkoutHook.current.handleAppleSignIn();
+    });
+
+    expect(mockSignInWithGoogle).toHaveBeenCalledExactlyOnceWith(
+      '/ogabassey/checkout?step=delivery'
+    );
+    expect(mockSignInWithApple).toHaveBeenCalledExactlyOnceWith(
+      '/ogabassey/checkout?step=delivery'
+    );
+
+    vi.clearAllMocks();
+
+    const { result: accountHook } = renderHook(() =>
+      useOgabasseyLogin({ redirectTo: '/account' })
+    );
+
+    await act(async () => {
+      await accountHook.current.handleGoogleSignIn();
+      await accountHook.current.handleAppleSignIn();
+    });
+
+    expect(mockSignInWithGoogle).toHaveBeenCalledExactlyOnceWith();
+    expect(mockSignInWithApple).toHaveBeenCalledExactlyOnceWith();
+  });
 });

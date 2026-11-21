@@ -6,6 +6,7 @@ const HOSTNAME_PATTERN =
 type StorefrontOAuthMerchant = {
   custom_domain?: string | null;
   slug: string;
+  verified_domains?: readonly string[] | null;
 };
 
 function normalizeHostname(hostname: string): string | null {
@@ -47,7 +48,16 @@ function buildTrustedStorefrontRedirectOrigins(
 
   if (merchant.custom_domain) {
     const customDomainOrigin = toHttpsOrigin(merchant.custom_domain);
-    if (customDomainOrigin) trustedOrigins.add(customDomainOrigin);
+    if (customDomainOrigin) {
+      trustedOrigins.add(customDomainOrigin);
+    }
+  }
+
+  for (const verifiedDomain of merchant.verified_domains ?? []) {
+    const verifiedOrigin = toHttpsOrigin(verifiedDomain);
+    if (verifiedOrigin) {
+      trustedOrigins.add(verifiedOrigin);
+    }
   }
 
   return trustedOrigins;

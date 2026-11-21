@@ -134,22 +134,20 @@ describe('OgabasseyV2CartPage', () => {
     ];
   });
 
-  it('discloses the optional Assurance fee and how to remove it', () => {
+  it('displays the Assurance fee and toggle when assured', () => {
     mockCartItems[0].hasAssurance = true;
     render(<OgabasseyV2CartPage storeSlug="ogabassey" />);
-    expect(screen.getByText('Optional. Included in total; uncheck to remove.')).toBeInTheDocument();
+    expect(screen.getByText('Screen & Liquid Damage')).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).toBeChecked();
     expect(screen.getByText('+₦2,000')).toBeInTheDocument();
   });
 
-  it('renders the Assurance disclosure in the storefront theme, not hardcoded gray', () => {
+  it('renders the Assurance copy in the storefront theme, not hardcoded gray', () => {
     mockCartItems[0].hasAssurance = true;
     render(<OgabasseyV2CartPage storeSlug="ogabassey" />);
-    const disclosure = screen.getByText(
-      'Optional. Included in total; uncheck to remove.'
-    );
-    expect(disclosure).toHaveClass('text-store-background-text/55');
-    expect(disclosure.className).not.toContain('text-gray-');
+    const coverage = screen.getByText('Screen & Liquid Damage');
+    expect(coverage).toHaveClass('text-store-background-text');
+    expect(coverage.className).not.toContain('text-gray-');
   });
 
   it('renders cart items', () => {

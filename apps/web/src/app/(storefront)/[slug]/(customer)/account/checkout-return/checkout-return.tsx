@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { asRoute } from '@/lib/routes';
+import { isDomainIdentifier } from '@/lib/validation';
 
 /** Resume only after the customer provider finishes account-switch reconciliation. */
 export function CheckoutReturn({
@@ -16,6 +17,8 @@ export function CheckoutReturn({
   const { isLoading, isAuthenticated } = useCustomerAuth();
   const router = useRouter();
   const [invalidDestination, setInvalidDestination] = useState(false);
+  const basePath =
+    slug && !isDomainIdentifier(slug) ? `/${encodeURIComponent(slug)}` : '';
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
     try {
@@ -23,7 +26,7 @@ export function CheckoutReturn({
       if (
         destination.origin === window.location.origin &&
         (destination.pathname === '/checkout' ||
-          destination.pathname === `/${slug}/checkout`)
+          (basePath !== '' && destination.pathname === `${basePath}/checkout`))
       ) {
         setInvalidDestination(false);
         router.replace(asRoute(`${destination.pathname}${destination.search}`));
@@ -33,7 +36,7 @@ export function CheckoutReturn({
     } catch {
       setInvalidDestination(true);
     }
-  }, [isLoading, isAuthenticated, next, slug, router]);
+  }, [isLoading, isAuthenticated, next, basePath, router]);
   return (
     <main className="mx-auto max-w-md p-8 text-center" role="status">
       {isLoading ? (
@@ -43,20 +46,14 @@ export function CheckoutReturn({
       ) : invalidDestination ? (
         <p>
           We couldn’t open that checkout.{' '}
-          <a
-            className="underline"
-            href={asRoute(`/${encodeURIComponent(slug)}/checkout`)}
-          >
+          <a className="underline" href={asRoute(`${basePath}/checkout`)}>
             Return to checkout
           </a>
         </p>
       ) : (
         <p>
           We could not restore your checkout.{' '}
-          <a
-            className="underline"
-            href={asRoute(`/${encodeURIComponent(slug)}/account/login`)}
-          >
+          <a className="underline" href={asRoute(`${basePath}/account/login`)}>
             Sign in again
           </a>
         </p>

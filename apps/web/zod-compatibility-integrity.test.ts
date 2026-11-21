@@ -40,13 +40,22 @@ describe('Zod legacy schema compatibility and bounded collection validation', ()
 
   it('finds installed validators to guard', () =>
     expect(roots.length).toBeGreaterThan(0));
-  for (const root of roots) {
+  const entrypoints = roots.flatMap((root) => {
+    const version = versionAt(root, 'zod');
+    const main = { root, version, subpath: '.' };
+    // Zod 4 also ships a separate copy of the legacy validator.
+    return version.startsWith('4.')
+      ? [main, { root, version, subpath: 'v3' }]
+      : [main];
+  });
+  for (const { root, version, subpath } of entrypoints) {
+    const entryRoot = join(root, subpath);
     for (const format of ['cjs', 'esm'] as const) {
       for (const asynchronous of [false, true]) {
-        it(`rejects oversized bounded collections before visiting children in ${root} (${format}, async=${asynchronous})`, async () => {
+        it(`rejects oversized bounded collections before visiting children in ${root}/${subpath} (${format}, async=${asynchronous})`, async () => {
           const entryPath = join(
-            root,
-            format === 'cjs' ? packageMain(root) : packageModule(root)
+            entryRoot,
+            format === 'cjs' ? packageMain(entryRoot) : packageModule(entryRoot)
           );
           const entry = (
             format === 'cjs'
@@ -71,7 +80,7 @@ describe('Zod legacy schema compatibility and bounded collection validation', ()
             expect(parsed.success).toBe(false);
             expect(
               visits,
-              `zod ${versionAt(root, 'zod')} visited an already oversized collection`
+              `zod ${version}/${subpath} visited an already oversized collection`
             ).toBe(0);
             if (!parsed.success)
               expect(parsed.error.issues[0].code).toBe('too_big');

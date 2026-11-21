@@ -458,3 +458,5 @@ patchedDependencies:
   # Preserve own data properties without invoking the legacy __proto__ setter.
   deepmerge@4.3.1: patches/deepmerge@4.3.1.patch
   zod@3.25.76: patches/zod@3.25.76.patch
+  # Zod 4 ships the same legacy validator at zod/v3.
+  zod@4.6.6: patches/zod@3.25.76.patch

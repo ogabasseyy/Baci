@@ -1,3 +1,4 @@
+import { NextResponse } from 'next/server';
 import type { ShippingQuote } from '@/lib/shipping/types';
 import { toPublicQuoteResponse } from './public-quote-response';
 
@@ -27,4 +28,26 @@ export function toAdminPublicQuote(quote: ShippingQuote) {
     sessionId: quote.id,
     expiresAt: quote.expiresAt.toISOString(),
   }).quotes.featured[0];
+}
+
+export function getAdminPartnerDeliveryConflict(message: string | undefined) {
+  const conflicts = {
+    partner_delivery_destination_changed: {
+      code: 'PARTNER_DELIVERY_DESTINATION_CHANGED',
+      error: 'Use the destination on the paid partner quote.',
+    },
+    partner_delivery_origin_or_parcel_changed: {
+      code: 'PARTNER_DELIVERY_ORIGIN_OR_PARCEL_CHANGED',
+      error: 'The pickup origin or parcel differs from the paid partner quote.',
+    },
+    partner_delivery_service_changed: {
+      code: 'PARTNER_DELIVERY_SERVICE_CHANGED',
+      error:
+        'The current GIG service differs from the settled delivery quote. Review the service before booking.',
+    },
+  };
+  if (!message || !Object.hasOwn(conflicts, message)) return null;
+  return NextResponse.json(conflicts[message as keyof typeof conflicts], {
+    status: 409,
+  });
 }

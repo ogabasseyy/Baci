@@ -17,13 +17,19 @@ it('computes rounded VAT for each taxable line and preserves the carrier parcel'
     },
   ];
   const products = [
-    { id: 'standard', vat_rate: '7.50', weight_value: 500, weight_unit: 'g' },
+    {
+      id: 'standard',
+      name: 'Stored product name',
+      vat_rate: '7.50',
+      weight_value: 500,
+      weight_unit: 'g',
+    },
     { id: 'exempt', vat_category_code: 'E', vat_rate: '7.50' },
   ];
 
   expect(buildPartnerQuoteParcel(lines, products, true)).toEqual({
     items: [
-      { name: 'Phone', quantity: 1, value: 100.05, weight: 0.5 },
+      { name: 'Stored product name', quantity: 1, value: 100.05, weight: 0.5 },
       { name: 'Exempt item', quantity: 2, value: 100, weight: 1 },
     ],
     taxMinor: 750,

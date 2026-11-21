@@ -50,7 +50,7 @@ def seed_fixture(directory):
         GRANT anon, authenticated TO baci_fixture_api;
         ALTER TABLE public.products ADD COLUMN weight_value numeric DEFAULT 500,
           ADD COLUMN weight_unit text DEFAULT 'g', ADD COLUMN dimensions jsonb;
-        GRANT SELECT (id, merchant_id, weight_value, weight_unit, dimensions, vat_category_code, vat_rate)
+        GRANT SELECT (id, merchant_id, name, weight_value, weight_unit, dimensions, vat_category_code, vat_rate)
           ON public.products TO anon;
         GRANT SELECT (id, vat_registration_status) ON public.merchants TO anon;
         """,

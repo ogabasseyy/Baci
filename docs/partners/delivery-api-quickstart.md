@@ -35,7 +35,7 @@ A `201` returns `quote_id`, `currency`, the selected service and delivery estima
 
 If Baci returns `ADDRESS_UNSERVICEABLE`, `CARRIER_UNAVAILABLE`, or `QUOTE_UNAVAILABLE`, Baci has issued no payable quote. A missing settlement policy or an unsupported merchant origin also returns `QUOTE_UNAVAILABLE`. Keep checkout on hold. Retry after a temporary outage, and share the request ID with Baci support if the error persists.
 
-Keep one active quote per purchase and reuse its ID while it remains valid. A quote request can be retried after a timeout **before** charging the buyer. Once charging starts, keep the quote ID tied to that payment attempt. If the payment outcome is unclear, check the original attempt before requesting a replacement quote or charge.
+Keep one active quote per purchase and reuse its ID while it remains valid. A quote request can be retried after a timeout **before** charging the buyer. A quote retry can issue a new quote ID and never charges or reserves stock. Once charging starts, keep the quote ID tied to that payment attempt. If the payment outcome is unclear, check the original attempt before requesting a replacement quote or charge.
 
 ## 3. Submit the purchase
 
@@ -67,7 +67,7 @@ Submissions that still lack a verified capture are removed after both the quote 
 
 ## 4. Read status and tracking
 
-Call `GET /order-submissions?partner_order_id=example-order-reference`. A receipt reports `pending_verification`, `payment_verified`, `settlement_verified`, `review_required`, or `accepted`. The `accepted` receipt includes `order_id`. A `review_required` receipt includes a `review_reason`. Retain the original payment and order references. A settlement review can clear when Baci verifies a corrected payout allocation. An order review means the original purchase needs a disposition before a replacement purchase can be attempted.
+Call `GET /order-submissions?partner_order_id=example-order-reference`. A receipt reports `pending_verification`, `payment_verified`, `settlement_verified`, `review_required`, or `accepted`. The `accepted` receipt includes `order_id`. The merchant moves the order to processing when it is ready for dispatch. A `review_required` receipt includes a `review_reason`. Retain the original payment and order references. A settlement review can clear when Baci verifies a corrected payout allocation. An order review means the original purchase needs a disposition before a replacement purchase can be attempted.
 
 Send exactly one `partner_order_id` parameter. Baci rejects duplicate references and additional query parameters.
 

@@ -40,7 +40,8 @@ RETURNS numeric LANGUAGE sql STABLE AS $$ SELECT 0::numeric; $$;
 
 CREATE FUNCTION private.seed_fixture_gigl_quote(
   p_order_id uuid, p_price numeric, p_service text DEFAULT 'Standard',
-  p_destination_override jsonb DEFAULT '{}'
+  p_destination_override jsonb DEFAULT '{}',
+  p_sender_override jsonb DEFAULT '{}', p_weight_delta numeric DEFAULT 0
 )
 RETURNS uuid LANGUAGE plpgsql AS $$
 DECLARE
@@ -57,12 +58,17 @@ BEGIN
       'shipmentType', 'domestic',
       'admin_order_provenance', 'server_gigl_v1',
       'receiver', o.shipping_address || p_destination_override,
-      'items', (SELECT jsonb_agg(jsonb_build_object('name', i.name,
-        'quantity', i.quantity, 'value', i.price))
-        FROM public.order_items i WHERE i.order_id = o.id)
+      'sender', (q.snapshot #> '{carrier_quote,quote_request,sender}') || p_sender_override,
+      'items', (SELECT jsonb_agg(jsonb_set(item, '{weight}',
+        to_jsonb((item->>'weight')::numeric + p_weight_delta)))
+        FROM jsonb_array_elements(q.snapshot #> '{carrier_quote,quote_request,items}') AS item)
     ),
     'gigl_platform_margin_v1', 1000, p_price - 1000, p_service
-  FROM public.orders o WHERE o.id = p_order_id;
+  FROM public.orders o
+  JOIN private.accepted_partner_orders a ON a.order_id = o.id
+  JOIN private.partner_order_submissions s ON s.id = a.submission_id
+  JOIN private.partner_delivery_quotes q ON q.id = s.quote_id
+  WHERE o.id = p_order_id;
 
   INSERT INTO public.shipping_quote_attestations (
     quote_id, merchant_id, order_id, price, currency, provider_rate_id, quote_request,

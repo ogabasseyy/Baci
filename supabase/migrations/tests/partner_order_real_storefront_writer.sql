@@ -191,6 +191,13 @@ BEGIN
     IF SQLERRM <> 'partner_delivery_destination_changed' THEN RAISE; END IF;
   END;
 
+  BEGIN
+    UPDATE public.orders SET source = 'online_store' WHERE id = accepted_id;
+    RAISE EXCEPTION 'accepted partner source was editable' USING ERRCODE = '22023';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'partner_order_source_immutable' THEN RAISE; END IF;
+  END;
+
   UPDATE public.orders SET shipping_address = shipping_address || '{"phone":"08011112222"}'
   WHERE id = accepted_id;
   IF (SELECT shipping_address->>'phone' FROM public.orders WHERE id = accepted_id)

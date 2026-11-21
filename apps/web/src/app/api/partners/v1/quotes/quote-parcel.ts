@@ -12,6 +12,7 @@ type QuoteLine = {
 
 type ParcelProduct = {
   id: string;
+  name?: string;
   weight_value?: number | string | null;
   weight_unit?: string | null;
   dimensions?: unknown;
@@ -34,7 +35,7 @@ export function buildPartnerQuoteParcel(
 
     const basePrice = line.base_unit_price_minor / 100;
     items.push({
-      name: line.title,
+      name: product.name ?? line.title,
       quantity: line.quantity,
       value: basePrice,
       weight: productWeightToKg(product.weight_value, product.weight_unit) ?? 1,

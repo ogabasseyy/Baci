@@ -93,17 +93,29 @@ function verifyGiglWalletBinding(orderId: string) {
       EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'partner_delivery_destination_changed' THEN RAISE; END IF;
       END;
+      FOR v_quote_id IN
+        SELECT private.seed_fixture_gigl_quote(v_order.id, 1500, 'Standard', '{}', '{"address":"Other pickup"}')
+        UNION ALL
+        SELECT private.seed_fixture_gigl_quote(v_order.id, 1500, 'Standard', '{}', '{}', 1)
+      LOOP
+        BEGIN
+          PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
+            v_quote_id, v_order.shipping_address);
+          RAISE EXCEPTION 'a different pickup or parcel was bound at the same price' USING ERRCODE = '22023';
+        EXCEPTION WHEN raise_exception THEN
+          IF SQLERRM <> 'partner_delivery_origin_or_parcel_changed' THEN RAISE; END IF;
+        END;
+      END LOOP;
       v_quote_id := private.seed_fixture_gigl_quote(v_order.id, 1499.999);
       PERFORM public.bind_admin_gigl_quote(v_order.id, v_order.merchant_id,
         v_quote_id, v_order.shipping_address);
     END;
     $$;
-    SELECT shipping_status, shipping_funding_source, shipping_provider,
-      (selected_quote_id IS NOT NULL) FROM public.orders WHERE id = '${orderId}';
+    SELECT shipping_status, shipping_funding_source, shipping_provider, (selected_quote_id IS NOT NULL)
+    FROM public.orders WHERE id = '${orderId}';
   `)
   ).toBe('processing|merchant_wallet|GIGL|t');
 }
-
 function assertFixtureId(id: string) {
   expect(id).toMatch(
     /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/
@@ -213,7 +225,6 @@ async function expectJson(
   if (operation) expectPartnerResponse(operation, status, body);
   return body;
 }
-
 async function verifyConcurrentRetry(
   send: () => Promise<Response>,
   expectedStatus: number,

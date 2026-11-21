@@ -19,7 +19,7 @@ import { buildPartnerQuoteParcel } from './quote-parcel';
 export const maxDuration = 60;
 
 const quoteColumns =
-  'id, weight_value, weight_unit, dimensions, vat_category_code, vat_rate';
+  'id, name, weight_value, weight_unit, dimensions, vat_category_code, vat_rate';
 
 function errorResponse(
   status: number,

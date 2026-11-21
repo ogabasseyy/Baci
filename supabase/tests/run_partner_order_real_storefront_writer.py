@@ -83,7 +83,7 @@ def partner_schema_sql():
         '20261120191400',
         '20261120192100',
         '20261120192400',
-        '20261120194800', '20261121100000',
+        '20261120194800', '20261121100000', '20261121110000',
     ]
     return [*reduced_schema_sql(), *(migration(version) for version in versions)]
 

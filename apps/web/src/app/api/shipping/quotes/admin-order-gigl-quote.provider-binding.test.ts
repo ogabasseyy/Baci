@@ -188,6 +188,10 @@ describe('Admin GIGL provider, persistence, binding, and wallet behavior', () =>
   it.each([
     ['partner_delivery_service_changed', 'PARTNER_DELIVERY_SERVICE_CHANGED'],
     [
+      'partner_delivery_origin_or_parcel_changed',
+      'PARTNER_DELIVERY_ORIGIN_OR_PARCEL_CHANGED',
+    ],
+    [
       'partner_delivery_destination_changed',
       'PARTNER_DELIVERY_DESTINATION_CHANGED',
     ],

@@ -130,22 +130,30 @@ export async function redeemCartHandoff(
   client: SupabaseClient,
   input: RedeemHandoffInput
 ): Promise<RedeemHandoffResult> {
-  const response = await client.rpc('commerce_cart_redeem_handoff', {
-    p_attempt_id: input.attemptId,
-    p_caller: input.caller,
-    p_choice: input.choice,
-    p_dest_cart_id: input.destCartId ?? null,
-    p_expected_dest_version: input.expectedDestVersion ?? null,
-    p_expected_incoming_version: input.expectedIncomingVersion ?? null,
-    p_handoff_id: input.handoffId,
-    p_lines: input.lines ?? null,
-    p_resolutions: input.resolutions ?? null,
-    p_token_hash: hashHandoffToken(input.token),
-  });
+  const response =
+    input.choice === 'import_mcp'
+      ? await client.rpc('commerce_cart_import_mcp_handoff', {
+          p_attempt_id: input.attemptId,
+          p_handoff_id: input.handoffId,
+          p_incoming_version: input.expectedIncomingVersion,
+          p_token_hash: hashHandoffToken(input.token),
+        })
+      : await client.rpc('commerce_cart_redeem_handoff', {
+          p_attempt_id: input.attemptId,
+          p_caller: input.caller,
+          p_choice: input.choice,
+          p_dest_cart_id: input.destCartId ?? null,
+          p_expected_dest_version: input.expectedDestVersion ?? null,
+          p_expected_incoming_version: input.expectedIncomingVersion ?? null,
+          p_handoff_id: input.handoffId,
+          p_lines: input.lines ?? null,
+          p_resolutions: input.resolutions ?? null,
+          p_token_hash: hashHandoffToken(input.token),
+        });
   if (response.error) {
     throw new CartRepositoryError(
       'temporarily_unavailable',
-      'Cart RPC commerce_cart_redeem_handoff failed'
+      'Cart handoff redemption failed'
     );
   }
   const data = (response.data ?? {}) as Record<string, unknown>;

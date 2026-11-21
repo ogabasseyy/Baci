@@ -28,6 +28,7 @@ import { GuestCartStore } from './guest-cart-store';
 import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
 import { createGuestCartWorkerClient } from './guest-cart-worker-client';
 import { describeGuestCartStoreHealth } from './guest-cart-health';
+import { guestCredentialModeEnabled } from './guest-credential-cart';
 import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
@@ -1234,6 +1235,9 @@ const premiumWidgetHtml = loadPremiumWidget();
 // MCP SERVER FACTORY
 // =============================================================================
 
+const guestCredentialMode = guestCredentialModeEnabled(
+  guestCartStore.canonicalEnabled
+);
 const guestOAuth = createGuestOAuthRuntime({
   issuer: MCP_PUBLIC_ORIGIN, supabaseUrl: SUPABASE_URL!, anonKey: SUPABASE_ANON_KEY!,
   getMerchantId, cartStore: guestCartStore,
@@ -1364,7 +1368,15 @@ function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { 
     }
   );
 
-  registerConfiguredGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp, connectionCart: options.connectionCart });
+  registerConfiguredGuestCartTool(server, {
+    store: guestCartStore,
+    supabase,
+    getMerchantId,
+    formatPrice,
+    clientIp: options.clientIp,
+    connectionCart: options.connectionCart,
+    guestCredentialMode,
+  });
 
   const agenticCheckoutClientConfig = getAgenticCheckoutClientConfig();
   if (agenticCheckoutClientConfig) {

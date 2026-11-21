@@ -2,6 +2,7 @@ import type { CartSnapshot } from '@baci/shared/cart';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { redactPreviewSnapshot } from '@/lib/cart/handoff-preview';
+import * as csrf from '@/lib/csrf';
 import { cartHandoffRedeemRequestSchema } from '@/schemas/cart';
 import { CartHandoff } from './cart-handoff';
 
@@ -71,6 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('CartHandoff', () => {
@@ -109,6 +111,120 @@ describe('CartHandoff', () => {
     }
     expect(fetchMock.mock.calls[0]?.[0]).toContain(`handoff_id=${HANDOFF_ID}`);
     expect(document.body.textContent).not.toContain(TOKEN);
+  });
+
+  it('opens an already shared cart directly without adding its lines again', async () => {
+    const cart = snapshot();
+    mockFetchSequence(
+      {
+        expiresAt: '2026-10-12T06:05:00.000Z',
+        merchant: { id: cart.merchantId, slug: 'ogabassey' },
+        snapshot: cart,
+        status: 'pending',
+      },
+      { cart }
+    );
+
+    const first = render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/cart'));
+    first.unmount();
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledTimes(2));
+    expect(
+      fetchMock.mock.calls.every(
+        ([, init]) => !init?.method || init.method === 'GET'
+      )
+    ).toBe(true);
+    expect(
+      screen.queryByRole('button', { name: 'Merge with my cart' })
+    ).toBeNull();
+  });
+
+  it('imports a signed MCP handoff automatically and reopens it without a second write', async () => {
+    const incoming = snapshot();
+    const website = snapshot({
+      cartId: '66666666-6666-4666-8666-666666666666',
+    });
+    let written = false;
+    const posted: unknown[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/handoff/redeem')) {
+        posted.push(
+          cartHandoffRedeemRequestSchema.parse(JSON.parse(String(init?.body)))
+        );
+        written = true;
+        return jsonResponse({ cart: website, choice: 'import_mcp' });
+      }
+      if (url.includes('/handoff?')) {
+        return jsonResponse(
+          written
+            ? {
+                status: 'consumed',
+                importMcp: true,
+                merchant: null,
+                snapshot: null,
+              }
+            : {
+                status: 'pending',
+                importMcp: true,
+                snapshot: incoming,
+                merchant: { id: incoming.merchantId, slug: 'ogabassey' },
+              }
+        );
+      }
+      if (url.includes('/api/storefront/cart?'))
+        return jsonResponse({ cart: website });
+      throw new Error('Unexpected call');
+    });
+    const first = render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/cart'));
+    expect(posted).toEqual([
+      expect.objectContaining({
+        choice: 'import_mcp',
+        destCartId: website.cartId,
+        expectedIncomingVersion: incoming.version,
+      }),
+    ]);
+    first.unmount();
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledTimes(2));
+    expect(posted).toHaveLength(1);
+    expect(
+      screen.queryByRole('button', { name: 'Connect this cart' })
+    ).toBeNull();
+  });
+
+  it('bootstraps and imports on the first website visit without a connect screen', async () => {
+    vi.spyOn(csrf, 'getClientCsrfToken').mockReturnValue('test-csrf-token');
+    const cart = snapshot();
+    const calls: string[] = [];
+    fetchMock.mockImplementation(async (url: string) => {
+      const pathname = new URL(url, 'https://ogabassey.com').pathname;
+      calls.push(pathname);
+      if (pathname.endsWith('/handoff')) {
+        return jsonResponse({
+          status: 'pending',
+          importMcp: true,
+          snapshot: cart,
+          merchant: { id: cart.merchantId, slug: 'ogabassey' },
+        });
+      }
+      if (pathname.endsWith('/bootstrap')) return jsonResponse({});
+      if (pathname.endsWith('/redeem'))
+        return jsonResponse({ choice: 'import_mcp' });
+      return jsonResponse({ code: 'missing_proof' }, 401);
+    });
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/cart'));
+    expect(calls).toEqual([
+      '/api/storefront/cart/handoff',
+      '/api/storefront/cart',
+      '/api/storefront/cart/bootstrap',
+      '/api/storefront/cart/handoff/redeem',
+    ]);
+    expect(
+      screen.queryByRole('button', { name: 'Connect this cart' })
+    ).toBeNull();
   });
 
   it('renders the continuation preview for an approved merchant', async () => {

@@ -214,6 +214,56 @@ function connectBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('POST /api/storefront/cart/handoff/redeem', () => {
+  it('imports into the website cart with its original grant and no cookie replacement', async () => {
+    mocks.cartPayload = {
+      ok: true,
+      currentVersion: 4,
+      grantId: DEST_GRANT_ID,
+      state: rawState({
+        cartId: DEST_CART_ID,
+        version: 4,
+        lines: [rawLine({ quantity: 2 })],
+      }),
+    };
+    const response = await postRedeem({
+      body: connectBody({ choice: 'import_mcp', destCartId: DEST_CART_ID }),
+      headers: { cookie: `baci-cart-${MERCHANT_ID}=${destSessionProof()}` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(await response.json()).toMatchObject({
+      choice: 'import_mcp',
+      cart: { cartId: DEST_CART_ID, lines: [{ quantity: 2 }] },
+    });
+    expect(mocks.cartRpcCalls).toEqual([
+      {
+        name: 'commerce_cart_import_mcp_handoff',
+        args: expect.objectContaining({
+          p_handoff_id: HANDOFF_ID,
+          p_incoming_version: 3,
+        }),
+      },
+    ]);
+  });
+
+  it('rejects native and client-supplied MCP imports before the RPC', async () => {
+    const body = connectBody({
+      choice: 'import_mcp',
+      destCartId: DEST_CART_ID,
+    });
+    const native = await postRedeem({
+      body,
+      headers: { authorization: `Bearer ${destSessionProof()}` },
+    });
+    expect(native.status).toBe(403);
+    const forged = await postRedeem({
+      body: { ...body, lines: [] },
+      headers: { cookie: `baci-cart-${MERCHANT_ID}=${destSessionProof()}` },
+    });
+    expect(forged.status).toBe(400);
+    expect(mocks.cartRpcCalls).toHaveLength(0);
+  });
+
   it.each([
     'web',
     'native',

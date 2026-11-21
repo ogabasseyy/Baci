@@ -2,19 +2,27 @@ import { registerCartLinkTools } from './cart-link-tool';
 import { registerConnectedCartRead } from './register-connected-cart-read';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { registerGuestCartTool } from './guest-cart-tool';
+import { registerGuestCredentialRead } from './guest-credential-cart';
 import { privateCartContinuationEnabled } from './private-cart-continuation-config';
 
 /** The production and QA registration boundary shares one default-off policy. */
 export function registerConfiguredGuestCartTool(
   server: McpServer,
-  options: Omit<Parameters<typeof registerGuestCartTool>[1], 'enablePrivateTextContinuation'>
+  options: Omit<
+    Parameters<typeof registerGuestCartTool>[1],
+    'enablePrivateTextContinuation' | 'modelCredentialTool'
+  >
 ) {
   registerGuestCartTool(server, {
     ...options,
-    enablePrivateTextContinuation: privateCartContinuationEnabled(),
+    enablePrivateTextContinuation:
+      !options.guestCredentialMode && privateCartContinuationEnabled(),
   });
   if (options.connectionCart) {
     registerConnectedCartRead(server, options.store, options.connectionCart);
+  } else if (options.guestCredentialMode) {
+    registerGuestCartTool(server, { ...options, modelCredentialTool: true });
+    registerGuestCredentialRead(server, options.store);
   } else {
     // Stateless links are only for legacy callers. Connected shoppers use the
     // persistent cart tools so additions, removals and handoffs share one cart.

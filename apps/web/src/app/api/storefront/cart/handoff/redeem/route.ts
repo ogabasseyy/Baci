@@ -108,6 +108,9 @@ export async function POST(request: NextRequest) {
     const hasDeviceProof =
       bearerProof?.startsWith(`${CART_SESSION_PROOF_VERSION}.`) ?? false;
     const caller = detectHandoffCaller(request.headers.get('origin'));
+    if (body.choice === 'import_mcp' && (caller !== 'web' || hasDeviceProof)) {
+      return cartErrorResponse('forbidden');
+    }
     if (caller === 'native' && !hasDeviceProof) {
       return cartErrorResponse('forbidden');
     }
@@ -159,6 +162,22 @@ export async function POST(request: NextRequest) {
         ...(redeemed.destVersion != null
           ? { destVersion: redeemed.destVersion }
           : null),
+      });
+    }
+
+    if (body.choice === 'import_mcp' && principal.scope === 'session') {
+      // Imports keep the browser's existing grant and its exact permissions.
+      if (
+        redeemed.cart?.cartId !== principal.cartId ||
+        redeemed.grantId !== principal.grantId
+      ) {
+        return cartErrorResponse('temporarily_unavailable');
+      }
+      return cartJsonResponse({
+        cart: redeemed.cart,
+        choice: redeemed.choice,
+        replayed: redeemed.replayed,
+        warnings: redeemed.warnings,
       });
     }
 

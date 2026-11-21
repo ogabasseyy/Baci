@@ -21,6 +21,7 @@ export interface PreviewMerchant {
 }
 
 export interface PreviewResponse {
+  importMcp?: boolean;
   status: 'pending' | 'consumed' | 'expired';
   merchant: PreviewMerchant | null;
   snapshot: CartSnapshot | null;
@@ -44,7 +45,7 @@ export interface MergeConflictView {
   incoming: ConflictOption;
 }
 
-export type Choice = 'connect' | 'merge' | 'keep_existing';
+export type Choice = 'connect' | 'merge' | 'keep_existing' | 'import_mcp';
 
 export function attemptStorageKey(handoffId: string): string {
   return `baci-cart-handoff-attempt:${handoffId}`;
@@ -113,7 +114,8 @@ export function lockedAttemptChoice(handoffId: string): Choice | null {
     if (
       stored === 'connect' ||
       stored === 'merge' ||
-      stored === 'keep_existing'
+      stored === 'keep_existing' ||
+      stored === 'import_mcp'
     ) {
       attemptChoices.set(key, stored);
       return stored;

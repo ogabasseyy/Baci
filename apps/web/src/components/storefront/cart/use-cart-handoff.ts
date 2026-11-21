@@ -20,6 +20,7 @@ import {
   recordResolutionList,
   redactHandoffFragment,
 } from './cart-handoff-support';
+import { prepareMcpHandoffImport } from './prepare-mcp-handoff-import';
 import { useHandoffRedeem } from './use-handoff-redeem';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
   const { token, handoffId } = props;
@@ -58,6 +59,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   }, []);
 
   const loadStarted = useRef(false);
+  const importStarted = useRef(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: this effect loads once; refresh is intentionally user-triggered thereafter.
   useEffect(() => {
@@ -67,17 +69,6 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     redeem.restorePersistedAttempt();
     void loadPreview();
   }, []);
-
-  function loadDestination(
-    slug: string | null,
-    signal?: AbortSignal
-  ): Promise<void> {
-    return loadDestinationCart(
-      { bootstrapRequired, setDestCart, setDestChecked, setDestinationError },
-      slug,
-      signal
-    );
-  }
 
   async function loadPreview(
     signal?: AbortSignal
@@ -121,7 +112,32 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       if (payload.merchant?.slug)
         recordActiveHandoff(token, handoffId, payload.merchant.slug);
       if (payload.status === 'pending') {
-        await loadDestination(payload.merchant?.slug ?? null, signal);
+        const destination = await loadDestinationCart(
+          {
+            bootstrapRequired,
+            setDestCart,
+            setDestChecked,
+            setDestinationError,
+            incoming: payload.snapshot
+              ? { cart: payload.snapshot, handoffId }
+              : undefined,
+          },
+          payload.merchant?.slug ?? null,
+          signal
+        );
+        if (destination && !signal?.aborted && !importStarted.current) {
+          const body = prepareMcpHandoffImport(
+            payload,
+            destination.cart,
+            handoffId,
+            token
+          );
+          if (body) {
+            importStarted.current = true;
+            lockChoice('import_mcp');
+            await postRedeem(body, payload.merchant?.slug ?? undefined);
+          }
+        }
       } else {
         setDestChecked(true);
         if (payload.status === 'expired') {
@@ -150,6 +166,11 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
             // Terminal with nothing to replay: drop the locator so
             // later cart-page loads do not restore this dead handoff.
             clearActiveHandoff(handoffId);
+            if (payload.importMcp) {
+              window.location.replace(
+                window.location.pathname + window.location.search
+              );
+            }
           }
         }
       }

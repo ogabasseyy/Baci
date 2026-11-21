@@ -4,6 +4,7 @@ import { cartLineIdentity } from '@baci/shared/cart';
 
 import { Button } from '@/components/ui/button';
 import { describeOption, formatMinor } from './cart-handoff-support';
+import { McpHandoffImport } from './mcp-handoff-import';
 import { useCartHandoff } from './use-cart-handoff';
 export function CartHandoff(props: { token: string; handoffId: string }) {
   const {
@@ -137,6 +138,15 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
           Handoff links last five minutes. Ask the sender for a fresh one.
         </p>
       </section>
+    );
+  }
+
+  if (preview.importMcp && (!lockedChoice || lockedChoice === 'import_mcp')) {
+    return (
+      <McpHandoffImport
+        error={redeemError}
+        retry={() => void act('import_mcp')}
+      />
     );
   }
 

@@ -39,8 +39,10 @@ export function mapPartnerDeliveryConflict(message: string | undefined) {
         'The current GIG service differs from the settled delivery quote. Review the service before booking.',
     },
   };
-  if (!message || !Object.hasOwn(conflicts, message)) return null;
-  return NextResponse.json(conflicts[message as keyof typeof conflicts], {
+  // Accept the raw PostgreSQL message or its conventional severity prefix.
+  const reason = message?.replace(/^ERROR: /, '');
+  if (!reason || !Object.hasOwn(conflicts, reason)) return null;
+  return NextResponse.json(conflicts[reason as keyof typeof conflicts], {
     status: 409,
   });
 }

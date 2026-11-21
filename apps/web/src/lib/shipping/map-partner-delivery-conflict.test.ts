@@ -24,9 +24,11 @@ describe('mapPartnerDeliveryConflict', () => {
       'PARTNER_SETTLED_ORDER_AMOUNTS_IMMUTABLE',
     ],
   ])('maps %s to a stable 409', async (message, code) => {
-    const response = mapPartnerDeliveryConflict(message);
-    expect(response?.status).toBe(409);
-    await expect(response?.json()).resolves.toMatchObject({ code });
+    for (const input of [message, `ERROR: ${message}`]) {
+      const response = mapPartnerDeliveryConflict(input);
+      expect(response?.status).toBe(409);
+      await expect(response?.json()).resolves.toMatchObject({ code });
+    }
   });
 
   it.each([
@@ -34,6 +36,7 @@ describe('mapPartnerDeliveryConflict', () => {
     '',
     'unknown',
     'constructor',
+    'ERROR: unrelated partner_delivery_price_changed error',
   ])('leaves unknown error %s to its caller', (message) => {
     expect(mapPartnerDeliveryConflict(message)).toBeNull();
   });

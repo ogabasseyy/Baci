@@ -133,10 +133,11 @@ Goal provisioning additionally requires
 base-runtime requirements, including the onboarding database password. A
 provisioning flag is not the separate savings-transfer activation flag.
 
-### Client build floors and onboarding rollout cohort (gate not wired yet)
+### Client build floors (gate not wired yet) and onboarding rollout cohort
 
-`apps/web/src/lib/piggyvest/primary-client-capability.ts` and
-`primary-onboarding-capability.ts` hold the build-aware capability gate; no route calls it yet. When wired, it reads:
+`apps/web/src/lib/piggyvest/primary-client-capability.ts` holds the
+build-aware client capability gate; no route calls it yet. When that gate is
+wired, it reads:
 
 - `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS` and
   `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID`: the lowest storefront native
@@ -162,25 +163,15 @@ provisioning flag is not the separate savings-transfer activation flag.
   the client send a contract number compiled into the bundle, so the gate
   keys on the JavaScript rather than the native build.
 - `piggyvest_primary.rollout_cohort` (migration 20261103012500), keyed by
-  merchant and customer. It ships empty and only a privileged operator adds
-  rows. A customer with no primary onboarding may start one only while
-  listed and while every readiness reader in
-  `primary-readiness-registry.ts` reports ready; none is registered yet, so
-  onboarding stays closed. A customer whose wallet is verified, or whose
-  onboarding is in flight (an intent or mapping not yet released), needs
-  only the build floor: removing them from the cohort, or a reader dropping
-  to not ready, never strands a provider-side wallet. Route wiring admits an
-  in-flight customer to resume that onboarding only, never a fresh claim.
-  Include
-  `read_rollout_cohort_membership(jsonb)` in the restricted provisioner's
-  verified grants; it returns only a boolean for the scoped customer.
-- Claim-time binding (route wiring PR, P4-capability-gate-routes). A `fresh`
-  verdict is a point-in-time read, not a token. The wiring must re-run
-  `resolvePrimaryOnboardingCapability` immediately before dispatching the
-  claim, and a follow-up migration must make `claim_onboarding(jsonb,text)`
-  re-check `rollout_cohort` membership inside its own transaction, so a
-  customer removed from the cohort between the gate and the claim cannot
-  create a backed wallet. Until both land no route calls the gate.
+  merchant and customer, and `read_rollout_cohort_membership(jsonb)` (keep it
+  in the restricted provisioner's verified grants; it returns only a boolean
+  for the scoped customer). Nothing in the app uses cohort membership for
+  admission today.
+- The onboarding readiness gate (`primary-readiness-registry.ts` and
+  `resolvePrimaryOnboardingCapability`) was removed on 2026-11-21 (owner
+  decision). No route ever called it, every reader was a placeholder that
+  answered "not ready", and onboarding was already live without it. The
+  legacy wallet move it waited for is done by hand (S10 runbook).
 - Refusal codes. Gate refusals are per customer or per build, so they use
   only `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, never the base
   `PIGGYVEST_NOT_READY` that released storefront builds cache merchant-wide.

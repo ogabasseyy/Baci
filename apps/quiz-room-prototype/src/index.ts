@@ -206,6 +206,23 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
     });
   }
 
+  private async refreshControlStateIfStale(
+    eventId: string,
+    nowMs: number
+  ): Promise<void> {
+    if (this.controlState.isFresh(nowMs) || !this.env.EVENT_COORDINATOR) {
+      return;
+    }
+    const coordStub = getWeurStub(this.env.EVENT_COORDINATOR, eventId);
+    const csRes = await coordStub.fetch(
+      `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(eventId)}`
+    );
+    if (csRes.ok) {
+      const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+      this.controlState.applySnapshot(snapshot);
+    }
+  }
+
   async alarm(): Promise<void> {
     await this.engine.onAlarm(Date.now());
   }
@@ -247,19 +264,7 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
           platform: QuizPlatform;
         }>(request);
         const nowMs = Date.now();
-        if (!this.controlState.isFresh(nowMs) && this.env.EVENT_COORDINATOR) {
-          const coordStub = getWeurStub(
-            this.env.EVENT_COORDINATOR,
-            body.ticket.eventId
-          );
-          const csRes = await coordStub.fetch(
-            `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(body.ticket.eventId)}`
-          );
-          if (csRes.ok) {
-            const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
-            this.controlState.applySnapshot(snapshot);
-          }
-        }
+        await this.refreshControlStateIfStale(body.ticket.eventId, nowMs);
         return jsonResponse(this.engine.startAttempt({ ...body, nowMs }));
       }
       if (request.method === 'POST' && url.pathname === '/internal/answer') {
@@ -269,10 +274,12 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
           questionId: string;
           answer: string;
         }>(request);
+        const nowMs = Date.now();
+        await this.refreshControlStateIfStale(body.ticket.eventId, nowMs);
         return jsonResponse(
           await this.engine.submitAnswer({
             ...body,
-            receivedAtMs: Date.now(),
+            receivedAtMs: nowMs,
           })
         );
       }
@@ -521,11 +528,49 @@ export class EventCoordinatorDO extends DurableObject<WorkerEnv> {
               res.status
             );
           }
-          return (await res.json()) as ReturnType<
+          const manifest = (await res.json()) as ReturnType<
             QuizRoomEngine['seal']
           > extends Promise<infer R>
             ? R
             : never;
+          const uuidRe =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (
+            env.SUPABASE_URL &&
+            env.QUIZ_BATCH_WORKER_JWT &&
+            uuidRe.test(eventId)
+          ) {
+            const sealUrl = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/record_quiz_edge_room_seal_v2`;
+            const sealRes = await fetch(sealUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${env.QUIZ_BATCH_WORKER_JWT}`,
+                apikey: env.SUPABASE_ANON_KEY ?? env.QUIZ_BATCH_WORKER_JWT,
+              },
+              body: JSON.stringify({
+                p_event_id: manifest.eventId,
+                p_room_id: manifest.roomId,
+                p_persisted_close_at: new Date(
+                  manifest.persistedCloseAtMs
+                ).toISOString(),
+                p_event_status: manifest.eventStatus,
+                p_attempt_count: manifest.attemptCount,
+                p_answer_count: manifest.answerCount,
+                p_batch_ids: manifest.batchIds,
+                p_batch_count: manifest.batchCount,
+                p_room_checksum_sha256: manifest.roomChecksumSha256,
+              }),
+            });
+            if (!sealRes.ok) {
+              throw new QuizRoomError(
+                'QUIZ_SEAL_PERSIST_FAILED',
+                `Failed to persist room seal ${manifest.roomId} to Supabase (${sealRes.status})`,
+                502
+              );
+            }
+          }
+          return manifest;
         },
       },
     });
@@ -661,8 +706,6 @@ function getShardCount(env: WorkerEnv): number {
   const parsed = Number.parseInt(env.RESULT_SHARD_COUNT ?? '16', 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 16;
 }
-
-const defaultControlState = new QuizControlStateStore();
 
 export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
@@ -996,18 +1039,31 @@ export default {
           secret: ticketSecret,
           nowMs: Date.now(),
         });
-        const body = await readJsonBody<{
-          questionId: string;
-          answer: string;
-        }>(request);
+        const body = await readJsonBody<Record<string, unknown>>(request);
+        const questionId =
+          typeof body.questionId === 'string' ? body.questionId.trim() : '';
+        const answer =
+          typeof body.answer === 'string' ? body.answer.trim() : '';
+        if (
+          !questionId ||
+          questionId.length > 128 ||
+          !answer ||
+          answer.length > 1024
+        ) {
+          throw new QuizRoomError(
+            'QUIZ_INVALID_INPUT',
+            'questionId (1..128 chars) and answer (1..1024 chars) are required',
+            400
+          );
+        }
         const roomStub = getWeurStub(env.QUIZ_ROOM, ticket.roomId);
         return roomStub.fetch('https://room.internal/internal/answer', {
           method: 'POST',
           body: JSON.stringify({
             ticket,
             attemptId,
-            questionId: body.questionId,
-            answer: body.answer,
+            questionId,
+            answer,
           }),
         });
       }
@@ -1135,8 +1191,15 @@ export default {
       const statusMatch = /^\/api\/quiz\/events\/([^/]+)\/status$/.exec(path);
       if (request.method === 'GET' && statusMatch?.[1]) {
         const eventId = statusMatch[1];
-        const pub = defaultControlState.getPublishedEvent(eventId);
-        const cancelled = defaultControlState.isEventCancelled(eventId);
+        const coordStub = getWeurStub(env.EVENT_COORDINATOR, eventId);
+        const csRes = await coordStub.fetch(
+          `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(eventId)}`
+        );
+        const snapshot = csRes.ok
+          ? ((await csRes.json()) as QuizControlStateSnapshot)
+          : null;
+        const pub = snapshot?.publishedEvents?.[eventId];
+        const cancelled = Boolean(snapshot?.cancelledEvents?.[eventId]);
         return jsonResponse(
           {
             eventId,

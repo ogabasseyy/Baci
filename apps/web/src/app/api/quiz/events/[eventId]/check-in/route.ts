@@ -155,6 +155,7 @@ export async function POST(
     logger.error({
       event: 'check_in_quiz_event_v2_invalid_projection',
       issues: parsedAdmission.error.issues,
+      message: 'check_in_quiz_event_v2 returned an invalid projection',
       eventId,
       userId: auth.user.id,
     });

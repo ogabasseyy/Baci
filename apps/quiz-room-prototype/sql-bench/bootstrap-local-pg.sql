@@ -546,3 +546,4 @@ $$;
 
 -- Apply the Stage 1 migration under test!
 \ir ../../../supabase/migrations/20261118170000_quiz_stage1_edge_prototype_v2.sql
+\ir ../../../supabase/migrations/20261118170001_gigl_quiz_edge_batch_worker_scope.sql

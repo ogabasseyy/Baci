@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { z } from 'zod';
 import { quizV2AttemptResponseSchema } from '@/schemas/quiz-schemas';
 import { getQuizAttestationHeaders } from './quiz-app-attestation';
@@ -47,6 +48,7 @@ export type QuizEdgeCheckInSession = z.infer<
 
 const activeEdgeSessions = new Map<string, QuizEdgeCheckInSession>();
 const activeAttemptSessions = new Map<string, QuizEdgeCheckInSession>();
+const EDGE_ATTEMPT_STORAGE_PREFIX = '@baci/quiz-edge-attempt:';
 
 function sessionKey(eventId: string, expectedUserId?: string): string {
   return `${eventId}:${expectedUserId ?? 'anon'}`;
@@ -65,6 +67,33 @@ export function getQuizEdgeSessionForAttempt(
   return activeAttemptSessions.get(attemptId);
 }
 
+/**
+ * Resolves an edge session for an attempt, hydrating from AsyncStorage after
+ * an OS cold restart or background kill so answers never fall back to Postgres.
+ */
+export async function resolveQuizEdgeSessionForAttempt(
+  attemptId: string
+): Promise<QuizEdgeCheckInSession | undefined> {
+  const cached = activeAttemptSessions.get(attemptId);
+  if (cached) return cached;
+  try {
+    const raw = await AsyncStorage.getItem(
+      `${EDGE_ATTEMPT_STORAGE_PREFIX}${attemptId}`
+    );
+    if (!raw) return undefined;
+    const parsed = quizEdgeCheckInResponseSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return undefined;
+    const session: QuizEdgeCheckInSession = {
+      ...parsed.data,
+      edgeBaseUrl: parsed.data.edgeBaseUrl.replace(/\/$/, ''),
+    };
+    activeAttemptSessions.set(attemptId, session);
+    return session;
+  } catch {
+    return undefined;
+  }
+}
+
 export function clearQuizEdgeSession(
   eventId: string,
   expectedUserId?: string
@@ -76,6 +105,9 @@ export function clearQuizEdgeSession(
   for (const [attemptId, session] of activeAttemptSessions.entries()) {
     if (session === existing) {
       activeAttemptSessions.delete(attemptId);
+      AsyncStorage.removeItem(
+        `${EDGE_ATTEMPT_STORAGE_PREFIX}${attemptId}`
+      ).catch(() => undefined);
     }
   }
 }
@@ -229,9 +261,19 @@ export async function startQuizEdgeAttempt(
     2
   );
   activeAttemptSessions.set(started.attemptId, session);
+  await AsyncStorage.setItem(
+    `${EDGE_ATTEMPT_STORAGE_PREFIX}${started.attemptId}`,
+    JSON.stringify(session)
+  ).catch(() => undefined);
   return started;
 }
 
+/**
+ * Submits an answer to the edge room with 1 automatic retry on transient
+ * network/5xx errors. Safe to retry because `QuizRoomEngine.submitAnswer`
+ * enforces `PRIMARY KEY (attempt_id, position)` and returns the already-recorded
+ * state idempotently on duplicate `(attemptId, questionId)` submissions.
+ */
 export function submitQuizEdgeAnswer(
   session: QuizEdgeCheckInSession,
   input: Pick<
@@ -247,6 +289,7 @@ export function submitQuizEdgeAnswer(
       ...(input.clientAnsweredAt
         ? { clientAnsweredAt: input.clientAnsweredAt }
         : {}),
+      idempotencyKey: `${input.attemptId}:${input.questionId}`,
       questionId: input.questionId,
     },
     quizV2AttemptResponseSchema,

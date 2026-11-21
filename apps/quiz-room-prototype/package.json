@@ -6,6 +6,7 @@
   "scripts": {
     "lint": "biome check .",
     "test": "vitest run --config vitest.config.ts",
-    "typecheck": "mkdir -p .wrangler-types && wrangler types .wrangler-types/worker-configuration.d.ts --config wrangler.jsonc && tsc -p tsconfig.json"
+    "typecheck": "mkdir -p .wrangler-types && wrangler types .wrangler-types/worker-configuration.d.ts --config wrangler.jsonc && tsc -p tsconfig.json",
+    "typecheck:ci": "mkdir -p .wrangler-types && wrangler types .wrangler-types/worker-configuration.d.ts --config wrangler.jsonc && tsc -p tsconfig.json"
   }
 }

@@ -11,7 +11,7 @@ import { getQuizAttestationHeaders } from './quiz-app-attestation';
 import {
   checkInQuizEdgeEvent,
   getQuizEdgeSession,
-  getQuizEdgeSessionForAttempt,
+  resolveQuizEdgeSessionForAttempt,
   startQuizEdgeAttempt,
   submitQuizEdgeAnswer,
 } from './quiz-edge-transport';
@@ -101,7 +101,7 @@ export async function startQuizAttemptV2(
   );
 }
 
-export function submitQuizAnswerV2({
+export async function submitQuizAnswerV2({
   answer,
   attemptId,
   baseUrl,
@@ -109,7 +109,7 @@ export function submitQuizAnswerV2({
   expectedUserId,
   questionId,
 }: SubmitQuizAnswerV2Input): Promise<QuizV2Attempt> {
-  const edgeSession = getQuizEdgeSessionForAttempt(attemptId);
+  const edgeSession = await resolveQuizEdgeSessionForAttempt(attemptId);
   if (edgeSession) {
     return submitQuizEdgeAnswer(edgeSession, {
       answer,

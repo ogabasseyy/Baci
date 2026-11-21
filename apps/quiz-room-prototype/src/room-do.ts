@@ -1419,9 +1419,8 @@ export class QuizRoomEngine {
     this.appCounters.queueMessages += stats.queueMessages;
     this.appCounters.queueOperations += stats.queueOperations;
 
+    // Persist journal rows first so batch checksums are durable before publish.
     this.storage.transactionSync(() => {
-      const config = this.requireConfigSync();
-      const alarmState = this.getAlarmStateSync(config);
       for (const packed of packedMessages) {
         this.storage.exec(
           `INSERT INTO room_batches (
@@ -1435,6 +1434,18 @@ export class QuizRoomEngine {
           packed.message.payloadSha256,
           packed.byteLength
         );
+      }
+    });
+
+    // Publish BEFORE clearing room_outbox so transient queue failures retry on next alarm.
+    if (packedMessages.length > 0 && this.hooks.onPublishBatches) {
+      await this.hooks.onPublishBatches(packedMessages);
+    }
+
+    this.storage.transactionSync(() => {
+      const config = this.requireConfigSync();
+      const alarmState = this.getAlarmStateSync(config);
+      for (const packed of packedMessages) {
         for (const b of packed.message.bundles) {
           this.storage.exec(
             `UPDATE room_attempts SET exported_batch_id = ? WHERE attempt_id = ? AND exported_batch_id IS NULL`,
@@ -1455,10 +1466,6 @@ export class QuizRoomEngine {
       this.writeAlarmStateSync(nextAlarm);
       this.scheduleNextAlarmSync(config, nextAlarm);
     });
-
-    if (packedMessages.length > 0 && this.hooks.onPublishBatches) {
-      await this.hooks.onPublishBatches(packedMessages);
-    }
 
     return packedMessages;
   }

@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -61,7 +61,7 @@ const MERCHANT_ID = '44444444-4444-4444-8444-444444444444';
 const ADMISSION_ID = '55555555-5555-4555-8555-555555555555';
 const REQ_ID = '66666666-6666-4666-8666-666666666666';
 const DEVICE_HASH = 'a'.repeat(64);
-const TICKET_SECRET = 'stage2-test-ticket-secret-0123456789abcdef';
+const TICKET_SECRET = randomBytes(32).toString('hex');
 
 function makeRequest(body: unknown, headers?: Record<string, string>) {
   return new NextRequest(

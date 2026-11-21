@@ -5,11 +5,39 @@ import { z } from 'zod';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 
 const disputeObjectSchema = z.record(z.string(), z.unknown());
+type DisputeClient = Pick<SupabaseClient, 'from' | 'rpc'>;
+
+async function reviewMalformedDispute(
+  client: DisputeClient,
+  event: string,
+  references: string[],
+  reason: string
+) {
+  // Conflicting payloads cannot attribute a dispute to an order. Keep a
+  // reference-only review for each candidate before acknowledging Paystack.
+  const writes = await Promise.all(
+    references.map((reference) =>
+      client.from('reconciliation_review').insert({
+        issue_type: 'payment_match_ambiguous',
+        paystack_ref: reference,
+        reason,
+        metadata: { source: 'bank_card_offer_dispute_payload', event },
+      })
+    )
+  );
+  if (writes.some(({ error }) => error && error.code !== '23505')) {
+    return NextResponse.json(
+      { error: 'Bank offer dispute reconciliation unavailable' },
+      { status: 503 }
+    );
+  }
+  return NextResponse.json({ code: 'BANK_CARD_OFFER_DISPUTE_REVIEW' });
+}
 
 export async function handleBankCardOfferDispute(
   event: unknown,
   data: unknown,
-  getClient: () => Pick<SupabaseClient, 'rpc'>
+  getClient: () => DisputeClient
 ): Promise<Response | null> {
   if (event !== 'charge.dispute.create' && event !== 'charge.dispute.resolve') {
     return null;
@@ -28,14 +56,21 @@ export async function handleBankCardOfferDispute(
   ].filter(
     (value): value is string => typeof value === 'string' && value.length > 0
   );
-  const reference = references.find(
-    (value) => bankCardOfferReferenceSchema.safeParse(value).success
-  );
+  const candidates = [
+    ...new Set(
+      references.filter(
+        (value) => bankCardOfferReferenceSchema.safeParse(value).success
+      )
+    ),
+  ];
+  const [reference] = candidates;
   if (!reference) return null;
   if (references.some((value) => value !== reference)) {
-    return NextResponse.json(
-      { error: 'Conflicting bank offer dispute references' },
-      { status: 503 }
+    return reviewMalformedDispute(
+      getClient(),
+      event,
+      candidates,
+      'Conflicting bank offer dispute references'
     );
   }
 
@@ -47,9 +82,11 @@ export async function handleBankCardOfferDispute(
         ? String(rawId)
         : '';
   if (!/^[0-9]{1,32}$/.test(disputeId)) {
-    return NextResponse.json(
-      { error: 'Bank offer dispute ID unavailable' },
-      { status: 503 }
+    return reviewMalformedDispute(
+      getClient(),
+      event,
+      candidates,
+      'Bank offer dispute ID unavailable'
     );
   }
 

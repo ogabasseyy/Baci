@@ -5,10 +5,8 @@ import { readSessionlessPaymentReferenceSnapshot } from './read-sessionless-paym
 export async function getBankCardOfferVerificationBinding(
   request: Request,
   reference: string,
-  merchantSlug: string | undefined
+  merchantSlug: string
 ) {
-  if (!merchantSlug) return 'unavailable';
-
   try {
     const auth = await getAuthenticatedUser(request);
     if (auth?.authMode !== 'cookie') return null;

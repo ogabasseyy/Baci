@@ -95,9 +95,9 @@ import { POST } from './route';
 
 const REFERENCE = 'BAC-VERIFY-1';
 
-function createRequest(reference = REFERENCE) {
+function createRequest(reference = REFERENCE, merchantSlug?: string) {
   return new NextRequest('http://localhost:3000/api/payments/verify', {
-    body: JSON.stringify({ reference }),
+    body: JSON.stringify({ reference, merchantSlug }),
     headers: { 'Content-Type': 'application/json' },
     method: 'POST',
   });

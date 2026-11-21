@@ -82,6 +82,8 @@ export function quoteBankCardOffer({
     offer.discountBasisPoints,
     offer.maximumDiscountKobo
   );
+  // Bank offers require a positive merchandise balance, even when delivery
+  // or other fees would leave a nonzero amount to charge.
   if (discount === 0n || discount >= productSubtotal) return null;
 
   // Unit discounts are differences between rounded cumulative shares. The

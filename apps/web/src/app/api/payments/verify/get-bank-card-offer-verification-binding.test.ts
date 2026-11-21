@@ -45,12 +45,7 @@ it('binds an owned order to the selected storefront', async () => {
   ]);
 });
 
-it('distinguishes missing storefront context from a missing buyer session', async () => {
-  await expect(
-    getBankCardOfferVerificationBinding(request, reference, undefined)
-  ).resolves.toBe('unavailable');
-  expect(authenticate).not.toHaveBeenCalled();
-
+it('rejects a missing buyer session before reading a storefront order', async () => {
   authenticate.mockResolvedValueOnce(null);
   await expect(
     getBankCardOfferVerificationBinding(request, reference, 'ogabassey')

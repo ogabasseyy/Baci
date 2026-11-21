@@ -24,7 +24,9 @@ describe('Paystack bank-offer route binding', () => {
 
   it('returns 503 for a temporary bank-offer binding outage before verification', async () => {
     getBankCardOfferBinding.mockResolvedValueOnce('unavailable');
-    const response = await POST(createRequest(`BCO-${'a'.repeat(32)}`));
+    const response = await POST(
+      createRequest(`BCO-${'a'.repeat(32)}`, 'ogabassey')
+    );
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
@@ -32,6 +34,16 @@ describe('Paystack bank-offer route binding', () => {
     });
     expect(mockCreateServiceClient).not.toHaveBeenCalled();
     expect(mockVerifyPaystack).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a browser bank-offer request without a storefront slug', async () => {
+    const response = await POST(createRequest(`BCO-${'a'.repeat(32)}`));
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Merchant slug is required for bank card offer verification',
+    });
+    expect(getBankCardOfferBinding).not.toHaveBeenCalled();
+    expect(mockCreateServiceClient).not.toHaveBeenCalled();
   });
 
   it('rejects a bank offer reference bound to a non-Paystack transaction', async () => {
@@ -42,7 +54,9 @@ describe('Paystack bank-offer route binding', () => {
       merchantId: 'merchant-1',
     });
 
-    const response = await POST(createRequest(`BCO-${'a'.repeat(32)}`));
+    const response = await POST(
+      createRequest(`BCO-${'a'.repeat(32)}`, 'ogabassey')
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({

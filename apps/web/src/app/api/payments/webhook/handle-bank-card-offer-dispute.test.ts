@@ -27,20 +27,56 @@ it('uses the nested transaction reference when Paystack leaves the direct refere
 });
 
 it('does not apply a dispute outcome when its Paystack payment references conflict', async () => {
-  const getClient = vi.fn();
+  const insert = vi.fn().mockResolvedValue({ error: null });
+  const rpc = vi.fn();
+  const from = vi.fn().mockReturnValue({ insert });
+  const otherReference = `BCO-${'b'.repeat(32)}`;
   const result = await handleBankCardOfferDispute(
     'charge.dispute.resolve',
     {
       id: 91,
-      transaction_reference: `BCO-${'b'.repeat(32)}`,
+      transaction_reference: otherReference,
       transaction: { reference },
       status: 'resolved',
       resolution: 'declined',
     },
-    getClient
+    () => ({ rpc, from }) as never
   );
-  expect(result?.status).toBe(503);
-  expect(getClient).not.toHaveBeenCalled();
+  expect(result?.status).toBe(200);
+  expect(from).toHaveBeenCalledWith('reconciliation_review');
+  expect(insert).toHaveBeenCalledTimes(2);
+  expect(insert).toHaveBeenCalledWith(
+    expect.objectContaining({ paystack_ref: reference })
+  );
+  expect(insert).toHaveBeenCalledWith(
+    expect.objectContaining({ paystack_ref: otherReference })
+  );
+  expect(rpc).not.toHaveBeenCalled();
+});
+
+it.each([
+  [null, 200],
+  [{ code: '23505' }, 200],
+  [{ code: '57014' }, 503],
+] as const)('acknowledges a malformed dispute ID only after review is durable (%j)', async (error, status) => {
+  const insert = vi.fn().mockResolvedValue({ error });
+  const rpc = vi.fn();
+  const result = await handleBankCardOfferDispute(
+    'charge.dispute.create',
+    { id: 'unusable', transaction_reference: reference },
+    () => ({ rpc, from: () => ({ insert }) }) as never
+  );
+  expect(result?.status).toBe(status);
+  expect(insert).toHaveBeenCalledExactlyOnceWith({
+    issue_type: 'payment_match_ambiguous',
+    paystack_ref: reference,
+    reason: 'Bank offer dispute ID unavailable',
+    metadata: {
+      source: 'bank_card_offer_dispute_payload',
+      event: 'charge.dispute.create',
+    },
+  });
+  expect(rpc).not.toHaveBeenCalled();
 });
 
 describe('handleBankCardOfferDispute', () => {

@@ -9,6 +9,17 @@ import {
 } from './bank-card-offer-quote.test-support';
 
 describe('bank card offer quotes', () => {
+  it('rejects a quote when kobo rounding discounts the entire basket', () => {
+    expect(
+      quoteBankCardOffer({
+        offer: { ...offer, discountBasisPoints: 9_999 },
+        merchantId,
+        items: [{ ...items[0], unitPriceKobo: 1, quantity: 1 }],
+        now,
+      })
+    ).toBeNull();
+  });
+
   it('retains a zero refundable value when a unit is fully discounted by rounding', () => {
     const quote = quoteBankCardOffer({
       offer: { ...offer, discountBasisPoints: 9_999 },

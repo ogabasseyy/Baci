@@ -67,6 +67,12 @@ export async function verifyBankCardOfferRequest(
     }
   }
 
+  if (!merchantSlug) {
+    return NextResponse.json(
+      { error: 'Merchant slug is required for bank card offer verification' },
+      { status: 400 }
+    );
+  }
   const binding = await getBankCardOfferVerificationBinding(
     request,
     reference,

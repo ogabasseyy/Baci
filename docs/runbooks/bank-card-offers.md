@@ -44,7 +44,7 @@ Before switching between Paystack test and live keys, finish or reconcile outsta
 
 A cancellation containing an unverified bank-offer leg enters refund review even if another leg has already been refunded. The quarantine path records the accepted refund IDs and raises a delivery-uncertain error, so the worker does not mark the whole step complete.
 
-Kobo rounding can fully discount a unit. Its saved merchandise refund value is zero, and that unit must contribute zero to any later merchandise refund.
+Kobo rounding can fully discount a unit. Its saved merchandise refund value is zero, and that unit must contribute zero to any later merchandise refund. The merchandise basket must still have a positive balance after the offer. Delivery and other fees cannot make a fully discounted basket eligible.
 
 Browser order creation and payment initialization for a bank offer use the checkout CSRF token. Browser verification requires the signed-in buyer's order ownership proof and the matching storefront. Pending and reversed views display only an order number returned by verification. A denied session shows instructions for checking the order from the buyer's account and stops automatic polling. The checkout request helper refreshes the CSRF token and retries once. A remaining non-denial 403 stops polling and offers page refresh, order history, or support without requesting a new payment. Pending responses and temporary verification outages use the checkout page’s bounded polling budget.
 

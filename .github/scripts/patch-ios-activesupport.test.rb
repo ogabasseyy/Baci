@@ -5,6 +5,25 @@ require "fileutils"
 require "tmpdir"
 require_relative "patch-ios-activesupport"
 
+if ARGV == ["--verify-installed"]
+  gem_spec = Gem.loaded_specs.fetch("activesupport")
+  abort "Unexpected ActiveSupport version #{gem_spec.version}" unless gem_spec.version.to_s == IosActiveSupportBackport::VERSION
+
+  installed_path = File.join(gem_spec.full_gem_path, "lib/active_support/inflector/methods.rb")
+  installed_source = File.binread(installed_path)
+  installed_digest = Digest::SHA256.hexdigest(installed_source)
+  abort "Installed ActiveSupport patch digest mismatch at #{installed_path}" unless installed_digest == IosActiveSupportBackport::PATCHED_DIGEST
+  abort "Installed ActiveSupport still defines const_regexp" if installed_source.include?("const_regexp")
+  abort "Installed ActiveSupport lacks literal LoadError matching" unless installed_source.include?(IosActiveSupportBackport::PATCHED_MATCH.lines.last.strip)
+
+  require "active_support/inflector"
+  abort "Installed ActiveSupport ordinary constant lookup failed" unless ActiveSupport::Inflector.safe_constantize("String") == String
+  abort "Installed ActiveSupport unknown constant lookup changed" unless ActiveSupport::Inflector.safe_constantize("DefinitelyMissingConstant").nil?
+
+  puts "Installed ActiveSupport backport verified"
+  exit
+end
+
 def assert_equal(expected, actual, message)
   raise "#{message}: expected #{expected.inspect}, got #{actual.inspect}" unless expected == actual
 end

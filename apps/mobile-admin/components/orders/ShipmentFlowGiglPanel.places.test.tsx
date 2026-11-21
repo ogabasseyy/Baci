@@ -148,28 +148,41 @@ describe('ShipmentFlowGiglPanel places autocomplete', () => {
   it('keeps typed search text in the address draft', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'key');
     render(<ShipmentFlowGiglPanel {...props} />);
-    fireEvent.change(screen.getByLabelText('Search shipping address'), {
-      target: { value: '12 Allen' },
-    });
+    fireEvent.change(
+      screen.getByLabelText('Search or enter shipping address'),
+      {
+        target: { value: '12 Allen' },
+      }
+    );
     expect(props.onAddressFieldChange).toHaveBeenCalledWith(
       'address',
       '12 Allen'
     );
+    expect(
+      screen.getByText(
+        'No suggestion? Type the full street address here, then enter the city and state below.'
+      )
+    ).toBeTruthy();
   });
 
   it('disables the search while a quote is loading', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'key');
     render(<ShipmentFlowGiglPanel {...props} state="loading" />);
     expect(
-      (screen.getByLabelText('Search shipping address') as HTMLInputElement)
-        .disabled
+      (
+        screen.getByLabelText(
+          'Search or enter shipping address'
+        ) as HTMLInputElement
+      ).disabled
     ).toBe(true);
   });
 
   it('keeps manual entry usable when no Maps key is configured', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', '');
     render(<ShipmentFlowGiglPanel {...props} />);
-    expect(screen.queryByLabelText('Search shipping address')).toBeNull();
+    expect(
+      screen.queryByLabelText('Search or enter shipping address')
+    ).toBeNull();
     expect(screen.getByLabelText('Shipping address')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Shipping city'), {
       target: { value: 'Abuja' },

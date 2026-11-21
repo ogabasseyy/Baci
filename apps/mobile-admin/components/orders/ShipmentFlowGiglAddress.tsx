@@ -65,26 +65,32 @@ export function ShipmentFlowGiglAddress({
         />
       ) : null}
       {showPlacesSearch ? (
-        <CheckoutRecoveryAddressInput
-          accessibilityLabel="Search shipping address"
-          address={addressDraft.address ?? ''}
-          disabled={loading}
-          onSearchChange={(text) => onAddressFieldChange('address', text)}
-          onSelect={(place) => {
-            const latitude = Number.parseFloat(place.latitude);
-            const longitude = Number.parseFloat(place.longitude);
-            const hasPin =
-              Number.isFinite(latitude) && Number.isFinite(longitude);
-            onPlaceSelect({
-              address: place.address,
-              city: place.city,
-              state: place.state,
-              latitude: hasPin ? latitude : undefined,
-              longitude: hasPin ? longitude : undefined,
-            });
-          }}
-          placeholder="Search delivery address"
-        />
+        <>
+          <CheckoutRecoveryAddressInput
+            accessibilityLabel="Search or enter shipping address"
+            address={addressDraft.address ?? ''}
+            disabled={loading}
+            onSearchChange={(text) => onAddressFieldChange('address', text)}
+            onSelect={(place) => {
+              const latitude = Number.parseFloat(place.latitude);
+              const longitude = Number.parseFloat(place.longitude);
+              const hasPin =
+                Number.isFinite(latitude) && Number.isFinite(longitude);
+              onPlaceSelect({
+                address: place.address,
+                city: place.city,
+                state: place.state,
+                latitude: hasPin ? latitude : undefined,
+                longitude: hasPin ? longitude : undefined,
+              });
+            }}
+            placeholder="Search or enter shipping address"
+          />
+          <Text style={{ color: colors.textSecondary, marginBottom: 10 }}>
+            No suggestion? Type the full street address here, then enter the
+            city and state below.
+          </Text>
+        </>
       ) : null}
       {manualFields.map((field) => (
         <View key={field} style={panelStyles.field}>

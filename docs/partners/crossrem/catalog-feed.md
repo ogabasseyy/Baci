@@ -1,6 +1,6 @@
 # CrossRem catalog feed v1
 
-`GET /api/partners/v1/catalog` returns one complete JSON snapshot for the configured merchant. Send `Authorization: Bearer <token>`. Generate at least 32 random bytes and encode them as unpadded base64url for `CROSSREM_CATALOG_TOKEN` in each approved environment.
+`GET /api/partners/v1/catalog` returns one complete JSON snapshot for the configured merchant. Send `Authorization: Bearer <token>`. Generate separate tokens from at least 32 random bytes encoded as unpadded base64url. Use `CROSSREM_CATALOG_TOKEN` for Baci checks and `CROSSREM_PARTNER_CATALOG_TOKEN` for the CrossRem team. Both credentials are catalog-only. Changing or removing the team credential and deploying the updated configuration leaves the Baci credential valid.
 
 The response includes `schema_version: 1`, `currency: "NGN"` and `listings`. Each listing has the existing `listing_id`, the exact Baci product and optional variant or offer ID, title, image and product URLs, product type, brand, condition and condition label, availability and prices in kobo. Always read `condition` directly rather than inferring it from `product_url` query params (which normalize offer conditions such as `uk_used` to `used`). The `base_price_minor` field is the current Ogabassey merchandise price for the exact item. CrossRem displays `price_minor`, which is the base plus 6%, rounded to the nearest kobo. Protection and delivery are excluded from both prices. Missing brand or category data is represented by null. Legacy categories can have a label without a stable category key.
 

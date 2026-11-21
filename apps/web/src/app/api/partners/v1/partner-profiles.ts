@@ -11,6 +11,10 @@ export function getPartnerProfiles(): readonly PartnerProfile[] {
       merchantId: crossRemCatalogConfig.merchantId,
       credentials: [
         { token: process.env.CROSSREM_CATALOG_TOKEN, scopes: ['catalog:read'] },
+        {
+          token: process.env.CROSSREM_PARTNER_CATALOG_TOKEN,
+          scopes: ['catalog:read'],
+        },
         { token: process.env.CROSSREM_QUOTE_TOKEN, scopes: ['quotes:write'] },
         {
           token: process.env.CROSSREM_ORDER_TOKEN,

@@ -87,3 +87,22 @@ it('refuses confirmation without an authenticated user', async () => {
   );
   expect(supabase.rpc).not.toHaveBeenCalled();
 });
+
+it.each([
+  ['22023', 'expired_gift_card_quote', 'The price expired. Get a fresh quote.'],
+  [
+    'P0001',
+    'insufficient_wallet_balance',
+    'Your wallet balance is too low for this gift card.',
+  ],
+  ['XX000', 'internal diagnostic', 'Gift card payment could not be confirmed'],
+])('maps wallet RPC code %s to a safe message', async (code, message, expected) => {
+  supabase.auth.getUser.mockResolvedValue({ data: { user: { id: userId } } });
+  supabase.rpc.mockResolvedValue({ error: { code, message } });
+  await expect(
+    confirmAuthenticatedGiftCardQuote({
+      payload: '{}',
+      signature: 'a'.repeat(64),
+    })
+  ).rejects.toThrow(expected);
+});

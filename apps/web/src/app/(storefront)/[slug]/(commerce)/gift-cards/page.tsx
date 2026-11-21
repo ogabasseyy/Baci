@@ -61,7 +61,7 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
   const mockCheckout =
     process.env.NODE_ENV === 'development' &&
     process.env.OGABASSEY_GIFT_CARD_MOCK_CHECKOUT === 'true' &&
-    /^(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(
+    /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
       requestHeaders.get('host') ?? ''
     );
   const total =

@@ -30,13 +30,19 @@ function signPresentation(config: PilotConfig, expiry: number) {
 }
 
 async function freshPilotQuote(config: PilotConfig, deps: PilotDependencies) {
-  if ((await deps.getUserId()) !== config.userId) {
+  const userId = await deps.getUserId();
+  if (!userId) throw new Error('Sign in to use your wallet.');
+  if (userId !== config.userId) {
     throw new Error('Gift card pilot is unavailable.');
   }
   if (!(await deps.readPetrockOffer())) {
     throw new Error('Petrock price or availability could not be verified.');
   }
-  const quote = await deps.issue({ cardId: PILOT_PRODUCT_ID }, config.orderId);
+  const quote = await deps
+    .issue({ cardId: PILOT_PRODUCT_ID }, config.orderId)
+    .catch(() => {
+      throw new Error('Gift card pricing is temporarily unavailable');
+    });
   if (quote.totalKobo !== PILOT_APPROVED_KOBO) {
     throw new Error('Price changed. No wallet debit was made.');
   }

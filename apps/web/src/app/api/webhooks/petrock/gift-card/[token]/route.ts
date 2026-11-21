@@ -19,10 +19,6 @@ export async function POST(
     return new Response(null, { status: 404 });
   }
 
-  // The pilot uses authenticated polling. Do not acknowledge completion until
-  // there is durable callback processing, and keep the voucher out of logs.
-  return new Response(null, {
-    status: 503,
-    headers: { 'Retry-After': '60' },
-  });
+  // Discard callback bodies. Only authenticated polling can capture fulfillment.
+  return new Response(null, { status: 204 });
 }

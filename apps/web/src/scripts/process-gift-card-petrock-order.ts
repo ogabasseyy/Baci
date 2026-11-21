@@ -51,6 +51,9 @@ async function main() {
     max: 1,
     connect_timeout: 10,
     onnotice: () => undefined,
+    // The URL authenticates a dedicated LOGIN member of this NOLOGIN role.
+    // Set it on every connection so reconnects retain the same privileges.
+    connection: { role: 'gift_card_petrock_worker' },
   });
   try {
     const result = await runGiftCardWorker(options, {

@@ -83,7 +83,21 @@ export async function confirmAuthenticatedGiftCardQuote(input: unknown) {
     p_payload: proof.payload,
     p_signature: proof.signature,
   });
-  if (result.error) throw new Error('Gift card payment could not be confirmed');
+  if (result.error) {
+    const rpcError = z
+      .object({ code: z.string(), message: z.string() })
+      .safeParse(result.error);
+    if (rpcError.success) {
+      const { code, message } = rpcError.data;
+      if (code === '22023' && message === 'expired_gift_card_quote') {
+        throw new Error('The price expired. Get a fresh quote.');
+      }
+      if (code === 'P0001' && message === 'insufficient_wallet_balance') {
+        throw new Error('Your wallet balance is too low for this gift card.');
+      }
+    }
+    throw new Error('Gift card payment could not be confirmed');
+  }
   return z
     .array(z.object({ order_id: z.uuid(), order_status: z.string() }))
     .length(1)

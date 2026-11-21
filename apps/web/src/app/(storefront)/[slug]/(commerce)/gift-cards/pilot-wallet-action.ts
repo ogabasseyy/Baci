@@ -18,6 +18,19 @@ type PilotWalletState =
   | { status: 'quote'; totalKobo: number; expiresAt: number; token: string }
   | { status: 'confirmed'; orderId: string };
 
+const customerMessages = new Set([
+  'Sign in to use your wallet.',
+  'Gift card pilot is unavailable.',
+  'Petrock price or availability could not be verified.',
+  'Gift card pricing is temporarily unavailable',
+  'Price changed. No wallet debit was made.',
+  'Please request a fresh price before confirming.',
+  'The displayed price expired. Get a fresh quote.',
+  'Fresh price expired. Get a fresh quote.',
+  'The price expired. Get a fresh quote.',
+  'Your wallet balance is too low for this gift card.',
+]);
+
 export async function runPilotWalletAction(
   _previous: PilotWalletState,
   form: FormData
@@ -55,10 +68,7 @@ export async function runPilotWalletAction(
       if (order) return { status: 'confirmed', orderId: order.order_id };
     }
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === 'Price changed. No wallet debit was made.'
-    ) {
+    if (error instanceof Error && customerMessages.has(error.message)) {
       return { status: 'error', message: error.message };
     }
   }

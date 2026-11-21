@@ -100,6 +100,7 @@ export async function SearchPageContent({
   const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
   const giftCards =
     page === 1 &&
+    !searchFailed &&
     !invalidFilters &&
     !hasActiveSearchRefinements(refinements) &&
     isGiftCardPreviewEnabled(merchant.slug)

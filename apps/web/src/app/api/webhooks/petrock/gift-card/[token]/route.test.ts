@@ -9,10 +9,11 @@ const request = new Request('https://example.test', {
 
 afterEach(() => vi.unstubAllEnvs());
 
-it('does not acknowledge a callback as processed while polling is the only recovery mechanism', async () => {
+it('discards callbacks without reading the body or requesting a retry', async () => {
   vi.stubEnv('GIFT_CARD_PETROCK_CALLBACK_TOKEN', token);
   const response = await POST(request, { params: Promise.resolve({ token }) });
-  expect(response.status).toBe(503);
+  expect(response.status).toBe(204);
+  expect(response.headers.has('Retry-After')).toBe(false);
   expect(request.bodyUsed).toBe(false);
 });
 

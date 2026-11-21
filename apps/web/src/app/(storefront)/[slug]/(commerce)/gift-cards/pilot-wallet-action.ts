@@ -53,14 +53,15 @@ export async function runPilotWalletAction(
     issue: issueAuthenticatedGiftCardQuote,
     confirm: confirmAuthenticatedGiftCardQuote,
   };
+  const intent = form.get('intent');
   try {
-    if (form.get('intent') === 'quote') {
+    if (intent === 'quote') {
       return {
         status: 'quote',
         ...(await issueGiftCardPilotQuote(config, dependencies)),
       };
     }
-    if (form.get('intent') === 'confirm') {
+    if (intent === 'confirm') {
       if (form.get('region') !== 'US') {
         return {
           status: 'error',
@@ -88,6 +89,9 @@ export async function runPilotWalletAction(
     if (error instanceof Error && customerMessages.has(error.message)) {
       return { status: 'error', message: error.message };
     }
+    console.warn('[gift-card-pilot] Unexpected wallet action failure', {
+      operation: intent === 'confirm' ? 'confirm' : 'quote',
+    });
   }
   return {
     status: 'error',

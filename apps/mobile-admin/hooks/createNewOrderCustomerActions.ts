@@ -118,9 +118,11 @@ export function createNewOrderCustomerActions({
       (normalizeStreetAddressForComparison(address.address) ===
         normalizeStreetAddressForComparison(storedStreet) &&
         (!address.city ||
-          address.city.toLowerCase() === item.city?.trim().toLowerCase()) &&
+          normalizeStreetAddressForComparison(address.city) ===
+            normalizeStreetAddressForComparison(item.city ?? '')) &&
         (!address.state ||
-          address.state.toLowerCase() === item.state?.trim().toLowerCase()) &&
+          normalizeStreetAddressForComparison(address.state) ===
+            normalizeStreetAddressForComparison(item.state ?? '')) &&
         (!address.countryCode ||
           address.countryCode.toLowerCase() ===
             item.country_code?.trim().toLowerCase()));

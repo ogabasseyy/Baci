@@ -57,6 +57,18 @@ try:
  for name in ['20261015172000_commerce_cart_handoff_preview_token_param.sql','20261015179990_commerce_cart_scoped_preview.sql']:
   sql+='\n'+(root/'supabase/migrations'/name).read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_handoff_attachment_lifetime.sql').read_text()
+ if '--mcp-import' in sys.argv:
+  for name in ['20261015160000_commerce_cart_redeem_grant_expiry.sql',
+               '20261120182000_commerce_cart_import_mcp_handoff.sql',
+               '20261121103000_commerce_cart_mcp_handoff_refresh_replay.sql',
+               '20261121103100_commerce_cart_mcp_handoff_import_mode.sql',
+               '20261121103200_commerce_cart_mcp_handoff_incremental_import.sql',
+               '20261121103300_commerce_cart_mcp_import_destination_identity.sql',
+               '20261121103400_commerce_cart_mcp_import_refresh_grant.sql',
+               '20261121103500_commerce_cart_mcp_import_quantity_high_water.sql',
+               '20261121103600_commerce_cart_mcp_import_merge_continuity.sql']:
+   sql+='\n'+(root/'supabase/migrations'/name).read_text()
+  sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-handoff-attachment-lifetime.log','w'),stderr=subprocess.STDOUT,cwd=root)
  print('PASS' if r.returncode==0 else 'FAIL')

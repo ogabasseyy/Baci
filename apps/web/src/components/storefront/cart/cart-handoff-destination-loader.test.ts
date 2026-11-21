@@ -1,4 +1,5 @@
-import { expect, it, vi } from 'vitest';
+import type { CartSnapshot } from '@baci/shared/cart';
+import { afterEach, expect, it, vi } from 'vitest';
 import { fetchDestinationCart } from './cart-handoff-destination';
 import { loadDestinationCart } from './cart-handoff-destination-loader';
 
@@ -50,4 +51,35 @@ it('surfaces a retryable error when the bounded refresh deadline aborts', async 
     'Could not check your existing cart. Please try again.'
   );
   expect(d.setDestCart).not.toHaveBeenCalled();
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+it('settles an already-owned cart before requesting the redirect', async () => {
+  const cart = { cartId: 'same-cart', merchantId: 'merchant' } as CartSnapshot;
+  vi.mocked(fetchDestinationCart).mockResolvedValue({
+    status: 'checked',
+    cart,
+    bootstrapRequired: false,
+  });
+  const setDestChecked = vi.fn();
+  const setDestCart = vi.fn();
+  const replace = vi.fn(() => {
+    expect(setDestChecked).toHaveBeenLastCalledWith(true);
+    expect(setDestCart).toHaveBeenLastCalledWith(cart);
+  });
+  vi.stubGlobal('window', {
+    location: { pathname: '/cart', search: '', replace },
+  });
+  await loadDestinationCart(
+    {
+      bootstrapRequired: { current: true },
+      setDestCart,
+      setDestChecked,
+      setDestinationError: vi.fn(),
+      incoming: { cart, handoffId: 'same-cart-link' },
+    },
+    'ogabassey'
+  );
+  expect(replace).toHaveBeenCalledExactlyOnceWith('/cart');
 });

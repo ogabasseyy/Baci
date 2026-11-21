@@ -39,7 +39,11 @@ export interface HandoffTokenPayload extends HandoffTokenInput {
   env: string;
 }
 
-export type HandoffChoice = 'connect' | 'merge' | 'keep_existing';
+export type HandoffChoice =
+  | 'connect'
+  | 'merge'
+  | 'keep_existing'
+  | 'import_mcp';
 
 export interface HandoffMerchantRef {
   slug: string;

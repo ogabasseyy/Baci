@@ -120,7 +120,10 @@ describe('ExpenseEditForm', () => {
     });
 
     expect(editFormMocks.preventRemoveEnabled).toBe(true);
-    editFormMocks.preventRemoveCallback?.();
+    editFormMocks.preventRemoveCallback?.({
+      data: { action: { type: 'GO_BACK' } },
+      repeat: vi.fn(),
+    });
 
     expect(editFormMocks.alert).toHaveBeenCalledWith(
       'Discard changes?',
@@ -167,7 +170,7 @@ describe('ExpenseEditForm', () => {
     );
   });
 
-  it('wires receipt removal and restoration into the save payload', () => {
+  it('includes receipt removal in the save payload', () => {
     renderForm();
     fireEvent.click(screen.getByRole('button', { name: 'Remove receipt' }));
     expect(screen.getByLabelText('receipt change')).toHaveTextContent('remove');
@@ -176,7 +179,11 @@ describe('ExpenseEditForm', () => {
       expect.objectContaining({ receiptChange: { kind: 'remove' } }),
       expect.any(Object)
     );
-    editFormMocks.mutate.mockClear();
+  });
+
+  it('preserves a receipt restored before saving other changes', () => {
+    renderForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove receipt' }));
     fireEvent.click(screen.getByRole('button', { name: 'Restore receipt' }));
     expect(screen.getByLabelText('receipt change')).toHaveTextContent(
       'unchanged'
@@ -223,7 +230,7 @@ describe('ExpenseEditForm', () => {
     );
   });
 
-  it('offers conflict Cancel and Reload without treating Cancel as a reload', () => {
+  it('keeps a conflicting edit protected when the user cancels reload', () => {
     editFormMocks.mutate.mockImplementation(
       (_input: unknown, options?: { onError?: (error: Error) => void }) => {
         const conflict = new Error('stale write');
@@ -243,6 +250,8 @@ describe('ExpenseEditForm', () => {
       | undefined;
     actions?.find((action) => action.text === 'Cancel')?.onPress?.();
     expect(reload).not.toHaveBeenCalled();
+    expect(editFormMocks.preventRemoveEnabled).toBe(true);
+    expect(editFormMocks.router.back).not.toHaveBeenCalled();
     actions?.find((action) => action.text === 'Reload')?.onPress?.();
     expect(reload).toHaveBeenCalledOnce();
   });
@@ -253,6 +262,16 @@ describe('ExpenseEditForm', () => {
     saveChangedAmount();
 
     expect(editFormMocks.router.back).toHaveBeenCalledOnce();
+  });
+
+  it('blocks a second submission if the saved editor stays mounted', () => {
+    renderForm();
+    saveChangedAmount();
+
+    const save = screen.getByRole('button', { name: 'Save expense' });
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(editFormMocks.mutate).toHaveBeenCalledOnce();
   });
 
   it('shows a retained legacy category instead of a false Inventory selection', () => {

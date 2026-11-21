@@ -35,7 +35,7 @@ export function useExpenseFormHandlers({
   const shouldPreventRemoval =
     form.isDirty &&
     (releasedDraft?.values !== form.values ||
-      releasedDraft.receiptChange !== form.receiptChange);
+      releasedDraft?.receiptChange !== form.receiptChange);
 
   const releaseDraft = () => {
     setReleasedDraft({

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { bankCardOfferProductIdSchema } from './bank-card-offer';
 
 const positiveSafeInteger = z
   .number()
@@ -25,7 +26,7 @@ const savedQuote = z.object({
     .array(
       z.object({
         itemId: z.uuid(),
-        productId: z.uuid(),
+        productId: bankCardOfferProductIdSchema,
         quantity: positiveSafeInteger,
         unitPriceKobo: z.number().int().nonnegative(),
         unitNetAmountsKobo: z.array(z.number().int().nonnegative()),

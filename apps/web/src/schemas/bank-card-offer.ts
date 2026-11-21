@@ -11,6 +11,7 @@ const verifiedIssuerByBank = {
 const nonEmpty = z.string().trim().min(1);
 const dateTime = z.iso.datetime({ offset: true });
 const kobo = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const bankCardOfferProductIdSchema = z.uuid();
 
 export const bankCardOfferSchema = z
   .strictObject({
@@ -20,7 +21,7 @@ export const bankCardOfferSchema = z
     displayName: nonEmpty.optional(),
     verifiedIssuerName: nonEmpty,
     cardBrands: z.array(cardBrand).min(1).max(3),
-    eligibleProductIds: z.array(z.uuid()).min(1),
+    eligibleProductIds: z.array(bankCardOfferProductIdSchema).min(1),
     discountBasisPoints: z.number().int().min(1).max(9_999),
     maximumDiscountKobo: kobo.positive(),
     startsAt: dateTime,

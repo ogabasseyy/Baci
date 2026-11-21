@@ -1,6 +1,8 @@
 import 'server-only';
-import { z } from 'zod';
-import type { BankCardOffer } from '@/schemas/bank-card-offer';
+import {
+  type BankCardOffer,
+  bankCardOfferProductIdSchema,
+} from '@/schemas/bank-card-offer';
 import { calculateBankCardOfferDiscount } from './calculate-bank-card-offer-discount';
 
 type CatalogLine = {
@@ -11,7 +13,6 @@ type CatalogLine = {
 };
 
 const BANK_CARD_OFFER_MAX_ALLOCATION_UNITS = 10_000;
-const catalogProductId = z.uuid();
 
 function safeAmount(amount: bigint) {
   if (amount > BigInt(Number.MAX_SAFE_INTEGER)) {
@@ -58,7 +59,7 @@ export function quoteBankCardOffer({
       throw new Error('Bank offer item IDs must be nonempty and unique');
     }
     itemIds.add(item.itemId);
-    if (!catalogProductId.safeParse(item.productId).success) {
+    if (!bankCardOfferProductIdSchema.safeParse(item.productId).success) {
       throw new Error('Bank offer lines require a valid catalog product ID');
     }
     if (

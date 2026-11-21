@@ -44,7 +44,6 @@ describe('bank-offer cancellation refunds', () => {
   it('records missing dispatch authority without looking up or sending a refund', async () => {
     const leg = { ...transaction, gateway_reference: `BCO-${'a'.repeat(32)}` };
     const rpc = vi.fn();
-
     await initiatePaystackCancellationRefunds({
       order,
       refundedPaymentIds: new Set(),

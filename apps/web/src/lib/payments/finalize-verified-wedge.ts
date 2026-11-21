@@ -246,6 +246,16 @@ export async function finalizeVerifiedWedge({
       orderNumber: outcome.orderNumber,
     });
   } else if (
+    outcome.kind === 'bank_offer_capture_review' &&
+    outcome.temporaryHold
+  ) {
+    // A dispute win can release the hold. A resolution stamp would
+    // permanently remove this capture from the recovery sweep.
+    summary.skipped.push({
+      reason: 'bank_offer_capture_held',
+      transactionId: candidate.id,
+    });
+  } else if (
     outcome.kind === 'bank_offer_capture_review' ||
     outcome.kind === 'order_cancelled' ||
     outcome.kind === 'order_skipped'

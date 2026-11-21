@@ -1,13 +1,12 @@
 import { useIsMountedRef } from '@/components/bnpl-checkout/use-is-mounted-ref';
 import { useMerchant } from '@/hooks/use-merchant';
-import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
-import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
+import { captureSubmittedCheckoutCart } from './capture-submitted-checkout-cart';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
 import { createCheckoutSnapshot } from './checkout-order-builders';
 import {
@@ -67,11 +66,8 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   const isMountedRef = useIsMountedRef();
   return async (address: ShippingAddressInput) => {
-    const itemsSnapshot = [...useCartStore.getState().items];
-    const {
-      checkoutGeneration: checkoutGenerationSnapshot,
-      cartWideNegotiationActive: groupNegotiationSnapshot,
-    } = useCartStore.getState();
+    const submittedCart = captureSubmittedCheckoutCart(selectedPayment);
+    const { checkoutGenerationSnapshot, itemsSnapshot } = submittedCart;
     if (blockIfMixedPrizeCart(itemsSnapshot)) {
       return;
     }
@@ -96,8 +92,6 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
-    const checkoutCartIdentity =
-      selectedPayment === 'paystack' ? deferredBankOfferCart.capture() : null;
     // The REDVAULT fence holds the in-flight latch until completion.
     const submitFence = await acquireCheckoutSubmitFence({
       accountPassword,
@@ -253,7 +247,7 @@ export function useCheckoutSubmit({
         await completeSubmittedOrder({
           accountPassword,
           address,
-          checkoutCartIdentity,
+          checkoutCartIdentity: submittedCart.checkoutCartIdentity,
           checkoutGeneration: submittedGeneration.current(),
           clearCart,
           completedPaymentMethod,
@@ -284,7 +278,7 @@ export function useCheckoutSubmit({
     } catch (error) {
       if (!rollbackCaptureInconclusive) {
         await restoreEmptiedCheckoutCart({
-          cartWideNegotiationActive: groupNegotiationSnapshot,
+          cartWideNegotiationActive: submittedCart.groupNegotiationSnapshot,
           checkoutGeneration: submittedGeneration.current(),
           creditFields: submitCreditFields,
           hadSortMarker: submitHadSortMarker,

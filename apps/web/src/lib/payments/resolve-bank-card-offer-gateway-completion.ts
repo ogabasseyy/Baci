@@ -136,7 +136,10 @@ export async function resolveBankCardOfferGatewayCompletion({
   if (hold.data) {
     return {
       ok: false as const,
-      outcome: { kind: 'bank_offer_capture_review' as const },
+      outcome: {
+        kind: 'bank_offer_capture_review' as const,
+        temporaryHold: true as const,
+      },
     };
   }
   const result = await completeOrderGatewayPayment({

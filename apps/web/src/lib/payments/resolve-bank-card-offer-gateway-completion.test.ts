@@ -154,7 +154,10 @@ it.each([
       resolveBankCardOfferGatewayCompletion(input)
     ).resolves.toMatchObject({
       ok: false,
-      outcome: { kind: outcome },
+      outcome: {
+        kind: outcome,
+        ...(data === true ? { temporaryHold: true } : {}),
+      },
     });
     expect(rpc).toHaveBeenCalledExactlyOnceWith(
       'get_bank_card_offer_verification_hold',

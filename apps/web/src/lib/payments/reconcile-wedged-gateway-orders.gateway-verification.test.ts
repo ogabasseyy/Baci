@@ -219,6 +219,48 @@ describe('reconcileWedgedGatewayOrders gateway verification', () => {
     );
   });
 
+  it('keeps a held bank-offer capture eligible for the sweep after a dispute win', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const candidate = { ...wedgedCandidate, gateway_reference: reference };
+    const supabase = buildSupabase([candidate]);
+    mocks.verifyPaystackPayment.mockResolvedValue({
+      data: { amount: 100, currency: 'NGN', status: 'success' },
+      success: true,
+    });
+    mocks.finalizeOrderGatewayPayment
+      .mockResolvedValueOnce({
+        kind: 'bank_offer_capture_review',
+        temporaryHold: true,
+      })
+      .mockResolvedValueOnce({
+        kind: 'completed',
+        healed: true,
+        orderNumber: 'ORD-1',
+      });
+
+    const held = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase,
+    });
+    expect(held.skipped).toContainEqual({
+      reason: 'bank_offer_capture_held',
+      transactionId: wedgedCandidate.id,
+    });
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'stamp_wedge_sweep_resolution_v1',
+      expect.anything()
+    );
+
+    const released = await reconcileWedgedGatewayOrders({
+      scheduleAfter,
+      supabase: buildSupabase([candidate]),
+    });
+    expect(released.healed).toContainEqual({
+      orderId: wedgedCandidate.order_id,
+      orderNumber: 'ORD-1',
+    });
+  });
+
   it('skips on gateway/database amount mismatch', async () => {
     const supabase = buildSupabase([wedgedCandidate]);
     mocks.verifyPaystackPayment.mockResolvedValue({

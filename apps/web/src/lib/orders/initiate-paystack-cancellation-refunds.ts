@@ -7,11 +7,10 @@ import {
 } from '@/lib/orders/begin-bank-card-offer-refund-dispatch';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-paystack-cancellation-refund-failure';
-import { parseBankOfferRefundableKobo } from '@/lib/orders/parse-bank-offer-refundable-kobo';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { recordPaystackCancellationRefund } from '@/lib/orders/record-paystack-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
-import { verifyTransaction } from '@/lib/paystack';
+import { verifyBankOfferRefundEvidence } from '@/lib/orders/verify-bank-offer-refund-evidence';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import { PartialCancellationRefundError } from './partial-cancellation-refund-error';
 import { DeferredError } from './run-order-cancellation-side-effect';
@@ -19,7 +18,6 @@ import { DeferredError } from './run-order-cancellation-side-effect';
 // Reserve a complete provider call and time to persist its outcome.
 const REFUND_PROVIDER_CALL_WORST_MS = 30_000;
 const REFUND_AUDIT_WRITE_RESERVE_MS = 8_000;
-const BANK_OFFER_VERIFY_BUDGET_MS = 8_000;
 export const REFUND_INITIATION_LEG_BUDGET_MS =
   REFUND_PROVIDER_CALL_WORST_MS + REFUND_AUDIT_WRITE_RESERVE_MS;
 
@@ -110,67 +108,32 @@ export async function initiatePaystackCancellationRefunds({
         bankOfferLegsForReview.push(transaction);
         continue;
       }
-      const reference = transaction.gateway_reference as string;
-      const identity = {
-        p_order_id: order.id,
-        p_merchant_id: order.merchant_id,
-        p_transaction_id: transaction.id,
-        p_reference: reference,
-      };
-      const capture = await supabase.rpc(
-        'get_bank_card_offer_refundable_amount',
-        identity
-      );
-      if (capture.error) {
+      const verification = await verifyBankOfferRefundEvidence({
+        claimToken,
+        identity: {
+          p_order_id: order.id,
+          p_merchant_id: order.merchant_id,
+          p_transaction_id: transaction.id,
+          p_reference: transaction.gateway_reference as string,
+        },
+        supabase,
+        verifyDeadlineMs:
+          deadlineMs === undefined
+            ? undefined
+            : deadlineMs - REFUND_INITIATION_LEG_BUDGET_MS,
+      });
+      if (verification.kind === 'unavailable') {
         bankOfferLookupUnavailable = true;
         if (isLastAttempt) bankOfferLegsForReview.push(transaction);
         continue;
       }
-      koboAmount = parseBankOfferRefundableKobo(capture.data) ?? 0;
-      if (koboAmount === 0) {
+      if (verification.kind === 'mismatch') {
         bankOfferLegsForReview.push(transaction);
         continue;
       }
-      const verifyBudgetMs =
-        deadlineMs === undefined
-          ? BANK_OFFER_VERIFY_BUDGET_MS
-          : Math.min(
-              BANK_OFFER_VERIFY_BUDGET_MS,
-              deadlineMs - Date.now() - REFUND_INITIATION_LEG_BUDGET_MS
-            );
-      if (verifyBudgetMs > 0) {
-        const verification = await verifyTransaction(
-          reference,
-          AbortSignal.timeout(verifyBudgetMs),
-          { textIds: true }
-        );
-        if (!verification.success) {
-          bankOfferLookupUnavailable = true;
-          if (isLastAttempt) bankOfferLegsForReview.push(transaction);
-          continue;
-        }
-        const { data } = verification;
-        if (
-          data?.status !== 'success' ||
-          data.reference !== reference ||
-          typeof data.currency !== 'string' ||
-          data.currency.toUpperCase() !== 'NGN' ||
-          data.amount !== koboAmount ||
-          typeof data.id !== 'string' ||
-          !/^[1-9][0-9]*$/.test(data.id) ||
-          !('domain' in data) ||
-          (data.domain !== 'test' && data.domain !== 'live')
-        ) {
-          bankOfferLegsForReview.push(transaction);
-          continue;
-        }
-        dispatchEvidence = {
-          ...identity,
-          p_claim_token: claimToken,
-          p_provider_id: data.id,
-          p_provider_domain: data.domain,
-          p_amount_kobo: koboAmount,
-        };
+      if (verification.kind === 'verified') {
+        dispatchEvidence = verification.evidence;
+        koboAmount = dispatchEvidence.p_amount_kobo;
       }
     }
     // Compute the retryable budget after reading the saved capture. Legs start

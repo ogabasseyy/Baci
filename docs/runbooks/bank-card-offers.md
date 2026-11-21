@@ -70,4 +70,6 @@ Immediately before refund submission, the cancellation worker re-verifies Paysta
 
 Card channel, issuer, brand, customer email and paid timestamp are checked when approving the capture. Refund re-verification uses the saved capture’s identity and amount because those card and customer fields describe offer eligibility at approval. Later changes to those fields must not prevent returning funds to the original verified charge.
 
+When the recovery sweep encounters a verified capture with a dispute hold, it defers completion and leaves the transaction eligible for a later sweep. A dispute win can release that hold. A separate evidence mismatch still requires Operations review.
+
 If capture lookup fails before the final worker attempt, the cancellation step is recorded as a retryable failure with any accepted refund IDs preserved. The cancellation drain uses its service client for the exact capture lookup. An authorization denial follows the same retry and quarantine path as an outage and starts no provider refund. The drain reclaims failed steps within its retry budget. On the final attempt, unresolved legs enter review with the capture lookup outage recorded.

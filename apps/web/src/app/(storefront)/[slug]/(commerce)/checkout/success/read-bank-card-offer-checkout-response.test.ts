@@ -24,3 +24,13 @@ it('passes a successful response through to the shared completion path', async (
   });
   expect(callbacks.setStatus).not.toHaveBeenCalled();
 });
+
+it('ignores order numbers carried in unverified error envelopes', async () => {
+  const callbacks = { setOrderNumber: vi.fn(), setStatus: vi.fn() };
+  const response = Response.json(
+    { orderNumber: 'UNVERIFIED' },
+    { status: 503 }
+  );
+  await readBankCardOfferCheckoutResponse(response, callbacks);
+  expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
+});

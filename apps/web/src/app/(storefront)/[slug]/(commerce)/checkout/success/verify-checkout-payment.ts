@@ -1,6 +1,6 @@
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
+import { normalizeCheckoutBankCardOfferReference } from './normalize-checkout-bank-card-offer-reference';
 import { readBankCardOfferCheckoutResponse } from './read-bank-card-offer-checkout-response';
 import type { CheckoutVerificationStatus } from './verify-checkout-payment-lookup';
 import {
@@ -150,12 +150,8 @@ export async function verifyCheckoutPayment(
   }
 
   setIsVerifying(true);
-  const bankOfferReference = bankCardOfferReferenceSchema.safeParse(
-    `BCO-${reference.slice(4).toLowerCase()}`
-  );
-  const isBankOffer =
-    reference.slice(0, 4).toUpperCase() === 'BCO-' &&
-    bankOfferReference.success;
+  const bankOfferReference = normalizeCheckoutBankCardOfferReference(reference);
+  const isBankOffer = bankOfferReference !== null;
   const fallbackOrderNumber = isBankOffer
     ? null
     : reference.slice(0, 8).toUpperCase();
@@ -163,7 +159,7 @@ export async function verifyCheckoutPayment(
   try {
     const response = await fetchWithCsrf('/api/payments/verify', {
       body: JSON.stringify({
-        reference: isBankOffer ? bankOfferReference.data : reference,
+        reference: bankOfferReference ?? reference,
         ...(isBankOffer ? { merchantSlug } : {}),
       }),
       headers: { 'Content-Type': 'application/json' },

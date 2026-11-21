@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { asRoute } from '@/lib/routes';
+import { normalizeCheckoutBankCardOfferReference } from './normalize-checkout-bank-card-offer-reference';
 import { startCheckoutVerificationPolling } from './start-checkout-verification-polling';
 import {
   type CheckoutVerificationStatus,
@@ -173,6 +174,11 @@ export function useCheckoutSuccessVerification({
 
     const polling = startCheckoutVerificationPolling({
       isPending: () => statusRef.current === 'pending',
+      onExhausted: () => {
+        if (normalizeCheckoutBankCardOfferReference(reference)) {
+          verifyHandlers.setStatus('verification_unavailable');
+        }
+      },
       verify: (signal) =>
         verifyCheckoutPayment({ ...verifyParams, signal }, verifyHandlers),
     });

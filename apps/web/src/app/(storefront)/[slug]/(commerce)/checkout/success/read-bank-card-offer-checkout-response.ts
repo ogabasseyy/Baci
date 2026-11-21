@@ -30,7 +30,6 @@ export async function readBankCardOfferCheckoutResponse(
   else setStatus(status);
   // An ownership denial clears an already verified order number.
   if (status === 'access_required') setOrderNumber(null);
-  else if (response.status !== 403 && data.orderNumber)
-    setOrderNumber(data.orderNumber);
+  else if (response.ok && data.orderNumber) setOrderNumber(data.orderNumber);
   return { handled: true as const };
 }

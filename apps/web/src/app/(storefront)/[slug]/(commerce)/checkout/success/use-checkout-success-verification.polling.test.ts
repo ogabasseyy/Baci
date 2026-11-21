@@ -8,6 +8,10 @@ import {
   setup,
   useCheckoutSuccessVerification,
 } from './use-checkout-success-verification.test-support';
+import {
+  VERIFY_REPOLL_MAX_ATTEMPTS,
+  VERIFY_REPOLL_SLOW_INTERVAL_MS,
+} from './verification-timing';
 import type { VerifyCheckoutPaymentHandlers } from './verify-checkout-payment';
 
 describe('checkout verification polling and identity', () => {
@@ -144,5 +148,26 @@ describe('checkout verification polling and identity', () => {
     await waitFor(() => expect(result.current.status).toBe('pending'));
     expect(result.current.orderNumber).toBeNull();
     expect(mockVerify).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers safe refresh guidance after the bank-offer verification budget is exhausted', async () => {
+    vi.useFakeTimers();
+    mockVerify.mockResolvedValue(undefined);
+    const { props } = setup();
+    const { result } = renderHook(() =>
+      useCheckoutSuccessVerification({
+        ...props,
+        reference: `BCO-${'a'.repeat(32)}`,
+      })
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        VERIFY_REPOLL_MAX_ATTEMPTS * VERIFY_REPOLL_SLOW_INTERVAL_MS
+      );
+    });
+    expect(mockVerify).toHaveBeenCalledTimes(VERIFY_REPOLL_MAX_ATTEMPTS);
+    expect(result.current.status).toBe('verification_unavailable');
+    expect(props.clearCart).not.toHaveBeenCalled();
   });
 });

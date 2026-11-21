@@ -8,9 +8,11 @@ import {
 
 export function startCheckoutVerificationPolling({
   isPending,
+  onExhausted,
   verify,
 }: {
   isPending: () => boolean;
+  onExhausted?: () => void;
   verify: (signal: AbortSignal) => Promise<void>;
 }) {
   let stopped = false;
@@ -64,11 +66,9 @@ export function startCheckoutVerificationPolling({
       }
       passController = null;
       passInFlight = false;
-      if (
-        stopped ||
-        !isPending() ||
-        reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
-      ) {
+      if (stopped || !isPending()) return;
+      if (reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS) {
+        onExhausted?.();
         return;
       }
       const interval =

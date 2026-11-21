@@ -45,17 +45,19 @@ it('identifies a reversal only on a successful terminal response', () => {
   );
   expect(getBankCardOfferCheckoutStatus(202, { status: 'pending' })).toBeNull();
   expect(getBankCardOfferCheckoutStatus(500, { status: 'reversed' })).toBe(
-    'pending'
+    'verification_unavailable'
   );
   expect(getBankCardOfferCheckoutStatus(200, { status: 'success' })).toBeNull();
 });
 
-it.each([408, 429, 503])('keeps a bank offer pending on HTTP %s', (status) => {
+it.each([
+  408, 429, 502, 503, 504,
+])('keeps a bank offer pending on HTTP %s', (status) => {
   expect(getBankCardOfferCheckoutStatus(status, {})).toBe('pending');
 });
 
 it.each([
-  400, 404, 409, 422,
+  400, 404, 409, 422, 500, 501, 505,
 ])('keeps HTTP %s out of the payment failure path', (status) => {
   expect(getBankCardOfferCheckoutStatus(status, {})).toBe(
     'verification_unavailable'

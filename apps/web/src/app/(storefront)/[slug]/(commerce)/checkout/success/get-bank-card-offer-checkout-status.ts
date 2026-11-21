@@ -14,8 +14,7 @@ export function getBankCardOfferCheckoutStatus(
   }
   // A proxy or server failure can carry invalid or stale data. Only a
   // successful verification response can establish a terminal outcome.
-  if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)
-    return 'pending';
+  if ([408, 429, 502, 503, 504].includes(httpStatus)) return 'pending';
   if (httpStatus === 409 && payment.code === 'reference_not_order_payment')
     return 'bank_offer_review';
   if (httpStatus < 200 || httpStatus >= 300) return 'verification_unavailable';

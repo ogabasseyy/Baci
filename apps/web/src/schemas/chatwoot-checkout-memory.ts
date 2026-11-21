@@ -15,6 +15,7 @@ export const chatwootCheckoutRememberedOrderSchema = z
         trackingToken: text(256).nullable(),
         amountDueMajor: z.number().finite().positive(),
         currency: text(8).nullable(),
+        paymentMethod: z.literal('oxygen').optional(),
       })
       .strict(),
     payment: z

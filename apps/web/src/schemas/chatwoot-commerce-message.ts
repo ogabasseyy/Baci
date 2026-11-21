@@ -70,6 +70,7 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
           conversationId,
           sessionToken,
           cartVersion: z.number().int().positive().safe(),
+          paymentMethod: z.enum(['bank_transfer', 'oxygen']).optional(),
           customer: z
             .object({
               firstName: shortText(60),

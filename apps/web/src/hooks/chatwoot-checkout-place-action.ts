@@ -1,8 +1,11 @@
+import { z } from 'zod';
 import { getContactErrors } from '@/components/storefront/ogabassey/pages/checkout/contact-validation';
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import type { CartItem } from '@/hooks/cart';
 import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-checkout-client';
 import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { formatPhoneToE164 } from '@/lib/phone';
+import { createClient } from '@/lib/supabase/client';
 import type { ChatwootCommerceMessage } from '@/schemas/chatwoot-commerce-message';
 import { pinChatwootCheckoutAttribution } from './chatwoot-checkout-attribution';
 import { resolveChatwootCheckoutDelivery } from './chatwoot-checkout-delivery';
@@ -106,6 +109,32 @@ async function placeForKeys(
     }
   };
 
+  const isOxygen = request.paymentMethod === 'oxygen';
+  const postOxygenHandoff = (orderId: string) => {
+    if (!z.uuid().safeParse(orderId).success) return fail('order_failed');
+    if (input.canPost()) {
+      input.postResult({
+        requestId: request.requestId,
+        status: 'secure_handoff',
+        href: `/payments/oxygen/${orderId}`,
+      });
+    }
+  };
+  if (isOxygen) {
+    if (!isOxygenStorefrontStagingEnabled()) return fail('payment_unavailable');
+    const {
+      data: { user },
+      error,
+    } = await createClient().auth.getUser();
+    if (
+      error ||
+      !user?.email ||
+      user.email.trim().toLowerCase() !==
+        request.customer.email.trim().toLowerCase()
+    ) {
+      return fail('payment_unavailable');
+    }
+  }
   const byRequest = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   const forCart = byRequest
     ? null
@@ -125,7 +154,12 @@ async function placeForKeys(
       conversationId: request.conversationId,
       merchantId: merchant.id,
     });
-    if (replay.kind === 'refuse') return fail('order_failed');
+    if (
+      replay.kind === 'refuse' ||
+      isOxygen !== (remembered.order.paymentMethod === 'oxygen')
+    )
+      return fail('order_failed');
+    if (isOxygen) return postOxygenHandoff(remembered.order.orderId);
     if (replay.kind === 'answer') {
       const answer = await answerChatwootCheckoutReplay({
         cached: replay.result,
@@ -163,7 +197,8 @@ async function placeForKeys(
   if (snapshot.currency !== 'NGN') return fail('delivery_unavailable');
   // The order API commits (and completes the cart) before the payment route
   // can refuse bank transfer, so apply the store checkout's gate up front.
-  if (!merchant.bankTransferAvailable) return fail('payment_unavailable');
+  if (!isOxygen && !merchant.bankTransferAvailable)
+    return fail('payment_unavailable');
   if (
     Object.keys(
       getContactErrors({
@@ -183,7 +218,7 @@ async function placeForKeys(
   }
 
   const display = input.getDisplayCart();
-  // Chat checkout is bank transfer only: a quiz voucher can leave nothing to
+  // A quiz voucher can leave nothing to
   // pay and the order API would finalize it as already paid.
   if (display.some(isQuizVoucherCartItem)) return fail('cart_unsupported');
   if (
@@ -205,7 +240,7 @@ async function placeForKeys(
     cartSubtotal: snapshot.itemsSubtotalMinor / 100,
   });
   if (!delivery.ok) return fail(delivery.code);
-  // Nothing to transfer: a free cart with free delivery would be finalized by
+  // Nothing to finance or transfer: a free cart with free delivery would be finalized by
   // the order route with no payment step for the chat to offer.
   if (snapshot.itemsSubtotalMinor + Math.round(delivery.quote.price * 100) <= 0)
     return fail('cart_unsupported');
@@ -249,6 +284,7 @@ async function placeForKeys(
       delivery,
       customer: request.customer,
       taxRate: merchant.taxRate,
+      paymentMethod: request.paymentMethod,
     },
     items
   );
@@ -271,8 +307,9 @@ async function placeForKeys(
       conversationId: request.conversationId,
       cartId: authorizedCartId,
     },
-    outcome.order
+    isOxygen ? { ...outcome.order, paymentMethod: 'oxygen' } : outcome.order
   );
+  if (isOxygen) return postOxygenHandoff(outcome.order.orderId);
   return startChatwootCheckoutPayment({
     ...paymentBase,
     order: outcome.order,
@@ -280,7 +317,7 @@ async function placeForKeys(
   });
 }
 
-/** Places the order and starts the bank-transfer payment for one widget request. */
+/** Places an order and returns the chosen payment step to the widget. */
 export async function handleChatwootCheckoutPlace(
   input: HandleChatwootCheckoutPlaceInput
 ): Promise<void> {

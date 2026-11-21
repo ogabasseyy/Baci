@@ -12,6 +12,9 @@
 -- numbers, and it never moves money: a wallet listed here is resolved by hand
 -- (never credit PiggyVest a second time, see the runbook).
 --
+-- Amounts are text with exactly two decimals (round(x, 2)), whatever the
+-- column's scale, so the app's strict format check never trips on a scale change.
+--
 -- Scope: only the merchant that owns the calling PiggyVest integration
 -- (PiggyVest is Ogabassey-only). Callable only by the reconciliation evidence
 -- login, through the same authority check as the wallet pay reconciliation.
@@ -51,11 +54,11 @@ BEGIN
     )
     SELECT pg_catalog.jsonb_build_object(
       'count', (SELECT pg_catalog.count(*) FROM flagged),
-      'totalBalance', (SELECT COALESCE(pg_catalog.sum(flagged.available_balance), 0.00)::text FROM flagged),
+      'totalBalance', (SELECT pg_catalog.round(COALESCE(pg_catalog.sum(flagged.available_balance), 0), 2)::text FROM flagged),
       'wallets', COALESCE((SELECT pg_catalog.jsonb_agg(item) FROM (
           SELECT pg_catalog.jsonb_build_object(
                    'walletId', flagged.id,
-                   'balance', flagged.available_balance::text) AS item
+                   'balance', pg_catalog.round(flagged.available_balance, 2)::text) AS item
             FROM flagged
            ORDER BY flagged.available_balance DESC, flagged.id
            LIMIT 50) AS listed), '[]'::jsonb))

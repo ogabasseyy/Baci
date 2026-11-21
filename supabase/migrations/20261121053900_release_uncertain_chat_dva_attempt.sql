@@ -1,9 +1,9 @@
 -- Operators can clear an abandoned claim after reconciling it with Paystack.
 -- Keep this off PostgREST and share the reservation's per-order lock.
 ALTER TABLE private.chat_paystack_dva_attempts
-  ADD COLUMN claimed_at timestamptz NOT NULL DEFAULT clock_timestamp();
+  ADD COLUMN IF NOT EXISTS claimed_at timestamptz NOT NULL DEFAULT clock_timestamp();
 
-CREATE FUNCTION private.refresh_chat_paystack_dva_claimed_at()
+CREATE OR REPLACE FUNCTION private.refresh_chat_paystack_dva_claimed_at()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   NEW.claimed_at := clock_timestamp();
@@ -13,11 +13,11 @@ $$;
 REVOKE ALL ON FUNCTION private.refresh_chat_paystack_dva_claimed_at()
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE TRIGGER refresh_chat_paystack_dva_claimed_at
+CREATE OR REPLACE TRIGGER refresh_chat_paystack_dva_claimed_at
 BEFORE UPDATE OF reference ON private.chat_paystack_dva_attempts
 FOR EACH ROW EXECUTE FUNCTION private.refresh_chat_paystack_dva_claimed_at();
 
-CREATE FUNCTION private.release_unfulfilled_chat_paystack_dva_attempt(
+CREATE OR REPLACE FUNCTION private.release_unfulfilled_chat_paystack_dva_attempt(
   p_order_id uuid,
   p_reference text
 )

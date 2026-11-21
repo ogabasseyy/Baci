@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { bankCardOfferProductIdSchema } from './bank-card-offer-product-id';
 
 const cardBrand = z.enum(['verve', 'visa', 'mastercard']);
 export type PaystackBankOfferCardBrand = z.infer<typeof cardBrand>;
@@ -11,7 +12,6 @@ const verifiedIssuerByBank = {
 const nonEmpty = z.string().trim().min(1);
 const dateTime = z.iso.datetime({ offset: true });
 const kobo = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export const bankCardOfferProductIdSchema = z.uuid();
 
 export const bankCardOfferSchema = z
   .strictObject({

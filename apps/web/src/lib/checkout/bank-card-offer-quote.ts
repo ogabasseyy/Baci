@@ -1,8 +1,6 @@
 import 'server-only';
-import {
-  type BankCardOffer,
-  bankCardOfferProductIdSchema,
-} from '@/schemas/bank-card-offer';
+import type { BankCardOffer } from '@/schemas/bank-card-offer';
+import { bankCardOfferProductIdSchema } from '@/schemas/bank-card-offer-product-id';
 import { calculateBankCardOfferDiscount } from './calculate-bank-card-offer-discount';
 
 type CatalogLine = {

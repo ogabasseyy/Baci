@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { bankCardOfferProductIdSchema } from './bank-card-offer';
+import { bankCardOfferProductIdSchema } from './bank-card-offer-product-id';
 
 const positiveSafeInteger = z
   .number()

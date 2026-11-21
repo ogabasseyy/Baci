@@ -122,7 +122,7 @@ export function QuizScreen({
   const pollingBackendMode =
     events.find((e) => e.id === pollingEventId)?.backendMode ??
     v2Attempt?.backendMode ??
-    'edge_rooms';
+    'postgres';
   useQuizResultPolling({
     attemptId: terminalContext?.attemptId ?? null,
     backendMode: pollingBackendMode,

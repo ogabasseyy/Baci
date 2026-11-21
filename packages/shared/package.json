@@ -34,6 +34,7 @@
     "./schemas/oxygen-order-plan": "./src/schemas/oxygen-order-plan.ts",
     "./receipt": "./src/receipt/index.ts",
     "./money": "./src/money/index.ts",
+    "./oxygen": "./src/oxygen/index.ts",
     "./repairs": "./src/repairs/index.ts",
     "./storefront": "./src/storefront/index.ts",
     "./storefront/launch-carousel": "./src/storefront/launch-carousel.ts",

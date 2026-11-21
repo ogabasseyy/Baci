@@ -17,6 +17,38 @@ const commonProps = {
 };
 
 describe('CheckoutBottomAction', () => {
+  it('begins the instalment application instead of implying the order is confirmed', () => {
+    render(
+      <CheckoutBottomAction
+        {...commonProps}
+        displayTotal={45000}
+        selectedPayment="oxygen"
+        total={45000}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'Begin process for ₦45,000' })
+    ).toBeTruthy();
+    expect(screen.getByText('Begin process')).toBeTruthy();
+    expect(screen.queryByText('Place Order')).toBeNull();
+  });
+  it.each([
+    'credit_direct',
+    'klump',
+  ] as const)('preserves the standard order action for %s', (selectedPayment) => {
+    render(
+      <CheckoutBottomAction
+        {...commonProps}
+        selectedPayment={selectedPayment}
+      />
+    );
+    expect(screen.getByText('Place Order')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Place order for ₦0' })
+    ).toBeTruthy();
+  });
+
   it('enables the simulated completion action without a payment selection', () => {
     render(
       <CheckoutBottomAction

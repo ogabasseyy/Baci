@@ -26,6 +26,9 @@ vi.mock('./catalog-version', () => ({
   readCrossRemCatalogVersion: readVersion,
 }));
 vi.mock('@/lib/redis', () => ({ getRedis: () => redis }));
+vi.mock('@/lib/tenant-rate-limit', () => ({
+  checkTenantRateLimitDetailed: async () => ({ verdict: 'allowed' }),
+}));
 
 const token = 'synthetic-crossrem-access-token-qa-test-0001';
 const snapshot = { listings: [{ id: 'google-listed-variant' }] };

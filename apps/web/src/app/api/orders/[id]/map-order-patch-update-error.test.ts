@@ -30,6 +30,17 @@ describe('mapOrderPatchUpdateError', () => {
     });
   });
 
+  it('maps an incompatible partner parcel to a stable 409', async () => {
+    const response = mapOrderPatchUpdateError({
+      code: 'P0001',
+      message: 'partner_delivery_origin_or_parcel_changed',
+    });
+    expect(response?.status).toBe(409);
+    await expect(response?.json()).resolves.toMatchObject({
+      code: 'PARTNER_DELIVERY_ORIGIN_OR_PARCEL_CHANGED',
+    });
+  });
+
   it('returns null for unrelated update errors', () => {
     expect(
       mapOrderPatchUpdateError({ message: 'Failed to update order' })

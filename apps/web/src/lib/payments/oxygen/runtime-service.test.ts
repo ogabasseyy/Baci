@@ -79,6 +79,42 @@ it('requires ownership and readiness before worker login or provider calls', asy
   expect(worker).not.toHaveBeenCalled();
   expect(call).not.toHaveBeenCalled();
 });
+it('marks an execution pause as a definitive rejection before enqueue', async () => {
+  const rpc = vi.fn().mockResolvedValue({
+    data: {
+      workflowId: id,
+      stage: 'kyc_required',
+      version: 1,
+      environment: 'staging',
+      executionEnabled: false,
+      state: {},
+      approvalOtpReady: false,
+      activationEnabled: false,
+      settlementEnabled: false,
+    },
+    error: null,
+  });
+  await expect(
+    performOxygenAction(
+      { rpc },
+      vi.fn(),
+      { call: vi.fn() },
+      'partner',
+      new Set(),
+      {
+        workflowId: id,
+        version: 1,
+        idempotencyKey: id,
+        command: { action: 'refresh_kyc' },
+      }
+    )
+  ).rejects.toMatchObject({ code: 'OXYGEN_ACTION_NOT_DISPATCHED' });
+  expect(rpc).toHaveBeenCalledExactlyOnceWith(
+    'oxygen_runtime',
+    expect.objectContaining({ p_operation: 'status' })
+  );
+});
+
 it.each([
   false,
   true,

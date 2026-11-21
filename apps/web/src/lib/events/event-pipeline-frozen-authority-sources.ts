@@ -126,10 +126,11 @@ export const eventPipelineFrozenRoutes = {
   // signs server-verified claims for the existing order RPC. The rollout flag
   // defaults off; this change adds no privileged-client construction, payment,
   // notification, tenant, credential, or event-dispatch authority.
-  // Bank-offer order creation uses CSRF and the existing merchant-scoped
-  // signer and event recorder at the same route boundary.
+  // Native Oxygen admission checks the authenticated order client and the
+  // resolved merchant before replay. Bank-offer creation uses the existing
+  // merchant-scoped signer and event recorder. Neither adds event authority.
   'apps/web/src/app/api/orders/route.ts':
-    'b2214d9aa85950b2ff37606fd8d26ea44aa55a4958be0388ab2f9eb5ee21f14e',
+    '1cc9c7e8a3f14666efbff0197f6a3dc5d8ecb171402fffece882f96c590143e1',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

@@ -33,6 +33,13 @@ BEGIN
   EXCEPTION WHEN check_violation THEN
     IF SQLERRM <> 'oxygen_order_total_must_be_positive' THEN RAISE; END IF;
   END;
+  BEGIN
+    UPDATE public.orders SET payment_method = 'oxygen'
+    WHERE id = 'eb200000-0000-4000-8000-000000000006';
+    RAISE EXCEPTION 'A zero-value card order switched to Oxygen';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'oxygen_previous_payment_unresolved' THEN RAISE; END IF;
+  END;
 END
 $test$;
 ROLLBACK;

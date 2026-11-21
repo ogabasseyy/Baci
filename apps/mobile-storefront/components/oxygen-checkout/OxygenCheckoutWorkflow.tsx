@@ -97,6 +97,7 @@ export function OxygenCheckoutWorkflow({
           <OxygenWorkflowError
             busy={workflow.busy || Boolean(refreshing)}
             capabilityUnavailable={capabilityUnavailable}
+            statementLinkSent={workflow.error?.code === 'statement_link_sent'}
             onRefresh={() => void refresh()}
           />
         ) : null}

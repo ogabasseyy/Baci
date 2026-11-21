@@ -6,10 +6,12 @@ import { OxygenButton, useOxygenColors } from './OxygenFormPrimitives';
 export function OxygenWorkflowError({
   busy,
   capabilityUnavailable,
+  statementLinkSent,
   onRefresh,
 }: {
   busy: boolean;
   capabilityUnavailable: boolean;
+  statementLinkSent: boolean;
   onRefresh: () => void;
 }) {
   const colors = useOxygenColors();
@@ -28,9 +30,11 @@ export function OxygenWorkflowError({
           textAlign: 'center',
         }}
       >
-        {capabilityUnavailable
-          ? 'Oxygen is temporarily unavailable'
-          : 'We couldn’t confirm this step'}
+        {statementLinkSent
+          ? 'Check your email'
+          : capabilityUnavailable
+            ? 'Oxygen is temporarily unavailable'
+            : 'We couldn’t confirm this step'}
       </Text>
       <Text
         style={{
@@ -40,8 +44,9 @@ export function OxygenWorkflowError({
           textAlign: 'center',
         }}
       >
-        Check your saved progress before trying again. You don’t need to restart
-        your application.
+        {statementLinkSent
+          ? 'Oxygen emailed you instructions for bank-statement linking. Complete those steps, then return here to check your payment options.'
+          : 'Check your saved progress before trying again. You don’t need to restart your application.'}
       </Text>
       <OxygenActionFooter>
         <OxygenButton

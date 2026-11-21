@@ -3,6 +3,7 @@ export * from './bank';
 export * from './capabilities';
 export * from './customer';
 export * from './draft';
+export * from './eligibility-prerequisites';
 export * from './eligibility-progress';
 export * from './plan';
 export * from './recovery';

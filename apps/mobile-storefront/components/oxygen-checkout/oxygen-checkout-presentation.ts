@@ -1,5 +1,6 @@
 import {
   type OxygenRuntimeSnapshot,
+  oxygenEligibilityPrerequisites,
   pendingReadRecovery,
 } from '@baci/shared/oxygen';
 export function oxygenSelfieRequired(snapshot: OxygenRuntimeSnapshot) {
@@ -56,4 +57,27 @@ export function oxygenPrebookingStep(
   );
   if (prerequisites && !s.eligible) return 'eligibility';
   return 'verification';
+}
+
+export function oxygenSavedApprovalOffersMissing(
+  snapshot: OxygenRuntimeSnapshot
+) {
+  const { state } = snapshot;
+  return (
+    snapshot.stage === 'approval_required' &&
+    state.booking?.status === 'BOOKED' &&
+    !state.offers?.some((offer) => offer.tenure === state.booking?.loan_tenure)
+  );
+}
+
+export function canRefreshOxygenSavedApprovalOffers(
+  snapshot: OxygenRuntimeSnapshot
+) {
+  const { state } = snapshot;
+  return Boolean(
+    state.applicationReference &&
+      oxygenEligibilityPrerequisites(state) &&
+      !state.paymentComplete &&
+      !state.setupComplete
+  );
 }

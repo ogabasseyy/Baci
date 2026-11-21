@@ -112,6 +112,22 @@ describe('saved native Oxygen checkout', () => {
     await screen.findByText('We couldn’t confirm this step');
     expect(screen.getByText('Check for an update')).toBeTruthy();
   });
+  it('tells the customer to finish bank-statement linking by email', async () => {
+    jest.mocked(useOxygenWorkflow).mockReturnValue({
+      snapshot: null,
+      controller: null,
+      capabilities: null,
+      busy: false,
+      error: new OxygenClientError('statement_link_sent', 409),
+      refresh,
+      execute: undefined,
+      recover: undefined,
+    });
+    render(<OxygenCheckoutScreen orderId="order" />);
+
+    expect(await screen.findByText('Check your email')).toBeTruthy();
+    expect(screen.getByText(/bank-statement linking/)).toBeTruthy();
+  });
   it('replaces booking actions with one recovery footer while preserving the selected plan', async () => {
     const state = {
       snapshot: { stage: 'plan_required', state: { validated: true } },

@@ -15,11 +15,14 @@ import { OxygenEligibilityState } from './OxygenEligibilityState';
 import { useOxygenColors } from './OxygenFormPrimitives';
 import { OxygenHostedModal } from './OxygenHostedModal';
 import { OxygenIdentityStep } from './OxygenIdentityStep';
+import { OxygenOfferRefresh } from './OxygenOfferRefresh';
 import { OxygenPaymentStep } from './OxygenPaymentStep';
 import { OxygenPlanStep } from './OxygenPlanStep';
 import {
+  canRefreshOxygenSavedApprovalOffers,
   oxygenPrebookingStep,
   oxygenRecoveryMode,
+  oxygenSavedApprovalOffersMissing,
   oxygenSelfieRequired,
   oxygenUnfinishedPayment,
 } from './oxygen-checkout-presentation';
@@ -86,6 +89,7 @@ export function OxygenWorkflowBody({
   const paymentConfirmed =
     snapshot.stage === 'ready_for_activation' ||
     (s.paymentComplete && s.setupComplete);
+  const savedOffersMissing = oxygenSavedApprovalOffersMissing(snapshot);
   const unfinishedPayment = oxygenUnfinishedPayment(snapshot);
   const paymentUrl =
     unfinishedPayment &&
@@ -174,21 +178,16 @@ export function OxygenWorkflowBody({
           onRefresh={() => void command('refresh_kyc')}
         />
       ) : null}
-      {snapshot.stage === 'plan_required' && !s.offers ? (
-        <View>
-          <Text style={{ color: colors.text }}>
-            We need to update your payment options before you continue.
-          </Text>
-          <Text style={{ color: colors.textSecondary }}>
-            If Oxygen can’t provide them, go back and choose another payment
-            method.
-          </Text>
-          <OxygenAction
-            label="Update payment options"
-            disabled={disabled}
-            onPress={() => void command('refresh_eligibility')}
-          />
-        </View>
+      {savedOffersMissing ||
+      (snapshot.stage === 'plan_required' && !s.offers) ? (
+        <OxygenOfferRefresh
+          disabled={
+            disabled ||
+            (savedOffersMissing &&
+              !canRefreshOxygenSavedApprovalOffers(snapshot))
+          }
+          onRefresh={() => void command('refresh_eligibility')}
+        />
       ) : null}
       {snapshot.stage === 'plan_required' && s.offers ? (
         <OxygenPlanStep
@@ -214,7 +213,7 @@ export function OxygenWorkflowBody({
           onRefresh={() => void command('refresh_kyc')}
         />
       ) : null}
-      {snapshot.stage === 'approval_required' ? (
+      {snapshot.stage === 'approval_required' && !savedOffersMissing ? (
         <OxygenApprovalFlow
           snapshot={snapshot}
           client={client}

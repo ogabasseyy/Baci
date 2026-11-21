@@ -247,3 +247,32 @@ it('accepts production snapshots only when this client is pinned to production',
   const staging = createOxygenClient({ profile, getSession: session, fetch });
   await expect(staging.snapshot(id)).rejects.toMatchObject({ code: 'scope' });
 });
+
+it('keeps the allowlisted statement-link instruction without trusting provider text or dispatch certainty', async () => {
+  const client = createOxygenClient({
+    profile,
+    getSession: session,
+    fetch: jest.fn().mockResolvedValue(
+      Response.json(
+        {
+          code: 'OXYGEN_STATEMENT_LINK_SENT',
+          error: 'provider details',
+        },
+        { status: 409 }
+      )
+    ),
+  });
+
+  await expect(
+    client.action({
+      workflowId: id,
+      version: 1,
+      idempotencyKey: id,
+      command: { action: 'refresh_eligibility' },
+    })
+  ).rejects.toMatchObject({
+    code: 'statement_link_sent',
+    dispatchState: 'unknown',
+    message: expect.not.stringContaining('provider details'),
+  });
+});

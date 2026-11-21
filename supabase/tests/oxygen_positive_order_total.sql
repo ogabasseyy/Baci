@@ -42,6 +42,28 @@ BEGIN
   END;
 END
 $test$;
+-- Simulate a historical row written before this trigger existed. Explicitly
+-- assigning the same protected values must still permit an ordinary update.
+ALTER TABLE public.orders DISABLE TRIGGER oxygen_positive_order_total;
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('eb200000-0000-4000-8000-000000000009','eb200000-0000-4000-8000-000000000002','eb200000-0000-4000-8000-000000000003','OXYGEN-LEGACY-ZERO',0,'NGN','unpaid','oxygen');
+ALTER TABLE public.orders ENABLE TRIGGER oxygen_positive_order_total;
+DO $test$
+BEGIN
+  UPDATE public.orders SET total = total, payment_method = payment_method
+  WHERE id = 'eb200000-0000-4000-8000-000000000009';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Legacy Oxygen no-op did not update its fixture row';
+  END IF;
+  BEGIN
+    UPDATE public.orders SET total = 'NaN'::numeric
+    WHERE id = 'eb200000-0000-4000-8000-000000000005';
+    RAISE EXCEPTION 'A non-finite Oxygen amount was accepted';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'oxygen_order_total_must_be_positive' THEN RAISE; END IF;
+  END;
+END
+$test$;
 -- Trigger calls use the trigger ACL checked when the trigger was created.
 -- Verify the existing service role can still insert a valid order and is
 -- constrained by the same amount guard even without direct EXECUTE.

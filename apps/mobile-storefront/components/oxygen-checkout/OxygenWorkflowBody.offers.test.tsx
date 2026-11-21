@@ -111,3 +111,52 @@ it('blocks a shorter period until the down payment covers its limit', () => {
     tenure: 2,
   });
 });
+
+it('updates missing saved offers before opening approval for an existing booking', () => {
+  const current = makeSnapshot();
+  const saved = oxygenRuntimeSnapshotSchema.parse({
+    ...current,
+    stage: 'approval_required',
+    state: {
+      ...current.state,
+      validated: true,
+      applicationReference: current.workflowId,
+      bookingReference: current.workflowId,
+      kyc: {
+        phone_status: 'DONE',
+        bvn_status: 'DONE',
+        selfie_status: 'DONE',
+        nin_status: 'DONE',
+        bank_status: 'DONE',
+        address_status: 'DONE',
+      },
+      booking: {
+        loan_reference: current.workflowId,
+        loan_amount: 148500,
+        product_amount: 198000,
+        equity_percentage: 25,
+        equity_amount: 49500,
+        loan_tenure: 3,
+        status: 'BOOKED',
+      },
+    },
+  });
+  execute.mockClear();
+  render(
+    <OxygenWorkflowBody
+      focused
+      onViewOrders={jest.fn()}
+      snapshot={saved}
+      client={client}
+      controller={controller}
+      capabilities={null}
+      busy={false}
+      productAmount={198000}
+      scopeKey="test"
+    />
+  );
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Update payment options' })
+  );
+  expect(execute).toHaveBeenCalledWith({ action: 'refresh_eligibility' });
+});

@@ -10,7 +10,8 @@ BEGIN
       RETURN NEW;
     END IF;
   END IF;
-  IF NEW.total IS NULL OR NEW.total <= 0 THEN
+  -- PostgreSQL numeric NaN sorts above finite amounts.
+  IF NEW.total IS NULL OR NEW.total = 'NaN'::numeric OR NEW.total <= 0 THEN
     RAISE EXCEPTION 'oxygen_order_total_must_be_positive' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;

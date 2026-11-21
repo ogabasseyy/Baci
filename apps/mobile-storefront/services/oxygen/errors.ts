@@ -8,6 +8,7 @@ export class OxygenClientError extends Error {
       | 'http'
       | 'scope'
       | 'busy'
+      | 'statement_link_sent'
       | 'recovery',
     public readonly status?: number,
     public readonly dispatchState: 'not_dispatched' | 'unknown' = 'unknown'

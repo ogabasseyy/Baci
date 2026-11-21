@@ -129,10 +129,21 @@ export function createOxygenClient(options: {
     )
       throw new OxygenClientError('scope');
     if (!response.ok) {
-      const definitiveRejection =
+      const actionRejection =
         [409, 503].includes(response.status) &&
         method === 'POST' &&
         path === 'workflows/actions'
+          ? await response.json().catch(() => null)
+          : null;
+      if (
+        response.status === 409 &&
+        z
+          .object({ code: z.literal('OXYGEN_STATEMENT_LINK_SENT') })
+          .safeParse(actionRejection).success
+      )
+        throw new OxygenClientError('statement_link_sent', 409);
+      const definitiveRejection =
+        actionRejection !== null
           ? z
               .union([
                 z.object({ code: z.literal(oxygenRuntimeUnavailableCode) }),
@@ -144,7 +155,7 @@ export function createOxygenClient(options: {
                   dispatchState: z.literal('not_dispatched'),
                 }),
               ])
-              .safeParse(await response.json().catch(() => null)).success
+              .safeParse(actionRejection).success
           : false;
       throw new OxygenClientError(
         response.status === 401 ? 'auth' : 'http',

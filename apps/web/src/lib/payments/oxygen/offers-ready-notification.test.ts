@@ -7,8 +7,9 @@ vi.mock('@/lib/expo-push-chunk-delivery', () => ({
 vi.mock('@/lib/expo-push-lazy-client', () => ({
   createLazyExpoGetter: () => () => ({}),
 }));
+type ZeptoMailTransport = typeof import('@/lib/zeptomail-transport');
 vi.mock('@/lib/zeptomail-transport', async (load) => ({
-  ...(await load<typeof import('@/lib/zeptomail-transport')>()),
+  ...(await load<ZeptoMailTransport>()),
   zeptoMailRequest: mail,
 }));
 

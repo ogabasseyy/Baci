@@ -1,14 +1,12 @@
--- Assistant handover alerts and the three-way chat alert level.
+-- Assistant handover alerts.
 --
--- 1. When the assistant hands a chat to a person, the merchant is alerted
---    (bell notification, then a push) at the "all" and "handover only"
---    levels, and stays unalerted only when they chose "off". Before this, the
---    handover level muted ordinary customer messages and nothing ever told the
---    merchant about the handover itself.
--- 2. One setting, three plain choices, written through one permission-checked
---    function: all new messages / only when the assistant hands a chat to a
---    person / off. It also keeps the push switch from the earlier push
---    preference migration in step, so the two can never disagree.
+-- When the assistant hands a chat to a person, the merchant is alerted (bell
+-- notification, then a push) at the "all" and "handover only" levels, and
+-- stays unalerted only when they chose "off". Before this, the handover level
+-- muted ordinary customer messages and nothing ever told the merchant about
+-- the handover itself. The three-way level and its dashboard functions are in
+-- 20261121100100_chat_alert_level.sql; the ordinary-message hourly cap is made
+-- kind-aware in 20261121100200_chat_message_budget_by_kind.sql.
 --
 -- The chat webhook has no user session, so the handover goes through one
 -- narrow SECURITY DEFINER function with the same short-lived HMAC proof model
@@ -38,13 +36,16 @@ $chat_event_kind_check$;
 COMMENT ON COLUMN public.chat_message_events.kind IS
   'message = a customer message, handover = the assistant handed the chat to a person.';
 
--- A store that muted pushes with the earlier push-only switch asked for no
--- pushes; the single level must say so instead of showing "all" while pushes
--- stay off.
-UPDATE public.notification_preferences
-SET chat_message_notifications = 'off', updated_at = pg_catalog.now()
-WHERE chat_message_push_enabled = false
-  AND chat_message_notifications <> 'off';
+-- Serves the per-store hourly handover count and the repeat-handover lookup.
+CREATE INDEX IF NOT EXISTS chat_message_events_handover_idx
+  ON public.chat_message_events (merchant_id, created_at DESC)
+  WHERE kind = 'handover' AND outcome = 'notified';
+
+-- The push switch column belongs to the earlier push-preference migration;
+-- declared here too (a no-op when it already exists) so this change and the
+-- alert-level migration never depend on apply order.
+ALTER TABLE public.notification_preferences
+  ADD COLUMN IF NOT EXISTS chat_message_push_enabled boolean NOT NULL DEFAULT true;
 
 -- Chat webhook intake for an assistant handover. Verifies the proof, applies
 -- the merchant's level, removes duplicate deliveries and writes the
@@ -128,6 +129,18 @@ BEGIN
   IF v_level = 'off' THEN
     -- The only level that stays silent. "all" and "handover" both alert.
     v_outcome := 'muted';
+  ELSIF EXISTS (
+    SELECT 1 FROM public.chat_message_events e
+    WHERE e.merchant_id = p_merchant_id
+      AND e.conversation_id = p_conversation_id
+      AND e.kind = 'handover'
+      AND e.outcome = 'notified'
+      AND e.created_at > pg_catalog.now() - interval '5 minutes'
+  ) THEN
+    -- Two customer messages handled at the same moment can both hand the same
+    -- chat over; that is one move to the person queue, so one alert. A chat
+    -- handed over again later is a new event and alerts again.
+    v_outcome := 'coalesced';
   ELSIF (
     SELECT count(*) FROM public.chat_message_events e
     WHERE e.merchant_id = p_merchant_id
@@ -160,6 +173,15 @@ BEGIN
 
   INSERT INTO public.chat_message_events(event_key, merchant_id, conversation_id, outcome, notification_id, kind)
   VALUES (p_event_key, p_merchant_id, p_conversation_id, v_outcome, v_notification, 'handover');
+
+  -- Bounded housekeeping, as in the customer-message intake: the duplicate
+  -- guard only needs recent rows.
+  DELETE FROM public.chat_message_events
+  WHERE merchant_id = p_merchant_id AND event_key IN (
+    SELECT event_key FROM public.chat_message_events
+    WHERE merchant_id = p_merchant_id AND created_at < pg_catalog.now() - interval '30 days'
+    LIMIT 200
+  );
 
   RETURN pg_catalog.jsonb_build_object('outcome', v_outcome);
 END;
@@ -215,71 +237,5 @@ BEGIN
   RETURN true;
 END;
 $$;
-
--- Dashboard read: the merchant's current chat alert level. Owner or staff who
--- may view the dashboard; nobody else, so one store's setting is never
--- readable by another.
-CREATE OR REPLACE FUNCTION public.get_chat_message_alert_level(
-  p_merchant_id uuid
-) RETURNS text
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  IF coalesce(auth.role(), '') <> 'service_role'
-    AND NOT public.check_staff_permission(
-      (SELECT auth.uid()), p_merchant_id, 'dashboard', 'view'
-    )
-  THEN
-    RAISE EXCEPTION 'not authorized to read notification preferences'
-      USING ERRCODE = '42501';
-  END IF;
-  RETURN COALESCE(
-    (
-      SELECT preference.chat_message_notifications
-      FROM public.notification_preferences AS preference
-      WHERE preference.merchant_id = p_merchant_id
-    ),
-    'all'
-  );
-END;
-$$;
-
-ALTER FUNCTION public.get_chat_message_alert_level(uuid) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.get_chat_message_alert_level(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.get_chat_message_alert_level(uuid) TO authenticated, service_role;
-
--- Dashboard write: the owner or staff with settings.edit, nobody else. The
--- push switch follows the level (on unless "off"), so a choice made here is
--- never undone by an older push-only setting.
-CREATE OR REPLACE FUNCTION public.set_chat_message_alert_level(
-  p_merchant_id uuid,
-  p_level text
-) RETURNS text
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-BEGIN
-  IF p_level IS NULL OR p_level NOT IN ('all', 'handover', 'off') THEN
-    RAISE EXCEPTION 'level must be all, handover or off' USING ERRCODE = '22023';
-  END IF;
-  IF coalesce(auth.role(), '') <> 'service_role'
-    AND NOT public.check_staff_permission(
-      (SELECT auth.uid()), p_merchant_id, 'settings', 'edit'
-    )
-  THEN
-    RAISE EXCEPTION 'not authorized to edit notification preferences'
-      USING ERRCODE = '42501';
-  END IF;
-  INSERT INTO public.notification_preferences AS preferences (
-    merchant_id, chat_message_notifications, chat_message_push_enabled, updated_at
-  ) VALUES (p_merchant_id, p_level, p_level <> 'off', pg_catalog.now())
-  ON CONFLICT (merchant_id) DO UPDATE
-  SET chat_message_notifications = EXCLUDED.chat_message_notifications,
-      chat_message_push_enabled = EXCLUDED.chat_message_push_enabled,
-      updated_at = pg_catalog.now();
-  RETURN p_level;
-END;
-$$;
-
-ALTER FUNCTION public.set_chat_message_alert_level(uuid, text) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.set_chat_message_alert_level(uuid, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.set_chat_message_alert_level(uuid, text) TO authenticated, service_role;
 
 COMMIT;

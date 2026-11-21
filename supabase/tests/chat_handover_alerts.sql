@@ -119,6 +119,17 @@ BEGIN
     WHERE e.event_key = 'evt-hand-0006' AND mn.in_app_visible) THEN RAISE EXCEPTION 'in-app preference ignored: %', v; END IF;
   UPDATE public.notification_preferences SET in_app_enabled = true WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1';
 
+  -- Two handovers for one chat at the same moment are one alert; a later one alerts again.
+  v := pg_temp.handover('evt-hand-race01', 40);
+  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'first racing handover: %', v; END IF;
+  v := pg_temp.handover('evt-hand-race02', 40);
+  IF v <> '{"outcome":"coalesced"}'::jsonb THEN RAISE EXCEPTION 'racing handover not coalesced: %', v; END IF;
+  v := pg_temp.handover('evt-hand-race03', 41);
+  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'handover for another chat: %', v; END IF;
+  UPDATE public.chat_message_events SET created_at = now() - interval '6 minutes' WHERE event_key = 'evt-hand-race01';
+  v := pg_temp.handover('evt-hand-race04', 40);
+  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'later handover for the same chat: %', v; END IF;
+
   -- An unknown store is ignored without recording anything.
   v := pg_temp.handover('evt-hand-0007', 1, p_merchant => 'c4a72000-0000-4000-8000-0000000000ff');
   IF v <> '{"outcome":"ignored"}'::jsonb OR EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = 'evt-hand-0007') THEN RAISE EXCEPTION 'unknown store: %', v; END IF;
@@ -136,6 +147,31 @@ DO $$ DECLARE v jsonb; v_before integer; BEGIN
   UPDATE public.chat_message_events SET created_at = now() - interval '61 minutes' WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1';
   v := pg_temp.handover('evt-hand-surge-next', 5001);
   IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'after the hour: %', v; END IF;
+END $$;
+
+-- The two hourly caps are independent: handovers never use up the ordinary-message cap, and messages never use up the handover cap.
+DO $$ DECLARE v jsonb; v_n integer; BEGIN
+  SELECT count(*) INTO v_n FROM public.chat_message_events WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1' AND kind = 'handover' AND outcome = 'notified' AND created_at > now() - interval '1 hour';
+  FOR i IN (v_n + 1)..60 LOOP
+    v := pg_temp.handover('evt-hand-capa-' || lpad(i::text, 3, '0'), 8000 + i);
+    IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'handover % under cap: %', i, v; END IF;
+  END LOOP;
+  v := pg_temp.handover('evt-hand-capa-over', 8999);
+  IF v <> '{"outcome":"coalesced"}'::jsonb THEN RAISE EXCEPTION 'handover cap not enforced: %', v; END IF;
+  -- Sixty handovers in the hour: an ordinary message still alerts.
+  v := pg_temp.message('evt-hand-capmsg-1', 6000);
+  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'handovers used up the message cap: %', v; END IF;
+  SELECT count(*) INTO v_n FROM public.chat_message_events WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1' AND kind = 'message' AND outcome = 'notified' AND created_at > now() - interval '1 hour';
+  FOR i IN (v_n + 1)..60 LOOP
+    v := pg_temp.message('evt-hand-capmsg-' || lpad((i + 1)::text, 3, '0'), 6000 + i);
+    IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'message % under cap: %', i, v; END IF;
+  END LOOP;
+  v := pg_temp.message('evt-hand-capmsg-over', 7000);
+  IF v <> '{"outcome":"coalesced"}'::jsonb THEN RAISE EXCEPTION 'message cap not enforced: %', v; END IF;
+  -- Sixty fresh messages do not stop a handover once the handover hour has passed.
+  UPDATE public.chat_message_events SET created_at = now() - interval '61 minutes' WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1' AND kind = 'handover';
+  v := pg_temp.handover('evt-hand-capsplit', 7001);
+  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'messages used up the handover cap: %', v; END IF;
 END $$;
 
 -- A handover shares the push claim with messages and logs its own fixed wording.
@@ -179,80 +215,6 @@ SET LOCAL ROLE authenticated;
 DO $$ BEGIN
   BEGIN PERFORM public.record_chat_handover(current_setting('test.proof'), current_setting('test.issued_at')::bigint, 'c4a72000-0000-4000-8000-0000000000b1', 'evt-hand-anon02', 31, 'Ada'); RAISE EXCEPTION 'a signed-in user could call the handover intake';
   EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM LIKE 'chat_event%' THEN RAISE EXCEPTION 'signed-in call reached the function body'; END IF; END;
-END $$;
-RESET ROLE;
-
--- The level: one choice, saved by the owner or permitted staff only, push switch kept in step.
-CREATE FUNCTION pg_temp.as_user(p_user uuid) RETURNS void LANGUAGE sql AS $$
-  SELECT set_config('request.jwt.claim.sub', p_user::text, true), set_config('request.jwt.claim.role', 'authenticated', true);
-$$;
-SELECT pg_temp.as_user('c4a72000-0000-4000-8000-0000000000a1');
-SET LOCAL ROLE authenticated;
-DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; v text; BEGIN
-  v := public.set_chat_message_alert_level(m, 'handover');
-  IF v <> 'handover' THEN RAISE EXCEPTION 'owner could not choose handover only: %', v; END IF;
-  v := public.get_chat_message_alert_level(m);
-  IF v <> 'handover' THEN RAISE EXCEPTION 'owner read back %', v; END IF;
-  BEGIN PERFORM public.set_chat_message_alert_level(m, 'sometimes'); RAISE EXCEPTION 'unknown level accepted';
-  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
-  BEGIN PERFORM public.set_chat_message_alert_level(m, NULL); RAISE EXCEPTION 'null level accepted';
-  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
-END $$;
-RESET ROLE;
-DO $$ BEGIN
-  IF (SELECT chat_message_push_enabled FROM public.notification_preferences WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1') IS NOT TRUE THEN RAISE EXCEPTION 'push switch off at handover only'; END IF;
-END $$;
-SET LOCAL ROLE authenticated;
-DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
-  PERFORM public.set_chat_message_alert_level(m, 'off');
-END $$;
-RESET ROLE;
-DO $$ BEGIN
-  IF (SELECT chat_message_notifications || ':' || chat_message_push_enabled FROM public.notification_preferences WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1') <> 'off:false' THEN RAISE EXCEPTION 'off did not turn the push switch off'; END IF;
-END $$;
-SET LOCAL ROLE authenticated;
-DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
-  -- Choosing a level again undoes an older push-only mute.
-  PERFORM public.set_chat_message_alert_level(m, 'all');
-END $$;
-RESET ROLE;
-DO $$ BEGIN
-  IF (SELECT chat_message_notifications || ':' || chat_message_push_enabled FROM public.notification_preferences WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1') <> 'all:true' THEN RAISE EXCEPTION 'all did not turn the push switch back on'; END IF;
-END $$;
--- Staff with the permission may save and read; staff without it and outsiders may not.
-SELECT pg_temp.as_user('c4a72000-0000-4000-8000-0000000000a3');
-SET LOCAL ROLE authenticated;
-DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; v text; BEGIN
-  v := public.set_chat_message_alert_level(m, 'handover');
-  IF v <> 'handover' THEN RAISE EXCEPTION 'permitted staff refused: %', v; END IF;
-  v := public.get_chat_message_alert_level(m);
-  IF v <> 'handover' THEN RAISE EXCEPTION 'permitted staff read back %', v; END IF;
-END $$;
-RESET ROLE;
-SELECT pg_temp.as_user('c4a72000-0000-4000-8000-0000000000a4');
-SET LOCAL ROLE authenticated;
-DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
-  BEGIN PERFORM public.set_chat_message_alert_level(m, 'off'); RAISE EXCEPTION 'staff without settings.edit could save';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-  BEGIN PERFORM public.get_chat_message_alert_level(m); RAISE EXCEPTION 'staff without dashboard.view could read';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-END $$;
-RESET ROLE;
-SELECT pg_temp.as_user('c4a72000-0000-4000-8000-0000000000a2');
-SET LOCAL ROLE authenticated;
-DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
-  BEGIN PERFORM public.set_chat_message_alert_level(m, 'off'); RAISE EXCEPTION 'an outsider could save';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-  BEGIN PERFORM public.get_chat_message_alert_level(m); RAISE EXCEPTION 'an outsider could read';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-END $$;
-RESET ROLE;
-SET LOCAL ROLE anon;
-DO $$ BEGIN
-  BEGIN PERFORM public.get_chat_message_alert_level('c4a72000-0000-4000-8000-0000000000b1'); RAISE EXCEPTION 'anon could read the level';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-  BEGIN PERFORM public.set_chat_message_alert_level('c4a72000-0000-4000-8000-0000000000b1', 'off'); RAISE EXCEPTION 'anon could save the level';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
 

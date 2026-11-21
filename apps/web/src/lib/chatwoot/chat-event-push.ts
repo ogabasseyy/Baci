@@ -3,12 +3,11 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { notifyMerchantWithStore } from '@/lib/expo-push-core';
 import { createAnonClient } from '@/lib/supabase/anon';
+import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
 import {
   chatEventPushArgs,
   createChatEventPushStore,
 } from './chat-event-push-store';
-
-const SECRET_PATTERN = /^[\x21-\x7e]{32,256}$/;
 
 export type ChatEventPushInput = {
   merchantId: string;
@@ -69,7 +68,7 @@ export async function sendChatEventPush(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<ChatEventPushResult> {
   const secret = env.EKAETTE_CHAT_EVENT_RPC_SECRET?.trim() ?? '';
-  if (!SECRET_PATTERN.test(secret)) {
+  if (!CHAT_EVENT_SECRET_PATTERN.test(secret)) {
     return { status: 'skipped', reason: 'not_configured' };
   }
   const scope = {

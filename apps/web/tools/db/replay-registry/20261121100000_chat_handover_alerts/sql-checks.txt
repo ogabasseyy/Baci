@@ -1,1 +1,2 @@
 supabase/tests/chat_handover_alerts.sql
+supabase/tests/chat_alert_level.sql

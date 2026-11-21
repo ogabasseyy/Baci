@@ -140,6 +140,16 @@ describe('CartPageWrapper handoff', () => {
     ).toBeInTheDocument();
   });
 
+  it('continues an empty hydrated website cart with no device import', async () => {
+    mockSearch('');
+    window.history.pushState({}, '', '/ogabassey/cart#handoff=ch1.empty&hid=empty-link');
+    vi.mocked(useCart).mockReturnValue({
+      addToCart: vi.fn(), cart: [], isHydrated: true, sharedCartEnabled: true, importStatus: 'none',
+    } as unknown as ReturnType<typeof useCart>);
+    render(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText(/Handoff continuation for empty-link/)).toBeInTheDocument();
+  });
+
   it("ignores merchant A's scoped locator on merchant B's cart page", async () => {
     mockSearch('');
     window.history.pushState({}, '', '/shop-b/cart');

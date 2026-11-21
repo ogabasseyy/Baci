@@ -146,7 +146,8 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
   // handoff. Otherwise adoption could reconcile two distinct adds as one.
   const waitingForLocalImport =
     !!pairing && sharedCartEnabled &&
-    (!isHydrated || importStatus === 'none' || importStatus === 'pending');
+    (!isHydrated || importStatus === 'pending' ||
+      (importStatus === 'none' && cart.length > 0));
   if (pairing && sharedCartEnabled && importStatus === 'failed') {
     return (
       <section aria-label="Cart handoff" className="mx-auto max-w-xl px-4 py-10">

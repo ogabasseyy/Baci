@@ -68,7 +68,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION piggyvest_primary.read_migrated_legacy_wallet_balances(uuid, text, jsonb)
-  FROM PUBLIC, anon, authenticated, service_role;
+  FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.read_migrated_legacy_wallet_balances(uuid, text, jsonb)
   TO piggyvest_primary_evidence;
 

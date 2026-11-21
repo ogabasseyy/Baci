@@ -216,6 +216,10 @@ END $$;
 \ir brilstash/stock-withdrawal.inc.sql
 \ir brilstash/source-remap.inc.sql
 \ir brilstash/promotion.inc.sql
+-- Recovery uses a simulated promotion clock. Timestamp the suspension on
+-- that same clock so CI can run outside the simulated window.
+ALTER TABLE private.brilstash_suspensions
+  ALTER COLUMN suspended_at SET DEFAULT private.brilstash_clock();
 \ir brilstash/released-attempts.inc.sql
 \ir brilstash/recovery.inc.sql
 \ir brilstash/setup.inc.sql

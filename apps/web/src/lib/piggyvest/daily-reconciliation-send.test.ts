@@ -18,6 +18,18 @@ describe('withEmailLines', () => {
   it('leaves the email unchanged with no lines', () => {
     expect(withEmailLines(email, [])).toBe(email);
   });
+
+  it('regression: a paging side check prefixes the subject so an all-clear report never reads all clear', () => {
+    const clear = {
+      subject: 'PiggyVest daily reconciliation: all clear (2026-11-21)',
+      text: 'body',
+      html: '<h2>S</h2>',
+    };
+    expect(withEmailLines(clear, ['x'], true).subject).toBe(
+      'ATTENTION, see below: PiggyVest daily reconciliation: all clear (2026-11-21)'
+    );
+    expect(withEmailLines(clear, ['x']).subject).toBe(clear.subject);
+  });
 });
 
 describe('deliverReconciliationEmail', () => {

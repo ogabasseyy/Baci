@@ -3,6 +3,7 @@ import {
   emptySearchRefinements,
   hasActiveSearchRefinements,
 } from '@baci/shared/lib';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
@@ -13,6 +14,10 @@ import { SearchRefinementControls } from '@/components/storefront/search-refinem
 import { SearchSubmissionLink } from '@/components/storefront/search-submission-link';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
+import {
+  findGiftCardPreviewMatches,
+  isGiftCardPreviewEnabled,
+} from '@/lib/gift-cards/preview-catalog';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
 import type { StorefrontSearchProductsPage } from '@/lib/storefront-search';
@@ -93,6 +98,13 @@ export async function SearchPageContent({
   const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const priceFormatter = getPriceFormatter(merchantCurrency);
   const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
+  const giftCards =
+    page === 1 &&
+    !invalidFilters &&
+    !hasActiveSearchRefinements(refinements) &&
+    isGiftCardPreviewEnabled(merchant.slug)
+      ? findGiftCardPreviewMatches(query)
+      : [];
   const totalPages = searchPageTotalPages(effectiveResult, searchFailed);
   const { breadcrumbSchema, searchResultsSchema } = buildSearchPageSchemas({
     businessName: merchant.business_name,
@@ -106,14 +118,17 @@ export async function SearchPageContent({
     visibleCount,
   });
 
-  const summaryText = searchFailed
-    ? `We couldn't load results for “${query}”.`
-    : formatSearchSummary({
-        query: searchQuery,
-        totalCount: effectiveResult.count,
-        visibleCount,
-        page,
-      });
+  const summaryText =
+    giftCards.length > 0 && visibleCount === 0 && !searchFailed
+      ? 'Gift cards matching your search'
+      : searchFailed
+        ? `We couldn't load results for “${query}”.`
+        : formatSearchSummary({
+            query: searchQuery,
+            totalCount: effectiveResult.count,
+            visibleCount,
+            page,
+          });
 
   return (
     <V2ComparisonScope storageNamespace={merchant.id}>
@@ -165,6 +180,32 @@ export async function SearchPageContent({
                     : []
                 }
               />
+
+              {giftCards.length > 0 && (
+                <section
+                  className="mt-4 space-y-2"
+                  aria-labelledby="gift-card-results"
+                >
+                  <h2 id="gift-card-results" className="font-semibold">
+                    Gift Cards
+                  </h2>
+                  <ul className="grid gap-2 sm:grid-cols-2">
+                    {giftCards.map((card) => (
+                      <li key={card.id}>
+                        <Link
+                          href={asRoute(
+                            `${pathPrefix}/gift-cards?selection=${card.id}`
+                          )}
+                          className="block rounded-lg border bg-store-background p-3 text-store-background-text hover:underline"
+                        >
+                          {card.brand} · United States ·{' '}
+                          {`$${card.denomination}`}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               {!searchFailed && effectiveResult.didYouMean && (
                 <p className="mt-4 text-sm text-store-background-text/55">
@@ -251,7 +292,7 @@ export async function SearchPageContent({
                         Products on this page are no longer available. Try
                         another page.
                       </p>
-                    ) : (
+                    ) : giftCards.length === 0 ? (
                       <SearchPageNoResultsPanel
                         merchantSlug={merchant.slug}
                         allProductsHref={allProductsHref}
@@ -261,7 +302,7 @@ export async function SearchPageContent({
                           refinements
                         )}
                       />
-                    )
+                    ) : null
                   ) : (
                     <SearchPageStartPanel />
                   )}

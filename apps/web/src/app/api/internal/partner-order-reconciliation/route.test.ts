@@ -239,12 +239,15 @@ describe('internal partner reconciliation', () => {
       'RECONCILIATION_UNAVAILABLE',
     ],
   ])('maps storage error %s (%s) without issuing a success receipt', async (code, message, status, responseCode) => {
+    using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     mocks.rpc.mockResolvedValue({ data: null, error: { code, message } });
     const result = await POST(request());
     expect(result.status).toBe(status);
     expect(await result.json()).toMatchObject({
       error: { code: responseCode },
     });
+    if (status === 503)
+      expect(warn.mock.calls.at(-1)?.[0]).toHaveProperty('sqlState', code);
   });
 
   it('alerts on a rejected Baci proof while keeping the response retryable', async () => {
@@ -263,9 +266,7 @@ describe('internal partner reconciliation', () => {
     { receipt, hold_reason: 'ORDER_REVIEW_REQUIRED' },
   ])('surfaces an invalid reconciliation response separately from an outage', async (data) => {
     mocks.rpc.mockResolvedValue({ data, error: null });
-
     const result = await POST(request());
-
     expect(result.status).toBe(500);
     expect(await result.json()).toMatchObject({
       error: { code: 'RECONCILIATION_RESPONSE_INVALID' },

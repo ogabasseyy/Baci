@@ -2,11 +2,14 @@ import { expect, it, vi } from 'vitest';
 import { logger } from '@/lib/logger';
 import { mocks, POST, request } from './route.test-support';
 
-it('logs an unsupported origin before asking GIG for a quote', async () => {
+it.each([
+  'GH',
+  null,
+])('rejects origin country %j before asking GIG for a quote', async (country) => {
   using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
   mocks.sender.mockResolvedValueOnce({
     ok: true,
-    country: 'GH',
+    country,
     sender: { city: 'Ikeja', state: 'Lagos', countryCode: 'NG' },
   });
   const response = await POST(request());

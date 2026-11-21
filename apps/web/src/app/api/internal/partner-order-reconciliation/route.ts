@@ -144,7 +144,15 @@ export async function POST(request: Request) {
       });
       return reject(503, 'RECONCILIATION_UNAVAILABLE');
     }
-    if (error) throw new Error('Partner reconciliation unavailable');
+    if (error) {
+      logger.warn({
+        message: 'Partner reconciliation database request failed',
+        connectionId,
+        requestId,
+        sqlState: /^[A-Z0-9]{5}$/.test(error.code) ? error.code : undefined,
+      });
+      return reject(503, 'RECONCILIATION_UNAVAILABLE');
+    }
     const outcome = outcomeSchema.safeParse(data);
     if (!outcome.success) {
       logger.error({

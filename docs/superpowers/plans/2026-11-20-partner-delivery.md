@@ -55,7 +55,7 @@ The [delivery API quickstart](../../partners/delivery-api-quickstart.md) documen
 | 400 | `INVALID_REQUEST` or `CAPTURE_EVIDENCE_MISMATCH` | Check the submitted evidence against the original capture and quote. |
 | 404 | `NOT_FOUND` | Check credential scope and the submission reference. |
 | 409 | `CAPTURE_EVIDENCE_CONFLICT` | Reconcile the existing capture claim before proceeding. |
-| 409 | `CAPTURE_TIMESTAMP_AFTER_RECEIPT` | Check the original provider capture time and clock alignment before retrying. |
+| 409 | `CAPTURE_TIMESTAMP_AFTER_RECEIPT` | Retry only with corrected evidence verified against the provider. Replaying the same evidence will return the same conflict. |
 | 409 | `SETTLEMENT_EVIDENCE_CONFLICT` | Compare the replayed payout allocation to the evidence on the accepted order. |
 | 409 | `RECONCILIATION_CONFLICT` | Check the submission receipt and existing evidence before retrying. |
 | 413 | `PAYLOAD_TOO_LARGE` | Reduce the evidence payload to the normalized fields. |
@@ -103,7 +103,7 @@ The database logs `partner_settlement_operational_error` for unavailable settlem
 
 Use the submission ID and provider references to check the stored charge and payout evidence. For a settlement hold, submit a corrected allocation only after independently verifying the amount, currency, and destination account. For an order hold, reconcile the original charge with the agreed refund owner and record the verified disposition under the original references. A price, stock, or tax change after the original purchase leaves that submission held. Keeping the original reference held prevents a later retry from fulfilling a charge while its refund is being resolved. A replacement purchase uses a fresh quote and new references after the original charge is resolved. Use the same review process for a verified capture outside the original quote window.
 
-The capture check uses the provider's actual capture timestamp, between quote issuance and expiry and no later than Baci's receipt of the paid submission. Validate the provider timestamp semantics and clock alignment during onboarding. Investigate a reported clock mismatch against the provider source. Keep the original evidence timestamp.
+The capture check uses the provider's actual capture timestamp, between quote issuance and expiry and no later than Baci's receipt of the paid submission. Validate the provider timestamp semantics and clock alignment during onboarding. Investigate a reported clock mismatch against the provider source. Preserve the original evidence and never adjust its timestamp just to pass validation.
 Monitor the `Partner capture timestamp after submission receipt` warning and the `partner_settlement_timestamp_in_future` database log for provider clock discrepancies. Amount and quote validity checks continue to apply.
 
 Before opening the paid-order flow, assign ownership for monitoring pending verification receipts and both hold reasons, verify the alert reaches that owner, and confirm who initiates and verifies refunds.

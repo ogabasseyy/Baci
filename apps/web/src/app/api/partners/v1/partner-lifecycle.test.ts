@@ -22,6 +22,7 @@ vi.mock('@/lib/tenant-rate-limit', () => ({
 vi.mock('@/app/api/shipping/quotes/resolve-public-merchant-sender', () => ({
   resolvePublicMerchantSender: async () => ({
     ok: true,
+    country: 'NG',
     sender: {
       address: '1 Merchant Road',
       city: 'Ikeja',
@@ -107,7 +108,6 @@ vi.mock('./partner-profiles', () => {
     ],
   };
 });
-
 const tokens = {
   catalog: 'fixture-merchant-lifecycle-catalog-token-000001',
   quote: 'fixture-merchant-lifecycle-quote-token-00000001',

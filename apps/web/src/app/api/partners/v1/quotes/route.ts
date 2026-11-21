@@ -135,7 +135,7 @@ export async function POST(request: Request) {
     ]);
     if (metadata.error || merchant.error || !merchant.data || !origin.ok)
       return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
-    const country = origin.country?.trim().toUpperCase() || 'NG';
+    const country = origin.country?.trim().toUpperCase();
     if (origin.sender?.countryCode !== 'NG' || country !== 'NG') {
       logger.warn({
         message: 'Partner quote sender is missing or outside Nigeria',

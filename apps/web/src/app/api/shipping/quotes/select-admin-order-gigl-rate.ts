@@ -1,14 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { toKobo } from '@/lib/shipping/to-kobo';
 import type { ShippingQuote } from '@/lib/shipping/types';
+import { settledDeliverySchema } from '@/schemas/settled-partner-delivery';
 import { selectEligibleAdminGiglQuote } from './admin-order-gigl-quote.helpers';
-
-const settledDeliverySchema = z.object({
-  service: z.string().min(1),
-  delivery_minor: z.number().int().positive(),
-});
 
 export async function selectAdminOrderGiglRate(
   supabase: SupabaseClient,

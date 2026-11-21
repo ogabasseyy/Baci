@@ -55,6 +55,15 @@ function createOrigin(base) {
     '#!/usr/bin/env bash\n',
     0o755
   );
+  write(
+    join(work, 'vps-workers/bin/gigl-cache-lock-exec.py'),
+    readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '../bin/gigl-cache-lock-exec.py'
+      )
+    )
+  );
   write(join(work, 'vps-workers/jobs/preflight-direct-web-workers.mjs'), '');
   write(
     join(work, 'vps-workers/install-event-pipeline-services.sh'),

@@ -1,15 +1,28 @@
 import 'dotenv/config';
 
 import { randomUUID } from 'node:crypto';
+import { isAbsolute, join } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import { processClaimedGiglTrackingMonitors } from '@/app/api/cron/gigl-tracking/gigl-tracking-monitor-worker';
 import { runGiglTrackingMonitorBatch } from '@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch';
 import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
+import { GiglProvider } from '@/lib/shipping/providers/gigl';
+import { hasVerifiedGiglCacheLock } from '@/lib/shipping/providers/gigl-cache-lock-verification';
+import { runWithGiglTrackingTokenCache } from '@/lib/shipping/providers/gigl-tracking-cache-runner';
+import { createGiglTrackingTokenCache } from '@/lib/shipping/providers/gigl-tracking-token-cache';
+import {
+  GIGL_BASE_URL,
+  GIGL_EMAIL,
+  GIGL_PASSWORD,
+} from '@/lib/shipping/providers/gigl.constants';
 
 interface CliLogger {
   error(message: string): void;
   info(message: string, summary: string): void;
 }
+
+let cacheRunActive = false;
 
 type RunBatch = (options: {
   batchSize: number;
@@ -43,19 +56,73 @@ function isExplicitlyDisabled(value: string | undefined) {
 
 async function runBatchDirectly(
   { batchSize }: { batchSize: number },
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv,
+  emitError: (message: string) => void
 ) {
-  return runGiglTrackingMonitorBatch({
+  const options = {
     batchSize,
     client: createGiglTrackingWorkerClient(env),
     workerId: `gigl-tracking-vps-${randomUUID()}`,
-  });
+  };
+  const home = env.HOME;
+  if (
+    env.BACI_WORKER_PROFILE !== 'gigl-tracking' ||
+    !home ||
+    !isAbsolute(home) ||
+    !GIGL_BASE_URL ||
+    !GIGL_EMAIL ||
+    !GIGL_PASSWORD
+  ) {
+    return runGiglTrackingMonitorBatch(options);
+  }
+  const directory = join(home, 'baci-workers', 'gigl-tracking-token-cache');
+  if (cacheRunActive || !hasVerifiedGiglCacheLock(directory, 9)) {
+    emitError('[gigl-tracking] token cache unavailable');
+    return runGiglTrackingMonitorBatch(options);
+  }
+  cacheRunActive = true;
+  try {
+    let cacheUnavailableReported = false;
+    const reportCacheUnavailable = () => {
+      if (cacheUnavailableReported) return;
+      cacheUnavailableReported = true;
+      emitError('[gigl-tracking] token cache unavailable');
+    };
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      isLocked: () => cacheRunActive && hasVerifiedGiglCacheLock(directory, 9),
+      onUnavailable: reportCacheUnavailable,
+      credentials: {
+        baseUrl: GIGL_BASE_URL,
+        email: GIGL_EMAIL,
+        password: GIGL_PASSWORD,
+      },
+    });
+    return await runWithGiglTrackingTokenCache({
+      cache,
+      onCacheUnavailable: reportCacheUnavailable,
+      createProvider: (initial) => new GiglProvider(initial),
+      run: (provider) =>
+        runGiglTrackingMonitorBatch({
+          ...options,
+          processMonitors: (client, monitors, workerId) =>
+            processClaimedGiglTrackingMonitors(
+              client,
+              monitors,
+              workerId,
+              (numbers) => provider.trackShipments(numbers)
+            ),
+        }),
+    });
+  } finally {
+    cacheRunActive = false;
+  }
 }
 
 export async function runGiglTrackingCli({
   env = process.env,
   logger = console,
-  runBatch = (options) => runBatchDirectly(options, env),
+  runBatch,
 }: {
   env?: NodeJS.ProcessEnv;
   logger?: CliLogger;
@@ -86,7 +153,7 @@ export async function runGiglTrackingCli({
   console.warn = () => emitError('[gigl-tracking] internal warning');
 
   try {
-    const result = await runBatch({ batchSize: 25 });
+    const result = await (runBatch ?? ((options) => runBatchDirectly(options, env, emitError)))({ batchSize: 25 });
     if (!result.ok) {
       emitError('[gigl-tracking] failed');
       return 1;
@@ -118,6 +185,9 @@ export async function runGiglTrackingCli({
 
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === invokedPath) {
+  process.once('exit', (code) => {
+    process.stderr.write(`[gigl-tracking] Finished at ${new Date().toISOString()} (exit ${code})\n`);
+  });
   runGiglTrackingCli().then((exitCode) => {
     process.exitCode = exitCode;
   });

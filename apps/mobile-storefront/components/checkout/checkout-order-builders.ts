@@ -1,4 +1,7 @@
-import { parseMerchantRateQuoteId } from '@baci/shared/lib';
+import {
+  areLocationStateLabelsEquivalent,
+  parseMerchantRateQuoteId,
+} from '@baci/shared/lib';
 import { isProviderStationPickupQuote } from '@/components/checkout/checkout-station-pickup';
 import { isGiglGoFasterQuote } from '@/components/checkout/checkout-step-helpers';
 import type {
@@ -105,7 +108,8 @@ export function buildOrderShippingAddress(
 ): ShippingAddressInput {
   const quotedState = selectedQuote?.receiverState;
   const deliveryAddress =
-    quotedState && quotedState.requested === address.state.trim()
+    quotedState &&
+    areLocationStateLabelsEquivalent(quotedState.requested, address.state)
       ? { ...address, state: quotedState.quoted }
       : address;
   if (deliveryMethod === 'pickup_station') {

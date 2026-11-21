@@ -118,6 +118,30 @@ describe('useCheckoutShipping', () => {
     );
   });
 
+  it('clears loading when an aborted quote has no replacement destination', async () => {
+    let quoteSignal: AbortSignal | undefined;
+    mockFetchShippingQuotes.mockImplementationOnce(
+      async ({ signal, setIsLoadingQuotes }) => {
+        setIsLoadingQuotes(true);
+        quoteSignal = signal;
+        await new Promise<void>((resolve) => {
+          signal?.addEventListener('abort', () => resolve(), { once: true });
+        });
+      }
+    );
+    const { result, rerender } = renderHook(
+      (params: ShippingParams) => useCheckoutShipping(params),
+      { initialProps: createLocatedParams('Rivers', 'Port Harcourt') }
+    );
+    await waitFor(() => expect(quoteSignal).toBeDefined());
+    expect(result.current.isLoadingQuotes).toBe(true);
+
+    await act(async () => rerender(createParams()));
+
+    expect(quoteSignal?.aborted).toBe(true);
+    expect(result.current.isLoadingQuotes).toBe(false);
+  });
+
   it('loads shipping states on mount and clears the loading flag', async () => {
     const { result } = renderHook(
       (props: ShippingParams) => useCheckoutShipping(props),

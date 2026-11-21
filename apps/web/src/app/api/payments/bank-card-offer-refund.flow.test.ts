@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { refundClient } from '@/lib/orders/execute-order-cancellation-side-effect.test-support';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from '@/lib/orders/run-order-cancellation-side-effect';
 import {
   customerEmail,
   merchant,
@@ -157,5 +162,82 @@ describe('bank card offer refund', () => {
     expect(refundInsert).toHaveBeenCalledWith(
       expect.objectContaining({ gateway_reference: '64' })
     );
+  });
+
+  it.each([
+    {
+      gateway: 'manual',
+      metadata: { payment_transaction_id: transactionId },
+      outcome: DeferredError,
+    },
+    {
+      gateway: 'paystack',
+      metadata: {
+        payment_transaction_id: transactionId,
+        provider_refund_status: 'processed',
+      },
+      outcome: DeliveryUncertainError,
+    },
+  ])('never sends a full refund after a $gateway partial-item refund', async ({
+    gateway,
+    metadata,
+    outcome,
+  }) => {
+    const { data } = setup('035', 'Wema Bank');
+    const checkout = await verify(request('verify', { reference }));
+    expect(checkout.status).toBe(200);
+    await expect(checkout.json()).resolves.toMatchObject({
+      finalizationOutcome: 'completed',
+      orderId,
+    });
+
+    // The saved capture remains eligible for a whole-order refund. A
+    // recorded item refund covers only part of it and must block dispatch
+    // before the worker reads or submits the full captured amount.
+    mocks.rpc.mockClear();
+    mocks.verify.mockResolvedValue({
+      success: true,
+      data: { ...data, id: String(data.id) },
+    });
+    const payment = {
+      id: transactionId,
+      status: 'completed',
+      amount: 95,
+      currency: 'NGN',
+      gateway: 'paystack',
+      gateway_reference: reference,
+    };
+    const ledger = refundClient({
+      payments: [payment],
+      refundRows: [
+        {
+          amount: 47.5,
+          currency: 'NGN',
+          gateway,
+          metadata,
+          status: 'completed',
+        },
+      ],
+    });
+    const { executeOrderCancellationSideEffect } = await import(
+      '@/lib/orders/execute-order-cancellation-side-effect'
+    );
+    const result = await executeOrderCancellationSideEffect({
+      claimToken: 'refund-claim',
+      merchant,
+      order: { ...order, payment_status: 'paid' },
+      step: 'refund',
+      supabase: { from: ledger.from, rpc: mocks.rpc } as never,
+    }).catch((error: unknown) => error);
+    expect(mocks.refund).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'begin_bank_card_offer_refund_dispatch',
+      expect.anything()
+    );
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'get_bank_card_offer_refundable_amount',
+      expect.anything()
+    );
+    expect(result).toBeInstanceOf(outcome);
   });
 });

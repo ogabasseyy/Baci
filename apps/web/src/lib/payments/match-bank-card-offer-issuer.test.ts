@@ -17,3 +17,11 @@ it.each([
 ] as const)('checks %s saved label %j with provider label %j', (bankCode, saved, provider, accepted) => {
   expect(matchBankCardOfferIssuer(bankCode, saved, provider)).toBe(accepted);
 });
+
+it.each([
+  '999',
+  '__proto__',
+  'constructor',
+])('rejects the unsupported bank code %s', (code) => {
+  expect(matchBankCardOfferIssuer(code, 'Wema Bank', 'Wema Bank')).toBe(false);
+});

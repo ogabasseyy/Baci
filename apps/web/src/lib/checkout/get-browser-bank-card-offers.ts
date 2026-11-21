@@ -17,8 +17,10 @@ export type BrowserBankCardOffer = Pick<
 export function getBrowserBankCardOffers(
   merchantId: string
 ): BrowserBankCardOffer[] {
+  const normalizedMerchantId = merchantId.toLowerCase();
   return BANK_CARD_OFFERS.filter(
-    (offer) => offer.enabled && offer.merchantId === merchantId.toLowerCase()
+    (offer) =>
+      offer.enabled && offer.merchantId.toLowerCase() === normalizedMerchantId
   ).map(
     ({
       id,

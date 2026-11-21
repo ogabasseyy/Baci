@@ -16,17 +16,16 @@ const labelsByBank = {
   },
 } as const;
 
-type BankCardOfferIssuerCode = keyof typeof labelsByBank;
-
 function normalizeLabel(label: string) {
   return label.trim().toLowerCase().replace(/\s+/g, ' ').replace(/\.$/, '');
 }
 
 export function matchBankCardOfferIssuer(
-  bankCode: BankCardOfferIssuerCode,
+  bankCode: string,
   savedLabel: string,
   providerLabel: string
 ): boolean {
+  if (bankCode !== '035' && bankCode !== '232') return false;
   const bank = labelsByBank[bankCode];
   if (normalizeLabel(savedLabel) !== bank.canonical) return false;
   const normalized = normalizeLabel(providerLabel);

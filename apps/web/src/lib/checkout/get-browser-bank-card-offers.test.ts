@@ -5,7 +5,7 @@ vi.mock('@/config/bank-card-offers', () => ({
   BANK_CARD_OFFERS: [
     {
       id: 'wema',
-      merchantId: 'one',
+      merchantId: 'OnE',
       enabled: true,
       approvedTermsReference: 'private',
       verifiedIssuerName: 'Wema Bank',

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { paystackTextIdPaymentIdentitySchema } from '@/schemas/paystack-text-id-payment-identity';
 import { logger } from './logger';
 import {
   type PaymentVerificationResponse,
@@ -12,16 +12,6 @@ export type TextIdPaymentVerificationResponse = Omit<
   PaymentVerificationResponse,
   'id'
 > & { id: string };
-
-// Text IDs preserve the exact provider identity for capture and refund
-// consumers. Their evidence checks validate the remaining fields needed
-// for each outcome, including terminal responses with no paid timestamp.
-const textIdPaymentIdentitySchema = z.object({
-  currency: z.string().min(1),
-  id: z.string().regex(/^[1-9][0-9]*$/),
-  reference: z.string().min(1),
-  status: z.string().min(1),
-});
 
 /**
  * Verify a Paystack transaction
@@ -76,9 +66,12 @@ export async function verifyTransaction(
     return result;
   }
 
+  // Text-ID consumers validate the remaining fields for each outcome.
   // Keep the legacy response warning for callers using numeric IDs.
   const parsed = (
-    options.textIds ? textIdPaymentIdentitySchema : PaymentVerificationSchema
+    options.textIds
+      ? paystackTextIdPaymentIdentitySchema
+      : PaymentVerificationSchema
   ).safeParse(result.data);
   if (!parsed.success) {
     logger.warn({

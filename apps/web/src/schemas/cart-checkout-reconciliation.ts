@@ -12,6 +12,7 @@ export const cartCheckoutReconciliationSchema = z
       .email()
       .transform((value) => value.toLowerCase()),
     idempotencyKey: z.string().min(1).max(128),
+    paymentMethod: z.literal('bank_transfer').optional(),
   })
   .strict();
 
@@ -28,3 +29,14 @@ export const cartCheckoutReconciliationReceiptSchema = z.discriminatedUnion(
     z.object({ kind: z.literal('unavailable') }),
   ]
 );
+
+export const bankTransferCheckoutReceiptSchema = z.object({
+  kind: z.literal('submitted'),
+  order: z.object({
+    id: z.uuid(),
+    order_number: z.string().min(1),
+    tracking_token: z.string().min(1),
+    currency: z.literal('NGN'),
+  }),
+  amountDueToGateway: z.number().positive(),
+});

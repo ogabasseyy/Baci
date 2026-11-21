@@ -15,11 +15,12 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
+  bankTransferCheckoutReceiptSchema,
   cartCheckoutReconciliationReceiptSchema,
   cartCheckoutReconciliationSchema,
 } from '@/schemas/cart-checkout-reconciliation';
 
-/** Resolve an uncertain REDVAULT checkout without creating an order or payment. */
+/** Resolve an uncertain checkout without creating an order or payment. */
 export async function POST(request: NextRequest) {
   try {
     if (!(await checkCsrfProtection(request)).valid)
@@ -57,6 +58,44 @@ export async function POST(request: NextRequest) {
     });
     if (!quota.allowed) return cartErrorResponse('quota_exceeded');
     const client = createCheckoutReconciliationClient(proof.authority, input);
+    if (input.paymentMethod === 'bank_transfer') {
+      const response = await client.rpc(
+        'commerce_cart_reconcile_bank_transfer_checkout'
+      );
+      const receipt = bankTransferCheckoutReceiptSchema.safeParse(
+        response.data
+      );
+      if (response.error || !receipt.success)
+        return cartErrorResponse('temporarily_unavailable');
+
+      // Payment or cancellation can commit after the cart RPC releases its locks.
+      const snapshot = await (auth.supabase ?? createAnonClient()).rpc(
+        'get_order_payment_snapshot',
+        {
+          p_order_id: receipt.data.order.id,
+          p_email: input.customerEmail,
+        }
+      );
+      const order = snapshot.data?.[0];
+      if (
+        snapshot.error ||
+        !order ||
+        order.merchant_id !== merchant.merchant.id ||
+        order.currency !== receipt.data.order.currency ||
+        order.payment_method !== 'bank_transfer' ||
+        (order.payment_status !== 'unpaid' &&
+          order.payment_status !== 'pending') ||
+        !order.shipping_status ||
+        ['cancelled', 'canceled'].includes(
+          order.shipping_status.toLowerCase()
+        ) ||
+        (order.wallet_amount_used ?? 0) !== 0 ||
+        order.total !== receipt.data.amountDueToGateway
+      ) {
+        return cartErrorResponse('temporarily_unavailable');
+      }
+      return cartJsonResponse(receipt.data);
+    }
     const response = await client.rpc(
       'commerce_cart_reconcile_redvault_checkout' as never
     );

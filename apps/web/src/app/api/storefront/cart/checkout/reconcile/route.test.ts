@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   quota: vi.fn(),
   rpc: vi.fn(),
   summary: vi.fn(),
+  paymentSnapshot: vi.fn(),
 }));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.csrf,
@@ -39,7 +40,9 @@ vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
 vi.mock('@/lib/checkout/get-redvault-checkout-summary', () => ({
   getRedvaultCheckoutSummary: mocks.summary,
 }));
-vi.mock('@/lib/supabase/anon', () => ({ createAnonClient: () => ({}) }));
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: () => ({ rpc: mocks.paymentSnapshot }),
+}));
 vi.mock('@/lib/slug-alias-cache', () => ({ getCurrentSlugForAlias: vi.fn() }));
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -66,7 +69,7 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({
     user: { id: userId },
     error: null,
-    supabase: {},
+    supabase: { rpc: mocks.paymentSnapshot },
   });
   mocks.resolveMerchant.mockResolvedValue({
     ok: true,
@@ -77,6 +80,20 @@ beforeEach(() => {
     authority: { session: { principalId: 'shopper-1' } },
   });
   mocks.quota.mockResolvedValue({ allowed: true });
+  mocks.paymentSnapshot.mockResolvedValue({
+    data: [
+      {
+        merchant_id: merchantId,
+        total: 12500,
+        currency: 'NGN',
+        payment_method: 'bank_transfer',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        wallet_amount_used: 0,
+      },
+    ],
+    error: null,
+  });
   mocks.rpc.mockResolvedValue({
     data: {
       kind: 'retired',
@@ -191,4 +208,71 @@ it('does not restore a review if the order was paid after reconciliation', async
     quote: { payable_kobo: 10250 },
   });
   expect((await POST(request())).status).toBe(503);
+});
+
+it('restores a submitted bank-transfer order from the bound receipt', async () => {
+  const order = {
+    id: '66666666-6666-4666-8666-666666666666',
+    order_number: 'BACI-123',
+    tracking_token: 'shopper-token',
+    currency: 'NGN',
+  };
+  const receipt = { kind: 'submitted', order, amountDueToGateway: 12500 };
+  mocks.rpc.mockResolvedValueOnce({ data: receipt, error: null });
+  const response = await POST(request({ paymentMethod: 'bank_transfer' }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(receipt);
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    'commerce_cart_reconcile_bank_transfer_checkout'
+  );
+  expect(mocks.summary).not.toHaveBeenCalled();
+});
+
+it('leaves bank-transfer checkout unresolved when the receipt is unavailable', async () => {
+  mocks.rpc.mockResolvedValueOnce({
+    data: { kind: 'unavailable' },
+    error: null,
+  });
+  expect((await POST(request({ paymentMethod: 'bank_transfer' }))).status).toBe(
+    503
+  );
+  expect(mocks.summary).not.toHaveBeenCalled();
+});
+
+it.each([
+  { payment_status: 'paid' },
+  { shipping_status: 'cancelled' },
+  { total: 100 },
+])('does not return bank transfer details when the order changed: %j', async (change) => {
+  mocks.rpc.mockResolvedValueOnce({
+    data: {
+      kind: 'submitted',
+      order: {
+        id: '66666666-6666-4666-8666-666666666666',
+        order_number: 'BACI-123',
+        tracking_token: 'shopper-token',
+        currency: 'NGN',
+      },
+      amountDueToGateway: 12500,
+    },
+    error: null,
+  });
+  mocks.paymentSnapshot.mockResolvedValueOnce({
+    data: [
+      {
+        merchant_id: merchantId,
+        total: 12500,
+        currency: 'NGN',
+        payment_method: 'bank_transfer',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        wallet_amount_used: 0,
+        ...change,
+      },
+    ],
+    error: null,
+  });
+  const response = await POST(request({ paymentMethod: 'bank_transfer' }));
+  expect(response.status).toBe(503);
+  expect(await response.text()).not.toContain('shopper-token');
 });

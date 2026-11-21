@@ -41,8 +41,8 @@ export const orderTrackingSchema = z.object({
   ),
   tracking: z
     .object({
-      provider: z.string(),
-      tracking_number: z.string(),
+      provider: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/),
+      tracking_number: z.string().min(1).max(128),
     })
     .nullable(),
 });

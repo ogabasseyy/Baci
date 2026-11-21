@@ -197,8 +197,8 @@ paths:
                       - type: object
                         required: [provider, tracking_number]
                         properties:
-                          provider: {type: string}
-                          tracking_number: {type: string}
+                          provider: {type: string, pattern: '^[A-Za-z0-9_-]{1,32}$'}
+                          tracking_number: {type: string, minLength: 1, maxLength: 128}
                   request_id: {type: string, format: uuid}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -421,5 +421,5 @@ components:
               enum: [INVALID_IDEMPOTENCY_KEY, INVALID_REQUEST, UNAUTHORIZED, SCOPE_REQUIRED,
                 ORDER_NOT_FOUND, ORDER_SUBMISSION_NOT_FOUND, QUOTE_NOT_FOUND, LISTING_UNAVAILABLE, ORDER_CONFLICT,
                 ADDRESS_UNSERVICEABLE, RATE_LIMITED, CARRIER_UNAVAILABLE, ORDER_INTAKE_UNAVAILABLE,
-                ORDER_LOOKUP_UNAVAILABLE, ORDER_RESPONSE_INVALID, QUOTE_UNAVAILABLE, QUOTE_ORIGIN_UNAVAILABLE, PAYLOAD_TOO_LARGE]
+                ORDER_LOOKUP_UNAVAILABLE, ORDER_RESPONSE_INVALID, QUOTE_UNAVAILABLE, QUOTE_ORIGIN_UNAVAILABLE, QUOTE_SETTLEMENT_UNAVAILABLE, PAYLOAD_TOO_LARGE]
         request_id: {type: string, format: uuid}

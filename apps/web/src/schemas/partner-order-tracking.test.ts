@@ -60,6 +60,18 @@ describe('partner order tracking schema', () => {
     ).toBe(true);
   });
 
+  it.each([
+    { provider: '', tracking_number: 'reference' },
+    { provider: 'A'.repeat(33), tracking_number: 'reference' },
+    { provider: 'bad provider', tracking_number: 'reference' },
+    { provider: 'GIGL', tracking_number: '' },
+    { provider: 'GIGL', tracking_number: 'a'.repeat(129) },
+  ])('rejects an invalid tracking projection', (tracking) => {
+    expect(
+      orderTrackingSchema.safeParse({ ...receipt, tracking }).success
+    ).toBe(false);
+  });
+
   it('does not expose extra fields in the tracking payload', () => {
     expect(
       orderTrackingSchema.parse({

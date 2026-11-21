@@ -137,7 +137,7 @@ describe('partner delivery quotes', () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
-      error: { code: 'QUOTE_UNAVAILABLE' },
+      error: { code: 'QUOTE_SETTLEMENT_UNAVAILABLE' },
     });
     expect(warn).toHaveBeenCalledWith({
       message: 'Partner quote settlement policy is unconfigured',

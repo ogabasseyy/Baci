@@ -90,7 +90,7 @@ export async function POST(request: Request) {
         connectionId,
         requestId,
       });
-      return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
+      return errorResponse(503, 'QUOTE_SETTLEMENT_UNAVAILABLE', requestId);
     }
     const catalog = await profile.loadCatalog();
     const byId = new Map(

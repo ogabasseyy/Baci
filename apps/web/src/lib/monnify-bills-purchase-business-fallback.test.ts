@@ -108,9 +108,11 @@ describe('Monnify business answers handed to Kuda', () => {
       }),
     });
 
+    // Code 99 means "re-query": the outcome is open, so the row is held.
     await expect(vend()).resolves.toMatchObject({
       providerDefiniteFailure: false,
-      status: 'failed',
+      providerOutcomeUnresolved: true,
+      status: 'pending',
     });
   });
 

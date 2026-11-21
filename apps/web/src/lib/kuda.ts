@@ -131,6 +131,15 @@ export interface PurchaseResult {
   // Monnify-only: Monnify's own response code on a failure (e.g. "99"),
   // code-shaped only, stored for diagnosis.
   providerResponseCode?: string;
+  // Monnify-only: the answer did not prove nothing was delivered (pending,
+  // code 99, a duplicate reference, a timeout...). Such a result is held as
+  // `pending` (persisted `processing`), never refunded or sent to Kuda. With
+  // providerVendReference set, requery settles it; without one it waits for
+  // support to check Monnify's dashboard.
+  providerOutcomeUnresolved?: boolean;
+  // Monnify-only: a held result whose answer carried a real voucher token.
+  // The token itself is never stored; this flag tells support to look for it.
+  providerTokenSeen?: boolean;
   // Units delivered for metered bills (e.g. prepaid electricity kWh).
   units?: string;
 }

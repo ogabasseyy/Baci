@@ -10,7 +10,6 @@ import {
   fetchJson,
   loadActiveHandoff,
   loadAttemptBody,
-  loadOrCreateAttemptId,
   lockedAttemptChoice,
   type MergeConflictView,
   mergeResolutionList,
@@ -20,7 +19,7 @@ import {
   recordResolutionList,
   redactHandoffFragment,
 } from './cart-handoff-support';
-import { prepareMcpHandoffImport } from './prepare-mcp-handoff-import';
+import { prepareHandoffRedeemBody } from './prepare-handoff-redeem-body';
 import { useHandoffRedeem } from './use-handoff-redeem';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
   const { token, handoffId } = props;
@@ -126,11 +125,12 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
           signal
         );
         if (destination && !signal?.aborted && !importStarted.current) {
-          const body = prepareMcpHandoffImport(
+          const body = prepareHandoffRedeemBody(
             payload,
             destination.cart,
             handoffId,
-            token
+            token,
+            'import_mcp'
           );
           if (body) {
             importStarted.current = true;
@@ -205,16 +205,14 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       await postRedeem(persistedBody);
       return;
     }
-    const attemptId = loadOrCreateAttemptId(handoffId);
-    const base = {
-      attemptId,
-      choice,
-      destCartId: destCart?.cartId,
-      expectedDestVersion: destCart?.version,
-      expectedIncomingVersion: preview.snapshot.version,
+    const base = prepareHandoffRedeemBody(
+      preview,
+      destCart,
       handoffId,
       token,
-    };
+      choice
+    );
+    if (!base) return;
     if (choice !== 'merge' || !destCart) {
       // Lock only once a redemption is actually about to be sent:
       // client-side preflight exits (capacity, conflicts) commit
@@ -276,18 +274,19 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       );
       return;
     }
-    lockChoice('merge');
-    const attemptId = loadOrCreateAttemptId(handoffId);
-    const ok = await postRedeem({
-      attemptId,
-      choice: 'merge',
-      destCartId: destCart.cartId,
-      expectedDestVersion: destCart.version,
-      expectedIncomingVersion: preview.snapshot.version,
+    const base = prepareHandoffRedeemBody(
+      preview,
+      destCart,
       handoffId,
+      token,
+      'merge'
+    );
+    if (!base) return;
+    lockChoice('merge');
+    const ok = await postRedeem({
+      ...base,
       lines: planned.lines,
       resolutions: resolutionList,
-      token,
     });
     if (ok) {
       setConflicts([]);

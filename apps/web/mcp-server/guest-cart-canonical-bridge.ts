@@ -98,6 +98,9 @@ export function createGuestCanonicalBridge(
 ): GuestCanonicalBridge | null {
   if (!configured) return null;
   const url = new URL(configured);
+  const handoff = process.env.BACI_MCP_GUEST_CREDENTIAL_ENABLED === 'true'
+    ? 'import_mcp'
+    : true;
   if (
     url.protocol !== 'https:' ||
     !allowedOrigins.includes(url.origin) ||
@@ -182,14 +185,14 @@ export function createGuestCanonicalBridge(
       canonical_cart_id: reply.state.cartId, version: reply.state.version };
   }
   return {
-    async read(token) { return cartReply(token, await send(token, { handoff: true, operationId: randomUUID() })); },
+    async read(token) { return cartReply(token, await send(token, { handoff, operationId: randomUUID() })); },
     async update(token, input) {
       const reply = await send(token, {
         productId: input.product_id,
         quantity: input.quantity,
         expectedVersion: input.expectedVersion,
         operationId: input.operationId,
-        handoff: true,
+        handoff,
       });
       return cartReply(token, reply);
     },

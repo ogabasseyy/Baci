@@ -29,10 +29,10 @@ import {
   mapGuestCartToolError,
 } from './guest-cart-tool-responses';
 import {
-  decodeGuestCartCredential,
   GUEST_CREDENTIAL_UPDATE_DESCRIPTION,
   guestCredentialHandoffUrl,
   guestCredentialReply,
+  parseGuestCredentialUpdateInput,
 } from './guest-credential-cart';
 
 export function registerGuestCartTool(
@@ -120,20 +120,17 @@ export function registerGuestCartTool(
     },
     async (input) => {
       try {
-        const args = {
-          ...input,
-          ...(options.connectionCart
-            ? { cart_token: await options.connectionCart.resolveToken() }
-            : options.modelCredentialTool &&
-                'cartCredential' in input &&
-                typeof input.cartCredential === 'string'
-              ? { cart_token: decodeGuestCartCredential(input.cartCredential) }
-              : {}),
-        };
         // Defensive validation for direct callers and tests. The SDK already
         // enforces the full schema, including cross-field refinements, before
         // invoking this registered handler.
-        const parsed = mcpGuestCartInputSchema.safeParse(args);
+        const parsed = options.modelCredentialTool
+          ? parseGuestCredentialUpdateInput(input)
+          : mcpGuestCartInputSchema.safeParse({
+              ...input,
+              ...(options.connectionCart
+                ? { cart_token: await options.connectionCart.resolveToken() }
+                : {}),
+            });
         if (!parsed.success) {
           return transcript({
             isError: true,

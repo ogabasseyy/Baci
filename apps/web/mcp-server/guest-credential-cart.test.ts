@@ -115,6 +115,14 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
   expect(rows.size).toBe(0);
   const call = (name: string, args: Record<string, unknown>) =>
     request((client) => client.callTool({ name, arguments: args }));
+  const rawCredentialReply = await call(updateName, {
+    product_id: charger,
+    quantity: 1,
+    cart_token: '0'.repeat(64),
+  });
+  expect(rawCredentialReply.isError).toBe(true);
+  expect(bridge.update).not.toHaveBeenCalled();
+  expect(rows.size).toBe(0);
   const first = await call(updateName, { product_id: charger, quantity: 1 });
   const token = first.structuredContent?.cartCredential;
   expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);

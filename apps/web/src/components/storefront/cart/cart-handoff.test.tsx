@@ -194,6 +194,38 @@ describe('CartHandoff', () => {
     ).toBeNull();
   });
 
+  it('rebuilds a definitively rejected MCP import without a destination revision', async () => {
+    const incoming = snapshot();
+    const website = snapshot({
+      cartId: '66666666-6666-4666-8666-666666666666',
+    });
+    const posted: unknown[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.includes('/handoff/redeem')) {
+        const body = JSON.parse(String(init?.body));
+        posted.push(body);
+        if (posted.length === 1)
+          return jsonResponse({ code: 'version_conflict' }, 409);
+        if (!cartHandoffRedeemRequestSchema.safeParse(body).success)
+          return jsonResponse({ code: 'invalid_request' }, 400);
+        return jsonResponse({ cart: website, choice: 'import_mcp' });
+      }
+      if (url.includes('/handoff?'))
+        return jsonResponse({
+          status: 'pending',
+          importMcp: true,
+          snapshot: incoming,
+          merchant: { id: incoming.merchantId, slug: 'ogabassey' },
+        });
+      return jsonResponse({ cart: website });
+    });
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1]).not.toHaveProperty('expectedDestVersion');
+    expect(replaceMock).toHaveBeenCalledWith('/cart');
+  });
+
   it('bootstraps and imports on the first website visit without a connect screen', async () => {
     vi.spyOn(csrf, 'getClientCsrfToken').mockReturnValue('test-csrf-token');
     const cart = snapshot();

@@ -12,6 +12,7 @@ DECLARE
   handoff uuid := gen_random_uuid();
   second_handoff uuid := gen_random_uuid();
   third_handoff uuid := gen_random_uuid();
+  ordinary_handoff uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
   result jsonb;
@@ -36,10 +37,23 @@ BEGIN
   THEN RAISE EXCEPTION 'Expected canonical removal before handoff: %', result; END IF;
   INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
     origin_principal_id, operation_id, destination, expires_at)
-  VALUES (handoff, 'import-test-link', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:test-import', '{"type":"web"}', now() + interval '5 minutes'),
-         (second_handoff, 'import-test-link-2', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:test-import', '{"type":"web"}', now() + interval '5 minutes'),
-         (third_handoff, 'import-test-link-3', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:test-import', '{"type":"web"}', now() + interval '5 minutes');
+  VALUES (handoff, 'import-test-link', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:mcp-import:test-import', '{"type":"web"}', now() + interval '5 minutes'),
+         (second_handoff, 'import-test-link-2', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:mcp-import:test-import', '{"type":"web"}', now() + interval '5 minutes'),
+         (third_handoff, 'import-test-link-3', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:mcp-import:test-import', '{"type":"web"}', now() + interval '5 minutes'),
+         (ordinary_handoff, 'ordinary-test-link', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:ordinary', '{"type":"web"}', now() + interval '5 minutes');
   PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
+  result := public.commerce_cart_import_mcp_handoff('ordinary-test-link', ordinary_handoff, 'ordinary-import', source_version);
+  IF result->>'code' IS DISTINCT FROM 'not_found'
+  THEN RAISE EXCEPTION 'The importer accepted an ordinary handoff: %', result; END IF;
+  result := public.commerce_cart_redeem_handoff('ordinary-test-link', ordinary_handoff, 'ordinary-redeem',
+    'keep_existing', 'web', destination, source_version, NULL, NULL, NULL);
+  IF result->>'ok' IS DISTINCT FROM 'true'
+  THEN RAISE EXCEPTION 'The generic writer rejected an ordinary handoff: %', result; END IF;
+  -- The import-only capability must never select a standard redeem path.
+  result := public.commerce_cart_redeem_handoff('import-test-link', handoff, 'wrong-mode',
+    'connect', 'web', destination, source_version, NULL, NULL, NULL);
+  IF result->>'code' IS DISTINCT FROM 'not_found' OR coalesce(result->>'ok', 'false') = 'true'
+  THEN RAISE EXCEPTION 'The generic writer accepted an import-only handoff: %', result; END IF;
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'import-attempt', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM destination_grant::text
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 2::bigint
@@ -116,7 +130,7 @@ BEGIN
   INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
     origin_principal_id, operation_id, destination, expires_at)
   VALUES (handoff, 'import-rollback-link', merchant, source, 'legacy:mcp:rollback-source',
-    'legacy-handoff:rollback-test', '{"type":"web"}', now() + interval '5 minutes');
+    'legacy-handoff:mcp-import:rollback-test', '{"type":"web"}', now() + interval '5 minutes');
   PERFORM pg_temp.handoff_claim(destination, destination_grant, 'mcp-import-rollback-dest');
   result := public.commerce_cart_import_mcp_handoff('import-rollback-link', handoff, 'rollback-attempt', 1);
   IF result->>'ok' IS DISTINCT FROM 'false'

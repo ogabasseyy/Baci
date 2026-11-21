@@ -14,12 +14,20 @@ it('opts in only server-signed MCP links for the current website environment', (
     destination: { type: 'web' as const },
     environment: 'mcp-preview-test',
     merchantId: '11111111-1111-4111-8111-111111111111',
-    operationId: 'legacy-handoff:operation',
+    operationId: 'legacy-handoff:mcp-import:operation',
     principalId: 'legacy:mcp:source',
   };
   const signed = createHandoffToken(input, secret);
   expect(isMcpWebsiteHandoff(signed)).toBe(true);
   expect(isMcpWebsiteHandoff(`${signed}X`)).toBe(false);
+  expect(
+    isMcpWebsiteHandoff(
+      createHandoffToken(
+        { ...input, operationId: 'legacy-handoff:operation' },
+        secret
+      )
+    )
+  ).toBe(false);
   expect(
     isMcpWebsiteHandoff(
       createHandoffToken(

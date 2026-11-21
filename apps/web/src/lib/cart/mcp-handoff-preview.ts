@@ -1,3 +1,4 @@
+import { MCP_IMPORT_HANDOFF_OPERATION_PREFIX } from '@/schemas/cart-legacy-bridge';
 import { getCartProofEnvironment } from './cart-runtime-env';
 import { parseHandoffToken } from './handoff-token';
 
@@ -12,7 +13,7 @@ export function isMcpWebsiteHandoff(token: string): boolean {
     return (
       handoff?.destination.type === 'web' &&
       handoff.principalId.startsWith('legacy:mcp:') &&
-      handoff.operationId.startsWith('legacy-handoff:')
+      handoff.operationId.startsWith(MCP_IMPORT_HANDOFF_OPERATION_PREFIX)
     );
   } catch {
     // The optional UI hint never invalidates an otherwise usable preview.

@@ -105,6 +105,7 @@ export const mcpGuestCartReadInputSchema = z.object({
 export const mcpGuestCredentialUpdateInputSchema = guestCartInputBase
   .omit({ cart_token: true })
   .extend({ cartCredential: modelCartCredentialSchema.optional() })
+  .strict()
   .refine(
     (value) => value.quantity !== 0 || value.cartCredential !== undefined,
     {

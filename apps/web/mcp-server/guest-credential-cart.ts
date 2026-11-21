@@ -5,6 +5,8 @@ import {
 } from '../src/schemas/cart';
 import {
   mcpGuestCredentialOutputSchema,
+  mcpGuestCredentialUpdateInputSchema,
+  mcpGuestCartInputSchema,
   mcpGuestCartReadInputSchema,
   modelCartCredentialSchema,
 } from '../src/schemas/mcp-guest-cart';
@@ -134,6 +136,16 @@ export function decodeGuestCartCredential(credential: string): string {
     modelCartCredentialSchema.parse(credential),
     'base64url'
   ).toString('hex');
+}
+
+export function parseGuestCredentialUpdateInput(input: unknown) {
+  const parsed = mcpGuestCredentialUpdateInputSchema.safeParse(input);
+  if (!parsed.success) return parsed;
+  const { cartCredential, ...update } = parsed.data;
+  return mcpGuestCartInputSchema.safeParse({
+    ...update,
+    cart_token: cartCredential && decodeGuestCartCredential(cartCredential),
+  });
 }
 
 export function guestCredentialReply<

@@ -42,6 +42,7 @@ import {
 } from '@/lib/shipping/shipping-quote-booking-economics';
 import type { ShippingAddress } from '@/lib/shipping/types';
 import { prepareSavedGiglCheckoutBooking } from './prepare-saved-gigl-checkout-booking';
+import { selectOrderBookingSender } from './select-order-booking-sender';
 
 export type BookOrderShipmentResult = ReusableOrderShipmentResult;
 
@@ -54,7 +55,7 @@ export async function bookOrderShipment(
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(
-      'id, customer_name, customer_email, customer_phone, shipping_fee, selected_quote_id, shipping_provider, shipping_funding_source, payment_method, payment_status, shipping_address, order_items(name, quantity, price, fulfillment_data, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
+      'id, source, customer_name, customer_email, customer_phone, shipping_fee, selected_quote_id, shipping_provider, shipping_funding_source, payment_method, payment_status, shipping_address, order_items(name, quantity, price, fulfillment_data, product_id, product:products!order_items_product_id_fkey(weight_value, weight_unit, dimensions, commodity_code))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -187,7 +188,11 @@ export async function bookOrderShipment(
     if (!merchantSenderResult.ok) {
       throw toBookingMerchantSenderError(merchantSenderResult);
     }
-    merchantSender = merchantSenderResult.sender;
+    merchantSender = selectOrderBookingSender(
+      orderWithEconomics.source,
+      merchantSenderResult.sender,
+      storedQuoteRequest?.sender
+    );
   }
   const resolvedQuote = await refreshOrderShipmentQuote(
     supabase,

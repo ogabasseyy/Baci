@@ -81,8 +81,14 @@ const purchaseUrlSnippet = serverSource.slice(
 );
 
 function runEmbeddedPurchaseUrl(p: unknown) {
-  const context: { URL: typeof URL; p: unknown; result?: string } = {
+  const context: {
+    URL: typeof URL;
+    document: { documentElement: { dataset: Record<string, string> } };
+    p: unknown;
+    result?: string;
+  } = {
     URL,
+    document: { documentElement: { dataset: {} } },
     p,
   };
   runInNewContext(

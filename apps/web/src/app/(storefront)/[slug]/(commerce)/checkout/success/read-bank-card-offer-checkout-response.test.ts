@@ -44,3 +44,16 @@ it('clears the displayed order number when a terminal review has no confirmed nu
   await readBankCardOfferCheckoutResponse(response, callbacks);
   expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
 });
+
+it.each([
+  401, 403,
+])('keeps captured payments pending without exposing order identity on HTTP %s', async (status) => {
+  const callbacks = { setOrderNumber: vi.fn(), setStatus: vi.fn() };
+  const response = Response.json(
+    { finalizationOutcome: 'completion_failed', orderNumber: 'UNVERIFIED' },
+    { status }
+  );
+  await readBankCardOfferCheckoutResponse(response, callbacks);
+  expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+  expect(callbacks.setOrderNumber).toHaveBeenCalledExactlyOnceWith(null);
+});

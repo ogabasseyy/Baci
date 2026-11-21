@@ -30,6 +30,11 @@ export async function readBankCardOfferCheckoutResponse(
   else setStatus(status);
   // A pending poll can keep the last verified number for this identity.
   if (response.ok && data.orderNumber) setOrderNumber(data.orderNumber);
-  else if (status !== 'pending') setOrderNumber(null);
+  else if (
+    status !== 'pending' ||
+    response.status === 401 ||
+    response.status === 403
+  )
+    setOrderNumber(null);
   return { handled: true as const };
 }

@@ -67,7 +67,7 @@ describe('verifyCheckoutPayment bank card offer', () => {
   });
 
   it.each([
-    429, 503,
+    408, 429, 502, 503, 504,
   ])('honors Retry-After on HTTP %s even with a non-JSON body', async (status) => {
     request.mockResolvedValue(
       new Response('Temporary gateway error', {

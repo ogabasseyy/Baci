@@ -17,6 +17,8 @@ export type BrowserBankCardOffer = Pick<
 export function getBrowserBankCardOffers(
   merchantId: string
 ): BrowserBankCardOffer[] {
+  // The checkout preview enforces startsAt/endsAt and updates at both
+  // boundaries so a cached page can show offers as they become active.
   const normalizedMerchantId = merchantId.toLowerCase();
   return BANK_CARD_OFFERS.filter(
     (offer) =>

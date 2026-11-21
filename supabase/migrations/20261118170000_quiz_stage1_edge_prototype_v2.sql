@@ -1314,6 +1314,25 @@ BEGIN
     );
 
     GET DIAGNOSTICS v_attempts_inserted = ROW_COUNT;
+
+    -- If any merged attempt belonged to an earlier already-scored batch (e.g.
+    -- multi-part split bundle arriving across physical batches), invalidate
+    -- that batch's scored_at so incremental/final scoring re-scores the merged answers.
+    UPDATE private.quiz_edge_attempt_batches AS b
+    SET scored_at = NULL,
+        scored_attempt_count = NULL
+    WHERE b.event_id = p_event_id
+      AND b.room_id = pg_catalog.btrim(p_room_id)
+      AND b.scored_at IS NOT NULL
+      AND b.batch_id IN (
+        SELECT s.batch_id
+        FROM private.quiz_edge_attempt_staging AS s
+        WHERE s.event_id = p_event_id
+          AND s.attempt_id IN (
+            SELECT (elem ->> 'attempt_id')::uuid
+            FROM pg_catalog.jsonb_array_elements(p_attempts) AS elem
+          )
+      );
   ELSE
     -- Multi-part split bundle path: merge answer arrays deduplicated by position.
     FOR v_part IN

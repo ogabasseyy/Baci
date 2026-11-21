@@ -1369,29 +1369,51 @@ export default {
             400
           );
         }
-        const jwtSecret = requireConfiguredSecret(
-          env.QUIZ_JWT_SECRET,
-          'QUIZ_JWT_SECRET'
-        );
-        const user = await verifyBearerJwt(
-          request.headers.get('Authorization'),
-          { secret: jwtSecret, nowMs: Date.now() }
-        );
-        if (!user.merchantId || !user.customerId) {
-          throw new QuizRoomError(
-            'QUIZ_JWT_CLAIMS_MISSING',
-            'Bearer JWT missing required merchantId or customerId claims',
-            403
+        const ticketHeader = request.headers.get('X-Baci-Quiz-Ticket');
+        let merchantId: string;
+        let customerId: string;
+        let userId: string;
+        if (ticketHeader) {
+          const ticketSecret = requireConfiguredSecret(
+            env.QUIZ_TICKET_SECRET,
+            'QUIZ_TICKET_SECRET'
           );
+          const ticket = await verifyAdmissionTicket(ticketHeader, {
+            secret: ticketSecret,
+            expectedEventId: eventId,
+            nowMs: Date.now(),
+          });
+          merchantId = ticket.merchantId;
+          customerId = ticket.customerId;
+          userId = ticket.userId;
+        } else {
+          const jwtSecret = requireConfiguredSecret(
+            env.QUIZ_JWT_SECRET,
+            'QUIZ_JWT_SECRET'
+          );
+          const user = await verifyBearerJwt(
+            request.headers.get('Authorization'),
+            { secret: jwtSecret, nowMs: Date.now() }
+          );
+          if (!user.merchantId || !user.customerId) {
+            throw new QuizRoomError(
+              'QUIZ_JWT_CLAIMS_MISSING',
+              'Bearer JWT missing required merchantId or customerId claims',
+              403
+            );
+          }
+          merchantId = user.merchantId;
+          customerId = user.customerId;
+          userId = user.userId;
         }
         const rankStub = getWeurStub(env.LIVE_RANK_INDEX, eventId);
         return rankStub.fetch('https://rank.internal/internal/leaderboard', {
           method: 'POST',
           body: JSON.stringify({
             eventId,
-            merchantId: user.merchantId,
-            callerCustomerId: user.customerId,
-            callerUserId: user.userId,
+            merchantId,
+            callerCustomerId: customerId,
+            callerUserId: userId,
           }),
         });
       }

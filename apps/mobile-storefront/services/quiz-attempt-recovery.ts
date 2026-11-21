@@ -22,7 +22,7 @@ export interface RecoverQuizAttemptInput extends QuizServiceOptions {
 }
 
 export async function recoverActiveQuizAttempt({
-  backendMode,
+  backendMode: _backendMode,
   baseUrl,
   deviceFingerprint,
   eventId,
@@ -54,12 +54,6 @@ export async function recoverActiveQuizAttempt({
         clearQuizEdgeSession(eventId, expectedUserId);
       }
     }
-  } else if (backendMode === 'edge_rooms') {
-    throw new QuizServiceError(
-      'Your quiz room session expired. Please check in again.',
-      'QUIZ_EDGE_SESSION_MISSING',
-      401
-    );
   }
   const query = new URLSearchParams({ eventId }).toString();
   return requestQuizV2(

@@ -1,6 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { usePreventRemove } from 'expo-router/react-navigation';
+import { usePreventRemove, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import type { ExpenseEditFormDraft } from '@/schemas/expense-form';
@@ -10,8 +9,13 @@ type ExpenseFormController = ReturnType<typeof useExpenseFormState>;
 
 export type ExpenseFormHandlerForm = Pick<
   ExpenseFormController,
-  'isDirty' | 'setField' | 'setLocalReceipt'
+  'isDirty' | 'receiptChange' | 'setField' | 'setLocalReceipt'
 > & { values: Pick<ExpenseEditFormDraft, 'groupId'> };
+
+type ExpenseDraftSnapshot = Pick<
+  ExpenseFormHandlerForm,
+  'receiptChange' | 'values'
+>;
 
 interface UseExpenseFormHandlersInput {
   archiveGroupMutation: (groupId: string) => Promise<unknown>;
@@ -25,8 +29,20 @@ export function useExpenseFormHandlers({
   originalGroupId = null,
 }: UseExpenseFormHandlersInput) {
   const router = useRouter();
-  const [isLeaving, setIsLeaving] = useState(false);
-  const shouldPreventRemoval = form.isDirty && !isLeaving;
+  const [releasedDraft, setReleasedDraft] =
+    useState<ExpenseDraftSnapshot | null>(null);
+  // A navigation attempt can leave the form open. Protect any subsequent edits.
+  const shouldPreventRemoval =
+    form.isDirty &&
+    (releasedDraft?.values !== form.values ||
+      releasedDraft.receiptChange !== form.receiptChange);
+
+  const releaseDraft = () => {
+    setReleasedDraft({
+      receiptChange: form.receiptChange,
+      values: form.values,
+    });
+  };
 
   const navigateBack = () => {
     if (router.canGoBack()) {
@@ -50,18 +66,18 @@ export function useExpenseFormHandlers({
     ]);
   };
 
-  const disablePrevention = usePreventRemove(
+  const disablePrevention: () => void = usePreventRemove(
     shouldPreventRemoval,
     ({ repeat }) => {
       confirmDiscard(() => {
-        setIsLeaving(true);
+        releaseDraft();
         repeat();
       });
     }
   );
 
   const leave = () => {
-    setIsLeaving(true);
+    releaseDraft();
     disablePrevention();
     navigateBack();
   };

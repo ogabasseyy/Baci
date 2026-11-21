@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 
 type PreventRemoveCallback = NonNullable<
-  Parameters<typeof import('expo-router/react-navigation').usePreventRemove>[1]
+  Parameters<typeof import('expo-router').usePreventRemove>[1]
 >;
 
 const mocks = vi.hoisted(() => ({
@@ -26,10 +26,6 @@ vi.mock('expo-router', () => ({
       <>{options?.headerLeft?.()}</>
     ),
   },
-  useRouter: () => mocks.router,
-}));
-
-vi.mock('expo-router/react-navigation', () => ({
   usePreventRemove: (prevent: boolean, callback: PreventRemoveCallback) => {
     mocks.removalPrevented = prevent;
     mocks.onRemovePrevented = callback;
@@ -37,6 +33,7 @@ vi.mock('expo-router/react-navigation', () => ({
       mocks.removalPrevented = false;
     };
   },
+  useRouter: () => mocks.router,
 }));
 
 export function pressNativeBack() {

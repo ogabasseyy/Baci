@@ -4,7 +4,7 @@ import type { ExpenseFormFields } from '@/components/expenses/ExpenseFormFields'
 import type { ExpenseDetail } from '@/schemas/expense-detail';
 
 type PreventRemoveCallback = NonNullable<
-  Parameters<typeof import('expo-router/react-navigation').usePreventRemove>[1]
+  Parameters<typeof import('expo-router').usePreventRemove>[1]
 >;
 
 export const editMerchantId = '97e7a9a4-4f82-484d-a0a5-0f2ba07f4e2e';
@@ -222,9 +222,6 @@ vi.mock('expo-router', () => ({
       <>{options?.headerLeft?.()}</>
     ),
   },
-  useRouter: () => editFormMocks.router,
-}));
-vi.mock('expo-router/react-navigation', () => ({
   usePreventRemove: (prevent: boolean, callback: PreventRemoveCallback) => {
     editFormMocks.preventRemoveEnabled = prevent;
     editFormMocks.preventRemoveCallback = callback;
@@ -232,6 +229,7 @@ vi.mock('expo-router/react-navigation', () => ({
       editFormMocks.preventRemoveEnabled = false;
     };
   },
+  useRouter: () => editFormMocks.router,
 }));
 vi.mock('@react-native-vector-icons/ionicons', () => ({ default: () => null }));
 vi.mock('react-native', () => ({

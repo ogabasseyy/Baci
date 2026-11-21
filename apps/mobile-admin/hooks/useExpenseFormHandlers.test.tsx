@@ -19,11 +19,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('react-native', () => ({ Alert: { alert: mocks.alert } }));
-vi.mock('expo-router', () => ({ useRouter: () => mocks.router }));
 vi.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: mocks.picker,
 }));
-vi.mock('expo-router/react-navigation', () => ({
+vi.mock('expo-router', () => ({
   usePreventRemove: (
     prevent: boolean,
     callback: (event: PreventRemoveEvent) => void
@@ -34,6 +33,7 @@ vi.mock('expo-router/react-navigation', () => ({
       mocks.prevent = false;
     };
   },
+  useRouter: () => mocks.router,
 }));
 
 function makeForm(
@@ -42,6 +42,7 @@ function makeForm(
 ): ExpenseFormHandlerForm {
   return {
     isDirty,
+    receiptChange: { kind: 'unchanged' },
     setField: vi.fn(),
     setLocalReceipt: vi.fn(),
     values: { groupId },
@@ -56,10 +57,11 @@ describe('useExpenseFormHandlers', () => {
   });
 
   it('routes native Back through the dirty-form discard confirmation', () => {
+    const form = makeForm(true);
     renderHook(() =>
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
-        form: makeForm(true),
+        form,
       })
     );
 
@@ -111,10 +113,11 @@ describe('useExpenseFormHandlers', () => {
   });
 
   it('bypasses the dirty guard when navigating back after a successful save', () => {
+    const form = makeForm(true);
     const { result } = renderHook(() =>
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
-        form: makeForm(true),
+        form,
       })
     );
 

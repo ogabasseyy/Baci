@@ -263,4 +263,26 @@ describe('AddExpenseScreen access boundary', () => {
     expect(navigation.exitScreen).toHaveBeenCalledOnce();
     expect(mocks.alert).not.toHaveBeenCalled();
   });
+
+  it('protects new edits if the form stays open after saving', () => {
+    navigation.router.back.mockImplementationOnce(() => undefined);
+    mocks.mutate.mockImplementationOnce(
+      (_input: unknown, options: { onSuccess: () => void }) =>
+        options.onSuccess()
+    );
+    render(<AddExpenseScreen />);
+    const amount = screen.getByLabelText('Expense amount');
+    fireEvent.change(amount, { target: { value: '2500' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
+
+    fireEvent.change(amount, { target: { value: '3000' } });
+    pressNativeBack();
+
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'Discard changes?',
+      expect.any(String),
+      expect.any(Array)
+    );
+    expect(navigation.exitScreen).not.toHaveBeenCalled();
+  });
 });

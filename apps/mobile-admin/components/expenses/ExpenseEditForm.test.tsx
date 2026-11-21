@@ -226,7 +226,7 @@ describe('ExpenseEditForm', () => {
     );
   });
 
-  it('offers conflict Cancel and Reload without treating Cancel as a reload', () => {
+  it('keeps a conflicting edit protected when the user cancels reload', () => {
     editFormMocks.mutate.mockImplementation(
       (_input: unknown, options?: { onError?: (error: Error) => void }) => {
         const conflict = new Error('stale write');
@@ -246,6 +246,8 @@ describe('ExpenseEditForm', () => {
       | undefined;
     actions?.find((action) => action.text === 'Cancel')?.onPress?.();
     expect(reload).not.toHaveBeenCalled();
+    expect(editFormMocks.preventRemoveEnabled).toBe(true);
+    expect(editFormMocks.router.back).not.toHaveBeenCalled();
     actions?.find((action) => action.text === 'Reload')?.onPress?.();
     expect(reload).toHaveBeenCalledOnce();
   });

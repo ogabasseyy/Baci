@@ -14,7 +14,6 @@ import type {
   SharedCartImportStatus,
   SharedCartSyncStatus,
 } from './cart-types';
-import { isLegacyFallbackCartProduct } from './shared-cart-display';
 import type { ExperienceCartHostPort } from './shared-cart-experience-runtime';
 
 import {
@@ -159,12 +158,13 @@ export function seedProducts(
 ): Record<string, Product> {
   const products: Record<string, Product> = {};
   for (const item of cached) {
-    // Only older confirmed cache entries need the display-field check.
-    const isPlaceholder =
-      typeof item.catalogPlaceholder === 'boolean'
-        ? item.catalogPlaceholder
-        : item.serverLineId && isLegacyFallbackCartProduct(item);
-    if (isPlaceholder) continue;
+    // Old confirmed entries carry no catalog status. Recheck them once
+    // instead of treating the cached display fields as catalog data.
+    if (
+      item.catalogPlaceholder === true ||
+      (item.serverLineId && item.catalogPlaceholder !== false)
+    )
+      continue;
     products[cartLineIdentity(cartItemToIdentity(item))] = item as Product;
   }
   return products;

@@ -46,17 +46,6 @@ export function minorToMajor(minor: number): number {
   return minor / 100;
 }
 
-const FALLBACK_PRODUCT_NAME = 'Unavailable item';
-
-export function isLegacyFallbackCartProduct(product: Product): boolean {
-  return (
-    product.slug === product.id &&
-    product.name === FALLBACK_PRODUCT_NAME &&
-    product.image === '' &&
-    product.imageLarge === ''
-  );
-}
-
 export function fallbackProduct(productId: string): Product {
   return {
     brand: '',
@@ -68,7 +57,7 @@ export function fallbackProduct(productId: string): Product {
     imageLarge: '',
     manage_stock: false,
     mpn: '',
-    name: FALLBACK_PRODUCT_NAME,
+    name: 'Unavailable item',
     price: 0,
     slug: productId,
     status: 'active',

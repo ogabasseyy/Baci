@@ -45,14 +45,17 @@ describe('useSharedCart cached handoff hydration', () => {
     writeCartSessionHint(MERCHANT_ID, '1');
   });
 
-  it('reloads catalog details for a cached fallback from a handoff', async () => {
+  it.each([
+    'Unavailable item',
+    'Cached product',
+  ])('rechecks an older confirmed entry labelled %s', async (cachedName) => {
     saveCartToStorage(
       [
         cartItem({
           cartItemId: 'line-1',
           image: '',
           imageLarge: '',
-          name: 'Unavailable item',
+          name: cachedName,
           serverLineId: 'line-1',
           slug: 'prod-1',
         }),

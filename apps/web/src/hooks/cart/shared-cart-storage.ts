@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import { CART_STORAGE_KEY } from './cart-storage';
-import type { CartItem, SharedCartDisplayItem } from './cart-types';
+import type { SharedCartDisplayItem } from './cart-types';
 
 // --- Shared-cart link support ---
 //
@@ -231,7 +231,10 @@ export const subscribeCartSessionGeneration = (
  */
 export const stripUnconfirmedDisplayLines = (
   display: SharedCartDisplayItem[]
-): CartItem[] =>
+): Omit<
+  SharedCartDisplayItem,
+  'pendingTempId' | 'hydrationFailed' | 'quizVoucherToken' | 'quizAwardId'
+>[] =>
   display
     .filter((line) => line.pendingTempId == null)
     .map((line) => {
@@ -242,5 +245,5 @@ export const stripUnconfirmedDisplayLines = (
         quizAwardId: _quizAwardId,
         ...rest
       } = line;
-      return rest as CartItem;
+      return rest;
     });

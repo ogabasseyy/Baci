@@ -109,6 +109,25 @@ const baseItem: NegotiationCardRequest = {
 };
 
 describe('NegotiationCard', () => {
+  it('shows customer identity and the saved counter offer', () => {
+    renderCard({
+      ...baseItem,
+      customer_name: 'Chidi Okeke',
+      status: 'countered',
+      counter_offer: 850000,
+    });
+    expect(screen.getByText('Chidi Okeke')).toBeInTheDocument();
+    expect(screen.getByText('+2348031234567')).toBeInTheDocument();
+    expect(screen.getByText(/Your counter offer:/)).toHaveTextContent(
+      '850,000'
+    );
+  });
+
+  it('shows a clear fallback when the customer name is unavailable', () => {
+    renderCard(baseItem);
+    expect(screen.getByText('Name not available')).toBeInTheDocument();
+  });
+
   it('renders variant metadata and opens evidence/contact actions', () => {
     const onOpenEvidence = vi.fn();
     const onOpenExternalUrl = vi.fn();

@@ -23,6 +23,21 @@ vi.mock('react-native', async () => {
         { disabled, onClick: () => onPress?.(), type: 'button' },
         children
       ),
+    TextInput: ({
+      accessibilityLabel,
+      value,
+      onChangeText,
+    }: {
+      accessibilityLabel: string;
+      value: string;
+      onChangeText: (value: string) => void;
+    }) =>
+      React.createElement('input', {
+        'aria-label': accessibilityLabel,
+        value,
+        onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+          onChangeText(event.target.value),
+      }),
     StyleSheet: {
       create: (styles: Record<string, unknown>) => styles,
     },
@@ -50,6 +65,33 @@ const colors: NegotiationCardColors = {
 };
 
 describe('NegotiationDecisionControls', () => {
+  it('validates the amount before sending a counter offer', () => {
+    const onCounterOffer = vi.fn();
+    render(
+      <NegotiationDecisionControls
+        actionLoading={false}
+        actionsDisabled={false}
+        colors={colors}
+        itemId="negotiation-1"
+        onAction={vi.fn()}
+        onCounterOffer={onCounterOffer}
+        status="pending"
+      />
+    );
+    fireEvent.click(screen.getByText('Counter Offer'));
+    expect(
+      screen.getByRole('button', { name: 'Send Counter Offer' })
+    ).toBeDisabled();
+    const input = screen.getByLabelText('Counter offer amount (NGN)');
+    fireEvent.change(input, { target: { value: '0' } });
+    expect(
+      screen.getByRole('button', { name: 'Send Counter Offer' })
+    ).toBeDisabled();
+    fireEvent.change(input, { target: { value: '850000.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send Counter Offer' }));
+    expect(onCounterOffer).toHaveBeenCalledWith('negotiation-1', 850000.5);
+  });
+
   it('forwards pending accept and reject actions', () => {
     const onAction = vi.fn();
 

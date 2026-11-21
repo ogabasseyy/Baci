@@ -289,16 +289,9 @@ export function useCheckoutSubmit({
         });
       }
       const orderId = orderIdentity.createdOrderId;
-      if (onShippingQuoteRejected && isMountedRef.current) {
-        handleCheckoutSubmitError(
-          error,
-          selectedPayment,
-          orderId,
-          onShippingQuoteRejected
-        );
-      } else {
-        handleCheckoutSubmitError(error, selectedPayment, orderId);
-      }
+      const onReject = () =>
+        isMountedRef.current && onShippingQuoteRejected?.();
+      handleCheckoutSubmitError(error, selectedPayment, orderId, onReject);
     } finally {
       setIsProcessing(false);
       isOrderInFlight.current = false;

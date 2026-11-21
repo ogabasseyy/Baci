@@ -97,6 +97,7 @@ export function useCheckoutShipping({
     watchedState,
   });
   const resetQuotes = () => {
+    shippingQuoteAbortRef.current?.abort();
     setShippingQuotes([]);
     setSelectedQuoteId('');
     setResolvedQuoteKey('');
@@ -268,10 +269,7 @@ export function useCheckoutShipping({
     deliveryMethod,
     getShippingProvider: () => getProvider(deliveryMethod, selectedQuote),
     ...handlers,
-    invalidateShippingQuote: () => {
-      shippingQuoteAbortRef.current?.abort();
-      resetQuotes();
-    },
+    invalidateShippingQuote: resetQuotes,
     isLoadingCities,
     isLoadingLocations,
     isLoadingQuotes,

@@ -361,8 +361,8 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
         }),
       fetchRoomBundles: () => Promise.resolve([]),
       materializeShard: () => Promise.resolve(),
-      markRoundReconciled: (ms: number) => {
-        demoState.markRoundReconciled(ms);
+      markRoundReconciled: (eventId: string, ms: number) => {
+        demoState.markRoundReconciled(eventId, ms);
         return Promise.resolve();
       },
     };
@@ -853,8 +853,8 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
         entry.engine.materializeResultsBatch(eventMeta, records);
         return Promise.resolve();
       },
-      markRoundReconciled: (ms: number) => {
-        demoState.markRoundReconciled(ms);
+      markRoundReconciled: (eventId: string, ms: number) => {
+        demoState.markRoundReconciled(eventId, ms);
         return Promise.resolve();
       },
     };

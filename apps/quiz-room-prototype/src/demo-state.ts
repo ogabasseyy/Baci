@@ -154,10 +154,10 @@ export class DemoStateEngine {
     });
   }
 
-  markRoundReconciled(publishedAtMs: number): void {
+  markRoundReconciled(eventId: string, publishedAtMs: number): void {
     this.storage.transactionSync(() => {
       const round = this.getActiveRound();
-      if (!round) return;
+      if (!round || round.eventId !== eventId) return;
       this.storage.exec(
         `INSERT INTO demo_meta (key, value_json) VALUES ('active_round', ?)
          ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,

@@ -41,6 +41,7 @@ describe('quiz-edge-check-in schemas', () => {
       startsAt: '2026-11-27T18:00:00.000Z',
       endsAt: '2026-11-27T18:10:00.000Z',
       rulesVersion: 'live-v1',
+      mode: 'live',
       reused: false,
     });
     expect(parsed.success).toBe(true);

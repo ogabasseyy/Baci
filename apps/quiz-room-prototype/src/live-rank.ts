@@ -301,12 +301,23 @@ export class LiveRankIndexEngine {
       attemptToCustomer,
     };
 
-    // Replay any durably committed live_submissions not yet reflected in the
-    // last published snapshot (e.g. after a DO restart between write and publish).
+    // Replay any durably committed live_submissions (additions, updates, and
+    // deletions) not yet reflected in the last published snapshot (e.g. after a
+    // DO restart between write/remove and publish).
     const committedRows = this.storage.exec<SubmissionRow>(
       `SELECT * FROM live_submissions WHERE event_id = ?`,
       eventId
     ).rows;
+    const committedCustomerIds = new Set(
+      committedRows.map((row) => row.customer_id)
+    );
+    for (const snapshotEntry of [...state.customerCurrentEntry.values()]) {
+      if (!committedCustomerIds.has(snapshotEntry.customerId)) {
+        this.removeEntryFromRanges(state, snapshotEntry);
+        state.customerCurrentEntry.delete(snapshotEntry.customerId);
+        state.attemptToCustomer.delete(snapshotEntry.attemptId);
+      }
+    }
     for (const row of committedRows) {
       const existing = state.customerCurrentEntry.get(row.customer_id);
       const entry: LiveRankEntry = {
@@ -538,6 +549,8 @@ export class LiveRankIndexEngine {
         leaderboard_username, score, elapsed_ms, submitted_at_ms, attempt_status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(event_id, customer_id) DO UPDATE SET
+        user_id = excluded.user_id,
+        merchant_id = excluded.merchant_id,
         attempt_id = excluded.attempt_id,
         leaderboard_username = excluded.leaderboard_username,
         score = excluded.score,

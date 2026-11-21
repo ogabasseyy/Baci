@@ -15,7 +15,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/app/api/quiz/_shared/route-helpers', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
+  const actual =
+    await importOriginal<
+      typeof import('@/app/api/quiz/_shared/route-helpers')
+    >();
   return {
     ...actual,
     requireQuizUser: mocks.requireQuizUser,
@@ -24,7 +27,10 @@ vi.mock('@/app/api/quiz/_shared/route-helpers', async (importOriginal) => {
 });
 
 vi.mock('@/app/api/quiz/_shared/quiz-v2-contract', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
+  const actual =
+    await importOriginal<
+      typeof import('@/app/api/quiz/_shared/quiz-v2-contract')
+    >();
   return {
     ...actual,
     requireQuizV2Contract: mocks.requireQuizV2Contract,
@@ -131,13 +137,14 @@ describe('POST /api/quiz/events/[eventId]/check-in', () => {
         merchantId: MERCHANT_ID,
         customerId: CUSTOMER_ID,
         userId: USER_ID,
-        roomId: `quiz-room:${EVENT_ID}:3`,
+        roomId: `${EVENT_ID}:room-0003`,
         roomIndex: 3,
         leaderboardUsername: 'LagosRunner',
         maxAttempts: 1,
         startsAt: '2026-12-01T18:00:00.000Z',
         endsAt: '2026-12-01T18:10:00.000Z',
         rulesVersion: 'live-v1',
+        mode: 'live',
         reused: false,
       },
       error: null,
@@ -166,7 +173,7 @@ describe('POST /api/quiz/events/[eventId]/check-in', () => {
     };
     expect(json.backendMode).toBe('edge_rooms');
     expect(json.edgeBaseUrl).toBe('https://quiz-edge.ogabassey.com');
-    expect(json.roomId).toBe(`quiz-room:${EVENT_ID}:3`);
+    expect(json.roomId).toBe(`${EVENT_ID}:room-0003`);
 
     const [prefix, encoded, sig] = json.ticket.split('.');
     expect(prefix).toBe('bqt1');
@@ -182,18 +189,54 @@ describe('POST /api/quiz/events/[eventId]/check-in', () => {
       admissionId: ADMISSION_ID,
       customerId: CUSTOMER_ID,
       eventId: EVENT_ID,
-      roomId: `quiz-room:${EVENT_ID}:3`,
+      roomId: `${EVENT_ID}:room-0003`,
       deviceHash: DEVICE_HASH,
       leaderboardUsername: 'LagosRunner',
+      mode: 'live',
     });
   });
 
+  it('signs mode=test when the admission projection reports a test event', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        admissionId: ADMISSION_ID,
+        eventId: EVENT_ID,
+        merchantId: MERCHANT_ID,
+        customerId: CUSTOMER_ID,
+        userId: USER_ID,
+        roomId: `${EVENT_ID}:room-0000`,
+        roomIndex: 0,
+        leaderboardUsername: 'Tester',
+        maxAttempts: 5,
+        startsAt: '2026-12-01T18:00:00.000Z',
+        endsAt: '2026-12-01T18:10:00.000Z',
+        rulesVersion: 'test-v1',
+        mode: 'test',
+        reused: true,
+      },
+      error: null,
+    });
+
+    const res = await POST(makeRequest(VALID_BODY), {
+      params: Promise.resolve({ eventId: EVENT_ID }),
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { ticket: string };
+    const [, encoded] = json.ticket.split('.');
+    const decoded = JSON.parse(
+      Buffer.from(encoded ?? '', 'base64url').toString('utf8')
+    ) as Record<string, unknown>;
+    expect(decoded.mode).toBe('test');
+  });
+
   it('returns safe error without leaking raw database details on RPC failure', async () => {
+    const rawDetail = 'internal_pg_constraint_secret_detail_991';
     mocks.rpc.mockResolvedValue({
       data: null,
       error: {
         code: 'QZ041',
         message: 'quiz_device_limit_reached',
+        details: rawDetail,
       },
     });
     const res = await POST(makeRequest(VALID_BODY), {
@@ -201,5 +244,11 @@ describe('POST /api/quiz/events/[eventId]/check-in', () => {
     });
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.status).toBeLessThan(500);
+    const bodyText = await res.text();
+    expect(bodyText).not.toContain(rawDetail);
+    const body = JSON.parse(bodyText) as { code?: string; error?: string };
+    expect(typeof body.code).toBe('string');
+    expect(typeof body.error).toBe('string');
+    expect(body.error?.length).toBeGreaterThan(0);
   });
 });

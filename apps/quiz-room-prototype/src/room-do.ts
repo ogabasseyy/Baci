@@ -455,7 +455,8 @@ export class QuizRoomEngine {
     attemptId: string,
     config: QuizEventConfig,
     alarmState: RoomAlarmState,
-    nowMs: number
+    nowMs: number,
+    includeScoreboard = true
   ): RoomAlarmState {
     this.storage.exec(
       `INSERT INTO room_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
@@ -464,18 +465,26 @@ export class QuizRoomEngine {
     if (alarmState.sealed || nowMs >= config.endsAtMs) {
       return alarmState;
     }
-    this.storage.exec(
-      `INSERT INTO room_scoreboard_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
-      attemptId
-    );
+    if (includeScoreboard) {
+      this.storage.exec(
+        `INSERT INTO room_scoreboard_outbox (attempt_id) VALUES (?) ON CONFLICT(attempt_id) DO NOTHING`,
+        attemptId
+      );
+    } else {
+      this.storage.exec(
+        `DELETE FROM room_scoreboard_outbox WHERE attempt_id = ?`,
+        attemptId
+      );
+    }
     const updatedAlarm: RoomAlarmState = {
       ...alarmState,
       nextFlushTickMs:
         alarmState.nextFlushTickMs ??
         nowMs + (config.flushTickMs ?? DEFAULT_FLUSH_TICK_MS),
-      nextScoreboardTickMs:
-        alarmState.nextScoreboardTickMs ??
-        nowMs + (config.scoreboardTickMs ?? DEFAULT_SCOREBOARD_TICK_MS),
+      nextScoreboardTickMs: includeScoreboard
+        ? (alarmState.nextScoreboardTickMs ??
+          nowMs + (config.scoreboardTickMs ?? DEFAULT_SCOREBOARD_TICK_MS))
+        : alarmState.nextScoreboardTickMs,
     };
     this.writeAlarmStateSync(updatedAlarm);
     this.scheduleNextAlarmSync(config, updatedAlarm);
@@ -925,6 +934,52 @@ export class QuizRoomEngine {
         ) {
           throw new QuizRoomError('QZ040', 'quiz_device_binding_required', 403);
         }
+        const activeTesterRevoked = this.controlState.isTesterRevoked(
+          config.eventId,
+          activeExisting.user_id
+        );
+        const activeRestricted =
+          this.controlState.isAttemptDisqualified(activeExisting.attempt_id) ||
+          this.controlState.isAttemptBlocked(
+            config.eventId,
+            activeExisting.attempt_id,
+            activeExisting.customer_id
+          );
+        if (activeTesterRevoked || activeRestricted) {
+          const restrictedStatus = activeTesterRevoked
+            ? 'tester_revoked'
+            : 'disqualified';
+          const submittedAtMs = activeExisting.submitted_at_ms ?? nowMs;
+          this.storage.exec(
+            `UPDATE room_attempts
+               SET status = ?, close_reason = ?, submitted_at_ms = ?, current_issued_at_ms = NULL
+             WHERE attempt_id = ?`,
+            restrictedStatus,
+            restrictedStatus,
+            submittedAtMs,
+            activeExisting.attempt_id
+          );
+          const nextAlarmState = this.enqueueSubmittedAttemptSync(
+            activeExisting.attempt_id,
+            config,
+            alarmState,
+            nowMs,
+            false
+          );
+          return this.projectAttemptStateSync(
+            {
+              ...activeExisting,
+              status: restrictedStatus,
+              close_reason: restrictedStatus,
+              submitted_at_ms: submittedAtMs,
+              current_issued_at_ms: null,
+            },
+            config,
+            nextAlarmState,
+            nowMs,
+            true
+          );
+        }
         return this.projectAttemptStateSync(
           activeExisting,
           config,
@@ -1076,7 +1131,7 @@ export class QuizRoomEngine {
       if (
         this.controlState.isEventCancelled(config.eventId) ||
         alarmState.eventStatus === 'cancelled' ||
-        nowMs >= config.endsAtMs ||
+        receivedAtMs >= config.endsAtMs ||
         alarmState.sealed
       ) {
         return this.projectAttemptStateSync(
@@ -1130,7 +1185,8 @@ export class QuizRoomEngine {
           attemptRow.attempt_id,
           config,
           alarmState,
-          nowMs
+          nowMs,
+          false
         );
         return this.projectAttemptStateSync(
           {
@@ -1181,7 +1237,10 @@ export class QuizRoomEngine {
             const variant = this.variantIndex.get(targetPlan.variantId);
             const matchesKey =
               variant !== undefined &&
-              selectedAnswerHash === variant.answerKeyHash;
+              constantTimeEqualStrings(
+                selectedAnswerHash,
+                variant.answerKeyHash
+              );
             const timelyScoreDelta = matchesKey ? 1 : 0;
             const timelyAnsweredInMs = Math.min(
               60_000,
@@ -1200,21 +1259,41 @@ export class QuizRoomEngine {
               attemptRow.attempt_id,
               targetPlan.position
             );
-            if (timelyScoreDelta > 0) {
+            let nextSubmittedAtMs = attemptRow.submitted_at_ms;
+            if (canRecoverTimelyFinalAnswer) {
+              nextSubmittedAtMs = receivedAtMs;
+              this.storage.exec(
+                `UPDATE room_attempts
+                 SET score = score + ?, submitted_at_ms = ?
+                 WHERE attempt_id = ?`,
+                timelyScoreDelta,
+                receivedAtMs,
+                attemptRow.attempt_id
+              );
+            } else if (timelyScoreDelta > 0) {
               this.storage.exec(
                 `UPDATE room_attempts SET score = score + ? WHERE attempt_id = ?`,
                 timelyScoreDelta,
                 attemptRow.attempt_id
               );
             }
+            const nextAlarmState = canRecoverTimelyFinalAnswer
+              ? this.enqueueSubmittedAttemptSync(
+                  attemptRow.attempt_id,
+                  config,
+                  alarmState,
+                  nowMs
+                )
+              : alarmState;
             const refreshed = {
               ...attemptRow,
               score: attemptRow.score + timelyScoreDelta,
+              submitted_at_ms: nextSubmittedAtMs,
             };
             return this.projectAttemptStateSync(
               refreshed,
               config,
-              alarmState,
+              nextAlarmState,
               nowMs
             );
           }
@@ -1300,21 +1379,31 @@ export class QuizRoomEngine {
         };
       } else {
         const nextPosition = targetPlan.position + 1;
+        const nextIssueNowMs =
+          input.nowMs !== undefined
+            ? nowMs
+            : Math.max(receivedAtMs, Date.now());
         this.storage.exec(
           `UPDATE room_attempts
            SET current_position = ?, current_issued_at_ms = ?, score = score + ?
            WHERE attempt_id = ?`,
           nextPosition,
-          nowMs,
+          nextIssueNowMs,
           scoreDelta,
           attemptRow.attempt_id
         );
         updatedAttempt = {
           ...attemptRow,
           current_position: nextPosition,
-          current_issued_at_ms: nowMs,
+          current_issued_at_ms: nextIssueNowMs,
           score: attemptRow.score + scoreDelta,
         };
+        return this.projectAttemptStateSync(
+          updatedAttempt,
+          config,
+          latestAlarmState,
+          nextIssueNowMs
+        );
       }
 
       return this.projectAttemptStateSync(
@@ -1411,7 +1500,8 @@ export class QuizRoomEngine {
             effectiveTarget.attempt_id,
             config,
             effectiveAlarmState,
-            nowMs
+            nowMs,
+            false
           );
           effectiveTarget = {
             ...effectiveTarget,
@@ -2050,6 +2140,13 @@ export class QuizRoomEngine {
             attemptId
           );
         }
+        this.storage.exec(
+          `DELETE FROM room_scoreboard_outbox
+           WHERE attempt_id NOT IN (
+             SELECT attempt_id FROM room_attempts
+             WHERE status = 'submitted' AND submitted_at_ms IS NOT NULL
+           )`
+        );
         const remainingRow = this.storage.exec<{ c: number }>(
           `SELECT count(*) AS c FROM room_scoreboard_outbox`
         ).rows[0];

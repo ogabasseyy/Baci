@@ -863,6 +863,8 @@ importers:
         specifier: npm:@typescript/typescript6@~6.0.2
         version: '@typescript/typescript6@6.0.2'
 
+  apps/quiz-room-prototype: {}
+
   apps/web:
     dependencies:
       '@ai-sdk/cerebras':

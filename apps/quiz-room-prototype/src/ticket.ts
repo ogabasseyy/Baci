@@ -29,7 +29,7 @@ export function requireConfiguredSecret(
       503
     );
   }
-  return value;
+  return value.trim();
 }
 
 export function verifyInternalCoordinatorAuth(

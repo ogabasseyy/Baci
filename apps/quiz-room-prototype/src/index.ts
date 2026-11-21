@@ -338,10 +338,15 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
           const csRes = await coordStub.fetch(
             `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(body.eventId)}`
           );
-          if (csRes.ok) {
-            const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
-            this.controlState.applySnapshot(snapshot);
+          if (!csRes.ok) {
+            throw new QuizRoomError(
+              'QUIZ_CONTROL_STATE_UNAVAILABLE',
+              `Failed to refresh control state for event ${body.eventId} (${csRes.status})`,
+              503
+            );
           }
+          const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+          this.controlState.applySnapshot(snapshot);
         }
         return jsonResponse(
           await this.engine.seal(body.persistedCloseAtMs, body.mode, {
@@ -690,11 +695,14 @@ export class EventCoordinatorDO extends DurableObject<WorkerEnv> {
             : never;
           const uuidRe =
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (
-            env.SUPABASE_URL &&
-            env.QUIZ_BATCH_WORKER_JWT &&
-            uuidRe.test(eventId)
-          ) {
+          if (uuidRe.test(eventId)) {
+            if (!env.SUPABASE_URL || !env.QUIZ_BATCH_WORKER_JWT) {
+              throw new QuizRoomError(
+                'QUIZ_CONFIG_MISSING',
+                'SUPABASE_URL and QUIZ_BATCH_WORKER_JWT are required to persist room seal',
+                503
+              );
+            }
             const sealUrl = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/record_quiz_edge_room_seal_v2`;
             const sealRes = await fetch(sealUrl, {
               method: 'POST',
@@ -834,8 +842,11 @@ export class DemoStateDO extends DurableObject<WorkerEnv> {
         return jsonResponse(this.engine.getActiveRound());
       }
       if (url.pathname === '/internal/demo/reconciled') {
-        const body = await readJsonBody<{ publishedAtMs: number }>(request);
-        this.engine.markRoundReconciled(body.publishedAtMs);
+        const body = await readJsonBody<{
+          eventId: string;
+          publishedAtMs: number;
+        }>(request);
+        this.engine.markRoundReconciled(body.eventId, body.publishedAtMs);
         return jsonResponse({ ok: true });
       }
       if (url.pathname === '/internal/demo/check-in') {
@@ -1008,11 +1019,11 @@ export default {
             );
           }
         },
-        markRoundReconciled: async (publishedAtMs) => {
+        markRoundReconciled: async (eventId, publishedAtMs) => {
           const stub = getWeurStub(env.DEMO_STATE, DEMO_STATE_DO_NAME);
           await stub.fetch('https://demo.internal/internal/demo/reconciled', {
             method: 'POST',
-            body: JSON.stringify({ publishedAtMs }),
+            body: JSON.stringify({ eventId, publishedAtMs }),
           });
         },
       });
@@ -1268,12 +1279,14 @@ export default {
         if (
           !questionId ||
           questionId.length > 128 ||
+          questionId.includes('\u0000') ||
           !answer ||
-          answer.length > 1024
+          answer.length > 1024 ||
+          answer.includes('\u0000')
         ) {
           throw new QuizRoomError(
             'QUIZ_INVALID_INPUT',
-            'questionId (1..128 chars) and answer (1..1024 chars) are required',
+            'questionId (1..128 chars) and answer (1..1024 chars) are required without NUL bytes',
             400
           );
         }

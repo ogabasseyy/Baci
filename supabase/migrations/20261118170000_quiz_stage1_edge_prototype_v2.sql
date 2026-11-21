@@ -42,7 +42,7 @@ ALTER TABLE public.quiz_attempts
   DROP CONSTRAINT IF EXISTS quiz_attempts_backend_mode_check;
 ALTER TABLE public.quiz_attempts
   ADD CONSTRAINT quiz_attempts_backend_mode_check
-  CHECK (backend_mode IN ('postgres', 'edge_rooms'));
+  CHECK (backend_mode IN ('postgres', 'edge_rooms')) NOT VALID;
 
 -- Candidate index for normalized-email cap lookups across active merchant
 -- customers.
@@ -324,6 +324,7 @@ BEGIN
       'startsAt', v_event.starts_at,
       'endsAt', v_event.ends_at,
       'rulesVersion', v_event.rules_version,
+      'mode', v_event.mode,
       'reused', true
     );
   END IF;
@@ -438,7 +439,7 @@ BEGIN
   v_room_index := pg_catalog.abs(
     pg_catalog.hashtextextended(v_event.id::text || ':' || v_customer.id::text, 0)
   ) % v_room_count;
-  v_room_id := 'quiz-room:' || v_event.id::text || ':' || v_room_index::text;
+  v_room_id := v_event.id::text || ':room-' || pg_catalog.lpad(v_room_index::text, 4, '0');
 
   INSERT INTO public.quiz_event_admissions (
     event_id,
@@ -488,6 +489,7 @@ BEGIN
     'startsAt', v_event.starts_at,
     'endsAt', v_event.ends_at,
     'rulesVersion', v_event.rules_version,
+    'mode', v_event.mode,
     'reused', false
   );
 END;

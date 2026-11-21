@@ -9,11 +9,14 @@ export function getQuizEdgeWorkerUrl(): string | undefined {
   if (!raw) return undefined;
   try {
     const parsed = new URL(raw);
+    if (parsed.search || parsed.hash) {
+      return undefined;
+    }
     if (
       parsed.protocol === 'https:' ||
       (parsed.protocol === 'http:' && LOCALHOST_HOSTS.has(parsed.hostname))
     ) {
-      return raw.replace(/\/$/, '');
+      return raw.replace(/\/+$/, '');
     }
     return undefined;
   } catch {

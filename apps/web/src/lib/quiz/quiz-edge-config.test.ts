@@ -27,6 +27,12 @@ describe('quiz-edge-config', () => {
 
     process.env.QUIZ_EDGE_WORKER_URL = 'http://quiz.example.com';
     expect(getQuizEdgeWorkerUrl()).toBeUndefined();
+
+    process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz.example.com?stage=2';
+    expect(getQuizEdgeWorkerUrl()).toBeUndefined();
+
+    process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz.example.com#frag';
+    expect(getQuizEdgeWorkerUrl()).toBeUndefined();
   });
 
   it('accepts https URLs and http localhost URLs, stripping trailing slash', () => {

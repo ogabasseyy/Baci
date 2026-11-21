@@ -33,7 +33,7 @@ export const quizEdgeAdmissionRpcResultSchema = z.object({
   startsAt: z.string().datetime({ offset: true }),
   endsAt: z.string().datetime({ offset: true }),
   rulesVersion: z.string().trim().min(1),
-  mode: z.enum(['live', 'test']).default('live'),
+  mode: z.enum(['live', 'test']),
   reused: z.boolean(),
 });
 

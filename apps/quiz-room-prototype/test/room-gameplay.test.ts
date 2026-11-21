@@ -597,4 +597,60 @@ describe('QuizRoomEngine gameplay, deadlines, restarts, and SQLite counters', ()
     expect(secondTick.scoreboardTicked).toBe(false);
     storage.close();
   });
+
+  it('restores submittedAtMs to receivedAtMs when repairing a timely final answer after expiry recovery', async () => {
+    const startsAtMs = 1_700_000_000_000;
+    const endsAtMs = startsAtMs + 120_000;
+    const storage = new NodeSqliteAdapter(':memory:');
+    const controlState = new QuizControlStateStore();
+    controlState.applySnapshot(createEmptyControlState(startsAtMs, 1));
+    const room = new QuizRoomEngine({
+      roomId: 'room-timely-final',
+      storage,
+      controlState,
+    });
+    const baseCfg = await buildEventConfig({ startsAtMs, endsAtMs });
+    room.initialize({
+      ...baseCfg,
+      questionCount: 1,
+      timePerQuestionSeconds: 10,
+      slots: baseCfg.slots.slice(0, 1),
+    });
+    const ticket = makeTicket({
+      userId: 'u-timely-1',
+      customerId: 'c-timely-1',
+      roomId: 'room-timely-final',
+    });
+    const started = room.startAttempt({
+      ticket,
+      integrityTier: 'strong',
+      acceptedRulesVersion: 'live-v1',
+      termsAccepted: true,
+      startRequestId: 'req-timely-1',
+      appVersion: '2.0.0',
+      platform: 'ios',
+      nowMs: startsAtMs + 1_000,
+    });
+
+    // Expiry recovery runs at deadline (startsAtMs + 11_000), marking final question timed out
+    const recovered = room.resumeAttempt(ticket, startsAtMs + 11_000);
+    expect(recovered.availability).toBe('pending_results');
+
+    // Timely answer that arrived at 10_900 completes hashing at 11_050
+    const repaired = await room.submitAnswer({
+      ticket,
+      attemptId: started.attemptId,
+      questionId: started.question?.id ?? '',
+      answer: 'opt-a',
+      receivedAtMs: startsAtMs + 10_900,
+      nowMs: startsAtMs + 11_050,
+    });
+    expect(repaired.status).toBe('submitted_pending_results');
+
+    const bundles = await room.exportCompletedBundles();
+    expect(bundles).toHaveLength(1);
+    expect(bundles[0]?.submittedAtMs).toBe(startsAtMs + 10_900);
+    expect(bundles[0]?.score).toBe(1);
+    storage.close();
+  });
 });

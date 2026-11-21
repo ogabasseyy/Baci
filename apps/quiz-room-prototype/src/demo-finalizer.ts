@@ -24,7 +24,7 @@ export interface DemoFinalizerEnv {
     eventMeta: PublishedShardEventMetadata,
     records: readonly QuizPrivateResultRecord[]
   ): Promise<void>;
-  markRoundReconciled(publishedAtMs: number): Promise<void>;
+  markRoundReconciled(eventId: string, publishedAtMs: number): Promise<void>;
 }
 
 export interface DemoReconcileResult {
@@ -247,7 +247,7 @@ export async function reconcileDemoRound(
   );
 
   if (!override && !soloInstant) {
-    await env.markRoundReconciled(publishedAtMs);
+    await env.markRoundReconciled(eventId, publishedAtMs);
   }
 
   return {

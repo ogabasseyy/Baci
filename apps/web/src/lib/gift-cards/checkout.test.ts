@@ -11,10 +11,11 @@ const quote = {
 
 it('charges the displayed price once and submits once on concurrent confirmation', async () => {
   const wallet = createMockGiftCardWallet(2_000_000);
-  const submit = vi.fn().mockResolvedValue({ orderId: 'order-1' });
+  const submit = vi.fn().mockResolvedValue({ orderId: ' order-1 ' });
   const checkout = () =>
     confirmGiftCardPurchase(quote, wallet, submit, () => 100);
-  const [first] = await Promise.all([checkout(), checkout()]);
+  const [first, concurrent] = await Promise.all([checkout(), checkout()]);
+  expect(concurrent).toEqual({ status: 'submitting' });
   expect(first).toMatchObject({ status: 'submitted', orderId: 'order-1' });
   expect(await checkout()).toEqual(first);
   expect(wallet.balance()).toBe(974366);

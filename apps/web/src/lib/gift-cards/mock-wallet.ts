@@ -8,6 +8,8 @@ export function createMockGiftCardWallet(initialBalanceKobo: number) {
     balance: () => balance,
     claim(quote, now) {
       const existing = purchases.get(quote.id);
+      // A concurrent confirmation sees pending immediately. A later replay
+      // sees the settled result, and neither can initiate another submission.
       if (existing) return existing;
       if (
         now >= quote.expiresAt ||

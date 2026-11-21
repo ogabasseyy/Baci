@@ -100,3 +100,25 @@ it('flags missing reference separately without exposing or capturing the replay'
   expect(deps.recordResult).not.toHaveBeenCalled();
   expect(deps.submit).not.toHaveBeenCalled();
 });
+
+it('returns review for invalid terminal replay evidence', async () => {
+  const deps = setup();
+  deps.read.mockResolvedValue({
+    ...paid,
+    status: 'submitted',
+    providerOrderId: 'supplier-1',
+  });
+  deps.poll.mockResolvedValue({
+    ok: true,
+    data: {
+      orderUuid: 'supplier-1',
+      referenceId: paid.id,
+      status: 'success',
+      replay: null,
+    },
+  });
+  await expect(
+    runGiftCardWorker({ mode: 'poll', orderId: paid.id }, deps)
+  ).resolves.toEqual({ status: 'review', reason: 'invalid_replay' });
+  expect(deps.recordResult).not.toHaveBeenCalled();
+});

@@ -42,7 +42,9 @@ export async function confirmGiftCardPurchase(
       cardId: quote.cardId,
       reference: quote.id,
     });
-    if (orderId.trim()) outcome = { status: 'submitted', orderId };
+    const trimmedOrderId = orderId.trim();
+    if (trimmedOrderId)
+      outcome = { status: 'submitted', orderId: trimmedOrderId };
   } catch {
     // A lost response may still mean Petrock accepted the order.
   }

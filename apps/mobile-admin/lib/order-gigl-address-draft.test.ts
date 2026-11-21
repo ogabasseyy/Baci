@@ -29,6 +29,15 @@ describe('order-gigl-address-draft', () => {
     });
   });
 
+  it('clears locality and pin when house-number tokens change', () => {
+    const next = applyAddressField(
+      { ...picked, address: '12-14 Marina' },
+      'address',
+      '1214 Marina'
+    );
+    expect(next).toEqual({ address: '1214 Marina', city: '', state: '' });
+  });
+
   it('clears the pin when city or state is edited by hand', () => {
     expect(applyAddressField(picked, 'city', 'Abuja').latitude).toBeUndefined();
     expect('latitude' in applyAddressField(picked, 'state', 'Ogun')).toBe(

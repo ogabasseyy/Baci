@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import type { useNewOrderController } from '@/hooks/useNewOrderController';
+import { normalizeStreetAddressForComparison } from '@/lib/normalize-street-address';
 import { parseGoogleAddressDetails } from './google-address-details';
 import { NewOrderManualLocalityFields } from './NewOrderManualLocalityFields';
 import { styles } from './new-order.styles';
@@ -31,9 +32,10 @@ function clearGeocodedFields<T extends object>(previous: T): T {
 }
 
 function isFormattingOnlyStreetEdit(previous: string, next: string): boolean {
-  const normalize = (value: string) =>
-    value.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return normalize(previous) === normalize(next);
+  return (
+    normalizeStreetAddressForComparison(previous) ===
+    normalizeStreetAddressForComparison(next)
+  );
 }
 
 export function NewOrderAddressInput({

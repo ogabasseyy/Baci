@@ -1,3 +1,4 @@
+import { normalizeStreetAddressForComparison } from './normalize-street-address';
 import type {
   OrderGiglMissingField,
   OrderGiglReceiver,
@@ -18,7 +19,8 @@ export function applyAddressField(
   if (!PIN_FIELDS.includes(field)) return { ...draft, [field]: value };
   if (
     field === 'address' &&
-    normalizeAddress(draft.address ?? '') === normalizeAddress(value)
+    normalizeStreetAddressForComparison(draft.address ?? '') ===
+      normalizeStreetAddressForComparison(value)
   ) {
     return { ...draft, address: value };
   }
@@ -27,10 +29,6 @@ export function applyAddressField(
     return { ...rest, address: value, city: '', state: '' };
   }
   return { ...rest, [field]: value };
-}
-
-function normalizeAddress(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 // A picked place replaces address, city, state and pin together.

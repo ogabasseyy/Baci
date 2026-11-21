@@ -605,7 +605,7 @@ describe('NewOrderAddressInput', () => {
       | { onChangeText?: (text: string) => void }
       | undefined;
     await act(async () => {
-      textInputProps?.onChangeText?.('42 Marina Ikeja Lagos');
+      textInputProps?.onChangeText?.(' 42 marina ,   ikeja, lagos ');
     });
 
     const update = setDeliveryInfo.mock.calls[0][0] as (
@@ -622,7 +622,7 @@ describe('NewOrderAddressInput', () => {
         longitude: 3.3,
       })
     ).toMatchObject({
-      address: '42 Marina Ikeja Lagos',
+      address: ' 42 marina ,   ikeja, lagos ',
       city: 'Ikeja',
       state: 'Lagos',
       latitude: 6.6,

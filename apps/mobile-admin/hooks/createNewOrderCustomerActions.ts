@@ -12,6 +12,7 @@ import type {
   NewCustomerDraft,
   SelectableCustomer,
 } from '@/components/orders/new-order.types';
+import { normalizeStreetAddressForComparison } from '@/lib/normalize-street-address';
 import {
   sanitizeAddress,
   sanitizeCustomerName,
@@ -114,7 +115,8 @@ export function createNewOrderCustomerActions({
     const storedStreet = sanitizeAddress(item.address ?? '');
     const sameDestination =
       !address ||
-      (address.address.toLowerCase() === storedStreet.toLowerCase() &&
+      (normalizeStreetAddressForComparison(address.address) ===
+        normalizeStreetAddressForComparison(storedStreet) &&
         (!address.city ||
           address.city.toLowerCase() === item.city?.trim().toLowerCase()) &&
         (!address.state ||

@@ -181,6 +181,7 @@ describe('createNewOrderCustomerActions', () => {
 
   it.each([
     ['12 Allen Avenue', 'Ikeja', 'Lagos', 6.6, 3.35],
+    [' 12 allen avenue, ', 'Ikeja', 'Lagos', 6.6, 3.35],
     ['10 Hospital Road', '', '', undefined, undefined],
   ])('only reuses profile locality when the entered street still matches', (address, city, state, latitude, longitude) => {
     const setCustomer = vi.fn();
@@ -207,7 +208,13 @@ describe('createNewOrderCustomerActions', () => {
       true
     );
     expect(setCustomer).toHaveBeenCalledWith(
-      expect.objectContaining({ address, city, state, latitude, longitude })
+      expect.objectContaining({
+        address: address.trim(),
+        city,
+        state,
+        latitude,
+        longitude,
+      })
     );
   });
 

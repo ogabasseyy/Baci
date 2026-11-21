@@ -34,6 +34,7 @@ BEGIN
         OR event.status = 'cancelled'
       )
     ORDER BY event.ends_at ASC, event.id ASC
+    LIMIT 10
   LOOP
     BEGIN
       v_reconcile := private.quiz_edge_reconciliation_snapshot_v2(v_event_id);

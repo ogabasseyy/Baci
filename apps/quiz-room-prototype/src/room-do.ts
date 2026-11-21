@@ -1822,11 +1822,36 @@ export class QuizRoomEngine {
     }
   }
 
+  private static readonly MAX_REPLAY_BATCH_IDS = 200;
+
   private async replayJournaledBatchesSerialized(
     batchIds?: readonly string[]
   ): Promise<{ replayedCount: number; batchIds: readonly string[] }> {
-    if (batchIds !== undefined && batchIds.length === 0) {
-      return { replayedCount: 0, batchIds: [] };
+    if (batchIds !== undefined) {
+      if (!Array.isArray(batchIds)) {
+        throw new QuizRoomError(
+          'INVALID_BATCH_IDS',
+          'batchIds must be an array of strings',
+          400
+        );
+      }
+      if (batchIds.length > QuizRoomEngine.MAX_REPLAY_BATCH_IDS) {
+        throw new QuizRoomError(
+          'INVALID_BATCH_IDS',
+          `batchIds may contain at most ${QuizRoomEngine.MAX_REPLAY_BATCH_IDS} entries`,
+          400
+        );
+      }
+      if (batchIds.some((id) => typeof id !== 'string')) {
+        throw new QuizRoomError(
+          'INVALID_BATCH_IDS',
+          'Each batchId must be a string',
+          400
+        );
+      }
+      if (batchIds.length === 0) {
+        return { replayedCount: 0, batchIds: [] };
+      }
     }
 
     this.ensureSchemaSync();

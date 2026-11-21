@@ -197,6 +197,28 @@ describe('Stage 3 operational hardening', () => {
     expect(missingRes).toEqual({ replayedCount: 0, batchIds: [] });
     expect(published).toHaveLength(3);
 
+    // Invalid batchIds types and oversized arrays fail with 400 QuizRoomError
+    await expect(
+      engine.replayJournaledBatches([123, null] as unknown as string[])
+    ).rejects.toMatchObject({
+      code: 'INVALID_BATCH_IDS',
+      status: 400,
+    });
+    await expect(
+      engine.replayJournaledBatches('not-an-array' as unknown as string[])
+    ).rejects.toMatchObject({
+      code: 'INVALID_BATCH_IDS',
+      status: 400,
+    });
+    await expect(
+      engine.replayJournaledBatches(
+        Array.from({ length: 201 }, (_, i) => `b-${i}`)
+      )
+    ).rejects.toMatchObject({
+      code: 'INVALID_BATCH_IDS',
+      status: 400,
+    });
+
     // Uninitialized / expired room returns empty without throwing
     const freshEngine = new QuizRoomEngine({
       roomId: 'evt-ops-1:room-9999',
@@ -310,6 +332,44 @@ describe('Stage 3 operational hardening', () => {
       env as never
     );
     expect(badReqRes.status).toBe(400);
+
+    const badBatchTypesRes = await worker.fetch(
+      new Request('https://quiz.test/api/quiz/admin/replay-batches', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${COORD_SECRET}` },
+        body: JSON.stringify({
+          roomIds: ['evt-1:room-0000'],
+          batchIds: [123, null],
+        }),
+      }),
+      env as never
+    );
+    expect(badBatchTypesRes.status).toBe(400);
+
+    const tooManyBatchIdsRes = await worker.fetch(
+      new Request('https://quiz.test/api/quiz/admin/replay-batches', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${COORD_SECRET}` },
+        body: JSON.stringify({
+          roomIds: ['evt-1:room-0000'],
+          batchIds: Array.from({ length: 201 }, (_, i) => `b-${i}`),
+        }),
+      }),
+      env as never
+    );
+    expect(tooManyBatchIdsRes.status).toBe(400);
+
+    const tooManyRoomsRes = await worker.fetch(
+      new Request('https://quiz.test/api/quiz/admin/replay-batches', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${COORD_SECRET}` },
+        body: JSON.stringify({
+          roomIds: Array.from({ length: 51 }, (_, i) => `evt-1:room-${i}`),
+        }),
+      }),
+      env as never
+    );
+    expect(tooManyRoomsRes.status).toBe(400);
 
     const okRes = await worker.fetch(
       new Request('https://quiz.test/api/quiz/admin/replay-batches', {

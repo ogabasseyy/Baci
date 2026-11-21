@@ -1234,6 +1234,10 @@ export default {
         request.method === 'POST' &&
         path === '/api/quiz/admin/replay-batches'
       ) {
+        const MAX_ADMIN_REPLAY_ROOMS = 50;
+        const MAX_ADMIN_REPLAY_BATCH_IDS = 200;
+        const ADMIN_REPLAY_CONCURRENCY = 5;
+
         verifyInternalCoordinatorAuth(
           request.headers.get('Authorization'),
           env.QUIZ_INTERNAL_COORDINATOR_SECRET
@@ -1243,15 +1247,17 @@ export default {
           roomId?: string;
           batchIds?: readonly string[];
         }>(request);
-        const roomIds =
+        const rawRoomIds =
           Array.isArray(body.roomIds) && body.roomIds.length > 0
             ? body.roomIds
             : typeof body.roomId === 'string' && body.roomId.trim().length > 0
               ? [body.roomId]
               : [];
         if (
-          roomIds.length === 0 ||
-          roomIds.some((id) => typeof id !== 'string' || id.trim().length === 0)
+          rawRoomIds.length === 0 ||
+          rawRoomIds.some(
+            (id) => typeof id !== 'string' || id.trim().length === 0
+          )
         ) {
           throw new QuizRoomError(
             'INVALID_ROOM_IDS',
@@ -1259,38 +1265,80 @@ export default {
             400
           );
         }
-        const results = await Promise.all(
-          roomIds.map(async (roomId) => {
-            const roomStub = getWeurStub(env.QUIZ_ROOM, roomId);
-            const res = await roomStub.fetch(
-              'https://room.internal/internal/replay-batches',
-              {
-                method: 'POST',
-                body: JSON.stringify({
-                  ...(body.batchIds !== undefined
-                    ? { batchIds: body.batchIds }
-                    : {}),
-                }),
-              }
+        const roomIds = Array.from(new Set(rawRoomIds.map((id) => id.trim())));
+        if (roomIds.length > MAX_ADMIN_REPLAY_ROOMS) {
+          throw new QuizRoomError(
+            'INVALID_ROOM_IDS',
+            `roomIds may contain at most ${MAX_ADMIN_REPLAY_ROOMS} rooms per request`,
+            400
+          );
+        }
+        let validatedBatchIds: readonly string[] | undefined;
+        if (body.batchIds !== undefined) {
+          if (!Array.isArray(body.batchIds)) {
+            throw new QuizRoomError(
+              'INVALID_BATCH_IDS',
+              'batchIds must be an array of strings',
+              400
             );
-            if (!res.ok) {
-              throw new QuizRoomError(
-                'QUIZ_ROOM_REPLAY_FAILED',
-                `Failed to replay journaled batches for room ${roomId}`,
-                res.status
+          }
+          if (body.batchIds.length > MAX_ADMIN_REPLAY_BATCH_IDS) {
+            throw new QuizRoomError(
+              'INVALID_BATCH_IDS',
+              `batchIds may contain at most ${MAX_ADMIN_REPLAY_BATCH_IDS} entries`,
+              400
+            );
+          }
+          if (body.batchIds.some((id) => typeof id !== 'string')) {
+            throw new QuizRoomError(
+              'INVALID_BATCH_IDS',
+              'Each batchId must be a string',
+              400
+            );
+          }
+          validatedBatchIds = body.batchIds;
+        }
+        const results: {
+          roomId: string;
+          replayedCount: number;
+          batchIds: readonly string[];
+        }[] = [];
+        for (let i = 0; i < roomIds.length; i += ADMIN_REPLAY_CONCURRENCY) {
+          const chunk = roomIds.slice(i, i + ADMIN_REPLAY_CONCURRENCY);
+          const chunkResults = await Promise.all(
+            chunk.map(async (roomId) => {
+              const roomStub = getWeurStub(env.QUIZ_ROOM, roomId);
+              const res = await roomStub.fetch(
+                'https://room.internal/internal/replay-batches',
+                {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    ...(validatedBatchIds !== undefined
+                      ? { batchIds: validatedBatchIds }
+                      : {}),
+                  }),
+                }
               );
-            }
-            const data = (await res.json()) as {
-              replayedCount: number;
-              batchIds: readonly string[];
-            };
-            return {
-              roomId,
-              replayedCount: data.replayedCount,
-              batchIds: data.batchIds,
-            };
-          })
-        );
+              if (!res.ok) {
+                throw new QuizRoomError(
+                  'QUIZ_ROOM_REPLAY_FAILED',
+                  `Failed to replay journaled batches for room ${roomId}`,
+                  res.status
+                );
+              }
+              const data = (await res.json()) as {
+                replayedCount: number;
+                batchIds: readonly string[];
+              };
+              return {
+                roomId,
+                replayedCount: data.replayedCount,
+                batchIds: data.batchIds,
+              };
+            })
+          );
+          results.push(...chunkResults);
+        }
         const totalReplayed = results.reduce(
           (sum, item) => sum + item.replayedCount,
           0

@@ -219,6 +219,26 @@ describe('Stage 3 operational hardening', () => {
       status: 400,
     });
 
+    // Corrupt journal row is isolated and does not block healthy sibling batches
+    adapter.exec(
+      `INSERT INTO room_batches (batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      'corrupt-batch-1',
+      999,
+      nowMs,
+      '{not-valid-json',
+      '0'.repeat(64),
+      15,
+      0
+    );
+    const partialCorruptRes = await engine.replayJournaledBatches();
+    expect(partialCorruptRes).toEqual({
+      replayedCount: 1,
+      batchIds: [originalBatch.message.batchId],
+      corruptBatchIds: ['corrupt-batch-1'],
+    });
+    expect(published).toHaveLength(4);
+
     // Uninitialized / expired room returns empty without throwing
     const freshEngine = new QuizRoomEngine({
       roomId: 'evt-ops-1:room-9999',
@@ -296,6 +316,21 @@ describe('Stage 3 operational hardening', () => {
         body: { eventId: 'evt-hb-1', updatedAtMs: ts },
       },
     ]);
+
+    // Far-future updatedAtMs is clamped to now + 60s skew
+    const farFutureTs = Date.now() + 86_400_000;
+    const clampedRes = await worker.fetch(
+      new Request('https://quiz.test/api/quiz/admin/heartbeat', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${COORD_SECRET}` },
+        body: JSON.stringify({ eventId: 'evt-hb-1', updatedAtMs: farFutureTs }),
+      }),
+      env as never
+    );
+    expect(clampedRes.status).toBe(200);
+    const clampedJson = (await clampedRes.json()) as { updatedAtMs: number };
+    expect(clampedJson.updatedAtMs).toBeLessThanOrEqual(Date.now() + 61_000);
+    expect(clampedJson.updatedAtMs).toBeLessThan(farFutureTs);
   });
 
   it('enforces coordinator auth and routes /api/quiz/admin/replay-batches across rooms', async () => {
@@ -401,6 +436,76 @@ describe('Stage 3 operational hardening', () => {
         id: 'evt-1:room-0001',
         path: '/internal/replay-batches',
         body: { batchIds: ['b-specific'] },
+      },
+    ]);
+
+    // Per-room failures are captured without aborting sibling rooms
+    const partialEnv = {
+      ...env,
+      QUIZ_ROOM: {
+        idFromName(name: string) {
+          return name as unknown as DurableObjectId;
+        },
+        get(id: DurableObjectId) {
+          return {
+            async fetch() {
+              const roomName = String(id);
+              if (roomName === 'evt-1:room-fail') {
+                return new Response(JSON.stringify({ error: 'boom' }), {
+                  status: 500,
+                });
+              }
+              return new Response(
+                JSON.stringify({
+                  replayedCount: 1,
+                  batchIds: [`${roomName}:b1`],
+                }),
+                { status: 200 }
+              );
+            },
+          };
+        },
+      },
+    };
+    const partialRes = await worker.fetch(
+      new Request('https://quiz.test/api/quiz/admin/replay-batches', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${COORD_SECRET}` },
+        body: JSON.stringify({
+          roomIds: ['evt-1:room-ok', 'evt-1:room-fail'],
+        }),
+      }),
+      partialEnv as never
+    );
+    expect(partialRes.status).toBe(200);
+    const partialJson = (await partialRes.json()) as {
+      ok: boolean;
+      totalReplayed: number;
+      failedRooms: number;
+      rooms: {
+        roomId: string;
+        ok: boolean;
+        replayedCount: number;
+        status?: number;
+      }[];
+    };
+    expect(partialJson.ok).toBe(false);
+    expect(partialJson.totalReplayed).toBe(1);
+    expect(partialJson.failedRooms).toBe(1);
+    expect(partialJson.rooms).toEqual([
+      {
+        roomId: 'evt-1:room-ok',
+        ok: true,
+        replayedCount: 1,
+        batchIds: ['evt-1:room-ok:b1'],
+      },
+      {
+        roomId: 'evt-1:room-fail',
+        ok: false,
+        replayedCount: 0,
+        batchIds: [],
+        error: 'Failed to replay journaled batches for room evt-1:room-fail',
+        status: 500,
       },
     ]);
   });

@@ -1198,11 +1198,13 @@ export default {
             400
           );
         }
+        const MAX_HEARTBEAT_FUTURE_SKEW_MS = 60_000;
+        const nowMs = Date.now();
         const updatedAtMs =
           typeof body.updatedAtMs === 'number' &&
           Number.isFinite(body.updatedAtMs)
-            ? body.updatedAtMs
-            : Date.now();
+            ? Math.min(body.updatedAtMs, nowMs + MAX_HEARTBEAT_FUTURE_SKEW_MS)
+            : nowMs;
         const coordStub = getWeurStub(env.EVENT_COORDINATOR, body.eventId);
         const refreshRes = await coordStub.fetch(
           'https://coord.internal/internal/control-state/refresh',
@@ -1300,41 +1302,67 @@ export default {
         }
         const results: {
           roomId: string;
+          ok: boolean;
           replayedCount: number;
           batchIds: readonly string[];
+          corruptBatchIds?: readonly string[];
+          error?: string;
+          status?: number;
         }[] = [];
         for (let i = 0; i < roomIds.length; i += ADMIN_REPLAY_CONCURRENCY) {
           const chunk = roomIds.slice(i, i + ADMIN_REPLAY_CONCURRENCY);
           const chunkResults = await Promise.all(
             chunk.map(async (roomId) => {
-              const roomStub = getWeurStub(env.QUIZ_ROOM, roomId);
-              const res = await roomStub.fetch(
-                'https://room.internal/internal/replay-batches',
-                {
-                  method: 'POST',
-                  body: JSON.stringify({
-                    ...(validatedBatchIds !== undefined
-                      ? { batchIds: validatedBatchIds }
-                      : {}),
-                  }),
-                }
-              );
-              if (!res.ok) {
-                throw new QuizRoomError(
-                  'QUIZ_ROOM_REPLAY_FAILED',
-                  `Failed to replay journaled batches for room ${roomId}`,
-                  res.status
+              try {
+                const roomStub = getWeurStub(env.QUIZ_ROOM, roomId);
+                const res = await roomStub.fetch(
+                  'https://room.internal/internal/replay-batches',
+                  {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      ...(validatedBatchIds !== undefined
+                        ? { batchIds: validatedBatchIds }
+                        : {}),
+                    }),
+                  }
                 );
+                if (!res.ok) {
+                  return {
+                    roomId,
+                    ok: false,
+                    replayedCount: 0,
+                    batchIds: [] as readonly string[],
+                    error: `Failed to replay journaled batches for room ${roomId}`,
+                    status: res.status,
+                  };
+                }
+                const data = (await res.json()) as {
+                  replayedCount: number;
+                  batchIds: readonly string[];
+                  corruptBatchIds?: readonly string[];
+                };
+                return {
+                  roomId,
+                  ok: true,
+                  replayedCount: data.replayedCount,
+                  batchIds: data.batchIds,
+                  ...(data.corruptBatchIds && data.corruptBatchIds.length > 0
+                    ? { corruptBatchIds: data.corruptBatchIds }
+                    : {}),
+                };
+              } catch (err) {
+                return {
+                  roomId,
+                  ok: false,
+                  replayedCount: 0,
+                  batchIds: [] as readonly string[],
+                  error:
+                    err instanceof Error
+                      ? err.message
+                      : `Failed to replay journaled batches for room ${roomId}`,
+                  status: 500,
+                };
               }
-              const data = (await res.json()) as {
-                replayedCount: number;
-                batchIds: readonly string[];
-              };
-              return {
-                roomId,
-                replayedCount: data.replayedCount,
-                batchIds: data.batchIds,
-              };
             })
           );
           results.push(...chunkResults);
@@ -1343,9 +1371,11 @@ export default {
           (sum, item) => sum + item.replayedCount,
           0
         );
+        const failedRooms = results.filter((item) => !item.ok).length;
         return jsonResponse({
-          ok: true,
+          ok: failedRooms === 0,
           totalReplayed,
+          failedRooms,
           rooms: results,
         });
       }

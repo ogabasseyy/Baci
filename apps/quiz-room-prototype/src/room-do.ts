@@ -1806,9 +1806,11 @@ export class QuizRoomEngine {
    * operators can recover DLQ'd or dropped queue messages without mutating
    * attempt state or allocating new batch IDs.
    */
-  async replayJournaledBatches(
-    batchIds?: readonly string[]
-  ): Promise<{ replayedCount: number; batchIds: readonly string[] }> {
+  async replayJournaledBatches(batchIds?: readonly string[]): Promise<{
+    replayedCount: number;
+    batchIds: readonly string[];
+    corruptBatchIds?: readonly string[];
+  }> {
     const prev = this.flushChain;
     let release!: () => void;
     this.flushChain = new Promise<void>((resolve) => {
@@ -1826,7 +1828,11 @@ export class QuizRoomEngine {
 
   private async replayJournaledBatchesSerialized(
     batchIds?: readonly string[]
-  ): Promise<{ replayedCount: number; batchIds: readonly string[] }> {
+  ): Promise<{
+    replayedCount: number;
+    batchIds: readonly string[];
+    corruptBatchIds?: readonly string[];
+  }> {
     if (batchIds !== undefined) {
       if (!Array.isArray(batchIds)) {
         throw new QuizRoomError(
@@ -1881,33 +1887,46 @@ export class QuizRoomEngine {
       return { replayedCount: 0, batchIds: [] };
     }
 
-    const toReplay: PackedMessageWithMetrics[] = selectedRows.map((row) => {
-      const message = JSON.parse(row.payload_json) as QuizPackedQueueMessage;
-      const byteLength = Number(row.byte_length);
-      return {
-        message,
-        serializedJson: row.payload_json,
-        byteLength,
-        queueOperations: Math.max(1, Math.ceil(byteLength / 65_536)),
-      };
-    });
-
-    if (this.hooks.onPublishBatches) {
-      await this.hooks.onPublishBatches(toReplay);
+    const toReplay: PackedMessageWithMetrics[] = [];
+    const corruptBatchIds: string[] = [];
+    for (const row of selectedRows) {
+      try {
+        const message = JSON.parse(row.payload_json) as QuizPackedQueueMessage;
+        if (!message || typeof message !== 'object' || !message.batchId) {
+          corruptBatchIds.push(row.batch_id);
+          continue;
+        }
+        const byteLength = Number(row.byte_length);
+        toReplay.push({
+          message,
+          serializedJson: row.payload_json,
+          byteLength,
+          queueOperations: Math.max(1, Math.ceil(byteLength / 65_536)),
+        });
+      } catch {
+        corruptBatchIds.push(row.batch_id);
+      }
     }
 
-    this.storage.transactionSync(() => {
-      for (const packed of toReplay) {
-        this.storage.exec(
-          `UPDATE room_batches SET acknowledged = 1 WHERE batch_id = ?`,
-          packed.message.batchId
-        );
+    if (toReplay.length > 0) {
+      if (this.hooks.onPublishBatches) {
+        await this.hooks.onPublishBatches(toReplay);
       }
-    });
+
+      this.storage.transactionSync(() => {
+        for (const packed of toReplay) {
+          this.storage.exec(
+            `UPDATE room_batches SET acknowledged = 1 WHERE batch_id = ?`,
+            packed.message.batchId
+          );
+        }
+      });
+    }
 
     return {
       replayedCount: toReplay.length,
       batchIds: toReplay.map((packed) => packed.message.batchId),
+      ...(corruptBatchIds.length > 0 ? { corruptBatchIds } : {}),
     };
   }
 

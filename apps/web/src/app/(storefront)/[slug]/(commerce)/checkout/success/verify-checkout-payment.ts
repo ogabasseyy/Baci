@@ -190,10 +190,10 @@ export async function verifyCheckoutPayment(
         bankOfferStatus === 'pending' && bankCardOfferRetryDelay(response);
       if (retryDelay) setStatus(bankOfferStatus, retryDelay);
       else setStatus(bankOfferStatus);
-      // Access denial clears the number. A CSRF error preserves only the
-      // number from an earlier pass for this checkout identity.
+      // Only an ownership denial clears an already verified order number.
       if (bankOfferStatus === 'access_required') setOrderNumber(null);
-      else if (response.status !== 403) setOrderNumber(orderNumber);
+      else if (response.status !== 403 && orderNumber)
+        setOrderNumber(orderNumber);
       return;
     }
 
@@ -208,7 +208,7 @@ export async function verifyCheckoutPayment(
       data.status === 'pending'
     ) {
       setStatus('pending');
-      setOrderNumber(orderNumber);
+      if (orderNumber) setOrderNumber(orderNumber);
     } else if (!response.ok) {
       if (
         typeof data.finalizationOutcome === 'string' &&
@@ -223,7 +223,7 @@ export async function verifyCheckoutPayment(
           data.finalizationOutcome
         );
         setStatus('pending');
-        setOrderNumber(orderNumber);
+        if (orderNumber) setOrderNumber(orderNumber);
       } else {
         console.error('Payment verification failed:', data);
         setStatus('failed');
@@ -247,7 +247,7 @@ export async function verifyCheckoutPayment(
         RECONCILING_FINALIZATION_OUTCOMES.has(data.finalizationOutcome)
       ) {
         setStatus('reconciling');
-        setOrderNumber(orderNumber);
+        if (orderNumber) setOrderNumber(orderNumber);
         if (data.paymentMethod) {
           setPaymentMethod(data.paymentMethod);
         }
@@ -255,7 +255,7 @@ export async function verifyCheckoutPayment(
       }
       clearCart();
       setStatus('success');
-      setOrderNumber(orderNumber);
+      if (orderNumber) setOrderNumber(orderNumber);
       const verifiedOrderId = data.orderId || orderId;
       // Only a completed finalization leaves an active paid order, so only
       // it counts as a paid conversion.
@@ -297,7 +297,7 @@ export async function verifyCheckoutPayment(
       scheduleFailedRedirect();
     } else {
       setStatus('pending');
-      setOrderNumber(orderNumber);
+      if (orderNumber) setOrderNumber(orderNumber);
     }
   } catch (error) {
     // An aborted bound is the loop working as intended — stay pending so
@@ -306,7 +306,7 @@ export async function verifyCheckoutPayment(
       console.error('Failed to verify payment:', error);
     }
     setStatus('pending');
-    setOrderNumber(fallbackOrderNumber);
+    if (fallbackOrderNumber) setOrderNumber(fallbackOrderNumber);
   } finally {
     setIsVerifying(false);
   }

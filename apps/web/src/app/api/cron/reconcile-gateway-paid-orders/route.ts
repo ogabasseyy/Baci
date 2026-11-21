@@ -117,8 +117,11 @@ export async function GET(request: NextRequest) {
           finalizePayment: authorities.finalizePayment,
           scheduleAfter,
           supabase,
-        }).catch(() => {
-          logger.warn({ message: 'Paid bank card offer recheck pass failed' });
+        }).catch((error: unknown) => {
+          logger.warn({
+            error,
+            message: 'Paid bank card offer recheck pass failed',
+          });
           return { ...emptyRecheck, failed: 1 };
         });
     const sideEffectDrain = await drainFailedPaidOrderSideEffects({

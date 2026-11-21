@@ -98,16 +98,25 @@ export function useCheckoutSuccessVerification({
     }
     let disposed = false;
     const verifyHandlers: VerifyCheckoutPaymentHandlers = {
-      clearCart,
-      redirectToCheckout,
-      scheduleFailedRedirect: () => {
-        timerHandle.current = setTimeout(redirectToCheckout, 4000);
+      clearCart: () => {
+        if (!disposed) clearCart();
       },
-      setIsVerifying,
+      redirectToCheckout: () => {
+        if (!disposed) redirectToCheckout();
+      },
+      scheduleFailedRedirect: () => {
+        if (!disposed)
+          timerHandle.current = setTimeout(redirectToCheckout, 4000);
+      },
+      setIsVerifying: (verifying) => {
+        if (!disposed) setIsVerifying(verifying);
+      },
       setOrderNumber: (number) => {
         if (!disposed) setOrderNumber(number);
       },
-      setPaymentMethod,
+      setPaymentMethod: (method) => {
+        if (!disposed) setPaymentMethod(method);
+      },
       setStatus: (nextStatus, delayMs = 0) => {
         if (disposed) return;
         // Every verification result updates the polling guard synchronously here.
@@ -116,6 +125,7 @@ export function useCheckoutSuccessVerification({
         setStatus(nextStatus);
       },
       capturePaymentCompleted: (input) => {
+        if (disposed) return;
         captureCheckoutFunnelEventOnce(
           CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
           input.orderId,
@@ -134,6 +144,7 @@ export function useCheckoutSuccessVerification({
         );
       },
       capturePaymentFailed: (input) => {
+        if (disposed) return;
         // A retry reuses the order with a new gateway reference: claim the
         // failure per attempt so a later failed attempt is not suppressed
         // by the first one (same reference still dedupes on re-verify).

@@ -140,7 +140,7 @@ describe('verifyCheckoutPayment', () => {
         body: JSON.stringify({ reference, merchantSlug: params.merchantSlug }),
       })
     );
-    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+    expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
   });
 
   it('stops polling a denied bank-offer request without prompting a new payment', async () => {
@@ -178,7 +178,7 @@ describe('verifyCheckoutPayment', () => {
     );
 
     expect(callbacks.setStatus).toHaveBeenCalledWith('pending', 15_000);
-    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+    expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });
@@ -231,6 +231,7 @@ describe('verifyCheckoutPayment', () => {
     );
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
+    expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
   });
 
   it('offers a safe refresh if bank-offer verification fails after the CSRF retry', async () => {

@@ -71,10 +71,12 @@ describe('useCheckoutSuccessVerification', () => {
         pendingRedvaultOrder: false,
       }),
       expect.objectContaining({
-        clearCart: props.clearCart,
+        clearCart: expect.any(Function),
         setStatus: expect.any(Function),
       })
     );
+    act(() => mockVerify.mock.calls[0][1].clearCart());
+    expect(props.clearCart).toHaveBeenCalledOnce();
     expect(mockHasPendingRedvault).toHaveBeenCalledWith('order-1');
   });
 
@@ -309,7 +311,17 @@ describe('useCheckoutSuccessVerification', () => {
 
     await waitFor(() => expect(result.current.status).toBe('success'));
 
+    const previous = mockVerify.mock.calls[0][1];
     rerender({ orderId: 'order-2' });
+    act(() => {
+      previous.clearCart();
+      previous.setIsVerifying(true);
+      previous.setPaymentMethod('bank_card_offer');
+      previous.setOrderNumber('BAC-1');
+    });
+    expect(result.current.paymentMethod).toBeNull();
+    expect(result.current.isVerifying).toBe(false);
+    expect(props.clearCart).not.toHaveBeenCalled();
 
     await waitFor(() => expect(result.current.status).toBe('pending'));
     expect(result.current.orderNumber).toBeNull();

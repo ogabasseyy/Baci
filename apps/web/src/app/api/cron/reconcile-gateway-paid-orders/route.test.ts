@@ -254,6 +254,19 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(await response.json()).toMatchObject({ bankOfferRecheck });
   });
 
+  it('retains the recheck error for operations on a failed pass', async () => {
+    const error = new Error('recheck database unavailable');
+    mocks.recheckPaidBankCardOfferCaptures.mockRejectedValueOnce(error);
+
+    const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
+
+    expect(response.status).toBe(503);
+    expect(mocks.logger.warn).toHaveBeenCalledWith({
+      error,
+      message: 'Paid bank card offer recheck pass failed',
+    });
+  });
+
   it('keeps the existing repair passes running if the Paystack attempt sweep fails', async () => {
     mocks.reconcileAbandonedPaystackAttempts.mockRejectedValue(
       new Error('candidate lookup failed')

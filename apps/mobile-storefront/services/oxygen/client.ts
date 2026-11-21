@@ -133,7 +133,9 @@ export function createOxygenClient(options: {
         [409, 503].includes(response.status) &&
         method === 'POST' &&
         path === 'workflows/actions'
-          ? await response.json().catch(() => null)
+          ? await Promise.resolve()
+              .then(() => response.json())
+              .catch(() => null)
           : null;
       if (
         response.status === 409 &&

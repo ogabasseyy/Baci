@@ -107,13 +107,16 @@ vi.mock('@/components/ui/AppFormScreen', () => ({
 vi.mock('@/components/expenses/ExpenseFormFields', () => ({
   ExpenseFormFields: ({
     amount,
+    disabled,
     onAmountChange,
   }: {
     amount: string;
+    disabled: boolean;
     onAmountChange: (value: string) => void;
   }) => (
     <input
       aria-label="Expense amount"
+      disabled={disabled}
       onChange={(event) => onAmountChange(event.target.value)}
       value={amount}
     />
@@ -225,7 +228,8 @@ describe('AddExpenseScreen access boundary', () => {
 
   it('resumes hardware Back only when the user discards the draft', () => {
     render(<AddExpenseScreen />);
-    fireEvent.change(screen.getByLabelText('Expense amount'), {
+    const amount = screen.getByLabelText('Expense amount');
+    fireEvent.change(amount, {
       target: { value: '2500' },
     });
 
@@ -243,6 +247,7 @@ describe('AddExpenseScreen access boundary', () => {
     }>;
     act(() => actions.find(({ text }) => text === 'Discard')?.onPress?.());
 
+    expect(amount).toHaveValue('');
     expect(navigation.exitScreen).toHaveBeenCalledOnce();
     expect(navigation.removalPrevented).toBe(false);
   });
@@ -264,7 +269,7 @@ describe('AddExpenseScreen access boundary', () => {
     expect(mocks.alert).not.toHaveBeenCalled();
   });
 
-  it('protects new edits if the form stays open after saving', () => {
+  it('prevents saving again if the form stays open after saving', () => {
     navigation.router.back.mockImplementationOnce(() => undefined);
     mocks.mutate.mockImplementationOnce(
       (_input: unknown, options: { onSuccess: () => void }) =>
@@ -273,16 +278,18 @@ describe('AddExpenseScreen access boundary', () => {
     render(<AddExpenseScreen />);
     const amount = screen.getByLabelText('Expense amount');
     fireEvent.change(amount, { target: { value: '2500' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save expense' }));
-
-    fireEvent.change(amount, { target: { value: '3000' } });
-    pressNativeBack();
-
-    expect(mocks.alert).toHaveBeenCalledWith(
-      'Discard changes?',
-      expect.any(String),
-      expect.any(Array)
+    const save = screen.getByRole('button', { name: 'Save expense' });
+    fireEvent.click(save);
+    expect(save).toBeDisabled();
+    expect(amount).toBeDisabled();
+    fireEvent.click(save);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close add expense screen' })
     );
-    expect(navigation.exitScreen).not.toHaveBeenCalled();
+
+    expect(mocks.mutate).toHaveBeenCalledOnce();
+    expect(navigation.router.replace).toHaveBeenCalledWith('/(admin)/expenses');
+    expect(navigation.exitScreen).toHaveBeenCalledOnce();
+    expect(mocks.alert).not.toHaveBeenCalled();
   });
 });

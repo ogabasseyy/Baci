@@ -24,7 +24,6 @@ import { useExpenseGroups } from '@/hooks/useExpenseGroups';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useSaveExpense } from '@/hooks/useSaveExpense';
 import { useTheme } from '@/hooks/useTheme';
-import { parseExpenseAmount } from '@/lib/expense-amount';
 import { CreateExpenseFormSchema } from '@/schemas/expense-form';
 
 function AddExpenseForm({
@@ -71,7 +70,6 @@ function AddExpenseForm({
       ? scope.branchId
       : defaultBranchId;
   const form = useExpenseFormState({ initialBranchId });
-  const [amountText, setAmountText] = useState('');
   const [categorySheetVisible, setCategorySheetVisible] = useState(false);
   const [groupManagerVisible, setGroupManagerVisible] = useState(false);
 
@@ -95,12 +93,17 @@ function AddExpenseForm({
   const selectedBranchId =
     scope.type === 'branch' ? scope.branchId : form.values.branchId;
   const selectedCategory = toExpenseCategoryOrNull(form.values.category);
-  const disabled = saveExpense.isPending || branchesLoading || isRefreshing;
-  const { archiveGroup, close, navigateBackAfterSave, pickReceipt } =
-    useExpenseFormHandlers({
-      archiveGroupMutation,
-      form,
-    });
+  const {
+    amountText,
+    archiveGroup,
+    changeAmount,
+    close,
+    hasSaved,
+    navigateBackAfterSave,
+    pickReceipt,
+  } = useExpenseFormHandlers({ archiveGroupMutation, form });
+  const disabled =
+    hasSaved || saveExpense.isPending || branchesLoading || isRefreshing;
   if (fatalBranchesError) {
     return (
       <ExpenseStatusShell
@@ -122,7 +125,7 @@ function AddExpenseForm({
     );
   }
   const save = () => {
-    if (!merchant?.id) return;
+    if (!merchant?.id || disabled) return;
 
     if (
       scope.type === 'all' &&
@@ -210,10 +213,7 @@ function AddExpenseForm({
           description={form.values.description ?? ''}
           disabled={disabled}
           existingReceiptUri={null}
-          onAmountChange={(value) => {
-            setAmountText(value);
-            form.setField('amount', parseExpenseAmount(value));
-          }}
+          onAmountChange={changeAmount}
           onBranchChange={(branchId) => form.setField('branchId', branchId)}
           onDateChange={(date) => form.setField('date', date)}
           onDescriptionChange={(description) =>

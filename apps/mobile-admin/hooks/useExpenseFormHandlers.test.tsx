@@ -42,7 +42,7 @@ function makeForm(
 ): ExpenseFormHandlerForm {
   return {
     isDirty,
-    receiptChange: { kind: 'unchanged' },
+    reset: vi.fn(),
     setField: vi.fn(),
     setLocalReceipt: vi.fn(),
     values: { groupId },
@@ -82,7 +82,7 @@ describe('useExpenseFormHandlers', () => {
       actions.find(({ text }) => text === 'Discard')?.onPress?.();
     });
     expect(repeat).toHaveBeenCalledOnce();
-    expect(mocks.prevent).toBe(false);
+    expect(form.reset).toHaveBeenCalledOnce();
   });
 
   it('clears a newly selected archived group but preserves the original group', async () => {

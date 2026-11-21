@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { usePreventRemove, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert } from 'react-native';
+import { parseExpenseAmount } from '@/lib/expense-amount';
 import type { ExpenseEditFormDraft } from '@/schemas/expense-form';
 import type { useExpenseFormState } from './useExpenseFormState';
 
@@ -9,39 +10,35 @@ type ExpenseFormController = ReturnType<typeof useExpenseFormState>;
 
 export type ExpenseFormHandlerForm = Pick<
   ExpenseFormController,
-  'isDirty' | 'receiptChange' | 'setField' | 'setLocalReceipt'
+  'isDirty' | 'reset' | 'setField' | 'setLocalReceipt'
 > & { values: Pick<ExpenseEditFormDraft, 'groupId'> };
-
-type ExpenseDraftSnapshot = Pick<
-  ExpenseFormHandlerForm,
-  'receiptChange' | 'values'
->;
 
 interface UseExpenseFormHandlersInput {
   archiveGroupMutation: (groupId: string) => Promise<unknown>;
   form: ExpenseFormHandlerForm;
+  initialAmountText?: string;
   originalGroupId?: string | null;
 }
 
 export function useExpenseFormHandlers({
   archiveGroupMutation,
   form,
+  initialAmountText = '',
   originalGroupId = null,
 }: UseExpenseFormHandlersInput) {
   const router = useRouter();
-  const [releasedDraft, setReleasedDraft] =
-    useState<ExpenseDraftSnapshot | null>(null);
-  // A navigation attempt can leave the form open. Protect any subsequent edits.
-  const shouldPreventRemoval =
-    form.isDirty &&
-    (releasedDraft?.values !== form.values ||
-      releasedDraft?.receiptChange !== form.receiptChange);
+  const [amountText, setAmountText] = useState(initialAmountText);
+  const [hasSaved, setHasSaved] = useState(false);
+  const shouldPreventRemoval = form.isDirty && !hasSaved;
 
-  const releaseDraft = () => {
-    setReleasedDraft({
-      receiptChange: form.receiptChange,
-      values: form.values,
-    });
+  const changeAmount = (value: string) => {
+    setAmountText(value);
+    form.setField('amount', parseExpenseAmount(value));
+  };
+
+  const discardDraft = () => {
+    form.reset();
+    setAmountText(initialAmountText);
   };
 
   const navigateBack = () => {
@@ -70,21 +67,30 @@ export function useExpenseFormHandlers({
     shouldPreventRemoval,
     ({ repeat }) => {
       confirmDiscard(() => {
-        releaseDraft();
+        discardDraft();
         repeat();
       });
     }
   );
 
   const leave = () => {
-    releaseDraft();
     disablePrevention();
     navigateBack();
   };
 
+  const navigateBackAfterSave = () => {
+    setHasSaved(true);
+    leave();
+  };
+
   const close = () => {
-    if (shouldPreventRemoval) {
-      confirmDiscard(leave);
+    if (hasSaved) {
+      router.replace('/(admin)/expenses');
+    } else if (shouldPreventRemoval) {
+      confirmDiscard(() => {
+        discardDraft();
+        leave();
+      });
     } else {
       navigateBack();
     }
@@ -110,5 +116,13 @@ export function useExpenseFormHandlers({
     }
   };
 
-  return { archiveGroup, close, navigateBackAfterSave: leave, pickReceipt };
+  return {
+    amountText,
+    archiveGroup,
+    changeAmount,
+    close,
+    hasSaved,
+    navigateBackAfterSave,
+    pickReceipt,
+  };
 }

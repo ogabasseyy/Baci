@@ -25,7 +25,6 @@ import { useExpenseReceiptUrl } from '@/hooks/useExpenseReceiptUrl';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useSaveExpense } from '@/hooks/useSaveExpense';
 import { useTheme } from '@/hooks/useTheme';
-import { parseExpenseAmount } from '@/lib/expense-amount';
 import type { ExpenseDetail } from '@/schemas/expense-detail';
 
 export function ExpenseEditForm({
@@ -88,7 +87,6 @@ export function ExpenseEditForm({
     originalLegacyReceiptUrl: expense.receipt_url,
     originalReceiptStoragePath: expense.receipt_storage_path,
   });
-  const [amountText, setAmountText] = useState(String(expense.amount));
   const [categorySheetVisible, setCategorySheetVisible] = useState(false);
   const [groupManagerVisible, setGroupManagerVisible] = useState(false);
   const branchOptions = branches
@@ -108,20 +106,30 @@ export function ExpenseEditForm({
       : null;
   const displayCategory = selectedCategory ?? legacyCategoryLabel;
   const historicalGroup = findHistoricalGroup(allGroups, expense.group_id);
-  const disabled = formDisabled(
-    saveExpense.isPending,
-    branchesLoading,
-    fatalBranchesError,
-    fatalGroupsError,
-    isRefreshing,
-    receipt.isLoading
-  );
-  const { archiveGroup, close, navigateBackAfterSave, pickReceipt } =
-    useExpenseFormHandlers({
-      archiveGroupMutation,
-      form,
-      originalGroupId: expense.group_id,
-    });
+  const {
+    amountText,
+    archiveGroup,
+    changeAmount,
+    close,
+    hasSaved,
+    navigateBackAfterSave,
+    pickReceipt,
+  } = useExpenseFormHandlers({
+    archiveGroupMutation,
+    form,
+    initialAmountText: String(expense.amount),
+    originalGroupId: expense.group_id,
+  });
+  const disabled =
+    hasSaved ||
+    formDisabled(
+      saveExpense.isPending,
+      branchesLoading,
+      fatalBranchesError,
+      fatalGroupsError,
+      isRefreshing,
+      receipt.isLoading
+    );
   if (fatalBranchesError || fatalGroupsError) {
     const errorMessage = dependencyErrorMessage(
       fatalBranchesError ? branchesError : null,
@@ -139,7 +147,7 @@ export function ExpenseEditForm({
     );
   }
   const save = () => {
-    if (!merchant?.id) return;
+    if (!merchant?.id || disabled) return;
     submitExpenseEdit({
       activeGroups,
       branches,
@@ -189,10 +197,7 @@ export function ExpenseEditForm({
           hasExistingReceipt={Boolean(
             expense.receipt_storage_path || expense.receipt_url
           )}
-          onAmountChange={(value) => {
-            setAmountText(value);
-            form.setField('amount', parseExpenseAmount(value));
-          }}
+          onAmountChange={changeAmount}
           onBranchChange={(branchId) => form.setField('branchId', branchId)}
           onDateChange={(date) => form.setField('date', date)}
           onDescriptionChange={(description) =>

@@ -55,12 +55,13 @@ it('leaves the gateway pending and preserves the cart while the order screen ver
   );
 });
 
-it('never saves a deferred cart marker for a malformed bank offer reference', async () => {
+it('rejects a malformed bank offer reference before navigation or cart changes', async () => {
   jest.clearAllMocks();
   jest
     .mocked(verifyOrderPaymentForCompletion)
     .mockResolvedValueOnce({ paid: false, inconclusive: true });
   const clearCart = jest.fn<() => void>();
+  const setPaymentStatus = jest.fn();
   await settleOrderCompletion(
     {
       orderId: 'order-1',
@@ -71,11 +72,13 @@ it('never saves a deferred cart marker for a malformed bank offer reference', as
       paymentCompletionStartedRef: { current: false },
       scheduleDelayedNavigation: (navigate) => navigate(),
       setErrorMessage: jest.fn(),
-      setPaymentStatus: jest.fn(),
+      setPaymentStatus,
     },
     undefined,
     false
   );
   expect(clearCart).not.toHaveBeenCalled();
   expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
+  expect(router.replace).not.toHaveBeenCalled();
+  expect(setPaymentStatus).toHaveBeenLastCalledWith('error');
 });

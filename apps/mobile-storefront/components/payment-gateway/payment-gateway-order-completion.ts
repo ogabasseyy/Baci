@@ -83,14 +83,20 @@ export async function settleOrderCompletion(
   setPaymentStatus('processing');
   if (orderId && !redvaultVerified) {
     const bankOfferReference =
-      reference && hasBankCardOfferReferencePrefix(reference)
+      reference && BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)
         ? reference
         : null;
-    const cartIdentity =
-      bankOfferReference &&
-      BANK_CARD_OFFER_REFERENCE_PATTERN.test(bankOfferReference)
-        ? deferredBankOfferCart.capture()
-        : null;
+    if (!bankOfferReference && hasBankCardOfferReferencePrefix(reference)) {
+      paymentCompletionStartedRef.current = false;
+      setPaymentStatus('error');
+      setErrorMessage(
+        'The payment reference is invalid. Return to checkout and try again.'
+      );
+      return;
+    }
+    const cartIdentity = bankOfferReference
+      ? deferredBankOfferCart.capture()
+      : null;
     // Prefer the canonical order total: `amount` is only the residual due
     // at the gateway after wallet/savings credits.
     const purchaseTotal = orderTotal ?? amount ?? 0;

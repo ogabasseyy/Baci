@@ -17,6 +17,8 @@ jest.mock('@/stores/cart-store', () => ({
 const stored = new Map<string, string>();
 const clearCart = jest.fn<() => Promise<void>>();
 const item = { id: 'line-1', product_id: 'product-1', quantity: 1, price: 95 };
+const reference = `BCO-${'a'.repeat(32)}`;
+const otherReference = `BCO-${'b'.repeat(32)}`;
 function cart(quantity = 1) {
   jest.mocked(useCartStore.getState).mockReturnValue({
     checkoutGeneration: 'generation-1',
@@ -37,45 +39,62 @@ beforeEach(() => {
   });
 });
 
+it('does not use storage for a noncanonical bank offer reference', async () => {
+  const malformedReference = reference.toLowerCase();
+  await deferredBankOfferCart.remember(
+    'order-1',
+    malformedReference,
+    'identity'
+  );
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-1',
+    malformedReference,
+    () => true
+  );
+  expect(AsyncStorage.getItem).not.toHaveBeenCalled();
+  expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+  expect(clearCart).not.toHaveBeenCalled();
+});
+
 it('clears only the unchanged cart for the matching verified order and reference', async () => {
   const identity = deferredBankOfferCart.capture();
   expect(identity).not.toBeNull();
   await deferredBankOfferCart.remember(
     'order-1',
-    'BCO-test',
+    reference,
     identity as string
   );
   await deferredBankOfferCart.clearIfUnchanged(
     'order-2',
-    'BCO-test',
+    reference,
     () => true
   );
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-other',
+    otherReference,
     () => true
   );
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-test',
+    reference,
     () => false
   );
   jest.mocked(useCartStore.persist.hasHydrated).mockReturnValueOnce(false);
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-test',
+    reference,
     () => true
   );
   expect(clearCart).not.toHaveBeenCalled();
 
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-test',
+    reference,
     () => true
   );
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-test',
+    reference,
     () => true
   );
   expect(clearCart).toHaveBeenCalledTimes(1);
@@ -84,29 +103,29 @@ it('clears only the unchanged cart for the matching verified order and reference
 it('keeps cart edits and does not replace the original marker on a repeat callback', async () => {
   await deferredBankOfferCart.remember(
     'order-1',
-    'BCO-test',
+    reference,
     deferredBankOfferCart.capture() as string
   );
   cart(2);
   await deferredBankOfferCart.remember(
     'order-1',
-    'BCO-test',
+    reference,
     deferredBankOfferCart.capture() as string
   );
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-test',
+    reference,
     () => true
   );
   expect(clearCart).not.toHaveBeenCalled();
   await deferredBankOfferCart.remember(
     'order-1',
-    'BCO-test',
+    reference,
     deferredBankOfferCart.capture() as string
   );
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-test',
+    reference,
     () => true
   );
   expect(clearCart).not.toHaveBeenCalled();
@@ -115,15 +134,15 @@ it('keeps cart edits and does not replace the original marker on a repeat callba
 
 it('preserves the original marker for retry when clearing fails', async () => {
   const identity = deferredBankOfferCart.capture() as string;
-  await deferredBankOfferCart.remember('order-1', 'BCO-test', identity);
+  await deferredBankOfferCart.remember('order-1', reference, identity);
   clearCart.mockRejectedValueOnce(new Error('retryable cart write'));
   await expect(
-    deferredBankOfferCart.clearIfUnchanged('order-1', 'BCO-test', () => true)
+    deferredBankOfferCart.clearIfUnchanged('order-1', reference, () => true)
   ).rejects.toThrow('retryable cart write');
   expect([...stored.values()]).toEqual([identity]);
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
-    'BCO-test',
+    reference,
     () => true
   );
   expect([...stored.values()]).toEqual(['consumed']);

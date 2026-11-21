@@ -27,6 +27,17 @@ function addressBasis(order?: OrderGiglStoredAddressSource) {
   return JSON.stringify(order?.shipping_address ?? null);
 }
 
+function addressSignature(order?: OrderGiglStoredAddressSource) {
+  return getOrderGiglAddressSignature(
+    getOrderGiglInitialAddress({
+      customer_phone: order?.customer_phone,
+      // Stored JSON, read the same way the panel reads the order.
+      shipping_address:
+        order?.shipping_address as InitialAddressOrder['shipping_address'],
+    })
+  );
+}
+
 /**
  * Sends GIG panel quote requests: previews share the background prefetch, and
  * bound quotes first save typed address details to the order. After a save the
@@ -59,13 +70,20 @@ export function useOrderGiglQuoteRequester({
     signal: AbortSignal,
     saveAddress = true
   ) => {
+    const order = currentStoredOrder();
+    let signature = preview ? null : addressSignature(order);
     let addressSaved = false;
     try {
-      return await requestOrderGiglQuote({
+      const result = await requestOrderGiglQuote({
         cacheScope: previewCacheScope,
         draft: preview || saveAddress ? addressRef.current : {},
         onAddressSaved: (shippingAddress) => {
           addressSaved = true;
+          if (signal.aborted) return;
+          signature = addressSignature({
+            ...order,
+            shipping_address: shippingAddress,
+          });
           savedRef.current = {
             basis: addressBasis(storedRef.current),
             shippingAddress,
@@ -75,8 +93,21 @@ export function useOrderGiglQuoteRequester({
         preview,
         queryClient,
         signal,
-        storedOrder: currentStoredOrder(),
+        storedOrder: order,
       });
+      if (
+        !signal.aborted &&
+        signature !== null &&
+        signature !== addressSignature(currentStoredOrder())
+      ) {
+        throw Object.assign(
+          new Error('Delivery address changed while pricing.'),
+          {
+            code: 'stale_order_quote_inputs',
+          }
+        );
+      }
+      return { result, signature };
     } finally {
       // Refresh the order only after the bind settles, so the refetch cannot
       // restart the quote request while it is still in flight.
@@ -90,21 +121,7 @@ export function useOrderGiglQuoteRequester({
     clear: () => {
       savedRef.current = null;
     },
-    /**
-     * Signature of the stored address a bound quote is priced from, in the
-     * form the panel derives from the order (saved details included).
-     */
-    storedAddressSignature: () => {
-      const order = currentStoredOrder();
-      return getOrderGiglAddressSignature(
-        getOrderGiglInitialAddress({
-          customer_phone: order?.customer_phone,
-          // Stored JSON, read the same way the panel reads the order.
-          shipping_address:
-            order?.shipping_address as InitialAddressOrder['shipping_address'],
-        })
-      );
-    },
+    storedAddressSignature: () => addressSignature(currentStoredOrder()),
     readCachedPreview: (orderId: string) =>
       readCachedOrderGiglPreview({
         cacheScope: previewCacheScope,

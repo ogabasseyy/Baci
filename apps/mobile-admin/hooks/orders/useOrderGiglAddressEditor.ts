@@ -39,15 +39,19 @@ export function useOrderGiglAddressEditor({
   );
   const addressRef = useRef(addressDraft);
   const editingAddressRef = useRef(false);
+  const scopeRef = useRef({ orderId, preview });
+  const initialAddressRef = useRef(initialAddress);
+  initialAddressRef.current = initialAddress;
   const [missingFields, setMissingFields] = useState<OrderGiglMissingField[]>(
     []
   );
   const reset = () => {
     editingAddressRef.current = false;
-    addressRef.current = toOrderGiglAddressDraft(initialAddress);
+    addressRef.current = toOrderGiglAddressDraft(initialAddressRef.current);
     setAddressDraft(addressRef.current);
   };
   const begin = () => {
+    // The form is prefilled. Clear the old rate so booking stays disabled until review and save.
     editingAddressRef.current = true;
     invalidateQuote();
     setMissingFields(DELIVERY_FIELDS);
@@ -64,10 +68,15 @@ export function useOrderGiglAddressEditor({
     editDraft((draft) => applySelectedPlace(draft, place));
   // biome-ignore lint/correctness/useExhaustiveDependencies: scalar address deps
   useLayoutEffect(() => {
-    editingAddressRef.current = false;
-    const next = toOrderGiglAddressDraft(initialAddress);
-    setAddressDraft(next);
-    addressRef.current = next;
+    const scope = scopeRef.current;
+    if (
+      editingAddressRef.current &&
+      scope.orderId === orderId &&
+      scope.preview === preview
+    )
+      return;
+    scopeRef.current = { orderId, preview };
+    reset();
   }, [
     initialAddress?.address,
     initialAddress?.city,

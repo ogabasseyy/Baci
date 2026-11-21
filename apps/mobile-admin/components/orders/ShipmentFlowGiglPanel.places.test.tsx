@@ -15,6 +15,7 @@ vi.mock('react-native-google-places-autocomplete', () => ({
     textInputProps: {
       accessibilityLabel: string;
       editable: boolean;
+      value: string;
       onChangeText: (text: string) => void;
     };
     query: Record<string, string>;
@@ -24,6 +25,7 @@ vi.mock('react-native-google-places-autocomplete', () => ({
       <input
         aria-label={textInputProps.accessibilityLabel}
         disabled={!textInputProps.editable}
+        value={textInputProps.value}
         onChange={(event) => textInputProps.onChangeText(event.target.value)}
       />
       <span role="status">{query.components}</span>
@@ -124,8 +126,15 @@ describe('ShipmentFlowGiglPanel places autocomplete', () => {
 
   it('sends address, city, state and pin from the selected place', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'key');
-    render(<ShipmentFlowGiglPanel {...props} />);
+    render(
+      <ShipmentFlowGiglPanel
+        {...props}
+        addressDraft={{ address: 'Saved street' }}
+      />
+    );
+    expect(screen.getByDisplayValue('Saved street')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe('country:NG');
+    expect(screen.queryByLabelText('Shipping address')).toBeNull();
     fireEvent.click(screen.getByText('Pick place'));
     expect(props.onPlaceSelect).toHaveBeenCalledWith({
       address: '12 Allen Ave, Ikeja',
@@ -161,6 +170,7 @@ describe('ShipmentFlowGiglPanel places autocomplete', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', '');
     render(<ShipmentFlowGiglPanel {...props} />);
     expect(screen.queryByLabelText('Search shipping address')).toBeNull();
+    expect(screen.getByLabelText('Shipping address')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Shipping city'), {
       target: { value: 'Abuja' },
     });

@@ -669,8 +669,8 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'quiz_edge_batch_worker',
 DO $$
 DECLARE
   v_event_id uuid := '88000000-0000-4000-8000-000000000401';
-  v_room0 text := 'quiz-room:88000000-0000-4000-8000-000000000401:0';
-  v_room1 text := 'quiz-room:88000000-0000-4000-8000-000000000401:1';
+  v_room0 text := '88000000-0000-4000-8000-000000000401:room-0000';
+  v_room1 text := '88000000-0000-4000-8000-000000000401:room-0001';
   v_res jsonb;
   v_attempts_r0 jsonb;
   v_attempts_r1 jsonb;
@@ -826,7 +826,7 @@ SET LOCAL ROLE quiz_edge_batch_worker;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'quiz_edge_batch_worker', true);
 SELECT public.record_quiz_edge_room_seal_v2(
   '88000000-0000-4000-8000-000000000401',
-  'quiz-room:88000000-0000-4000-8000-000000000401:1',
+  '88000000-0000-4000-8000-000000000401:room-0001',
   '2026-11-18T10:05:00.250Z', 'completed',
   2, 3, ARRAY['b-r1-1'], 1, pg_catalog.repeat('d', 64)
 );
@@ -976,7 +976,7 @@ SET LOCAL ROLE quiz_edge_batch_worker;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'quiz_edge_batch_worker', true);
 SELECT public.record_quiz_edge_room_seal_v2(
   '88000000-0000-4000-8000-000000000403',
-  'quiz-room:88000000-0000-4000-8000-000000000403:0',
+  '88000000-0000-4000-8000-000000000403:room-0000',
   '2026-11-18T10:02:00.000Z', 'cancelled',
   0, 0, ARRAY[]::text[], 0, pg_catalog.repeat('e', 64)
 );
@@ -1031,7 +1031,7 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'quiz_edge_batch_worker',
 DO $$
 DECLARE
   v_event_id uuid := '88000000-0000-4000-8000-000000000402';
-  v_room text := 'quiz-room:88000000-0000-4000-8000-000000000402:0';
+  v_room text := '88000000-0000-4000-8000-000000000402:room-0000';
   v_batch jsonb;
 BEGIN
   -- 1) Alice (311): score 1, elapsed 2000ms, submitted 10:00:12.000Z (attempt ...901)

@@ -159,6 +159,7 @@ describe('native Oxygen order admission', () => {
   it.each([
     { id: 'malformed-id', total: 100 },
     { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab', total: Number.NaN },
+    { id: 'aebdc237-5363-4e2b-b0ee-5be12ea9edab', total: '100' },
   ])('rejects an unusable order receipt before the cart handoff: %j', async (order) => {
     createOrder.mockResolvedValueOnce({ order });
     await expect(

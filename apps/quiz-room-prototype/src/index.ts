@@ -860,6 +860,7 @@ export default {
           }
           return (await sweepRes.json()) as {
             persistedCloseAtMs: number | null;
+            allRoomsSealed: boolean;
           };
         },
         fetchRoomBundles: async (roomId) => {

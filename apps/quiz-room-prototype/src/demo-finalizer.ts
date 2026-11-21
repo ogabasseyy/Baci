@@ -14,7 +14,10 @@ export interface DemoFinalizerEnv {
     endsAtMs: number;
     roomIds: readonly string[];
     nowMs: number;
-  }): Promise<{ persistedCloseAtMs: number | null }>;
+  }): Promise<{
+    persistedCloseAtMs: number | null;
+    allRoomsSealed: boolean;
+  }>;
   fetchRoomBundles(roomId: string): Promise<readonly QuizAttemptBundle[]>;
   materializeShard(
     shardName: string,
@@ -146,6 +149,17 @@ export async function reconcileDemoRound(
       roomIds,
       nowMs,
     });
+    if (!sweep.allRoomsSealed) {
+      return {
+        reconciled: false,
+        mode: 'pending',
+        eventId,
+        endsAtMs,
+        publishedAtMs: null,
+        participantCount: 0,
+        topStandings: [],
+      };
+    }
     publishedAtMs = sweep.persistedCloseAtMs ?? nowMs;
   }
 

@@ -355,7 +355,10 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
       freezeCoordinator: () => Promise.resolve(),
       refreshControlState: () => Promise.resolve(),
       freezeAndSweepCoordinator: () =>
-        Promise.resolve({ persistedCloseAtMs: Date.now() }),
+        Promise.resolve({
+          persistedCloseAtMs: Date.now(),
+          allRoomsSealed: true,
+        }),
       fetchRoomBundles: () => Promise.resolve([]),
       materializeShard: () => Promise.resolve(),
       markRoundReconciled: (ms: number) => {
@@ -818,7 +821,10 @@ describe('Queue consumer and Demo UI / Telemetry routes', () => {
           eventId: params.eventId,
           nowMs: params.nowMs,
         });
-        return { persistedCloseAtMs: snap.persistedCloseAtMs };
+        return {
+          persistedCloseAtMs: snap.persistedCloseAtMs,
+          allRoomsSealed: snap.allRoomsSealed,
+        };
       },
       fetchRoomBundles: async (roomId: string) => {
         const r = rooms.get(roomId);

@@ -1387,87 +1387,122 @@ export class QuizRoomEngine {
       return { config, items, nextSeq: alarmState.nextBatchSeq };
     });
 
-    if (!pendingRaw.config || pendingRaw.items.length === 0) {
+    if (!pendingRaw.config) {
       return [];
     }
 
-    const bundles: QuizAttemptBundle[] = [];
-    for (const item of pendingRaw.items) {
-      bundles.push(
-        await this.finalizeBundleChecksum(
-          item.attempt,
-          item.answerRows,
-          pendingRaw.config
-        )
-      );
-    }
-
-    const packer = new QuizBatchPacker({
-      eventId: pendingRaw.config.eventId,
-      roomId: this.roomId,
-      initialSeq: pendingRaw.nextSeq,
-    });
-    const packedMessages: PackedMessageWithMetrics[] = [];
-    for (const bundle of bundles) {
-      packedMessages.push(...(await packer.addBundle(bundle, nowMs)));
-    }
-    const tail = await packer.flush(nowMs);
-    if (tail) packedMessages.push(tail);
-
-    const stats = packer.getStats();
-    this.appCounters.bytesPacked += stats.bytesPacked;
-    this.appCounters.queueMessages += stats.queueMessages;
-    this.appCounters.queueOperations += stats.queueOperations;
-
-    // Persist journal rows first so batch checksums are durable before publish.
-    this.storage.transactionSync(() => {
-      for (const packed of packedMessages) {
-        this.storage.exec(
-          `INSERT INTO room_batches (
-            batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged
-          ) VALUES (?, ?, ?, ?, ?, ?, 0)
-          ON CONFLICT(batch_id) DO NOTHING`,
-          packed.message.batchId,
-          packed.message.seq,
-          packed.message.createdAtMs,
-          packed.serializedJson,
-          packed.message.payloadSha256,
-          packed.byteLength
+    if (pendingRaw.items.length > 0) {
+      const bundles: QuizAttemptBundle[] = [];
+      for (const item of pendingRaw.items) {
+        bundles.push(
+          await this.finalizeBundleChecksum(
+            item.attempt,
+            item.answerRows,
+            pendingRaw.config
+          )
         );
       }
+
+      const packer = new QuizBatchPacker({
+        eventId: pendingRaw.config.eventId,
+        roomId: this.roomId,
+        initialSeq: pendingRaw.nextSeq,
+      });
+      const newlyPacked: PackedMessageWithMetrics[] = [];
+      for (const bundle of bundles) {
+        newlyPacked.push(...(await packer.addBundle(bundle, nowMs)));
+      }
+      const tail = await packer.flush(nowMs);
+      if (tail) newlyPacked.push(tail);
+
+      const stats = packer.getStats();
+      this.appCounters.bytesPacked += stats.bytesPacked;
+      this.appCounters.queueMessages += stats.queueMessages;
+      this.appCounters.queueOperations += stats.queueOperations;
+
+      // Atomically journal immutable batches, mark attempts exported, clear outbox,
+      // and advance nextBatchSeq BEFORE publishing so retries replay the exact same
+      // journaled payload while newly completed attempts allocate fresh batch IDs.
+      this.storage.transactionSync(() => {
+        const config = this.requireConfigSync();
+        const alarmState = this.getAlarmStateSync(config);
+        for (const packed of newlyPacked) {
+          this.storage.exec(
+            `INSERT INTO room_batches (
+              batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged
+            ) VALUES (?, ?, ?, ?, ?, ?, 0)
+            ON CONFLICT(batch_id) DO NOTHING`,
+            packed.message.batchId,
+            packed.message.seq,
+            packed.message.createdAtMs,
+            packed.serializedJson,
+            packed.message.payloadSha256,
+            packed.byteLength
+          );
+          for (const b of packed.message.bundles) {
+            this.storage.exec(
+              `UPDATE room_attempts SET exported_batch_id = ? WHERE attempt_id = ? AND exported_batch_id IS NULL`,
+              packed.message.batchId,
+              b.attemptId
+            );
+            this.storage.exec(
+              `DELETE FROM room_outbox WHERE attempt_id = ?`,
+              b.attemptId
+            );
+          }
+        }
+        const nextAlarm: RoomAlarmState = {
+          ...alarmState,
+          nextBatchSeq: packer.getNextSeq(),
+        };
+        this.writeAlarmStateSync(nextAlarm);
+      });
+    }
+
+    const unackedRows = this.storage.exec<BatchRow>(
+      `SELECT batch_id, seq, created_at_ms, payload_json, payload_sha256, byte_length, acknowledged
+       FROM room_batches WHERE acknowledged = 0 ORDER BY seq ASC`
+    ).rows;
+
+    const toPublish: PackedMessageWithMetrics[] = unackedRows.map((row) => {
+      const message = JSON.parse(row.payload_json) as QuizPackedQueueMessage;
+      const byteLength = Number(row.byte_length);
+      return {
+        message,
+        serializedJson: row.payload_json,
+        byteLength,
+        queueOperations: Math.max(1, Math.ceil(byteLength / 65_536)),
+      };
     });
 
-    // Publish BEFORE clearing room_outbox so transient queue failures retry on next alarm.
-    if (packedMessages.length > 0 && this.hooks.onPublishBatches) {
-      await this.hooks.onPublishBatches(packedMessages);
+    if (toPublish.length === 0) {
+      return [];
+    }
+
+    // Publish all unacknowledged immutable journal rows; transient failures leave
+    // acknowledged = 0 so the next flush replays the exact same payloads verbatim.
+    if (this.hooks.onPublishBatches) {
+      await this.hooks.onPublishBatches(toPublish);
     }
 
     this.storage.transactionSync(() => {
       const config = this.requireConfigSync();
       const alarmState = this.getAlarmStateSync(config);
-      for (const packed of packedMessages) {
-        for (const b of packed.message.bundles) {
-          this.storage.exec(
-            `UPDATE room_attempts SET exported_batch_id = ? WHERE attempt_id = ? AND exported_batch_id IS NULL`,
-            packed.message.batchId,
-            b.attemptId
-          );
-          this.storage.exec(
-            `DELETE FROM room_outbox WHERE attempt_id = ?`,
-            b.attemptId
-          );
-        }
+      for (const packed of toPublish) {
+        this.storage.exec(
+          `UPDATE room_batches SET acknowledged = 1 WHERE batch_id = ?`,
+          packed.message.batchId
+        );
       }
       const nextAlarm: RoomAlarmState = {
         ...alarmState,
         nextFlushTickMs: null,
-        nextBatchSeq: packer.getNextSeq(),
       };
       this.writeAlarmStateSync(nextAlarm);
       this.scheduleNextAlarmSync(config, nextAlarm);
     });
 
-    return packedMessages;
+    return toPublish;
   }
 
   /**

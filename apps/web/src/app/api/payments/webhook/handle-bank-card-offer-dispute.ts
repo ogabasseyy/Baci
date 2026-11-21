@@ -21,8 +21,31 @@ export async function handleBankCardOfferDispute(
   );
   if (!reference.success) return null;
 
+  const rawId = payload?.id;
+  const disputeId =
+    typeof rawId === 'string'
+      ? rawId
+      : typeof rawId === 'number' && Number.isSafeInteger(rawId)
+        ? String(rawId)
+        : '';
+  if (!/^[0-9]{1,32}$/.test(disputeId)) {
+    return NextResponse.json(
+      { error: 'Bank offer dispute ID unavailable' },
+      { status: 503 }
+    );
+  }
+
+  let outcome = 'open';
+  if (event === 'charge.dispute.resolve') {
+    if (payload?.status === 'resolved' && payload.resolution === 'declined')
+      outcome = 'won';
+    else if (payload?.resolution === 'merchant-accepted') outcome = 'lost';
+  }
+
   const result = await getClient().rpc('record_bank_card_offer_dispute', {
+    p_dispute_id: disputeId,
     p_event: event,
+    p_outcome: outcome,
     p_reference: reference.data,
   });
   if (result.error || result.data !== true) {

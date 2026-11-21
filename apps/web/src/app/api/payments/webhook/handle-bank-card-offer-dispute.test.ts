@@ -11,12 +11,18 @@ describe('handleBankCardOfferDispute', () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     const result = await handleBankCardOfferDispute(
       event,
-      { transaction: { reference }, metadata: { merchant_id: 'ignored' } },
+      {
+        id: 42,
+        transaction: { reference },
+        metadata: { merchant_id: 'ignored' },
+      },
       () => ({ rpc }) as never
     );
     expect(result?.status).toBe(200);
     expect(rpc).toHaveBeenCalledWith('record_bank_card_offer_dispute', {
+      p_dispute_id: '42',
       p_event: event,
+      p_outcome: 'open',
       p_reference: reference,
     });
   });
@@ -28,7 +34,7 @@ describe('handleBankCardOfferDispute', () => {
     const rpc = vi.fn().mockResolvedValue({ data, error: null });
     const result = await handleBankCardOfferDispute(
       'charge.dispute.create',
-      { transaction_ref: reference },
+      { id: 42, transaction_ref: reference },
       () => ({ rpc }) as never
     );
     expect(result?.status).toBe(503);
@@ -55,5 +61,30 @@ describe('handleBankCardOfferDispute', () => {
       )
     ).resolves.toBeNull();
     expect(getClient).not.toHaveBeenCalled();
+  });
+});
+
+it.each([
+  ['declined', 'won'],
+  ['merchant-accepted', 'lost'],
+  ['unknown', 'open'],
+])('records the signed resolution %s as %s', async (resolution, outcome) => {
+  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+  const result = await handleBankCardOfferDispute(
+    'charge.dispute.resolve',
+    {
+      id: '9007199254740992',
+      status: 'resolved',
+      resolution,
+      transaction: { reference },
+    },
+    () => ({ rpc }) as never
+  );
+  expect(result?.status).toBe(200);
+  expect(rpc).toHaveBeenCalledWith('record_bank_card_offer_dispute', {
+    p_dispute_id: '9007199254740992',
+    p_event: 'charge.dispute.resolve',
+    p_outcome: outcome,
+    p_reference: reference,
   });
 });

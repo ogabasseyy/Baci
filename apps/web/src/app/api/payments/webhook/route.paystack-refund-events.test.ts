@@ -138,7 +138,7 @@ describe('POST /api/payments/webhook paystack refund events', () => {
     const reference = `BCO-${'a'.repeat(32)}`;
     const body = {
       event: 'charge.dispute.create',
-      data: { transaction: { reference } },
+      data: { id: 42, transaction: { reference } },
     };
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
     mockServiceClient.rpc = rpc;
@@ -155,7 +155,9 @@ describe('POST /api/payments/webhook paystack refund events', () => {
       code: 'BANK_CARD_OFFER_DISPUTE_REVIEW',
     });
     expect(rpc).toHaveBeenCalledWith('record_bank_card_offer_dispute', {
+      p_dispute_id: '42',
       p_event: body.event,
+      p_outcome: 'open',
       p_reference: reference,
     });
     expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();

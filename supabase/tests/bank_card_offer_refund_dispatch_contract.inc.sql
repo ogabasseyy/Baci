@@ -32,7 +32,7 @@ BEGIN
     OR public.authorize_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
       v_refund_claim, '43', 'test', 9500) IS DISTINCT FROM false
   THEN RAISE EXCEPTION 'Refund admission must bind the captured provider identity and live worker claim'; END IF;
-  IF has_function_privilege('authenticated', 'public.record_bank_card_offer_dispute(text,text)', 'EXECUTE')
+  IF has_function_privilege('authenticated', 'public.record_bank_card_offer_dispute(text,text,text,text)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.begin_bank_card_offer_refund_dispatch(uuid,uuid,uuid,text,uuid,text,text,bigint)', 'EXECUTE')
   THEN RAISE EXCEPTION 'Dispute and dispatch writes must be service-only'; END IF;
   IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
@@ -78,8 +78,8 @@ BEGIN
   UPDATE private.bank_card_offer_payment_attempts SET refund_dispatch_claim = NULL
     WHERE transaction_id = v_transaction;
   SET LOCAL ROLE service_role;
-  IF public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.create') IS DISTINCT FROM true
-    OR public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve') IS DISTINCT FROM true
+  IF public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.create', '42', 'open') IS DISTINCT FROM true
+    OR public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve', '42', 'open') IS DISTINCT FROM true
   THEN RAISE EXCEPTION 'Signed dispute events must hold the saved capture'; END IF;
   IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
     v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM 'blocked'
@@ -104,6 +104,37 @@ BEGIN
   SET LOCAL ROLE service_role;
   IF EXISTS (SELECT 1 FROM public.claim_paid_bank_card_offer_recheck() c WHERE c.transaction_id = v_transaction)
   THEN RAISE EXCEPTION 'A verified reversal on a dispute must leave the recheck queue'; END IF;
+  RESET ROLE;
+
+  SET LOCAL ROLE service_role;
+  IF NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.create', '43', 'open')
+    OR NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve', '42', 'won')
+  THEN RAISE EXCEPTION 'Unable to isolate dispute outcomes by provider case'; END IF;
+  RESET ROLE;
+  IF NOT EXISTS (SELECT 1 FROM private.bank_card_offer_payment_attempts
+    WHERE transaction_id = v_transaction AND dispute_hold_at IS NOT NULL)
+  THEN RAISE EXCEPTION 'Winning one dispute must not clear another open dispute'; END IF;
+
+  SET LOCAL ROLE service_role;
+  IF NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve', '43', 'won')
+    OR NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.create', '43', 'open')
+  THEN RAISE EXCEPTION 'Unable to record and replay a won dispute'; END IF;
+  RESET ROLE;
+  IF EXISTS (SELECT 1 FROM private.bank_card_offer_payment_attempts
+    WHERE transaction_id = v_transaction AND dispute_hold_at IS NOT NULL)
+  THEN RAISE EXCEPTION 'A replay must not reinstate a dispute hold after a win'; END IF;
+  IF NOT private.bank_card_offer_reversal_recorded(v_transaction)
+  THEN RAISE EXCEPTION 'A won dispute must not clear an independently confirmed reversal'; END IF;
+
+  DELETE FROM public.reconciliation_review WHERE txn_id = v_transaction;
+  SET LOCAL ROLE service_role;
+  IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference)
+    IS DISTINCT FROM 9500
+  THEN RAISE EXCEPTION 'Won disputes alone should permit a legitimate cancellation refund'; END IF;
+  IF NOT public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve', '44', 'lost')
+  THEN RAISE EXCEPTION 'Unable to record a lost dispute'; END IF;
+  IF public.get_bank_card_offer_refundable_amount(v_order, v_merchant, v_transaction, v_reference) IS NOT NULL
+  THEN RAISE EXCEPTION 'Lost dispute must continue blocking automatic refunds'; END IF;
   RESET ROLE;
 
   -- Inventory can leave a completed transaction attached to a pending order.

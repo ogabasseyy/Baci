@@ -23,6 +23,7 @@ const DEFAULT_CARRIER = 'Topship';
 
 export function getPaymentTabForMethod(method: PaymentMethodType): PaymentTab {
   if (
+    method === 'oxygen' ||
     method === 'credpal' ||
     method === 'credit_direct' ||
     method === 'klump'

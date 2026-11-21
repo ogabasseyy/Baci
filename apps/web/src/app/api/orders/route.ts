@@ -100,7 +100,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
+import { checkoutOrderNotReusable } from './checkout-order-not-reusable';
+import { rejectMobileOxygenCreditCombination } from './mobile-oxygen-order-admission';
+import { resolveOrderCreationMerchant } from './order-creation-merchant';
 import { authenticateOrderRequest } from './order-request-auth';
+import { replayAdmittedOxygenOrder } from './replay-admitted-oxygen-order';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -538,6 +542,12 @@ export async function POST(request: NextRequest) {
     const sharedCartPrincipalId = cartAuthority.principalId;
 
     const hasVoucherItem = hasQuizVoucherItem(items);
+    const oxygenCombinationRejection = rejectMobileOxygenCreditCombination(
+      request,
+      body,
+      hasVoucherItem
+    );
+    if (oxygenCombinationRejection) return oxygenCombinationRejection;
     const requestIdempotencyKey = hasVoucherItem
       ? null
       : getRequestIdempotencyKey(request);
@@ -964,25 +974,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch merchant to verify it exists (include business_name, slug for email)
-    const { data: merchant, error: merchantFetchError } = await supabase
-      .from('merchants')
-      .select(
-        'id, phone, rider_phone_number, business_name, business_address, slug, support_email, email_sender_name, email, tax_identification_number, cac_rc_number, plan_tier, vat_registration_status, vat_rate, registered_address, support_phone, logo_url, legal_entity_name, brand_colors, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, payout_currency, country'
-      )
-      .eq('id', merchant_id)
-      .single();
-
-    if (merchantFetchError || !merchant) {
-      logger.error({
-        message: 'Failed to fetch merchant for order creation',
-        error: merchantFetchError,
-      });
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
+    const merchantResult = await resolveOrderCreationMerchant({
+      request,
+      supabase,
+      order: body,
+      userId: resolvedUserId,
+      allowReadOnlyOxygenReplay: Boolean(requestIdempotencyKey),
+    });
+    if (!merchantResult.ok) return merchantResult.response;
+    const { merchant } = merchantResult;
 
     // Canonical merchant currency (payout_currency -> country -> NGN). The
     // order-create RPC stamps orders.currency the same way, so this is the
@@ -2075,6 +2075,16 @@ export async function POST(request: NextRequest) {
       requestIdempotencyKey,
       supabase,
     });
+    if (merchantResult.oxygenAdmission)
+      return replayAdmittedOxygenOrder({
+        client: supabase,
+        merchantId: merchant_id,
+        userId: resolvedUserId,
+        key: requestIdempotencyKey,
+        hash: checkoutRequestHash,
+        rejection: merchantResult.oxygenAdmission,
+      });
+
     // When the replay probe adopts a per-provider alternate, that matched
     // carrier is the original order's provider: the RPC must receive the
     // same carrier the adopted hash encodes, never a leftover null.
@@ -2427,6 +2437,18 @@ export async function POST(request: NextRequest) {
           }
         );
       }
+      if (
+        code === '23514' &&
+        message === 'oxygen_order_total_must_be_positive'
+      ) {
+        return NextResponse.json(
+          {
+            code: 'OXYGEN_MOBILE_ZERO_BALANCE',
+            error: 'Choose another payment option for this zero-balance order.',
+          },
+          { status: 400 }
+        );
+      }
       if (message === 'checkout_idempotency_conflict') {
         return NextResponse.json(
           {
@@ -2437,16 +2459,7 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      if (message === 'order_not_reusable') {
-        return NextResponse.json(
-          {
-            code: 'CHECKOUT_ORDER_NOT_REUSABLE',
-            error:
-              'This checkout order can no longer be reused. Refresh checkout and start a new order.',
-          },
-          { status: 409 }
-        );
-      }
+      if (message === 'order_not_reusable') return checkoutOrderNotReusable();
       // Discount-code limit outcomes are race/state conflicts, not malformed
       // input — surface as 409 so the client shows "no longer available".
       if (

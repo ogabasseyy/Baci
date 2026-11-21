@@ -14,10 +14,13 @@ import {
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import type { UserAccess } from '@/lib/api-permissions';
+import { hasBearerAuthScheme } from '@/lib/bearer-auth-scheme';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { createClient } from '@/lib/supabase/server';
 import { userAccessSchema } from '@/schemas/api-auth';
+
+export { hasBearerAuthScheme } from '@/lib/bearer-auth-scheme';
 
 function _createScopedClient(token: string): SupabaseClient {
   return createScopedClient(token);
@@ -27,11 +30,6 @@ export interface AuthResult {
   user: User | null;
   error: string | null;
   supabase: SupabaseClient | null;
-}
-
-export function hasBearerAuthScheme(request: Request | NextRequest): boolean {
-  const authHeader = request.headers.get('Authorization') ?? '';
-  return /^\s*bearer(?:\s|$)/i.test(authHeader);
 }
 
 export function getBearerTokenFromRequest(

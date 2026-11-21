@@ -63,6 +63,9 @@ export function useQuizLobbyNavigation({
           () => null
         );
         return recoverActiveQuizAttempt({
+          backendMode: useQuizStore
+            .getState()
+            .events.find((e) => e.id === eventId)?.backendMode,
           eventId,
           expectedUserId: userId,
           deviceFingerprint,
@@ -77,6 +80,9 @@ export function useQuizLobbyNavigation({
           answer,
           questionId,
           attemptId: recoveredAttempt.attemptId,
+          backendMode: useQuizStore
+            .getState()
+            .events.find((e) => e.id === eventId)?.backendMode,
           expectedUserId: userId,
           clientAnsweredAt: new Date().toISOString(),
         });

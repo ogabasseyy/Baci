@@ -142,6 +142,7 @@ export function CheckoutStepContent({
           paymentController.savings.isLoadingCheckoutSavings
         }
         klumpDisabledReason={paymentController.klumpDisabledReason}
+        oxygenDisabledReason={paymentController.oxygenDisabledReason}
         onRetrySavings={paymentController.savings.reloadCheckoutSavings}
         onSavingsToggle={paymentController.savings.setSavingsSelection}
         onSelectPayment={paymentController.setSelectedPayment}

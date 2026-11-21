@@ -6,6 +6,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { registerCatalogRenderer } from './catalog-render-tool';
+import { configureCatalogWidgetHtml } from './catalog-widget-html';
 import { resolveSerializedAnchorStock } from '../src/lib/serialized-anchor-stock';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
@@ -28,6 +29,7 @@ import { GuestCartStore } from './guest-cart-store';
 import { gateStartupOnGuestCartCapability } from './guest-cart-startup-gate';
 import { createGuestCartWorkerClient } from './guest-cart-worker-client';
 import { describeGuestCartStoreHealth } from './guest-cart-health';
+import { guestCredentialModeEnabled } from './guest-credential-cart';
 import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 import { createGracefulShutdown } from './server-shutdown';
 import { createCatalogImageUrlResolver } from './catalog-image-url';
@@ -1096,7 +1098,10 @@ const widgetHtml = `<!DOCTYPE html>
     };
     // Option-bearing results open the PDP: the cart handoff rejects
     // variant/condition products with "Choose product options".
-    const purchaseUrl = (p) => (hasOptionParams(p.url) ? p.url : cartUrl(p.id));
+    const catalogOnly = document.documentElement.dataset.ogabasseyCatalogOnly === 'true';
+    const purchaseUrl = (p) => catalogOnly
+      ? (p.url || productUrl(p.slug))
+      : (hasOptionParams(p.url) ? p.url : cartUrl(p.id));
 
     const renderProducts = (products) => {
       if (!products?.length) {
@@ -1133,8 +1138,8 @@ const widgetHtml = `<!DOCTYPE html>
               (hasDiscount ? '<span class="original-price">' + formatPrice(p.compare_at_price) + '</span>' : '') +
             '</div>' +
             '<div class="product-actions">' +
-              '<button class="btn btn-cart" data-id="' + escapeHtml(p.id) + '">' + cartIcon + '</button>' +
-              '<button class="btn btn-buy" data-id="' + escapeHtml(p.id) + '">Buy Now</button>' +
+              (catalogOnly ? '' : '<button class="btn btn-cart" data-id="' + escapeHtml(p.id) + '">' + cartIcon + '</button>') +
+              '<button class="btn btn-buy" data-id="' + escapeHtml(p.id) + '">' + (catalogOnly ? 'View product' : 'Buy Now') + '</button>' +
             '</div>' +
           '</div>';
 
@@ -1234,6 +1239,9 @@ const premiumWidgetHtml = loadPremiumWidget();
 // MCP SERVER FACTORY
 // =============================================================================
 
+const guestCredentialMode = guestCredentialModeEnabled(
+  guestCartStore.canonicalEnabled
+);
 const guestOAuth = createGuestOAuthRuntime({
   issuer: MCP_PUBLIC_ORIGIN, supabaseUrl: SUPABASE_URL!, anonKey: SUPABASE_ANON_KEY!,
   getMerchantId, cartStore: guestCartStore,
@@ -1260,9 +1268,7 @@ function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { 
           {
             uri,
             mimeType,
-            text: uri === STORE_WIDGET_URI
-              ? premiumWidgetHtml
-              : premiumWidgetHtml.replace(/<html(?=[\s>])/i, '<html data-ogabassey-legacy-widget="true"'),
+            text: configureCatalogWidgetHtml(premiumWidgetHtml, guestCredentialMode, uri !== STORE_WIDGET_URI),
             _meta: {
               ui: {
                 prefersBorder: true,
@@ -1272,7 +1278,9 @@ function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { 
                   resourceDomains: [MCP_PUBLIC_ORIGIN],
                 },
               },
-              'openai/widgetDescription': 'Interactive Ogabassey products with guest-cart controls and website checkout links.',
+              'openai/widgetDescription': guestCredentialMode
+                ? 'Browse Ogabassey products. Ask in the conversation to update your guest cart.'
+                : 'Interactive Ogabassey products with guest-cart controls and website checkout links.',
               'openai/widgetPrefersBorder': true,
               'openai/widgetCSP': {
                 connect_domains: [],
@@ -1364,7 +1372,15 @@ function createOgabasseyServer(options: { clientIp?: string; connectionCart?: { 
     }
   );
 
-  registerConfiguredGuestCartTool(server, { store: guestCartStore, supabase, getMerchantId, formatPrice, clientIp: options.clientIp, connectionCart: options.connectionCart });
+  registerConfiguredGuestCartTool(server, {
+    store: guestCartStore,
+    supabase,
+    getMerchantId,
+    formatPrice,
+    clientIp: options.clientIp,
+    connectionCart: options.connectionCart,
+    guestCredentialMode,
+  });
 
   const agenticCheckoutClientConfig = getAgenticCheckoutClientConfig();
   if (agenticCheckoutClientConfig) {
@@ -2604,7 +2620,7 @@ const httpServer = createServer(
       res.setHeader('Content-Type', 'text/html;profile=mcp-app; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       res.writeHead(200);
-      res.end(premiumWidgetHtml);
+      res.end(configureCatalogWidgetHtml(premiumWidgetHtml, guestCredentialMode));
       logAudit({
         timestamp: new Date().toISOString(),
         requestId,

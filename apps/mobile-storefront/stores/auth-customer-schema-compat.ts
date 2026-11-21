@@ -1,8 +1,8 @@
 export const CUSTOMER_SELECT_COLUMNS =
-  'id, user_id, email, first_name, last_name, phone, loyalty_points, username, username_changed_at, date_of_birth';
+  'id, merchant_id, user_id, email, first_name, last_name, phone, loyalty_points, username, username_changed_at, date_of_birth';
 
 export const LEGACY_CUSTOMER_SELECT_COLUMNS =
-  'id, user_id, email, first_name, last_name, phone, loyalty_points, username, date_of_birth';
+  'id, merchant_id, user_id, email, first_name, last_name, phone, loyalty_points, username, date_of_birth';
 
 export function isMissingUsernameChangedAtColumn(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;

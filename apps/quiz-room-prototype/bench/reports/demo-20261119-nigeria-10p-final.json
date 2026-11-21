@@ -1,0 +1,67 @@
+{
+  "generatedAtIso": "2026-11-19T13:10:32.716Z",
+  "totalSamples": 79,
+  "mismatchedSelfReportCount": 30,
+  "carriers": [
+    {
+      "verifiedNetwork": "Airtel Nigeria",
+      "carrier": "Airtel Nigeria",
+      "selfReportedCarrier": "Airtel",
+      "mismatchedSelfReportCount": 0,
+      "asns": [36873],
+      "count": 5,
+      "p50Ms": 370,
+      "p95Ms": 2516,
+      "p99Ms": 2516,
+      "under1sRatePct": 80,
+      "retries": 0,
+      "timeouts": 0,
+      "colos": ["CDG"]
+    },
+    {
+      "verifiedNetwork": "Cloudflare London, LLC (AS13335)",
+      "carrier": "Cloudflare London, LLC (AS13335)",
+      "selfReportedCarrier": "Airtel",
+      "mismatchedSelfReportCount": 10,
+      "asns": [13335],
+      "count": 10,
+      "p50Ms": 212,
+      "p95Ms": 331,
+      "p99Ms": 331,
+      "under1sRatePct": 100,
+      "retries": 0,
+      "timeouts": 0,
+      "colos": ["LHR"]
+    },
+    {
+      "verifiedNetwork": "MTN Nigeria",
+      "carrier": "MTN Nigeria",
+      "selfReportedCarrier": "MTN (44), Glo (10)",
+      "mismatchedSelfReportCount": 10,
+      "asns": [29465],
+      "count": 54,
+      "p50Ms": 252,
+      "p95Ms": 1591,
+      "p99Ms": 10889,
+      "under1sRatePct": 92.5925925925926,
+      "retries": 0,
+      "timeouts": 0,
+      "colos": ["AMS", "NBO"]
+    },
+    {
+      "verifiedNetwork": "Private Customer (AS209854)",
+      "carrier": "Private Customer (AS209854)",
+      "selfReportedCarrier": "MTN",
+      "mismatchedSelfReportCount": 10,
+      "asns": [209854],
+      "count": 10,
+      "p50Ms": 368,
+      "p95Ms": 420,
+      "p99Ms": 420,
+      "under1sRatePct": 100,
+      "retries": 0,
+      "timeouts": 0,
+      "colos": ["ORD"]
+    }
+  ]
+}

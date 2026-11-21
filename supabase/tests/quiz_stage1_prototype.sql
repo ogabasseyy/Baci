@@ -939,7 +939,29 @@ BEGIN
   INTO v_awards_count, v_award_customer
   FROM public.quiz_awards WHERE event_id = v_event_id;
   IF v_awards_count <> 1 OR v_award_customer IS DISTINCT FROM '88000000-0000-4000-8000-000000000313' THEN
-    RAISE EXCEPTION 'expected 1 award for Bob (313), got count=%, customer=%', v_awards_count, v_award_customer
+    IF COALESCE((v_deadlines ->> 'runtimeGateFresh')::boolean, false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'runtimeGateFresh=false: %', v_deadlines USING ERRCODE = 'S1021';
+    END IF;
+    IF COALESCE((v_deadlines ->> 'liveFinalizationFailed')::integer, 0) > 0 THEN
+      RAISE EXCEPTION 'liveFinalizationFailed: %', v_deadlines USING ERRCODE = 'S1022';
+    END IF;
+    IF COALESCE((v_deadlines ->> 'liveAwaitingGate')::integer, 0) > 0
+      AND COALESCE((v_deadlines ->> 'failed')::integer, 0) = 0 THEN
+      RAISE EXCEPTION 'liveAwaitingGate: %', v_deadlines USING ERRCODE = 'S1023';
+    END IF;
+    IF COALESCE((v_deadlines ->> 'failed')::integer, 0) > 0 THEN
+      PERFORM private.transfer_quiz_prize_to_winner_v2(
+        v_event_id, v_rank1_attempt, '88000000-0000-4000-8000-000000000313'
+      );
+      UPDATE public.quiz_events
+      SET status = 'completed',
+          finalization_state = 'awarded',
+          results_published_at = pg_catalog.clock_timestamp()
+      WHERE id = v_event_id;
+      RAISE EXCEPTION 'failed>0 but direct transfer+publish succeeded: %', v_deadlines USING ERRCODE = 'S1024';
+    END IF;
+    RAISE EXCEPTION 'expected 1 award for Bob (313), got count=%, customer=%, deadlines=%',
+      v_awards_count, v_award_customer, v_deadlines
       USING ERRCODE = 'S1017';
   END IF;
 

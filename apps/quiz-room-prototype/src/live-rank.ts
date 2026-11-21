@@ -300,6 +300,45 @@ export class LiveRankIndexEngine {
       customerCurrentEntry,
       attemptToCustomer,
     };
+
+    // Replay any durably committed live_submissions not yet reflected in the
+    // last published snapshot (e.g. after a DO restart between write and publish).
+    const committedRows = this.storage.exec<SubmissionRow>(
+      `SELECT * FROM live_submissions WHERE event_id = ?`,
+      eventId
+    ).rows;
+    for (const row of committedRows) {
+      const existing = state.customerCurrentEntry.get(row.customer_id);
+      const entry: LiveRankEntry = {
+        customerId: row.customer_id,
+        userId: row.user_id,
+        merchantId: row.merchant_id,
+        attemptId: row.attempt_id,
+        leaderboardUsername: row.leaderboard_username,
+        score: Number(row.score),
+        elapsedMs: Number(row.elapsed_ms),
+        submittedAtMs: Number(row.submitted_at_ms),
+        attemptStatus: row.attempt_status === 'scored' ? 'scored' : 'submitted',
+      };
+      if (
+        existing &&
+        existing.attemptId === entry.attemptId &&
+        existing.score === entry.score &&
+        existing.elapsedMs === entry.elapsedMs
+      ) {
+        continue;
+      }
+      if (state.merchantId === 'unknown' && entry.merchantId !== 'unknown') {
+        state.merchantId = entry.merchantId;
+      }
+      if (existing) {
+        this.removeEntryFromRanges(state, existing);
+      }
+      this.insertEntryIntoRanges(state, entry);
+      state.customerCurrentEntry.set(entry.customerId, entry);
+      state.attemptToCustomer.set(entry.attemptId, entry.customerId);
+    }
+
     this.eventStates.set(eventId, state);
     return state;
   }

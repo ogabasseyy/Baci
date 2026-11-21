@@ -2066,6 +2066,34 @@ BEGIN
 
   GET DIAGNOSTICS v_attempts_written = ROW_COUNT;
 
+  -- Preserve device bindings from edge admissions so post-event canonical
+  -- recovery (resume_quiz_attempt_v2) succeeds on live events.
+  INSERT INTO public.quiz_attempt_devices (
+    attempt_id,
+    event_id,
+    device_hash,
+    allowed
+  )
+  SELECT DISTINCT ON (qa.id)
+    qa.id,
+    qa.event_id,
+    adm.device_hash,
+    true
+  FROM public.quiz_attempts AS qa
+  JOIN private.quiz_edge_attempt_staging AS s
+    ON s.event_id = qa.event_id
+   AND s.attempt_id = qa.id
+  JOIN public.quiz_event_admissions AS adm
+    ON adm.event_id = qa.event_id
+   AND (
+     adm.id = s.admission_id
+     OR (s.admission_id IS NULL AND adm.customer_id = qa.customer_id)
+   )
+  WHERE qa.event_id = p_event_id
+    AND adm.device_hash ~ '^[0-9a-f]{64}$'
+  ORDER BY qa.id, adm.created_at DESC
+  ON CONFLICT (attempt_id) DO NOTHING;
+
   IF v_event.status = 'cancelled' THEN
     DELETE FROM public.quiz_event_results_v2
     WHERE event_id = p_event_id;

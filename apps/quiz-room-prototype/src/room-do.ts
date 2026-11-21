@@ -1174,7 +1174,7 @@ export class QuizRoomEngine {
             this.storage.exec(
               `UPDATE room_answers
                SET raw_answer = ?, selected_answer_hash = ?, received_at_ms = ?,
-                   answered_in_ms = ?, timeout = 0, is_correct = ?
+                   answered_in_ms = ?, timeout = 0, score_delta = ?
                WHERE attempt_id = ? AND position = ?`,
               input.answer,
               selectedAnswerHash,

@@ -1,21 +1,11 @@
 import 'server-only';
-import { z } from 'zod';
 import { verifyTransaction } from '@/lib/paystack';
 import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-terminal-status';
-import { paystackVerifyResponseSchema } from '@/schemas/paystack-card-offer-verification';
+import { paystackTerminalCustomerSchema } from '@/schemas/paystack-card-offer-verification';
 import {
   type BankCardOfferAttempt,
   verifyBankCardOfferAttempt,
 } from './bank-card-offer-payment';
-
-const paystackTerminalCustomerSchema = z.object({
-  customer: z.object({
-    email: z
-      .string()
-      .trim()
-      .pipe(paystackVerifyResponseSchema.shape.data.shape.customer.shape.email),
-  }),
-});
 
 export async function verifyBankCardOfferPaystack(
   attempt: BankCardOfferAttempt,
@@ -48,8 +38,9 @@ export async function verifyBankCardOfferPaystack(
   if (status !== 'success') {
     // Terminal evidence only holds the exact reference for review. Its
     // amount may describe a partial reversal, so requiring the original
-    // amount here could hide a legitimate reversal. Successful capture
-    // approval below still requires the full saved amount.
+    // amount here could hide a legitimate reversal. Keep the original
+    // reported amount as review evidence. Refunds independently read the
+    // verified capture, and capture approval requires the full saved amount.
     if (terminal.success) {
       const customer = paystackTerminalCustomerSchema.safeParse(data);
       return 'domain' in data &&

@@ -72,6 +72,7 @@ export function setup(
   let shouldFailCompletion = failFirstCompletion;
   let paid = false;
   let terminalReview = false;
+  const capture = { held: false };
   const refundInsert = vi.fn().mockResolvedValue({ error: null });
   const quote = {
     merchantId,
@@ -130,6 +131,9 @@ export function setup(
               amount: 95,
               gateway_reference: reference,
               gateway: 'paystack',
+              transaction_status: paid ? 'completed' : 'pending',
+              order_payment_status: paid ? 'paid' : 'unpaid',
+              inventory_confirmed: paid,
             },
           ],
         };
@@ -191,6 +195,8 @@ export function setup(
         };
       case 'request_bank_card_offer_initialization_review':
         return { data: true, error: null };
+      case 'get_bank_card_offer_verification_hold':
+        return { data: capture.held, error: null };
       case 'flag_bank_card_offer_terminal_review':
         terminalReview = true;
         return { data: true };
@@ -289,5 +295,5 @@ export function setup(
     };
     return chain;
   });
-  return { data, refundInsert };
+  return { data, refundInsert, capture };
 }

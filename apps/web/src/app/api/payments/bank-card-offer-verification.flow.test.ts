@@ -14,6 +14,41 @@ describe('bank card offer verification', () => {
   it.each([
     'cookie',
     'bearer',
+  ] as const)('keeps a paid %s capture on review after a durable hold', async (authMode) => {
+    const { capture } = setup('035', 'Wema Bank');
+    const paid = await verify(request('verify', { reference }));
+    expect(paid.status).toBe(200);
+    await expect(paid.json()).resolves.toMatchObject({
+      finalizationOutcome: 'completed',
+    });
+
+    mocks.rpc.mockClear();
+    capture.held = true;
+    mocks.cookieAuth.mockResolvedValueOnce({
+      authMode,
+      user: { id: userId },
+      supabase: mocks,
+    });
+    const input = request('verify', { reference });
+    if (authMode === 'bearer')
+      input.headers.set('authorization', 'Bearer test-only');
+    const replay = await verify(input);
+
+    expect(replay.status).toBe(202);
+    await expect(replay.json()).resolves.toMatchObject({
+      code: 'BANK_CARD_OFFER_CAPTURE_REVIEW',
+      orderId,
+      status: 'pending',
+    });
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      'complete_order_gateway_payment',
+      expect.anything()
+    );
+  });
+
+  it.each([
+    'cookie',
+    'bearer',
   ] as const)('keeps a processing Paystack transaction pending for %s checkout', async (authMode) => {
     const { data } = setup('035', 'Wema Bank');
     mocks.cookieAuth.mockResolvedValueOnce({

@@ -95,7 +95,19 @@ it.each([
   expect(complete).not.toHaveBeenCalled();
 });
 
-it('uses verified evidence for completion and reports the atomic capture', async () => {
+it.each([
+  { data: false, error: null, outcome: undefined },
+  { data: true, error: null, outcome: 'bank_offer_capture_review' },
+  {
+    data: null,
+    error: { code: '57014' },
+    outcome: 'bank_offer_verification_wait',
+  },
+])('requires an unheld capture before completing (%j)', async ({
+  data,
+  error,
+  outcome,
+}) => {
   const gatewayResponse = {
     id: '55',
     status: 'success' as const,
@@ -136,6 +148,25 @@ it('uses verified evidence for completion and reports the atomic capture', async
       verifiedAt: gatewayResponse.paid_at,
     },
   });
+  rpc.mockResolvedValueOnce({ data, error });
+  if (outcome) {
+    await expect(
+      resolveBankCardOfferGatewayCompletion(input)
+    ).resolves.toMatchObject({
+      ok: false,
+      outcome: { kind: outcome },
+    });
+    expect(rpc).toHaveBeenCalledExactlyOnceWith(
+      'get_bank_card_offer_verification_hold',
+      {
+        p_order_id: input.orderId,
+        p_merchant_id: input.merchantId,
+        p_transaction_id: input.transactionId,
+      }
+    );
+    expect(complete).not.toHaveBeenCalled();
+    return;
+  }
   complete.mockResolvedValue({
     ok: true,
     completion: {

@@ -123,6 +123,8 @@ export function useParamReconciliationVerification({
           return;
         }
         if (requireVerifiedPayment && result.paid && reference) {
+          // Cart storage failures are logged in the helper and retain the
+          // snapshot for retry. They must not alter the verified payment.
           await deferredBankOfferCart
             .clearIfUnchanged(orderId, reference, () => !cancelled)
             .catch(() => undefined);

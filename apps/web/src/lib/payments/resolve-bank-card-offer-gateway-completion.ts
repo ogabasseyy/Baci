@@ -116,6 +116,29 @@ export async function resolveBankCardOfferGatewayCompletion({
       outcome: { kind: 'bank_offer_capture_review' as const },
     };
   }
+  // Replays of already-paid captures can skip status-changing DB
+  // triggers. Read the same durable fence as native verification before
+  // returning a successful completion to any caller.
+  const hold = await scopedClient.rpc('get_bank_card_offer_verification_hold', {
+    p_order_id: orderId,
+    p_merchant_id: merchantId,
+    p_transaction_id: transactionId,
+  });
+  if (hold.error || typeof hold.data !== 'boolean') {
+    return {
+      ok: false as const,
+      outcome: {
+        kind: 'bank_offer_verification_wait' as const,
+        providerUnavailable: true,
+      },
+    };
+  }
+  if (hold.data) {
+    return {
+      ok: false as const,
+      outcome: { kind: 'bank_offer_capture_review' as const },
+    };
+  }
   const result = await completeOrderGatewayPayment({
     actor,
     expectedOutstandingMinor,

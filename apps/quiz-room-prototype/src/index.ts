@@ -330,6 +330,19 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
           eventId: string;
           endsAtMs: number;
         }>(request);
+        if (this.env.EVENT_COORDINATOR) {
+          const coordStub = getWeurStub(
+            this.env.EVENT_COORDINATOR,
+            body.eventId
+          );
+          const csRes = await coordStub.fetch(
+            `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(body.eventId)}`
+          );
+          if (csRes.ok) {
+            const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+            this.controlState.applySnapshot(snapshot);
+          }
+        }
         return jsonResponse(
           await this.engine.seal(body.persistedCloseAtMs, body.mode, {
             eventId: body.eventId,

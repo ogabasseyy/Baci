@@ -1359,10 +1359,58 @@ export class QuizRoomEngine {
         throw new QuizRoomError('QZ040', 'quiz_device_binding_required', 403);
       }
 
+      let effectiveTarget = target;
+      let effectiveAlarmState = alarmState;
+      if (
+        effectiveTarget.status === 'started' &&
+        !this.controlState.isEventCancelled(config.eventId) &&
+        effectiveAlarmState.eventStatus !== 'cancelled'
+      ) {
+        const testerRevoked = this.controlState.isTesterRevoked(
+          config.eventId,
+          effectiveTarget.user_id
+        );
+        const attemptRestricted =
+          this.controlState.isAttemptDisqualified(effectiveTarget.attempt_id) ||
+          this.controlState.isAttemptBlocked(
+            config.eventId,
+            effectiveTarget.attempt_id,
+            effectiveTarget.customer_id
+          );
+        if (testerRevoked || attemptRestricted) {
+          const restrictedStatus = testerRevoked
+            ? 'tester_revoked'
+            : 'disqualified';
+          const submittedAtMs = effectiveTarget.submitted_at_ms ?? nowMs;
+          this.storage.exec(
+            `UPDATE room_attempts
+               SET status = ?, close_reason = ?, submitted_at_ms = ?, current_issued_at_ms = NULL
+             WHERE attempt_id = ?`,
+            restrictedStatus,
+            restrictedStatus,
+            submittedAtMs,
+            effectiveTarget.attempt_id
+          );
+          effectiveAlarmState = this.enqueueSubmittedAttemptSync(
+            effectiveTarget.attempt_id,
+            config,
+            effectiveAlarmState,
+            nowMs
+          );
+          effectiveTarget = {
+            ...effectiveTarget,
+            status: restrictedStatus,
+            close_reason: restrictedStatus,
+            submitted_at_ms: submittedAtMs,
+            current_issued_at_ms: null,
+          };
+        }
+      }
+
       const projected = this.projectAttemptStateSync(
-        target,
+        effectiveTarget,
         config,
-        alarmState,
+        effectiveAlarmState,
         nowMs,
         true
       );

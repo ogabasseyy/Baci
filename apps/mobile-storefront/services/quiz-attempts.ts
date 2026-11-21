@@ -104,12 +104,16 @@ export async function startQuizAttemptV2(
 export async function submitQuizAnswerV2({
   answer,
   attemptId,
+  backendMode,
   baseUrl,
   clientAnsweredAt,
   expectedUserId,
   questionId,
 }: SubmitQuizAnswerV2Input): Promise<QuizV2Attempt> {
-  const edgeSession = await resolveQuizEdgeSessionForAttempt(attemptId);
+  const edgeSession = await resolveQuizEdgeSessionForAttempt(
+    attemptId,
+    expectedUserId
+  );
   if (edgeSession) {
     return submitQuizEdgeAnswer(edgeSession, {
       answer,
@@ -117,6 +121,13 @@ export async function submitQuizAnswerV2({
       clientAnsweredAt,
       questionId,
     });
+  }
+  if (backendMode === 'edge_rooms') {
+    throw new QuizServiceError(
+      'Your quiz edge session expired. Please rejoin the quiz.',
+      'QUIZ_EDGE_SESSION_MISSING',
+      409
+    );
   }
   return requestQuizV2(
     `/api/quiz/attempts/${encodeURIComponent(attemptId)}/answers`,

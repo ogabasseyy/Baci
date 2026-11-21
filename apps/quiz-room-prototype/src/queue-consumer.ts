@@ -149,7 +149,14 @@ async function postIngestRpc(
 }
 
 function isTransientStatus(status: number): boolean {
-  return status === 408 || status === 425 || status === 429 || status >= 500;
+  return (
+    status === 401 ||
+    status === 403 ||
+    status === 408 ||
+    status === 425 ||
+    status === 429 ||
+    status >= 500
+  );
 }
 
 export async function handleQuizQueueBatch(

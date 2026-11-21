@@ -178,6 +178,7 @@ export interface SubmitQuizAnswerInput extends QuizServiceOptions {
 export interface SubmitQuizAnswerV2Input extends QuizServiceOptions {
   answer: string;
   attemptId: string;
+  backendMode?: QuizEventBackendMode;
   clientAnsweredAt?: string;
   expectedUserId: string;
   questionId: string;

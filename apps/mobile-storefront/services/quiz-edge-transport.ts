@@ -1,7 +1,16 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { quizV2AttemptResponseSchema } from '@/schemas/quiz-schemas';
 import { getQuizAttestationHeaders } from './quiz-app-attestation';
+import {
+  clearQuizEdgeSession,
+  getQuizEdgeSession,
+  getQuizEdgeSessionForAttempt,
+  type QuizEdgeCheckInSession,
+  quizEdgeCheckInResponseSchema,
+  resolveQuizEdgeSessionForAttempt,
+  saveQuizEdgeAttemptSession,
+  saveQuizEdgeSession,
+} from './quiz-edge-session';
 import {
   getQuizAppMetadata,
   QUIZ_CONTRACT_HEADER,
@@ -23,94 +32,14 @@ import { QuizServiceError } from './quiz-types';
 
 export const QUIZ_TICKET_HEADER = 'X-Baci-Quiz-Ticket';
 
-export const quizEdgeCheckInResponseSchema = z.object({
-  admissionId: z.string().uuid(),
-  eventId: z.string().uuid(),
-  merchantId: z.string().uuid(),
-  roomId: z.string().min(1),
-  roomIndex: z.number().int().nonnegative(),
-  leaderboardUsername: z.string().min(1),
-  maxAttempts: z.number().int().positive(),
-  startsAt: z.string().datetime({ offset: true }),
-  endsAt: z.string().datetime({ offset: true }),
-  rulesVersion: z.string().min(1),
-  reused: z.boolean(),
-  backendMode: z.literal('edge_rooms'),
-  edgeBaseUrl: z.string().url(),
-  ticket: z.string().startsWith('bqt1.'),
-});
-
-export type QuizEdgeCheckInSession = z.infer<
-  typeof quizEdgeCheckInResponseSchema
-> & {
-  expectedUserId?: string;
+export {
+  clearQuizEdgeSession,
+  getQuizEdgeSession,
+  getQuizEdgeSessionForAttempt,
+  type QuizEdgeCheckInSession,
+  quizEdgeCheckInResponseSchema,
+  resolveQuizEdgeSessionForAttempt,
 };
-
-const activeEdgeSessions = new Map<string, QuizEdgeCheckInSession>();
-const activeAttemptSessions = new Map<string, QuizEdgeCheckInSession>();
-const EDGE_ATTEMPT_STORAGE_PREFIX = '@baci/quiz-edge-attempt:';
-
-function sessionKey(eventId: string, expectedUserId?: string): string {
-  return `${eventId}:${expectedUserId ?? 'anon'}`;
-}
-
-export function getQuizEdgeSession(
-  eventId: string,
-  expectedUserId?: string
-): QuizEdgeCheckInSession | undefined {
-  return activeEdgeSessions.get(sessionKey(eventId, expectedUserId));
-}
-
-export function getQuizEdgeSessionForAttempt(
-  attemptId: string
-): QuizEdgeCheckInSession | undefined {
-  return activeAttemptSessions.get(attemptId);
-}
-
-/**
- * Resolves an edge session for an attempt, hydrating from AsyncStorage after
- * an OS cold restart or background kill so answers never fall back to Postgres.
- */
-export async function resolveQuizEdgeSessionForAttempt(
-  attemptId: string
-): Promise<QuizEdgeCheckInSession | undefined> {
-  const cached = activeAttemptSessions.get(attemptId);
-  if (cached) return cached;
-  try {
-    const raw = await AsyncStorage.getItem(
-      `${EDGE_ATTEMPT_STORAGE_PREFIX}${attemptId}`
-    );
-    if (!raw) return undefined;
-    const parsed = quizEdgeCheckInResponseSchema.safeParse(JSON.parse(raw));
-    if (!parsed.success) return undefined;
-    const session: QuizEdgeCheckInSession = {
-      ...parsed.data,
-      edgeBaseUrl: parsed.data.edgeBaseUrl.replace(/\/$/, ''),
-    };
-    activeAttemptSessions.set(attemptId, session);
-    return session;
-  } catch {
-    return undefined;
-  }
-}
-
-export function clearQuizEdgeSession(
-  eventId: string,
-  expectedUserId?: string
-): void {
-  const key = sessionKey(eventId, expectedUserId);
-  const existing = activeEdgeSessions.get(key);
-  activeEdgeSessions.delete(key);
-  if (!existing) return;
-  for (const [attemptId, session] of activeAttemptSessions.entries()) {
-    if (session === existing) {
-      activeAttemptSessions.delete(attemptId);
-      AsyncStorage.removeItem(
-        `${EDGE_ATTEMPT_STORAGE_PREFIX}${attemptId}`
-      ).catch(() => undefined);
-    }
-  }
-}
 
 export async function checkInQuizEdgeEvent(
   input: StartQuizAttemptV2Input & { checkInRequestId: string }
@@ -159,10 +88,7 @@ export async function checkInQuizEdgeEvent(
     edgeBaseUrl: admitted.edgeBaseUrl.replace(/\/$/, ''),
     expectedUserId: input.expectedUserId,
   };
-  activeEdgeSessions.set(
-    sessionKey(input.eventId, input.expectedUserId),
-    session
-  );
+  saveQuizEdgeSession(input.eventId, session);
   return session;
 }
 
@@ -217,7 +143,10 @@ async function fetchEdgeJson<T>(
       }
       return parsed.data;
     } catch (error) {
-      if (error instanceof QuizServiceError && error.status < 500) {
+      if (
+        error instanceof QuizServiceError &&
+        (error.status < 500 || error.code === 'QUIZ_INVALID_RESPONSE')
+      ) {
         throw error;
       }
       lastError = timedOut
@@ -226,7 +155,13 @@ async function fetchEdgeJson<T>(
             'QUIZ_REQUEST_TIMEOUT',
             504
           )
-        : error;
+        : error instanceof QuizServiceError
+          ? error
+          : new QuizServiceError(
+              'Network request failed. Please try again.',
+              'QUIZ_EDGE_NETWORK_ERROR',
+              503
+            );
     } finally {
       clearTimeout(timer);
     }
@@ -260,11 +195,7 @@ export async function startQuizEdgeAttempt(
     quizV2AttemptResponseSchema,
     2
   );
-  activeAttemptSessions.set(started.attemptId, session);
-  await AsyncStorage.setItem(
-    `${EDGE_ATTEMPT_STORAGE_PREFIX}${started.attemptId}`,
-    JSON.stringify(session)
-  ).catch(() => undefined);
+  await saveQuizEdgeAttemptSession(started.attemptId, session);
   return started;
 }
 

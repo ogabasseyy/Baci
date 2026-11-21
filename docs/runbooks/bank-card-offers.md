@@ -78,6 +78,23 @@ Automatic whole-order cancellation refunds use the exact kobo amount from the ve
 
 The refund worker handles whole-order cancellations. When its ledger already shows a partial refund, it withholds that payment leg before looking up or submitting the full capture amount. A linked manual record leaves the balance for Operations to complete. A completed provider refund that covers only part of the leg goes to reconciliation. The bank-offer refund flow tests exercise both cases against the cancellation worker with mocked Paystack.
 
+For a manual merchandise refund, use the order ID and merchant ID to ask an authorized database operator for the saved unit values. The snapshot remains private. The read only needs the allocations, with no buyer or card information.
+
+```sql
+SELECT line.value->>'itemId' AS order_item_id,
+       unit.ordinality AS unit_number,
+       unit.value::bigint AS net_kobo
+FROM private.bank_card_offer_order_snapshots AS snapshot
+CROSS JOIN LATERAL jsonb_array_elements(snapshot.offer_quote->'allocations') AS line(value)
+CROSS JOIN LATERAL jsonb_array_elements_text(line.value->'unitNetAmountsKobo')
+  WITH ORDINALITY AS unit(value, ordinality)
+WHERE snapshot.order_id = $1::uuid
+  AND snapshot.merchant_id = $2::uuid
+ORDER BY order_item_id, unit_number;
+```
+
+Match the returned item and unit numbers to the return record. Sum `net_kobo` only for units in that return that have no existing or pending refund. A zero-value unit adds zero. Reconcile any prior refunds and reversals against the original Paystack capture and confirm that the sum fits within its remaining refundable balance. Resolve unmatched or ambiguous records before sending money. Submit the exact positive kobo amount for a partial refund and link the refund record to the original payment leg. A total of zero needs no Paystack refund. Leaving the amount blank asks Paystack for a full refund. Resolve delivery, tax, and other fees separately under the return policy.
+
 When Paystack reports a reversal with a usable integer amount, the open reconciliation record stores it as `paystack_reported_reversal_amount_kobo` for Operations. The reversal status blocks automatic refunds. The reported amount is advisory and is never used as a refund amount or subtracted from the saved capture. Operations confirm the actual reversed value with Paystack before changing the order or issuing a refund.
 
 Immediately before refund submission, the cancellation worker re-verifies Paystack and binds the successful response to the saved provider ID, domain, reference and exact amount. The saved approval already binds the original email, issuer, card brand and filter policy to that capture. Refunds return money to the original payment source, so later changes to those provider labels cannot prevent a refund on an otherwise verified capture. The database locks the payment row, checks the active refund claim and any recorded reversal or dispute, and records the dispatch before the HTTP call. A later worker reconciles that dispatch with Paystack before any replacement. Signed disputes hold the saved attempt for review. A confirmed merchant win releases only the hold for that dispute. Other open or lost disputes and independently confirmed reversals continue to block automatic refunds. If a reversal or dispute arrives after admission, the review records that the provider call may already be in flight. Paystack controls the final refund decision if the provider state changes after admission.

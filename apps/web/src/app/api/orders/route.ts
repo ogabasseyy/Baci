@@ -101,6 +101,7 @@ import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import {
+  isMobileOxygenOrder,
   rejectMobileOxygenCreditCombination,
   rejectMobileOxygenZeroBalance,
 } from './mobile-oxygen-order-admission';
@@ -1793,48 +1794,61 @@ export async function POST(request: NextRequest) {
     // (empty) offer economics the subtotal recompute below would throw and
     // 500 a retry the RPC would otherwise replay. The RPC's request-hash
     // check rejects true conflicts first.
-    if (
-      body.shipping_rate_id &&
+    const needsMerchantRateSubtotal =
+      Boolean(body.shipping_rate_id) &&
       !isIdempotentMerchantRateReplay &&
-      !isIdempotentOfferOrderReplay
+      !isIdempotentOfferOrderReplay;
+    const needsOxygenSubtotal =
+      !merchantResult.oxygenAdmission &&
+      replaySnapshot === null &&
+      isMobileOxygenOrder(request, body.payment_method, body.source);
+    if (
+      canonicalOrderSubtotal === null &&
+      (needsMerchantRateSubtotal || needsOxygenSubtotal)
     ) {
-      if (canonicalOrderSubtotal == null) {
-        try {
-          canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
-            allowUnavailableConditionPrices: isConditionReplay,
-            conditionPriceOverrides,
-            items: orderItemsPayload,
-            merchantId: merchant_id,
-            offerPrices: liveOfferPrices,
-            supabase,
-          });
-        } catch (subtotalError) {
-          if (subtotalError instanceof OrderConditionUnavailableError)
-            return conditionOfferUnavailableResponse();
-          if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
-            return NextResponse.json(
-              { error: 'Failed to create order', details: 'invalid_items' },
-              { status: 400 }
-            );
-          }
-          logger.error({
-            error: subtotalError,
-            merchantId: merchant_id,
-            message: 'Shipping-rate canonical subtotal recompute failed',
-          });
+      try {
+        canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+          allowUnavailableConditionPrices: isConditionReplay,
+          conditionPriceOverrides,
+          items: orderItemsPayload,
+          merchantId: merchant_id,
+          offerPrices: liveOfferPrices,
+          supabase,
+        });
+      } catch (subtotalError) {
+        if (subtotalError instanceof OrderConditionUnavailableError)
+          return conditionOfferUnavailableResponse();
+        if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
           return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
+            { error: 'Failed to create order', details: 'invalid_items' },
+            { status: 400 }
           );
         }
-      }
-      if (canonicalOrderSubtotal == null) {
+        logger.error({
+          error: subtotalError,
+          merchantId: merchant_id,
+          message: 'Checkout canonical subtotal recompute failed',
+        });
         return NextResponse.json(
-          { error: 'Failed to create order', details: 'invalid_items' },
-          { status: 400 }
+          { error: 'Internal server error' },
+          { status: 500 }
         );
       }
-
+    }
+    if (
+      (needsMerchantRateSubtotal || needsOxygenSubtotal) &&
+      canonicalOrderSubtotal === null
+    ) {
+      return NextResponse.json(
+        { error: 'Failed to create order', details: 'invalid_items' },
+        { status: 400 }
+      );
+    }
+    if (
+      body.shipping_rate_id &&
+      needsMerchantRateSubtotal &&
+      canonicalOrderSubtotal !== null
+    ) {
       // Published merchant rates are exposed through the anonymous-safe RPC.
       // Verification must not depend on a privileged credential or read the
       // underlying private tables. Recompute the fee and destination as before.

@@ -1,5 +1,18 @@
 -- Transactional coverage for background eligibility and its worker binding.
 BEGIN;
+DO $test$
+DECLARE
+ access_role text;
+BEGIN
+ IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='oxygen_private.provider_states'::regclass) THEN
+  RAISE EXCEPTION 'Provider state RLS is disabled';
+ END IF;
+ FOREACH access_role IN ARRAY ARRAY['anon','authenticated'] LOOP
+  IF has_column_privilege(access_role,'oxygen_private.provider_states','eligibility_progress','SELECT,INSERT,UPDATE') THEN
+   RAISE EXCEPTION 'Role % has direct eligibility progress access',access_role;
+  END IF;
+ END LOOP;
+END $test$;
 INSERT INTO auth.users(id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 VALUES
  ('efab0000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','eligibility-owner@example.test','test',now(),now(),now(),'{}','{}'),

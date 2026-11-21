@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { computeCanonicalOrderSubtotal } from '@/lib/checkout/canonical-order-subtotal';
 import { readOxygenMobileCapabilities } from '@/lib/payments/oxygen/mobile-capabilities';
 import {
   createOrderRequest,
@@ -6,8 +7,13 @@ import {
   MERCHANT_ID,
   POST,
   resetOrderRouteMocks,
+  setNextOrderTax,
 } from './route.transaction-discount-fixtures.test-support';
 
+vi.mock('@/lib/checkout/canonical-order-subtotal', async (load) => ({
+  ...(await load<typeof import('@/lib/checkout/canonical-order-subtotal')>()),
+  computeCanonicalOrderSubtotal: vi.fn(),
+}));
 vi.mock('@/lib/payments/oxygen/mobile-capabilities', () => ({
   readOxygenMobileCapabilities: vi.fn(async () => ({
     ok: true,
@@ -66,6 +72,44 @@ it('permits only replay reads when Bearer Oxygen admission is closed', async () 
   expect(getLatestRpc().mock.calls.map(([operation]) => operation)).toEqual([
     'storefront_checkout_replay_snapshot',
   ]);
+});
+
+it('rejects a fresh mobile order with a server-priced zero subtotal and no discount', async () => {
+  vi.mocked(computeCanonicalOrderSubtotal).mockResolvedValueOnce(0);
+  setNextOrderTax(0);
+  const request = createOrderRequest({
+    payment_method: 'oxygen',
+    items: [
+      { product_id: 'p-mac', quantity: 1, price: 0, name: 'Test product' },
+    ],
+    subtotal: 0,
+    tax_amount: 0,
+  });
+  const response = await POST(request);
+  expect(response.status).toBe(400);
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'OXYGEN_MOBILE_ZERO_BALANCE',
+  });
+  expect(computeCanonicalOrderSubtotal).toHaveBeenCalledOnce();
+  expect(getLatestRpc()).not.toHaveBeenCalledWith(
+    'create_storefront_order',
+    expect.anything()
+  );
+});
+
+it('rejects a guest retry even when it supplies a mobile Oxygen order key', async () => {
+  resetOrderRouteMocks();
+  const request = createOrderRequest({
+    source: 'mobile_app',
+    payment_method: 'oxygen',
+  });
+  request.headers.set(
+    'Idempotency-Key',
+    '43276b67-0362-4d83-a522-eb445dc11735'
+  );
+  expect((await POST(request)).status).toBe(401);
+  expect(readOxygenMobileCapabilities).not.toHaveBeenCalled();
+  expect(getLatestRpc()).not.toHaveBeenCalled();
 });
 
 it.each([

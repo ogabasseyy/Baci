@@ -93,16 +93,28 @@ it.each([
 
 it.each([
   'NETWORK_ERROR',
+  'CONFIG_ERROR',
   'HTTP_503',
   'HTTP_429',
-  'HTTP_401',
-  'HTTP_400',
-])('keeps verification retryable when Paystack returns %s without a missing-reference result', async (code) => {
+])('signals a transient verification outage for %s', async (code) => {
   verify.mockResolvedValueOnce({
     success: false,
     code,
     error: 'Verification unavailable',
   });
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'unavailable',
+  });
+});
 
+it.each([
+  'HTTP_401',
+  'HTTP_400',
+])('has no terminal evidence for %s', async (code) => {
+  verify.mockResolvedValueOnce({
+    success: false,
+    code,
+    error: 'Verification unavailable',
+  });
   await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toBeNull();
 });

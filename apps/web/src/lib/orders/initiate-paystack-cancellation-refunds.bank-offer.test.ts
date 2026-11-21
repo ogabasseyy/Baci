@@ -149,6 +149,7 @@ describe('bank-offer cancellation refunds', () => {
     try {
       await expect(
         initiatePaystackCancellationRefunds({
+          claimToken: 'claim-1',
           deadlineMs: 1_238_000,
           order,
           refundedPaymentIds: new Set(),
@@ -173,6 +174,7 @@ describe('bank-offer cancellation refunds', () => {
 
     await expect(
       initiatePaystackCancellationRefunds({
+        claimToken: 'claim-1',
         order,
         isLastAttempt,
         refundedPaymentIds: new Set(),
@@ -215,5 +217,21 @@ describe('bank-offer cancellation refunds', () => {
     expect(rpc).not.toHaveBeenCalled();
     expect(mocks.quarantineRefund).toHaveBeenCalled();
     expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+  });
+
+  it('quarantines a bank-offer refund that has no worker claim', async () => {
+    const leg = { ...transaction, gateway_reference: `BCO-${'a'.repeat(32)}` };
+    const rpc = vi.fn();
+    await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase: { rpc } as never,
+      transactions: [leg],
+    });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
+    expect(mocks.quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({ transactions: [leg] })
+    );
   });
 });

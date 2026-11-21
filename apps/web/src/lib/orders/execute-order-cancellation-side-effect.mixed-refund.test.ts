@@ -62,6 +62,7 @@ describe('cancellation with mixed refunds', () => {
     });
 
     const result = executeOrderCancellationSideEffect({
+      claimToken: 'claim-1',
       isLastAttempt,
       merchant,
       order,

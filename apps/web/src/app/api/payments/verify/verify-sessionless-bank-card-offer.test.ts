@@ -208,3 +208,12 @@ it.each([
     { p_reference: reference }
   );
 });
+
+it('backs off on a Paystack outage without filing a capture review', async () => {
+  verify.mockResolvedValueOnce({ kind: 'unavailable' });
+  const result = await verifyNative(snapshot, buyerClient);
+  expect(result.status).toBe(503);
+  expect(result.headers.get('Retry-After')).toBe('15');
+  expect(rpc).toHaveBeenCalledOnce();
+  expect(buyerRpc).not.toHaveBeenCalled();
+});

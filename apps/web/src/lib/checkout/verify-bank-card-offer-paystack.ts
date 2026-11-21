@@ -13,9 +13,18 @@ export async function verifyBankCardOfferPaystack(
   const response = await verifyTransaction(attempt.reference, signal, {
     textIds: true,
   });
-  // A provider lookup without transaction data cannot prove a mismatch
-  // or a terminal outcome. Keep the same attempt pending for verification.
-  if (!response.success) return null;
+  // A missing transaction still needs the same reference checked later.
+  // Transport failures additionally tell the caller to back off.
+  if (!response.success) {
+    const code = response.code;
+    return code === 'NETWORK_ERROR' ||
+      code === 'CONFIG_ERROR' ||
+      code === 'HTTP_408' ||
+      code === 'HTTP_429' ||
+      code?.startsWith('HTTP_5')
+      ? ({ kind: 'unavailable' } as const)
+      : null;
+  }
   const { data } = response;
   if (!data || typeof data !== 'object' || typeof data.status !== 'string') {
     return { kind: 'mismatch' } as const;

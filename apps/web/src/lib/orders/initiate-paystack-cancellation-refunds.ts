@@ -102,6 +102,10 @@ export async function initiatePaystackCancellationRefunds({
       continue;
     }
     if (isBankOffer) {
+      if (!claimToken) {
+        bankOfferLegsForReview.push(transaction);
+        continue;
+      }
       const reference = transaction.gateway_reference as string;
       const identity = {
         p_order_id: order.id,
@@ -131,11 +135,6 @@ export async function initiatePaystackCancellationRefunds({
               deadlineMs - Date.now() - REFUND_INITIATION_LEG_BUDGET_MS
             );
       if (verifyBudgetMs > 0) {
-        if (!claimToken) {
-          bankOfferLookupUnavailable = true;
-          if (isLastAttempt) bankOfferLegsForReview.push(transaction);
-          continue;
-        }
         const verification = await verifyTransaction(
           reference,
           AbortSignal.timeout(verifyBudgetMs),

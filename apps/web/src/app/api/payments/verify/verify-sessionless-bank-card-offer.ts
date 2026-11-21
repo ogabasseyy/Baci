@@ -63,6 +63,16 @@ export async function verifySessionlessBankCardOffer(
       adjustmentsKobo:
         amountKobo - (quote.productSubtotalKobo - quote.discountKobo),
     });
+    if (verified?.kind === 'unavailable') {
+      logger.warn({
+        message: 'Paystack bank offer verification unavailable',
+        orderId: snapshot.orderId,
+      });
+      return NextResponse.json(
+        { error: 'Verification unavailable' },
+        { status: 503, headers: { 'Retry-After': '15' } }
+      );
+    }
     if (verified?.kind === 'terminal') {
       const review = await client.rpc('flag_bank_card_offer_terminal_review', {
         ...args,

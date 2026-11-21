@@ -68,7 +68,7 @@ export async function resolveOrderGatewayCompletion({
               transactionId,
             })
           : null;
-      if (!verified) {
+      if (!verified || verified.kind === 'unavailable') {
         return {
           ok: false as const,
           outcome: {

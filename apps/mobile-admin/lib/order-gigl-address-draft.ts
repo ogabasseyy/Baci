@@ -16,8 +16,21 @@ export function applyAddressField(
   value: string
 ): Draft {
   if (!PIN_FIELDS.includes(field)) return { ...draft, [field]: value };
+  if (
+    field === 'address' &&
+    normalizeAddress(draft.address ?? '') === normalizeAddress(value)
+  ) {
+    return { ...draft, address: value };
+  }
   const { latitude: _lat, longitude: _lng, ...rest } = draft;
+  if (field === 'address') {
+    return { ...rest, address: value, city: '', state: '' };
+  }
   return { ...rest, [field]: value };
+}
+
+function normalizeAddress(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 // A picked place replaces address, city, state and pin together.

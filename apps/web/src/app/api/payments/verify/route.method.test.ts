@@ -8,8 +8,11 @@ const CSRF_HEADERS = {
 };
 
 describe('/api/payments/verify method boundary', () => {
-  it('requires authenticated POST for bank offers even with a tracking token', async () => {
-    const reference = `BCO-${'a'.repeat(32)}`;
+  it.each([
+    'BCO',
+    'bco',
+  ])('requires authenticated POST for %s references even with a tracking token', async (prefix) => {
+    const reference = `${prefix}-${'a'.repeat(32)}`;
     const response = await GET(
       new NextRequest(
         `http://localhost:3000/api/payments/verify?reference=%20${reference}%20&trackingToken=track-1`

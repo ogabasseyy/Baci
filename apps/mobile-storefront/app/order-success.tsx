@@ -3,6 +3,7 @@
  * Shown after successful order placement
  */
 
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Linking } from 'react-native';
@@ -49,7 +50,7 @@ export default function OrderSuccessScreen() {
     deliveryEstimate,
     reconciliation,
   } = useLocalSearchParams<Record<string, string>>();
-  const requireVerifiedPayment = Boolean(reference?.startsWith('BCO-'));
+  const requireVerifiedPayment = hasBankCardOfferReferencePrefix(reference);
   const isParamReconciliation =
     requireVerifiedPayment ||
     reconciliation === 'order_cancelled' ||

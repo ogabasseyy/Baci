@@ -1,4 +1,7 @@
-import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
+import {
+  BANK_CARD_OFFER_REFERENCE_PATTERN,
+  hasBankCardOfferReferencePrefix,
+} from '@baci/shared/constants';
 import { CHECKOUT_API_BASE_URL } from '@/components/checkout/checkout-screen.constants';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { getSession } from '@/lib/supabase';
@@ -54,7 +57,7 @@ export async function checkReferenceSettled(
   reference: string,
   trackingToken?: string | null
 ): Promise<OrderPaymentVerification> {
-  const bankOffer = reference.startsWith('BCO-');
+  const bankOffer = hasBankCardOfferReferencePrefix(reference);
   if (bankOffer && !BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)) {
     return { paid: false, terminalFailure: 'failed' };
   }

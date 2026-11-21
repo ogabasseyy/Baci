@@ -111,6 +111,7 @@ describe('checkReferenceSettled transport selection', () => {
   it.each([
     'BCO-',
     'BCO-invalid',
+    `bco-${'a'.repeat(32)}`,
     `BCO-${'A'.repeat(32)}`,
   ])('rejects malformed bank offer reference %s without querying the order', async (reference) => {
     await expect(

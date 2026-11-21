@@ -1,3 +1,4 @@
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import { router } from 'expo-router';
 import type { RefObject } from 'react';
 import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
@@ -78,7 +79,10 @@ export async function settleOrderCompletion(
   // cancellation/error callbacks while verification is still running.
   setPaymentStatus('processing');
   if (orderId && !redvaultVerified) {
-    const bankOfferReference = reference?.startsWith('BCO-') ? reference : null;
+    const bankOfferReference =
+      reference && hasBankCardOfferReferencePrefix(reference)
+        ? reference
+        : null;
     const cartIdentity = bankOfferReference
       ? deferredBankOfferCart.capture()
       : null;

@@ -102,6 +102,21 @@ it('requires a checkout key before reading an order', async () => {
   expect(rpc).not.toHaveBeenCalled();
 });
 
+it('reports voucher incompatibility when the route omits the checkout key', async () => {
+  const result = await prepareBankCardOfferOrder({
+    ...bankRequest,
+    hasVoucherItem: true,
+    requestIdempotencyKey: null,
+  });
+
+  if (result.kind !== 'response') throw new Error('Expected a request error');
+  expect(result.response.status).toBe(409);
+  await expect(result.response.json()).resolves.toMatchObject({
+    code: 'BANK_CARD_OFFER_UNAVAILABLE',
+  });
+  expect(rpc).not.toHaveBeenCalled();
+});
+
 it('selects the enabled offer for a fresh checkout owned by the buyer', async () => {
   const result = await prepareBankCardOfferOrder({
     ...bankRequest,

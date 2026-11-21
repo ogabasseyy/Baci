@@ -67,6 +67,8 @@ export async function prepareBankCardOfferOrder({
       ),
     } as const;
   }
+  // Voucher checkout never reads the header key and cannot use a bank offer.
+  // Return the incompatibility below even if the original request had no key.
   if (!requestIdempotencyKey && !hasVoucherItem) {
     return {
       kind: 'response',

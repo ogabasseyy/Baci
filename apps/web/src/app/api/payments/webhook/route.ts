@@ -1,4 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
@@ -767,7 +768,7 @@ export async function POST(request: NextRequest) {
 
     // Bank offer captures must pass the shared verification path before any
     // transaction flip or fallback settlement can run.
-    if (reference.startsWith('BCO-')) {
+    if (hasBankCardOfferReferencePrefix(reference)) {
       return await handleBankCardOfferWebhook({
         gateway,
         reference,

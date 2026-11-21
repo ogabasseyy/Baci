@@ -31,6 +31,8 @@ it('honors an HTTP-date Retry-After', () => {
     expect(bankCardOfferRetryDelay(response)).toBe(60_000);
     response.headers.set('Retry-After', 'Fri, 20 Nov 2026 11:59:00 GMT');
     expect(bankCardOfferRetryDelay(response)).toBe(15_000);
+    response.headers.set('Date', 'Fri, 20 Nov 2026 11:58:30 GMT');
+    expect(bankCardOfferRetryDelay(response)).toBe(30_000);
   } finally {
     vi.useRealTimers();
   }

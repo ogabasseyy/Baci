@@ -1,3 +1,4 @@
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import { type NextRequest, NextResponse } from 'next/server';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -31,7 +32,7 @@ const verification: PaymentVerificationDependencies = {
 // instead of POSTing through a CSRF failure.
 export function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  if (searchParams.get('reference')?.trim().startsWith('BCO-')) {
+  if (hasBankCardOfferReferencePrefix(searchParams.get('reference')?.trim())) {
     return NextResponse.json(
       { error: 'Bank card offer verification requires authenticated POST' },
       { status: 405, headers: { Allow: 'POST' } }
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
   // and keep their existing authority. Bank offers require buyer ownership
   // and record terminal reviews without settling through the bearer lane.
   const { reference, merchantSlug, trackingToken } = parsedBody.data;
-  if (reference.startsWith('BCO-')) {
+  if (hasBankCardOfferReferencePrefix(reference)) {
     return verifyBankCardOfferRequest(
       request,
       reference,

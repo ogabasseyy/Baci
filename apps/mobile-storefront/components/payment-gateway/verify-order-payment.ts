@@ -1,3 +1,4 @@
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import type { TrackedCompletionAttribution } from '@/lib/tracked-order-completion';
 import { checkReferenceSettled } from './verify-order-payment-reference-settlement';
 import {
@@ -97,7 +98,7 @@ export async function verifyOrderPaymentForCompletion({
         };
       }
       // A cached paid row cannot confirm a bank offer after a reversal.
-      return reference.startsWith('BCO-') ? settled : tracked;
+      return hasBankCardOfferReferencePrefix(reference) ? settled : tracked;
     }
     if (tracked.paid || tracked.reconciliation) {
       return tracked;

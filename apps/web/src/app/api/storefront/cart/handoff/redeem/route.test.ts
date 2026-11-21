@@ -721,3 +721,19 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     }
   });
 });
+
+it('rejects a destination revision on an automatic MCP import', async () => {
+  const { cartHandoffRedeemRequestSchema } = await import('@/schemas/cart');
+  const body = connectBody({
+    choice: 'import_mcp',
+    destCartId: DEST_CART_ID,
+    expectedIncomingVersion: 1,
+  });
+  expect(cartHandoffRedeemRequestSchema.safeParse(body).success).toBe(true);
+  expect(
+    cartHandoffRedeemRequestSchema.safeParse({
+      ...body,
+      expectedDestVersion: 1,
+    }).success
+  ).toBe(false);
+});

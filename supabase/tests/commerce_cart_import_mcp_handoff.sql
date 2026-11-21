@@ -11,6 +11,7 @@ DECLARE
   destination_grant uuid := gen_random_uuid();
   handoff uuid := gen_random_uuid();
   second_handoff uuid := gen_random_uuid();
+  third_handoff uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
   result jsonb;
@@ -36,7 +37,8 @@ BEGIN
   INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
     origin_principal_id, operation_id, destination, expires_at)
   VALUES (handoff, 'import-test-link', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:test-import', '{"type":"web"}', now() + interval '5 minutes'),
-         (second_handoff, 'import-test-link-2', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:test-import', '{"type":"web"}', now() + interval '5 minutes');
+         (second_handoff, 'import-test-link-2', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:test-import', '{"type":"web"}', now() + interval '5 minutes'),
+         (third_handoff, 'import-test-link-3', merchant, source, 'legacy:mcp:test-import', 'legacy-handoff:test-import', '{"type":"web"}', now() + interval '5 minutes');
   PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'import-attempt', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM destination_grant::text
@@ -52,9 +54,20 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'reopen-new-attempt', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Reopening did not replay: %', result; END IF;
   result := public.commerce_cart_import_mcp_handoff('import-test-link-2', second_handoff, 'second-link', source_version);
-  IF result->>'code' IS DISTINCT FROM 'handoff_consumed'
+  IF result->>'replayed' IS DISTINCT FROM 'true'
+     OR result->>'grantId' IS DISTINCT FROM destination_grant::text
+     OR (result->'state'->>'cartId')::uuid IS DISTINCT FROM destination
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 2::bigint
-  THEN RAISE EXCEPTION 'A second link duplicated the cart import: %', result; END IF;
+  THEN RAISE EXCEPTION 'A refreshed link did not reopen the cart without duplicates: %', result; END IF;
+  -- Reopening cannot mint a broader proof than the existing restricted grant.
+  UPDATE public.commerce_cart_grants SET allowed_operations = ARRAY['add'] WHERE id = destination_grant;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object(
+    'role','commerce_cart_shopper','exp',9999999999,'cart_scope','bootstrap',
+    'cart_merchant_id',merchant,'cart_principal_id','website-import-test'
+  )::text, true);
+  result := public.commerce_cart_import_mcp_handoff('import-test-link-2', second_handoff, 'restricted-replay', source_version);
+  IF result->>'code' IS DISTINCT FROM 'unauthorized' OR result ? 'state'
+  THEN RAISE EXCEPTION 'A bootstrap replay elevated a restricted grant: %', result; END IF;
   -- Different browser with only a bootstrap proof gets a distinct cart.
   PERFORM set_config('request.jwt.claims', jsonb_build_object(
     'role','commerce_cart_shopper','exp',9999999999,'cart_scope','bootstrap',
@@ -63,7 +76,7 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'foreign-replay', source_version);
   IF result->>'code' IS DISTINCT FROM 'handoff_consumed' OR result ? 'state'
   THEN RAISE EXCEPTION 'An unrelated browser replay saw recipient data: %', result; END IF;
-  result := public.commerce_cart_import_mcp_handoff('import-test-link-2', second_handoff, 'first-visit', source_version);
+  result := public.commerce_cart_import_mcp_handoff('import-test-link-3', third_handoff, 'first-visit', source_version);
   guest_cart := (result->'state'->>'cartId')::uuid;
   IF result->>'ok' IS DISTINCT FROM 'true' OR guest_cart IN (source, destination)
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = guest_cart) IS DISTINCT FROM 1::bigint
@@ -71,7 +84,7 @@ BEGIN
           AND principal_id = 'new-website-import-test') <> 1
      OR EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE cart_id = guest_cart AND principal_id = 'legacy:mcp:test-import')
   THEN RAISE EXCEPTION 'Bootstrap did not create an independent guest cart: %', result; END IF;
-  result := public.commerce_cart_import_mcp_handoff('import-test-link-2', second_handoff, 'bootstrap-retry', source_version);
+  result := public.commerce_cart_import_mcp_handoff('import-test-link-3', third_handoff, 'bootstrap-retry', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true' OR (result->'state'->>'cartId')::uuid IS DISTINCT FROM guest_cart
   THEN RAISE EXCEPTION 'Lost bootstrap reply did not recover the same cart: %', result; END IF;
 END $$;

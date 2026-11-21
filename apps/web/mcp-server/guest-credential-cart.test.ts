@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createFakeGuestCartSupabase } from './guest-cart-fake-supabase';
 import { registerConfiguredGuestCartTool } from './guest-cart-registration';
 import { GuestCartStore } from './guest-cart-store';
-import { guestCredentialModeEnabled } from './guest-credential-cart';
+import { decodeGuestCartCredential, guestCredentialModeEnabled } from './guest-credential-cart';
 
 vi.mock('./cart-handoff', () => ({
   prepareCartHandoff: vi
@@ -183,4 +183,13 @@ it('keeps credential mode opt-in and requires an independent cart-only canonical
       MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS: '1',
     })
   ).toThrow('cart-only');
+});
+
+
+it('rejects noncanonical and malformed cart credential encodings before decoding', () => {
+  const token = Buffer.alloc(32).toString('base64url');
+  expect(decodeGuestCartCredential(token)).toBe('0'.repeat(64));
+  for (const invalid of [token + '=', token + '!', token.slice(1), token.slice(0, -1) + 'B']) {
+    expect(() => decodeGuestCartCredential(invalid)).toThrow();
+  }
 });

@@ -180,6 +180,13 @@ export const cartHandoffRedeemRequestSchema = z
   })
   .superRefine((value, context) => {
     if (value.choice === 'import_mcp') {
+      if (value.expectedDestVersion !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['expectedDestVersion'],
+          message: 'An MCP import uses the locked destination revision',
+        });
+      }
       if (!value.expectedIncomingVersion || value.lines || value.resolutions) {
         context.addIssue({
           code: 'custom',

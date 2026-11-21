@@ -59,7 +59,8 @@ try:
  sql+='\n'+(root/'supabase/tests/commerce_cart_handoff_attachment_lifetime.sql').read_text()
  if '--mcp-import' in sys.argv:
   for name in ['20261015160000_commerce_cart_redeem_grant_expiry.sql',
-               '20261120182000_commerce_cart_import_mcp_handoff.sql']:
+               '20261120182000_commerce_cart_import_mcp_handoff.sql',
+               '20261121103000_commerce_cart_mcp_handoff_refresh_replay.sql']:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'

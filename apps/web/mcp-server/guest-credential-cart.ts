@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import {
   mcpGuestCredentialOutputSchema,
   mcpGuestCartReadInputSchema,
+  modelCartCredentialSchema,
 } from '../src/schemas/mcp-guest-cart';
 import {
   GuestCartCanonicalError,
@@ -116,7 +117,7 @@ export function registerGuestCredentialRead(
 
 /** Represent the same server-minted 256-bit capability on the model tool. */
 export function decodeGuestCartCredential(credential: string): string {
-  return Buffer.from(credential, 'base64url').toString('hex');
+  return Buffer.from(modelCartCredentialSchema.parse(credential), 'base64url').toString('hex');
 }
 
 export function guestCredentialReply<

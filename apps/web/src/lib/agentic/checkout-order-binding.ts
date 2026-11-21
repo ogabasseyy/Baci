@@ -71,12 +71,13 @@ function boundOrderFailureResult(code: string): AgenticCheckoutOrderResult {
  */
 export async function submitSharedCartBindingOrder(input: {
   supabase: SupabaseClient;
+  bindingClient?: SupabaseClient;
   sharedCart: SharedCartBindingRef;
   orderRpcArgs: Record<string, unknown>;
   boundPrincipalId?: string | null;
 }): Promise<SharedCartBindingOutcome> {
   const bound = await submitCartBoundOrder(
-    { client: input.supabase },
+    { client: input.bindingClient ?? input.supabase },
     {
       args: input.orderRpcArgs,
       cartId: input.sharedCart.cart_id,

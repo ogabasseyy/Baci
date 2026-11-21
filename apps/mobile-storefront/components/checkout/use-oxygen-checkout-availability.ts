@@ -5,8 +5,8 @@ import { allowsLocalOxygenNetwork } from '@/lib/api-core';
 import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
 import { useAuthStore } from '@/stores/auth-store';
+import { hasVoucherIdentifier } from '@/stores/cart-line';
 import type { CartItem } from '@/stores/cart-store';
-import { cartHasVoucherLine } from './checkout-prize-cart-guard';
 
 const unavailable =
   'Oxygen checkout is unavailable. Check your connection and try again.';
@@ -28,7 +28,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     customerUserId === userId &&
     customerMerchantId === profile?.merchantId &&
     merchantId === profile?.merchantId;
-  const hasVoucher = cartHasVoucherLine(items);
+  const hasVoucher = items.some(hasVoucherIdentifier);
   const scope =
     profile && linked && !hasVoucher
       ? JSON.stringify([

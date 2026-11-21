@@ -63,23 +63,25 @@ beforeEach(() => {
   jest.mocked(getOxygenMobileProfile).mockReturnValue(profile);
 });
 
-it('does not probe for a voucher cart or mismatched staging customer', async () => {
-  const voucher = {
-    voucher_token: 'test-token',
-    voucher_award_id: 'award-id',
-  } as CartItem;
-  const { rerender, result } = renderHook(
-    ({ items }: { items: CartItem[] }) => useOxygenCheckoutAvailability(items),
-    { initialProps: { items: [voucher] } }
+it.each([
+  { voucher_token: 'test-token', voucher_award_id: 'award-id' },
+  { voucher_token: 'test-token' },
+  { voucher_award_id: 'award-id' },
+])('does not probe when the cart has voucher identifiers %j', async (identifiers) => {
+  const { result } = renderHook(() =>
+    useOxygenCheckoutAvailability([identifiers as CartItem])
   );
   await act(async () => {});
   expect(result.current.disabledReason).toContain('voucher');
   expect(oxygenNativeSession).not.toHaveBeenCalled();
+});
+
+it('does not probe for a mismatched staging customer', async () => {
   jest.mocked(getOxygenMobileProfile).mockReturnValue({
     ...profile,
     merchantId: 'another-merchant',
   });
-  rerender({ items: [] });
+  const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
   await act(async () => {});
   expect(result.current.disabledReason).toContain('linked customer');
   expect(oxygenNativeSession).not.toHaveBeenCalled();

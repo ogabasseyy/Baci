@@ -1,7 +1,7 @@
 -- Run after the shared-cart fixture and handoff migrations in a disposable database.
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS default_variant_id uuid;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS condition text;
-ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS attributes jsonb DEFAULT '{}';
+ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS attributes jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS condition text;
 
 DO $$
@@ -35,7 +35,7 @@ DECLARE
   result jsonb;
 BEGIN
   INSERT INTO public.product_variants(id, merchant_id, product_id, attributes, condition, price_override, stock_quantity)
-  VALUES (default_variant, merchant, product, '{}', 'new', 15, 20);
+  VALUES (default_variant, merchant, product, 'null', NULL, 15, 20);
   UPDATE public.products SET condition = 'new', default_variant_id = default_variant
   WHERE id = product AND merchant_id = merchant;
   INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
@@ -78,10 +78,12 @@ BEGIN
   IF result->>'code' IS DISTINCT FROM 'not_found' OR coalesce(result->>'ok', 'false') = 'true'
   THEN RAISE EXCEPTION 'The generic writer accepted an import-only handoff: %', result; END IF;
   UPDATE public.commerce_cart_lines SET has_assurance = true WHERE cart_id = destination;
+  UPDATE public.commerce_cart_lines SET options = 'null' WHERE cart_id = source AND product_id = product;
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'protected-line', source_version);
   IF result->>'code' IS DISTINCT FROM 'invalid_item'
      OR EXISTS (SELECT 1 FROM public.commerce_cart_handoffs WHERE id = handoff AND redeemed_at IS NOT NULL)
   THEN RAISE EXCEPTION 'MCP import must not add to a resolved SKU with assurance: %', result; END IF;
+  UPDATE public.commerce_cart_lines SET options = '{}' WHERE cart_id = source AND product_id = product;
   UPDATE public.commerce_cart_lines SET has_assurance = false WHERE cart_id = destination;
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'import-attempt', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM destination_grant::text

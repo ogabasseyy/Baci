@@ -60,6 +60,7 @@ describe('bugfix: GIG bind refused typed address details as stale inputs', () =>
     expect(result.current.state).toBe('ready');
 
     act(() => result.current.beginAddressEdit?.());
+    expect(result.current.missingFields).not.toContain('phone');
     act(() => {
       result.current.updateAddressField('address', '10 Hospital Road');
       result.current.updateAddressField('city', 'Lokoja');

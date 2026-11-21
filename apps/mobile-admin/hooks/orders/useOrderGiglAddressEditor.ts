@@ -14,12 +14,7 @@ import {
   toOrderGiglAddressDraft,
 } from '@/lib/order-gigl-shipping-state';
 
-const DELIVERY_FIELDS: OrderGiglMissingField[] = [
-  'address',
-  'city',
-  'state',
-  'phone',
-];
+const DELIVERY_FIELDS: OrderGiglMissingField[] = ['address', 'city', 'state'];
 
 interface Props {
   initialAddress?: OrderGiglInitialAddress;
@@ -54,7 +49,11 @@ export function useOrderGiglAddressEditor({
     // The form is prefilled. Clear the old rate so booking stays disabled until review and save.
     editingAddressRef.current = true;
     invalidateQuote();
-    setMissingFields(DELIVERY_FIELDS);
+    setMissingFields(
+      addressRef.current.phone?.trim()
+        ? DELIVERY_FIELDS
+        : [...DELIVERY_FIELDS, 'phone']
+    );
   };
   const editDraft = (edit: DraftEdit) => {
     editingAddressRef.current = true;

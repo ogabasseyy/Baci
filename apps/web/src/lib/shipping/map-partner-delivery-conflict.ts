@@ -39,8 +39,12 @@ export function mapPartnerDeliveryConflict(message: string | undefined) {
         'The current GIG service differs from the settled delivery quote. Review the service before booking.',
     },
   };
-  // Accept the raw PostgreSQL message or its conventional severity prefix.
-  const reason = message?.replace(/^ERROR: /, '');
+  // Normalize the first line from PostgreSQL wrappers. Detail and context
+  // lines can contain unrelated text and cannot select a conflict response.
+  const reason = message
+    ?.split(/\r?\n/, 1)[0]
+    ?.trim()
+    .replace(/^(?:ERROR: *)+/, '');
   if (!reason || !Object.hasOwn(conflicts, reason)) return null;
   return NextResponse.json(conflicts[reason as keyof typeof conflicts], {
     status: 409,

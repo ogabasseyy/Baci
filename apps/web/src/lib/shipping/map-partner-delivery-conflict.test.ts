@@ -24,7 +24,11 @@ describe('mapPartnerDeliveryConflict', () => {
       'PARTNER_SETTLED_ORDER_AMOUNTS_IMMUTABLE',
     ],
   ])('maps %s to a stable 409', async (message, code) => {
-    for (const input of [message, `ERROR: ${message}`]) {
+    for (const input of [
+      message,
+      `ERROR: ${message}`,
+      `ERROR: ERROR: ${message}\nDETAIL: private context`,
+    ]) {
       const response = mapPartnerDeliveryConflict(input);
       expect(response?.status).toBe(409);
       await expect(response?.json()).resolves.toMatchObject({ code });

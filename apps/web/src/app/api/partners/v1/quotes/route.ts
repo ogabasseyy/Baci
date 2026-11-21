@@ -198,10 +198,11 @@ export async function POST(request: Request) {
           (toKobo(rate.price) ?? 0) > 0 &&
           rate.expiresAt.getTime() > now
       )
-      .sort(
-        (a, b) =>
-          a.price - b.price || a.serviceTier.localeCompare(b.serviceTier)
-      )[0];
+      .sort((a, b) => {
+        if (a.price !== b.price) return a.price - b.price;
+        if (a.serviceTier === b.serviceTier) return 0;
+        return a.serviceTier < b.serviceTier ? -1 : 1;
+      })[0];
     if (!selectedRate)
       return errorResponse(503, 'CARRIER_UNAVAILABLE', requestId);
 

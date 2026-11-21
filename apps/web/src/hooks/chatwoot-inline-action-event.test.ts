@@ -9,6 +9,9 @@ describe('isChatwootInlineActionEvent', () => {
       'baci-cart-quantity',
       'baci-product-request',
       'baci-checkout-review-request',
+      'baci-delivery-options-request',
+      'baci-checkout-place-request',
+      'baci-checkout-payment-status-request',
     ]) {
       expect(isChatwootInlineActionEvent(event)).toBe(true);
     }

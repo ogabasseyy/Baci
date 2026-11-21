@@ -1,5 +1,6 @@
 import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
+import { applyCartSnapshotCookies } from '@/lib/cart/apply-cart-snapshot-cookies';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   detectHandoffCaller,
@@ -108,6 +109,9 @@ export async function POST(request: NextRequest) {
     const hasDeviceProof =
       bearerProof?.startsWith(`${CART_SESSION_PROOF_VERSION}.`) ?? false;
     const caller = detectHandoffCaller(request.headers.get('origin'));
+    if (body.choice === 'import_mcp' && (caller !== 'web' || hasDeviceProof)) {
+      return cartErrorResponse('forbidden');
+    }
     if (caller === 'native' && !hasDeviceProof) {
       return cartErrorResponse('forbidden');
     }
@@ -162,6 +166,36 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (
+      redeemed.resumeImport &&
+      (principal.scope !== 'bootstrap' || !redeemed.cart || !redeemed.grantId)
+    ) {
+      return cartErrorResponse('temporarily_unavailable');
+    }
+
+    if (body.choice === 'import_mcp' && principal.scope === 'session') {
+      // Imports keep the browser's existing grant and its exact permissions.
+      if (
+        redeemed.cart?.cartId !== principal.cartId ||
+        redeemed.grantId !== principal.grantId
+      ) {
+        return cartErrorResponse('temporarily_unavailable');
+      }
+      const response = cartJsonResponse({
+        cart: redeemed.cart,
+        choice: redeemed.choice,
+        replayed: redeemed.replayed,
+        warnings: redeemed.warnings,
+      });
+      applyCartSnapshotCookies(response, {
+        cart: redeemed.cart,
+        cookieMaxAge: 0,
+        merchantId: context.merchant.id,
+        proof: null,
+      });
+      return response;
+    }
+
     let proof: string | null = null;
     let maxAge = 0;
     try {
@@ -214,11 +248,15 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('temporarily_unavailable');
     }
 
+    if (redeemed.resumeImport && (!proof || maxAge <= 0)) {
+      return cartErrorResponse('temporarily_unavailable');
+    }
     const response = cartJsonResponse({
       cart: redeemed.cart,
       choice: redeemed.choice,
       ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
       replayed: redeemed.replayed,
+      ...(redeemed.resumeImport ? { resumeImport: true } : {}),
       warnings: redeemed.warnings,
     });
     if (proof && maxAge > 0) {

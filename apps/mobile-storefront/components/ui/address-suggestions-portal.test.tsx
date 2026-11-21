@@ -1,10 +1,13 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import {
+  Dimensions,
   Keyboard,
   type KeyboardEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  View,
 } from 'react-native';
 import Colors from '@/constants/Colors';
 import {
@@ -45,7 +48,13 @@ function captureKeyboardShow(): (screenY: number) => void {
   return (screenY) => act(() => listener?.(keyboardEvent(screenY)));
 }
 
-function Harness({ anchorY = 200 }: { anchorY?: number }) {
+function Harness({
+  anchorY = 200,
+  predictions = [prediction],
+}: {
+  anchorY?: number;
+  predictions?: (typeof prediction)[];
+}) {
   const portal = useAddressSuggestionsPortal();
   return (
     <>
@@ -57,7 +66,7 @@ function Harness({ anchorY = 200 }: { anchorY?: number }) {
             colors: Colors.light,
             isDark: false,
             onSelect: jest.fn(),
-            predictions: [prediction],
+            predictions,
           })
         }
       >
@@ -100,8 +109,10 @@ describe('AddressSuggestionsProvider', () => {
 
     const dropdown = screen.getByLabelText('Address suggestions');
     const style = StyleSheet.flatten(dropdown.props.style);
-    expect(style.top).toBeLessThan(620);
-    expect(style.top + style.maxHeight).toBeLessThanOrEqual(592);
+    expect(Dimensions.get('window').height - style.bottom).toBeLessThan(620);
+    expect(Dimensions.get('window').height - style.bottom).toBeLessThanOrEqual(
+      592
+    );
   });
 
   it('positions suggestions above when the space below is unusably short', () => {
@@ -118,7 +129,7 @@ describe('AddressSuggestionsProvider', () => {
     const style = StyleSheet.flatten(
       screen.getByLabelText('Address suggestions').props.style
     );
-    expect(style.top).toBeLessThan(530);
+    expect(Dimensions.get('window').height - style.bottom).toBe(526);
     expect(style.maxHeight).toBe(280);
   });
 
@@ -150,4 +161,54 @@ describe('AddressSuggestionsProvider', () => {
 
     expect(screen.queryByLabelText('Address suggestions')).toBeNull();
   });
+});
+
+it('keeps the dropdown attached when its host starts below a navigation header', () => {
+  type Measure = (
+    callback: (x: number, y: number, width: number, height: number) => void
+  ) => void;
+  jest
+    .spyOn(
+      View.prototype as unknown as { measureInWindow: Measure },
+      'measureInWindow'
+    )
+    .mockImplementation((cb) => cb(10, 100, 380, 700));
+  render(
+    <AddressSuggestionsProvider>
+      <Harness anchorY={200} />
+    </AddressSuggestionsProvider>
+  );
+  fireEvent(screen.getByTestId('address-suggestions-layer'), 'layout', {});
+  fireEvent.press(screen.getByRole('button', { name: 'Show' }));
+  expect(
+    StyleSheet.flatten(screen.getByLabelText('Address suggestions').props.style)
+  ).toMatchObject({ top: 156, left: 6 });
+  jest.restoreAllMocks();
+});
+
+it('waits for the current result set to be measured before adjusting scroll', () => {
+  const showKeyboard = captureKeyboardShow();
+  const onRequestSpace = jest.fn();
+  const second = { ...prediction, placeId: 'place-2', mainText: 'Second road' };
+  const { rerender, UNSAFE_getByType } = render(
+    <AddressSuggestionsProvider onRequestSpace={onRequestSpace}>
+      <Harness anchorY={530} />
+    </AddressSuggestionsProvider>
+  );
+  showKeyboard(600);
+  fireEvent.press(screen.getByRole('button', { name: 'Show' }));
+  fireEvent(UNSAFE_getByType(ScrollView), 'contentSizeChange', 300, 90);
+  expect(onRequestSpace).toHaveBeenCalledWith(84);
+  onRequestSpace.mockClear();
+
+  rerender(
+    <AddressSuggestionsProvider onRequestSpace={onRequestSpace}>
+      <Harness anchorY={530} predictions={[prediction, second]} />
+    </AddressSuggestionsProvider>
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Show' }));
+  expect(onRequestSpace).not.toHaveBeenCalled();
+  fireEvent(UNSAFE_getByType(ScrollView), 'contentSizeChange', 300, 150);
+  expect(onRequestSpace).toHaveBeenCalledTimes(1);
+  expect(onRequestSpace).toHaveBeenCalledWith(144);
 });

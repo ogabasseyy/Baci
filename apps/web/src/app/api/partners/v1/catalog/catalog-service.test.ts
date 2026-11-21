@@ -27,7 +27,11 @@ vi.mock('./catalog-version', () => ({
   readCrossRemCatalogVersion: async () => 'synthetic-version',
 }));
 vi.mock('@/lib/redis', () => ({ getRedis: () => null }));
-vi.mock('./catalog-bindings', () => ({
+vi.mock('@/lib/tenant-rate-limit', () => ({
+  checkTenantRateLimitDetailed: async () => ({ verdict: 'allowed' }),
+}));
+vi.mock('./catalog-bindings', async (importOriginal) => ({
+  ...((await importOriginal()) as typeof import('./catalog-bindings')),
   crossRemCatalogConfig: {
     bindings: mocks.bindings,
     merchantId: 'ogabassey-id',

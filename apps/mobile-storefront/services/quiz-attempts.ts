@@ -8,6 +8,13 @@ import {
   submitQuizAnswer,
 } from './quiz';
 import { getQuizAttestationHeaders } from './quiz-app-attestation';
+import {
+  checkInQuizEdgeEvent,
+  getQuizEdgeSession,
+  resolveQuizEdgeSessionForAttempt,
+  startQuizEdgeAttempt,
+  submitQuizEdgeAnswer,
+} from './quiz-edge-transport';
 import type {
   QuizV2Attempt,
   StartQuizAttemptV2Input,
@@ -27,17 +34,37 @@ export function createQuizStartRequestId(): string {
   return Crypto.randomUUID();
 }
 
-export async function startQuizAttemptV2({
-  acceptedRulesVersion,
-  baseUrl,
-  deviceFingerprint,
-  eventId,
-  expectedUserId,
-  integrityTier,
-  mode,
-  startRequestId,
-  termsAccepted,
-}: StartQuizAttemptV2Input): Promise<QuizV2Attempt> {
+export async function startQuizAttemptV2(
+  input: StartQuizAttemptV2Input
+): Promise<QuizV2Attempt> {
+  const {
+    acceptedRulesVersion,
+    backendMode,
+    baseUrl,
+    deviceFingerprint,
+    eventId,
+    expectedUserId,
+    integrityTier,
+    mode,
+    startRequestId,
+    termsAccepted,
+  } = input;
+  if (backendMode === 'edge_rooms') {
+    const existingSession = getQuizEdgeSession(eventId, expectedUserId);
+    const session =
+      existingSession ??
+      (await checkInQuizEdgeEvent({
+        ...input,
+        checkInRequestId: startRequestId,
+      }));
+    return await startQuizEdgeAttempt(session, {
+      acceptedRulesVersion,
+      eventId,
+      integrityTier,
+      startRequestId,
+      termsAccepted,
+    });
+  }
   if (mode === 'live' && !deviceFingerprint) {
     throw new QuizServiceError(
       'This app needs a device identity before a live quiz can start.',
@@ -74,14 +101,34 @@ export async function startQuizAttemptV2({
   );
 }
 
-export function submitQuizAnswerV2({
+export async function submitQuizAnswerV2({
   answer,
   attemptId,
+  backendMode,
   baseUrl,
   clientAnsweredAt,
   expectedUserId,
   questionId,
 }: SubmitQuizAnswerV2Input): Promise<QuizV2Attempt> {
+  const edgeSession = await resolveQuizEdgeSessionForAttempt(
+    attemptId,
+    expectedUserId
+  );
+  if (edgeSession) {
+    return submitQuizEdgeAnswer(edgeSession, {
+      answer,
+      attemptId,
+      clientAnsweredAt,
+      questionId,
+    });
+  }
+  if (backendMode === 'edge_rooms') {
+    throw new QuizServiceError(
+      'Your quiz edge session expired. Please rejoin the quiz.',
+      'QUIZ_EDGE_SESSION_MISSING',
+      409
+    );
+  }
   return requestQuizV2(
     `/api/quiz/attempts/${encodeURIComponent(attemptId)}/answers`,
     {

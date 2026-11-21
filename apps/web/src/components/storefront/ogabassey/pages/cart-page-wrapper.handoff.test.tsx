@@ -92,6 +92,33 @@ describe('CartPageWrapper handoff', () => {
     ).toBeInTheDocument();
   });
 
+  it('redacts the pairing and waits for existing device items to reach the website cart', async () => {
+    mockSearch('');
+    window.history.pushState({}, '', '/ogabassey/cart#handoff=ch1.pending&hid=link');
+    const initial = {
+      addToCart: vi.fn(),
+      cart: [],
+      isHydrated: true,
+    } as unknown as ReturnType<typeof useCart>;
+    vi.mocked(useCart).mockReturnValue({
+      ...initial,
+      sharedCartEnabled: true,
+      importStatus: 'pending',
+    });
+    const { rerender } = render(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText('Loading your cart…')).toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+    expect(screen.queryByText(/Handoff continuation/)).not.toBeInTheDocument();
+
+    vi.mocked(useCart).mockReturnValue({
+      ...initial,
+      sharedCartEnabled: true,
+      importStatus: 'done',
+    });
+    rerender(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText(/Handoff continuation for link/)).toBeInTheDocument();
+  });
+
   it('restores a scoped locator on its own merchant cart page', async () => {
     mockSearch('');
     window.history.pushState({}, '', '/shop-a/cart');
@@ -111,6 +138,16 @@ describe('CartPageWrapper handoff', () => {
         'Handoff continuation for handoff-saved with ch1.saved'
       )
     ).toBeInTheDocument();
+  });
+
+  it('continues an empty hydrated website cart with no device import', async () => {
+    mockSearch('');
+    window.history.pushState({}, '', '/ogabassey/cart#handoff=ch1.empty&hid=empty-link');
+    vi.mocked(useCart).mockReturnValue({
+      addToCart: vi.fn(), cart: [], isHydrated: true, sharedCartEnabled: true, importStatus: 'none',
+    } as unknown as ReturnType<typeof useCart>);
+    render(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText(/Handoff continuation for empty-link/)).toBeInTheDocument();
   });
 
   it("ignores merchant A's scoped locator on merchant B's cart page", async () => {

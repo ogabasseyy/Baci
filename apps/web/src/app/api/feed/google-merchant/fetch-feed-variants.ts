@@ -3,6 +3,8 @@ import { chunkValues } from '@/lib/chunk-values';
 import type { FeedVariant } from './feed-builder';
 import { FEED_FETCH_CONSTANTS } from './feed-fetch-constants';
 
+const VARIANT_PAGE_SIZE = 1000;
+
 export interface FeedVariantRow {
   attributes: Record<string, unknown> | null;
   condition?: FeedVariant['condition'];
@@ -37,25 +39,31 @@ export async function fetchFeedVariants(
     const batchResults = await Promise.all(
       batchWindow.map(async (batchProductIds, batchWindowIndex) => {
         const batchIndex = batchStart + batchWindowIndex;
-        const { data, error } = await supabase.rpc(
-          'get_feed_product_variants',
-          {
-            p_merchant_id: merchantId,
-            p_product_ids: batchProductIds,
+        const batchRows: FeedVariantRow[] = [];
+        for (let offset = 0; ; offset += VARIANT_PAGE_SIZE) {
+          // PostgREST caps rows per response, even for a bounded product batch.
+          const { data, error } = await supabase
+            .rpc('get_feed_product_variants', {
+              p_merchant_id: merchantId,
+              p_product_ids: batchProductIds,
+            })
+            .order('id', { ascending: true })
+            .range(offset, offset + VARIANT_PAGE_SIZE - 1);
+
+          if (error) {
+            console.error('DB_VARIANTS_ERROR:', {
+              batchIndex,
+              batchProductCount: batchProductIds.length,
+              error,
+              merchantId,
+              offset,
+            });
+            throw new Error('Failed to fetch product variants');
           }
-        );
-
-        if (error) {
-          console.error('DB_VARIANTS_ERROR:', {
-            batchIndex,
-            batchProductCount: batchProductIds.length,
-            error,
-            merchantId,
-          });
-          throw new Error('Failed to fetch product variants');
+          const page = (data ?? []) as FeedVariantRow[];
+          batchRows.push(...page);
+          if (page.length < VARIANT_PAGE_SIZE) return batchRows;
         }
-
-        return (data || []) as FeedVariantRow[];
       })
     );
 

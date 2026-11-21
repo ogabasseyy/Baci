@@ -127,6 +127,7 @@ export async function fetchPlaceDetails({
       streetNumber: details.streetNumber || '',
       route: details.route || '',
       city: details.city || '',
+      lga: typeof details.lga === 'string' ? details.lga : '',
       state: details.state || '',
       zip: details.postalCode || '',
       country: details.country || '',

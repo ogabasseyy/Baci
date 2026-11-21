@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-21T05:14:06+00:00",
-  "source_revision": "721b7e7aa91d5a92b3f8773af32d9b73ed28b429",
-  "evidence_digest": "c558342ec8822053bdc563d53b43a1b1ab4e5250009482065524b458f63d9cfb",
-  "claims_digest": "85769744f1ea818ca59e9b9abdf590b425c140d8b3bb8cf655ce17aa83eb4bbd",
-  "review_scope": "Source evidence only. Re-reviewed expense creation after the save navigation fix and duplicate submission guard. Branch validation and expense creation permissions still apply. Other bound capability source files were unchanged from the prior reviewed revision. Existing OAuth, storefront MCP, payment, merchant protocol, and Oxygen pilot limitations still apply. No new production capability promotion.",
+  "reviewed_at": "2026-11-21T08:22:47+00:00",
+  "source_revision": "c2ba3c99ea390e0dab89012d842d72b659b5ce4b",
+  "evidence_digest": "843e888e9bc4f09713486152adcf9263f7c517a449f79eca7a45f7fc948448ee",
+  "claims_digest": "1683fe9a99ec4b8e6d95346ba8e10b3ed36eaf1b808a18af530e29eccd80fe82",
+  "review_scope": "Source evidence only. Re-reviewed shipment booking after paid partner pickup and parcel binding. The partner path still requires merchant authorization, verified payment and settlement, and an attested matching GIG wallet quote. Provider booking and delivery still require live evidence. Other bound capability sources match the prior reviewed revision. No production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

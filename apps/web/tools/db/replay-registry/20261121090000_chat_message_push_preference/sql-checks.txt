@@ -1,0 +1,1 @@
+supabase/migrations/tests/chat_message_push_preference.sql

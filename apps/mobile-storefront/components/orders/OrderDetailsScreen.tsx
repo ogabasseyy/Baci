@@ -41,6 +41,7 @@ import {
 } from '@/lib/post-purchase-actions';
 import { createInsuranceFlowActions } from './insurance-flow-actions';
 import { orderDetailsScreenStyles as styles } from './OrderDetailsScreen.styles';
+import { OxygenOrderResume } from './OxygenOrderResume';
 import { formatOrderDetailsDate } from './order-details.helpers';
 
 export function OrderDetailsScreen() {
@@ -169,6 +170,8 @@ export function OrderDetailsScreen() {
               textSecondaryColor={colors.textSecondary}
             />
           )}
+
+          <OxygenOrderResume order={order} />
 
           <OrderDetailsItemsCard
             colors={colors}

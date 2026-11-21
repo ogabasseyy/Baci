@@ -737,7 +737,7 @@ CREATE TABLE IF NOT EXISTS private.quiz_edge_attempt_staging (
   admission_id uuid REFERENCES public.quiz_event_admissions(id) ON DELETE SET NULL,
   room_id text NOT NULL CHECK (pg_catalog.length(pg_catalog.btrim(room_id)) > 0),
   batch_id text NOT NULL CHECK (pg_catalog.length(pg_catalog.btrim(batch_id)) > 0),
-  customer_id uuid NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
+  customer_id uuid REFERENCES public.customers(id) ON DELETE SET NULL,
   attempt_number integer NOT NULL DEFAULT 1 CHECK (attempt_number > 0),
   integrity_tier text NOT NULL DEFAULT 'unknown',
   leaderboard_username text,
@@ -812,7 +812,7 @@ CREATE TABLE IF NOT EXISTS private.quiz_edge_scored_attempts (
   attempt_id uuid NOT NULL,
   room_id text NOT NULL,
   batch_id text NOT NULL,
-  customer_id uuid NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
+  customer_id uuid REFERENCES public.customers(id) ON DELETE SET NULL,
   attempt_number integer NOT NULL,
   integrity_tier text NOT NULL,
   leaderboard_username text,
@@ -1245,10 +1245,10 @@ BEGIN
     SELECT
       p_event_id,
       item.attempt_id,
-      item.admission_id,
+      adm.id,
       pg_catalog.btrim(p_room_id),
       pg_catalog.btrim(p_batch_id),
-      item.customer_id,
+      cust.id,
       COALESCE(item.attempt_number, 1),
       COALESCE(NULLIF(pg_catalog.btrim(item.integrity_tier), ''), 'unknown'),
       item.leaderboard_username,
@@ -1280,13 +1280,33 @@ BEGIN
       bundle_checksum_sha256 text,
       answers jsonb
     )
+    LEFT JOIN public.customers AS cust
+      ON cust.id = item.customer_id
+    LEFT JOIN public.quiz_event_admissions AS adm
+      ON adm.id = item.admission_id
     ON CONFLICT (event_id, attempt_id) DO NOTHING;
 
     GET DIAGNOSTICS v_attempts_inserted = ROW_COUNT;
   ELSE
     -- Multi-part split bundle path: merge answer arrays deduplicated by position.
     FOR v_part IN
-      SELECT item.*
+      SELECT
+        item.attempt_id,
+        adm.id AS admission_id,
+        cust.id AS customer_id,
+        item.attempt_number,
+        item.integrity_tier,
+        item.leaderboard_username,
+        item.rules_version,
+        item.terms_accepted_at,
+        item.app_version,
+        item.platform,
+        item.start_request_id,
+        item.started_at,
+        item.submitted_at,
+        item.close_reason,
+        item.bundle_checksum_sha256,
+        item.answers
       FROM pg_catalog.jsonb_to_recordset(p_attempts) AS item(
         attempt_id uuid,
         admission_id uuid,
@@ -1305,6 +1325,10 @@ BEGIN
         bundle_checksum_sha256 text,
         answers jsonb
       )
+      LEFT JOIN public.customers AS cust
+        ON cust.id = item.customer_id
+      LEFT JOIN public.quiz_event_admissions AS adm
+        ON adm.id = item.admission_id
     LOOP
       INSERT INTO private.quiz_edge_attempt_staging (
         event_id, attempt_id, admission_id, room_id, batch_id, customer_id,
@@ -1974,6 +1998,12 @@ BEGIN
     'edge_rooms'
   FROM private.quiz_edge_scored_attempts AS sa
   WHERE sa.event_id = p_event_id
+    AND sa.customer_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.customers AS c
+      WHERE c.id = sa.customer_id
+    )
   ORDER BY sa.attempt_id
   ON CONFLICT (id) DO UPDATE
   SET score = EXCLUDED.score,
@@ -2131,6 +2161,9 @@ BEGIN
       JOIN private.quiz_edge_attempt_staging AS s
         ON s.event_id = p_event_id
        AND s.attempt_id = bt.attempt_id
+      JOIN public.quiz_attempts AS qa
+        ON qa.id = bt.attempt_id
+       AND qa.event_id = p_event_id
       CROSS JOIN LATERAL pg_catalog.jsonb_to_recordset(s.answers) AS ans(
         slot_id uuid,
         variant_id uuid,

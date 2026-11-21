@@ -135,7 +135,7 @@ describe('Worker HTTP router (src/index.ts)', () => {
           integrityTier: 'strong',
           acceptedRulesVersion: 'live-v1',
           termsAccepted: true,
-          startRequestId: 'req-r1',
+          startRequestId: '11111111-1111-4111-8111-111111111111',
           appVersion: '2.0.0',
           platform: 'ios',
         }),
@@ -147,6 +147,29 @@ describe('Worker HTTP router (src/index.ts)', () => {
       ns: 'QUIZ_ROOM',
       id: 'room-42',
       path: '/internal/start',
+    });
+
+    const badStartRes = await worker.fetch(
+      new Request('https://quiz.example.com/api/quiz/events/evt-r1/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Baci-Quiz-Ticket': signedTicket,
+        },
+        body: JSON.stringify({
+          integrityTier: 'strong',
+          acceptedRulesVersion: 'live-v1',
+          termsAccepted: true,
+          startRequestId: 'not-a-uuid',
+          appVersion: '2.0.0',
+          platform: 'ios',
+        }),
+      }),
+      env as never
+    );
+    expect(badStartRes.status).toBe(400);
+    expect((await badStartRes.json()) as { code: string }).toMatchObject({
+      code: 'QUIZ_INVALID_INPUT',
     });
 
     const ansRes = await worker.fetch(

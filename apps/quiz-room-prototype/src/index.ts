@@ -318,6 +318,7 @@ export class QuizRoomDO extends DurableObject<WorkerEnv> {
 }
 
 export class LiveRankIndexDO extends DurableObject<WorkerEnv> {
+  private readonly controlState: QuizControlStateStore;
   private readonly engine: LiveRankIndexEngine;
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
@@ -325,12 +326,42 @@ export class LiveRankIndexDO extends DurableObject<WorkerEnv> {
     const adapter = new CloudflareSqlStorageAdapter(
       ctx.storage as unknown as CloudflareDoStorageLike
     );
-    this.engine = new LiveRankIndexEngine({ storage: adapter });
+    this.controlState = new QuizControlStateStore();
+    this.engine = new LiveRankIndexEngine({
+      storage: adapter,
+      controlState: this.controlState,
+    });
+  }
+
+  private async refreshControlState(eventId: string): Promise<void> {
+    if (!this.env.EVENT_COORDINATOR) {
+      return;
+    }
+    const coordStub = getWeurStub(this.env.EVENT_COORDINATOR, eventId);
+    const csRes = await coordStub.fetch(
+      `https://coord.internal/internal/control-state?eventId=${encodeURIComponent(eventId)}`
+    );
+    if (csRes.ok) {
+      const snapshot = (await csRes.json()) as QuizControlStateSnapshot;
+      this.controlState.applySnapshot(snapshot);
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
     try {
       const url = new URL(request.url);
+      if (
+        request.method === 'POST' &&
+        url.pathname === '/internal/control-state'
+      ) {
+        const snapshot = await readJsonBody<QuizControlStateSnapshot>(request);
+        const applied = this.controlState.applySnapshot(snapshot);
+        return jsonResponse({
+          ok: true,
+          applied,
+          version: this.controlState.getVersion(),
+        });
+      }
       if (
         request.method === 'POST' &&
         url.pathname === '/internal/submit-batch'
@@ -366,6 +397,7 @@ export class LiveRankIndexDO extends DurableObject<WorkerEnv> {
           callerUserId: string;
           isTestEvent?: boolean;
         }>(request);
+        await this.refreshControlState(body.eventId);
         return jsonResponse(await this.engine.getLiveLeaderboard(body));
       }
       return jsonResponse({ error: 'Not found', code: 'NOT_FOUND' }, 404);
@@ -1028,14 +1060,57 @@ export default {
           expectedEventId: eventId,
           nowMs: Date.now(),
         });
-        const body = await readJsonBody<{
+        const rawBody = await readJsonBody<Record<string, unknown>>(request);
+        const startRequestId =
+          typeof rawBody.startRequestId === 'string'
+            ? rawBody.startRequestId.trim()
+            : '';
+        const acceptedRulesVersion =
+          typeof rawBody.acceptedRulesVersion === 'string'
+            ? rawBody.acceptedRulesVersion.trim()
+            : '';
+        const appVersion =
+          typeof rawBody.appVersion === 'string'
+            ? rawBody.appVersion.trim()
+            : '';
+        const integrityTier = rawBody.integrityTier;
+        const platform = rawBody.platform;
+        const termsAccepted = rawBody.termsAccepted;
+        const UUID_RE =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (
+          !UUID_RE.test(startRequestId) ||
+          !acceptedRulesVersion ||
+          acceptedRulesVersion.length > 64 ||
+          !appVersion ||
+          appVersion.length > 64 ||
+          typeof termsAccepted !== 'boolean' ||
+          (integrityTier !== 'basic' &&
+            integrityTier !== 'device' &&
+            integrityTier !== 'strong') ||
+          (platform !== 'android' && platform !== 'ios' && platform !== 'web')
+        ) {
+          throw new QuizRoomError(
+            'QUIZ_INVALID_INPUT',
+            'Invalid start payload: startRequestId must be a UUID and integrityTier, acceptedRulesVersion, termsAccepted, appVersion, platform must be valid',
+            400
+          );
+        }
+        const body: {
           integrityTier: QuizIntegrityTier;
           acceptedRulesVersion: string;
           termsAccepted: boolean;
           startRequestId: string;
           appVersion: string;
           platform: QuizPlatform;
-        }>(request);
+        } = {
+          integrityTier,
+          acceptedRulesVersion,
+          termsAccepted,
+          startRequestId,
+          appVersion,
+          platform,
+        };
         const roomStub = getWeurStub(env.QUIZ_ROOM, ticket.roomId);
         return roomStub.fetch('https://room.internal/internal/start', {
           method: 'POST',

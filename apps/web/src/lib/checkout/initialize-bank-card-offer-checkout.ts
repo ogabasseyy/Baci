@@ -70,6 +70,7 @@ export async function initializeBankCardOfferCheckout({
   });
   const reserved = bankCardOfferClaimSchema.safeParse(claim.data);
   if (claim.error || !reserved.success) return { kind: 'unavailable' } as const;
+  if ('retired' in reserved.data) return { kind: 'retired' } as const;
   const { claimed, reference, checkoutUrl } = reserved.data;
   const review = (failed: boolean) =>
     client.rpc('request_bank_card_offer_initialization_review', {

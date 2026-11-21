@@ -63,6 +63,23 @@ it('returns the paid order instead of starting another payment', async () => {
   });
 });
 
+it.each(['pending', 'paid'])('keeps a %s saved offer fenced when the email changes', async (payment_status) => {
+  const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+    id: pendingOrder.orderId,
+    shipping_status: 'pending',
+    payment_status,
+  }));
+  await expect(resolveBankOfferPendingCheckout({
+    ...options,
+    customerEmail: 'edited@example.com',
+    paymentMethod: 'paystack',
+    fetchImpl,
+  })).rejects.toThrow('Check your existing order');
+  expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
+    '/api/storefront/orders/order-1?tracking_token=track-1'
+  );
+});
+
 it('rotates the saved offer key before retiring a cancelled order', async () => {
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
     id: pendingOrder.orderId,

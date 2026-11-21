@@ -31,11 +31,11 @@ export async function resolveBankOfferPendingCheckout({
       pendingOrder.paymentMethod !== 'bank_card_offer')
   )
     return null;
-  if (
-    pendingOrder.merchantId !== merchantId ||
-    pendingOrder.customerEmail.trim().toLowerCase() !==
-      customerEmail.trim().toLowerCase()
-  )
+  if (pendingOrder.merchantId !== merchantId) return null;
+  const emailMatches =
+    pendingOrder.customerEmail.trim().toLowerCase() ===
+    customerEmail.trim().toLowerCase();
+  if (pendingOrder.paymentMethod !== 'bank_card_offer' && !emailMatches)
     return null;
   const message =
     'Check your existing order or contact support before starting another payment.';
@@ -50,6 +50,7 @@ export async function resolveBankOfferPendingCheckout({
   }
   if (existing.id !== pendingOrder.orderId) throw new Error(message);
   if (isPaidOrderState(existing)) {
+    if (!emailMatches) throw new Error(message);
     return {
       reusableOrder: null,
       clearStoredOrder: true,
@@ -64,6 +65,7 @@ export async function resolveBankOfferPendingCheckout({
     return { reusableOrder: null, clearStoredOrder: true };
   }
   if (
+    !emailMatches ||
     paymentMethod !== 'bank_card_offer' ||
     !checkoutFingerprintsMatch(
       checkoutFingerprint,

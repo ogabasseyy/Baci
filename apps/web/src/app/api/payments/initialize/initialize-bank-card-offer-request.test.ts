@@ -58,6 +58,27 @@ it('returns the existing reference when provider initialization needs review', a
   });
 });
 
+it('asks the buyer to restart checkout after an expired unclaimed order is retired', async () => {
+  vi.mocked(checkCsrfProtection).mockResolvedValueOnce({ valid: true });
+  vi.mocked(authenticateApiRequest).mockResolvedValueOnce({
+    user: { id: 'buyer' },
+    error: null,
+  } as never);
+  vi.mocked(initializeBankCardOfferCheckout).mockResolvedValueOnce({
+    kind: 'retired',
+  });
+
+  const response = await initializeBankCardOfferRequest(
+    request,
+    data,
+    vi.fn().mockResolvedValue({})
+  );
+  expect(response.status).toBe(409);
+  await expect(response.json()).resolves.toMatchObject({
+    code: 'CHECKOUT_ORDER_NOT_REUSABLE',
+  });
+});
+
 it('returns Retry-After when an existing attempt has no durable recovery review', async () => {
   vi.mocked(checkCsrfProtection).mockResolvedValueOnce({ valid: true });
   vi.mocked(authenticateApiRequest).mockResolvedValueOnce({

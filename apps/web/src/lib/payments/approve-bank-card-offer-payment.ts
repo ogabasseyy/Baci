@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyBankCardOfferPaystack } from '@/lib/checkout/verify-bank-card-offer-paystack';
-import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-reference';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-terminal-status';
 import { bankCardOfferVerificationContextSchema } from '@/schemas/bank-card-offer-verification-context';
 
 export async function approveBankCardOfferPayment({

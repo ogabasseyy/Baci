@@ -9,6 +9,27 @@ DECLARE
   v_reference text;
   v_transaction uuid;
 BEGIN
+  BEGIN
+    UPDATE public.orders SET payment_status = 'unpaid' WHERE id = v_order;
+    UPDATE public.products SET manage_stock = true, stock_quantity = 3
+    WHERE id = (SELECT product_id FROM public.order_items WHERE order_id = v_order);
+    UPDATE private.bank_card_offer_order_snapshots
+    SET offer_quote = jsonb_set(offer_quote, '{endsAt}', to_jsonb(clock_timestamp() - interval '1 second'))
+    WHERE order_id = v_order;
+    v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
+    IF v_attempt IS DISTINCT FROM '{"retired":true}'::jsonb
+      OR NOT EXISTS (SELECT 1 FROM public.orders WHERE id = v_order
+        AND shipping_status = 'cancelled' AND cancelled_at IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM public.transactions WHERE order_id = v_order)
+      OR (SELECT p.stock_quantity FROM public.products p
+        JOIN public.order_items oi ON oi.product_id = p.id
+        WHERE oi.order_id = v_order) IS DISTINCT FROM 4
+    THEN RAISE EXCEPTION 'An expired unclaimed order must cancel without starting a payment'; END IF;
+    RAISE EXCEPTION 'expired_checkout_test_complete';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'expired_checkout_test_complete' THEN RAISE; END IF;
+  END;
+
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
   v_reference := v_attempt->>'reference';
   IF v_attempt->>'claimed' <> 'true' OR v_reference !~ '^BCO-[0-9a-f]{32}$' THEN

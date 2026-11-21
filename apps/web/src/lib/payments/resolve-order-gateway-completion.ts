@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
-import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-reference';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-terminal-status';
 import { approveBankCardOfferPayment } from './approve-bank-card-offer-payment';
 import { completeOrderGatewayPayment } from './complete-order-gateway-payment';
 import { fileRedvaultInventoryConfirmationReview } from './file-redvault-inventory-confirmation-review';

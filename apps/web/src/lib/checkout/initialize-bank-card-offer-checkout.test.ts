@@ -116,6 +116,17 @@ describe('initializeBankCardOfferCheckout', () => {
     expect(paystack).not.toHaveBeenCalled();
   });
 
+  it('returns retirement without opening a provider checkout or review', async () => {
+    const { input, reserve, review } = setup();
+    reserve.mockResolvedValueOnce({ data: { retired: true }, error: null });
+
+    await expect(initializeBankCardOfferCheckout(input)).resolves.toEqual({
+      kind: 'retired',
+    });
+    expect(paystack).not.toHaveBeenCalled();
+    expect(review).not.toHaveBeenCalled();
+  });
+
   it('retries a callback lookup outage before claiming a Paystack attempt', async () => {
     const { input, reserve } = setup();
     vi.mocked(getCachedMerchantByDomain).mockRejectedValueOnce(

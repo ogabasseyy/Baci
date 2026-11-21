@@ -54,6 +54,16 @@ export async function initializeBankCardOfferRequest(
   if (result.kind === 'unavailable') {
     return unavailable();
   }
+  if (result.kind === 'retired') {
+    return NextResponse.json(
+      {
+        code: 'CHECKOUT_ORDER_NOT_REUSABLE',
+        error:
+          'This bank card offer expired. Choose an available payment option and try again.',
+      },
+      { status: 409 }
+    );
+  }
   if (result.kind === 'retryable') {
     return NextResponse.json(
       {

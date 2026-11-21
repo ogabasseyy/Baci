@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-reference';
+import { bankCardOfferTerminalStatusSchema } from '@/schemas/bank-card-offer-terminal-status';
 import type { finalizeOrderGatewayPayment } from './finalize-order-gateway-payment';
 import type {
   WedgedCandidate,

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-reference';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-terminal-status';
 import type { BlockedOrderPaymentOutcome } from './file-blocked-order-payment-review';
 
 export interface FinalizeOrderGatewayPaymentArgs {

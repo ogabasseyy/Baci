@@ -129,7 +129,7 @@ export const eventPipelineFrozenRoutes = {
   // Native Oxygen admission checks the authenticated order client and the
   // resolved merchant before replay. It adds no credential or event authority.
   'apps/web/src/app/api/orders/route.ts':
-    'ab68e1216905685bfbad79bee188dd4f1a071dedb4a9242de7221048865dc205',
+    '62aaf994d5539614bb061c2c9461dfbb5bfd57b8da8a61c027347704513d2e44',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

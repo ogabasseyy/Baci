@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-21T04:58:41+00:00",
-  "source_revision": "94e5f52fad7b32276d0a7dd714528f2f99f6a112",
-  "evidence_digest": "3a5701154a7cfb0b022bca6b3945af059a921947a4a02c9f567102984e6c3d22",
-  "claims_digest": "c187645c8d05de4f9c77312e9e73f7bd24567d808b6bf17a0aa342f528aaacc5",
-  "review_scope": "Source evidence only. Re-reviewed expense creation after the save navigation fix. Branch validation and expense creation permissions still apply. Other bound capability source files were unchanged from the prior reviewed revision. Existing OAuth, storefront MCP, payment, merchant protocol, and Oxygen pilot limitations still apply. No new production capability promotion.",
+  "reviewed_at": "2026-11-21T05:14:06+00:00",
+  "source_revision": "721b7e7aa91d5a92b3f8773af32d9b73ed28b429",
+  "evidence_digest": "c558342ec8822053bdc563d53b43a1b1ab4e5250009482065524b458f63d9cfb",
+  "claims_digest": "85769744f1ea818ca59e9b9abdf590b425c140d8b3bb8cf655ce17aa83eb4bbd",
+  "review_scope": "Source evidence only. Re-reviewed expense creation after the save navigation fix and duplicate submission guard. Branch validation and expense creation permissions still apply. Other bound capability source files were unchanged from the prior reviewed revision. Existing OAuth, storefront MCP, payment, merchant protocol, and Oxygen pilot limitations still apply. No new production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

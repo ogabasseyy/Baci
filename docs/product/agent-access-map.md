@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 21 November 2026 against source revision
-`94e5f52fad7b32276d0a7dd714528f2f99f6a112`. The expense flow was re-reviewed after the save navigation fix.
+`721b7e7aa91d5a92b3f8773af32d9b73ed28b429`. The expense flow was re-reviewed after the save navigation fix.
 The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).

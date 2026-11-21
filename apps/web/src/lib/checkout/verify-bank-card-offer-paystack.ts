@@ -18,6 +18,9 @@ export async function verifyBankCardOfferPaystack(
   // Transport and credential failures tell the caller to back off.
   if (!response.success) {
     const code = response.code;
+    if (code === 'INVALID_VERIFICATION_RESPONSE') {
+      return { kind: 'mismatch' } as const;
+    }
     return code === 'NETWORK_ERROR' ||
       code === 'CONFIG_ERROR' ||
       code === 'HTTP_401' ||

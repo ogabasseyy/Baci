@@ -42,6 +42,17 @@ it('leaves pending transactions without settlement evidence', async () => {
   });
 });
 
+it('routes a malformed successful response rejected by the Paystack parser to capture review', async () => {
+  verify.mockResolvedValueOnce({
+    success: false,
+    code: 'INVALID_VERIFICATION_RESPONSE',
+    error: 'Invalid Paystack transaction identity',
+  });
+  await expect(verifyBankCardOfferPaystack(attemptFixture)).resolves.toEqual({
+    kind: 'mismatch',
+  });
+});
+
 it('holds the saved reference for operations when Paystack reports a partial reversal', async () => {
   respond({
     ...captureFixture,

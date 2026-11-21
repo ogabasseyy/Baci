@@ -90,7 +90,11 @@ async function pushChatMessage(chatEvent: ChatEvent) {
   // Losing the claim to a concurrent delivery is normal. Anything else that
   // stopped the push is logged, without customer text or secrets, so a
   // broken push path is visible even though the webhook still succeeds.
-  if (pushStatus !== 'sent' && pushStatus !== 'skipped:already_claimed') {
+  if (
+    pushStatus !== 'sent' &&
+    pushStatus !== 'skipped:already_claimed' &&
+    pushStatus !== 'skipped:muted'
+  ) {
     console.warn('Chat message push was not sent', {
       eventKey: chatEvent.eventKey,
       merchantId: chatEvent.merchantId,

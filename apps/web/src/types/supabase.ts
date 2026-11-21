@@ -7591,6 +7591,7 @@ export type Database = {
       notification_preferences: {
         Row: {
           banner_enabled: boolean | null;
+          chat_message_push_enabled: boolean;
           follow_up_notifications_enabled: boolean;
           in_app_enabled: boolean | null;
           merchant_id: string;
@@ -7602,6 +7603,7 @@ export type Database = {
         };
         Insert: {
           banner_enabled?: boolean | null;
+          chat_message_push_enabled?: boolean;
           follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
           merchant_id: string;
@@ -7613,6 +7615,7 @@ export type Database = {
         };
         Update: {
           banner_enabled?: boolean | null;
+          chat_message_push_enabled?: boolean;
           follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
           merchant_id?: string;
@@ -18501,6 +18504,22 @@ export type Database = {
           total_read: number;
           total_sent: number;
         }[];
+      };
+      get_chat_message_alert_level: {
+        Args: { p_merchant_id: string };
+        Returns: string;
+      };
+      get_chat_message_push_preference: {
+        Args: { p_merchant_id: string };
+        Returns: boolean;
+      };
+      set_chat_message_alert_level: {
+        Args: { p_level: string; p_merchant_id: string };
+        Returns: string;
+      };
+      set_chat_message_push_preference: {
+        Args: { p_enabled: boolean; p_merchant_id: string };
+        Returns: boolean;
       };
       get_follow_up_notification_preference: {
         Args: { p_order_id: string };

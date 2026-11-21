@@ -9,7 +9,7 @@ import {
 
 export const CHAT_EVENT_NAME_MAX_LENGTH = 80;
 export const CHAT_EVENT_PREVIEW_MAX_LENGTH = 280;
-const SECRET_PATTERN = /^[\x21-\x7e]{32,256}$/;
+export const CHAT_EVENT_SECRET_PATTERN = /^[\x21-\x7e]{32,256}$/;
 
 export type ChatCustomerMessageEvent = {
   merchantId: string;
@@ -40,7 +40,7 @@ export function normalizeChatEventText(
   return cap((value ?? '').replace(/\s+/g, ' ').trim(), maxLength);
 }
 
-function sha256Hex(value: string): string {
+export function sha256Hex(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
@@ -75,7 +75,7 @@ export async function recordChatCustomerMessage(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<ChatEventIntakeResult> {
   const secret = env.EKAETTE_CHAT_EVENT_RPC_SECRET?.trim() ?? '';
-  if (!SECRET_PATTERN.test(secret))
+  if (!CHAT_EVENT_SECRET_PATTERN.test(secret))
     return { ok: false, code: 'not_configured' };
 
   const issuedAt = Math.floor(Date.now() / 1000);

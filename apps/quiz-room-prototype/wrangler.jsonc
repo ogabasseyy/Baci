@@ -1,0 +1,40 @@
+{
+  "name": "baci-quiz-room-prototype",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "QUIZ_ROOM", "class_name": "QuizRoomDO" },
+      { "name": "LIVE_RANK_INDEX", "class_name": "LiveRankIndexDO" },
+      { "name": "RESULT_SHARD", "class_name": "ResultShardDO" },
+      { "name": "EVENT_COORDINATOR", "class_name": "EventCoordinatorDO" },
+      { "name": "DEMO_STATE", "class_name": "DemoStateDO" }
+    ]
+  },
+  "queues": {
+    "producers": [
+      { "queue": "baci-quiz-attempts-stage1", "binding": "QUIZ_BATCH_QUEUE" }
+    ],
+    "consumers": [
+      {
+        "queue": "baci-quiz-attempts-stage1",
+        "max_batch_size": 25,
+        "max_batch_timeout": 2,
+        "max_retries": 5
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "QuizRoomDO",
+        "LiveRankIndexDO",
+        "ResultShardDO",
+        "EventCoordinatorDO",
+        "DemoStateDO"
+      ]
+    }
+  ]
+}

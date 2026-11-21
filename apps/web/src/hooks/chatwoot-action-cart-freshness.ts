@@ -14,9 +14,13 @@ export function evaluateChatwootActionCartFreshness(input: {
   const isMutation =
     event === 'baci-cart-add' || event === 'baci-cart-quantity';
   const isProduct = event === 'baci-product-request';
-  // A payment poll reads a payment reference, not the cart: the order it
-  // belongs to may already have moved the cart version on.
-  const isPaymentStatus = event === 'baci-checkout-payment-status-request';
+  // In-chat checkout runs its own cart checks. Placing an order moves the cart
+  // version on, so a retry of that placement, or a poll of its payment, must
+  // still reach the handler: it answers a repeat from the remembered order and
+  // applies the exact-version checks itself before creating a new one.
+  const isPaymentStatus =
+    event === 'baci-checkout-payment-status-request' ||
+    event === 'baci-checkout-place-request';
   const authorizedVersionIsCurrent = isPaymentStatus
     ? authorizedVersion !== null
     : isMutation

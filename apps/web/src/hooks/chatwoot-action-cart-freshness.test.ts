@@ -64,13 +64,24 @@ describe('evaluateChatwootActionCartFreshness', () => {
     expect(run('baci-cart-add', 5, null, ref(5)).cartRefIsCurrent).toBe(false);
   });
 
-  it('requires an exact cart version for an in-chat order placement', () => {
+  it('lets an in-chat order placement reach its handler after the order moved the cart on', () => {
+    // A retry of a placed order arrives with the page's cart ref behind the
+    // server. The checkout handler answers it from the remembered order and
+    // applies the exact-version checks itself before creating a new one.
     expect(run('baci-checkout-place-request', 3, ref(3), ref(3))).toMatchObject(
-      { authorizedVersionIsCurrent: true, cartRefIsCurrent: true }
+      { stillCurrent: true }
     );
-    expect(run('baci-checkout-place-request', 3, ref(3), ref(4))).toMatchObject(
-      { authorizedVersionIsCurrent: false, cartRefIsCurrent: false }
+    expect(run('baci-checkout-place-request', 4, ref(3), ref(3))).toMatchObject(
+      {
+        authorizedVersionIsCurrent: true,
+        cartRefIsCurrent: true,
+        stillCurrent: true,
+      }
     );
+    expect(
+      run('baci-checkout-place-request', null, ref(3), ref(3))
+        .authorizedVersionIsCurrent
+    ).toBe(false);
   });
 
   it('lets a payment poll proceed after the order moved the cart on', () => {

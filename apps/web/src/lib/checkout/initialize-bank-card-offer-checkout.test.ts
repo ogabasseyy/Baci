@@ -127,6 +127,21 @@ describe('initializeBankCardOfferCheckout', () => {
     expect(review).not.toHaveBeenCalled();
   });
 
+  it('accepts a saved customer email with different casing', async () => {
+    const { getContext, input } = setup();
+    getContext.mockResolvedValueOnce({
+      data: { ...context, customerEmail: 'CUSTOMER@example.test' },
+      error: null,
+    });
+
+    await expect(initializeBankCardOfferCheckout(input)).resolves.toMatchObject(
+      {
+        kind: 'initialized',
+        reference,
+      }
+    );
+  });
+
   it('retries a callback lookup outage before claiming a Paystack attempt', async () => {
     const { input, reserve } = setup();
     vi.mocked(getCachedMerchantByDomain).mockRejectedValueOnce(

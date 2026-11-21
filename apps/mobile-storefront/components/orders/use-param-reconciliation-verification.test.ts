@@ -83,6 +83,28 @@ describe('useParamReconciliationVerification', () => {
     expect(result.current.reconciliation).toBe('payment_reversed');
   });
 
+  it.each([
+    'failed',
+    'cancelled',
+    'abandoned',
+  ])('stops retrying a definitively %s bank offer', async (terminalFailure) => {
+    mockedVerify.mockResolvedValue({ paid: false, terminalFailure });
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        retryDelayMs: 100,
+      })
+    );
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(500);
+    });
+    expect(mockedVerify).toHaveBeenCalledTimes(1);
+    expect(result.current.reconciliation).toBe('payment_failed');
+    expect(result.current.exhausted).toBe(false);
+  });
+
   it('recovers when a transient failure resolves before the retry budget', async () => {
     mockedVerify
       .mockResolvedValueOnce({ paid: false, inconclusive: true })

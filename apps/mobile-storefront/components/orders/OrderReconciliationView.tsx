@@ -10,7 +10,7 @@ interface OrderReconciliationViewProps {
   colors: typeof Colors.light;
   isDark: boolean;
   orderNumber?: string;
-  reversed?: boolean;
+  bankOfferOutcome?: 'payment_failed' | 'payment_reversed';
   onContinueShopping: () => void;
   onViewOrders: () => void;
 }
@@ -25,10 +25,12 @@ export function OrderReconciliationView({
   colors,
   isDark,
   orderNumber,
-  reversed = false,
+  bankOfferOutcome,
   onContinueShopping,
   onViewOrders,
 }: OrderReconciliationViewProps) {
+  const reversed = bankOfferOutcome === 'payment_reversed';
+  const failed = bankOfferOutcome === 'payment_failed';
   return (
     <>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
@@ -64,12 +66,16 @@ export function OrderReconciliationView({
             <Text style={[styles.title, { color: colors.text }]}>
               {reversed
                 ? 'Payment reversed'
-                : 'Payment Received — Order Under Review'}
+                : failed
+                  ? 'Payment not completed'
+                  : 'Payment Received — Order Under Review'}
             </Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               {reversed
                 ? 'Paystack reversed this payment. Check your order or contact support before paying again.'
-                : 'Your payment went through, but this order was cancelled before it could be confirmed. Our team is reconciling it now. Any amount due back to you will be refunded automatically.'}
+                : failed
+                  ? 'Paystack confirmed this payment did not complete. Check your order before starting a new payment.'
+                  : 'Your payment went through, but this order was cancelled before it could be confirmed. Our team is reconciling it now. Any amount due back to you will be refunded automatically.'}
             </Text>
             <View
               style={[

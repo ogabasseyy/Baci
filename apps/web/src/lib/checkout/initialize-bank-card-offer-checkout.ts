@@ -37,7 +37,8 @@ export async function initializeBankCardOfferCheckout({
     result.error ||
     !context.success ||
     context.data.quote.merchantId !== merchantId ||
-    email.trim().toLowerCase() !== context.data.customerEmail
+    email.trim().toLowerCase() !==
+      context.data.customerEmail.trim().toLowerCase()
   ) {
     return { kind: 'unavailable' } as const;
   }

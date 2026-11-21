@@ -103,7 +103,6 @@ export default function OrderSuccessScreen() {
   // same commercial presentation on both authenticated and guest paths.
   const isCreditedOrder =
     receiptAmountPaid > 0 || guestInvoice.status === 'credited';
-  // Confirm the outcome with the server before trusting a route parameter.
   const {
     verified: paramReconciliationVerified,
     reconciliation: verifiedReconciliation,
@@ -122,14 +121,7 @@ export default function OrderSuccessScreen() {
     (isParamReconciliation && paramReconciliationVerified === true) ||
     wasPaidOrder ||
     isCancelledOrder;
-  // The proforma action opens this same preview: stamp the explicit kind so
-  // the generated artifact and modal chrome read as a proforma, matching
-  // the web success page (unpaid invoice orders only — paid orders keep the
-  // commercial receipt even if this screen was reached via invoice). The
-  // route method is caller-controlled, so once the authenticated receipt
-  // lookup resolves, the stored method must agree: a stale or crafted
-  // invoice link for a card/Pay-for-Me/bank-transfer order must not
-  // relabel its preview as a proforma.
+  // An unpaid invoice produces a proforma only when the saved method agrees.
   const storedMethodAgrees =
     receiptPaymentMethod === undefined || receiptPaymentMethod === 'invoice';
   const isProformaDocument =
@@ -249,7 +241,12 @@ export default function OrderSuccessScreen() {
       <OrderReconciliationView
         colors={colors}
         isDark={colorScheme === 'dark'}
-        reversed={verifiedReconciliation === 'payment_reversed'}
+        bankOfferOutcome={
+          verifiedReconciliation === 'payment_failed' ||
+          verifiedReconciliation === 'payment_reversed'
+            ? verifiedReconciliation
+            : undefined
+        }
         orderNumber={orderNumber}
         onContinueShopping={handleContinueShopping}
         onViewOrders={handleViewOrders}

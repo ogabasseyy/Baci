@@ -149,11 +149,12 @@ export async function settleOrderCompletion(
     } else if (verification.reconciliation || reference?.startsWith('BCO-')) {
       // Keep the cart for reconciliation or a bank offer still awaiting
       // verification. The order screen checks the reference before rendering.
-      if (
+      setPaymentStatus(
         verification.reconciliation &&
-        verification.reconciliation !== 'payment_reversed'
-      )
-        setPaymentStatus('success');
+          verification.reconciliation !== 'payment_reversed'
+          ? 'success'
+          : 'pending'
+      );
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',

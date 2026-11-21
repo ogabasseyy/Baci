@@ -27,7 +27,7 @@ export interface ParamReconciliationVerification {
    * success, and exhaustion (below) is never success either.
    */
   verified: boolean | undefined;
-  reconciliation: OrderPaymentVerification['reconciliation'];
+  reconciliation: OrderPaymentVerification['reconciliation'] | 'payment_failed';
   /**
    * True once the bounded retries are spent while the lookup stays
    * inconclusive (e.g. a network/API outage), or immediately when the
@@ -61,7 +61,7 @@ export function useParamReconciliationVerification({
   retryDelayMs = 750,
 }: ParamReconciliationVerificationInput): ParamReconciliationVerification {
   const [outcome, setOutcome] = useState<
-    OrderPaymentVerification['reconciliation'] | false
+    ParamReconciliationVerification['reconciliation'] | false
   >(undefined);
   const [exhausted, setExhausted] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -91,6 +91,10 @@ export function useParamReconciliationVerification({
         reference,
       }).then((result) => {
         if (cancelled) {
+          return;
+        }
+        if (requireVerifiedPayment && result.terminalFailure) {
+          setOutcome('payment_failed');
           return;
         }
         if (

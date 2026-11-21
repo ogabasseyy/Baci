@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { shippingService } from '@/lib/shipping';
 import { normalizeNigerianQuoteReceiver } from '@/lib/shipping/normalize-nigerian-quote-receiver';
 import { quoteProviderFailure } from '@/lib/shipping/quote-provider-failure';
+import { isBookableSenderPhone } from '@/lib/shipping/resolve-booking-merchant-sender';
 import { createShippingQuoteRouteProof } from '@/lib/shipping/shipping-quote-route-proof';
 import { toKobo } from '@/lib/shipping/to-kobo';
 import type { QuoteRequest } from '@/lib/shipping/types';
@@ -83,7 +84,6 @@ export async function POST(request: Request) {
         'Retry-After': String(retryAfter),
       });
     }
-
     if (settlementBasis === null) {
       logger.warn({
         message: 'Partner quote settlement policy is unconfigured',
@@ -135,10 +135,13 @@ export async function POST(request: Request) {
     ]);
     if (metadata.error || merchant.error || !merchant.data || !origin.ok)
       return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
-    const country = origin.country?.trim().toUpperCase();
-    if (origin.sender?.countryCode !== 'NG' || country !== 'NG') {
+    if (
+      origin.sender?.countryCode !== 'NG' ||
+      origin.country?.trim().toUpperCase() !== 'NG' ||
+      !isBookableSenderPhone(origin.sender.phone)
+    ) {
       logger.warn({
-        message: 'Partner quote sender is missing or outside Nigeria',
+        message: 'Partner quote sender configuration is invalid',
         connectionId,
         requestId,
       });
@@ -205,7 +208,6 @@ export async function POST(request: Request) {
       })[0];
     if (!selectedRate)
       return errorResponse(503, 'CARRIER_UNAVAILABLE', requestId);
-
     const expiry = new Date(
       Math.min(now + validityMs, selectedRate.expiresAt.getTime())
     );

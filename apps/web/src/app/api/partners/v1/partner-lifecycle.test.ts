@@ -25,6 +25,7 @@ vi.mock('@/app/api/shipping/quotes/resolve-public-merchant-sender', () => ({
     country: 'NG',
     sender: {
       address: '1 Merchant Road',
+      phone: '08011112222',
       city: 'Ikeja',
       state: 'Lagos',
       countryCode: 'NG',

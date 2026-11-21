@@ -107,7 +107,7 @@ def run():
         try:
             subprocess.run(
                 ['psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-h', directory, '-p', '55469', '-U', 'postgres', '-d', 'postgres'],
-                input=sql, text=True, check=True,
+                input=sql, text=True, cwd=SQL_TESTS, check=True,
             )
         finally:
             subprocess.run(

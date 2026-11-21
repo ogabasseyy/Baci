@@ -17,9 +17,34 @@ it.each([
   const body = await response.json();
   expect(body.error.code).toBe('QUOTE_ORIGIN_UNAVAILABLE');
   expect(warn).toHaveBeenCalledExactlyOnceWith({
-    message: 'Partner quote sender is missing or outside Nigeria',
+    message: 'Partner quote sender configuration is invalid',
     connectionId: 'crossrem-ogabassey',
     requestId: body.request_id,
   });
   expect(mocks.rates).not.toHaveBeenCalled();
+});
+
+it.each([
+  '',
+  'not-a-phone',
+  '+23415781',
+])('holds quotes when the pickup phone is invalid (%j)', async (phone) => {
+  using warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+  mocks.sender.mockResolvedValueOnce({
+    ok: true,
+    country: 'NG',
+    sender: { city: 'Ikeja', state: 'Lagos', countryCode: 'NG', phone },
+  });
+
+  const response = await POST(request());
+  expect(response.status).toBe(503);
+  const body = await response.json();
+  expect(body.error.code).toBe('QUOTE_ORIGIN_UNAVAILABLE');
+  expect(warn).toHaveBeenCalledExactlyOnceWith({
+    message: 'Partner quote sender configuration is invalid',
+    connectionId: 'crossrem-ogabassey',
+    requestId: body.request_id,
+  });
+  expect(mocks.rates).not.toHaveBeenCalled();
+  expect(mocks.rpc).not.toHaveBeenCalled();
 });

@@ -118,7 +118,12 @@ beforeEach(() => {
   mocks.sender.mockResolvedValue({
     ok: true,
     country: 'NG',
-    sender: { city: 'Ikeja', state: 'Lagos', countryCode: 'NG' },
+    sender: {
+      city: 'Ikeja',
+      state: 'Lagos',
+      countryCode: 'NG',
+      phone: '08011112222',
+    },
   });
   mocks.rates.mockResolvedValue([
     {

@@ -8,6 +8,8 @@ import {
   type CheckoutOrderItemInput,
 } from '@/lib/checkout/build-order-items';
 import type { BrowserBankCardOffer } from '@/lib/checkout/get-browser-bank-card-offers';
+import { findBrowserBankOfferRecovery } from '../find-browser-bank-offer-recovery';
+import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import { previewBankCardOffer } from '../preview-bank-card-offer';
 
 export function useBrowserBankCardOffer({
@@ -18,11 +20,20 @@ export function useBrowserBankCardOffer({
   financial,
   formatCurrency,
   isOrderInFlightRef,
+  buyer,
 }: {
   offers: readonly BrowserBankCardOffer[];
   cart: CheckoutOrderItemInput[];
   fees: readonly number[];
   available: boolean;
+  buyer?: {
+    pendingOrder: PendingCheckoutOrderSnapshot | null;
+    merchantId: string | undefined;
+    checkoutEmail: string;
+    accountEmail: string | undefined;
+    paystackAvailable: boolean;
+    currency: string;
+  };
   isOrderInFlightRef: { current: boolean };
   financial: Pick<
     ReturnType<typeof useCheckoutFinancialSession>,
@@ -30,6 +41,23 @@ export function useBrowserBankCardOffer({
   >;
   formatCurrency: (amount: number) => string;
 }) {
+  const hasEligibleBuyer =
+    !buyer ||
+    Boolean(
+      buyer.paystackAvailable &&
+        buyer.currency === 'NGN' &&
+        buyer.accountEmail?.trim().toLowerCase() ===
+          buyer.checkoutEmail.trim().toLowerCase()
+    );
+  const savedAttempt =
+    buyer &&
+    findBrowserBankOfferRecovery(
+      buyer.pendingOrder,
+      buyer.merchantId,
+      buyer.checkoutEmail,
+      hasEligibleBuyer
+    );
+  const [recoverSaved, setRecoverSaved] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => {
@@ -48,7 +76,10 @@ export function useBrowserBankCardOffer({
     return () => clearTimeout(timer);
   }, [offers, clock]);
 
-  const items = available && offers.length ? buildCheckoutOrderItems(cart) : [];
+  const items =
+    hasEligibleBuyer && available && offers.length
+      ? buildCheckoutOrderItems(cart)
+      : [];
   const now = Date.now();
   const options = items.length
     ? offers.flatMap((offer) => {
@@ -59,20 +90,47 @@ export function useBrowserBankCardOffer({
   const choice = options.find(({ offer }) => offer.id === selectedId);
   const { paymentSession, summaryAmounts } = financial;
   const selected = paymentSession.method === 'paystack' ? selectedId : null;
-  const offer = selected ? (choice?.price ?? null) : null;
+  const storedOfferId = savedAttempt?.checkoutFingerprint.split(':')[1];
+  const recoveryActive =
+    paymentSession.method === 'paystack' &&
+    Boolean(
+      savedAttempt &&
+        (recoverSaved || (selected && selected === storedOfferId && !choice))
+    );
+  const offer = selected && !recoveryActive ? (choice?.price ?? null) : null;
   const selectMethod: typeof paymentSession.selectMethod = (method) => {
     if (isOrderInFlightRef.current) return;
     setSelectedId(null);
+    setRecoverSaved(false);
     paymentSession.selectMethod(method);
   };
-  const total = offer ? offer.payableKobo / 100 : paymentSession.total;
+  const total =
+    recoveryActive && savedAttempt
+      ? savedAttempt.amountDueToGateway
+      : offer
+        ? offer.payableKobo / 100
+        : paymentSession.total;
   return {
     offer,
+    recoverSavedOffer: recoveryActive,
     model: {
       options,
       selectedId: selected,
+      recovery: savedAttempt
+        ? {
+            active: recoveryActive,
+            total: formatCurrency(savedAttempt.amountDueToGateway),
+            select() {
+              if (isOrderInFlightRef.current) return;
+              setSelectedId(null);
+              setRecoverSaved(true);
+              paymentSession.selectMethod('paystack');
+            },
+          }
+        : undefined,
       select(offerId: string | null) {
         if (isOrderInFlightRef.current) return;
+        setRecoverSaved(false);
         setSelectedId(offerId);
         paymentSession.selectMethod(offerId ? 'paystack' : '');
       },
@@ -80,21 +138,23 @@ export function useBrowserBankCardOffer({
     },
     presentation: {
       paymentSession:
-        offers.length === 0
+        offers.length === 0 && !savedAttempt
           ? paymentSession
           : {
               ...paymentSession,
               selectMethod,
               total,
-              wallet: offer
-                ? { ...paymentSession.wallet, remainingAmount: total }
-                : paymentSession.wallet,
+              wallet:
+                offer || recoveryActive
+                  ? { ...paymentSession.wallet, remainingAmount: total }
+                  : paymentSession.wallet,
             },
       summaryAmounts: offer
         ? { ...summaryAmounts, summaryDiscountAmount: offer.discountKobo / 100 }
         : summaryAmounts,
     },
     submit(placeOrder: () => void | Promise<void>) {
+      if (recoveryActive) return placeOrder();
       // Recheck even if a background tab has delayed the boundary timer.
       if (
         selected &&

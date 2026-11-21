@@ -7,6 +7,7 @@ import type { BankCardOfferSelection } from '../preview-bank-card-offer';
 export type BankCardOfferOptionsModel = {
   options: { offer: BrowserBankCardOffer; price: BankCardOfferSelection }[];
   selectedId: string | null;
+  recovery?: { active: boolean; total: string; select: () => void };
   select: (offerId: string | null) => void;
   format: (kobo: number) => string;
 };

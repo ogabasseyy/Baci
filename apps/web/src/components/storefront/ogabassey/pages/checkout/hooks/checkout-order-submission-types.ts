@@ -80,6 +80,7 @@ export interface CheckoutOrderSubmissionContext {
   };
   payment: {
     bankCardOffer?: BankCardOfferSelection;
+    recoverSavedOffer?: boolean;
     session: PaymentSession;
     bankTransferAvailable: boolean;
     paystackAvailable: boolean;

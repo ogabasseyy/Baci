@@ -2,10 +2,8 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
-import {
-  doesBankOfferMerchantMatch,
-  getBankCardOfferVerificationBinding,
-} from './get-bank-card-offer-verification-binding';
+import { doesBankOfferMerchantMatch } from './does-bank-offer-merchant-match';
+import { getBankCardOfferVerificationBinding } from './get-bank-card-offer-verification-binding';
 import type { PaymentVerificationDependencies } from './payment-verification-dependencies';
 import { readSessionlessPaymentReferenceSnapshot } from './read-sessionless-payment-reference-snapshot';
 import type { verifySessionlessBankCardOffer } from './verify-sessionless-bank-card-offer';

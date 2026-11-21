@@ -26,6 +26,7 @@ interface CheckoutOrderState {
   newsletterOptIn: boolean;
   paymentMethod: PaymentMethod;
   bankCardOffer?: BankCardOfferSelection;
+  recoverSavedOffer?: boolean;
   total: number;
   orderRequestSubtotal: number;
   subtotal: number;
@@ -95,7 +96,7 @@ export function buildCheckoutOrderLifecycleOptions({
       merchantSlug: state.merchant.slug,
       customerEmail: state.customer.email,
       checkoutFingerprint: identity.checkoutFingerprint,
-      paymentMethod: state.bankCardOffer ? 'bank_card_offer' : identity.normalizedPaymentMethod,
+      paymentMethod: state.bankCardOffer || state.recoverSavedOffer ? 'bank_card_offer' : identity.normalizedPaymentMethod,
       shippingProvider: delivery.shippingProvider,
       selectedQuoteId: getForwardableSelectedQuoteId(
         state.deliveryMethod,
@@ -122,6 +123,7 @@ export function buildCheckoutOrderLifecycleOptions({
       pushSuccessRoute: actions.pushSuccessRoute,
     },
     submit: {
+      recoverSavedOffer: state.recoverSavedOffer,
       getIdempotencyKey: actions.getIdempotencyKey,
       orderRequest: buildCheckoutOrderRequest({
         merchantId: state.merchant.id,

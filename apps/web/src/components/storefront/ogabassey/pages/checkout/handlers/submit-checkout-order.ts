@@ -40,6 +40,7 @@ export interface SubmitCheckoutOrderOptions {
   orderRequest: ReturnType<typeof buildCheckoutOrderRequest>;
   paymentMethod: PaymentMethod;
   total: number;
+  recoverSavedOffer?: boolean;
   /** Removes only lines the server rejects as irredeemable. */
   onVoucherRejected: (errorData: CheckoutOrderErrorData) => void;
   /** Clears a persisted snapshot/key that cannot safely be replayed. */
@@ -111,6 +112,7 @@ export async function submitCheckoutOrder({
     ? fetchWithCsrf
     : fetch,
   resolvedPendingOrder,
+  recoverSavedOffer,
 }: SubmitCheckoutOrderOptions): Promise<SubmittedCheckoutOrder> {
   if (
     resolvedPendingOrder.redvaultUnresolved ||
@@ -131,6 +133,11 @@ export async function submitCheckoutOrder({
     };
   }
 
+  if (recoverSavedOffer) {
+    throw new Error(
+      'No payable bank offer attempt was found. Choose another payment option.'
+    );
+  }
   const idempotencyKey = await getIdempotencyKey();
   const requestOptions: RequestInit = {
     method: 'POST',

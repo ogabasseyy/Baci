@@ -40,7 +40,18 @@ export function BankCardOfferOptions() {
           </span>
         </button>
       ))}
-      {model.selectedId &&
+      {model.recovery && (
+        <button
+          type="button"
+          aria-pressed={model.recovery.active}
+          onClick={model.recovery.select}
+          className="flex items-center justify-between gap-3 rounded-xl border border-store-background-text/15 p-3 text-left aria-pressed:border-store-primary aria-pressed:bg-store-primary/5"
+        >
+          <span className="font-semibold">Continue saved bank offer</span>
+          <span className="shrink-0 font-semibold">{model.recovery.total}</span>
+        </button>
+      )}
+      {!model.recovery?.active && model.selectedId &&
         !model.options.some(({ offer }) => offer.id === model.selectedId) && (
           <button
             type="button"

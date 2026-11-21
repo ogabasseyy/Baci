@@ -51,7 +51,7 @@ async function openPayment() {
   await continueToPaymentAfterPickupCheck();
 }
 
-it('shows the capped card savings and sends the accepted discounted total through checkout', async () => {
+it('shows the capped savings and resumes the same Paystack attempt after expiry', async () => {
   setupCheckout();
   const persisted = await vi.importActual<
     typeof import('@/hooks/use-persisted-state')
@@ -97,6 +97,7 @@ it('shows the capped card savings and sends the accepted discounted total throug
       return Response.json({ states: ['Lagos'], locations: [] });
     });
 
+  const now = vi.spyOn(Date, 'now');
   try {
     render(<CheckoutPage bankCardOffers={[wema]} />);
     await openPayment();
@@ -131,6 +132,10 @@ it('shows the capped card savings and sends the accepted discounted total throug
       );
     });
     await waitFor(() => expect(button).toBeEnabled());
+    now.mockReturnValue(Date.parse(wema.endsAt) + 1000);
+    fireEvent.click(
+      await screen.findByRole('button', { name: /continue saved bank offer/i })
+    );
     fireEvent.click(button as HTMLButtonElement);
     await waitFor(() => expect(initialize).toHaveBeenCalledTimes(2));
     expect(createOrder).toHaveBeenCalledTimes(1);
@@ -138,6 +143,7 @@ it('shows the capped card savings and sends the accepted discounted total throug
       '/api/orders/reuse'
     );
   } finally {
+    now.mockRestore();
     fetch.mockRestore();
   }
 });

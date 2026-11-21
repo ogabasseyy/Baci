@@ -167,13 +167,16 @@ export const CheckoutPage: React.FC<
     formatCurrency: formatCurrencyAuto,
     cart: checkoutCart,
     fees: [deliveryCost, orderTotals?.taxAmount ?? 0, giftWrappingCost],
+    buyer: {
+      pendingOrder: pendingCheckoutOrder,
+      merchantId: merchant?.id,
+      checkoutEmail: checkoutForm.customerEmail,
+      accountEmail: user?.email,
+      paystackAvailable: paystackCheckoutAvailable,
+      currency: currencyCode,
+    },
     available: Boolean(
-      user?.email &&
-        user.email.trim().toLowerCase() ===
-          checkoutForm.customerEmail.trim().toLowerCase() &&
-        paystackCheckoutAvailable &&
-        currencyCode === 'NGN' &&
-        !checkoutSharedCartRef &&
+      !checkoutSharedCartRef &&
         !resumeOrderId &&
         !paymentSession.discount.code &&
         !paymentSession.checkoutValues.useWalletCredit &&
@@ -225,8 +228,9 @@ export const CheckoutPage: React.FC<
       getHref,
     },
     payment: {
-      session: paymentSession,
+      session: bankCards.presentation.paymentSession,
       bankCardOffer: bankCards.offer ?? undefined,
+      recoverSavedOffer: bankCards.recoverSavedOffer,
       bankTransferAvailable: bankTransferCheckoutAvailable,
       paystackAvailable: paystackCheckoutAvailable,
       korapayAvailable: korapayCheckoutAvailable,

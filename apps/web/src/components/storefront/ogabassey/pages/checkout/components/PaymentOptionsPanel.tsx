@@ -86,7 +86,7 @@ export function PaymentOptionsPanel({
             {paystackCheckoutAvailable && (
               <PaymentOptionCard
                 method="paystack"
-                paymentMethod={bankOfferModel?.selectedId ? '' : paymentMethod}
+                paymentMethod={bankOfferModel?.selectedId || bankOfferModel?.recovery?.active ? '' : paymentMethod}
                 setPaymentMethod={setPaymentMethod}
                 title="Paystack"
                 description="Card, Bank Transfer, USSD"

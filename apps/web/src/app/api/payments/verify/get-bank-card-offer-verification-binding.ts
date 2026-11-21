@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
+import { doesBankOfferMerchantMatch } from './does-bank-offer-merchant-match';
 import { readSessionlessPaymentReferenceSnapshot } from './read-sessionless-payment-reference-snapshot';
 
 export async function getBankCardOfferVerificationBinding(
@@ -30,20 +30,4 @@ export async function getBankCardOfferVerificationBinding(
   } catch {
     return 'unavailable';
   }
-}
-
-export async function doesBankOfferMerchantMatch(
-  client: SupabaseClient,
-  slug: string,
-  merchantId: string
-): Promise<boolean> {
-  const { data, error } = await client
-    .from('merchants')
-    .select('id')
-    .eq('slug', slug)
-    .eq('id', merchantId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.id === merchantId;
 }

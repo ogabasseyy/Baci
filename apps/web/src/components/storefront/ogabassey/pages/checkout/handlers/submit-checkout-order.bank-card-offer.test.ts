@@ -34,3 +34,21 @@ it('sends the browser CSRF token and the order idempotency key for a bank offer'
     vi.unstubAllGlobals();
   }
 });
+
+it('cannot create a new order while recovering a vanished bank offer attempt', async () => {
+  const request = vi.fn();
+  await expect(submitCheckoutOrder({
+    recoverSavedOffer: true,
+    resolvedPendingOrder: { reusableOrder: null, clearStoredOrder: false },
+    getIdempotencyKey: vi.fn(),
+    orderRequest: orderRequest(),
+    paymentMethod: 'paystack',
+    total: 4200,
+    onVoucherRejected: vi.fn(),
+    onPendingOrderInvalidated: vi.fn(),
+    onShippingRateRejected: vi.fn(),
+    getOrderErrorMessage: () => 'unreachable',
+    request,
+  })).rejects.toThrow('No payable bank offer attempt');
+  expect(request).not.toHaveBeenCalled();
+});

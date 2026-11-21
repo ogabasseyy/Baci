@@ -17,6 +17,7 @@ jest.mock(
   { virtual: true }
 );
 jest.mock('expo-file-system', () => ({
+  Paths: { cache: { uri: 'file:///app/cache/' } },
   File: class {
     constructor(uri: string) {
       mockFile(uri);
@@ -80,4 +81,33 @@ it('preserves cancellation from the gallery', async () => {
     .mocked(ImagePicker.launchImageLibraryAsync)
     .mockResolvedValue({ canceled: true, assets: null });
   expect(await pickOxygenProofSource('photos')).toEqual({ canceled: true });
+});
+
+it('releases the image picker cache copy only after the reader requests cleanup', async () => {
+  const uri = 'file:///app/cache/ImagePicker/proof.png';
+  mockFile.mockClear();
+  mockDeleteCopy.mockClear();
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri, width: 100, height: 100, mimeType: 'image/png' }],
+  });
+
+  const result = await pickOxygenProofSource('photos');
+  expect(mockDeleteCopy).not.toHaveBeenCalled();
+  result.assets?.[0]?.release?.();
+  expect(mockFile).toHaveBeenCalledWith(uri);
+  expect(mockDeleteCopy).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  'file:///app/original.png',
+  'file:///app/cache/../original.png',
+  'content://media/external/images/1',
+])('does not schedule deletion of a gallery original outside the cache: %s', async (uri) => {
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [{ uri, width: 100, height: 100, mimeType: 'image/png' }],
+  });
+  const result = await pickOxygenProofSource('photos');
+  expect(result.assets?.[0]?.release).toBeUndefined();
 });

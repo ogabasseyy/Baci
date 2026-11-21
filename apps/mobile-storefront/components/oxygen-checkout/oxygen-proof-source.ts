@@ -1,5 +1,5 @@
 import { getDocumentAsync } from 'expo-document-picker';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import type { OxygenProofPicker } from './use-oxygen-proof';
 
 export type OxygenProofSource = 'photos' | 'files';
@@ -11,6 +11,18 @@ export function warmOxygenPhotoPicker() {
     throw error;
   });
   return photoModule;
+}
+
+// Expo ImagePicker exports native photos to the app cache. File/provider
+// URIs outside that directory may refer to a customer's original.
+function isPhotoCacheCopy(uri: string): boolean {
+  if (!uri.startsWith('file:///')) return false;
+  const cache = new URL(Paths.cache.uri).href.replace(/\/+$/, '');
+  const path = new URL(uri).href;
+  const prefix = `${cache}/`;
+  return (
+    path.startsWith(prefix) && /^[a-z\d._/-]+$/i.test(path.slice(prefix.length))
+  );
 }
 
 export async function pickOxygenProofSource(
@@ -49,6 +61,9 @@ export async function pickOxygenProofSource(
           : 'address-proof.jpg'),
       mimeType: asset.mimeType,
       size: asset.fileSize,
+      ...(isPhotoCacheCopy(asset.uri)
+        ? { release: () => new File(asset.uri).delete() }
+        : {}),
     })),
   };
 }

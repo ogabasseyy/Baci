@@ -63,7 +63,7 @@ async function GiftCardPreview({ params, searchParams }: GiftCardPageProps) {
     !!configuredMarkup && Number.isSafeInteger(markup) && markup >= 0;
   const requestHeaders = await headers();
   const prefix = getStorefrontPathPrefix(requestHeaders, merchant);
-  // Production builds exclude this development-only fixture path.
+  // The fixture path is disabled unless development mode and explicit opt-in are both active.
   const mockCheckout =
     process.env.NODE_ENV === 'development' &&
     process.env.OGABASSEY_GIFT_CARD_MOCK_CHECKOUT === 'true';

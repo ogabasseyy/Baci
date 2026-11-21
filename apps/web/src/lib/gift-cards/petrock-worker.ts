@@ -70,13 +70,15 @@ export async function runGiftCardWorker(
   if (reply.data.orderUuid !== order.providerOrderId) {
     return { status: 'review', reason: 'order_mismatch' };
   }
-  if (!reply.data.referenceId) {
+  const { referenceId, status, replay } = reply.data;
+  // An authenticated rejection with the supplier's exact echoed order ID
+  // can refund. Delivering a successful voucher still requires both IDs.
+  if (referenceId === undefined && status !== 'reject') {
     return { status: 'review', reason: 'missing_reference' };
   }
-  if (reply.data.referenceId !== order.id) {
+  if (referenceId !== undefined && referenceId !== order.id) {
     return { status: 'review', reason: 'reference_mismatch' };
   }
-  const { status, replay } = reply.data;
   if (status !== 'success' && status !== 'reject') return { status: 'pending' };
   if (
     typeof replay !== 'string' ||

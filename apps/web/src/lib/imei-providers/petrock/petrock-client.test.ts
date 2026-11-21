@@ -41,6 +41,17 @@ describe('createPetrockClient', () => {
     ]);
   });
 
+  it('rejects a gift-card poll without an echoed supplier order ID', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        data: { status: 'reject', reference_id: 'gift-quote-123' },
+      })
+    );
+    await expect(
+      client.getOrder('order-123', { requireOrderUuid: true })
+    ).resolves.toMatchObject({ ok: false, kind: 'invalid_response' });
+  });
+
   it('submits byte-exact dynamic field names and extracts the order UUID', async () => {
     fetchMock.mockResolvedValue(
       new Response(

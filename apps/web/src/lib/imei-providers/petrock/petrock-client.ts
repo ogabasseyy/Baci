@@ -174,7 +174,8 @@ export function createPetrockClient({
     },
 
     async getOrder(
-      orderUuid: string
+      orderUuid: string,
+      { requireOrderUuid = false } = {}
     ): Promise<PetrockClientResult<PetrockOrder>> {
       const result = await request(
         `/order?order_uuid=${encodeURIComponent(orderUuid)}`
@@ -184,7 +185,7 @@ export function createPetrockClient({
       const parsed = petrockOrderResponseSchema.safeParse(result.data);
       if (
         !parsed.success ||
-        (parsed.data.data.order_uuid !== undefined &&
+        ((requireOrderUuid || parsed.data.data.order_uuid !== undefined) &&
           parsed.data.data.order_uuid !== orderUuid)
       ) {
         return {

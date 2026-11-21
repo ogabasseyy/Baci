@@ -39,6 +39,11 @@ BEGIN
      OR public.capture_gift_card_petrock_result(v_order_id,'supplier-1','success','voucher') THEN
     RAISE EXCEPTION 'Unexpected result capture';
   END IF;
+  BEGIN
+    PERFORM public.capture_gift_card_petrock_result(v_order_id, 'supplier-1', 'success', 'v1.iv.tag.');
+    RAISE EXCEPTION 'Empty ciphertext accepted for success' USING ERRCODE = 'XX000';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
   IF NOT public.capture_gift_card_petrock_result(v_order_id,'supplier-1','success','v1.iv.tag.cipher') THEN
     RAISE EXCEPTION 'Expected sealed evidence capture';
   END IF;

@@ -83,7 +83,7 @@ async function main() {
         referenceId: order.id,
         feedbackUrl: options.feedbackUrl,
       }),
-      poll: (providerId) => provider.getOrder(providerId),
+      poll: (providerId) => provider.getOrder(providerId, { requireOrderUuid: true }),
       seal(replay, orderId) {
         const iv = randomBytes(12);
         const cipher = createCipheriv('aes-256-gcm', Buffer.from(options.evidenceKey, 'hex'), iv);

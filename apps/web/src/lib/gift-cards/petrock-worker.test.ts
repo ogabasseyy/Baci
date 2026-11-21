@@ -126,3 +126,29 @@ it.each([
   ).resolves.toEqual({ status: 'review', reason: 'invalid_replay' });
   expect(deps.recordResult).not.toHaveBeenCalled();
 });
+
+it('captures a confirmed rejection with an echoed supplier order ID and no merchant reference', async () => {
+  const deps = setup();
+  deps.read.mockResolvedValue({
+    ...paid,
+    status: 'submitted',
+    providerOrderId: 'supplier-1',
+  });
+  deps.poll.mockResolvedValue({
+    ok: true,
+    data: { orderUuid: 'supplier-1', status: 'reject', replay: '' },
+  });
+  await expect(
+    runGiftCardWorker({ mode: 'poll', orderId: paid.id }, deps)
+  ).resolves.toEqual({
+    status: 'captured',
+    providerStatus: 'reject',
+    replay: '[redacted]',
+  });
+  expect(deps.recordResult).toHaveBeenCalledExactlyOnceWith(
+    paid.id,
+    'supplier-1',
+    'reject',
+    'ciphertext'
+  );
+});

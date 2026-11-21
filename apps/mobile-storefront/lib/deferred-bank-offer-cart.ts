@@ -5,6 +5,7 @@ import { useCartStore } from '@/stores/cart-store';
 const CONSUMED_MARKER = 'consumed';
 
 function cartIdentity() {
+  if (!useCartStore.persist.hasHydrated()) return null;
   const { checkoutGeneration, items, sharedCartRef } = useCartStore.getState();
   if (!checkoutGeneration || !items.length) return null;
   return JSON.stringify([

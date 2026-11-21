@@ -77,6 +77,18 @@ describe('OrderSuccessScreen', () => {
     mockGuestInvoiceHolder.current = { status: 'unpaid', isResolved: true };
   });
 
+  it('shows an invalid-link message without claiming Paystack rejected the payment', () => {
+    mockSearchParamsHolder.current = {
+      ...mockSearchParamsHolder.current,
+      reference: 'bco-invalid',
+    };
+    const view = render(<OrderSuccessScreen />);
+    expect(view.getByText('Invalid payment link')).toBeTruthy();
+    expect(view.queryByLabelText('Retry verification')).toBeNull();
+    expect(mockOrderReconciliationView).not.toHaveBeenCalled();
+    expect(mockVerifyOrderPaymentForCompletion).not.toHaveBeenCalled();
+  });
+
   it('schedules the order received notification only after the success screen loads', async () => {
     render(<OrderSuccessScreen />);
 

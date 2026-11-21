@@ -39,6 +39,12 @@ beforeEach(() => {
   });
 });
 
+it('does not snapshot a cart before storage hydration', () => {
+  jest.mocked(useCartStore.persist.hasHydrated).mockReturnValueOnce(false);
+  expect(deferredBankOfferCart.capture()).toBeNull();
+  expect(useCartStore.getState).not.toHaveBeenCalled();
+});
+
 it('does not use storage for a noncanonical bank offer reference', async () => {
   const malformedReference = reference.toLowerCase();
   await deferredBankOfferCart.remember(

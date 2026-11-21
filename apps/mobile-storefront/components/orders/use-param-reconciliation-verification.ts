@@ -1,3 +1,4 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import { useEffect, useState } from 'react';
 import {
   type OrderPaymentVerification,
@@ -30,6 +31,7 @@ export interface ParamReconciliationVerification {
    */
   verified: boolean | undefined;
   bankOfferPaid: boolean;
+  invalidPaymentLink: boolean;
   reconciliation: OrderPaymentVerification['reconciliation'] | 'payment_failed';
   /**
    * True once the bounded retries are spent while the lookup stays
@@ -63,6 +65,9 @@ export function useParamReconciliationVerification({
   maxAttempts = 3,
   retryDelayMs = 750,
 }: ParamReconciliationVerificationInput): ParamReconciliationVerification {
+  const invalidPaymentLink =
+    requireVerifiedPayment &&
+    (!reference || !BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference));
   const [outcome, setOutcome] = useState<
     | ParamReconciliationVerification['reconciliation']
     | 'bank_offer_paid'
@@ -75,7 +80,7 @@ export function useParamReconciliationVerification({
   useEffect(() => {
     setOutcome(undefined);
     setExhausted(false);
-    if (!isParamReconciliation) {
+    if (!isParamReconciliation || invalidPaymentLink) {
       return;
     }
     if (!orderId) {
@@ -154,6 +159,7 @@ export function useParamReconciliationVerification({
     maxAttempts,
     retryDelayMs,
     retryNonce,
+    invalidPaymentLink,
   ]);
 
   // Plain closure: React Compiler handles memoization (AGENTS.md).
@@ -162,6 +168,7 @@ export function useParamReconciliationVerification({
   };
 
   return {
+    invalidPaymentLink,
     verified:
       outcome === undefined
         ? undefined

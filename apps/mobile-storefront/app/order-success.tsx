@@ -107,6 +107,7 @@ export default function OrderSuccessScreen() {
   const {
     verified: paramReconciliationVerified,
     bankOfferPaid,
+    invalidPaymentLink,
     reconciliation: verifiedReconciliation,
     exhausted: isParamVerificationExhausted,
     retry: retryParamVerification,
@@ -118,7 +119,8 @@ export default function OrderSuccessScreen() {
     requireVerifiedPayment,
   });
   const isParamVerificationUnresolved =
-    isParamReconciliation && paramReconciliationVerified === undefined;
+    invalidPaymentLink ||
+    (isParamReconciliation && paramReconciliationVerified === undefined);
   const isReconciliation =
     (isParamReconciliation && paramReconciliationVerified === true) ||
     wasPaidOrder ||
@@ -225,6 +227,7 @@ export default function OrderSuccessScreen() {
       : undefined;
 
   const paramVerificationGate = renderParamVerificationGate({
+    invalidPaymentLink,
     isParamReconciliation,
     paramReconciliationVerified,
     isParamVerificationExhausted,

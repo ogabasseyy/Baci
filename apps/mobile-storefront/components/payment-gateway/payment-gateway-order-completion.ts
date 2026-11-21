@@ -74,6 +74,10 @@ export async function settleOrderCompletion(
     setPaymentStatus,
     trackingToken,
   } = context;
+  const bankOfferReference =
+    reference && BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)
+      ? reference
+      : null;
 
   paymentCompletionStartedRef.current = true;
   clearPendingLoadTimeout();
@@ -82,10 +86,6 @@ export async function settleOrderCompletion(
   // cancellation/error callbacks while verification is still running.
   setPaymentStatus('processing');
   if (orderId && !redvaultVerified) {
-    const bankOfferReference =
-      reference && BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)
-        ? reference
-        : null;
     if (!bankOfferReference && hasBankCardOfferReferencePrefix(reference)) {
       paymentCompletionStartedRef.current = false;
       setPaymentStatus('error');
@@ -115,6 +115,19 @@ export async function settleOrderCompletion(
     // since would be destroyed even though navigation refuses to run.
     if (!isMountedRef.current) {
       return;
+    }
+    if (
+      bankOfferReference &&
+      cartIdentity &&
+      !verification.reconciliation &&
+      !verification.terminalFailure
+    ) {
+      await deferredBankOfferCart
+        .remember(orderId, bankOfferReference, cartIdentity)
+        .catch(() =>
+          console.warn('Could not save the bank-offer cart snapshot')
+        );
+      if (!isMountedRef.current) return;
     }
     if (verification.paid) {
       // The tracked order already carries the checkout identity,
@@ -175,14 +188,6 @@ export async function settleOrderCompletion(
           ? 'success'
           : 'pending'
       );
-      if (bankOfferReference && cartIdentity && !verification.reconciliation) {
-        await deferredBankOfferCart
-          .remember(orderId, bankOfferReference, cartIdentity)
-          .catch(() =>
-            console.warn('Could not save the pending bank-offer cart')
-          );
-        if (!isMountedRef.current) return;
-      }
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',
@@ -219,7 +224,9 @@ export async function settleOrderCompletion(
     }
   }
   setPaymentStatus('success');
-  await clearCart();
+  // The order screen clears a verified bank-offer cart only with a saved
+  // identity. A missing snapshot gives no authority over the current cart.
+  if (!bankOfferReference) await clearCart();
   scheduleDelayedNavigation(() => {
     router.replace({
       pathname: '/order-success',

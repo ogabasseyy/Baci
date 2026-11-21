@@ -132,6 +132,7 @@ describe('useParamReconciliationVerification', () => {
         isParamReconciliation: true,
         requireVerifiedPayment: true,
         orderId: 'order-1',
+        reference: `BCO-${'d'.repeat(32)}`,
         retryDelayMs: 100,
       })
     );
@@ -158,6 +159,7 @@ describe('useParamReconciliationVerification', () => {
         isParamReconciliation: true,
         requireVerifiedPayment: true,
         orderId: 'order-1',
+        reference: `BCO-${'d'.repeat(32)}`,
         retryDelayMs: 100,
       })
     );

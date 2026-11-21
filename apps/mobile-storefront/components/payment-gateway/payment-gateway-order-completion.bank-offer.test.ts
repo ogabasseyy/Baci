@@ -11,7 +11,9 @@ jest.mock('@/lib/deferred-bank-offer-cart', () => ({
     remember: jest.fn(async () => undefined),
   },
 }));
-jest.mock('@/services/analytics', () => ({}));
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: jest.fn(async () => undefined),
+}));
 jest.mock('./settle-redvault-funnel-completion', () => ({}));
 jest.mock('./verify-order-payment', () => ({
   verifyOrderPaymentForCompletion: jest.fn(),
@@ -57,9 +59,6 @@ it('leaves the gateway pending and preserves the cart while the order screen ver
 
 it('rejects a malformed bank offer reference before navigation or cart changes', async () => {
   jest.clearAllMocks();
-  jest
-    .mocked(verifyOrderPaymentForCompletion)
-    .mockResolvedValueOnce({ paid: false, inconclusive: true });
   const clearCart = jest.fn<() => void>();
   const setPaymentStatus = jest.fn();
   await settleOrderCompletion(
@@ -80,5 +79,40 @@ it('rejects a malformed bank offer reference before navigation or cart changes',
   expect(clearCart).not.toHaveBeenCalled();
   expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
   expect(router.replace).not.toHaveBeenCalled();
+  expect(verifyOrderPaymentForCompletion).not.toHaveBeenCalled();
   expect(setPaymentStatus).toHaveBeenLastCalledWith('error');
+});
+
+it.each([
+  'cart-identity',
+  null,
+])('uses only a captured identity to clear a paid bank-offer cart (%s)', async (identity) => {
+  jest.clearAllMocks();
+  jest.mocked(deferredBankOfferCart.capture).mockReturnValueOnce(identity);
+  jest
+    .mocked(verifyOrderPaymentForCompletion)
+    .mockResolvedValueOnce({ paid: true });
+  const clearCart = jest.fn<() => void>();
+  const setPaymentStatus = jest.fn();
+  const reference = `BCO-${'a'.repeat(32)}`;
+  await settleOrderCompletion(
+    {
+      orderId: 'order-1',
+      reference,
+      clearCart,
+      clearPendingLoadTimeout: jest.fn(),
+      isMountedRef: { current: true },
+      paymentCompletionStartedRef: { current: false },
+      scheduleDelayedNavigation: (navigate) => navigate(),
+      setErrorMessage: jest.fn(),
+      setPaymentStatus,
+    },
+    undefined,
+    false
+  );
+  expect(setPaymentStatus).toHaveBeenLastCalledWith('success');
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(jest.mocked(deferredBankOfferCart.remember).mock.calls).toEqual(
+    identity ? [['order-1', reference, identity]] : []
+  );
 });

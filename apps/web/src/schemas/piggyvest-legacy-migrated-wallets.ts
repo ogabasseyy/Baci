@@ -20,12 +20,10 @@ export const piggyvestLegacyMigratedWalletRowsSchema = z
             .array(z.strictObject({ walletId: z.uuid(), balance: naira }))
             .max(50),
         })
-        // The list is the first 50 of `count`: an inconsistent answer is
-        // unreadable, never a page with no wallet ids to act on.
+        // The SQL lists exactly the first min(count, 50) wallets: any other
+        // length is unreadable, never a page with a missing or short list.
         .refine(
-          (result) =>
-            result.count >= result.wallets.length &&
-            (result.count === 0) === (result.wallets.length === 0),
+          (result) => result.wallets.length === Math.min(result.count, 50),
           { message: 'count and wallets disagree' }
         ),
     })

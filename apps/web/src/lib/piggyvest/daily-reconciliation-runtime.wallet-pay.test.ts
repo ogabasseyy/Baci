@@ -113,7 +113,8 @@ describe('runPiggyvestDailyReconciliation: moved legacy wallets', () => {
       count: 2,
       totalBalance: '9.00',
       wallets: [
-        { walletId: '0b3f1e0a-0000-4000-8000-0000000000a1', balance: '9.00' },
+        { walletId: '0b3f1e0a-0000-4000-8000-0000000000a1', balance: '8.00' },
+        { walletId: '0b3f1e0a-0000-4000-8000-0000000000a2', balance: '1.00' },
       ],
     });
     const { deps } = makeDeps({

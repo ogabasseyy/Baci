@@ -43,6 +43,18 @@ describe('piggyvestLegacyMigratedWalletRowsSchema', () => {
     ['a negative count', rows({ ...valid, count: -1 })],
     ['a fractional count', rows({ ...valid, count: 1.5 })],
     ['a count below the listed wallets', rows({ ...valid, count: 1 })],
+    ['a count above a short list', rows({ ...valid, count: 3 })],
+    [
+      'a count above 50 with fewer than 50 listed',
+      rows({
+        count: 75,
+        totalBalance: '75.00',
+        wallets: Array.from({ length: 49 }, (_, index) => ({
+          walletId: walletId(index),
+          balance: '1.00',
+        })),
+      }),
+    ],
     [
       'a count with no wallet ids',
       rows({ count: 1, totalBalance: '1.00', wallets: [] }),

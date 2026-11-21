@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const oauthRouteMocks = vi.hoisted(() => ({
   getMerchantByIdentifier: vi.fn(),
   signInWithOAuth: vi.fn(),
+  verifiedDomains: [] as string[],
   merchant: {
     business_name: 'Baci Store',
     id: 'merchant-1',
@@ -32,6 +33,20 @@ vi.mock('@/lib/supabase/server', () => ({
     auth: {
       signInWithOAuth: oauthRouteMocks.signInWithOAuth,
     },
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            not: async () => ({
+              data: oauthRouteMocks.verifiedDomains.map((domain) => ({
+                domain,
+              })),
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    }),
   }),
 }));
 
@@ -46,6 +61,7 @@ function makeRequest(body: Record<string, unknown>) {
 describe('POST /api/storefront/auth/google', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    oauthRouteMocks.verifiedDomains = [];
     oauthRouteMocks.getMerchantByIdentifier.mockResolvedValue(
       oauthRouteMocks.merchant
     );
@@ -164,6 +180,34 @@ describe('POST /api/storefront/auth/google', () => {
       expect.objectContaining({
         options: expect.objectContaining({
           redirectTo: 'https://ogabassey.com/account/callback',
+        }),
+      })
+    );
+  });
+
+  it('allows explicitly verified alias origins and rejects unverified www siblings', async () => {
+    const { POST } = await import('./route');
+
+    const rejected = await POST(
+      makeRequest({
+        merchantSlug: 'ogabassey',
+        redirectUrl: 'https://www.ogabassey.com/account/callback',
+      })
+    );
+    expect(rejected.status).toBe(400);
+
+    oauthRouteMocks.verifiedDomains = ['www.ogabassey.com'];
+    const allowed = await POST(
+      makeRequest({
+        merchantSlug: 'ogabassey',
+        redirectUrl: 'https://www.ogabassey.com/account/callback',
+      })
+    );
+    expect(allowed.status).toBe(200);
+    expect(oauthRouteMocks.signInWithOAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          redirectTo: 'https://www.ogabassey.com/account/callback',
         }),
       })
     );

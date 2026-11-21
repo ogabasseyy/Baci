@@ -195,10 +195,10 @@ describe('partner order intake', () => {
     expect((await POST(request())).status).toBe(404);
     expect((await POST(request())).status).toBe(409);
     const conflict = await POST(request());
-    expect(conflict.status).toBe(409);
+    expect(conflict.status).toBe(503);
     const body = await conflict.json();
     expect(body).toEqual({
-      error: { code: 'ORDER_CONFLICT' },
+      error: { code: 'ORDER_INTAKE_UNAVAILABLE' },
       request_id: expect.any(String),
     });
     expect(warn).toHaveBeenCalledExactlyOnceWith({

@@ -24,6 +24,8 @@ export async function selectAdminOrderGiglRate(
       ),
     };
   }
+  // A settlement is read through the accepted-order mapping for this exact
+  // order. It governs the rate even if the display source is missing.
   if (!error && (data !== null || order.source === 'partner')) {
     if (data === null) {
       return {

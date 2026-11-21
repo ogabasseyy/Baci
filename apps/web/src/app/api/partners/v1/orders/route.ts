@@ -92,14 +92,14 @@ export async function POST(request: Request) {
     if (error?.code === 'P0002' && error.message === 'partner_quote_not_found')
       return invalid(404, 'QUOTE_NOT_FOUND');
     if (error?.code === '23505') {
-      if (error.message !== 'partner_order_conflict') {
-        logger.warn({
-          message: 'Unexpected partner order uniqueness conflict',
-          connectionId,
-          requestId,
-        });
-      }
-      return invalid(409, 'ORDER_CONFLICT');
+      if (error.message === 'partner_order_conflict')
+        return invalid(409, 'ORDER_CONFLICT');
+      logger.warn({
+        message: 'Unexpected partner order uniqueness conflict',
+        connectionId,
+        requestId,
+      });
+      return invalid(503, 'ORDER_INTAKE_UNAVAILABLE');
     }
     if (error) throw new Error('Partner order intake storage unavailable');
     const reply = partnerOrderReceiptSchema.safeParse(data);

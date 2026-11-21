@@ -142,7 +142,7 @@ export async function POST(request: Request) {
         connectionId,
         requestId,
       });
-      return errorResponse(503, 'QUOTE_UNAVAILABLE', requestId);
+      return errorResponse(503, 'QUOTE_ORIGIN_UNAVAILABLE', requestId);
     }
     const parcel = buildPartnerQuoteParcel(
       items,

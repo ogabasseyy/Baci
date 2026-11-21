@@ -15,7 +15,7 @@ it.each([
   const response = await POST(request());
   expect(response.status).toBe(503);
   const body = await response.json();
-  expect(body.error.code).toBe('QUOTE_UNAVAILABLE');
+  expect(body.error.code).toBe('QUOTE_ORIGIN_UNAVAILABLE');
   expect(warn).toHaveBeenCalledExactlyOnceWith({
     message: 'Partner quote sender is missing or outside Nigeria',
     connectionId: 'crossrem-ogabassey',

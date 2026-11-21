@@ -88,6 +88,9 @@ try:
   sql+="\nALTER TABLE public.products ADD COLUMN default_variant_id uuid, ADD COLUMN condition text DEFAULT 'new';"
   sql+="\nALTER TABLE public.product_variants ADD COLUMN attributes jsonb NOT NULL DEFAULT '{}', ADD COLUMN condition text;"
   for name in ['20261015160000_commerce_cart_redeem_grant_expiry.sql',
+               '20261015175000_commerce_cart_variant_predicate_columns.sql',
+               '20261019172000_commerce_cart_offer_variant_columns.sql',
+               '20261019183000_commerce_cart_default_variant_predicate.sql',
                '20261120182000_commerce_cart_import_mcp_handoff.sql',
                '20261121103000_commerce_cart_mcp_handoff_refresh_replay.sql',
                '20261121103100_commerce_cart_mcp_handoff_import_mode.sql',
@@ -107,6 +110,8 @@ try:
     anchor_array = ', '.join(f'$anchor${anchor}$anchor$' for anchor in anchors)
     sql+=f"\nSELECT pg_temp.check_mcp_import_source_drift($repair${migration}$repair$, ARRAY[{anchor_array}], 'MCP cart import {reason}');"
    sql+='\n'+migration
+  sql+="\nALTER TABLE public.product_variants DROP COLUMN is_active, DROP COLUMN status, DROP COLUMN deleted_at, DROP COLUMN archived_at, DROP COLUMN is_default;"
+  sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_sku_cases.sql').read_text()
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-handoff-attachment-lifetime.log','w'),stderr=subprocess.STDOUT,cwd=root)

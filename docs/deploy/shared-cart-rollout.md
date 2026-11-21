@@ -209,6 +209,20 @@ and enrollment gates in the release sequence below.
 7. Expand only after convergence, checkout-binding and isolation
    evidence pass at the deployed revision.
 
+### Ogabassey conversation guest-cart mode
+
+`BACI_MCP_GUEST_CREDENTIAL_ENABLED` is off by default. Keep it stable on
+the dedicated cart-only MCP service throughout validation and rollout.
+A change requires a service restart, refreshed tool discovery, and a
+fresh ChatGPT handoff link to exercise the new mode. Previously issued
+links keep their signed behavior until they expire.
+
+Opening the `Review cart and checkout` link is the shopper action that
+starts the website import. The destination verifies the signed link and
+website session, adds eligible quantities once, and opens the website
+cart directly. The shopper can edit copied items on the website and
+chooses separately whether to place an order.
+
 ## Signing keys
 
 Session proofs and handoff tokens derive separate signing keys from

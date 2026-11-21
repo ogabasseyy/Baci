@@ -46,6 +46,8 @@ SELECT * FROM (VALUES
    'FOLLOW-UP: quote id is the only capability; not tied to caller or session'),
   ('public.get_credit_direct_settings(text)',
    'public storefront/feed read; anon-safe projection'),
+  ('public.get_chat_message_push_preference(uuid)',
+   'chat webhook has no merchant session; returns one boolean switch only'),
   ('public.get_feed_product_variants(uuid[],uuid)',
    'public storefront/feed read; anon-safe projection'),
   ('public.get_follow_up_notification_preference(uuid)',

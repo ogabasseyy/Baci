@@ -3,6 +3,7 @@ import 'server-only';
 import { isMajorAmountRepresentable } from '@/lib/money/is-major-amount-representable';
 import type { ShippingQuote } from '@/lib/shipping/types';
 import type { ChatwootDeliveryOptionsResponse } from '@/schemas/chatwoot-delivery-options';
+import { formatChatwootPickupLocation } from './pickup-location';
 
 const MAX_DELIVERY_OPTIONS = 20;
 
@@ -68,14 +69,7 @@ export function projectChatwootDeliveryOptions(input: {
       continue;
     }
 
-    const pickupLocation = quote.isStationPickup
-      ? boundedText(
-          [quote.stationName, quote.stationAddress]
-            .filter((part): part is string => typeof part === 'string')
-            .join(' · '),
-          240
-        )
-      : undefined;
+    const pickupLocation = formatChatwootPickupLocation(quote);
     const pickupInstructions = quote.isStationPickup
       ? boundedText(quote.stationInstructions, 240)
       : undefined;

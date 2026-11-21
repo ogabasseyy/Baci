@@ -1,30 +1,39 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type ExpenseFormHandlerForm,
   useExpenseFormHandlers,
 } from './useExpenseFormHandlers';
 
+type PreventRemoveEvent = {
+  data: { action: { type: 'GO_BACK' } };
+  repeat: () => void;
+};
+
 const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
   picker: vi.fn(),
   prevent: false,
-  preventCallback: null as (() => void) | null,
-  dispatch: vi.fn(),
+  preventCallback: null as ((event: PreventRemoveEvent) => void) | null,
+  router: { back: vi.fn(), canGoBack: () => true },
 }));
 
 vi.mock('react-native', () => ({ Alert: { alert: mocks.alert } }));
-vi.mock('expo-router', () => ({
-  useNavigation: () => ({ dispatch: mocks.dispatch }),
-}));
 vi.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: mocks.picker,
 }));
-vi.mock('expo-router/react-navigation', () => ({
-  usePreventRemove: (prevent: boolean, callback: () => void) => {
+vi.mock('expo-router', () => ({
+  usePreventRemove: (
+    prevent: boolean,
+    callback: (event: PreventRemoveEvent) => void
+  ) => {
     mocks.prevent = prevent;
     mocks.preventCallback = callback;
+    return () => {
+      mocks.prevent = false;
+    };
   },
+  useRouter: () => mocks.router,
 }));
 
 function makeForm(
@@ -33,6 +42,7 @@ function makeForm(
 ): ExpenseFormHandlerForm {
   return {
     isDirty,
+    reset: vi.fn(),
     setField: vi.fn(),
     setLocalReceipt: vi.fn(),
     values: { groupId },
@@ -47,22 +57,32 @@ describe('useExpenseFormHandlers', () => {
   });
 
   it('routes native Back through the dirty-form discard confirmation', () => {
-    const onNavigateBack = vi.fn();
+    const form = makeForm(true);
     renderHook(() =>
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
-        form: makeForm(true),
-        onNavigateBack,
+        form,
       })
     );
 
     expect(mocks.prevent).toBe(true);
-    mocks.preventCallback?.();
+    const repeat = vi.fn();
+    mocks.preventCallback?.({ data: { action: { type: 'GO_BACK' } }, repeat });
     expect(mocks.alert).toHaveBeenCalledWith(
       'Discard changes?',
       'Your unsaved changes will be lost.',
       expect.any(Array)
     );
+    expect(repeat).not.toHaveBeenCalled();
+    const actions = mocks.alert.mock.calls[0]?.[2] as Array<{
+      text: string;
+      onPress?: () => void;
+    }>;
+    act(() => {
+      actions.find(({ text }) => text === 'Discard')?.onPress?.();
+    });
+    expect(repeat).toHaveBeenCalledOnce();
+    expect(form.reset).toHaveBeenCalledOnce();
   });
 
   it('clears a newly selected archived group but preserves the original group', async () => {
@@ -72,7 +92,6 @@ describe('useExpenseFormHandlers', () => {
       useExpenseFormHandlers({
         archiveGroupMutation,
         form,
-        onNavigateBack: vi.fn(),
         originalGroupId: 'original-group',
       })
     );
@@ -86,7 +105,6 @@ describe('useExpenseFormHandlers', () => {
       useExpenseFormHandlers({
         archiveGroupMutation,
         form: originalForm,
-        onNavigateBack: vi.fn(),
         originalGroupId: 'original-group',
       })
     );
@@ -95,19 +113,18 @@ describe('useExpenseFormHandlers', () => {
   });
 
   it('bypasses the dirty guard when navigating back after a successful save', () => {
-    const onNavigateBack = vi.fn();
+    const form = makeForm(true);
     const { result } = renderHook(() =>
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
-        form: makeForm(true),
-        onNavigateBack,
+        form,
       })
     );
 
-    result.current.navigateBackAfterSave();
+    act(() => result.current.navigateBackAfterSave());
 
-    expect(onNavigateBack).toHaveBeenCalledTimes(1);
-    mocks.preventCallback?.();
+    expect(mocks.router.back).toHaveBeenCalledTimes(1);
+    expect(mocks.prevent).toBe(false);
     expect(mocks.alert).not.toHaveBeenCalled();
   });
 
@@ -117,7 +134,6 @@ describe('useExpenseFormHandlers', () => {
       useExpenseFormHandlers({
         archiveGroupMutation: vi.fn(),
         form: makeForm(false),
-        onNavigateBack: vi.fn(),
       })
     );
 

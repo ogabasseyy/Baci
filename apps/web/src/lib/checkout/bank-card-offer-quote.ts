@@ -1,5 +1,6 @@
 import 'server-only';
 import type { BankCardOffer } from '@/schemas/bank-card-offer';
+import { calculateBankCardOfferDiscount } from './calculate-bank-card-offer-discount';
 
 type CatalogLine = {
   itemId: string;
@@ -8,7 +9,6 @@ type CatalogLine = {
   quantity: number;
 };
 
-const BASIS_POINTS = 10_000n;
 const BANK_CARD_OFFER_MAX_ALLOCATION_UNITS = 10_000;
 
 function safeAmount(amount: bigint) {
@@ -77,11 +77,11 @@ export function quoteBankCardOffer({
 
   const productSubtotalKobo = safeAmount(productSubtotal);
   const eligibleSubtotalKobo = safeAmount(eligibleSubtotal);
-  const roundedDiscount =
-    (eligibleSubtotal * BigInt(offer.discountBasisPoints) + BASIS_POINTS / 2n) /
-    BASIS_POINTS;
-  const cap = BigInt(offer.maximumDiscountKobo);
-  const discount = roundedDiscount < cap ? roundedDiscount : cap;
+  const discount = calculateBankCardOfferDiscount(
+    eligibleSubtotal,
+    offer.discountBasisPoints,
+    offer.maximumDiscountKobo
+  );
   if (discount === 0n || discount >= productSubtotal) return null;
 
   // Allocate against running eligible value so the stored unit discounts sum

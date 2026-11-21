@@ -1,3 +1,4 @@
+import type { BankCardOfferSelection } from '../preview-bank-card-offer';
 import type { CartItem } from '@/hooks/cart';
 import type { useCart } from '@/hooks/cart';
 import type { SharedCartSyncStatus } from '@/hooks/cart/cart-types';
@@ -78,6 +79,7 @@ export interface CheckoutOrderSubmissionContext {
     walletFundedTransfer: ReturnType<typeof useWalletFundedBankTransfer>;
   };
   payment: {
+    bankCardOffer?: BankCardOfferSelection;
     session: PaymentSession;
     bankTransferAvailable: boolean;
     paystackAvailable: boolean;

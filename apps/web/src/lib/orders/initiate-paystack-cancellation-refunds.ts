@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
+import {
+  type BankOfferRefundEvidence,
+  beginBankCardOfferRefundDispatch,
+} from '@/lib/orders/begin-bank-card-offer-refund-dispatch';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { handlePaystackCancellationRefundFailure } from '@/lib/orders/handle-paystack-cancellation-refund-failure';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
@@ -12,21 +16,10 @@ import {
   PartialCancellationRefundError,
 } from './run-order-cancellation-side-effect';
 
-// Worst-case sizing for one refund leg: the provider POST may take up
-// to 30s (mirroring the transport worst-case precedent), and the
-// audit write reserves 8s after the response (mirroring the audit
-// margin precedent). Starting a leg short of both strands it: an
-// abort before dispatch reports NETWORK_ERROR and terminally
-// quarantines a definitely unattempted leg, while an accept just
-// before the timeout leaves no margin to persist its audit row
-// before the worker is killed.
+// Reserve a complete provider call and time to persist its outcome.
 const REFUND_PROVIDER_CALL_WORST_MS = 30_000;
 const REFUND_AUDIT_WRITE_RESERVE_MS = 8_000;
 const BANK_OFFER_VERIFY_BUDGET_MS = 8_000;
-// Single source for the preflight admission reserve: an initiation
-// leg starts only when a full provider call plus the audit reserve
-// both fit (see the per-leg gate below), so verification must leave
-// this much room or the run verifies and then refuses to initiate.
 export const REFUND_INITIATION_LEG_BUDGET_MS =
   REFUND_PROVIDER_CALL_WORST_MS + REFUND_AUDIT_WRITE_RESERVE_MS;
 
@@ -93,7 +86,7 @@ export async function initiatePaystackCancellationRefunds({
       continue;
     }
     let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
-    let eligibleForDispatch = !isBankOffer;
+    let dispatchEvidence: BankOfferRefundEvidence | undefined;
     // A sub-kobo amount would round to zero and request a full refund.
     if (!isBankOffer && transactionAmount > 0 && koboAmount <= 0) {
       await quarantineRefund({
@@ -167,26 +160,13 @@ export async function initiatePaystackCancellationRefunds({
           bankOfferLegsForReview.push(transaction);
           continue;
         }
-        const admission = await supabase.rpc(
-          'authorize_bank_card_offer_refund_dispatch',
-          {
-            ...identity,
-            p_claim_token: claimToken,
-            p_provider_id: data.id,
-            p_provider_domain: data.domain,
-            p_amount_kobo: koboAmount,
-          }
-        );
-        if (admission.error) {
-          bankOfferLookupUnavailable = true;
-          if (isLastAttempt) bankOfferLegsForReview.push(transaction);
-          continue;
-        }
-        if (admission.data !== true) {
-          bankOfferLegsForReview.push(transaction);
-          continue;
-        }
-        eligibleForDispatch = true;
+        dispatchEvidence = {
+          ...identity,
+          p_claim_token: claimToken,
+          p_provider_id: data.id,
+          p_provider_domain: data.domain,
+          p_amount_kobo: koboAmount,
+        };
       }
     }
     // Compute the budget after reading the saved capture. A plain
@@ -202,7 +182,7 @@ export async function initiatePaystackCancellationRefunds({
         ? undefined
         : timeoutMs - REFUND_AUDIT_WRITE_RESERVE_MS;
     if (
-      !eligibleForDispatch ||
+      (isBankOffer && !dispatchEvidence) ||
       (timeoutMs !== undefined && timeoutMs < REFUND_INITIATION_LEG_BUDGET_MS)
     ) {
       // On the final attempt the claim has already raised the row to
@@ -243,6 +223,25 @@ export async function initiatePaystackCancellationRefunds({
         });
       }
       throw new Error('cancellation_refund_deadline_exceeded');
+    }
+    if (dispatchEvidence) {
+      const admission = await beginBankCardOfferRefundDispatch({
+        evidence: dispatchEvidence,
+        order,
+        refundIds,
+        supabase,
+        transaction,
+      });
+      if (admission === 'unavailable') {
+        bankOfferLookupUnavailable = true;
+        if (isLastAttempt) bankOfferLegsForReview.push(transaction);
+        continue;
+      }
+      if (admission === 'already_admitted') continue;
+      if (admission !== 'dispatch') {
+        bankOfferLegsForReview.push(transaction);
+        continue;
+      }
     }
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,

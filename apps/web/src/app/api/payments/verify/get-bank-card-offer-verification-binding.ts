@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
-import { readSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
+import { readSessionlessPaymentReferenceSnapshot } from './read-sessionless-payment-reference-snapshot';
 
 export async function getBankCardOfferVerificationBinding(
   request: Request,

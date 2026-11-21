@@ -352,6 +352,15 @@ BEGIN
     OR public.authorize_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
       v_refund_claim, '43', 'test', 9500) IS DISTINCT FROM false
   THEN RAISE EXCEPTION 'Refund admission must bind the captured provider identity and live worker claim'; END IF;
+  IF has_function_privilege('authenticated', 'public.record_bank_card_offer_dispute(text,text)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.begin_bank_card_offer_refund_dispatch(uuid,uuid,uuid,text,uuid,text,text,bigint)', 'EXECUTE')
+  THEN RAISE EXCEPTION 'Dispute and dispatch writes must be service-only'; END IF;
+  IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+    v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM 'dispatch'
+  THEN RAISE EXCEPTION 'Refund dispatch should be admitted once'; END IF;
+  IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+    v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM 'already_admitted'
+  THEN RAISE EXCEPTION 'An accepted dispatch claim must survive retries'; END IF;
   RESET ROLE;
   IF NOT public.flag_bank_card_offer_terminal_review(v_order, v_merchant, v_transaction, 'failed')
   THEN RAISE EXCEPTION 'The sweep must record a confirmed failed status for a completed attempt'; END IF;
@@ -377,6 +386,29 @@ BEGIN
     v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM false
   THEN RAISE EXCEPTION 'A reversal recorded before refund admission must win'; END IF;
   RESET ROLE;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.reconciliation_review
+    WHERE txn_id = v_transaction AND metadata->>'provider_status' = 'reversed'
+      AND metadata->>'refund_dispatch_admitted' = 'true'
+  ) THEN RAISE EXCEPTION 'A late reversal must carry the admitted refund evidence'; END IF;
+
+  -- Exercise the dispute fence without the terminal verification review.
+  DELETE FROM public.reconciliation_review WHERE txn_id = v_transaction;
+  UPDATE private.bank_card_offer_payment_attempts SET refund_dispatch_claim = NULL
+    WHERE transaction_id = v_transaction;
+  SET LOCAL ROLE service_role;
+  IF public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.create') IS DISTINCT FROM true
+    OR public.record_bank_card_offer_dispute(v_reference, 'charge.dispute.resolve') IS DISTINCT FROM true
+  THEN RAISE EXCEPTION 'Signed dispute events must hold the saved capture'; END IF;
+  IF public.begin_bank_card_offer_refund_dispatch(v_order, v_merchant, v_transaction, v_reference,
+    v_refund_claim, '42', 'test', 9500) IS DISTINCT FROM 'blocked'
+  THEN RAISE EXCEPTION 'A dispute recorded before dispatch must block the refund'; END IF;
+  RESET ROLE;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.reconciliation_review
+    WHERE txn_id = v_transaction AND metadata->>'bank_offer_dispute' = 'true'
+  ) THEN RAISE EXCEPTION 'Dispute evidence must be durable'; END IF;
 
   -- Inventory can leave a completed transaction attached to a pending order.
   UPDATE public.orders SET payment_status = 'pending' WHERE id = v_order;

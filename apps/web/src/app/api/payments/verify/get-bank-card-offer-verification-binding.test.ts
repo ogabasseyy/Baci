@@ -1,12 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { getAuthenticatedUser } from '@/lib/supabase/mobile-auth';
 import { getBankCardOfferVerificationBinding } from './get-bank-card-offer-verification-binding';
-import { readSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
+import { readSessionlessPaymentReferenceSnapshot } from './read-sessionless-payment-reference-snapshot';
 
 vi.mock('@/lib/supabase/mobile-auth', () => ({
   getAuthenticatedUser: vi.fn(),
 }));
-vi.mock('./sessionless-payment-reference-snapshot', () => ({
+vi.mock('./read-sessionless-payment-reference-snapshot', () => ({
   readSessionlessPaymentReferenceSnapshot: vi.fn(),
 }));
 

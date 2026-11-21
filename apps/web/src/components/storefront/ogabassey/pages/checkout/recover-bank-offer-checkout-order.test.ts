@@ -31,7 +31,7 @@ it('reopens the saved bank offer with its authoritative rail and amount', async 
     merchantId: snapshot.merchantId,
     customerEmail: snapshot.customerEmail,
     checkoutFingerprint: snapshot.checkoutFingerprint,
-    paymentMethod: 'card',
+    paymentMethod: 'bank_card_offer',
     shippingProvider: null,
     fetchImpl,
   })).resolves.toMatchObject({

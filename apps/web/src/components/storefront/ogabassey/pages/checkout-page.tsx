@@ -3,11 +3,15 @@ import type React from 'react';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import type { BrowserBankCardOffer } from '@/lib/checkout/get-browser-bank-card-offers';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
+import { checkoutDeliveryFormFields } from './checkout/checkout-delivery-form-fields';
+import { BankCardOfferOptionsContext } from './checkout/components/BankCardOfferOptions';
 import { CheckoutCartScreen } from './checkout/components/CheckoutCartScreen';
-import { CheckoutResumeFallback } from './checkout/components/CheckoutResumeFallback';
+import { getCheckoutPageResumeFallback } from './checkout/components/get-checkout-page-resume-fallback';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutScreenModel } from './checkout/derive-checkout-screen-model';
+import { useBrowserBankCardOffer } from './checkout/hooks/use-browser-bank-card-offer';
 import { useCheckoutAttemptSession } from './checkout/hooks/use-checkout-attempt-session';
 import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delivery-session';
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
@@ -18,10 +22,11 @@ import { useCheckoutScrollTop } from './checkout/hooks/use-checkout-scroll-top';
 import { useCheckoutUser } from './checkout/hooks/use-checkout-user';
 import type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
-import { shouldShowResumeGate } from './checkout/should-show-resume-gate';
 
 export type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
-export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
+export const CheckoutPage: React.FC<
+  OxygenCheckoutSlots & { bankCardOffers?: readonly BrowserBankCardOffer[] }
+> = ({ bankCardOffers = [], ...oxygenSlots }) => {
   const {
     cart,
     clearCart,
@@ -99,11 +104,8 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     displayModel: checkoutDisplay,
     resumeOrderId,
     preferredGateway,
-    isProcessing,
     isOrderInFlightRef,
     resumedOrder,
-    isLoadingResumedOrder,
-    resumeOrderError,
   } = checkoutAttempt;
   const {
     effectiveCheckoutCartTotal,
@@ -118,8 +120,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     (Number(searchParams.get('giftWrappingCost')) || 0);
 
   const delivery = useCheckoutDeliverySession({
-    airportRequiresQuote: checkoutForm.airportRequiresQuote,
-    airportType: checkoutForm.airportType,
+    ...checkoutDeliveryFormFields(checkoutForm),
     completedSteps,
     inferredLocation,
     isHydrated,
@@ -129,21 +130,10 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     checkoutCart,
     checkoutCartCatalogSubtotal,
     quoteItemsFingerprint,
-    deliveryCoordinates: checkoutForm.deliveryCoordinates,
-    persistedSelectedQuoteId: checkoutForm.selectedQuoteId,
-    persistedSelectedProviderRateId: checkoutForm.selectedProviderRateId,
     currentStep,
     setCurrentStep,
     setCheckoutField,
     setCheckoutFields,
-    deliveryMethod: checkoutForm.deliveryMethod,
-    newAddressStreet: checkoutForm.newAddressStreet,
-    newAddressState: checkoutForm.newAddressState,
-    newAddressCity: checkoutForm.newAddressCity,
-    customerPhone: checkoutForm.customerPhone,
-    firstName: checkoutForm.firstName,
-    lastName: checkoutForm.lastName,
-    customerEmail: checkoutForm.customerEmail,
   });
   const { cost: deliveryCost } = delivery;
 
@@ -170,12 +160,32 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
       preferredGateway,
     });
 
+  const bankCards = useBrowserBankCardOffer({
+    offers: bankCardOffers,
+    isOrderInFlightRef,
+    financial: { paymentSession, summaryAmounts },
+    formatCurrency: formatCurrencyAuto,
+    cart: checkoutCart,
+    fees: [deliveryCost, orderTotals?.taxAmount ?? 0, giftWrappingCost],
+    available: Boolean(
+      user?.email &&
+        user.email.trim().toLowerCase() ===
+          checkoutForm.customerEmail.trim().toLowerCase() &&
+        paystackCheckoutAvailable &&
+        currencyCode === 'NGN' &&
+        !checkoutSharedCartRef &&
+        !resumeOrderId &&
+        !paymentSession.discount.code &&
+        !paymentSession.checkoutValues.useWalletCredit &&
+        !checkoutCart.some((item) => item.negotiatedPrice !== undefined)
+    ),
+  });
   useCheckoutScrollTop();
 
   const {
     crypto,
     dva,
-    handlePlaceOrder,
+    handlePlaceOrder: placeOrder,
     oxygenAllowed,
     redvaultAvailable,
     walletFundedTransfer,
@@ -216,6 +226,7 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     },
     payment: {
       session: paymentSession,
+      bankCardOffer: bankCards.offer ?? undefined,
       bankTransferAvailable: bankTransferCheckoutAvailable,
       paystackAvailable: paystackCheckoutAvailable,
       korapayAvailable: korapayCheckoutAvailable,
@@ -223,41 +234,27 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     },
     attempt: checkoutAttempt,
   });
-  const isAutoTriggerProcessing =
-    isHydrated &&
-    checkoutCart.length === 0 &&
-    resumedOrder &&
-    !!preferredGateway &&
-    !isProcessing;
-  if (
-    shouldShowResumeGate(
-      checkoutCart.length === 0,
-      isLoadingResumedOrder,
-      Boolean(isAutoTriggerProcessing),
-      Boolean(resumeOrderId && resumeOrderError),
-      oxygenSlots.verifiedOxygenOrderId,
-      searchParams.get('oxygenOrderId')
-    )
-  ) {
-    return (
-      <CheckoutResumeFallback
-        cartEmpty={checkoutCart.length === 0}
-        isAutoTriggerProcessing={isAutoTriggerProcessing}
-        isLoadingResumedOrder={isLoadingResumedOrder}
-        navigate={(path) => routerPush(getHref(path))}
-        resumeOrderError={resumeOrderError}
-        resumeOrderId={resumeOrderId}
-        resumedOrderId={resumedOrder?.id}
-      />
-    );
-  }
+  const resumeFallback = getCheckoutPageResumeFallback({
+    checkoutAttempt,
+    cartEmpty: checkoutCart.length === 0,
+    isHydrated,
+    requestedOxygenId: searchParams.get('oxygenOrderId'),
+    verifiedOxygenOrderId: oxygenSlots.verifiedOxygenOrderId,
+    navigate: (path) => routerPush(getHref(path)),
+  });
+  if (resumeFallback) return resumeFallback;
   const screenModel = deriveCheckoutScreenModel({
     sessions: {
       form: checkoutFormSession,
       attempt: checkoutAttempt,
       delivery,
-      financial: { paymentSession, summaryAmounts },
-      execution: { crypto, dva, handlePlaceOrder, walletFundedTransfer },
+      financial: bankCards.presentation,
+      execution: {
+        crypto,
+        dva,
+        handlePlaceOrder: async () => bankCards.submit(placeOrder),
+        walletFundedTransfer,
+      },
     },
     display: {
       checkoutDisplay,
@@ -283,12 +280,14 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     },
   });
   return (
-    <CheckoutCartScreen
-      model={{ ...screenModel, ...oxygenSlots }}
-      order={resumedOrder}
-      requestedId={searchParams.get('orderId')}
-      verifiedOxygenOrderId={oxygenSlots.verifiedOxygenOrderId}
-      requestedOxygenId={searchParams.get('oxygenOrderId')}
-    />
+    <BankCardOfferOptionsContext.Provider value={bankCards.model}>
+      <CheckoutCartScreen
+        model={{ ...screenModel, ...oxygenSlots }}
+        order={resumedOrder}
+        requestedId={searchParams.get('orderId')}
+        verifiedOxygenOrderId={oxygenSlots.verifiedOxygenOrderId}
+        requestedOxygenId={searchParams.get('oxygenOrderId')}
+      />
+    </BankCardOfferOptionsContext.Provider>
   );
 };

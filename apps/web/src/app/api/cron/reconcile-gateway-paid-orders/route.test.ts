@@ -214,7 +214,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
   it.each([
     { failed: 0, retrying: 1 },
     { failed: 1, retrying: 0 },
-  ])('reports paid-offer recheck outcomes without failing the cron (%j)', async (counts) => {
+  ])('distinguishes deferred checks from recheck failures (%j)', async (counts) => {
     const bankOfferRecheck = {
       checked: 1,
       ...counts,
@@ -224,7 +224,7 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
 
     const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(counts.failed ? 503 : 200);
     expect(await response.json()).toMatchObject({ bankOfferRecheck });
   });
 

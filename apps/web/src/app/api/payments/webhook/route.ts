@@ -76,6 +76,7 @@ import {
   referenceSchema,
 } from '@/schemas/payments';
 import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
+import { handleBankCardOfferDispute } from './handle-bank-card-offer-dispute';
 import { handleBankCardOfferWebhook } from './handle-bank-card-offer-webhook';
 import {
   dispatchPaystackCheckoutOnlyWebhook,
@@ -674,6 +675,15 @@ export async function POST(request: NextRequest) {
         createServiceClient(),
         parsed.data as unknown as Record<string, unknown>
       );
+    }
+
+    if (gateway === 'paystack') {
+      const dispute = await handleBankCardOfferDispute(
+        body.event,
+        body.data,
+        createServiceClient
+      );
+      if (dispute) return dispute;
     }
 
     // Extract reference and check event type based on gateway

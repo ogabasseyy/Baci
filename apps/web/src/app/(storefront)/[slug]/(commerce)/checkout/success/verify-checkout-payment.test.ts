@@ -177,7 +177,7 @@ describe('verifyCheckoutPayment', () => {
       callbacks
     );
 
-    expect(callbacks.setStatus).toHaveBeenCalledWith('pending');
+    expect(callbacks.setStatus).toHaveBeenCalledWith('pending', 15_000);
     expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();

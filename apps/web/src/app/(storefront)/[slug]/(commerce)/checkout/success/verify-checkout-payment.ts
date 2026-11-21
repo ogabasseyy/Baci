@@ -169,9 +169,7 @@ export async function verifyCheckoutPayment(
       signal,
     });
     const body = response.json();
-    const raw: unknown = await (isBankOffer && !response.ok
-      ? body.catch(() => null)
-      : body);
+    const raw: unknown = await (isBankOffer ? body.catch(() => null) : body);
     const data = isVerificationResponse(raw) ? raw : {};
     const orderNumber = data.orderNumber || fallbackOrderNumber;
 

@@ -7,7 +7,7 @@ import {
   getBankCardOfferVerificationBinding,
 } from './get-bank-card-offer-verification-binding';
 import type { PaymentVerificationDependencies } from './payment-verification-dependencies';
-import { readSessionlessPaymentReferenceSnapshot } from './sessionless-payment-reference-snapshot';
+import { readSessionlessPaymentReferenceSnapshot } from './read-sessionless-payment-reference-snapshot';
 import type { verifySessionlessBankCardOffer } from './verify-sessionless-bank-card-offer';
 
 function unavailable() {

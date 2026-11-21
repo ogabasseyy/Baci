@@ -225,12 +225,14 @@ export function setup(
       }
       case 'get_bank_card_offer_refundable_amount':
         return { data: paid && args.p_reference === reference ? 9500 : null };
-      case 'authorize_bank_card_offer_refund_dispatch':
+      case 'begin_bank_card_offer_refund_dispatch':
         return {
           data:
             paid &&
             args.p_reference === reference &&
-            args.p_claim_token === 'refund-claim',
+            args.p_claim_token === 'refund-claim'
+              ? 'dispatch'
+              : 'blocked',
         };
       default:
         return { data: null, error: null };

@@ -14,6 +14,11 @@ export function getBankCardOfferCheckoutStatus(
   // Transient responses leave the capture unknown. Keep polling this reference.
   if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500)
     return 'pending';
+  if (
+    (httpStatus === 404 && payment.code === 'reference_not_found') ||
+    (httpStatus === 409 && payment.code === 'reference_not_order_payment')
+  )
+    return 'bank_offer_review';
   if (httpStatus < 200 || httpStatus >= 300) return 'verification_unavailable';
   if (payment.code === 'BANK_CARD_OFFER_CAPTURE_REVIEW') {
     return 'bank_offer_review';
@@ -35,7 +40,7 @@ const MAX_RETRY_AFTER_MS = 5 * 60_000;
 export function bankCardOfferRetryDelay(response: Response): number {
   if (response.status !== 429 && response.status !== 503) return 0;
   const retryAfter = response.headers.get('Retry-After')?.trim();
-  if (!retryAfter) return response.status === 429 ? DEFAULT_RETRY_AFTER_MS : 0;
+  if (!retryAfter) return DEFAULT_RETRY_AFTER_MS;
   const delay = /^\d+$/.test(retryAfter)
     ? Number(retryAfter) * 1000
     : Date.parse(retryAfter) - Date.now();

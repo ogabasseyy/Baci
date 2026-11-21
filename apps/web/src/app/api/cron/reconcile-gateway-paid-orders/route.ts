@@ -147,7 +147,12 @@ export async function GET(request: NextRequest) {
         ...summary,
         sideEffectDrain,
       },
-      { status: abandonedAttemptSweepFailed ? 503 : 200 }
+      {
+        status:
+          abandonedAttemptSweepFailed || bankOfferRecheck.failed > 0
+            ? 503
+            : 200,
+      }
     );
   } catch (error) {
     logger.error({

@@ -16,7 +16,7 @@ import {
 import type { RedvaultQuoteSummary } from './components/redvault/RedvaultPaymentOption';
 import type { RedvaultPreparedOrder } from './handlers/redvault-prepared-order-submit';
 
-import { recoverBankOfferCheckoutOrder } from './recover-bank-offer-checkout-order';
+import { resolveBankOfferPendingCheckout } from './resolve-bank-offer-pending-checkout';
 
 export { normalizeOrderPaymentMethod } from './normalize-order-payment-method';
 
@@ -174,6 +174,10 @@ export async function resolvePendingCheckoutOrder({
   shippingRateId,
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
+  const offerFence = await resolveBankOfferPendingCheckout({
+    pendingOrder, merchantId, merchantSlug, customerEmail, checkoutFingerprint, paymentMethod, fetchImpl,
+  });
+  if (offerFence) return offerFence;
   const oxygenFence = await resolveOxygenCheckoutFence({
     pendingOrder,
     merchantId,
@@ -241,9 +245,6 @@ export async function resolvePendingCheckoutOrder({
   if (isNonReusableOrderState(existingOrder)) {
     return clearOrderUnlessOxygenIsUnresolved(oxygenOrder);
   }
-
-  const bankOffer = recoverBankOfferCheckoutOrder(existingOrder, pendingOrder);
-  if (bankOffer) return bankOffer;
 
   const mutationFetch = fetchImpl === fetch ? fetchWithCsrf : fetchImpl;
 

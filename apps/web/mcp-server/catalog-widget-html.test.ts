@@ -8,3 +8,10 @@ it('sets browse-only mode without dropping the legacy host marker', () => {
     '<html data-ogabassey-catalog-only="true" data-ogabassey-legacy-widget="true" lang="en">'
   );
 });
+
+it('preserves the original tag case and rejects fragments in catalog-only mode', () => {
+  expect(configureCatalogWidgetHtml('<HTML lang="en"></HTML>', true)).toBe(
+    '<HTML data-ogabassey-catalog-only="true" lang="en"></HTML>'
+  );
+  expect(() => configureCatalogWidgetHtml('<section></section>', true)).toThrow();
+});

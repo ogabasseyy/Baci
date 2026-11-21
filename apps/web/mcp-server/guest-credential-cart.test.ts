@@ -205,6 +205,13 @@ it('only returns exact signed handoff URLs on an allowed storefront origin', () 
     version: 2,
   };
   const configuredUrl = handoffUrl.replace('ogabassey.com', 'shop.example');
+  vi.stubEnv(
+    'MCP_CANONICAL_CART_BRIDGE_URL',
+    'https://shop.example/api/storefront/cart/legacy'
+  );
+  expect(guestCredentialHandoffUrl({ ...cart, items: [] })).toBe(
+    'https://shop.example/cart'
+  );
   expect(guestCredentialHandoffUrl({ ...cart, cart_url: configuredUrl })).toBe(
     configuredUrl
   );

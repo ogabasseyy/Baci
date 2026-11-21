@@ -64,9 +64,9 @@ export async function loadDestinationCart(
     );
     return;
   }
-  if (openAlreadySharedCart(result.cart, deps.incoming)) return;
   deps.bootstrapRequired.current = result.bootstrapRequired;
   deps.setDestCart(result.cart);
   deps.setDestChecked(true);
+  if (openAlreadySharedCart(result.cart, deps.incoming)) return;
   return result;
 }

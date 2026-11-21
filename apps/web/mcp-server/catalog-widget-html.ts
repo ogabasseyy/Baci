@@ -8,7 +8,12 @@ export function configureCatalogWidgetHtml(
     ...(catalogOnly ? ['data-ogabassey-catalog-only="true"'] : []),
     ...(legacyWidget ? ['data-ogabassey-legacy-widget="true"'] : []),
   ];
-  return attributes.length
-    ? html.replace(/<html(?=[\s>])/i, `<html ${attributes.join(' ')}`)
-    : html;
+  if (!attributes.length) return html;
+  const tagged = html.replace(
+    /<html(?=[\s>])/i,
+    (root) => `${root} ${attributes.join(' ')}`
+  );
+  if (catalogOnly && tagged === html)
+    throw new Error('Catalog-only widget requires a full HTML document');
+  return tagged;
 }

@@ -32,6 +32,10 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
     act,
     continueMerge,
   } = useCartHandoff(props);
+  function openWebsiteCart() {
+    clearActiveHandoff(props.handoffId);
+    window.location.replace(window.location.pathname + window.location.search);
+  }
 
   if (destinationError || loadError || !preview || !destChecked) {
     return (
@@ -103,17 +107,30 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
     );
   }
 
+  if (
+    !lockedChoice &&
+    destCart?.cartId === preview.snapshot.cartId &&
+    destCart.merchantId === preview.snapshot.merchantId
+  ) {
+    return (
+      <section
+        aria-label="Cart handoff"
+        className="mx-auto max-w-xl px-4 py-10"
+      >
+        <p>Your website cart is already connected.</p>
+        <Button className="mt-4" onClick={openWebsiteCart}>
+          View website cart
+        </Button>
+      </section>
+    );
+  }
+
   if (preview.importMcp && (!lockedChoice || lockedChoice === 'import_mcp')) {
     return (
       <McpHandoffImport
         error={redeemError}
         retry={() => void act('import_mcp')}
-        openWebsiteCart={() => {
-          clearActiveHandoff(props.handoffId);
-          window.location.replace(
-            window.location.pathname + window.location.search
-          );
-        }}
+        openWebsiteCart={openWebsiteCart}
       />
     );
   }

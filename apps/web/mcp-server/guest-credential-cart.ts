@@ -57,13 +57,21 @@ export function guestCredentialHandoffUrl(cart: {
   const handoff = cart.cart_url;
   const url = handoff ? URL.parse(handoff) : null;
   const fragment = new URLSearchParams(url?.hash.slice(1));
+  const allowedOrigins = canonicalBridgeAllowedOrigins();
   if (!cart.canonical_cart_id || !cart.version)
     throw new GuestCartStorageUnavailableError('Canonical cart unavailable');
-  if (!cart.items.length) return 'https://ogabassey.com/cart';
+  if (!cart.items.length) {
+    const endpoint = URL.parse(
+      process.env.MCP_CANONICAL_CART_BRIDGE_URL || 'https://ogabassey.com'
+    );
+    if (endpoint?.protocol !== 'https:' || !allowedOrigins.includes(endpoint.origin))
+      throw new GuestCartStorageUnavailableError('Storefront origin unavailable');
+    return new URL('/cart', endpoint.origin).href;
+  }
   if (
     !handoff ||
     url?.protocol !== 'https:' ||
-    !canonicalBridgeAllowedOrigins().includes(url.origin) ||
+    !allowedOrigins.includes(url.origin) ||
     url.username ||
     url.password ||
     url.pathname !== '/cart' ||

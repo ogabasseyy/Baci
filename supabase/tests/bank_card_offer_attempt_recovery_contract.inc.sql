@@ -75,6 +75,9 @@ BEGIN
     THEN RAISE EXCEPTION 'A confirmed unusable reference should be retired'; END IF;
     IF NOT EXISTS (SELECT 1 FROM public.transactions WHERE id = v_transaction AND status = 'cancelled')
     THEN RAISE EXCEPTION 'A retired reference must retain its audit row'; END IF;
+    IF (SELECT metadata->'retired_attempt' FROM public.reconciliation_review WHERE id = v_review_id)
+      IS DISTINCT FROM jsonb_build_object('provider_domain', 'test', 'policy_hash', v_hash, 'had_checkout_url', false)
+    THEN RAISE EXCEPTION 'Retirement must retain only the non-secret attempt evidence'; END IF;
   END;
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
   IF v_attempt->>'claimed' IS DISTINCT FROM 'true' OR v_attempt->>'reference' = v_reference
@@ -174,6 +177,9 @@ BEGIN
     IF public.restore_bank_card_offer_checkout_url(v_review_id, 'https://checkout.paystack.com/trx/test')
       OR NOT public.retire_bank_card_offer_initialization(v_review_id, 'Paystack confirms this hosted session cannot charge')
     THEN RAISE EXCEPTION 'Initialized terminal attempt must retire without restoring the old URL'; END IF;
+    IF (SELECT metadata->'retired_attempt' FROM public.reconciliation_review WHERE id = v_review_id)
+      IS DISTINCT FROM jsonb_build_object('provider_domain', 'test', 'policy_hash', v_hash, 'had_checkout_url', true)
+    THEN RAISE EXCEPTION 'Retirement must record that a URL existed without retaining the URL'; END IF;
   END;
   v_attempt := public.claim_bank_card_offer_attempt(v_order, v_merchant, 9500, v_hash, 'test', 100, 0);
   IF v_attempt->>'claimed' IS DISTINCT FROM 'true' OR v_attempt->>'reference' = v_reference

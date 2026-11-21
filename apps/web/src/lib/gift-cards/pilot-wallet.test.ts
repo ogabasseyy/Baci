@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { confirmGiftCardPilot, issueGiftCardPilotQuote } from './pilot-wallet';
+
+import { PILOT_APPROVED_KOBO, PILOT_PRODUCT_ID } from './pilot-wallet-config';
 
 const approved = 1673573;
 const userId = '10000000-0000-4000-8000-000000000001';
@@ -78,4 +81,17 @@ it('refuses a fresh quote that is already expired even when the displayed quote 
     'Fresh price expired'
   );
   expect(deps.confirm).not.toHaveBeenCalled();
+});
+
+it('keeps the worker SQL allowlist bound to the checkout pilot economics', () => {
+  const sql = readFileSync(
+    new URL(
+      '../../../../../supabase/migrations/20261121210000_scope_gift_card_worker_to_pilot.sql',
+      import.meta.url
+    ),
+    'utf8'
+  );
+  expect(sql).toContain(
+    `p_product_id = '${PILOT_PRODUCT_ID}' AND p_amount_kobo = ${PILOT_APPROVED_KOBO}`
+  );
 });

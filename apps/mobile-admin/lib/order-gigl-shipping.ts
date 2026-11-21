@@ -30,6 +30,7 @@ const quoteResultSchema = z.object({
   shortfall: z.number().nonnegative(),
   canBook: z.boolean(),
   boundChargeRecovery: z.boolean().optional(),
+  paidByBaci: z.boolean().optional(),
 });
 
 const fundingAccountSchema = z.object({

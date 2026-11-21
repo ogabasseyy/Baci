@@ -24,6 +24,7 @@ import {
   toOrderGiglAddressDraft,
   toOrderGiglWalletState,
 } from '@/lib/order-gigl-shipping-state';
+import { getOrderGiglWalletShortfall } from './getOrderGiglWalletShortfall';
 import { useOrderGiglFunding } from './useOrderGiglFunding';
 import { useOrderGiglQuoteRequester } from './useOrderGiglQuoteRequester';
 import { useOrderGiglQuoteState } from './useOrderGiglQuoteState';
@@ -141,19 +142,18 @@ export function useOrderGiglShipping({
     const isCurrent = () =>
       !context ||
       (context.isCurrent() && enabledRef.current && appActiveRef.current);
+    if (walletRef.current?.paidByBaci) {
+      const resolved = await requestQuote(isCurrent); // a revoked flag must not linger
+      return isCurrent() && resolved ? toOrderGiglWalletState(resolved) : null;
+    }
     const summary = await getMerchantWalletSummary(context?.signal);
     if (!isCurrent()) return null;
-    const price = quoteRef.current?.price ?? 0;
-    const shortfall = Math.max(0, price - summary.availableBalance);
-    const next = {
-      availableBalance: summary.availableBalance,
-      canBook: price > 0 && shortfall === 0,
-      shortfall,
-    };
-    setWallet(next);
+    const next = getOrderGiglWalletShortfall(
+      summary.availableBalance,
+      quoteRef.current?.price ?? 0
+    );
+    setWallet(next.canBook ? { ...next, canBook: false } : next);
     if (next.canBook) {
-      setWallet({ ...next, canBook: false });
-      if (!isCurrent()) return null;
       const refreshed = await requestQuote(isCurrent);
       if (!isCurrent()) return null;
       if (refreshed?.canBook) {

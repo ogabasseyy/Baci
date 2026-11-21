@@ -7,6 +7,7 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
+import { resolveAdminGiglQuoteFunding } from '@/lib/shipping/gigl-shipping-funding-mode';
 import { mapPartnerDeliveryConflict } from '@/lib/shipping/map-partner-delivery-conflict';
 import { readMerchantShippingWalletBalance } from '@/lib/shipping/merchant-shipping-wallet-balance';
 import { persistAdminGiglQuote } from '@/lib/shipping/persist-admin-gigl-quote';
@@ -173,23 +174,29 @@ export async function postAdminOrderGiglQuote(
   if (candidate.error) return candidate.error;
   const quote = candidate.quote;
   if (isPreview) {
-    const wallet = await readMerchantShippingWalletBalance(
-      auth.supabase,
-      access.merchantId
+    const previewSupabase = auth.supabase;
+    const funding = await resolveAdminGiglQuoteFunding(
+      previewSupabase,
+      access.merchantId,
+      quote.price,
+      async () => {
+        const wallet = await readMerchantShippingWalletBalance(
+          previewSupabase,
+          access.merchantId
+        );
+        return wallet.ok ? wallet.availableBalance : null;
+      }
     );
-    if (!wallet.ok) {
+    if (!funding.ok) {
       return NextResponse.json(
         { error: 'Unable to load wallet' },
         { status: 500 }
       );
     }
-    const { availableBalance, shortfall, canBook } =
-      calculateAdminWalletFunding(quote.price, wallet.availableBalance);
+    const { ok: _ok, ...fundingFields } = funding;
     return NextResponse.json({
       quote: toAdminPublicQuote(quote),
-      availableBalance,
-      shortfall,
-      canBook,
+      ...fundingFields,
     });
   }
   const quoteRequest = {
@@ -253,14 +260,21 @@ export async function postAdminOrderGiglQuote(
   const result = (Array.isArray(binding) ? binding[0] : binding) as {
     available_balance?: number;
   } | null;
-  const { availableBalance, shortfall, canBook } = calculateAdminWalletFunding(
+  const funding = await resolveAdminGiglQuoteFunding(
+    auth.supabase,
+    access.merchantId,
     quote.price,
-    Number(result?.available_balance ?? 0)
+    () => Promise.resolve(Number(result?.available_balance ?? 0))
   );
+  if (!funding.ok) {
+    return NextResponse.json(
+      { error: 'Unable to load wallet' },
+      { status: 500 }
+    );
+  }
+  const { ok: _ok, ...fundingFields } = funding;
   return NextResponse.json({
     quote: toAdminPublicQuote(quote),
-    availableBalance,
-    shortfall,
-    canBook,
+    ...fundingFields,
   });
 }

@@ -4,12 +4,9 @@ import { loadCheckoutShippingQuotes } from '@/components/storefront/ogabassey/pa
 import { isMerchantQuote } from '@/components/storefront/ogabassey/pages/checkout/is-merchant-quote';
 import type { DeliveryMethod } from '@/components/storefront/ogabassey/pages/checkout/types';
 import { formatChatwootPickupLocation } from '@/lib/chatwoot/pickup-location';
-import {
-  getSubdivisions,
-  resolveSubdivisionCode,
-} from '@/lib/shipping/merchant-rates/subdivisions';
 import type { ShippingQuote } from '@/types/shipping-quote';
 import type { ChatwootCheckoutFailureCode } from './chatwoot-checkout-result';
+import { resolveChatwootCheckoutState } from './chatwoot-checkout-state';
 
 export interface ChatwootCheckoutDeliveryInput {
   merchantId: string;
@@ -49,14 +46,6 @@ export type ChatwootCheckoutDeliveryResult =
   | { ok: false; code: ChatwootCheckoutFailureCode };
 
 const toMinor = (major: number) => Math.round(major * 100);
-
-/** Canonical Nigerian state name, or null when the input is not one. */
-export function resolveChatwootCheckoutState(state: string): string | null {
-  const code = resolveSubdivisionCode('NG', state);
-  return (
-    getSubdivisions('NG').find((entry) => entry.code === code)?.name ?? null
-  );
-}
 
 async function loadMerchantQuotes(
   input: ChatwootCheckoutDeliveryInput,

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type ChatwootCheckoutDeliveryInput,
   resolveChatwootCheckoutDelivery,
-  resolveChatwootCheckoutState,
 } from './chatwoot-checkout-delivery';
 import {
   checkoutPlaceRequest,
@@ -26,14 +25,6 @@ const input = (
 });
 const stub = (...list: Record<string, unknown>[]) =>
   stubCheckoutFetch({ '/api/shipping/quotes': () => quotes(...list) });
-
-describe('resolveChatwootCheckoutState', () => {
-  it('resolves canonical Nigerian state names and rejects others', () => {
-    expect(resolveChatwootCheckoutState('lagos')).toBe('Lagos');
-    expect(resolveChatwootCheckoutState('FCT')).toBe('Abuja (FCT)');
-    expect(resolveChatwootCheckoutState('Atlantis')).toBeNull();
-  });
-});
 
 describe('resolveChatwootCheckoutDelivery', () => {
   it('matches the single merchant rate and sends the cart subtotal it was given', async () => {

@@ -1,4 +1,3 @@
-import { resolveChatwootCheckoutState } from './chatwoot-checkout-delivery';
 import { rememberChatwootCheckoutPayment } from './chatwoot-checkout-memory';
 import { initializeChatwootCheckoutBankTransfer } from './chatwoot-checkout-payment';
 import { readChatwootCheckoutPaymentStatus } from './chatwoot-checkout-payment-status';
@@ -7,6 +6,7 @@ import type {
   ChatwootCheckoutFailureCode,
   ChatwootCheckoutPlaceResult,
 } from './chatwoot-checkout-result';
+import { resolveChatwootCheckoutState } from './chatwoot-checkout-state';
 
 export interface StartChatwootCheckoutPaymentInput {
   request: {

@@ -4,6 +4,17 @@ export function calculateBankCardOfferDiscount(
   discountBasisPoints: number,
   maximumDiscountKobo: number
 ): bigint {
+  if (
+    eligibleSubtotalKobo <= 0n ||
+    !Number.isSafeInteger(discountBasisPoints) ||
+    discountBasisPoints < 1 ||
+    discountBasisPoints >= 10_000 ||
+    !Number.isSafeInteger(maximumDiscountKobo) ||
+    maximumDiscountKobo < 1
+  ) {
+    return 0n;
+  }
+
   const basisPoints = 10_000n;
   const rounded =
     (eligibleSubtotalKobo * BigInt(discountBasisPoints) + basisPoints / 2n) /

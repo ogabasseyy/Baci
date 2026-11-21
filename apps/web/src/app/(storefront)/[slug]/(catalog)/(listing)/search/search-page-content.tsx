@@ -3,7 +3,6 @@ import {
   emptySearchRefinements,
   hasActiveSearchRefinements,
 } from '@baci/shared/lib';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { BreadcrumbList, CollectionPage, WithContext } from 'schema-dts';
 import { JsonLd } from '@/components/seo/json-ld';
@@ -11,7 +10,6 @@ import { StorefrontPagination } from '@/components/storefront/ogabassey/componen
 import { V2ComparisonScope } from '@/components/storefront/ogabassey/providers/v2-comparison-scope';
 import { SearchQueryDraftSession } from '@/components/storefront/search-refinements/search-query-draft';
 import { SearchRefinementControls } from '@/components/storefront/search-refinements/search-refinement-controls';
-import { SearchSubmissionLink } from '@/components/storefront/search-submission-link';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
 import {
@@ -33,6 +31,7 @@ import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
 import { getPriceFormatter } from './search-page-price';
 import { buildSearchPageSchemas } from './search-page-schema';
 import { SearchPageStartPanel } from './search-page-start-panel';
+import { SearchPageSuggestions } from './search-page-suggestions';
 import { formatSearchSummary } from './search-page-summary';
 import { searchPageTotalPages } from './search-page-total-pages';
 
@@ -119,7 +118,6 @@ export async function SearchPageContent({
     visibleCount,
   });
 
-  // Gift-card preview links carry no product offer or live quote.
   const giftCardResultsOnly = giftCards.length > 0 && visibleCount === 0;
   const productSummaryText = giftCardResultsOnly
     ? 'Gift cards matching your search'
@@ -164,10 +162,6 @@ export async function SearchPageContent({
                 </p>
               </div>
 
-              {/* Keyed by route query so client-side navigation remounts the
-          form and draft session, resetting the controlled input and any
-          validation error for the new results. */}
-              {/* Ogabassey's template supplies the search input in its navbar. */}
               <SearchPageForm
                 key={query}
                 action={searchBasePath}
@@ -192,47 +186,11 @@ export async function SearchPageContent({
                 }
               />
 
-              {giftCards.length > 0 && (
-                <section
-                  className="mt-4 space-y-2"
-                  aria-labelledby="gift-card-results"
-                >
-                  <h2 id="gift-card-results" className="font-semibold">
-                    Gift Cards
-                  </h2>
-                  <ul className="grid gap-2 sm:grid-cols-2">
-                    {giftCards.map((card) => (
-                      <li key={card.id}>
-                        <Link
-                          href={asRoute(
-                            `${pathPrefix}/gift-cards?selection=${card.id}`
-                          )}
-                          className="block rounded-lg border bg-store-background p-3 text-store-background-text hover:underline"
-                        >
-                          {card.brand} · United States ·{' '}
-                          {`$${card.denomination}`}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {!searchFailed && effectiveResult.didYouMean && (
-                <p className="mt-4 text-sm text-store-background-text/55">
-                  Did you mean{' '}
-                  <SearchSubmissionLink
-                    pathPrefix={pathPrefix}
-                    query={effectiveResult.didYouMean}
-                    source="did-you-mean"
-                    className="font-medium text-store-primary underline-offset-4 hover:underline"
-                  >
-                    {effectiveResult.didYouMean}
-                  </SearchSubmissionLink>
-                  ?
-                </p>
-              )}
-
+              <SearchPageSuggestions
+                giftCards={giftCards}
+                didYouMean={searchFailed ? null : effectiveResult.didYouMean}
+                pathPrefix={pathPrefix}
+              />
               {query && !searchFailed && (
                 <SearchComparisonTray
                   currency={merchantCurrency}

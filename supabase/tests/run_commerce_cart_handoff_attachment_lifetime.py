@@ -60,6 +60,10 @@ try:
  sql+='\n'+(root/'supabase/tests/commerce_cart_handoff_attachment_lifetime.sql').read_text()
  if '--mcp-import' in sys.argv:
   sql+='\n'+(root/'supabase/tests/commerce_cart_mcp_import_source_drift.sql').read_text()
+  inherited_condition = """coalesce(
+      discovery.canonical_product_condition(variant.condition),
+      discovery.canonical_product_condition(coalesce(product.condition, 'new'))
+    )"""
   drift_probes = {
    '20261121103800': ('inherited variant source mismatch', [
     'discovery.canonical_product_condition(variant.condition)',
@@ -69,6 +73,10 @@ try:
    ]),
    '20261121103900': ('legacy destination source mismatch', [
     "    AND coalesce(item.identity->'options', '{}'::jsonb) = '{}'::jsonb",
+   ]),
+   '20261121104000': ('condition destination source mismatch', [
+    "'variantId', variant.id, 'condition', " + inherited_condition,
+    'AND ' + inherited_condition + ' =',
    ]),
    '20261121104100': ('condition alias anchor mismatch', [
     "'variantId', CASE WHEN EXISTS (",

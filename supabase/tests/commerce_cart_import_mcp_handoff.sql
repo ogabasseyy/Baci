@@ -35,6 +35,9 @@ DECLARE
 BEGIN
   INSERT INTO public.product_variants(id, merchant_id, product_id, attributes, condition, price_override, stock_quantity)
   VALUES (default_variant, merchant, product, 'null', NULL, 15, 20);
+  -- Inventory anchors are stock bookkeeping rows and cannot be sold as SKUs.
+  INSERT INTO public.product_variants(id, merchant_id, product_id, is_inventory_anchor)
+  VALUES (gen_random_uuid(), merchant, product, true);
   UPDATE public.products SET condition = 'new', default_variant_id = default_variant
   WHERE id = product AND merchant_id = merchant;
   INSERT INTO public.commerce_carts(id, merchant_id, expires_at)

@@ -58,6 +58,8 @@ try:
   sql+='\n'+(root/'supabase/migrations'/name).read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_handoff_attachment_lifetime.sql').read_text()
  if '--mcp-import' in sys.argv:
+  sql+="\nALTER TABLE public.products ADD COLUMN default_variant_id uuid, ADD COLUMN condition text DEFAULT 'new';"
+  sql+="\nALTER TABLE public.product_variants ADD COLUMN attributes jsonb NOT NULL DEFAULT '{}', ADD COLUMN condition text;"
   for name in ['20261015160000_commerce_cart_redeem_grant_expiry.sql',
                '20261120182000_commerce_cart_import_mcp_handoff.sql',
                '20261121103000_commerce_cart_mcp_handoff_refresh_replay.sql',
@@ -69,7 +71,8 @@ try:
                '20261121103600_commerce_cart_mcp_import_merge_continuity.sql',
                '20261121103700_commerce_cart_mcp_import_default_variant.sql',
                '20261121103800_commerce_cart_mcp_import_inherited_variant.sql',
-               '20261121103900_commerce_cart_mcp_import_legacy_destination.sql']:
+               '20261121103900_commerce_cart_mcp_import_legacy_destination.sql',
+               '20261121104000_commerce_cart_mcp_import_condition_destination.sql']:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
  sql+='\nROLLBACK;'

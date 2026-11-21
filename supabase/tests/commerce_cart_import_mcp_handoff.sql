@@ -1,9 +1,4 @@
 -- Run after the shared-cart fixture and handoff migrations in a disposable database.
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS default_variant_id uuid;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS condition text;
-ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS attributes jsonb NOT NULL DEFAULT '{}';
-ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS condition text;
-
 DO $$
 DECLARE
   merchant constant uuid := '11111111-1111-4111-8111-111111111111';
@@ -103,12 +98,16 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-protected', source_version);
   IF result->>'code' IS DISTINCT FROM 'invalid_item'
   THEN RAISE EXCEPTION 'Import bypassed assurance on a legacy product-only line: %', result; END IF;
+  UPDATE public.commerce_cart_lines SET condition = 'new' WHERE cart_id = legacy_destination;
+  result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-condition-protected', source_version);
+  IF result->>'code' IS DISTINCT FROM 'invalid_item'
+  THEN RAISE EXCEPTION 'Import bypassed assurance on a condition-carrying product-only line: %', result; END IF;
   UPDATE public.commerce_cart_lines SET has_assurance = false WHERE cart_id = legacy_destination;
   result := public.commerce_cart_import_mcp_handoff('import-legacy-link', legacy_handoff, 'legacy-add', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true'
      OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = legacy_destination) <> 1
      OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = legacy_destination
-       AND product_id = product AND variant_id IS NULL AND quantity = 2)
+       AND product_id = product AND variant_id IS NULL AND condition = 'new' AND quantity = 2)
   THEN RAISE EXCEPTION 'Import split an existing product-only line: %', result; END IF;
 
   PERFORM pg_temp.handoff_claim(destination, destination_grant, 'website-import-test');

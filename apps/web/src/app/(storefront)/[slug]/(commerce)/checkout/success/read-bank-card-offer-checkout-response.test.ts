@@ -34,3 +34,13 @@ it('ignores order numbers carried in unverified error envelopes', async () => {
   await readBankCardOfferCheckoutResponse(response, callbacks);
   expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
 });
+
+it('clears the displayed order number when a terminal review has no confirmed number', async () => {
+  const callbacks = { setOrderNumber: vi.fn(), setStatus: vi.fn() };
+  const response = Response.json(
+    { code: 'BANK_CARD_OFFER_CAPTURE_REVIEW' },
+    { status: 202 }
+  );
+  await readBankCardOfferCheckoutResponse(response, callbacks);
+  expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
+});

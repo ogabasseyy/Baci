@@ -150,14 +150,17 @@ describe('checkout verification polling and identity', () => {
     expect(mockVerify).toHaveBeenCalledTimes(2);
   });
 
-  it('offers safe refresh guidance after the bank-offer verification budget is exhausted', async () => {
+  it.each([
+    `BCO-${'a'.repeat(32)}`,
+    'standard-reference',
+  ])('offers safe refresh guidance after polling is exhausted (%s)', async (reference) => {
     vi.useFakeTimers();
     mockVerify.mockResolvedValue(undefined);
     const { props } = setup();
     const { result } = renderHook(() =>
       useCheckoutSuccessVerification({
         ...props,
-        reference: `BCO-${'a'.repeat(32)}`,
+        reference,
       })
     );
 

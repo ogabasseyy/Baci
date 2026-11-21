@@ -114,7 +114,7 @@ describe('verifyCheckoutPayment bank card offer', () => {
     );
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
-    expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
   });
 
   it('offers a safe refresh if bank-offer verification fails after the CSRF retry', async () => {
@@ -131,7 +131,7 @@ describe('verifyCheckoutPayment bank card offer', () => {
     expect(callbacks.setStatus).toHaveBeenCalledWith(
       'verification_unavailable'
     );
-    expect(callbacks.setOrderNumber).not.toHaveBeenCalled();
+    expect(callbacks.setOrderNumber).toHaveBeenCalledWith(null);
     expect(callbacks.capturePaymentFailed).not.toHaveBeenCalled();
     expect(callbacks.scheduleFailedRedirect).not.toHaveBeenCalled();
   });

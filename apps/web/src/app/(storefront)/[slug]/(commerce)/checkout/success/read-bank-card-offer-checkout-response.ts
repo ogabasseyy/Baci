@@ -28,8 +28,8 @@ export async function readBankCardOfferCheckoutResponse(
   const retryDelay = status === 'pending' && bankCardOfferRetryDelay(response);
   if (retryDelay) setStatus(status, retryDelay);
   else setStatus(status);
-  // An ownership denial clears an already verified order number.
-  if (status === 'access_required') setOrderNumber(null);
-  else if (response.ok && data.orderNumber) setOrderNumber(data.orderNumber);
+  // A pending poll can keep the last verified number for this identity.
+  if (response.ok && data.orderNumber) setOrderNumber(data.orderNumber);
+  else if (status !== 'pending') setOrderNumber(null);
   return { handled: true as const };
 }

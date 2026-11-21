@@ -17,6 +17,7 @@ DECLARE
   reduced_handoff uuid := gen_random_uuid();
   linked_handoff uuid := gen_random_uuid();
   linked_recovery_handoff uuid := gen_random_uuid();
+  restored_handoff uuid := gen_random_uuid();
   linked_grant uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
@@ -186,6 +187,24 @@ BEGIN
   IF result->>'replayed' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM linked_grant::text
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 3::bigint
   THEN RAISE EXCEPTION 'Bootstrap recovery did not use the renewed website authority: %', result; END IF;
+
+  -- Decreases leave website items alone, so later restoring the source
+  -- quantity must not recount the units previously transferred.
+  PERFORM pg_temp.handoff_claim(source, source_grant, 'legacy:mcp:test-import');
+  result := public.commerce_cart_mutate(source, 'restore-source-quantity', source_version,
+    jsonb_build_object('type', 'add', 'item', jsonb_build_object('productId', product), 'quantity', 1));
+  IF result->>'ok' IS DISTINCT FROM 'true'
+  THEN RAISE EXCEPTION 'Could not restore the original source quantity: %', result; END IF;
+  source_version := (result->>'currentVersion')::integer;
+  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
+    origin_principal_id, operation_id, destination, expires_at)
+  VALUES (restored_handoff, 'import-restored-source', merchant, source, 'legacy:mcp:test-import',
+    'legacy-handoff:mcp-import:restored', '{"type":"web"}', now() + interval '5 minutes');
+  PERFORM pg_temp.handoff_claim(destination, linked_grant, 'linked-website-import-test');
+  result := public.commerce_cart_import_mcp_handoff('import-restored-source', restored_handoff, 'reopen-restored-quantity', source_version);
+  IF result->>'ok' IS DISTINCT FROM 'true'
+     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination AND product_id = product) IS DISTINCT FROM 2::bigint
+  THEN RAISE EXCEPTION 'Restoring a source quantity duplicated units already transferred: %', result; END IF;
 END $$;
 
 DO $$

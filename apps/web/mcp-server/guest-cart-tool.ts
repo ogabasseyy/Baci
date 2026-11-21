@@ -12,9 +12,9 @@ import {
   MCP_GUEST_CART_DESCRIPTION,
   mcpGuestCartInputSchema,
   mcpGuestCartOutputSchema,
-  mcpGuestCredentialOutputSchema,
-  mcpGuestCredentialUpdateInputSchema,
 } from '../src/schemas/mcp-guest-cart';
+import { mcpGuestCredentialOutputSchema } from '../src/schemas/mcp-guest-credential-output';
+import { mcpGuestCredentialUpdateInputSchema } from '../src/schemas/mcp-guest-credential-update-input';
 import { prepareCartHandoff } from './cart-handoff';
 import {
   type GuestCartQuotaReservation,

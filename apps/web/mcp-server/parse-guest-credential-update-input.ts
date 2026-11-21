@@ -1,7 +1,5 @@
-import {
-  mcpGuestCredentialUpdateInputSchema,
-  mcpGuestCartInputSchema,
-} from '../src/schemas/mcp-guest-cart';
+import { mcpGuestCartInputSchema } from '../src/schemas/mcp-guest-cart';
+import { mcpGuestCredentialUpdateInputSchema } from '../src/schemas/mcp-guest-credential-update-input';
 
 export function parseGuestCredentialUpdateInput(input: unknown) {
   const parsed = mcpGuestCredentialUpdateInputSchema.safeParse(input);

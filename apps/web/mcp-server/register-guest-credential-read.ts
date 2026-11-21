@@ -1,8 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import {
-  mcpGuestCredentialOutputSchema,
-  mcpGuestCartReadInputSchema,
-} from '../src/schemas/mcp-guest-cart';
+import { mcpGuestCartReadInputSchema } from '../src/schemas/mcp-guest-cart-read-input';
+import { mcpGuestCredentialOutputSchema } from '../src/schemas/mcp-guest-credential-output';
 import { decodeGuestCartCredential } from './decode-guest-cart-credential';
 import { GuestCartStorageUnavailableError } from './guest-cart-errors';
 import type { GuestCartStoreLike } from './guest-cart-health';

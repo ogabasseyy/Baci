@@ -3,6 +3,7 @@ import {
   type OrderPaymentVerification,
   verifyOrderPaymentForCompletion,
 } from '@/components/payment-gateway/verify-order-payment';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 
 interface ParamReconciliationVerificationInput {
   isParamReconciliation: boolean;
@@ -89,7 +90,7 @@ export function useParamReconciliationVerification({
         orderId,
         trackingToken,
         reference,
-      }).then((result) => {
+      }).then(async (result) => {
         if (cancelled) {
           return;
         }
@@ -113,7 +114,14 @@ export function useParamReconciliationVerification({
           setExhausted(true);
           return;
         }
-        setOutcome(result.reconciliation ?? false);
+        if (requireVerifiedPayment && result.paid && reference) {
+          await deferredBankOfferCart
+            .clearIfUnchanged(orderId, reference, () => !cancelled)
+            .catch(() =>
+              console.warn('Could not clear the verified bank-offer cart')
+            );
+        }
+        if (!cancelled) setOutcome(result.reconciliation ?? false);
       });
     };
     runVerification();

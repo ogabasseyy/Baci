@@ -1,0 +1,48 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCartStore } from '@/stores/cart-store';
+
+function cartIdentity() {
+  const { checkoutGeneration, items, sharedCartRef } = useCartStore.getState();
+  if (!checkoutGeneration || !items.length) return null;
+  return JSON.stringify([
+    checkoutGeneration,
+    sharedCartRef?.merchantId,
+    sharedCartRef?.cartId,
+    items.map((item) => [
+      item.id,
+      item.product_id,
+      item.variant_id,
+      item.offer_id,
+      item.quantity,
+      item.price,
+      item.negotiatedPrice,
+      item.hasAssurance,
+    ]),
+  ]);
+}
+
+function storageKey(orderId: string, reference: string) {
+  return `bank-offer-checkout-cart:${orderId}:${reference}`;
+}
+
+export const deferredBankOfferCart = {
+  capture: cartIdentity,
+  async remember(orderId: string, reference: string, identity: string) {
+    const key = storageKey(orderId, reference);
+    if (!(await AsyncStorage.getItem(key)))
+      await AsyncStorage.setItem(key, identity);
+  },
+  async clearIfUnchanged(
+    orderId: string,
+    reference: string,
+    isActive: () => boolean
+  ) {
+    const key = storageKey(orderId, reference);
+    const expected = await AsyncStorage.getItem(key);
+    // A freshly opened link, a changed cart, or a cancelled verification
+    // may still show the order, but never authorizes a cart mutation.
+    if (!isActive() || !expected || cartIdentity() !== expected) return;
+    await useCartStore.getState().clearCart();
+    await AsyncStorage.removeItem(key);
+  },
+};

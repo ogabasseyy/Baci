@@ -1,9 +1,13 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import { useParamReconciliationVerification } from './use-param-reconciliation-verification';
 
 jest.mock('@/components/payment-gateway/verify-order-payment', () => ({
   verifyOrderPaymentForCompletion: jest.fn(),
+}));
+jest.mock('@/lib/deferred-bank-offer-cart', () => ({
+  deferredBankOfferCart: { clearIfUnchanged: jest.fn(async () => undefined) },
 }));
 
 const mockedVerify = verifyOrderPaymentForCompletion as jest.Mock;
@@ -16,6 +20,35 @@ describe('useParamReconciliationVerification', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('clears the saved basket only after verified bank-offer settlement', async () => {
+    mockedVerify
+      .mockResolvedValueOnce({ paid: false })
+      .mockResolvedValueOnce({ paid: true });
+    const reference = `BCO-${'d'.repeat(32)}`;
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        reference,
+        retryDelayMs: 100,
+      })
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(100);
+    });
+    expect(deferredBankOfferCart.clearIfUnchanged).toHaveBeenCalledWith(
+      'order-1',
+      reference,
+      expect.any(Function)
+    );
+    expect(result.current.verified).toBe(false);
   });
 
   it('resolves true for a verified reconciliation arrival', async () => {

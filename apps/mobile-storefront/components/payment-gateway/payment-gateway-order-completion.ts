@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import type { RefObject } from 'react';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import {
   trackCheckoutPaymentCompletedOnce,
@@ -77,6 +78,10 @@ export async function settleOrderCompletion(
   // cancellation/error callbacks while verification is still running.
   setPaymentStatus('processing');
   if (orderId && !redvaultVerified) {
+    const bankOfferReference = reference?.startsWith('BCO-') ? reference : null;
+    const cartIdentity = bankOfferReference
+      ? deferredBankOfferCart.capture()
+      : null;
     // Prefer the canonical order total: `amount` is only the residual due
     // at the gateway after wallet/savings credits.
     const purchaseTotal = orderTotal ?? amount ?? 0;
@@ -146,7 +151,7 @@ export async function settleOrderCompletion(
           : 'Payment could not be confirmed. Please try again.'
       );
       return;
-    } else if (verification.reconciliation || reference?.startsWith('BCO-')) {
+    } else if (verification.reconciliation || bankOfferReference) {
       // Keep the cart for reconciliation or a bank offer still awaiting
       // verification. The order screen checks the reference before rendering.
       setPaymentStatus(
@@ -155,6 +160,14 @@ export async function settleOrderCompletion(
           ? 'success'
           : 'pending'
       );
+      if (bankOfferReference && cartIdentity && !verification.reconciliation) {
+        await deferredBankOfferCart
+          .remember(orderId, bankOfferReference, cartIdentity)
+          .catch(() =>
+            console.warn('Could not save the pending bank-offer cart')
+          );
+        if (!isMountedRef.current) return;
+      }
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',

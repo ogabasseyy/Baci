@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "bundler/setup"
-require "fileutils"
+require "stringio"
 require "tmpdir"
 require_relative "patch-ios-activesupport"
 
@@ -50,8 +50,17 @@ def with_fixture
   )
   Dir.mktmpdir("ios-activesupport-backport-test-") do |temp_dir|
     fixture_path = File.join(temp_dir, "methods.rb")
-    FileUtils.cp(source_path, fixture_path)
-    yield fixture_path
+    source = File.binread(source_path)
+    digest = Digest::SHA256.hexdigest(source)
+    initial_result = if digest == IosActiveSupportBackport::ORIGINAL_DIGEST
+      :patched
+    elsif digest == IosActiveSupportBackport::PATCHED_DIGEST
+      :already_patched
+    else
+      raise "Unexpected ActiveSupport fixture digest #{digest}"
+    end
+    File.binwrite(fixture_path, source)
+    yield fixture_path, initial_result
   end
 end
 
@@ -63,9 +72,9 @@ rescue StandardError => error
   exit 1
 end
 
-run_test("patches pinned source, removes regex helper, and preserves normal lookups") do
-  with_fixture do |fixture_path|
-    assert_equal(:patched, IosActiveSupportBackport.apply!(path: fixture_path, version: "7.2.3.1"), "first patch")
+run_test("patches pristine or preserves cached patched source and normal lookups") do
+  with_fixture do |fixture_path, initial_result|
+    assert_equal(initial_result, IosActiveSupportBackport.apply!(path: fixture_path, version: "7.2.3.1"), "first patch")
 
     patched_source = File.binread(fixture_path)
     assert_equal(IosActiveSupportBackport::PATCHED_DIGEST, Digest::SHA256.hexdigest(patched_source), "patched digest")
@@ -76,7 +85,6 @@ run_test("patches pinned source, removes regex helper, and preserves normal look
     assert_equal(:already_patched, IosActiveSupportBackport.apply!(path: fixture_path, version: "7.2.3.1"), "repeat patch")
     assert_equal(patched_source, File.binread(fixture_path), "idempotent bytes")
 
-    require "active_support/inflector"
     load fixture_path
     assert_equal(String, ActiveSupport::Inflector.safe_constantize("String"), "ordinary constant lookup")
     assert_equal(nil, ActiveSupport::Inflector.safe_constantize("DefinitelyMissingConstant"), "unknown constant lookup")
@@ -96,17 +104,25 @@ run_test("patches pinned source, removes regex helper, and preserves normal look
 end
 
 run_test("rejects unexpected source without modifying it") do
-  with_fixture do |fixture_path|
+  with_fixture do |fixture_path, _initial_result|
     File.open(fixture_path, "ab") { |file| file.write("\n# unexpected source change\n") }
     original = File.binread(fixture_path)
+    captured_stderr = StringIO.new
+    previous_stderr = $stderr
+    $stderr = captured_stderr
 
     begin
-      IosActiveSupportBackport.apply!(path: fixture_path, version: "7.2.3.1")
-      raise "unexpected source was accepted"
-    rescue SystemExit => error
-      assert_equal(1, error.status, "unexpected source exit status")
+      begin
+        IosActiveSupportBackport.apply!(path: fixture_path, version: "7.2.3.1")
+        raise "unexpected source was accepted"
+      rescue SystemExit => error
+        assert_equal(1, error.status, "unexpected source exit status")
+      end
+    ensure
+      $stderr = previous_stderr
     end
 
+    assert_includes(captured_stderr.string, "Unexpected ActiveSupport source digest", "unexpected source diagnostic")
     assert_equal(original, File.binread(fixture_path), "unexpected source remains unchanged")
   end
 end

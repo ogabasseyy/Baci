@@ -85,6 +85,35 @@ describe('Zod legacy schema compatibility and bounded collection validation', ()
             if (!parsed.success)
               expect(parsed.error.issues[0].code).toBe('too_big');
           }
+          // Legacy Zod v3 ZodMap has no size-bound API. Native Zod 4 maps use
+          // `.max()`, so cover that already-bounded root path separately.
+          if (version.startsWith('4.') && subpath === '.') {
+            const nativeZ = entry as typeof import('zod');
+            const nativeElement = nativeZ.z.any().superRefine(() => {
+              visits++;
+            });
+            visits = 0;
+            const map = nativeZ.z.map(nativeElement, nativeElement).max(2);
+            const parsed = asynchronous
+              ? await map.safeParseAsync(
+                  new Map([
+                    [1, 1],
+                    [2, 2],
+                    [3, 3],
+                  ])
+                )
+              : map.safeParse(
+                  new Map([
+                    [1, 1],
+                    [2, 2],
+                    [3, 3],
+                  ])
+                );
+            expect(parsed.success).toBe(false);
+            expect(visits).toBe(0);
+            if (!parsed.success)
+              expect(parsed.error.issues[0].code).toBe('too_big');
+          }
           expect(z.array(z.string()).max(2).parse(['a', 'b'])).toEqual([
             'a',
             'b',

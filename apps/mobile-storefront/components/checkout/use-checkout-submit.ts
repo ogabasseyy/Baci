@@ -1,5 +1,6 @@
 import { useIsMountedRef } from '@/components/bnpl-checkout/use-is-mounted-ref';
 import { useMerchant } from '@/hooks/use-merchant';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
 import { trackCheckoutStep } from '@/services/analytics';
@@ -95,6 +96,8 @@ export function useCheckoutSubmit({
     ) {
       return;
     }
+    const checkoutCartIdentity =
+      selectedPayment === 'paystack' ? deferredBankOfferCart.capture() : null;
     // The REDVAULT fence holds the in-flight latch until completion.
     const submitFence = await acquireCheckoutSubmitFence({
       accountPassword,
@@ -250,6 +253,7 @@ export function useCheckoutSubmit({
         await completeSubmittedOrder({
           accountPassword,
           address,
+          checkoutCartIdentity,
           checkoutGeneration: submittedGeneration.current(),
           clearCart,
           completedPaymentMethod,

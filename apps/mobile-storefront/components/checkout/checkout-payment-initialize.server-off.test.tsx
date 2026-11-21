@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { router } from 'expo-router';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import type { OrderResponse } from '@/services/orders';
 import {
@@ -13,6 +14,10 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/services/analytics', () => ({
   trackCheckoutPaymentStarted: jest.fn(),
+}));
+
+jest.mock('@/lib/deferred-bank-offer-cart', () => ({
+  deferredBankOfferCart: { remember: jest.fn() },
 }));
 
 jest.mock('@/services/orders', () => ({
@@ -102,6 +107,51 @@ describe('initializeGatewayAndRoute', () => {
         reference: 'ref-1',
       }),
     });
+  });
+
+  it('saves the submitted bank-offer cart before opening the gateway', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    mockInitResponse({
+      success: true,
+      reference,
+      authorization_url: 'https://pay.example/authorize',
+    });
+    let openedWhenSaving = true;
+    jest
+      .mocked(deferredBankOfferCart.remember)
+      .mockImplementationOnce(async () => {
+        openedWhenSaving = mockRouterPush.mock.calls.length > 0;
+      });
+
+    await initializeGatewayAndRoute(
+      createParams({ checkoutCartIdentity: 'submitted-cart' })
+    );
+
+    expect(deferredBankOfferCart.remember).toHaveBeenCalledWith(
+      'order-1',
+      reference,
+      'submitted-cart'
+    );
+    expect(openedWhenSaving).toBe(false);
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind a newer cart to a replayed bank-offer order', async () => {
+    mockInitResponse({
+      success: true,
+      reference: `BCO-${'a'.repeat(32)}`,
+      authorization_url: 'https://pay.example/authorize',
+    });
+
+    await initializeGatewayAndRoute(
+      createParams({
+        checkoutCartIdentity: 'newer-cart',
+        orderResponse: { ...orderResponse, idempotency: { replayed: true } },
+      })
+    );
+
+    expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
   });
 
   it('records the full order total when credit partially covers the order', async () => {

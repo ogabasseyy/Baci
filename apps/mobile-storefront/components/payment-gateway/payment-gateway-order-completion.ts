@@ -94,9 +94,6 @@ export async function settleOrderCompletion(
       );
       return;
     }
-    const cartIdentity = bankOfferReference
-      ? deferredBankOfferCart.capture()
-      : null;
     // Prefer the canonical order total: `amount` is only the residual due
     // at the gateway after wallet/savings credits.
     const purchaseTotal = orderTotal ?? amount ?? 0;
@@ -109,19 +106,6 @@ export async function settleOrderCompletion(
       trackingToken,
       reference,
     });
-    // Keep the checkout-time identity even if the WebView closes during
-    // verification. A later visit can clear it only after verifying the
-    // same order and reference and matching the still-unchanged cart.
-    if (
-      bankOfferReference &&
-      cartIdentity &&
-      !verification.reconciliation &&
-      !verification.terminalFailure
-    ) {
-      await deferredBankOfferCart
-        .remember(orderId, bankOfferReference, cartIdentity)
-        .catch(() => undefined);
-    }
     // A late response must not record a conversion, erase the cart, or
     // navigate after the shopper has left the gateway.
     if (!isMountedRef.current) {

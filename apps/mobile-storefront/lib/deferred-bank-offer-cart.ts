@@ -40,7 +40,7 @@ async function serializeCartOperation(
 }
 
 function cartIdentity() {
-  if (!useCartStore.persist.hasHydrated()) return null;
+  if (!useCartStore.persist?.hasHydrated()) return null;
   const { checkoutGeneration, items, sharedCartRef } = useCartStore.getState();
   if (!checkoutGeneration || !items.length) return null;
   return JSON.stringify([
@@ -96,7 +96,7 @@ export const deferredBankOfferCart = {
       );
       if (!isActive() || expected === CONSUMED_MARKER) return;
       if (expected) {
-        if (!useCartStore.persist.hasHydrated()) return;
+        if (!useCartStore.persist?.hasHydrated()) return;
         if (cartIdentity() === expected) {
           await runCartStep('cleanup', 'clear_cart', () =>
             useCartStore.getState().clearCart()

@@ -46,11 +46,8 @@ it('leaves the gateway pending and preserves the cart while the order screen ver
   expect(setPaymentStatus).toHaveBeenLastCalledWith('pending');
   expect(clearCart).not.toHaveBeenCalled();
   expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
-  expect(deferredBankOfferCart.remember).toHaveBeenCalledWith(
-    'order-1',
-    reference,
-    'cart-identity'
-  );
+  expect(deferredBankOfferCart.capture).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
   expect(router.replace).toHaveBeenCalledWith(
     expect.objectContaining({
       pathname: '/order-success',
@@ -85,7 +82,7 @@ it('rejects a malformed bank offer reference before navigation or cart changes',
   expect(setPaymentStatus).toHaveBeenLastCalledWith('error');
 });
 
-it('retains the original cart snapshot when the gateway closes during verification', async () => {
+it('does not alter the saved cart snapshot when the gateway closes during verification', async () => {
   jest.clearAllMocks();
   const isMountedRef = { current: true };
   jest
@@ -114,22 +111,15 @@ it('retains the original cart snapshot when the gateway closes during verificati
     false
   );
 
-  expect(deferredBankOfferCart.remember).toHaveBeenCalledWith(
-    'order-1',
-    reference,
-    'cart-identity'
-  );
+  expect(deferredBankOfferCart.capture).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
   expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
   expect(clearCart).not.toHaveBeenCalled();
   expect(navigate).not.toHaveBeenCalled();
 });
 
-it.each([
-  'cart-identity',
-  null,
-])('uses only a captured identity to clear a paid bank-offer cart (%s)', async (identity) => {
+it('uses only the original checkout snapshot when an older bank-offer payment completes', async () => {
   jest.clearAllMocks();
-  jest.mocked(deferredBankOfferCart.capture).mockReturnValueOnce(identity);
   jest
     .mocked(verifyOrderPaymentForCompletion)
     .mockResolvedValueOnce({ paid: true });
@@ -160,7 +150,6 @@ it.each([
   );
   expect(setPaymentStatus).toHaveBeenLastCalledWith('success');
   expect(clearCart).not.toHaveBeenCalled();
-  expect(jest.mocked(deferredBankOfferCart.remember).mock.calls).toEqual(
-    identity ? [['order-1', reference, identity]] : []
-  );
+  expect(deferredBankOfferCart.capture).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
 });

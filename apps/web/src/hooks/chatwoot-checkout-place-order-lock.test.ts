@@ -9,6 +9,17 @@ vi.mock('@/hooks/cart/shared-cart-checkout-client', async (importActual) => ({
   prepareSharedCartCheckout: mocks.prepare,
 }));
 
+vi.mock('./chatwoot-checkout-keys', () => ({
+  // Derived without the crypto wait, so the attempts interleave predictably.
+  deriveChatwootCheckoutKeys: async (
+    requestId: string,
+    merchantId: string
+  ) => ({
+    idempotencyKey: `cw-chk-test-${merchantId}-${requestId}`,
+    operationId: `cw-op-test-${merchantId}-${requestId}`,
+  }),
+}));
+
 import {
   handleChatwootCheckoutPlace,
   resetChatwootCheckoutOrderMemory,
@@ -29,15 +40,27 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-/** Holds every network answer back a tick, so overlapping attempts overlap. */
-function stubSlowCheckoutFetch(handlers: ReturnType<typeof happyHandlers>) {
+/**
+ * Holds every network answer until `release()` is called, so a second attempt
+ * can be started while the first is provably still on the network.
+ */
+function stubGatedCheckoutFetch(handlers: ReturnType<typeof happyHandlers>) {
   const stubbed = stubCheckoutFetch(handlers);
-  const slow: typeof fetch = async (...args) => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((open) => {
+    release = open;
+  });
+  const gated: typeof fetch = async (...args) => {
+    await gate;
     return stubbed.fetchMock(...(args as [string, RequestInit])) as never;
   };
-  vi.stubGlobal('fetch', slow);
-  return stubbed;
+  vi.stubGlobal('fetch', gated);
+  return { ...stubbed, release };
+}
+
+/** Runs queued promise callbacks until both attempts are parked. */
+async function settle() {
+  for (let turn = 0; turn < 200; turn += 1) await Promise.resolve();
 }
 
 const count = (calls: { path: string }[], path: string) =>
@@ -46,7 +69,7 @@ const count = (calls: { path: string }[], path: string) =>
 describe('handleChatwootCheckoutPlace', () => {
   describe('one payment setup per order', () => {
     it('two copies of one request authorized against different carts place one order and set up payment once', async () => {
-      const { calls } = stubSlowCheckoutFetch(happyHandlers());
+      const { calls, release } = stubGatedCheckoutFetch(happyHandlers());
       // Placing the order completes the cart, so a late copy of the same
       // request can be authorized against the cart that replaced it.
       const movedRef = { cartId: 'a-replacement-cart', version: 1 };
@@ -58,11 +81,12 @@ describe('handleChatwootCheckoutPlace', () => {
       });
 
       const earlier = handleChatwootCheckoutPlace(first);
-      // The later copy arrives while the earlier one is on the network.
-      await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0), {
-        interval: 1,
-      });
-      await Promise.all([earlier, handleChatwootCheckoutPlace(second)]);
+      await settle();
+      // The later copy arrives while the earlier one is still on the network.
+      const later = handleChatwootCheckoutPlace(second);
+      await settle();
+      release();
+      await Promise.all([earlier, later]);
 
       expect(lastResult(first)).toMatchObject({ status: 'payment_ready' });
       expect(lastResult(second)).toEqual(lastResult(first));
@@ -85,7 +109,7 @@ describe('handleChatwootCheckoutPlace', () => {
         code: 'payment_unavailable',
       });
 
-      const { calls } = stubSlowCheckoutFetch(happyHandlers());
+      const { calls, release } = stubGatedCheckoutFetch(happyHandlers());
       const movedRef = { cartId: 'a-replacement-cart', version: 1 };
       const retry = placeInput({
         authorizedCartId: movedRef.cartId,
@@ -97,11 +121,12 @@ describe('handleChatwootCheckoutPlace', () => {
       });
 
       const earlier = handleChatwootCheckoutPlace(retry);
-      // The later copy arrives while the earlier one is on the network.
-      await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0), {
-        interval: 1,
-      });
-      await Promise.all([earlier, handleChatwootCheckoutPlace(newer)]);
+      await settle();
+      // The later copy arrives while the earlier one is still on the network.
+      const later = handleChatwootCheckoutPlace(newer);
+      await settle();
+      release();
+      await Promise.all([earlier, later]);
 
       expect(lastResult(retry)).toMatchObject({ status: 'payment_ready' });
       expect(lastResult(newer)).toMatchObject({

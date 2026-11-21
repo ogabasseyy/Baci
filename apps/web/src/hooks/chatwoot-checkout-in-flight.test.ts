@@ -9,8 +9,10 @@ function deferred() {
   return { promise, resolve };
 }
 
-/** Lets queued promise callbacks run. */
-const settle = () => new Promise<void>((done) => setTimeout(done, 0));
+/** Lets queued promise callbacks run, without waiting on the clock. */
+async function settle() {
+  for (let turn = 0; turn < 20; turn += 1) await Promise.resolve();
+}
 
 describe('runChatwootCheckoutSerially', () => {
   it('starts a second task for the same key only after the first settles', async () => {

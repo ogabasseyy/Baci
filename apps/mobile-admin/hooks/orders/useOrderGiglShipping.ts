@@ -97,8 +97,11 @@ export function useOrderGiglShipping({
     pollerRef.current = null;
     controllerRef.current?.abort();
   };
-  const applyQuoteResult = (result: OrderGiglQuoteResult, bound: boolean) => {
-    applyQuote(result, bound ? requester.storedAddressSignature() : null);
+  const applyQuoteResult = (
+    result: OrderGiglQuoteResult,
+    signature: string | null
+  ) => {
+    applyQuote(result, signature);
     editingAddressRef.current = false;
     setMissingFields([]);
     setError(null);
@@ -114,6 +117,7 @@ export function useOrderGiglShipping({
       setError('Complete the delivery address and phone before saving.');
       return null;
     }
+    if (saveAddress) editingAddressRef.current = true;
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -121,14 +125,14 @@ export function useOrderGiglShipping({
     setError(null);
     try {
       const bound = !previewRef.current;
-      const result = await requester.fetch(
+      const { result, signature } = await requester.fetch(
         orderId,
         !bound,
         controller.signal,
         saveAddress
       );
       if (!controller.signal.aborted && isValid()) {
-        applyQuoteResult(result, bound);
+        applyQuoteResult(result, signature);
         return result;
       }
     } catch (requestError: unknown) {
@@ -145,6 +149,7 @@ export function useOrderGiglShipping({
         canEditAddress &&
         !previewRef.current
       ) {
+        addressEditor.reset();
         openAddressEditor();
         setError(failure.message);
         return null;
@@ -238,6 +243,8 @@ export function useOrderGiglShipping({
     orderIdRef.current = orderId;
     clearOrderScopedState();
   }, [orderId]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cancel work when the panel scope changes
+  useEffect(() => () => stopPolling(), [enabled, orderId, preview]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: render-local request
   useEffect(() => {
     // The order refetch after an address save carries the address the bound
@@ -245,18 +252,15 @@ export function useOrderGiglShipping({
     const keepBound =
       !preview && state === 'ready' && isBoundTo(initialAddressSignature);
     if (!enabled) reset();
-    else if (!keepBound) {
+    else if (!keepBound && !editingAddressRef.current) {
+      stopPolling();
       invalidateQuote();
       resetFunding();
       // A fresh background preview shows the price at once, with no request.
       const cached = preview ? requester.readCachedPreview(orderId) : null;
-      if (cached) applyQuoteResult(cached, false);
+      if (cached) applyQuoteResult(cached, null);
       else void requestQuote();
     }
-    return () => {
-      controllerRef.current?.abort();
-      stopPolling();
-    };
   }, [enabled, initialAddressSignature, orderId, preview]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: stable stopPolling
   useEffect(() => {

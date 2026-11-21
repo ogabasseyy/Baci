@@ -37,6 +37,12 @@ export function ShipmentFlowGiglAddress({
   selected,
 }: Props) {
   const { colors } = useTheme();
+  const showPlacesSearch =
+    missingFields.includes('address') &&
+    Boolean(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY);
+  const manualFields = missingFields.filter(
+    (field) => field !== 'address' || !showPlacesSearch
+  );
   const destination = [
     addressDraft.address,
     addressDraft.city,
@@ -58,7 +64,7 @@ export function ShipmentFlowGiglAddress({
           onPress={onEditAddress}
         />
       ) : null}
-      {missingFields.includes('address') ? (
+      {showPlacesSearch ? (
         <CheckoutRecoveryAddressInput
           accessibilityLabel="Search shipping address"
           address={addressDraft.address ?? ''}
@@ -80,7 +86,7 @@ export function ShipmentFlowGiglAddress({
           placeholder="Search delivery address"
         />
       ) : null}
-      {missingFields.map((field) => (
+      {manualFields.map((field) => (
         <View key={field} style={panelStyles.field}>
           <Text style={{ color: colors.text }}>{FIELD_LABELS[field]}</Text>
           <TextInput

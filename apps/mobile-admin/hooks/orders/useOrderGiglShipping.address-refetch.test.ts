@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
+import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   flushPromises,
+  renderBoundQuote,
   saveTypedCityAndState,
   server,
   trim,
@@ -25,6 +27,89 @@ describe('bugfix: the order refetch after an address save asked for the bound qu
     });
     vi.useFakeTimers();
     vi.setSystemTime('2026-09-01T17:00:00.000Z');
+  });
+
+  it('keeps the explicit delivery draft while the same order refreshes', async () => {
+    const order = {
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: { address: '1 Allen', city: 'Ikeja', state: 'Lagos' },
+    };
+    const { result, rerender } = renderBoundQuote(order);
+    await flushPromises();
+    act(() => {
+      result.current.beginAddressEdit?.();
+      result.current.updateAddressField('address', '2 Merchant Road');
+    });
+    const quoteCallsBeforeRefresh = server.getQuote.mock.calls.length;
+    server.storedAddress = { ...server.storedAddress, city: 'Yaba' };
+    rerender({ current: { ...order, shipping_address: server.storedAddress } });
+    await flushPromises();
+    expect(result.current.addressDraft.address).toBe('2 Merchant Road');
+    expect(result.current.state).toBe('missing_address');
+    expect(server.getQuote).toHaveBeenCalledTimes(quoteCallsBeforeRefresh);
+    expect(server.patch).not.toHaveBeenCalled();
+  });
+
+  it('lets an explicit address save finish when fresh order data arrives', async () => {
+    const order = {
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: { address: '1 Allen', city: 'Ikeja', state: 'Lagos' },
+    };
+    const { result, rerender } = renderBoundQuote(order);
+    await flushPromises();
+    act(() => {
+      result.current.beginAddressEdit?.();
+      result.current.updateAddressField('address', '2 Merchant Road');
+    });
+    const patch = Promise.withResolvers<void>();
+    server.patch.mockReturnValueOnce(patch.promise);
+    let save: Promise<unknown> | undefined;
+    act(() => {
+      save = result.current.saveAddressAndRequestQuote();
+    });
+    server.storedAddress = { ...server.storedAddress, city: 'Yaba' };
+    rerender({ current: { ...order, shipping_address: server.storedAddress } });
+    await act(async () => {
+      patch.resolve();
+      await save;
+    });
+    expect(server.patch).toHaveBeenCalledOnce();
+    expect(result.current.state).toBe('ready');
+    expect(result.current.quote?.price).toBe(11000);
+  });
+
+  it('rejects a delayed quote when the saved destination has changed', async () => {
+    const order = {
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: { address: '1 Allen', city: 'Ikeja', state: 'Lagos' },
+    };
+    const { result, rerender } = renderBoundQuote(order);
+    await flushPromises();
+    act(() => {
+      result.current.beginAddressEdit?.();
+      result.current.updateAddressField('address', '2 Merchant Road');
+    });
+    const delayedQuote = Promise.withResolvers<typeof quoteResult>();
+    server.getQuote.mockReturnValueOnce(delayedQuote.promise);
+    let save: Promise<unknown> | undefined;
+    act(() => {
+      save = result.current.saveAddressAndRequestQuote();
+    });
+    await flushPromises();
+    expect(server.patch).toHaveBeenCalledOnce();
+    expect(server.getQuote).toHaveBeenCalledTimes(2);
+    server.storedAddress = { ...server.storedAddress, address: '3 New Road' };
+    rerender({ current: { ...order, shipping_address: server.storedAddress } });
+    await act(async () => {
+      delayedQuote.resolve(quoteResult);
+      await save;
+    });
+    expect(result.current.quote).toBeNull();
+    expect(result.current.addressDraft.address).toBe('3 New Road');
+    expect(result.current.error).toMatch(/review the delivery address/i);
   });
 
   it('keeps the bound quote when the refreshed order carries the saved address', async () => {

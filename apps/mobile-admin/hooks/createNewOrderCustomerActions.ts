@@ -121,6 +121,14 @@ export function createNewOrderCustomerActions({
           address.countryCode.toLowerCase() ===
             item.country_code?.trim().toLowerCase()));
     const profile = sameDestination ? item : undefined;
+    // Coordinates describe one location; never combine a draft coordinate
+    // with the other half of a profile pin.
+    const pin =
+      address?.latitude === undefined && address?.longitude === undefined
+        ? profile
+        : address;
+    const { latitude, longitude } = pin ?? {};
+    const hasPin = latitude != null && longitude != null;
     setCustomer({
       address: address?.address ?? (item.address || ''),
       email: item.email || '',
@@ -132,8 +140,8 @@ export function createNewOrderCustomerActions({
       country: address?.country || profile?.country || '',
       countryCode: address?.countryCode || profile?.country_code || '',
       postalCode: address?.postalCode || profile?.zip_code || '',
-      latitude: address ? address.latitude : (item.latitude ?? undefined),
-      longitude: address ? address.longitude : (item.longitude ?? undefined),
+      latitude: hasPin ? latitude : undefined,
+      longitude: hasPin ? longitude : undefined,
     });
     setShowCustomerModal(false);
     setCustomerSearch('');

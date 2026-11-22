@@ -40,6 +40,8 @@ describe('bugfix: the order refetch after an address save asked for the bound qu
     act(() => {
       result.current.beginAddressEdit?.();
       result.current.updateAddressField('address', '2 Merchant Road');
+      result.current.updateAddressField('city', 'Yaba');
+      result.current.updateAddressField('state', 'Lagos');
     });
     const quoteCallsBeforeRefresh = server.getQuote.mock.calls.length;
     server.storedAddress = { ...server.storedAddress, city: 'Yaba' };
@@ -62,6 +64,8 @@ describe('bugfix: the order refetch after an address save asked for the bound qu
     act(() => {
       result.current.beginAddressEdit?.();
       result.current.updateAddressField('address', '2 Merchant Road');
+      result.current.updateAddressField('city', 'Yaba');
+      result.current.updateAddressField('state', 'Lagos');
     });
     const patch = Promise.withResolvers<void>();
     server.patch.mockReturnValueOnce(patch.promise);
@@ -91,6 +95,8 @@ describe('bugfix: the order refetch after an address save asked for the bound qu
     act(() => {
       result.current.beginAddressEdit?.();
       result.current.updateAddressField('address', '2 Merchant Road');
+      result.current.updateAddressField('city', 'Yaba');
+      result.current.updateAddressField('state', 'Lagos');
     });
     const delayedQuote = Promise.withResolvers<typeof quoteResult>();
     server.getQuote.mockReturnValueOnce(delayedQuote.promise);

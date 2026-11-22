@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-21T16:06:44+00:00",
-  "source_revision": "f654c9b95780fec288bb25bf1f4201c0598dcce6",
-  "evidence_digest": "20872bf2af96e842aaeadac7fa1f724df03fe8f3c4c54e129d3c382a9b16ebdc",
-  "claims_digest": "e8a621c01662467d37c7d46f30acaad07844cca62b4e2b803bd7ddff171ba75c",
-  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile orders after the delivery-address selection change. Existing permission, payment and cancellation limitations still apply. Other bound capability sources match the prior reviewed revision. No production capability promotion.",
+  "reviewed_at": "2026-11-22T04:40:44+00:00",
+  "source_revision": "5e3fb7c88bc291a31c08db797355c880aa0efc91",
+  "evidence_digest": "11353d1999929c7126d6daa260c32c52ff03c02f8025d33e4ec4d965305b1f58",
+  "claims_digest": "7c7541eb967022b52aa466ccc40249dda275e773226165c65a930dd764965669",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, address editing, and GIG quote binding after the main-branch sync. Previously reviewed capability claims remain code-evidenced only; no production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

@@ -8,3 +8,6 @@ export const MAX_PUBLIC_FETCH_BYTES = 16 * 1024 ** 2;
 export const MAX_PUBLIC_OBSERVATION_BYTES = 4 * MAX_PUBLIC_FETCH_BYTES;
 // Allow for base64, per-resource response headers and JSON metadata.
 export const MAX_PUBLIC_OBSERVATION_START_BYTES = 128 * 1024 ** 2;
+
+// A terminal result can include 128 routes with titles, paths and canonical URLs.
+export const MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES = 768 * 1024;

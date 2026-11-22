@@ -60,9 +60,7 @@ export async function derivePublicVerificationPlan(
     );
   if (!product) throw Error('PUBLIC_JOURNEY_NOT_READY');
   const variant = product.requiresVariant
-    ? product.variants
-        .filter((item) => item.available)
-        .sort((a, b) => a.id.localeCompare(b.id))[0]
+    ? product.variants.find((item) => item.available)
     : undefined;
   const productPath = normalizeExperiencePath(
     product.canonicalPath ?? `/products/${product.slug}`

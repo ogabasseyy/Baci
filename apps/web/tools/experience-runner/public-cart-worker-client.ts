@@ -1,5 +1,6 @@
 import type { Readable, Writable } from 'node:stream';
 import { z } from 'zod';
+import { MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES } from './public-observation-resource-limit';
 
 const requestSchema = z.strictObject({
   url: z.string().max(2048),
@@ -81,7 +82,7 @@ export function createPublicCartWorkerClient(settings: {
       if (closed || pending) throw Error('PUBLIC_CART_CLIENT_UNAVAILABLE');
       closed = true;
       const line = JSON.stringify({ type: 'done', observation });
-      if (Buffer.byteLength(line) > 16384)
+      if (Buffer.byteLength(line) > MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES)
         throw Error('PUBLIC_CART_CLIENT_OUTPUT_BUDGET');
       await new Promise<void>((resolve, reject) =>
         settings.output.end(`${line}\n`, (error?: Error | null) =>

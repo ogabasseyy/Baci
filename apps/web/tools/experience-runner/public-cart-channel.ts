@@ -1,6 +1,8 @@
 import type { Readable, Writable } from 'node:stream';
 import { z } from 'zod';
+import { MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES } from './public-observation-resource-limit';
 
+const MAX_REQUEST_FRAME_BYTES = 16 * 1024;
 const request = z.strictObject({
   url: z.string().max(2048),
   method: z.enum(['GET', 'POST']),
@@ -39,12 +41,13 @@ export async function runPublicCartChannel(settings: {
     for await (const part of settings.input) {
       const chunk = Buffer.isBuffer(part) ? part : Buffer.from(part);
       inputBytes += chunk.length;
-      if (chunk.length > 65536 || inputBytes > 1048576) throw Error();
+      if (inputBytes > 1048576) throw Error();
       buffered = Buffer.concat([buffered, chunk]);
       for (;;) {
         const newline = buffered.indexOf(10);
         if (newline < 0) break;
-        if (newline > 16384 || done) throw Error();
+        if (newline > MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES || done)
+          throw Error();
         const raw = buffered.subarray(0, newline);
         buffered = buffered.subarray(newline + 1);
         const message = frame.parse(
@@ -55,7 +58,8 @@ export async function runPublicCartChannel(settings: {
           observation = message.observation;
           continue;
         }
-        if (message.id !== expected++) throw Error();
+        if (raw.length > MAX_REQUEST_FRAME_BYTES || message.id !== expected++)
+          throw Error();
         const result = await settings.session(message.request);
         if (
           timedOut ||
@@ -75,7 +79,7 @@ export async function runPublicCartChannel(settings: {
           )
         );
       }
-      if (buffered.length > 16384) throw Error();
+      if (buffered.length > MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES) throw Error();
     }
     if (timedOut || !done || buffered.length) throw Error();
     return observation;

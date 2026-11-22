@@ -121,3 +121,22 @@ it('does not invent a product or accept a changed head or foreign canonical URL'
     derivePublicVerificationPlan(binding, wrongFamily)
   ).rejects.toThrow();
 });
+
+it('keeps the catalog order when choosing the first available variant', async () => {
+  const deps = fixture();
+  deps.catalog.mockResolvedValueOnce({
+    products: [
+      {
+        ...product,
+        variants: [
+          { id: 'unavailable', label: 'Grey', available: false },
+          { id: 'variant-z', label: 'Blue', available: true },
+          { id: 'variant-a', label: 'Green', available: true },
+        ],
+      },
+    ],
+    revision: 'rev',
+  });
+  const result = await derivePublicVerificationPlan(binding, deps);
+  expect(result.product.variantId).toBe('variant-z');
+});

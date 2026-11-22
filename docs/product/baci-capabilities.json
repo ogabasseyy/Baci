@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-22T04:40:44+00:00",
-  "source_revision": "5e3fb7c88bc291a31c08db797355c880aa0efc91",
-  "evidence_digest": "11353d1999929c7126d6daa260c32c52ff03c02f8025d33e4ec4d965305b1f58",
-  "claims_digest": "7c7541eb967022b52aa466ccc40249dda275e773226165c65a930dd764965669",
-  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, address editing, and GIG quote binding after the main-branch sync. Previously reviewed capability claims remain code-evidenced only; no production capability promotion.",
+  "reviewed_at": "2026-11-22T04:53:31+00:00",
+  "source_revision": "e86a6ef9df09a27b44dd2e5507f49340454ff5c0",
+  "evidence_digest": "eb2dd5c5728e6b894e78c2de4df45487720f9015c761f35bba272d43ae469574",
+  "claims_digest": "d4827f8ded5c5e49d4a9f19275fc19000701a08b8325dd88b1dc96dd28a73bcb",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, locality recovery, duplicate-customer destination matching, and GIG quote binding after the main-branch sync. Previously reviewed capability claims remain code-evidenced only; no production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-22T05:24:51+00:00",
-  "source_revision": "9e3f4e4e431260d22b7b608257523bfb35ec86a6",
-  "evidence_digest": "6a12c01c84df837e4668b4a44e3a4a216b24acb5d914aa5da56876d2a134dbb3",
-  "claims_digest": "b62ff5f6e13d081a7bf1caa709ee8a183d4201a3e5d80a9d45d9d3bab7261727",
-  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, locality recovery, duplicate-customer destination matching, and GIG quote binding after syncing to current main. Retained the current main review of paid partner pickup and parcel binding and the previously reviewed expense evidence. All claims remain code-evidenced only; no production capability promotion.",
+  "reviewed_at": "2026-11-22T05:46:12+00:00",
+  "source_revision": "48cd218cc70cb18a54af8606dbf6f2002e4bf38c",
+  "evidence_digest": "d6916859d4c822abd882d56907b838251725a27e1ff4051773334745a65a72dd",
+  "claims_digest": "4a727423e2058c328137d9f51fa6daf8082f6a14db86c6606722cf1080ba3c6e",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, locality recovery, duplicate-customer destination matching, and GIG quote binding after syncing to current main. Retained current-main reviews of paid partner pickup and parcel binding, checkout recovery, and the previously reviewed expense evidence. All claims remain code-evidenced only; no production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

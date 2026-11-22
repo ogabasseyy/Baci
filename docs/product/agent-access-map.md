@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 22 November 2026 against source revision
-`9e3f4e4e431260d22b7b608257523bfb35ec86a6`. Staff-entered mobile orders were re-reviewed after the delivery-address selection change. The paid partner pickup and parcel-binding review from current main and the prior expense review remain in scope.
+`48cd218cc70cb18a54af8606dbf6f2002e4bf38c`. Staff-entered mobile orders were re-reviewed after the delivery-address selection change and current-main sync. The paid partner pickup, parcel-binding and checkout-recovery reviews from current main and the prior expense review remain in scope.
 The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).

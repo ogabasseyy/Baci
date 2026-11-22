@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import postgres from 'postgres';
 import { listPaystackRefunds } from '../lib/orders/list-paystack-refunds';
 import {
@@ -8,14 +9,13 @@ import {
 } from '../schemas/bank-offer-partial-refund-input';
 import { checkBankOfferPartialRefund } from './check-bank-offer-partial-refund';
 
-async function main() {
-  const args = partialRefundCliArgsSchema.safeParse(process.argv.slice(2));
+async function checkRefund(argv: readonly string[]): Promise<number> {
+  const args = partialRefundCliArgsSchema.safeParse(argv);
   if (!args.success) {
     console.error(
       'Usage: check:bank-offer-partial-refund <order UUID> <merchant UUID> <return manifest.json>'
     );
-    process.exitCode = 1;
-    return;
+    return 1;
   }
   const [orderId, merchantId, manifestFile] = args.data;
   const manifest = partialRefundManifestSchema.safeParse(
@@ -25,8 +25,7 @@ async function main() {
     console.error(
       'Invalid return manifest. See docs/runbooks/bank-card-offers.md.'
     );
-    process.exitCode = 1;
-    return;
+    return 1;
   }
   const sql = postgres(
     partialRefundDatabaseUrlSchema.parse(
@@ -73,8 +72,7 @@ async function main() {
     `;
     if (!row) {
       console.error('No eligible capture found for this order and merchant.');
-      process.exitCode = 1;
-      return;
+      return 1;
     }
     try {
       const result = await checkBankOfferPartialRefund(
@@ -87,6 +85,7 @@ async function main() {
           })
       );
       console.log(JSON.stringify(result));
+      return 0;
     } catch (error) {
       // Fetch and schema errors can contain provider or session details.
       const expectedMessages = new Set([
@@ -106,17 +105,32 @@ async function main() {
           ? error.message
           : 'Could not verify the saved capture, allocations, or Paystack refund history.'
       );
-      process.exitCode = 1;
+      return 1;
     }
   } finally {
     await sql.end({ timeout: 5 });
   }
 }
 
-// Driver and file errors may contain connection attributes or raw input.
-main().catch(() => {
-  console.error(
-    'Could not read the return manifest or connect to the Operations database.'
-  );
-  process.exitCode = 1;
-});
+export async function runBankOfferPartialRefundCli(
+  argv: readonly string[]
+): Promise<number> {
+  try {
+    return await checkRefund(argv);
+  } catch {
+    // Driver and file errors may contain connection attributes or raw input.
+    console.error(
+      'Could not read the return manifest or connect to the Operations database.'
+    );
+    return 1;
+  }
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  void runBankOfferPartialRefundCli(process.argv.slice(2)).then((exitCode) => {
+    process.exitCode = exitCode;
+  });
+}

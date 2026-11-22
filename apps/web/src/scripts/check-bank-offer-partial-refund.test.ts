@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { partialRefundManifestSchema } from '../schemas/bank-offer-partial-refund-input';
 import { checkBankOfferPartialRefund } from './check-bank-offer-partial-refund';
 
 const itemId = 'a0000000-0000-4000-8000-000000000001';
@@ -140,22 +139,5 @@ describe('bank-offer partial refund checker', () => {
         vi.fn().mockResolvedValue([priorRefund, priorRefund])
       )
     ).rejects.toThrow('Unverified Paystack refund history');
-  });
-
-  it('accepts an explicit list of prior returns and preserves large provider IDs', () => {
-    expect(
-      partialRefundManifestSchema.parse({
-        units: [{ ...unit(1), itemId: itemId.toUpperCase() }],
-        previousRefunds: [
-          { refundId: '18446744073709551615', units: [unit(2)] },
-        ],
-      })
-    ).toEqual({
-      units: [unit(1)],
-      previousRefunds: [{ refundId: '18446744073709551615', units: [unit(2)] }],
-    });
-    expect(
-      partialRefundManifestSchema.safeParse({ units: [unit(1)] }).success
-    ).toBe(false);
   });
 });

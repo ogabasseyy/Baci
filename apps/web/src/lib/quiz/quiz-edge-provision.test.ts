@@ -136,11 +136,17 @@ describe('provisionQuizEdgeRooms', () => {
     }
   });
 
-  it('returns QUIZ_EDGE_INIT_ROOMS_FAILED when Worker returns non-2xx', async () => {
+  it('returns QUIZ_EDGE_INIT_ROOMS_FAILED and rolls back draft backend_mode when Worker returns non-2xx', async () => {
     process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz-edge.example.com';
     process.env.QUIZ_INTERNAL_COORDINATOR_SECRET = 'coord-secret-xyz';
 
     const rpc = vi.fn().mockResolvedValue({ data: validPayload, error: null });
+    const rollbackEq = vi.fn().mockReturnThis();
+    const rollbackBuilder = Object.assign(Promise.resolve({ error: null }), {
+      eq: rollbackEq,
+    });
+    const update = vi.fn(() => rollbackBuilder);
+    const from = vi.fn(() => ({ update }));
     const fetchMock = vi
       .fn()
       .mockResolvedValue(new Response('Unauthorized', { status: 401 }));
@@ -150,12 +156,98 @@ describe('provisionQuizEdgeRooms', () => {
       expectedRoomCount: 2,
       fetchImpl: fetchMock as unknown as typeof fetch,
       merchantId: 'merch-1',
-      supabase: { rpc },
+      supabase: { from, rpc },
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('QUIZ_EDGE_INIT_ROOMS_FAILED');
     }
+    expect(from).toHaveBeenCalledWith('quiz_events');
+    expect(update).toHaveBeenCalledWith({
+      backend_mode: 'postgres',
+      expected_room_count: null,
+    });
+    expect(rollbackEq).toHaveBeenCalledWith('status', 'draft');
+  });
+
+  it('maps QZ061 to QUIZ_EVENT_NOT_DRAFT and QZ003 to QUIZ_QUESTION_POOL_INCOMPLETE', async () => {
+    process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz-edge.example.com';
+    process.env.QUIZ_INTERNAL_COORDINATOR_SECRET = 'coord-secret-xyz';
+
+    const notDraft = await provisionQuizEdgeRooms({
+      eventId: 'evt-1',
+      expectedRoomCount: 2,
+      merchantId: 'merch-1',
+      supabase: {
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: 'QZ061', message: 'quiz_event_not_provisionable' },
+        }),
+      },
+    });
+    expect(notDraft).toMatchObject({
+      code: 'QUIZ_EVENT_NOT_DRAFT',
+      ok: false,
+    });
+
+    const incompletePool = await provisionQuizEdgeRooms({
+      eventId: 'evt-1',
+      expectedRoomCount: 2,
+      merchantId: 'merch-1',
+      supabase: {
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: 'QZ003', message: 'quiz_question_pool_incomplete' },
+        }),
+      },
+    });
+    expect(incompletePool).toMatchObject({
+      code: 'QUIZ_QUESTION_POOL_INCOMPLETE',
+      ok: false,
+    });
+  });
+
+  it('forwards launchConfig parameters to prepare_quiz_edge_rooms_v2', async () => {
+    process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz-edge.example.com';
+    process.env.QUIZ_INTERNAL_COORDINATOR_SECRET = 'coord-secret-xyz';
+
+    const rpc = vi.fn().mockResolvedValue({ data: validPayload, error: null });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, roomCount: 2 }), {
+        status: 200,
+      })
+    );
+
+    const result = await provisionQuizEdgeRooms({
+      eventId: 'evt-1',
+      expectedRoomCount: 2,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      launchConfig: {
+        endsAt: '2026-11-22T10:05:00.000Z',
+        maxAttempts: 3,
+        questionCount: 1,
+        rulesVersion: 'v2-test',
+        startsAt: '2026-11-22T10:00:00.000Z',
+        status: 'active',
+        timePerQuestionSeconds: 15,
+      },
+      merchantId: 'merch-1',
+      supabase: { rpc },
+    });
+
+    expect(result).toEqual({ ok: true, roomCount: 2 });
+    expect(rpc).toHaveBeenCalledWith('prepare_quiz_edge_rooms_v2', {
+      p_ends_at: '2026-11-22T10:05:00.000Z',
+      p_event_id: 'evt-1',
+      p_expected_room_count: 2,
+      p_max_attempts: 3,
+      p_merchant_id: 'merch-1',
+      p_question_count: 1,
+      p_rules_version: 'v2-test',
+      p_starts_at: '2026-11-22T10:00:00.000Z',
+      p_target_status: 'active',
+      p_time_per_question_seconds: 15,
+    });
   });
 });

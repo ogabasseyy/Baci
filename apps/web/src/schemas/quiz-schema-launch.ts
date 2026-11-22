@@ -136,6 +136,12 @@ export const merchantQuizActivationV2RequestSchema = z
         message: 'endsAt must be after startsAt',
         path: ['timing', 'endsAt'],
       });
+    if (value.edgeRoomCount !== undefined && value.backendMode !== 'edge_rooms')
+      context.addIssue({
+        code: 'custom',
+        message: 'edgeRoomCount is only allowed when backendMode is edge_rooms',
+        path: ['edgeRoomCount'],
+      });
   });
 
 export type MerchantQuizActivationV2Input = z.infer<

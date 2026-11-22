@@ -8,7 +8,12 @@ export function captureSubmittedCheckoutCart(
   const { checkoutGeneration, cartWideNegotiationActive, items } =
     useCartStore.getState();
   return {
-    itemsSnapshot: [...items],
+    itemsSnapshot: items.map((item) => ({
+      ...item,
+      ...(item.variant_attributes && {
+        variant_attributes: { ...item.variant_attributes },
+      }),
+    })),
     checkoutGenerationSnapshot: checkoutGeneration,
     groupNegotiationSnapshot: cartWideNegotiationActive,
     checkoutCartIdentity:

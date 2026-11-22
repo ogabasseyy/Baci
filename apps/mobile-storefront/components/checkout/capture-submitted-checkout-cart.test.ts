@@ -47,6 +47,25 @@ it('leaves cleanup unauthorized when checkout has no usable cart identity', () =
   ).toBeNull();
 });
 
+it('preserves submitted quantities and variant attributes after an in-place live cart edit', () => {
+  const liveItem = {
+    ...originalItem,
+    variant_attributes: { storage: '128GB' },
+  };
+  jest.mocked(useCartStore.getState).mockReturnValue({
+    ...originalCart,
+    items: [liveItem],
+  } as never);
+  const submitted = captureSubmittedCheckoutCart('paystack');
+
+  liveItem.quantity = 2;
+  liveItem.variant_attributes.storage = '256GB';
+
+  expect(submitted.itemsSnapshot).toEqual([
+    { ...originalItem, variant_attributes: { storage: '128GB' } },
+  ]);
+});
+
 it.each([
   'korapay',
   'uba_redvault',

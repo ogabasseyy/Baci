@@ -20,6 +20,9 @@ import { isAtLeast } from './security-integrity-version-floor';
 // - proxy-addr 2.0.8 (CVE-2026-90711, IPv4-mapped trust bypass)
 // - source-map-js 1.2.2 (CVE-2026-93749, section-offset DoS)
 // - smol-toml 1.9.0 (GHSA-r4xh-jqrq-34v2, parseKey quadratic parse)
+// - hono 4.13.16 (November 2026 middleware, CSRF, form, and CSS advisories)
+// - @hono/node-server 2.1.6 (November 2026 path parsing and WebSocket reset advisories)
+// - node-forge 1.4.3 (November 2026 TLS, HTTP ReDoS, and Ed25519 advisories)
 
 const PINS: [string, readonly [number, number, number]][] = [
   ['prosemirror-view', [1, 42, 3]],
@@ -35,15 +38,15 @@ const PINS: [string, readonly [number, number, number]][] = [
   ['vite', [8, 1, 6]],
   ['dompurify', [3, 4, 17]],
   ['fast-uri', [3, 1, 9]],
-  ['hono', [4, 13, 11]],
-  ['@hono/node-server', [2, 1, 3]],
+  ['hono', [4, 13, 16]],
+  ['@hono/node-server', [2, 1, 6]],
   ['ip-address', [10, 7, 4]],
   ['markdown-it', [14, 3, 3]],
   ['minimatch', [11, 0, 1]],
   ['sanitize-html', [2, 18, 1]],
   ['qs', [6, 16, 1]],
   ['graphql-scalars', [2, 0, 1]],
-  ['node-forge', [1, 4, 1]],
+  ['node-forge', [1, 4, 3]],
   ['postcss-selector-parser', [6, 1, 5]],
 ];
 

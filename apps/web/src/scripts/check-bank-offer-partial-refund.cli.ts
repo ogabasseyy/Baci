@@ -37,7 +37,7 @@ async function main() {
       max: 1,
       connect_timeout: 10,
       connection: {
-        default_transaction_read_only: 'on',
+        default_transaction_read_only: true,
         statement_timeout: 5_000,
       },
     }

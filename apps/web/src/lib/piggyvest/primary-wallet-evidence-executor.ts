@@ -5,6 +5,7 @@ import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-prim
 import { GOAL_CANCEL_FORFEIT_STATEMENTS } from './goal-cancel-forfeit-statements';
 import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
+import { LEGACY_MIGRATED_WALLET_STATEMENTS } from './legacy-migrated-wallet-statements';
 import { primaryDbLink } from './primary-db-link';
 import { WALLET_PAY_EVIDENCE_STATEMENTS as walletPay } from './wallet-pay-statements';
 
@@ -32,6 +33,7 @@ const statements = new Set([
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result',
   'SELECT piggyvest_primary.read_credit_gap_ledger($1::uuid,$2::text,$3::jsonb) AS result',
   'SELECT piggyvest_primary.read_goal_wallet_setup_health($1::uuid,$2::text,$3::jsonb) AS result',
+  LEGACY_MIGRATED_WALLET_STATEMENTS.readBalances,
   ...Object.values(walletPay),
 ]);
 // Statements whose third parameter is an operation id (not JSON).

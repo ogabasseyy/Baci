@@ -97,6 +97,43 @@ describe('Change items flow', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it('lets staff classify an unallocated late transfer after settlement', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        ...committed,
+        customer: {
+          ...committed.customer,
+          state: 'settled',
+          holdFulfillment: false,
+          balanceDueMinor: 0,
+        },
+        bankEvidence: [
+          {
+            id: replacementId,
+            amountMinor: 500,
+            status: null,
+            transactionId: null,
+            occurredAt: '2026-11-22T10:00:00Z',
+          },
+        ],
+      })
+    );
+    show();
+    fireEvent.change(await screen.findByLabelText('Verified transfer'), {
+      target: { value: replacementId },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Record verified transfer' })
+    );
+    await waitFor(() => {
+      const [, init] = mocks.post.mock.calls[0];
+      expect(JSON.parse(init.body)).toMatchObject({
+        action: 'record_top_up',
+        evidenceId: replacementId,
+      });
+    });
+  });
+
   it('requires consent and creates a fresh preview after a stale response', async () => {
     mocks.post.mockResolvedValueOnce(
       Response.json(

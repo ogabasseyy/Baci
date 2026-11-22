@@ -38,7 +38,7 @@ SELECT * FROM (VALUES
    'RLS/policy helper evaluated for anon sessions'),
   ('public.read_paid_order_amendment_tracking(uuid,text,text,text)',
    'guest amendment summary requires merchant, order and existing tracking proof'),
-  ('public.claim_checkout_for_paid_order_amendment(uuid,text,text,text,text,bigint)',
+  ('public.claim_checkout_for_paid_order_amendment(uuid,text,text,text,text,bigint,bigint,bigint)',
    'guest checkout requires the order tracking token before reserving a pilot payment reference'),
   ('public.claim_immediate_order_notification_with_proof(uuid,text)',
    'guest or bearer flow; token/secret verified in the body'),

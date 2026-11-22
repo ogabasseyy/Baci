@@ -125,4 +125,17 @@ describe('paid order amendment routes', () => {
       error: 'The order changed. Preview the replacement again.',
     });
   });
+
+  it('reports lock contention without invalidating the preview', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '55P03', message: 'could not obtain lock' },
+    });
+    const response = await POST(request(confirmBody), context);
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      code: 'amendment_busy',
+      error: 'This order is busy. Please try again shortly.',
+    });
+  });
 });

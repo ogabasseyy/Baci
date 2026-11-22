@@ -82,7 +82,8 @@ export function OrderAmendmentSettlementControls({
         </AlertDialogContent>
       </AlertDialog>
       <fieldset disabled={disabled} className="space-y-3">
-        {status.state === 'awaiting_payment' && (
+        {(status.state === 'awaiting_payment' ||
+          workspace.bankEvidence.some((entry) => !entry.status)) && (
           <div className="grid gap-1.5 sm:max-w-lg">
             <Label htmlFor="top-up-evidence">Verified transfer</Label>
             <select

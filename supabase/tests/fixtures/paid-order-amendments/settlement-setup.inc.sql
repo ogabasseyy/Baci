@@ -33,11 +33,11 @@ BEGIN
   WHERE id = wallet;
   INSERT INTO public.orders(id,merchant_id,order_number,source,currency,payment_method,payment_status,shipping_status,total,subtotal,amount_paid)
   VALUES (o,m,o::text,'online_store','NGN','card','paid','pending',300000,300000,300000);
-  INSERT INTO public.products(id,merchant_id,name,price,status,taxable,vat_rate,stock_quantity,manage_stock,inventory_tracking_policy)
-  VALUES (source,m,'Original',300000,'active',false,0,0,true,'off'),
-    (replacement,m,'Replacement',300000+p_delta::numeric/100,'active',false,0,1,true,'off');
-  INSERT INTO public.order_items(id,order_id,product_id,name,price,quantity,vat_rate,vat_amount)
-    VALUES (line,o,source,'Original',300000,1,0,0);
+  INSERT INTO public.products(id,merchant_id,name,price,status,taxable,vat_rate,stock_quantity,manage_stock,inventory_tracking_policy,images)
+  VALUES (source,m,'Original',300000,'active',false,0,0,true,'off','["https://example.invalid/original.png"]'),
+    (replacement,m,'Replacement',300000+p_delta::numeric/100,'active',false,0,1,true,'off','["https://example.invalid/replacement.png"]');
+  INSERT INTO public.order_items(id,order_id,product_id,name,price,quantity,vat_rate,vat_amount,image_url)
+    VALUES (line,o,source,'Original',300000,1,0,0,'https://example.invalid/original-snapshot.png');
   INSERT INTO public.transactions(id,merchant_id,order_id,transaction_type,amount,currency,status,gateway,gateway_reference,gateway_response)
   VALUES (capture,m,o,'payment',300000,'NGN','completed','paystack',payment_reference,
     '{"id":"531","channel":"card","domain":"test","integration":"987"}');

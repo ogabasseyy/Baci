@@ -10,6 +10,50 @@ $$;
 ROLLBACK;
 
 \ir fixtures/paid-order-amendments/settlement-setup.inc.sql
+
+BEGIN;
+DO $$
+DECLARE
+  held jsonb := pg_temp.amendment_settlement_seed(-5000000);
+  eligible jsonb := pg_temp.amendment_settlement_seed(0);
+  held_order uuid := (held->>'order')::uuid;
+  eligible_order uuid := (eligible->>'order')::uuid;
+  held_wallet uuid := (held->>'wallet')::uuid;
+  eligible_wallet uuid := (eligible->>'wallet')::uuid;
+BEGIN
+  PERFORM set_config('request.jwt.claim.role','service_role',true);
+  PERFORM public.process_due_settlements();
+
+  IF (SELECT status FROM public.merchant_settlements WHERE source_id = held_order) IS DISTINCT FROM 'pending'
+    OR EXISTS (SELECT 1 FROM public.wallet_transactions WHERE source_id = held_order AND type = 'credit')
+    OR (SELECT upcoming_balance FROM public.merchant_wallets WHERE id = held_wallet) IS DISTINCT FROM 299000
+    OR (SELECT available_balance FROM public.merchant_wallets WHERE id = held_wallet) IS DISTINCT FROM 0
+    OR (SELECT status FROM public.merchant_settlements WHERE source_id = eligible_order) IS DISTINCT FROM 'settled'
+    OR (SELECT count(*) FROM public.wallet_transactions WHERE source_id = eligible_order AND type = 'credit') <> 1
+    OR (SELECT available_balance FROM public.merchant_wallets WHERE id = eligible_wallet) IS DISTINCT FROM 299000
+  THEN
+    RAISE EXCEPTION 'due settlements did not preserve only the open amendment refund hold';
+  END IF;
+
+  PERFORM public.process_due_settlements();
+  IF (SELECT count(*) FROM public.wallet_transactions WHERE source_id = eligible_order AND type = 'credit') <> 1
+    OR EXISTS (SELECT 1 FROM public.wallet_transactions WHERE source_id = held_order AND type = 'credit')
+  THEN
+    RAISE EXCEPTION 'repeat settlement released held money or credited twice';
+  END IF;
+
+  IF (SELECT image_url FROM public.order_items WHERE id = (held->>'line')::uuid)
+    IS DISTINCT FROM 'https://example.invalid/replacement.png'
+  THEN RAISE EXCEPTION 'confirmed replacement retained the original image snapshot'; END IF;
+  PERFORM set_config('request.jwt.claim.role','authenticated',true);
+  PERFORM set_config('request.jwt.claim.sub',held->>'actor',true);
+  PERFORM pg_temp.amendment_action(held,'{"action":"reverse","reason":"Fixture image reversal","idempotencyKey":"fixture-image-reversal"}');
+  IF (SELECT image_url FROM public.order_items WHERE id = (held->>'line')::uuid)
+    IS DISTINCT FROM 'https://example.invalid/original-snapshot.png'
+  THEN RAISE EXCEPTION 'reversal failed to restore the original image snapshot'; END IF;
+END;
+$$;
+ROLLBACK;
 BEGIN;
 DO $$
 DECLARE

@@ -86,15 +86,17 @@ describe('POST /api/cron/process-settlements', () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
-  it('does not release due settlements when refund reconciliation is unavailable', async () => {
+  it('logs refund reconciliation failure and continues the guarded settlement run', async () => {
     vi.stubEnv('PAID_ORDER_AMENDMENT_REFUND_WORKER_ENABLED', 'true');
     mocks.drainPaystackAmendmentRefunds.mockRejectedValue(new Error('offline'));
 
     const response = await POST(makeCronRequest());
 
-    expect(response.status).toBe(503);
-    expect(mocks.rpc).not.toHaveBeenCalledWith('process_due_settlements');
-    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith('process_due_settlements');
+    expect(mocks.loggerError).toHaveBeenCalledWith({
+      message: 'Amendment refund worker could not complete its pass',
+    });
   });
 
   it('rejects requests without the configured cron secret before processing settlements', async () => {

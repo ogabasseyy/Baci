@@ -111,6 +111,7 @@ vi.mock('@/lib/korapay', () => ({
 // Paystack mocks
 const mockInitializePaystack = vi.fn();
 vi.mock('@/lib/paystack', () => ({
+  isPaystackConfigured: () => true,
   initializeTransaction: (...args: unknown[]) =>
     mockInitializePaystack(...args),
   calculatePlatformFee: (amount: number) => ({
@@ -424,6 +425,28 @@ describe('POST /api/payments/initialize', () => {
     expect(payload.channels).toEqual(['card']);
     expect(payload).not.toHaveProperty('subaccount');
     expect(payload).not.toHaveProperty('transaction_charge');
+    expect(rpcCalls).toContainEqual({
+      name: 'claim_checkout_for_paid_order_amendment',
+      args: expect.objectContaining({ p_gateway: 'paystack_no_subaccount' }),
+    });
+  });
+
+  it('does not claim or submit after a local Paystack preflight failure', async () => {
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        customer_phone: 'not-a-phone',
+        tracking_token: 'track-token-123',
+      })
+    );
+    expect(response.status).toBe(502);
+    expect(
+      rpcCalls.some(
+        ({ name }) => name === 'claim_checkout_for_paid_order_amendment'
+      )
+    ).toBe(false);
+    expect(mockInitializePaystack).not.toHaveBeenCalled();
   });
 
   it('holds the checkout claim through provider acceptance and a failed local write', async () => {

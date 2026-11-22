@@ -186,6 +186,12 @@ describe('CustomerOrderDetailsContent', () => {
       screen.getByRole('link', { name: 'Original invoice' })
     ).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Revised invoice' })).toBeNull();
+    expect(
+      screen.getByRole('link', { name: 'Download Invoice' })
+    ).toHaveAttribute(
+      'href',
+      '/api/storefront/account/orders/order-1/invoice?merchantSlug=ogabassey'
+    );
   });
 
   it('renders condition and variant metadata for order items', () => {

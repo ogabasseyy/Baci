@@ -25,8 +25,24 @@ BEGIN
     payment_status,shipping_status,total,subtotal,amount_paid,tracking_token,customer_email)
     VALUES (v_order,v_merchant,'FIXTURE-SURCHARGE-REFUND','online_store','NGN','card',
       'unpaid','pending',100,100,0,'synthetic-surcharge-proof','fixture-surcharge-shopper@example.invalid');
-  IF public.claim_checkout_for_paid_order_amendment(v_order,'synthetic-surcharge-proof','paystack',
-    v_ref,'NGN',10000) IS DISTINCT FROM 'claimed_integration' THEN
+  UPDATE private.paid_order_amendment_config SET integration_wallet_checkout = false WHERE merchant_id = v_merchant;
+  BEGIN
+    PERFORM public.claim_checkout_for_paid_order_amendment(v_order,'synthetic-surcharge-proof','paystack_no_subaccount',
+      v_ref,'NGN',10000);
+    RAISE EXCEPTION 'checkout claimed without a subaccount or integration wallet';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'checkout_gateway_not_configured' THEN RAISE; END IF;
+  END;
+  UPDATE private.paid_order_amendment_config SET integration_wallet_checkout = true WHERE merchant_id = v_merchant;
+  BEGIN
+    PERFORM public.claim_checkout_for_paid_order_amendment(v_order,'synthetic-surcharge-proof','paystack_no_subaccount',
+      v_ref,'NGN',10000,200,1);
+    RAISE EXCEPTION 'changed shipping economics created a checkout claim';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'checkout_payment_details_changed' THEN RAISE; END IF;
+  END;
+  IF public.claim_checkout_for_paid_order_amendment(v_order,'synthetic-surcharge-proof','paystack_no_subaccount',
+    v_ref,'NGN',10000,200,0) IS DISTINCT FROM 'claimed_integration' THEN
     RAISE EXCEPTION 'integration wallet checkout was not bound';
   END IF;
   v_capture := jsonb_build_object('id',345,'reference',v_ref,'integration',987,'domain','test',

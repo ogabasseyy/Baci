@@ -73,12 +73,6 @@ export async function POST(request: Request) {
         logger.error({
           message: 'Amendment refund worker could not complete its pass',
         });
-        if (parsedQuery.data.cancellationsOnly !== 'true') {
-          return NextResponse.json(
-            { error: 'Amendment refund reconciliation unavailable' },
-            { status: 503 }
-          );
-        }
       }
     }
     if (process.env.PAID_ORDER_AMENDMENT_UPDATES_ENABLED === 'true') {

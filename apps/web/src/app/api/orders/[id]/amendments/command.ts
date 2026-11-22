@@ -168,8 +168,8 @@ function amendmentResponse({
   if (error.code === '55P03') {
     return NextResponse.json(
       {
-        code: 'preview_stale',
-        error: 'The order changed. Preview the replacement again.',
+        code: 'amendment_busy',
+        error: 'This order is busy. Please try again shortly.',
       },
       { status: 409 }
     );

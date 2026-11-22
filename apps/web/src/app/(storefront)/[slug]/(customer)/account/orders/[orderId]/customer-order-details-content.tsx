@@ -71,7 +71,7 @@ export function CustomerOrderDetailsContent({
   const documentRevision = order.amendment
     ? order.current_document_kind === 'receipt'
       ? 'current'
-      : (order.amendment.documentId ?? 'current')
+      : order.amendment.documentId
     : null;
   const documentHref = `/api/storefront/account/orders/${order.id}/${order.current_document_kind}?merchantSlug=${encodeURIComponent(merchantSlug)}${documentRevision ? `&revision=${documentRevision}` : ''}`;
   const firstItem = order.items[0];

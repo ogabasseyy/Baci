@@ -50,7 +50,7 @@ New bank-offer payment transactions start pending. The insert guard requires ver
 
 When a signed webhook has no matching saved bank-offer attempt, platform operations should look up the `payment_match_zero_candidates` review by `paystack_ref`. The row is intentionally unassigned because tenant and order identity come from the saved attempt. The webhook metadata does not establish that relationship. The platform queue deduplicates open rows by issue type and Paystack reference, and the webhook acknowledges a duplicate.
 
-Hosted storefront callbacks use HTTPS with both Paystack test and live keys. A custom-domain lookup error returns a retryable response before claiming a payment attempt. Non-production localhost can use HTTP for local QA with mocked Paystack responses.
+Bank-offer checkout accepts HTTPS URLs on `checkout.paystack.com`, the host in [Paystack’s transaction initialization example](https://paystack.com/docs/api/transaction/#initialize). Verify any additional checkout host with Paystack before accepting it. Hosted storefront callbacks use HTTPS with both Paystack test and live keys. A custom-domain lookup error returns a retryable response before claiming a payment attempt. Non-production localhost can use HTTP for local QA with mocked Paystack responses.
 
 Before switching between Paystack test and live keys, finish or reconcile outstanding attempts with the original domain's credentials. Confirm abandoned references cannot charge before retiring them. Retain access to the original domain for payment reconciliation and refunds. Reusing a saved attempt across domains is blocked by design.
 
@@ -97,7 +97,7 @@ WHERE snapshot.order_id = $1::uuid
 ORDER BY order_item_id, unit_number;
 ```
 
-Run the read-only checker from the repository root using a direct, TLS-verified Operations database connection in `BANK_OFFER_REFUND_READ_DATABASE_URL` and the Paystack key for the saved capture in `PAYSTACK_SECRET_KEY`. Use existing authorized database access for the private snapshot, payment attempt, cancellation status, and capture lookup. The CLI runs its database session in read-only mode.
+Run the read-only checker from the repository root using a direct, TLS-verified Operations database connection in `BANK_OFFER_REFUND_READ_DATABASE_URL` and the Paystack key for the saved capture in `PAYSTACK_SECRET_KEY`. Use an authorized Operations credential scoped to reading the private snapshot, payment attempt, and cancellation status and executing the capture lookup. Store the connection URL with Operations credentials and keep it out of storefront and worker environments. The CLI runs its database session in read-only mode.
 
 ```sh
 pnpm --filter @baci/web check:bank-offer-partial-refund <order-uuid> <merchant-uuid> /path/to/return.json

@@ -2,77 +2,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import {
-  binding,
-  conversation,
-  stubFetch,
-} from './merchant-inbox-client.test-support';
+import { binding } from './merchant-inbox-client.test-support';
 import { searchMerchantInboxConversations } from './merchant-inbox-search-client';
+import {
+  contactRow,
+  messageRow,
+  named,
+  stub,
+} from './merchant-inbox-search-client.test-support';
 
 afterEach(() => vi.unstubAllGlobals());
-
-/** Row of `/search/conversations` as Chatwoot v4.19.1 renders it. */
-const contactRow = (id: number, inboxId: number, name = 'Ada') => ({
-  id,
-  account_id: 2,
-  created_at: 1_794_720_151,
-  message: {},
-  contact: { id: 5, name },
-  inbox: { id: inboxId, name: 'Web', channel_type: 'Channel::WebWidget' },
-  agent: {},
-  additional_attributes: {},
-});
-
-/** Row of `/conversations/search` (models/_conversation partial). */
-const messageRow = (
-  id: number,
-  inboxId: number,
-  messages: Array<{ content: string; message_type: number }> = []
-) => ({
-  id,
-  uuid: `uuid-${id}`,
-  created_at: 1_794_720_151,
-  contact: { id: 5, name: 'Ada' },
-  inbox: { id: inboxId, name: 'Web', channel_type: 'Channel::WebWidget' },
-  messages: messages.map((m, i) => ({ id: i + 1, ...m, created_at: 1 })),
-  account_id: 2,
-});
-
-type Routes = {
-  contact?: unknown;
-  message?: unknown;
-  contactStatus?: number;
-  messageStatus?: number;
-  /** Full conversation reads, by id. */
-  reads?: Record<number, unknown>;
-};
-
-function stub(routes: Routes) {
-  const calls: URL[] = [];
-  const fetchMock = stubFetch((url) => {
-    calls.push(url);
-    const path = url.pathname.replace('/api/v1/accounts/2', '');
-    if (path === '/search/conversations') {
-      return routes.contactStatus
-        ? { status: routes.contactStatus }
-        : { body: routes.contact ?? { payload: { conversations: [] } } };
-    }
-    if (path === '/conversations/search') {
-      return routes.messageStatus
-        ? { status: routes.messageStatus }
-        : { body: routes.message ?? { meta: {}, payload: [] } };
-    }
-    const id = Number(path.split('/')[2]);
-    const read = routes.reads?.[id];
-    return read ? { body: read } : { status: 404 };
-  });
-  return { calls, fetchMock };
-}
-
-const named = (id: number, name: string, inboxId = 20) => ({
-  ...conversation(id, inboxId),
-  meta: { sender: { name } },
-});
 
 describe('searchMerchantInboxConversations', () => {
   it('finds a chat by name through the contact search, reading it in full', async () => {
@@ -253,77 +192,5 @@ describe('searchMerchantInboxConversations', () => {
     await expect(
       searchMerchantInboxConversations(binding, { q: 'a', page: 1 })
     ).resolves.toEqual({ ok: false, code: 'unavailable' });
-  });
-
-  it('keeps paging when a page held only other stores chats', async () => {
-    stub({
-      contact: { payload: { conversations: [contactRow(9, 99)] } },
-    });
-    await expect(
-      searchMerchantInboxConversations(binding, { q: 'a', page: 1 })
-    ).resolves.toEqual({ ok: true, results: [], hasMore: true });
-  });
-
-  it('stops paging on empty provider pages', async () => {
-    stub({});
-    await expect(
-      searchMerchantInboxConversations(binding, { q: 'zz', page: 9 })
-    ).resolves.toEqual({ ok: true, results: [], hasMore: false });
-  });
-
-  it('bugfix: keeps every match of a provider page, none lost beyond twenty', async () => {
-    const rows = Array.from({ length: 30 }, (_, i) => contactRow(i + 1, 20));
-    const reads: Record<number, unknown> = {};
-    for (let i = 1; i <= 30; i++) {
-      reads[i] = {
-        ...named(i, `Shopper ${i}`),
-        last_activity_at: 1_794_720_000 + i,
-      };
-    }
-    const { calls } = stub({
-      contact: { payload: { conversations: rows } },
-      reads,
-    });
-
-    const result = await searchMerchantInboxConversations(binding, {
-      q: 'shopper',
-      page: 1,
-    });
-
-    expect(result.ok && result.results).toHaveLength(30);
-    // Newest first, and the ones past twenty are present.
-    expect(result.ok && result.results[0].conversation.id).toBe(30);
-    expect(
-      result.ok && result.results.some((r) => r.conversation.id === 21)
-    ).toBe(true);
-    expect(
-      calls.filter((u) => /\/conversations\/\d+$/.test(u.pathname))
-    ).toHaveLength(30);
-  });
-
-  it('merges both searches at their full page sizes without losing any', async () => {
-    const message = Array.from({ length: 25 }, (_, i) => messageRow(i + 1, 20));
-    const contact = Array.from({ length: 15 }, (_, i) =>
-      contactRow(i + 100, 20)
-    );
-    const reads: Record<number, unknown> = {};
-    for (const id of [
-      ...message.map((m) => m.id),
-      ...contact.map((c) => c.id),
-    ]) {
-      reads[id] = named(id, `Shopper ${id}`);
-    }
-    stub({
-      message: { meta: {}, payload: message },
-      contact: { payload: { conversations: contact } },
-      reads,
-    });
-
-    const result = await searchMerchantInboxConversations(binding, {
-      q: 'x',
-      page: 1,
-    });
-
-    expect(result.ok && result.results).toHaveLength(40);
   });
 });

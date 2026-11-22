@@ -109,10 +109,11 @@ describe('useInboxConversations', () => {
     expect(result.current.data?.pages).toHaveLength(2);
   });
 
-  it('does not ask until the merchant is known', async () => {
+  it('does not ask until the merchant is known', () => {
     mocks.merchant.mockReturnValue({ merchant: null });
-    renderHook(() => useInboxConversations(), { wrapper });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const { result } = renderHook(() => useInboxConversations(), { wrapper });
+    // The query is switched off, so it never starts: no waiting needed.
+    expect(result.current.fetchStatus).toBe('idle');
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 

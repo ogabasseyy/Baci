@@ -134,6 +134,29 @@ run_test("patches pristine or preserves cached patched source and normal lookups
       end
       assert_equal(:raised, nonmatching_result, "nonmatching autoload error")
       assert_equal([], nonmatching_regexp_calls, "nonmatching autoload error avoids Regexp matching")
+
+      ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
+        raise LoadError, "Unable to autoload constant ActiveSupport"
+      end
+      namespaced_result, namespaced_regexp_calls = capture_regexp_matching_calls do
+        ActiveSupport::Inflector.safe_constantize("ActiveSupport::Inflector::MissingConstant")
+      end
+      assert_equal(nil, namespaced_result, "namespaced first-segment autoload error")
+      assert_equal([], namespaced_regexp_calls, "namespaced autoload error avoids Regexp matching")
+
+      ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
+        raise LoadError, "Unable to autoload constant UnrelatedName"
+      end
+      namespaced_nonmatching_result, namespaced_nonmatching_regexp_calls = capture_regexp_matching_calls do
+        begin
+          ActiveSupport::Inflector.safe_constantize("ActiveSupport::Inflector::MissingConstant")
+          :returned
+        rescue LoadError
+          :raised
+        end
+      end
+      assert_equal(:raised, namespaced_nonmatching_result, "namespaced nonmatching autoload error")
+      assert_equal([], namespaced_nonmatching_regexp_calls, "namespaced nonmatching autoload error avoids Regexp matching")
     ensure
       ActiveSupport::Inflector.define_singleton_method(:constantize, original_constantize)
     end

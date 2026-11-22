@@ -55,6 +55,12 @@ describe('proxy CSP', () => {
     expect(candidate).not.toContain('report-to');
   });
 
+  it('does not produce a report-only candidate without an input script-src', () => {
+    expect(
+      generateStorefrontCspReportOnlyCandidate("default-src 'self'")
+    ).toBeNull();
+  });
+
   it('removes the local eval exception and replaces duplicate candidate directives', () => {
     const local = generateCSP('storefront', true);
     const candidate = generateStorefrontCspReportOnlyCandidate(

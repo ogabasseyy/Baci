@@ -93,10 +93,10 @@ export function applySecurityHeaders(
     process.env.NODE_ENV !== 'production' &&
     process.env.BACI_CSP_REPORT_ONLY_PREVIEW === 'true'
   ) {
-    response.headers.set(
-      'Content-Security-Policy-Report-Only',
-      generateStorefrontCspReportOnlyCandidate(csp)
-    );
+    const candidate = generateStorefrontCspReportOnlyCandidate(csp);
+    if (candidate) {
+      response.headers.set('Content-Security-Policy-Report-Only', candidate);
+    }
   }
 
   // Add missing security headers

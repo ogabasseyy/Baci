@@ -113,7 +113,9 @@ export function generateCSP(
  * while leaving the enforced policy untouched. The preview deliberately has no
  * reporting endpoint, so violations are observable only in local DevTools.
  */
-export function generateStorefrontCspReportOnlyCandidate(csp: string): string {
+export function generateStorefrontCspReportOnlyCandidate(
+  csp: string
+): string | null {
   const directives = csp
     .split(';')
     .map((directive) => normalizeCspDirective(directive))
@@ -121,7 +123,9 @@ export function generateStorefrontCspReportOnlyCandidate(csp: string): string {
   const scriptSource = directives.findIndex(
     (directive) => getCspDirectiveName(directive) === 'script-src'
   );
-  if (scriptSource === -1) return csp;
+  // Without a script-src directive there is no defined script policy to
+  // tighten. Do not emit an enforced-equivalent Report-Only header.
+  if (scriptSource === -1) return null;
 
   const [name, ...sources] = directives[scriptSource].split(' ');
   directives[scriptSource] = [

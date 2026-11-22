@@ -2,11 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import postgres from 'postgres';
 import { listPaystackRefunds } from '../lib/orders/list-paystack-refunds';
-import {
-  partialRefundCliArgsSchema,
-  partialRefundDatabaseUrlSchema,
-  partialRefundManifestSchema,
-} from '../schemas/bank-offer-partial-refund-input';
+import { partialRefundCliArgsSchema } from '../schemas/bank-offer-partial-refund-cli-args';
+import { partialRefundDatabaseUrlSchema } from '../schemas/bank-offer-partial-refund-database-url';
+import { partialRefundManifestSchema } from '../schemas/bank-offer-partial-refund-input';
 import { checkBankOfferPartialRefund } from './check-bank-offer-partial-refund';
 
 async function checkRefund(argv: readonly string[]): Promise<number> {

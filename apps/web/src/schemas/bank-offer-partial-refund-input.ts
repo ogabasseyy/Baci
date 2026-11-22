@@ -16,12 +16,4 @@ export const partialRefundManifestSchema = z.strictObject({
   previousRefunds: z.array(z.strictObject({ refundId: decimalId, units })),
 });
 
-export const partialRefundCliArgsSchema = z.tuple([
-  z.uuid(),
-  z.uuid(),
-  z.string().min(1),
-]);
-export const partialRefundDatabaseUrlSchema = z.url({
-  protocol: /^postgres(?:ql)?$/,
-});
 export type PartialRefundManifest = z.infer<typeof partialRefundManifestSchema>;

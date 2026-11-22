@@ -1,5 +1,11 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { CountryCode } from 'react-native-country-picker-modal';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEmptyNewCustomerDraft } from '@/components/orders/new-order.defaults';
@@ -48,6 +54,7 @@ vi.mock('@gorhom/bottom-sheet', async () => {
         {
           accessibilityLabel,
           onChangeText,
+          onFocus,
           onSubmitEditing,
           placeholder,
           returnKeyType,
@@ -56,6 +63,7 @@ vi.mock('@gorhom/bottom-sheet', async () => {
         }: {
           accessibilityLabel?: string;
           onChangeText?: (value: string) => void;
+          onFocus?: () => void;
           onSubmitEditing?: () => void;
           placeholder?: string;
           returnKeyType?: string;
@@ -69,6 +77,7 @@ vi.mock('@gorhom/bottom-sheet', async () => {
           'data-gorhom-input': 'true',
           'data-return-key-type': returnKeyType,
           'data-submit-behavior': submitBehavior,
+          onFocus,
           onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
             onChangeText?.(event.target.value),
           onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -429,6 +438,202 @@ describe('NewOrderCustomerCreateView', () => {
       'true'
     );
     expect(screen.queryByText('Save Customer')).not.toBeInTheDocument();
+  });
+
+  it('keeps the typed delivery address when choosing a duplicate customer', () => {
+    const duplicateCustomer: SelectableCustomer = {
+      address: null,
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({
+      duplicateCustomer,
+      newCustomer: {
+        ...createEmptyNewCustomerDraft(),
+        address: '10 Hospital Road',
+      },
+    });
+    render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
+
+    expect(
+      screen.getByText('The address you entered will be used for this order.')
+    ).toBeInTheDocument();
+    const button = screen.getByText('Use This').closest('button');
+    if (!button) throw new Error('Missing customer selection button');
+    fireEvent.click(button);
+    expect(harness.controller.handleSelectCustomer).toHaveBeenCalledWith(
+      duplicateCustomer,
+      true
+    );
+  });
+
+  it('explains that a city without a street cannot replace the saved destination', () => {
+    const duplicateCustomer: SelectableCustomer = {
+      address: '12 Allen Avenue',
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({
+      duplicateCustomer,
+      newCustomer: { ...createEmptyNewCustomerDraft(), city: 'Lokoja' },
+    });
+    render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
+    expect(
+      screen.getByText(
+        /add a street address to use the entered delivery details/i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('warns when delivery details without a street would be replaced by the saved destination', () => {
+    const duplicateCustomer: SelectableCustomer = {
+      address: '12 Allen Avenue',
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({
+      duplicateCustomer,
+      newCustomer: {
+        ...createEmptyNewCustomerDraft(),
+        country: 'Nigeria',
+        postalCode: '900001',
+      },
+    });
+    render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
+    expect(
+      screen.getByText(
+        /add a street address to use the entered delivery details/i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('does not show a delivery warning for an empty draft and duplicate customer', () => {
+    const duplicateCustomer: SelectableCustomer = {
+      address: '12 Allen Avenue',
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({ duplicateCustomer });
+    render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
+    expect(
+      screen.queryByText(
+        /add a street address to use the entered delivery details/i
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps duplicate selection disabled until selected place details resolve', async () => {
+    let resolveDetails:
+      | ((response: { ok: boolean; json: () => Promise<unknown> }) => void)
+      | undefined;
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/details/')) {
+        return new Promise((resolve) => {
+          resolveDetails = resolve;
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          predictions: [
+            {
+              description: '12 Allen Avenue, Ikeja, Lagos',
+              place_id: 'place-1',
+              structured_formatting: {
+                main_text: '12 Allen Avenue',
+                secondary_text: 'Ikeja, Lagos',
+              },
+            },
+          ],
+        }),
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const duplicateCustomer: SelectableCustomer = {
+      address: '12 Allen Avenue',
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({ duplicateCustomer });
+    const view = render(
+      <NewOrderCustomerCreateView controller={harness.snapshot()} />
+    );
+    const search = screen.getByPlaceholderText('Search Address');
+    fireEvent.focus(search);
+    fireEvent.change(search, { target: { value: '12 Allen' } });
+    view.rerender(
+      <NewOrderCustomerCreateView controller={harness.snapshot()} />
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: 'Use address 12 Allen Avenue, Ikeja, Lagos',
+        })
+      ).toBeInTheDocument()
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Use address 12 Allen Avenue, Ikeja, Lagos',
+      })
+    );
+
+    const useExisting = screen.getByRole('button', {
+      name: 'Use existing customer',
+    });
+    expect(useExisting).toBeDisabled();
+    fireEvent.click(useExisting);
+    expect(harness.controller.handleSelectCustomer).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveDetails?.({
+        ok: true,
+        json: async () => ({
+          status: 'OK',
+          result: {
+            address_components: [
+              { long_name: 'Ikeja', types: ['locality'] },
+              {
+                long_name: 'Lagos',
+                types: ['administrative_area_level_1'],
+              },
+            ],
+            geometry: { location: { lat: 6.6, lng: 3.3 } },
+          },
+        }),
+      });
+    });
+    await waitFor(() => expect(useExisting).not.toBeDisabled());
   });
 
   it('surfaces an existing duplicate customer and reuses it from the banner', () => {

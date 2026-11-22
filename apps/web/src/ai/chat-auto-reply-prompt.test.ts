@@ -56,9 +56,21 @@ describe('formatChatAutoReplyProducts', () => {
     } as unknown as ChatProductResult;
     expect(formatChatAutoReplyProducts([variants, offers], 'NGN')).toBe(
       [
-        '- Demo Phone | NGN 450000 | availability depends on the option chosen',
-        '- Demo Laptop | NGN 900000 | availability depends on the option chosen',
+        '- Demo Phone | base price NGN 450000, exact price depends on the option chosen | availability depends on the option chosen',
+        '- Demo Laptop | base price NGN 900000, exact price depends on the option chosen | availability depends on the option chosen',
       ].join('\n')
+    );
+  });
+
+  it('never presents the parent price of an option product as an exact price, even in stock', () => {
+    const variants = {
+      name: 'Demo Phone',
+      price: 100000,
+      stock: 4,
+      has_variants: true,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([variants], 'NGN')).toBe(
+      '- Demo Phone | base price NGN 100000, exact price depends on the option chosen | in stock'
     );
   });
 

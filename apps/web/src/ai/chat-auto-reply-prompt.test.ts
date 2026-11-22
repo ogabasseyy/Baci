@@ -62,7 +62,7 @@ describe('formatChatAutoReplyProducts', () => {
     );
   });
 
-  it('never presents the parent price of an option product as an exact price, even in stock', () => {
+  it('never presents the parent price or parent stock of an option product as exact', () => {
     const variants = {
       name: 'Demo Phone',
       price: 100000,
@@ -70,7 +70,7 @@ describe('formatChatAutoReplyProducts', () => {
       has_variants: true,
     } as unknown as ChatProductResult;
     expect(formatChatAutoReplyProducts([variants], 'NGN')).toBe(
-      '- Demo Phone | base price NGN 100000, exact price depends on the option chosen | in stock'
+      '- Demo Phone | base price NGN 100000, exact price depends on the option chosen | availability depends on the option chosen'
     );
   });
 

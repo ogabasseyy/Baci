@@ -124,6 +124,7 @@ export function createNewOrderCustomerActions({
           normalizeStreetAddressForComparison(address.state) ===
             normalizeStreetAddressForComparison(item.state ?? '')) &&
         (!address.countryCode ||
+          !item.country_code?.trim() ||
           address.countryCode.toLowerCase() ===
             item.country_code?.trim().toLowerCase()));
     const profile = sameDestination ? item : undefined;

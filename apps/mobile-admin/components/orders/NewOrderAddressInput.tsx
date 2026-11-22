@@ -49,7 +49,11 @@ export function NewOrderAddressInput({
   const [manualLocality, setManualLocality] = useState(false);
 
   const setLocality = (field: 'city' | 'state', text: string) => {
-    setManualLocality(true);
+    if (
+      deliveryInfo[field].trim().toLowerCase() !== text.trim().toLowerCase()
+    ) {
+      setManualLocality(true);
+    }
     setDeliveryInfo((previous) => {
       if (previous[field].trim().toLowerCase() === text.trim().toLowerCase()) {
         return { ...previous, [field]: text };
@@ -199,7 +203,7 @@ export function NewOrderAddressInput({
             <View style={{ marginTop: 8 }}>
               {manualLocality ? (
                 <Text style={[styles.listSubValue, { color: colors.warning }]}>
-                  Street changed. Confirm or re-enter the city and state before
+                  Confirm the city and state match the delivery address before
                   saving.
                 </Text>
               ) : null}

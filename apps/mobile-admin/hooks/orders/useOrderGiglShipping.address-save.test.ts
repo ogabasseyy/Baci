@@ -125,6 +125,43 @@ describe('bugfix: GIG bind refused typed address details as stale inputs', () =>
     expect(server.patch).not.toHaveBeenCalled();
   });
 
+  it('reveals locality fields when a street edit clears them from an address-only missing state', async () => {
+    server.getQuote.mockRejectedValueOnce(
+      Object.assign(new Error('Incomplete'), {
+        code: 'ORDER_SHIPPING_ADDRESS_INCOMPLETE',
+        missing: ['address'],
+      })
+    );
+    const { result } = renderBoundQuote({
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: {
+        city: 'Ikeja',
+        name: 'Ada',
+        phone: '0801',
+        state: 'Lagos',
+      },
+    });
+    await flushPromises();
+
+    expect(result.current.missingFields).toEqual(['address']);
+    act(() => result.current.updateAddressField('address', '10 Hospital Road'));
+    expect(result.current.missingFields).toEqual(['address', 'city', 'state']);
+
+    act(() => {
+      result.current.updateAddressField('city', 'Yaba');
+      result.current.updateAddressField('state', 'Lagos');
+    });
+    await act(() => result.current.saveAddressAndRequestQuote());
+
+    expect(server.patch).toHaveBeenCalledOnce();
+    expect(server.storedAddress).toMatchObject({
+      address: '10 Hospital Road',
+      city: 'Yaba',
+      state: 'Lagos',
+    });
+  });
+
   it('saves typed city and state to the order before binding instead of failing with 409', async () => {
     const { result } = renderBoundQuote({
       customer_name: 'Ada',

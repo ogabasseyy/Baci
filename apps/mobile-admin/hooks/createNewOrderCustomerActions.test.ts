@@ -297,4 +297,49 @@ describe('createNewOrderCustomerActions', () => {
       })
     );
   });
+
+  it('reuses the matching profile locality when its country code is blank', () => {
+    const setCustomer = vi.fn();
+    const actions = makeActions({
+      newCustomer: {
+        ...createEmptyNewCustomerDraft(),
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        countryCode: 'NG',
+      },
+      setCustomer,
+    });
+
+    actions.handleSelectCustomer(
+      {
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        country_code: null,
+        latitude: 6.6,
+        longitude: 3.35,
+        company_name: null,
+        customer_type: 'individual',
+        email: null,
+        first_name: 'Ada',
+        full_name: 'Ada Lovelace',
+        id: 'customer-no-country-code',
+        last_name: 'Lovelace',
+        phone: '08012345678',
+        zip_code: null,
+      },
+      true
+    );
+
+    expect(setCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.35,
+      })
+    );
+  });
 });

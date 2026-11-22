@@ -276,6 +276,37 @@ describe('NewOrderAddressInput', () => {
     ).toMatchObject({ city: 'Ikeja', latitude: 6.6, longitude: 3.4 });
   });
 
+  it('does not show a street-change warning for a case-only locality edit', () => {
+    render(
+      <NewOrderAddressInput
+        controller={makeController({
+          deliveryInfo: {
+            address: 'Saved street',
+            city: 'ikeja',
+            name: 'Ada',
+            phone: '08030000000',
+            state: 'Lagos',
+          },
+        })}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+    const onNotFound = googlePlacesState.lastProps?.onNotFound as
+      | (() => void)
+      | undefined;
+    act(() => onNotFound?.());
+
+    fireEvent.change(screen.getByPlaceholderText('City'), {
+      target: { value: 'Ikeja' },
+    });
+
+    expect(
+      screen.queryByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
   it('updates city and state through dedicated fallback inputs', () => {
     const setDeliveryInfo = vi.fn();
     render(
@@ -546,7 +577,7 @@ describe('NewOrderAddressInput', () => {
     });
     expect(
       screen.getByText(
-        'Street changed. Confirm or re-enter the city and state before saving.'
+        'Confirm the city and state match the delivery address before saving.'
       )
     ).toBeInTheDocument();
 
@@ -630,7 +661,7 @@ describe('NewOrderAddressInput', () => {
     });
     expect(
       screen.queryByText(
-        'Street changed. Confirm or re-enter the city and state before saving.'
+        'Confirm the city and state match the delivery address before saving.'
       )
     ).toBeNull();
   });

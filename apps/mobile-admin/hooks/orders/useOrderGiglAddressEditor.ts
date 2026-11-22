@@ -60,10 +60,23 @@ export function useOrderGiglAddressEditor({
     setAddressDraft(addressRef.current);
     invalidateQuote();
   };
-  const updateAddressField = (field: OrderGiglMissingField, value: string) =>
+  const exposeMissingLocalityFields = () => {
+    const missingLocality = (['city', 'state'] as const).filter(
+      (field) => !addressRef.current[field]?.trim()
+    );
+    if (missingLocality.length === 0) return;
+    setMissingFields((previous) => [
+      ...new Set([...previous, ...missingLocality]),
+    ]);
+  };
+  const updateAddressField = (field: OrderGiglMissingField, value: string) => {
     editDraft((draft) => applyAddressField(draft, field, value));
-  const selectAddressPlace = (place: OrderGiglSelectedPlace) =>
+    if (field === 'address') exposeMissingLocalityFields();
+  };
+  const selectAddressPlace = (place: OrderGiglSelectedPlace) => {
     editDraft((draft) => applySelectedPlace(draft, place));
+    exposeMissingLocalityFields();
+  };
   // biome-ignore lint/correctness/useExhaustiveDependencies: scalar address deps
   useLayoutEffect(() => {
     initialAddressRef.current = initialAddress;

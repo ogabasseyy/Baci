@@ -12,7 +12,7 @@ const AGENT_TRUST_SCHEMA_VERSION = '2026-05-20';
 const ROOT_DOMAIN = (getRootDomain() || 'usebaci.com').toLowerCase();
 const AGENT_TRUST_CACHE_CONTROL = 'public, max-age=60';
 const AGENT_TRUST_CDN_CACHE_CONTROL =
-  'public, s-maxage=300, stale-while-revalidate=3600';
+  'public, s-maxage=1800, stale-while-revalidate=86400';
 
 // Cold agent-trust misses build feed parity and review signals; keep the
 // machine-readable route within Vercel's documented function-duration config

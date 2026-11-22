@@ -80,12 +80,15 @@ function transactionQuery(data: unknown) {
 describe('cancellation refund leg matching', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('quarantines a leg whose completed refund is partial', async () => {
+  it.each([
+    ['paystack', 'paystack-ref'],
+    ['bank_card_offer', `BCO-${'a'.repeat(32)}`],
+  ])('quarantines a %s leg whose completed refund is partial', async (paymentMethod, reference) => {
     const reviewInsert = vi.fn().mockResolvedValue({ error: null });
     const from = vi
       .fn()
       .mockReturnValueOnce(
-        transactionQuery([payment('payment-1', 100, 'paystack-ref')])
+        transactionQuery([payment('payment-1', 100, reference)])
       )
       .mockReturnValueOnce(
         transactionQuery([completedRefund('payment-1', { amount: 40 })])
@@ -96,7 +99,7 @@ describe('cancellation refund leg matching', () => {
     await expect(
       executeOrderCancellationSideEffect({
         merchant,
-        order,
+        order: { ...order, payment_method: paymentMethod },
         step: 'refund',
         supabase: { from } as never,
       })

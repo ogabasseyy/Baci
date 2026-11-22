@@ -1,4 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
@@ -76,6 +77,8 @@ import {
   referenceSchema,
 } from '@/schemas/payments';
 import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
+import { handleBankCardOfferDispute } from './handle-bank-card-offer-dispute';
+import { handleBankCardOfferWebhook } from './handle-bank-card-offer-webhook';
 import {
   dispatchPaystackCheckoutOnlyWebhook,
   dispatchPaystackSharedKeyWebhook,
@@ -675,6 +678,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (gateway === 'paystack') {
+      const dispute = await handleBankCardOfferDispute(
+        body.event,
+        body.data,
+        createServiceClient
+      );
+      if (dispute) return dispute;
+    }
+
     // Extract reference and check event type based on gateway
     let reference: string;
     let isSuccessEvent = false;
@@ -753,6 +765,17 @@ export async function POST(request: NextRequest) {
 
     // Webhook handlers have no user cookies — use service client to bypass RLS
     const supabase = createServiceClient();
+
+    // Bank offer captures must pass the shared verification path before any
+    // transaction flip or fallback settlement can run.
+    if (hasBankCardOfferReferencePrefix(reference)) {
+      return await handleBankCardOfferWebhook({
+        gateway,
+        reference,
+        supabase,
+        finalize: finalizeOrderGatewayPayment,
+      });
+    }
 
     // Verify payment with the appropriate gateway
     let paymentStatus: string;

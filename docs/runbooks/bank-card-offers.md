@@ -1,0 +1,136 @@
+# Bank card offer payment recovery
+
+## Release and activation
+
+The shipped offer list is empty. Before merging checkout or payment changes, require the full web tests and the DB Replay job on the reviewed commit. That job runs `bank_card_offer_order_snapshots.sql` and `bank_card_offer_payment_attempts.sql` against PostgreSQL after migration replay. Both suites are listed in their original migration folders' `sql-checks.txt` files. They cover saved quotes, buyer ownership, exact capture and refund amounts, replay fences, and the paid-capture reversal queue.
+
+The configurable bank-code allowlist is Wema (`035`) and Sterling (`232`). UBA (`033`) continues on its existing REDVAULT checkout, capture, and refund paths. The bank-offer schema tests reject `033`, and the REDVAULT payment and refund suites exercise the separate UBA path.
+
+Activation for Wema or Sterling uses the server offer configuration. Adding an issuer outside that pair requires a reviewed database allowlist change and matching Paystack issuer validation as well as configuration.
+
+The server checks that the offer is enabled and has started before signing the quote. The checkout RPC also rejects an expired quote against the database clock before creating a new order, and the Paystack attempt claim checks the saved expiry again. An idempotent replay returns the saved order without creating a new quote. Capture verification and refunds use the saved terms after the offer closes.
+
+Before enabling a bank offer, the payments team records the bank approval, confirms the exact issuer label and refund behavior with Paystack, and assigns a duty owner for capture and terminal reviews. With the offer still disabled, confirm that both review types reach the team's alerting and agree on a response target. Review-gated checkout directs buyers to order history or support while that owner reconciles the original payment reference.
+
+Bank offers require a signed-in shopper whose account email matches the checkout email. The saved order must belong to that customer before a payment attempt can be claimed. Guest shoppers can still use standard checkout. A fresh bank-offer order requires Paystack to be enabled and a valid subaccount before inventory is reserved.
+
+`BANK_CARD_OFFERS` in the server is the source of truth for merchant eligibility, offer dates, eligible products, discount rate and cap. The checkout route signs the quote and order together. The database checks that proof, validates the allocations against the order, and saves the result for verification and refunds. It does not maintain a second offer configuration.
+
+Web and mobile clients must send `expected_total` for bank-offer orders. It is the total the shopper accepted after the offer, shipping, exclusive tax, gift wrapping, and assurance fees. If it is missing or differs from the server quote in kobo, checkout returns `BANK_CARD_OFFER_TOTAL_MISMATCH` before creating an order. Clients should refresh the total and ask the shopper to confirm it.
+
+A bank-offer order requires one verified Paystack capture at the saved discounted total. The database rejects other payment legs, including manual and fallback payments, because they cannot prove eligibility for that discount. If a shopper wants to switch payment methods, reconcile the original attempt and cancel the bank-offer order before creating a standard order.
+
+The database generates the bank-offer reference from a UUID. The checkout initializer parses the claim with the canonical reference schema before building the Paystack request. Issuer matching uses the bank code from the required saved policy. REDVAULT uses the shared evidence verifier with its configured issuer label.
+
+The canonical reference is `BCO-` followed by 32 lowercase hexadecimal characters. The web and app reserve every casing of the prefix so a malformed reference cannot fall through to standard payment verification. Authenticated verification and the app’s order screen reject incorrect casing and use the exact reference issued by checkout. Only canonical references can create or look up mobile cart snapshots.
+
+A signed-in customer can replay an already-created order with the same idempotency key and checkout request after an offer is disabled. This recovers the saved order and its post-creation work. Cache invalidation may safely repeat. The analytics recorder reuses the `platform_purchase:<orderId>` key, which deduplicates both the platform event and its delivery enqueue. The replay hash uses the validated checkout body with stable key ordering. A changed value under the same key is a conflict, including changing payment methods. Start a new checkout with a new key if the shopper switches methods. The database rejects reuse before creating another order and both checkout paths return `CHECKOUT_IDEMPOTENCY_CONFLICT`. Fresh orders still require an enabled offer, and payment attempts remain subject to the saved deadline.
+
+A committed order is returned even when event recording or cache invalidation fails. Search server logs for `Bank offer post-checkout effects failed`, `Failed to record the bank offer order event`, or `Failed to revalidate product caches after bank offer order creation`. Use the logged merchant and order context to locate the saved order and check its event by `platform_purchase:<orderId>`. An exact authorized checkout replay can retry the effects without creating another order. Keep the same key and payload for that recovery. A shopper accepting a corrected price is making a new checkout request and must use a new key.
+
+The offer deadline closes new checkouts and payment attempts. An attempt opened before the deadline retains its saved price and approval rules if Paystack settles it later.
+
+A checkout initialization retry during the provider grace period returns 503 with Retry-After until the same attempt has a saved checkout URL or a durable review. For an initialization review, look up the original reference with Paystack. If Paystack provides a usable checkout URL for that reference, authorized operations can call `restore_bank_card_offer_checkout_url` with the review ID and that URL. If Paystack confirms the reference cannot accept a charge, authorized operations can call `retire_bank_card_offer_initialization` with the review ID and the provider confirmation. The shopper can then retry on the same order if the offer is still available. A timeout or a missing verification result is insufficient to retire the reference.
+
+Retirement preserves the cancelled transaction, exact reference, provider domain, policy hash, and whether a hosted URL existed. The resolved review records the provider confirmation. The hosted URL is discarded.
+
+The checkout URL validators in TypeScript and migration `20261119153530` both preserve Paystack query parameters. The database recovery test exercises saving and restoring a URL with a query string.
+
+When Paystack verification reports a failed, abandoned, cancelled, or reversed attempt, checkout stops returning the old URL and opens a review. For reversals, the storefront displays the reversal outcome with the order number and support link. It suppresses automatic retries and retains the cart. Support can confirm the reversal and close or cancel the original order before the shopper creates a fresh checkout. Operations must confirm that this reference cannot accept a charge before retiring it, including when the checkout was already initialized.
+
+A terminal provider status belongs in terminal review only when the reference, payment domain, and currency match the saved attempt. Otherwise the evidence goes to the ambiguous capture review queue and cannot establish that the saved attempt is terminal. A terminal echo may carry an amount that differs from the order total. Use the original Paystack reference to confirm what happened before retiring the attempt. Only validated successful capture evidence can authorize settlement or a refund. Completion retries re-verify the original reference even after approval was saved. During a Paystack outage the saved approval is retained and settlement waits. A recorded reversal blocks payment completion and further automatic cancellation refunds for that reference. The wedge sweep confirms and records the bank-offer terminal status before retiring the candidate. A recheck that no longer matches leaves the attempt eligible for the next sweep.
+
+For a capture review, reconcile the payment with Paystack under the original reference. A verified lookup response reporting a missing reference triggers capture review on settlement paths. A lookup failure does not prove the payment can be retired. Preserve the saved order and attempt while evaluating the provider evidence. The customer verification endpoint reports this state as pending with HTTP 202. The webhook returns HTTP 200 once the review is recorded so Paystack can stop retrying the delivery.
+
+[Paystack's webhook list](https://paystack.com/docs/payments/webhooks/#types-of-events) includes `charge.success` for captures and separate refund and dispute notifications. The payment webhook dispatches Paystack refund notifications before the capture branch. The refund reconciliation worker checks recorded refunds independently of shopper visits.
+
+The hourly gateway worker also rechecks verified captures on paid bank-offer orders. It takes due attempts until the queue is empty or its 20-second pass ends. A failed check is eligible again after its 50-minute claim expires. A confirmed reversal records the existing reconciliation review and blocks another automatic cancellation refund. Operations should reconcile fulfillment and the original charge from that review. The wedge sweep reserves 20 seconds for the paid-offer pass before the full side-effect drain window. Monitor `bankOfferRecheck`, `bankOfferRecheckSkipped`, and `sideEffectDrain` during onboarding. Watch `PAYSTACK_PAYMENT_MATCH_ZERO_CANDIDATES` for mismatches between signed callbacks and saved attempts. The claim writes the saved integer kobo divided by 100 using PostgreSQL numeric arithmetic. If the stored amount differs, reconcile the original charge and snapshot in operations before settlement.
+
+New bank-offer payment transactions start pending. The insert guard requires verified evidence linked to the transaction ID, and that evidence can exist only after the payment transaction is created. The reversal trigger therefore fences status updates. The separate order-payment and refund checks also read the recorded reversal.
+
+When a signed webhook has no matching saved bank-offer attempt, platform operations should look up the `payment_match_zero_candidates` review by `paystack_ref`. The row is intentionally unassigned because tenant and order identity come from the saved attempt. The webhook metadata does not establish that relationship. The platform queue deduplicates open rows by issue type and Paystack reference, and the webhook acknowledges a duplicate.
+
+Bank-offer checkout accepts HTTPS URLs on `checkout.paystack.com`, the host in [Paystack’s transaction initialization example](https://paystack.com/docs/api/transaction/#initialize). Verify any additional checkout host with Paystack before accepting it. Hosted storefront callbacks use HTTPS with both Paystack test and live keys. A custom-domain lookup error returns a retryable response before claiming a payment attempt. Non-production localhost can use HTTP for local QA with mocked Paystack responses.
+
+Before switching between Paystack test and live keys, finish or reconcile outstanding attempts with the original domain's credentials. Confirm abandoned references cannot charge before retiring them. Retain access to the original domain for payment reconciliation and refunds. Reusing a saved attempt across domains is blocked by design.
+
+A cancellation containing an unverified bank-offer leg enters refund review even if another leg has already been refunded. The quarantine path records the accepted refund IDs and raises a delivery-uncertain error, so the worker does not mark the whole step complete.
+
+Kobo rounding can fully discount a unit. Its saved merchandise refund value is zero, and that unit must contribute zero to any later merchandise refund. The merchandise basket must still have a positive balance after the offer. Delivery and other fees cannot make a fully discounted basket eligible.
+
+Browser order creation and payment initialization for a bank offer use the checkout CSRF token. Browser verification requires the signed-in buyer's order ownership proof and the matching storefront. Pending and reversed views display only an order number returned by verification. A denied session shows instructions for checking the order from the buyer's account and stops automatic polling. The checkout request helper refreshes the CSRF token and retries once. A remaining non-denial 403 stops polling and offers page refresh, order history, or support without requesting a new payment. Pending responses and temporary verification outages use the checkout page’s bounded polling budget.
+
+The server computes the approved offer percentage and cap and signs the quote with the order payload. Per-unit discount amounts are retained for partial-item refunds, with at most 10,000 units across the cart. The database validates the signed route proof, exact totals, and persisted allocation. The snapshot table denies direct access to application roles, including `service_role`. Supported checkout RPCs only insert or replay the original snapshot. The shared Paystack parser validates the provider payload structure. The card-offer verifier then checks both Paystack channel fields along with issuer, brand and amount before writing approval.
+
+Before activating a campaign, verify the exact Paystack authorization issuer label using an approved card for that bank and confirm the refund path. The shared card evidence schema used by REDVAULT and bank offers requires a successful transaction and a valid Paystack paid timestamp. Verification accepts the canonical name and the documented legal-name variants for the saved Wema or Sterling bank code. Approvals still record the canonical issuer from the saved quote. Confirm any unfamiliar label with Paystack before adding it to the explicit bank-code allowlist. The issuer-mismatch warning includes the bank code and a validated bank label when available.
+
+Native verification uses the buyer's authenticated POST, including when a tracking token is present, and checks the merchant when a storefront slug is supplied. It records a verified terminal review before returning the terminal status. A provider mismatch creates a scoped capture review and keeps the payment pending. A failed review write returns a retryable 503. Paystack is rechecked before reporting success even for an already-paid order with confirmed inventory. During a provider outage, the order screen offers a verification retry after its automatic checks run out. A confirmed reversal has its own message. A verified payment stays pending after the buyer-owned sweep marker is confirmed. A failed marker write returns a retryable 503. Settlement stays on the webhook and worker paths.
+
+The webhook resolves the saved attempt by reference and delegates to the same live Paystack verification used by the bank-offer finalizer. The verification hold RPC accepts a server-minted, order-scoped JWT with the `authenticated` database role and no buyer `sub`. A normal buyer session has a user ID and cannot call it directly. Both callers treat a missing boolean as unavailable and keep payment pending.
+
+Native checkout captures the submitted cart before creating the order and saves its identity against the returned bank-offer reference before opening Paystack. Replayed orders and payment completion cannot replace that snapshot. The cart is preserved while verification is pending and cleared only after confirmed payment and an exact match to the saved cart. A missing snapshot leaves the cart intact. Standard gateway redirects retain their existing order-screen polling and cart handling.
+
+For each verified bank-offer order, the app keeps a small consumed marker keyed to the order and reference. This also covers verification that finishes before the initial snapshot is stored. It prevents a delayed initializer from writing cleanup state after payment is confirmed.
+
+New cart snapshots store a SHA-256 fingerprint and the expiry on the device. A matching snapshot can clear the cart for up to seven days after checkout starts. Later verification preserves the cart and replaces the expired snapshot with the consumed marker. A fresh bank-offer checkout also retires expired or undated snapshots for other orders. This leaves payment confirmation and reconciliation available after the cart snapshot expires.
+
+The snapshot identifies the submitted basket through its generation, shared-cart identity, and item details. Changing only delivery, tax, wrapping, or another checkout fee does not change the basket identity. The saved order and Paystack verification enforce the final payable separately.
+
+Snapshot storage failures report the operation and failure stage through existing app analytics. These events carry no order ID, payment reference, cart contents, or raw error. A failed cleanup keeps the snapshot available for a later verified visit.
+
+Automatic whole-order cancellation refunds use the exact kobo amount from the verified payment leg. The audit writes the corresponding decimal text to the numeric amount column. A primary key permits one saved attempt per order, and the completion guard rejects a second transaction outside that attempt. For a partial-item refund, Operations calculates the amount from the saved per-unit net allocations and uses the original capture. This change adds no automated partial-item refund path.
+
+The refund worker handles whole-order cancellations. When its ledger already shows a partial refund, it withholds that payment leg before looking up or submitting the full capture amount. A linked manual record leaves the balance for Operations to complete. A completed provider refund that covers only part of the leg goes to reconciliation. The bank-offer refund flow tests exercise both cases against the cancellation worker with mocked Paystack.
+
+For a manual merchandise refund, use the order ID and merchant ID to ask an authorized database operator for the saved unit values. The snapshot remains private. The read only needs the allocations, with no buyer or card information.
+
+```sql
+SELECT line.value->>'itemId' AS order_item_id,
+       unit.ordinality AS unit_number,
+       unit.value::bigint AS net_kobo
+FROM private.bank_card_offer_order_snapshots AS snapshot
+CROSS JOIN LATERAL jsonb_array_elements(snapshot.offer_quote->'allocations') AS line(value)
+CROSS JOIN LATERAL jsonb_array_elements_text(line.value->'unitNetAmountsKobo')
+  WITH ORDINALITY AS unit(value, ordinality)
+WHERE snapshot.order_id = $1::uuid
+  AND snapshot.merchant_id = $2::uuid
+ORDER BY order_item_id, unit_number;
+```
+
+Run the read-only checker from the repository root using a direct, TLS-verified Operations database connection in `BANK_OFFER_REFUND_READ_DATABASE_URL` and the Paystack key for the saved capture in `PAYSTACK_SECRET_KEY`. Use an authorized Operations credential scoped to reading the private snapshot, payment attempt, and cancellation status and executing the capture lookup. Store the connection URL with Operations credentials and keep it out of storefront and worker environments. The CLI runs its database session in read-only mode.
+
+```sh
+pnpm --filter @baci/web check:bank-offer-partial-refund <order-uuid> <merchant-uuid> /path/to/return.json
+```
+
+Build the manifest from the return records using the saved order-item UUIDs and one-based unit numbers from the query above. Include every earlier Paystack refund that is processed, pending, processing, or needs attention, using its numeric refund ID as a JSON string and the units recorded for it. Use an empty `previousRefunds` array when there are none. Include zero-kobo units in the return record.
+
+```json
+{
+  "units": [
+    { "itemId": "a4fbecee-2846-4a61-beef-df54636a20de", "unitNumber": 2 }
+  ],
+  "previousRefunds": [
+    {
+      "refundId": "123456789",
+      "units": [
+        { "itemId": "a4fbecee-2846-4a61-beef-df54636a20de", "unitNumber": 1 }
+      ]
+    }
+  ]
+}
+```
+
+The checker validates the sum of all saved units against `productSubtotalKobo - discountKobo`, rejects repeated or unknown units across the manifest, and verifies the exact saved capture against Paystack. Every nonfailed Paystack refund reduces the remaining balance. The proposed amount must fit within that balance, and each prior refund must match its recorded units and amount. Resolve unmatched refunds, unresolved reversals, disputes, or ambiguous return records before continuing. Resolve delivery, tax, and other fees separately under the return policy.
+
+A successful run prints the suggested merchandise refund, remaining Paystack balance, and count of returned units. This is a point-in-time estimate. The checker cannot verify which physical unit a return record describes or detect another operator's work before Paystack lists it. Coordinate with Operations and rerun just before submitting. A total of zero needs no Paystack refund. For a positive amount, submit the exact kobo amount in Paystack and link the refund record to the original capture. Leaving the amount blank requests a full refund.
+
+When Paystack reports a reversal with a usable integer amount, the open reconciliation record stores it as `paystack_reported_reversal_amount_kobo` for Operations. The reversal status blocks automatic refunds. The reported amount is advisory and is never used as a refund amount or subtracted from the saved capture. Operations confirm the actual reversed value with Paystack before changing the order or issuing a refund.
+
+Immediately before refund submission, the cancellation worker re-verifies Paystack and binds the successful response to the saved provider ID, domain, reference and exact amount. The saved approval already binds the original email, issuer, card brand and filter policy to that capture. Refunds return money to the original payment source, so later changes to those provider labels cannot prevent a refund on an otherwise verified capture. The database locks the payment row, checks the active refund claim and any recorded reversal or dispute, and records the dispatch before the HTTP call. A later worker reconciles that dispatch with Paystack before any replacement. Signed disputes hold the saved attempt for review. A confirmed merchant win releases only the hold for that dispute. Other open or lost disputes and independently confirmed reversals continue to block automatic refunds. If a reversal or dispute arrives after admission, the review records that the provider call may already be in flight. Paystack controls the final refund decision if the provider state changes after admission.
+
+Card channel, issuer, brand, customer email and paid timestamp are checked when approving the capture. Refund re-verification uses the saved capture’s identity and amount because those card and customer fields describe offer eligibility at approval. Later changes to those fields must not prevent returning funds to the original verified charge.
+
+When the recovery sweep encounters a verified capture with a dispute hold, it defers completion and leaves the transaction eligible for a later sweep. A dispute win can release that hold. A separate evidence mismatch still requires Operations review.
+
+If capture lookup fails before the final worker attempt, the cancellation step is recorded as a retryable failure with any accepted refund IDs preserved. The cancellation drain uses its service client for the exact capture lookup. An authorization denial follows the same retry and quarantine path as an outage and starts no provider refund. The drain reclaims failed steps within its retry budget. On the final attempt, unresolved legs enter review with the capture lookup outage recorded.

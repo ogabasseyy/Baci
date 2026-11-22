@@ -16,6 +16,8 @@ import {
 import type { RedvaultQuoteSummary } from './components/redvault/RedvaultPaymentOption';
 import type { RedvaultPreparedOrder } from './handlers/redvault-prepared-order-submit';
 
+import { resolveBankOfferPendingCheckout } from './resolve-bank-offer-pending-checkout';
+
 export { normalizeOrderPaymentMethod } from './normalize-order-payment-method';
 
 export { buildPendingCheckoutFingerprint } from './checkout-fingerprint';
@@ -89,6 +91,9 @@ export interface ReusedCheckoutOrder {
   id: string;
   order_number?: string;
   tracking_token?: string;
+  currency?: string;
+  total?: number;
+  payment_method?: string;
 }
 
 export interface ResolvePendingCheckoutOrderOptions {
@@ -129,6 +134,7 @@ export interface ResolvePendingCheckoutOrderResult {
     amountDueToGateway: number;
   } | null;
   clearStoredOrder: boolean;
+  bankOfferVerification?: { orderId: string; reference: string };
   /** Stored REDVAULT order still unresolved: do not open a second order with another method. */
   redvaultUnresolved?: boolean;
   /**
@@ -169,6 +175,10 @@ export async function resolvePendingCheckoutOrder({
   shippingRateId,
   fetchImpl = fetch,
 }: ResolvePendingCheckoutOrderOptions): Promise<ResolvePendingCheckoutOrderResult> {
+  const offerFence = await resolveBankOfferPendingCheckout({
+    pendingOrder, merchantId, merchantSlug, customerEmail, checkoutFingerprint, paymentMethod, fetchImpl,
+  });
+  if (offerFence) return offerFence;
   const oxygenFence = await resolveOxygenCheckoutFence({
     pendingOrder,
     merchantId,

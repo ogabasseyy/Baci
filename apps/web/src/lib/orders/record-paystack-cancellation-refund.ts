@@ -36,7 +36,8 @@ export async function recordPaystackCancellationRefund({
   reason?: string;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction;
-  transactionAmount: number;
+  // A verified bank-offer amount is passed as decimal text to PostgreSQL.
+  transactionAmount: number | string;
 }): Promise<number> {
   // Defense in depth behind initiateRefund's payload validation: a
   // successful response without a refund object may still have
@@ -188,7 +189,7 @@ export async function recordPaystackCancellationRefund({
         normalizePaymentGateway(conflicting?.gateway) === 'PAYSTACK' &&
         conflicting?.gateway_reference === String(paystackRefund.data.id) &&
         conflictingLeg === transaction.id &&
-        Number(conflicting?.amount) === transactionAmount &&
+        refundAuditAmountsMatch(conflicting?.amount, transactionAmount) &&
         normalizeCurrencyCode(conflicting?.currency) ===
           normalizeCurrencyCode(
             transaction.currency || order.currency || 'NGN'
@@ -212,4 +213,17 @@ export async function recordPaystackCancellationRefund({
     }
   }
   return paystackRefund.data.id;
+}
+
+function refundAuditAmountsMatch(
+  persisted: unknown,
+  expected: string | number
+) {
+  if (typeof expected === 'number') return Number(persisted) === expected;
+  if (typeof persisted !== 'string' && typeof persisted !== 'number')
+    return false;
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(String(persisted));
+  if (!match) return false;
+  const fraction = (match[2] ?? '').replace(/0+$/, '').padEnd(2, '0');
+  return `${match[1]}.${fraction}` === expected;
 }

@@ -4,6 +4,7 @@ import type { CartItem } from '@/hooks/cart';
 import { buildCheckoutOrderRequest } from './build-checkout-order-request';
 import { getForwardableSelectedQuoteId } from './utils';
 import { selectRejectedVoucherLines } from './select-rejected-voucher-lines';
+import type { BankCardOfferSelection } from './preview-bank-card-offer';
 import type { DeliveryMethod, PaymentMethod } from './types';
 
 type PreparedCheckoutSubmission = Extract<
@@ -24,6 +25,8 @@ interface CheckoutOrderState {
   };
   newsletterOptIn: boolean;
   paymentMethod: PaymentMethod;
+  bankCardOffer?: BankCardOfferSelection;
+  recoverSavedOffer?: boolean;
   total: number;
   orderRequestSubtotal: number;
   subtotal: number;
@@ -93,7 +96,7 @@ export function buildCheckoutOrderLifecycleOptions({
       merchantSlug: state.merchant.slug,
       customerEmail: state.customer.email,
       checkoutFingerprint: identity.checkoutFingerprint,
-      paymentMethod: identity.normalizedPaymentMethod,
+      paymentMethod: state.bankCardOffer || state.recoverSavedOffer ? 'bank_card_offer' : identity.normalizedPaymentMethod,
       shippingProvider: delivery.shippingProvider,
       selectedQuoteId: getForwardableSelectedQuoteId(
         state.deliveryMethod,
@@ -120,11 +123,13 @@ export function buildCheckoutOrderLifecycleOptions({
       pushSuccessRoute: actions.pushSuccessRoute,
     },
     submit: {
+      recoverSavedOffer: state.recoverSavedOffer,
       getIdempotencyKey: actions.getIdempotencyKey,
       orderRequest: buildCheckoutOrderRequest({
         merchantId: state.merchant.id,
         items: identity.items,
         paymentMethod: identity.normalizedPaymentMethod,
+        bankCardOffer: state.bankCardOffer,
         acceptsMarketing: state.newsletterOptIn,
         customer: {
           name: state.customer.name,

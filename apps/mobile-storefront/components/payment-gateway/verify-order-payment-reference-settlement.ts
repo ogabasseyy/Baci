@@ -1,6 +1,11 @@
+import {
+  BANK_CARD_OFFER_REFERENCE_PATTERN,
+  hasBankCardOfferReferencePrefix,
+} from '@baci/shared/constants';
 import { CHECKOUT_API_BASE_URL } from '@/components/checkout/checkout-screen.constants';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { getSession } from '@/lib/supabase';
+import { bankOfferReversalResponseSchema } from '@/schemas/bank-offer-reversal-response';
 import type { OrderPaymentVerification } from './verify-order-payment';
 import { VERIFY_TIMEOUT_MS } from './verify-order-payment-tracked-lookup';
 
@@ -53,6 +58,11 @@ export async function checkReferenceSettled(
   reference: string,
   trackingToken?: string | null
 ): Promise<OrderPaymentVerification> {
+  const bankOffer = hasBankCardOfferReferencePrefix(reference);
+  if (bankOffer && !BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)) {
+    return { paid: false, terminalFailure: 'failed' };
+  }
+
   try {
     // The verify route enforces CSRF protection on POST, which accepts
     // session header auth for native callers. Guests have no session:
@@ -66,7 +76,7 @@ export async function checkReferenceSettled(
     } catch {
       accessToken = null;
     }
-    if (!accessToken && !trackingToken) {
+    if (!accessToken && (bankOffer || !trackingToken)) {
       return { paid: false, inconclusive: true };
     }
     // Prefer the proof-bound GET whenever the creation tracking token is
@@ -75,7 +85,8 @@ export async function checkReferenceSettled(
     // and Juicyway rows — completed wallet references and asynchronously
     // settled CredPal/Klump references would otherwise poll pending
     // forever for signed-in shoppers.
-    const useBearerPost = !!accessToken && !trackingToken;
+    // Bank offers require buyer ownership and fresh issuer evidence.
+    const useBearerPost = !!accessToken && (bankOffer || !trackingToken);
     const verifyUrl = useBearerPost
       ? `${CHECKOUT_API_BASE_URL}/api/payments/verify`
       : `${CHECKOUT_API_BASE_URL}/api/payments/verify?reference=${encodeURIComponent(reference)}&trackingToken=${encodeURIComponent(trackingToken ?? '')}`;
@@ -100,6 +111,18 @@ export async function checkReferenceSettled(
       return { paid: false, inconclusive: true };
     }
     const data = toVerifyReferenceResponse(rawBody);
+    if (bankOffer && data.status === 'reversed') {
+      // Both authenticated verify paths report a proven reversal as a
+      // terminal 200 for the bound order. Other envelopes prove neither
+      // reversal nor settlement, even if they also claim success.
+      const reversal = bankOfferReversalResponseSchema.safeParse(rawBody);
+      return response.status === 200 &&
+        reversal.success &&
+        reversal.data.orderId === orderId &&
+        reversal.data.reference === reference
+        ? { paid: false, reconciliation: 'payment_reversed' }
+        : { paid: false, inconclusive: true };
+    }
     // Only a completed finalization counts: the endpoint also reports
     // success for cancelled/skipped orders, which are not paid conversions.
     // The identity check fails closed: the route's orderId and the

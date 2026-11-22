@@ -9,10 +9,14 @@ import {
 const mocks = vi.hoisted(() => ({
   initiatePaystackRefund: vi.fn(),
   quarantineRefund: vi.fn(),
+  verifyTransaction: vi.fn(),
 }));
 
 vi.mock('@/lib/initiate-paystack-refund', () => ({
   initiateRefund: mocks.initiatePaystackRefund,
+}));
+vi.mock('@/lib/paystack', () => ({
+  verifyTransaction: mocks.verifyTransaction,
 }));
 
 vi.mock('./quarantine-order-cancellation-refund', () => ({
@@ -38,12 +42,19 @@ describe('initiatePaystackCancellationRefunds', () => {
     mockAcceptedRefund(mocks.initiatePaystackRefund, overrides);
   }
 
-  it('quarantines a sub-kobo leg instead of refunding the whole transaction', async () => {
+  it.each([
+    0.001,
+    0,
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])('quarantines an invalid refund leg of %s before calling Paystack', async (amount) => {
+    const invalidLeg = { ...transaction, amount };
     const refundIds = await initiatePaystackCancellationRefunds({
       order,
       refundedPaymentIds: new Set(),
       supabase,
-      transactions: [{ ...transaction, amount: 0.001 }],
+      transactions: [invalidLeg],
     });
 
     // 0.001 rounds to 0 kobo, which the provider call would read as a
@@ -51,9 +62,8 @@ describe('initiatePaystackCancellationRefunds', () => {
     // call goes out.
     expect(refundIds).toEqual([]);
     expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
-    const subKobo = { ...transaction, amount: 0.001 };
     expect(mocks.quarantineRefund).toHaveBeenCalledWith(
-      expect.objectContaining({ transactions: [subKobo] })
+      expect.objectContaining({ transactions: [invalidLeg] })
     );
   });
 

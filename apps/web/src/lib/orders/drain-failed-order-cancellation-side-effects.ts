@@ -257,8 +257,9 @@ export async function drainFailedOrderCancellationSideEffects({
         orderId,
         step,
         supabase,
-        execute: () =>
+        execute: (claimToken) =>
           executeOrderCancellationSideEffect({
+            claimToken,
             deadlineMs:
               step === 'customer_email'
                 ? emailCutoff

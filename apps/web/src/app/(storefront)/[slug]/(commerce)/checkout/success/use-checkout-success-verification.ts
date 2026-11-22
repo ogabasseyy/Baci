@@ -10,13 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CHECKOUT_PENDING_ORDER_STORAGE_KEY } from '@/components/storefront/ogabassey/pages/checkout/pending-checkout-order';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
 import { asRoute } from '@/lib/routes';
-import {
-  VERIFY_REPOLL_FAST_MAX_ATTEMPTS,
-  VERIFY_REPOLL_INTERVAL_MS,
-  VERIFY_REPOLL_MAX_ATTEMPTS,
-  VERIFY_REPOLL_SLOW_INTERVAL_MS,
-  VERIFY_REQUEST_TIMEOUT_MS,
-} from './verification-timing';
+import { startCheckoutVerificationPolling } from './start-checkout-verification-polling';
 import {
   type CheckoutVerificationStatus,
   hasMatchingPendingRedvaultOrder,
@@ -61,9 +55,6 @@ export function useCheckoutSuccessVerification({
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const statusRef = useRef<CheckoutVerificationStatus>('pending');
   const verificationIdentityRef = useRef<string | null>(null);
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -92,6 +83,7 @@ export function useCheckoutSuccessVerification({
     // terminal status/order details linger and the guard below refuses
     // to verify the new identity at all.
     const verificationIdentity = [
+      merchantSlug,
       orderId,
       reference,
       trackingToken,
@@ -105,92 +97,35 @@ export function useCheckoutSuccessVerification({
       setPaymentMethod(null);
     }
     let disposed = false;
-    let reverifyTimer: ReturnType<typeof setTimeout> | null = null;
-    let reverifyAttempts = 0;
-    let passInFlight = false;
-    let passController: AbortController | null = null;
-    let passTimeout: ReturnType<typeof setTimeout> | null = null;
-    const clearReverifyTimer = () => {
-      if (reverifyTimer !== null) {
-        clearTimeout(reverifyTimer);
-        reverifyTimer = null;
-      }
-    };
-    const abortPass = () => {
-      if (passTimeout !== null) {
-        clearTimeout(passTimeout);
-        passTimeout = null;
-      }
-      if (passController !== null) {
-        passController.abort();
-        passController = null;
-      }
-    };
-    // Serialized: the next attempt is scheduled only after the current
-    // verification settles, so a slow older response can never arrive
-    // after a newer success and overwrite the terminal state (or schedule
-    // a redirect after payment was confirmed). Each pass is abort-bounded
-    // so a hung request releases the lane for its retry instead of
-    // stalling every later pass behind a never-settling connection.
-    const runVerificationPass = () => {
-      // Gate the pass itself on the terminal status: setStatus('success')
-      // only schedules the React update, so the settling promise's
-      // finally can still observe a stale 'pending' ref and arm another
-      // timer. Without this check that timer performs an extra
-      // verification after success, and a transient failure could flip a
-      // paid order to failed (payment_failed + checkout redirect).
-      if (
-        disposed ||
-        passInFlight ||
-        statusRef.current !== 'pending' ||
-        reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
-      ) {
-        return;
-      }
-      reverifyAttempts += 1;
-      passInFlight = true;
-      passController = new AbortController();
-      passTimeout = setTimeout(() => {
-        passController?.abort();
-      }, VERIFY_REQUEST_TIMEOUT_MS);
-      void verifyCheckoutPayment(
-        { ...verifyParams, signal: passController.signal },
-        verifyHandlers
-      ).finally(() => {
-        if (passTimeout !== null) {
-          clearTimeout(passTimeout);
-          passTimeout = null;
-        }
-        passController = null;
-        passInFlight = false;
-        if (
-          disposed ||
-          statusRef.current !== 'pending' ||
-          reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
-        ) {
-          return;
-        }
-        const interval =
-          reverifyAttempts < VERIFY_REPOLL_FAST_MAX_ATTEMPTS
-            ? VERIFY_REPOLL_INTERVAL_MS
-            : VERIFY_REPOLL_SLOW_INTERVAL_MS;
-        reverifyTimer = setTimeout(() => {
-          reverifyTimer = null;
-          runVerificationPass();
-        }, interval);
-      });
-    };
     const verifyHandlers: VerifyCheckoutPaymentHandlers = {
-      clearCart,
-      redirectToCheckout,
-      scheduleFailedRedirect: () => {
-        timerHandle.current = setTimeout(redirectToCheckout, 4000);
+      clearCart: () => {
+        if (!disposed) clearCart();
       },
-      setIsVerifying,
-      setOrderNumber,
-      setPaymentMethod,
-      setStatus,
+      redirectToCheckout: () => {
+        if (!disposed) redirectToCheckout();
+      },
+      scheduleFailedRedirect: () => {
+        if (!disposed)
+          timerHandle.current = setTimeout(redirectToCheckout, 4000);
+      },
+      setIsVerifying: (verifying) => {
+        if (!disposed) setIsVerifying(verifying);
+      },
+      setOrderNumber: (number) => {
+        if (!disposed) setOrderNumber(number);
+      },
+      setPaymentMethod: (method) => {
+        if (!disposed) setPaymentMethod(method);
+      },
+      setStatus: (nextStatus, delayMs = 0) => {
+        if (disposed) return;
+        // Every verification result updates the polling guard synchronously here.
+        statusRef.current = nextStatus;
+        polling.delayNextPass(delayMs);
+        setStatus(nextStatus);
+      },
       capturePaymentCompleted: (input) => {
+        if (disposed) return;
         captureCheckoutFunnelEventOnce(
           CHECKOUT_FUNNEL_EVENTS.paymentCompleted,
           input.orderId,
@@ -209,6 +144,7 @@ export function useCheckoutSuccessVerification({
         );
       },
       capturePaymentFailed: (input) => {
+        if (disposed) return;
         // A retry reuses the order with a new gateway reference: claim the
         // failure per attempt so a later failed attempt is not suppressed
         // by the first one (same reference still dedupes on re-verify).
@@ -235,38 +171,17 @@ export function useCheckoutSuccessVerification({
       },
     };
 
-    // The shopper returned while a slow-lane wait was pending: revalidate
-    // now instead of making them wait out the backoff.
-    const revalidateOnVisible = () => {
-      if (
-        typeof document !== 'undefined' &&
-        document.visibilityState === 'hidden'
-      ) {
-        return;
-      }
-      if (disposed || passInFlight || reverifyTimer === null) {
-        return;
-      }
-      if (
-        statusRef.current !== 'pending' ||
-        reverifyAttempts >= VERIFY_REPOLL_MAX_ATTEMPTS
-      ) {
-        return;
-      }
-      clearReverifyTimer();
-      runVerificationPass();
-    };
-    window.addEventListener('focus', revalidateOnVisible);
-    document.addEventListener('visibilitychange', revalidateOnVisible);
-
-    runVerificationPass();
+    const polling = startCheckoutVerificationPolling({
+      isPending: () => statusRef.current === 'pending',
+      onExhausted: () => verifyHandlers.setStatus('verification_unavailable'),
+      verify: (signal) =>
+        verifyCheckoutPayment({ ...verifyParams, signal }, verifyHandlers),
+    });
+    polling.start();
 
     return () => {
       disposed = true;
-      clearReverifyTimer();
-      abortPass();
-      window.removeEventListener('focus', revalidateOnVisible);
-      document.removeEventListener('visibilitychange', revalidateOnVisible);
+      polling.stop();
       if (timerHandle.current !== null) {
         clearTimeout(timerHandle.current);
       }

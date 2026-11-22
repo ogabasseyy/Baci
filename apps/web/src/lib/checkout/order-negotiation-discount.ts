@@ -4,6 +4,7 @@ import {
   makeOfferLineKey,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { after } from 'next/server';
 import {
   loadOrderConditionPrices,
   orderConditionPrice,
@@ -15,6 +16,7 @@ import {
   type EligibleLineDiscountResult,
   type NegotiationLineInput,
 } from './eligible-line-discount';
+import { monitorNegotiationCostFloor } from './negotiation-cost-floor-monitor';
 import { applyPersistedLineOccurrenceKeys } from './order-negotiation-occurrence-keys';
 
 type VariantPriceRow = {
@@ -61,6 +63,7 @@ export async function computeOrderNegotiationDiscount({
   vatRegistered,
   allowUnavailableConditionPrices,
   conditionPriceOverrides,
+  monitorCostFloor = false,
 }: {
   items: NegotiationDiscountItem[];
   merchantId: string;
@@ -71,6 +74,9 @@ export async function computeOrderNegotiationDiscount({
   supabase: SupabaseClient;
   allowUnavailableConditionPrices?: boolean;
   conditionPriceOverrides?: Map<string, number>;
+  // Set by the route only when the validated discount will actually be
+  // charged; enables the observation-only cost-floor log.
+  monitorCostFloor?: boolean;
   // The route passes `merchant.vat_registration_status === 'registered'`.
   // Non-registered merchants charge no VAT, so the discount must not gross up.
   vatRegistered: boolean;
@@ -161,6 +167,10 @@ export async function computeOrderNegotiationDiscount({
   );
 
   const lines: NegotiationLineInput[] = [];
+  // Cost-floor measurement input: only the variant linkage validated against
+  // the line's product is forwarded (a foreign/mismatched id prices from the
+  // parent and must not resolve another product's cost).
+  const validatedVariantIds: Array<string | null> = [];
   for (const { item, lineId } of validatableItems) {
     if (!item.product_id) {
       return null;
@@ -184,6 +194,7 @@ export async function computeOrderNegotiationDiscount({
       item.offer_id && item.product_id
         ? offerPrices?.get(makeOfferLineKey(item.product_id, item.offer_id))
         : undefined;
+    validatedVariantIds.push(variant ? (item.variant_id ?? null) : null);
     lines.push({
       catalogUnitPrice: Number(
         orderConditionPrice(conditionPrices, item) ??
@@ -218,9 +229,35 @@ export async function computeOrderNegotiationDiscount({
     });
   }
 
-  return applyPersistedLineOccurrenceKeys(
-    computeEligibleLineDiscount(lines, MAX_AUTO_NEGOTIATION_DISCOUNT_RATE),
-    indexedItems,
-    productMap
+  const result = computeEligibleLineDiscount(
+    lines,
+    MAX_AUTO_NEGOTIATION_DISCOUNT_RATE
   );
+  // Observation only (never alters the result): flag charged discounts that
+  // land under the merchant's cost floor so the exposure can be measured.
+  // Runs after the response so checkout latency is unaffected.
+  if (monitorCostFloor && !result.rejectionCode && result.totalDiscount > 0) {
+    const monitorLines = lines.map((line, index) => ({
+      productId: line.productId,
+      variantId: validatedVariantIds[index] ?? null,
+      catalogUnitPrice: line.catalogUnitPrice,
+      clientUnitPrice: line.clientUnitPrice,
+      quantity: line.quantity,
+      negotiable: line.negotiable,
+    }));
+    const run = () =>
+      monitorNegotiationCostFloor({
+        supabase,
+        merchantId,
+        lines: monitorLines,
+      });
+    try {
+      after(run);
+    } catch {
+      // Outside a request scope (scripts/tests): run detached, never awaited.
+      run().catch(() => undefined);
+    }
+  }
+
+  return applyPersistedLineOccurrenceKeys(result, indexedItems, productMap);
 }

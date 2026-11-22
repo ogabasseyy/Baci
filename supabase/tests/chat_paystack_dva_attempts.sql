@@ -181,12 +181,14 @@ SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000007', 'FENCE-7');
 SELECT pg_temp.as_service();
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
   account_name, provider, assigned_at, expires_at)
-VALUES
-  ('a0000000-0000-4000-8000-000000000007', '0000000071', 'Test Bank',
-   'Test Name', 'paystack', NULL, NULL),
-  ('a0000000-0000-4000-8000-000000000007', '0000000072', 'Test Bank',
-   'Test Name', 'paystack', clock_timestamp() - interval '5 hours',
-   clock_timestamp() - interval '4 hours');
+VALUES ('a0000000-0000-4000-8000-000000000007', '0000000072', 'Test Bank',
+  'Test Name', 'paystack', clock_timestamp() - interval '5 hours',
+  clock_timestamp() - interval '4 hours');
+-- The alias guard rejects a new row beside a live one, so add the legacy row last.
+INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
+  account_name, provider, assigned_at, expires_at)
+VALUES ('a0000000-0000-4000-8000-000000000007', '0000000071', 'Test Bank',
+  'Test Name', 'paystack', NULL, NULL);
 DO $$ BEGIN
   IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000007',
        'token-FENCE-7', 'BAC-AAAAAAAAAAA7') = 'claimed' THEN

@@ -10,6 +10,8 @@ export type AdminNotificationNavigationTarget =
   | { screen: 'negotiations' }
   | { screen: 'repair'; params: { id: string } }
   | { screen: 'repairs' }
+  | { screen: 'message'; params: { id: string } }
+  | { screen: 'messages' }
   | { screen: 'index' };
 
 export type StorefrontNotificationNavigationTarget =
@@ -159,6 +161,18 @@ export function getAdminNotificationNavigationTarget(
       return repairId
         ? { screen: 'repair', params: { id: repairId } }
         : { screen: 'repairs' };
+    }
+    case 'customer_message': {
+      // The chat push sends the conversation id as a number; accept a
+      // numeric string too. Anything else lands on the conversation list.
+      const raw = payload.conversation_id ?? payload.conversationId;
+      const conversationId =
+        typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0
+          ? String(raw)
+          : readString(payload, 'conversation_id', 'conversationId');
+      return conversationId && /^[1-9]\d{0,15}$/.test(conversationId)
+        ? { screen: 'message', params: { id: conversationId } }
+        : { screen: 'messages' };
     }
     default:
       return { screen: 'index' };

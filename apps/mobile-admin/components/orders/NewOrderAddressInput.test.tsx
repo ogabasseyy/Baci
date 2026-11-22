@@ -307,6 +307,42 @@ describe('NewOrderAddressInput', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('uses the latest typed locality when rapid edits are batched', () => {
+    render(
+      <NewOrderAddressInput
+        controller={makeController({
+          deliveryInfo: {
+            address: 'Saved street',
+            city: 'Lagos',
+            name: 'Ada',
+            phone: '08030000000',
+            state: 'Lagos',
+          },
+        })}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+    const onNotFound = googlePlacesState.lastProps?.onNotFound as
+      | (() => void)
+      | undefined;
+    act(() => onNotFound?.());
+
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText('City'), {
+        target: { value: 'Ikeja' },
+      });
+      fireEvent.change(screen.getByPlaceholderText('City'), {
+        target: { value: 'Lagos' },
+      });
+    });
+
+    expect(
+      screen.getByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).toBeInTheDocument();
+  });
+
   it('updates city and state through dedicated fallback inputs', () => {
     const setDeliveryInfo = vi.fn();
     render(

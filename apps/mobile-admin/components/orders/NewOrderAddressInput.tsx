@@ -45,15 +45,24 @@ export function NewOrderAddressInput({
   const { colors, deliveryInfo, setDeliveryInfo } = controller;
   const hasGoogleMapsApiKey = Boolean(googleMapsApiKey);
   const selectedDescriptionRef = useRef<string | null>(null);
+  const latestLocalityRef = useRef({
+    city: deliveryInfo.city,
+    state: deliveryInfo.state,
+  });
+  // Keep the event-time value current even when React batches rapid keystrokes.
+  latestLocalityRef.current = {
+    city: deliveryInfo.city,
+    state: deliveryInfo.state,
+  };
   const [detailsRecovery, setDetailsRecovery] = useState(false);
   const [manualLocality, setManualLocality] = useState(false);
 
   const setLocality = (field: 'city' | 'state', text: string) => {
-    if (
-      deliveryInfo[field].trim().toLowerCase() !== text.trim().toLowerCase()
-    ) {
+    const previousText = latestLocalityRef.current[field];
+    if (previousText.trim().toLowerCase() !== text.trim().toLowerCase()) {
       setManualLocality(true);
     }
+    latestLocalityRef.current[field] = text;
     setDeliveryInfo((previous) => {
       if (previous[field].trim().toLowerCase() === text.trim().toLowerCase()) {
         return { ...previous, [field]: text };
@@ -107,6 +116,7 @@ export function NewOrderAddressInput({
               selectedDescriptionRef.current = data.description;
               setManualLocality(false);
               if (!details) {
+                latestLocalityRef.current = { city: '', state: '' };
                 setDetailsRecovery(true);
                 setDeliveryInfo((previous) => ({
                   ...clearGeocodedFields(previous),
@@ -119,6 +129,10 @@ export function NewOrderAddressInput({
               const missingLocality = !(
                 parsed.city.trim() && parsed.state.trim()
               );
+              latestLocalityRef.current = {
+                city: parsed.city,
+                state: parsed.state,
+              };
               setDetailsRecovery(missingLocality);
               setDeliveryInfo((previous) => ({
                 ...previous,
@@ -175,6 +189,9 @@ export function NewOrderAddressInput({
                   text
                 );
                 setManualLocality(!keepsDestination && Boolean(text.trim()));
+                if (!keepsDestination) {
+                  latestLocalityRef.current = { city: '', state: '' };
+                }
                 setDeliveryInfo((previous) => ({
                   ...(keepsDestination
                     ? previous
@@ -234,6 +251,9 @@ export function NewOrderAddressInput({
                 text
               );
               setManualLocality(!keepsDestination && Boolean(text.trim()));
+              if (!keepsDestination) {
+                latestLocalityRef.current = { city: '', state: '' };
+              }
               setDeliveryInfo((previous) => ({
                 ...(keepsDestination
                   ? previous

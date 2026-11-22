@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useV2Theme } from '../providers/v2-theme-context';
 
 /*
@@ -25,9 +25,21 @@ export const SnowEffect: React.FC = () => {
   const { theme } = useV2Theme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(undefined);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  // Respect the shopper's "reduce motion" setting (and follow live changes).
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(query.matches);
+    const onChange = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
 
   useEffect(() => {
-    if (theme !== 'santa' || !canvasRef.current) return;
+    if (theme !== 'santa' || reducedMotion || !canvasRef.current) return;
+    // The state above lags one render behind on mount, so check the query directly too.
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -113,9 +125,9 @@ export const SnowEffect: React.FC = () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       window.removeEventListener('resize', handleResize);
     };
-  }, [theme]);
+  }, [theme, reducedMotion]);
 
-  if (theme !== 'santa') return null;
+  if (theme !== 'santa' || reducedMotion) return null;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-100 overflow-hidden">

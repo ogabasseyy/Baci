@@ -26,6 +26,14 @@ path:
 - `WALLET_DVA_PROVISIONER_DB_PASSWORD`
 - `WALLET_DVA_PROVISIONER_DB_CA`
 
+`WALLET_DVA_PROVISIONER_DB_HOST` must be a DNS FQDN accepted by the runtime
+schema; IP literals, localhost, and short hostnames are rejected. TLS certificate
+verification uses the supplied CA. Paystack's create response may omit
+`split_config`; in that case the server validates the returned numeric DVA ID
+and performs a read-only GET to `/dedicated_account/:dedicated_account_id` to
+verify the exact new assignment before persistence. It never retries the create
+request as part of that readback.
+
 The runtime uses TLS certificate verification and rejects any session whose
 login/database identity, role membership, table privileges, or TLS state does
 not match this dedicated contract. It has no service-role or generic database
@@ -36,6 +44,6 @@ it calls Paystack.
 After provisioning the role and before enabling the runtime, run
 `supabase/tests/wallet_dva_restricted_writer.sql` against the chronological
 migration replay. The test covers the SQL role boundary, exact owner/merchant
-binding, idempotent retries, receiver and active-checkout alias conflicts,
-projection shape, NULL rejection, authenticated execute denial, and owner
-RLS reads with synthetic users.
+binding, idempotent retries, disabled and pending-review lifecycle behavior,
+receiver and active-checkout alias conflicts, projection shape, NULL rejection,
+authenticated execute denial, and owner RLS reads with synthetic users.

@@ -1,8 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  ensureCustomerWalletPaymentAccount,
-  resolveCustomerWalletPaymentAccount,
-} from '@/lib/customer-wallet-payment-accounts';
+import { resolveCustomerWalletPaymentAccount } from '@/lib/customer-wallet-payment-accounts';
 import type {
   OrderWalletFundingIntent,
   OrderWalletFundingIntentRepository,
@@ -121,9 +118,6 @@ export function createOrderWalletFundingIntentRepository(
   supabase: SupabaseClient
 ): OrderWalletFundingIntentRepository {
   return {
-    ensureWalletPaymentAccount(args) {
-      return ensureCustomerWalletPaymentAccount({ ...args, supabase });
-    },
     async expireStaleWalletFundingIntents(args) {
       const { error } = await supabase.rpc(
         'expire_order_wallet_funding_intents',

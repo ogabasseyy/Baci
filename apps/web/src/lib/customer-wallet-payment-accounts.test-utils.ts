@@ -1,4 +1,7 @@
 import { vi } from 'vitest';
+import type { CustomerWalletPaymentAccount } from './customer-wallet-payment-account-types';
+import { normalizeWalletPaymentAccount } from './customer-wallet-payment-account-types';
+import type { WalletDvaProvisionerInput } from './wallet-dva-provisioner-executor';
 
 export const existingAccountRow = {
   id: 'wallet-account-1',
@@ -32,6 +35,28 @@ export const customer = {
   phone: '+2348012345678',
   user_id: 'user-1',
 };
+
+export function createWalletDvaTestWriter() {
+  return vi.fn(
+    async (
+      input: WalletDvaProvisionerInput
+    ): Promise<CustomerWalletPaymentAccount> =>
+      normalizeWalletPaymentAccount({
+        ...existingAccountRow,
+        account_name: input.accountName,
+        account_number: input.accountNumber,
+        bank_name: input.bankName,
+        bank_slug: input.bankSlug,
+        consented_at: input.consentedAt,
+        currency: input.currency,
+        customer_id: input.customerId,
+        merchant_id: input.merchantId,
+        provider_account_id: input.providerAccountId,
+        provider_customer_code: input.providerCustomerCode,
+        provider_subaccount_code: input.providerSubaccountCode,
+      })
+  );
+}
 
 export function createMaybeSingleQuery(data: unknown) {
   const query: Record<string, unknown> = {};

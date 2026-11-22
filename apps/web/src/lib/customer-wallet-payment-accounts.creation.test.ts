@@ -7,9 +7,8 @@ import {
   getDedicatedAccounts,
 } from '@/lib/paystack';
 import {
-  createInsertQuery,
   createMaybeSingleQuery,
-  createSelectRowsQuery,
+  createWalletDvaTestWriter,
   customer,
   existingAccountRow,
   merchant,
@@ -48,6 +47,7 @@ describe('customer wallet payment account creation', () => {
         customer,
         merchant,
         supabase,
+        userId: customer.user_id,
         walletDvaWriter: null,
       })
     ).resolves.toEqual(
@@ -73,6 +73,7 @@ describe('customer wallet payment account creation', () => {
         customer,
         merchant,
         supabase,
+        userId: customer.user_id,
         walletDvaWriter: null,
       })
     ).rejects.toMatchObject({ code: 'WALLET_DVA_WRITER_UNAVAILABLE' });
@@ -94,6 +95,8 @@ describe('customer wallet payment account creation', () => {
         customer,
         merchant: { ...merchant, paystack_subaccount_code: '   ' },
         supabase,
+        userId: customer.user_id,
+        walletDvaWriter: null,
       })
     ).rejects.toMatchObject({
       code: 'GATEWAY_NOT_CONFIGURED',
@@ -115,6 +118,8 @@ describe('customer wallet payment account creation', () => {
         customer: { ...customer, phone: null },
         merchant,
         supabase,
+        userId: customer.user_id,
+        walletDvaWriter: createWalletDvaTestWriter(),
       })
     ).rejects.toMatchObject({
       code: 'CUSTOMER_PHONE_REQUIRED',
@@ -151,21 +156,9 @@ describe('customer wallet payment account creation', () => {
     });
 
     const accountQuery = createMaybeSingleQuery(null);
-    const orderAliasQuery = createSelectRowsQuery([]);
-    const { insert, query: insertQuery } = createInsertQuery({
-      ...existingAccountRow,
-      account_number: '2222222222',
-      bank_name: 'Test Bank',
-      bank_slug: 'test-bank',
-      provider_account_id: '98',
-      provider_customer_code: 'CUS_new',
-    });
+    const walletDvaWriter = createWalletDvaTestWriter();
     const supabase = {
-      from: vi
-        .fn()
-        .mockReturnValueOnce(accountQuery)
-        .mockReturnValueOnce(orderAliasQuery)
-        .mockReturnValueOnce(insertQuery),
+      from: vi.fn(() => accountQuery),
     } as unknown as SupabaseClient;
 
     await expect(
@@ -174,6 +167,8 @@ describe('customer wallet payment account creation', () => {
         customer,
         merchant,
         supabase,
+        userId: customer.user_id,
+        walletDvaWriter,
       })
     ).resolves.toEqual(
       expect.objectContaining({
@@ -201,11 +196,13 @@ describe('customer wallet payment account creation', () => {
       phone: '+2348012345678',
       subaccount: 'ACCT_merchant123',
     });
-    expect(insert).toHaveBeenCalledWith(
+    expect(walletDvaWriter).toHaveBeenCalledWith(
       expect.objectContaining({
-        account_number: '2222222222',
-        merchant_id: 'merchant-1',
-        provider_subaccount_code: 'ACCT_merchant123',
+        accountNumber: '2222222222',
+        customerId: 'customer-1',
+        merchantId: 'merchant-1',
+        providerSubaccountCode: 'ACCT_merchant123',
+        userId: customer.user_id,
       })
     );
   });

@@ -43,7 +43,8 @@ INSERT INTO auth.users (
 VALUES
   ('86110000-0000-4000-8000-000000000101', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-owner-1@example.test', 'test', now(), now(), now(), '{}', '{}'),
   ('86110000-0000-4000-8000-000000000102', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-owner-2@example.test', 'test', now(), now(), now(), '{}', '{}'),
-  ('86110000-0000-4000-8000-000000000103', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-owner-3@example.test', 'test', now(), now(), now(), '{}', '{}');
+  ('86110000-0000-4000-8000-000000000103', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-owner-3@example.test', 'test', now(), now(), now(), '{}', '{}'),
+  ('86110000-0000-4000-8000-000000000104', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-owner-4@example.test', 'test', now(), now(), now(), '{}', '{}');
 
 SET LOCAL ROLE service_role;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
@@ -59,6 +60,7 @@ BEGIN
   VALUES
     ('86110000-0000-4000-8000-000000000011', '86110000-0000-4000-8000-000000000001', 'wallet-owner-1@example.test', '86110000-0000-4000-8000-000000000101'),
     ('86110000-0000-4000-8000-000000000012', '86110000-0000-4000-8000-000000000001', 'wallet-owner-2@example.test', '86110000-0000-4000-8000-000000000102'),
+    ('86110000-0000-4000-8000-000000000013', '86110000-0000-4000-8000-000000000001', 'wallet-owner-4@example.test', '86110000-0000-4000-8000-000000000104'),
     ('86110000-0000-4000-8000-000000000021', '86110000-0000-4000-8000-000000000002', 'wallet-owner-3@example.test', '86110000-0000-4000-8000-000000000103');
 
   INSERT INTO public.merchant_feature_settings (merchant_id, wallet_paystack_dva_enabled)
@@ -74,6 +76,20 @@ BEGIN
     '86110000-0000-4000-8000-000000000002', 'paystack', 'pending',
     '9876543210', now() + interval '30 minutes', now() + interval '1 hour'
   );
+
+  INSERT INTO public.customer_wallet_payment_accounts (
+    id, merchant_id, customer_id, provider, provider_customer_code,
+    provider_subaccount_code, provider_account_id, account_number,
+    account_name, bank_name, bank_slug, currency, status, consented_at
+  ) VALUES
+    ('86110000-0000-4000-8000-000000000301', '86110000-0000-4000-8000-000000000001',
+     '86110000-0000-4000-8000-000000000012', 'paystack', 'CUS_WalletOwner2',
+     'ACCT_walletdva1', 'paystack-pending-2', '2222222222', 'Pending Owner',
+     'Wema Bank', NULL, 'NGN', 'pending_review', now()),
+    ('86110000-0000-4000-8000-000000000302', '86110000-0000-4000-8000-000000000002',
+     '86110000-0000-4000-8000-000000000021', 'paystack', 'CUS_WalletOwner3',
+     'ACCT_walletdva2', 'paystack-disabled-3', '4444444444', 'Disabled Owner',
+     'Wema Bank', NULL, 'NGN', 'disabled', now());
 END;
 $fixtures$;
 
@@ -175,10 +191,10 @@ BEGIN
   v_conflict := false;
   BEGIN
     PERFORM wallet_dva_private.record_paystack_customer_wallet_dva(
-      '86110000-0000-4000-8000-000000000102',
-      '86110000-0000-4000-8000-000000000012',
+      '86110000-0000-4000-8000-000000000104',
+      '86110000-0000-4000-8000-000000000013',
       '86110000-0000-4000-8000-000000000001',
-      'CUS_WalletOwner2', 'ACCT_walletdva1', 'paystack-id-2',
+      'CUS_WalletOwner4', 'ACCT_walletdva1', 'paystack-id-4',
       '1234567890', 'Other Owner', 'Wema', NULL, 'NGN', now()
     );
   EXCEPTION WHEN raise_exception THEN
@@ -192,10 +208,10 @@ BEGIN
   v_conflict := false;
   BEGIN
     PERFORM wallet_dva_private.record_paystack_customer_wallet_dva(
-      '86110000-0000-4000-8000-000000000103',
-      '86110000-0000-4000-8000-000000000021',
-      '86110000-0000-4000-8000-000000000002',
-      'CUS_WalletOwner3', 'ACCT_walletdva2', 'paystack-id-3',
+      '86110000-0000-4000-8000-000000000104',
+      '86110000-0000-4000-8000-000000000013',
+      '86110000-0000-4000-8000-000000000001',
+      'CUS_WalletOwner4', 'ACCT_walletdva1', 'paystack-id-4',
       '9876543210', 'Alias Owner', 'Wema', NULL, 'NGN', now()
     );
   EXCEPTION WHEN raise_exception THEN
@@ -203,6 +219,52 @@ BEGIN
   END;
   IF NOT v_conflict THEN
     RAISE EXCEPTION 'active checkout DVA alias was not refused';
+  END IF;
+
+  -- Pending review only reactivates if provider identity is unchanged.
+  v_conflict := false;
+  BEGIN
+    PERFORM wallet_dva_private.record_paystack_customer_wallet_dva(
+      '86110000-0000-4000-8000-000000000102',
+      '86110000-0000-4000-8000-000000000012',
+      '86110000-0000-4000-8000-000000000001',
+      'CUS_WalletOwner2', 'ACCT_walletdva1', 'paystack-pending-2',
+      '5555555555', 'Changed Pending Owner', 'Wema Bank', NULL, 'NGN', now()
+    );
+  EXCEPTION WHEN raise_exception THEN
+    v_conflict := SQLERRM = 'WALLET_DVA_PENDING_REVIEW_CONFLICT';
+  END;
+  IF NOT v_conflict THEN
+    RAISE EXCEPTION 'changed pending-review identity was not refused';
+  END IF;
+
+  v_retry := wallet_dva_private.record_paystack_customer_wallet_dva(
+    '86110000-0000-4000-8000-000000000102',
+    '86110000-0000-4000-8000-000000000012',
+    '86110000-0000-4000-8000-000000000001',
+    'CUS_WalletOwner2', 'ACCT_walletdva1', 'paystack-pending-2',
+    '2222222222', 'Pending Owner Verified', 'Wema Bank', NULL, 'NGN', now()
+  );
+  IF v_retry->>'status' IS DISTINCT FROM 'active'
+    OR v_retry->>'id' IS DISTINCT FROM '86110000-0000-4000-8000-000000000301'
+  THEN
+    RAISE EXCEPTION 'matching pending-review account did not reactivate in place';
+  END IF;
+
+  v_conflict := false;
+  BEGIN
+    PERFORM wallet_dva_private.record_paystack_customer_wallet_dva(
+      '86110000-0000-4000-8000-000000000103',
+      '86110000-0000-4000-8000-000000000021',
+      '86110000-0000-4000-8000-000000000002',
+      'CUS_WalletOwner3', 'ACCT_walletdva2', 'paystack-disabled-3',
+      '4444444444', 'Disabled Owner', 'Wema Bank', NULL, 'NGN', now()
+    );
+  EXCEPTION WHEN raise_exception THEN
+    v_conflict := SQLERRM = 'WALLET_DVA_DISABLED_ACCOUNT';
+  END;
+  IF NOT v_conflict THEN
+    RAISE EXCEPTION 'disabled DVA slot was not refused';
   END IF;
 
   -- Required fields must reject SQL NULL (which otherwise bypasses OR checks).
@@ -255,15 +317,28 @@ BEGIN
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', '86110000-0000-4000-8000-000000000102', true);
   SELECT count(*) INTO v_count
   FROM public.customer_wallet_payment_accounts;
-  IF v_count <> 0 THEN
-    RAISE EXCEPTION 'same-merchant alternate user saw a wallet DVA';
+  IF v_count <> 1 OR NOT EXISTS (
+    SELECT 1 FROM public.customer_wallet_payment_accounts
+    WHERE customer_id = '86110000-0000-4000-8000-000000000012'
+  ) THEN
+    RAISE EXCEPTION 'same-merchant owner did not see only their own wallet DVA';
   END IF;
 
   PERFORM pg_catalog.set_config('request.jwt.claim.sub', '86110000-0000-4000-8000-000000000103', true);
   SELECT count(*) INTO v_count
   FROM public.customer_wallet_payment_accounts;
+  IF v_count <> 1 OR NOT EXISTS (
+    SELECT 1 FROM public.customer_wallet_payment_accounts
+    WHERE customer_id = '86110000-0000-4000-8000-000000000021'
+  ) THEN
+    RAISE EXCEPTION 'other-merchant owner did not see only their own wallet DVA';
+  END IF;
+
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', '86110000-0000-4000-8000-000000000104', true);
+  SELECT count(*) INTO v_count
+  FROM public.customer_wallet_payment_accounts;
   IF v_count <> 0 THEN
-    RAISE EXCEPTION 'other-merchant user saw a wallet DVA';
+    RAISE EXCEPTION 'same-merchant alternate user saw a wallet DVA';
   END IF;
 END;
 $rls_reads$;

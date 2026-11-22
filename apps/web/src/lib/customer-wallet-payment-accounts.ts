@@ -189,8 +189,8 @@ export async function ensureCustomerWalletPaymentAccount({
   customer: CustomerWalletPaymentCustomer;
   merchant: CustomerWalletPaymentMerchant;
   supabase: SupabaseClient;
-  userId?: string;
-  walletDvaWriter?: WalletDvaAccountWriter | null;
+  userId: string;
+  walletDvaWriter: WalletDvaAccountWriter | null;
 }): Promise<CustomerWalletPaymentAccount> {
   const merchantSubaccount = getMerchantPaystackSubaccount(merchant);
 
@@ -220,7 +220,7 @@ export async function ensureCustomerWalletPaymentAccount({
 
   // Fail closed before creating an external Paystack account when the
   // separately provisioned restricted writer is not available.
-  if (walletDvaWriter === null) {
+  if (walletDvaWriter == null || userId == null || userId.trim().length === 0) {
     throw new CustomerWalletPaymentAccountError(
       'WALLET_DVA_WRITER_UNAVAILABLE',
       'Wallet funding account storage is unavailable'
@@ -260,7 +260,6 @@ export async function ensureCustomerWalletPaymentAccount({
       consentedAt,
       customerId: customer.id,
       merchantId: merchant.id,
-      supabase,
       userId,
       writeVerifiedAccount: walletDvaWriter,
     });
@@ -274,7 +273,6 @@ export async function ensureCustomerWalletPaymentAccount({
     }),
     phone: customerPhone,
     subaccount: merchantSubaccount,
-    ...(walletDvaWriter ? { requireVerifiedSubaccount: true } : {}),
   });
 
   if (!dedicatedAccount.success) {
@@ -289,7 +287,6 @@ export async function ensureCustomerWalletPaymentAccount({
     consentedAt,
     customerId: customer.id,
     merchantId: merchant.id,
-    supabase,
     userId,
     writeVerifiedAccount: walletDvaWriter,
   });

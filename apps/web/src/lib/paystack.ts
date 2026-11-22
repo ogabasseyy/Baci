@@ -242,8 +242,6 @@ export interface WalletDedicatedAccount {
 export interface WalletDedicatedAccountInput {
   customerCode: string;
   subaccount: string;
-  /** Strict route boundary requires provider readback if create omits proof. */
-  requireVerifiedSubaccount?: boolean;
   preferredBank?: string;
   phone?: string;
   firstName?: string;
@@ -801,49 +799,44 @@ export async function createDedicatedAccountForWallet(
   // If it is absent, confirm the exact created assignment through the
   // provider's read endpoint. Never repeat create after an incomplete result.
   if (!providerSplitConfigSubaccount && walletAccount.split_config == null) {
-    if (!input.requireVerifiedSubaccount) {
-      // Preserve the pre-existing behavior for non-customer-wallet callers.
-      providerSplitConfigSubaccount = input.subaccount;
-    } else {
-      if (walletAccount.id === undefined || walletAccount.id === null) {
-        return {
-          success: false,
-          error: 'Wallet DVA response did not identify the created assignment',
-          code: 'VALIDATION_ERROR',
-        };
-      }
-      const createdAccountId = String(walletAccount.id);
-      const createdAccountNumber = walletAccount.account_number;
-      const fetched = await getDedicatedAccount(createdAccountId);
-      if (!fetched.success) return fetched;
-      const verifiedParsed = WalletDedicatedAccountResponseSchema.safeParse(
-        fetched.data
-      );
-      if (!verifiedParsed.success) {
-        return {
-          success: false,
-          error: 'Wallet DVA assignment could not be verified',
-          code: 'VALIDATION_ERROR',
-        };
-      }
-      walletAccount = verifiedParsed.data;
-      if (
-        !walletAccount.active ||
-        !walletAccount.assigned ||
-        String(walletAccount.id) !== createdAccountId ||
-        walletAccount.account_number !== createdAccountNumber ||
-        walletAccount.customer?.customer_code !== input.customerCode
-      ) {
-        return {
-          success: false,
-          error: 'Wallet DVA assignment could not be verified',
-          code: 'VALIDATION_ERROR',
-        };
-      }
-      providerSplitConfigSubaccount = extractPaystackSplitConfigSubaccount(
-        walletAccount.split_config
-      );
+    if (walletAccount.id === undefined || walletAccount.id === null) {
+      return {
+        success: false,
+        error: 'Wallet DVA response did not identify the created assignment',
+        code: 'VALIDATION_ERROR',
+      };
     }
+    const createdAccountId = String(walletAccount.id);
+    const createdAccountNumber = walletAccount.account_number;
+    const fetched = await getDedicatedAccount(createdAccountId);
+    if (!fetched.success) return fetched;
+    const verifiedParsed = WalletDedicatedAccountResponseSchema.safeParse(
+      fetched.data
+    );
+    if (!verifiedParsed.success) {
+      return {
+        success: false,
+        error: 'Wallet DVA assignment could not be verified',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+    walletAccount = verifiedParsed.data;
+    if (
+      !walletAccount.active ||
+      !walletAccount.assigned ||
+      String(walletAccount.id) !== createdAccountId ||
+      walletAccount.account_number !== createdAccountNumber ||
+      walletAccount.customer?.customer_code !== input.customerCode
+    ) {
+      return {
+        success: false,
+        error: 'Wallet DVA assignment could not be verified',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+    providerSplitConfigSubaccount = extractPaystackSplitConfigSubaccount(
+      walletAccount.split_config
+    );
   }
   if (providerSplitConfigSubaccount !== input.subaccount) {
     return {

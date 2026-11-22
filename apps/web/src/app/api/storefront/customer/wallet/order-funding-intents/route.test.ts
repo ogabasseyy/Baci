@@ -196,7 +196,6 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
     expect(response.status).toBe(200);
     expect(mockCreateOrderWalletFundingIntent).toHaveBeenCalledWith(
       expect.objectContaining({
-        consent: undefined,
         customer,
         merchant,
         orderId: '11111111-1111-4111-8111-111111111111',

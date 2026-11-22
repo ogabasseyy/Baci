@@ -1,7 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { hasActivePaystackOrderDvaAlias } from '@/lib/payments/paystack-dva-order-alias';
 import type { WalletDedicatedAccount } from '@/lib/paystack';
-import { resolveStalledWalletPaymentAccount } from './customer-wallet-payment-account-reactivation';
 import {
   type CustomerWalletPaymentAccount,
   CustomerWalletPaymentAccountError,
@@ -11,41 +9,8 @@ import {
 } from './customer-wallet-payment-account-types';
 import type { WalletDvaProvisionerInput } from './wallet-dva-provisioner-executor';
 
-const POSTGRES_UNIQUE_VIOLATION = '23505';
-
 // Re-exported so existing importers are unaffected by the split.
 export { normalizeWalletPaymentAccount };
-
-async function assertNoActiveOrderPaymentAccountAlias({
-  accountNumber,
-  asOf,
-  supabase,
-}: {
-  accountNumber: string;
-  asOf: Date;
-  supabase: SupabaseClient;
-}) {
-  let aliasesActiveOrder = false;
-  try {
-    aliasesActiveOrder = await hasActivePaystackOrderDvaAlias({
-      accountNumber,
-      asOf,
-      supabase,
-    });
-  } catch (error) {
-    throw new CustomerWalletPaymentAccountError(
-      'WALLET_DVA_STORAGE_ERROR',
-      error instanceof Error ? error.message : 'Failed to check order DVA alias'
-    );
-  }
-
-  if (aliasesActiveOrder) {
-    throw new CustomerWalletPaymentAccountError(
-      'WALLET_DVA_ORDER_ALIAS_CONFLICT',
-      'This Paystack account is still reserved for an active order payment'
-    );
-  }
-}
 
 export async function resolveCustomerWalletPaymentAccount({
   customerId,
@@ -109,7 +74,6 @@ export async function persistWalletPaymentAccount({
   consentedAt,
   customerId,
   merchantId,
-  supabase,
   userId,
   writeVerifiedAccount,
 }: {
@@ -117,106 +81,45 @@ export async function persistWalletPaymentAccount({
   consentedAt: Date;
   customerId: string;
   merchantId: string;
-  supabase: SupabaseClient;
-  userId?: string;
-  writeVerifiedAccount?: (
+  userId: string;
+  writeVerifiedAccount: (
     input: WalletDvaProvisionerInput
   ) => Promise<CustomerWalletPaymentAccount>;
 }) {
-  if (writeVerifiedAccount) {
-    if (!userId) {
-      throw new CustomerWalletPaymentAccountError(
-        'WALLET_DVA_STORAGE_ERROR',
-        'Customer ownership could not be verified'
-      );
-    }
-    return writeVerifiedAccount({
-      accountName: account.accountName,
-      accountNumber: account.accountNumber,
-      bankName: account.bankName,
-      bankSlug: account.bankSlug,
-      consentedAt: consentedAt.toISOString(),
-      currency: account.currency,
-      customerId,
-      merchantId,
-      providerAccountId: account.providerAccountId,
-      providerCustomerCode: account.providerCustomerCode,
-      providerSubaccountCode: account.providerSubaccountCode,
-      userId,
-    });
-  }
-
-  await assertNoActiveOrderPaymentAccountAlias({
-    accountNumber: account.accountNumber,
-    asOf: new Date(),
-    supabase,
-  });
-
-  const payload = {
-    account_name: account.accountName,
-    account_number: account.accountNumber,
-    bank_name: account.bankName,
-    bank_slug: account.bankSlug,
-    consented_at: consentedAt.toISOString(),
-    currency: account.currency,
-    customer_id: customerId,
-    merchant_id: merchantId,
-    metadata: { source: 'wallet_dva' },
-    provider: 'paystack' as const,
-    provider_account_id: account.providerAccountId,
-    provider_customer_code: account.providerCustomerCode,
-    provider_subaccount_code: account.providerSubaccountCode,
-    status: 'active' as const,
-  };
-  const { data, error } = await supabase
-    .from('customer_wallet_payment_accounts')
-    .insert(payload)
-    .select(WALLET_PAYMENT_ACCOUNT_SELECT)
-    .single();
-
   if (
-    error &&
-    (error as { code?: string }).code === POSTGRES_UNIQUE_VIOLATION
+    userId == null ||
+    userId.trim().length === 0 ||
+    writeVerifiedAccount == null
   ) {
-    const existingAccount = await resolveCustomerWalletPaymentAccount({
-      customerId,
-      merchantId,
-      supabase,
-    });
-    if (existingAccount) return existingAccount;
-
-    const receiverAccount = await findCustomerWalletPaymentAccountByReceiver({
-      receiverAccountNumber: account.accountNumber,
-      supabase,
-    });
-    if (
-      receiverAccount?.customerId === customerId &&
-      receiverAccount.merchantId === merchantId
-    ) {
-      return receiverAccount;
-    }
-    if (receiverAccount) {
-      throw new CustomerWalletPaymentAccountError(
-        'WALLET_DVA_RECEIVER_CONFLICT',
-        'This Paystack wallet DVA is already assigned to another customer'
-      );
-    }
-
-    const reactivated = await resolveStalledWalletPaymentAccount({
-      account,
-      consentedAt,
-      customerId,
-      merchantId,
-      supabase,
-    });
-    if (reactivated) return reactivated;
-  }
-
-  if (error) {
     throw new CustomerWalletPaymentAccountError(
-      'WALLET_DVA_STORAGE_ERROR',
-      error.message
+      'WALLET_DVA_WRITER_UNAVAILABLE',
+      'Wallet funding account storage is unavailable'
     );
   }
-  return normalizeWalletPaymentAccount(data as CustomerWalletPaymentAccountRow);
+  const written = await writeVerifiedAccount({
+    accountName: account.accountName,
+    accountNumber: account.accountNumber,
+    bankName: account.bankName,
+    bankSlug: account.bankSlug,
+    consentedAt: consentedAt.toISOString(),
+    currency: account.currency,
+    customerId,
+    merchantId,
+    providerAccountId: account.providerAccountId,
+    providerCustomerCode: account.providerCustomerCode,
+    providerSubaccountCode: account.providerSubaccountCode,
+    userId,
+  });
+  if (
+    written.customerId !== customerId ||
+    written.merchantId !== merchantId ||
+    written.provider !== 'paystack' ||
+    written.status !== 'active'
+  ) {
+    throw new CustomerWalletPaymentAccountError(
+      'WALLET_DVA_STORAGE_ERROR',
+      'Wallet DVA writer returned an invalid owner binding'
+    );
+  }
+  return written;
 }

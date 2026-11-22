@@ -300,7 +300,6 @@ describe('paystack helpers', () => {
     const { createDedicatedAccountForWallet } = await import('@/lib/paystack');
     const result = await createDedicatedAccountForWallet({
       customerCode: 'CUS_wallet123',
-      requireVerifiedSubaccount: true,
       subaccount: 'ACCT_merchant123',
     });
 

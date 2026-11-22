@@ -85,7 +85,14 @@ export interface GenerateQuizDraftInput {
   topics: string[];
 }
 
+export interface QuizEdgeLaunchOptions {
+  backendMode: 'postgres' | 'edge_rooms';
+  edgeRoomCount?: number;
+}
+
 export interface QuizLaunchInput {
+  backendMode?: 'postgres' | 'edge_rooms';
+  edgeRoomCount?: number;
   maxAttempts: number;
   mode: 'test' | 'live';
   regulatoryCompliance?: MerchantQuizActivationV2Input['regulatoryCompliance'];

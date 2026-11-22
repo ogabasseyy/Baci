@@ -7,6 +7,7 @@ import type {
 } from '@/schemas/quiz';
 import type {
   QuizDraftConfiguration,
+  QuizEdgeLaunchOptions,
   QuizLaunchInput,
 } from './quiz-admin-actions';
 import { isQuizAuthoringWindowAllowed } from './quiz-authoring-window-allowed';
@@ -27,7 +28,8 @@ export function QuizAdminResult({
   isActivating?: boolean;
   onActivate?: (
     answerKeyReview: AnswerKeyReview,
-    regulatoryCompliance?: QuizLaunchInput['regulatoryCompliance']
+    regulatoryCompliance?: QuizLaunchInput['regulatoryCompliance'],
+    edgeOptions?: QuizEdgeLaunchOptions
   ) => void;
   result: MerchantQuizGenerationResponse;
 }) {
@@ -151,8 +153,10 @@ export function QuizAdminResult({
           configuration={configuration}
           isLaunching={isActivating}
           onCancel={() => setShowDialog(false)}
-          onConfirm={(review, regulatoryCompliance) =>
-            onActivate?.(review, regulatoryCompliance)
+          onConfirm={(review, regulatoryCompliance, edgeOptions) =>
+            edgeOptions
+              ? onActivate?.(review, regulatoryCompliance, edgeOptions)
+              : onActivate?.(review, regulatoryCompliance)
           }
         />
       ) : null}

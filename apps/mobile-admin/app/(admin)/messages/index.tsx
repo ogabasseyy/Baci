@@ -23,9 +23,18 @@ import { NetworkError } from '@/lib/api-client';
 import { sortInbox } from '@/lib/merchant-inbox-sort';
 import type { InboxView } from '@/schemas/merchant-inbox';
 
-/** A view that filters rows after loading may need a few pages to fill. */
+/**
+ * The chat engine pages by recent activity, so the views that rank chats by
+ * priority or waiting time load a few pages up front and sort across them;
+ * older chats join the ranking as more pages load on scroll.
+ */
 const MIN_ROWS_BEFORE_PAUSE = 8;
-const MAX_AUTO_PAGES = 6;
+const MAX_AUTO_PAGES = 5;
+const RANKED_VIEWS: readonly InboxView[] = [
+  'needs_reply',
+  'unread',
+  'follow_up',
+];
 
 const EMPTY: Record<InboxView, { title: string; body: string }> = {
   needs_reply: {
@@ -75,13 +84,15 @@ export default function MessagesScreen() {
   );
   const pages = query.data?.pages.length ?? 0;
 
-  // Views narrow each provider page, so a short result keeps loading a few more.
+  // Ranked views load several pages so the top of the list is truly the most
+  // important; the others only keep loading while a narrowed view is short.
   useEffect(() => {
     if (
       query.hasNextPage &&
       !query.isFetchingNextPage &&
-      conversations.length < MIN_ROWS_BEFORE_PAUSE &&
-      pages < MAX_AUTO_PAGES
+      pages < MAX_AUTO_PAGES &&
+      (RANKED_VIEWS.includes(view) ||
+        conversations.length < MIN_ROWS_BEFORE_PAUSE)
     ) {
       query.fetchNextPage();
     }
@@ -91,6 +102,7 @@ export default function MessagesScreen() {
     query.fetchNextPage,
     conversations.length,
     pages,
+    view,
   ]);
 
   const onRefresh = async () => {
@@ -117,7 +129,9 @@ export default function MessagesScreen() {
             <InboxSearchResults
               colors={colors}
               isError={search.isError}
+              isLoadingMore={search.isLoadingMore}
               isPending={search.isPending}
+              onLoadMore={search.loadMore}
               results={search.results}
               term={term}
             />

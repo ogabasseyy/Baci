@@ -1,39 +1,77 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useMerchant } from '@/hooks/useMerchant';
 import { inboxSearchKey } from '@/lib/inbox-query-keys';
 import { searchInbox } from '@/lib/merchant-inbox-api';
+import type { InboxSearchResponse } from '@/schemas/merchant-inbox';
 
 export const INBOX_SEARCH_MIN_LENGTH = 2;
 const DEBOUNCE_MS = 350;
+/**
+ * The chat engine searches the whole account and the server keeps only this
+ * store's chats, so a page can come back empty while later pages have matches.
+ * Empty pages are skipped automatically, up to this many.
+ */
+const MAX_EMPTY_PAGES_SKIPPED = 5;
 
 /** Searches chats once the person pauses typing; shorter terms search nothing. */
 export function useInboxSearch(rawTerm: string) {
   const { merchant } = useMerchant();
   const [term, setTerm] = useState('');
+  const trimmed = rawTerm.trim();
 
   useEffect(() => {
-    const next = rawTerm.trim();
-    const timer = setTimeout(() => setTerm(next), DEBOUNCE_MS);
+    const timer = setTimeout(() => setTerm(trimmed), DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [rawTerm]);
+  }, [trimmed]);
 
   const active = term.length >= INBOX_SEARCH_MIN_LENGTH;
-  const query = useQuery({
+  const query = useInfiniteQuery({
     enabled: !!merchant?.id && active,
-    queryFn: () => searchInbox(term),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage: InboxSearchResponse) =>
+      lastPage.hasMore ? lastPage.page + 1 : undefined,
+    queryFn: ({ pageParam }: { pageParam: number }) =>
+      searchInbox(term, pageParam),
     queryKey: inboxSearchKey(merchant?.id, term),
     staleTime: 30_000,
   });
 
+  // Only results for the term on screen: never a stale list from the last one.
+  const current = active && term === trimmed;
+  const seen = new Set<number>();
+  const results = current
+    ? (query.data?.pages ?? [])
+        .flatMap((page) => page.results)
+        .filter(({ conversation }) => {
+          if (seen.has(conversation.id)) return false;
+          seen.add(conversation.id);
+          return true;
+        })
+    : [];
+  const pages = query.data?.pages.length ?? 0;
+  const skipping =
+    current &&
+    results.length === 0 &&
+    query.hasNextPage &&
+    pages <= MAX_EMPTY_PAGES_SKIPPED;
+
+  useEffect(() => {
+    if (skipping && !query.isFetchingNextPage) query.fetchNextPage();
+  }, [skipping, pages, query.isFetchingNextPage, query.fetchNextPage]);
+
   return {
-    // Typing but not yet searched: show nothing stale, just "searching".
+    // Typing but not searched yet, or still looking through empty pages.
     isPending:
-      rawTerm.trim().length >= INBOX_SEARCH_MIN_LENGTH &&
-      (!active || term !== rawTerm.trim() || query.isLoading),
+      trimmed.length >= INBOX_SEARCH_MIN_LENGTH &&
+      (!current || query.isLoading || !!skipping),
     isError: query.isError,
-    results:
-      active && term === rawTerm.trim() ? (query.data?.results ?? []) : [],
+    results,
+    hasMore: !!query.hasNextPage,
+    isLoadingMore: query.isFetchingNextPage,
+    loadMore: () => {
+      if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
+    },
     refetch: query.refetch,
   };
 }

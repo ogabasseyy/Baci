@@ -100,7 +100,9 @@ describe('MessagesScreen', () => {
     vi.clearAllMocks();
     mocks.search.mockReturnValue({
       isError: false,
+      isLoadingMore: false,
       isPending: false,
+      loadMore: vi.fn(),
       results: [],
     });
   });
@@ -241,7 +243,9 @@ describe('MessagesScreen', () => {
     );
     mocks.search.mockReturnValue({
       isError: false,
+      isLoadingMore: false,
       isPending: false,
+      loadMore: vi.fn(),
       results: [
         {
           conversation: conversation(8, 'Zed Test', 'store'),

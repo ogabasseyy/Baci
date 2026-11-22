@@ -16,12 +16,12 @@ vi.mock('@/components/ui/AppSheetModal', () => ({
 
 import { TagSheet } from './TagSheet';
 
-function renderSheet(selected: string[] = []) {
+function renderSheet(selected: string[] = [], busy = false) {
   const onAdd = vi.fn();
   const onRemove = vi.fn();
   render(
     <TagSheet
-      busy={false}
+      busy={busy}
       colors={LIGHT_COLORS}
       onAdd={onAdd}
       onClose={vi.fn()}
@@ -76,6 +76,17 @@ describe('TagSheet', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Payment' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Add tag' })).toBeDisabled();
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: ignores the keyboard submit while a save is pending', () => {
+    const { onAdd } = renderSheet([], true);
+    const input = screen.getByLabelText('New tag');
+    expect(input).toHaveAttribute('readonly');
+
+    fireEvent.change(input, { target: { value: 'Wholesale' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
     expect(onAdd).not.toHaveBeenCalled();
   });
 });

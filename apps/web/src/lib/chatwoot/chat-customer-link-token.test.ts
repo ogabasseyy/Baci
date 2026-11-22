@@ -16,11 +16,12 @@ const CUSTOMER = '33333333-3333-4333-8333-333333333333';
 function env(): NodeJS.ProcessEnv {
   const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   return {
+    NODE_ENV: 'test',
     EKAETTE_CHATWOOT_CHALLENGE_PRIVATE_KEY: privateKey
       .export({ format: 'pem', type: 'pkcs8' })
       .toString(),
     EKAETTE_CHATWOOT_CHALLENGE_ISSUER: 'https://app.example.test',
-  } as NodeJS.ProcessEnv;
+  };
 }
 
 describe('chat customer link token', () => {

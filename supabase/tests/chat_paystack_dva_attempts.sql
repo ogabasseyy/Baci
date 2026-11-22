@@ -31,7 +31,7 @@ LANGUAGE sql AS $$
     'cw-chk-' || encode(sha256(convert_to(p_number, 'UTF8')), 'hex'));
 $$;
 
-CREATE FUNCTION pg_temp.begin_attempt(p_order uuid, p_token text, p_ref text)
+CREATE FUNCTION pg_temp.begin_attempt(p_order uuid, p_token text, p_ref text, p_want text DEFAULT NULL)
 RETURNS text LANGUAGE plpgsql AS $$
 DECLARE
   o public.orders%ROWTYPE;
@@ -54,6 +54,10 @@ BEGIN
     RAISE EXCEPTION 'unexpected receipt %', coalesce(kind, 'null')
       USING ERRCODE = 'ZK' || upper(left(coalesce(kind, 'nul'), 3));
   END IF;
+  IF p_want IS NOT NULL AND kind IS DISTINCT FROM p_want THEN
+    RAISE EXCEPTION 'receipt % but wanted %', kind, p_want
+      USING ERRCODE = 'Z' || right(p_ref, 1) || upper(left(kind, 3));
+  END IF;
   RETURN kind;
 END;
 $$;
@@ -66,7 +70,7 @@ VALUES ('a0000000-0000-4000-8000-000000000001', '0000000001', 'Test Bank',
   'Test Name', 'paystack', NULL, NULL);
 DO $$ BEGIN
   IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000001',
-       'token-FENCE-1', 'BAC-AAAAAAAAAAA1') IS DISTINCT FROM 'pending' THEN
+       'token-FENCE-1', 'BAC-AAAAAAAAAAA1', 'pending') IS DISTINCT FROM 'pending' THEN
     RAISE EXCEPTION 'account with NULL assigned_at must stay fenced';
   END IF;
   IF EXISTS (SELECT 1 FROM private.chat_paystack_dva_attempts
@@ -85,7 +89,7 @@ VALUES ('a0000000-0000-4000-8000-000000000002', '0000000002', 'Test Bank',
   'shopper@example.com', 5000.00);
 DO $$ BEGIN
   IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000002',
-       'token-FENCE-2', 'BAC-AAAAAAAAAAA2') IS DISTINCT FROM 'pending' THEN
+       'token-FENCE-2', 'BAC-AAAAAAAAAAA2', 'pending') IS DISTINCT FROM 'pending' THEN
     RAISE EXCEPTION 'live account without expires_at must not be re-claimed';
   END IF;
 END $$;
@@ -113,11 +117,11 @@ END $$;
 SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000004', 'FENCE-4');
 DO $$ BEGIN
   IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000004',
-       'token-FENCE-4', 'BAC-AAAAAAAAAAA4') IS DISTINCT FROM 'claimed' THEN
+       'token-FENCE-4', 'BAC-AAAAAAAAAAA4', 'claimed') IS DISTINCT FROM 'claimed' THEN
     RAISE EXCEPTION 'first request without any account must claim';
   END IF;
   IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000004',
-       'token-FENCE-4', 'BAC-AAAAAAAAAAA5') IS DISTINCT FROM 'pending' THEN
+       'token-FENCE-4', 'BAC-AAAAAAAAAAA5', 'pending') IS DISTINCT FROM 'pending' THEN
     RAISE EXCEPTION 'an unresolved claim must stay fenced';
   END IF;
 END $$;
@@ -151,7 +155,7 @@ VALUES
    clock_timestamp() - interval '4 hours', 'shopper@example.com', 5000.00);
 DO $$ BEGIN
   IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000006',
-       'token-FENCE-6', 'BAC-AAAAAAAAAAA6') IS DISTINCT FROM 'claimed' THEN
+       'token-FENCE-6', 'BAC-AAAAAAAAAAA6', 'claimed') IS DISTINCT FROM 'claimed' THEN
     RAISE EXCEPTION 'expired aliases must allow a fresh claim';
   END IF;
   UPDATE private.chat_paystack_dva_attempts

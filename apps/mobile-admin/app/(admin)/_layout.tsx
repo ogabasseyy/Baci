@@ -168,6 +168,11 @@ export default function AdminLayout() {
           options={{ title: 'Payment Accounts' }}
         />
         <Stack.Screen name="negotiations" options={{ title: 'Negotiations' }} />
+        <Stack.Screen name="messages/index" options={{ title: 'Messages' }} />
+        <Stack.Screen
+          name="messages/[id]"
+          options={{ title: 'Conversation', presentation: 'card' }}
+        />
         <Stack.Screen
           name="repairs/index"
           options={{ title: 'Repair Bookings' }}

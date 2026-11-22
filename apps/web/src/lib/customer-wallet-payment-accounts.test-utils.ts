@@ -30,6 +30,7 @@ export const customer = {
   id: 'customer-1',
   last_name: 'Doe',
   phone: '+2348012345678',
+  user_id: 'user-1',
 };
 
 export function createMaybeSingleQuery(data: unknown) {

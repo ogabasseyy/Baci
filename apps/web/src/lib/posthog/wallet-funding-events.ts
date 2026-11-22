@@ -40,9 +40,11 @@ export const WALLET_FUNDING_TELEMETRY = {
     paystackDvaError: 'PAYSTACK_DVA_ERROR',
     orderAliasConflict: 'WALLET_DVA_ORDER_ALIAS_CONFLICT',
     pendingReviewConflict: 'WALLET_DVA_PENDING_REVIEW_CONFLICT',
+    providerCustomerConflict: 'WALLET_DVA_PROVIDER_CUSTOMER_CONFLICT',
     receiverConflict: 'WALLET_DVA_RECEIVER_CONFLICT',
     storageError: 'WALLET_DVA_STORAGE_ERROR',
     subaccountConflict: 'WALLET_DVA_SUBACCOUNT_CONFLICT',
+    writerUnavailable: 'WALLET_DVA_WRITER_UNAVAILABLE',
     // … plus the feature-flag rejection the funding-account route returns
     // directly (not thrown as a CustomerWalletPaymentAccountError).
     dvaDisabled: 'WALLET_DVA_DISABLED',

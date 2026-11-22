@@ -48,6 +48,7 @@ describe('customer wallet payment account creation', () => {
         customer,
         merchant,
         supabase,
+        walletDvaWriter: null,
       })
     ).resolves.toEqual(
       expect.objectContaining({
@@ -58,6 +59,27 @@ describe('customer wallet payment account creation', () => {
 
     expect(createOrGetCustomer).not.toHaveBeenCalled();
     expect(createDedicatedAccountForWallet).not.toHaveBeenCalled();
+  });
+
+  it('does not create a provider account when the restricted writer is unavailable', async () => {
+    const accountQuery = createMaybeSingleQuery(null);
+    const supabase = {
+      from: vi.fn(() => accountQuery),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      ensureCustomerWalletPaymentAccount({
+        consentedAt: new Date('2026-05-21T10:00:00.000Z'),
+        customer,
+        merchant,
+        supabase,
+        walletDvaWriter: null,
+      })
+    ).rejects.toMatchObject({ code: 'WALLET_DVA_WRITER_UNAVAILABLE' });
+
+    expect(createOrGetCustomer).not.toHaveBeenCalled();
+    expect(createDedicatedAccountForWallet).not.toHaveBeenCalled();
+    expect(getDedicatedAccounts).not.toHaveBeenCalled();
   });
 
   it('fails closed when the merchant has no Paystack subaccount', async () => {

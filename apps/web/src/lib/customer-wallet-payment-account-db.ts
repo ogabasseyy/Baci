@@ -9,11 +9,12 @@ import {
   normalizeWalletPaymentAccount,
   WALLET_PAYMENT_ACCOUNT_SELECT,
 } from './customer-wallet-payment-account-types';
+import type { WalletDvaProvisionerInput } from './wallet-dva-provisioner-executor';
+
+const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 // Re-exported so existing importers are unaffected by the split.
 export { normalizeWalletPaymentAccount };
-
-const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 async function assertNoActiveOrderPaymentAccountAlias({
   accountNumber,
@@ -109,13 +110,42 @@ export async function persistWalletPaymentAccount({
   customerId,
   merchantId,
   supabase,
+  userId,
+  writeVerifiedAccount,
 }: {
   account: WalletDedicatedAccount;
   consentedAt: Date;
   customerId: string;
   merchantId: string;
   supabase: SupabaseClient;
+  userId?: string;
+  writeVerifiedAccount?: (
+    input: WalletDvaProvisionerInput
+  ) => Promise<CustomerWalletPaymentAccount>;
 }) {
+  if (writeVerifiedAccount) {
+    if (!userId) {
+      throw new CustomerWalletPaymentAccountError(
+        'WALLET_DVA_STORAGE_ERROR',
+        'Customer ownership could not be verified'
+      );
+    }
+    return writeVerifiedAccount({
+      accountName: account.accountName,
+      accountNumber: account.accountNumber,
+      bankName: account.bankName,
+      bankSlug: account.bankSlug,
+      consentedAt: consentedAt.toISOString(),
+      currency: account.currency,
+      customerId,
+      merchantId,
+      providerAccountId: account.providerAccountId,
+      providerCustomerCode: account.providerCustomerCode,
+      providerSubaccountCode: account.providerSubaccountCode,
+      userId,
+    });
+  }
+
   await assertNoActiveOrderPaymentAccountAlias({
     accountNumber: account.accountNumber,
     asOf: new Date(),
@@ -131,16 +161,13 @@ export async function persistWalletPaymentAccount({
     currency: account.currency,
     customer_id: customerId,
     merchant_id: merchantId,
-    metadata: {
-      source: 'wallet_dva',
-    },
+    metadata: { source: 'wallet_dva' },
     provider: 'paystack' as const,
     provider_account_id: account.providerAccountId,
     provider_customer_code: account.providerCustomerCode,
     provider_subaccount_code: account.providerSubaccountCode,
     status: 'active' as const,
   };
-
   const { data, error } = await supabase
     .from('customer_wallet_payment_accounts')
     .insert(payload)
@@ -156,9 +183,7 @@ export async function persistWalletPaymentAccount({
       merchantId,
       supabase,
     });
-    if (existingAccount) {
-      return existingAccount;
-    }
+    if (existingAccount) return existingAccount;
 
     const receiverAccount = await findCustomerWalletPaymentAccountByReceiver({
       receiverAccountNumber: account.accountNumber,
@@ -170,7 +195,6 @@ export async function persistWalletPaymentAccount({
     ) {
       return receiverAccount;
     }
-
     if (receiverAccount) {
       throw new CustomerWalletPaymentAccountError(
         'WALLET_DVA_RECEIVER_CONFLICT',
@@ -178,19 +202,14 @@ export async function persistWalletPaymentAccount({
       );
     }
 
-    // The unique slot covers inactive rows: a retry after a
-    // disabled/pending_review row lands here. Null means no stalled row —
-    // fall through to the default unique-violation error below.
-    const reactivatedAccount = await resolveStalledWalletPaymentAccount({
+    const reactivated = await resolveStalledWalletPaymentAccount({
       account,
       consentedAt,
       customerId,
       merchantId,
       supabase,
     });
-    if (reactivatedAccount) {
-      return reactivatedAccount;
-    }
+    if (reactivated) return reactivated;
   }
 
   if (error) {
@@ -199,6 +218,5 @@ export async function persistWalletPaymentAccount({
       error.message
     );
   }
-
   return normalizeWalletPaymentAccount(data as CustomerWalletPaymentAccountRow);
 }

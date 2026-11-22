@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { ensurePaidOrderInventoryConfirmed } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
+import { resolvePaidOrderCheckoutCapture } from '@/lib/payments/resolve-paid-order-checkout-capture';
 import type { GatewayVerificationResult } from '@/lib/payments/types';
 import { referenceSchema } from '@/schemas/payments';
 import type { PaymentVerificationDependencies } from './payment-verification-dependencies';
@@ -150,6 +151,35 @@ export async function verifyPaymentReference(
         existingOrder?.order_number ||
         transaction.gateway_reference.slice(0, 8).toUpperCase(),
     });
+  }
+
+  if (
+    transaction.gateway === 'paystack' &&
+    !isLocallyFinalizedOrderPayment &&
+    typeof verification.gatewayResponse.requested_amount === 'number' &&
+    verification.gatewayResponse.requested_amount !==
+      verification.gatewayResponse.amount
+  ) {
+    const capture = await resolvePaidOrderCheckoutCapture({
+      reference: parsedReference.data,
+      gatewayResponse: verification.gatewayResponse,
+      supabase,
+    });
+    if (capture === 'unavailable' || capture === 'awaiting_evidence') {
+      return NextResponse.json(
+        { error: 'Payment capture reconciliation temporarily unavailable' },
+        { status: 503 }
+      );
+    }
+    if (capture === 'review' || capture === 'unapplied') {
+      return NextResponse.json(
+        {
+          error: 'Payment capture requires review',
+          code: 'PAID_ORDER_CAPTURE_REQUIRES_REVIEW',
+        },
+        { status: 409 }
+      );
+    }
   }
 
   // Verify the gateway-confirmed amount matches our stored transaction amount

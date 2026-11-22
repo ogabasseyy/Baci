@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-22T08:16:45+00:00",
-  "source_revision": "eba8399dcd9a596ecc83ecbeafc14d494fb31cf4",
-  "evidence_digest": "bad013c7cfc214e0e9bc011f2cbbea64a2c1bfb46adeebe15561fa00a4dd94a2",
-  "claims_digest": "dd147351887f503e8f59527aa684c4738f9d3fe6eb3d6af05ced76883de12eba",
-  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order address preservation, rapid street edits, incomplete duplicate-customer drafts, pending Places details, and GIG quote/save concurrency after syncing to current main. Re-reviewed current-main customer checkout quote rejection, destination/state matching, and stale-quote recovery alongside the retained paid partner pickup and parcel-binding evidence. The previously reviewed expense evidence remains in scope. The full-code builder, durable worker, and verified renderer storage remain disabled by default. Hosted qualification and activation remain pending. All claims remain code-evidenced only.",
+  "reviewed_at": "2026-11-22T09:36:50+00:00",
+  "source_revision": "b2ed6e25669480fb33345c499690ccb22a348924",
+  "evidence_digest": "00215535c9fc7805f04ae25b3e0e394eb88dd03a1d743d0bc5e169d996ab013f",
+  "claims_digest": "384ec280e4c456bc5879640ed5829d9c8fd8048f0eb1f52781b319162f2c73f0",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order address preservation, rapid street edits, incomplete duplicate-customer drafts, pending Places details, and GIG quote/save concurrency after syncing to current main. Re-reviewed current-main customer checkout quote rejection, destination/state matching, and stale-quote recovery alongside the retained paid partner pickup and parcel-binding evidence. The previously reviewed expense evidence remains in scope. All claims remain code-evidenced only; no production capability promotion. Re-reviewed the dashboard order details, ordinary cancellation, and invoice document paths alongside the feature-gated paid-order item replacement flow. Paid-order replacement remains outside the published production capability claims. The custom storefront builder, durable worker, and verified renderer storage are disabled by default and await hosted qualification.",
   "capabilities": [
     {
       "id": "payments",

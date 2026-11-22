@@ -151,7 +151,10 @@ export async function preflightCancellationRefundInitiation({
   // overfunded ledger cannot be repaired by retrying, so file it for
   // reconciliation instead of burning the attempt budget.
   const outstandingRefundKobo = outstandingTransactions.reduce(
-    (sum, transaction) => sum + Math.round(Number(transaction.amount) * 100),
+    (sum, transaction) =>
+      sum +
+      (transaction.refundAmountMinor ??
+        Math.round(Number(transaction.amount) * 100)),
     0
   );
   if (outstandingRefundKobo > Math.round(refundAmount * 100)) {

@@ -54,6 +54,7 @@ import ConfirmInsuranceDialog, {
 } from './confirm-insurance-dialog';
 import { summarizeInsuranceConfirmation } from './insurance-confirmation-summary';
 import { OrderPaymentSummary } from './OrderPaymentSummary';
+import { OrderAmendmentPanel } from './order-amendment-panel';
 import { OrderRefundSection } from './order-refund-section';
 import { ShipmentDetailsCard } from './shipment-details-card';
 import { useOrderCancellation } from './use-order-cancellation';
@@ -132,6 +133,12 @@ export default function OrderDetailsClientPage({
 }: OrderDetailsClientPageProps) {
   const { toast } = useToast();
   const [order, setOrder] = useState<Order>(initialOrder);
+  const [lastOrder, setLastOrder] = useState(initialOrder);
+  const [amendmentHold, setAmendmentHold] = useState(false);
+  if (lastOrder !== initialOrder) {
+    setLastOrder(initialOrder);
+    setOrder(initialOrder);
+  }
   const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = useState(false);
   const [isConfirmationDialogOpen, setIsConfirmationDialogOpen] =
     useState(false);
@@ -309,8 +316,8 @@ export default function OrderDetailsClientPage({
     }
   };
 
-  const primaryAction = getPrimaryAction();
-  const secondaryAction = getSecondaryAction();
+  const primaryAction = amendmentHold ? null : getPrimaryAction();
+  const secondaryAction = amendmentHold ? null : getSecondaryAction();
 
   return (
     <>
@@ -363,7 +370,9 @@ export default function OrderDetailsClientPage({
                 <DropdownMenuItem onSelect={() => handleResendNotification()}>
                   <Send className="mr-2 size-4" /> Resend Email
                 </DropdownMenuItem>
-                <DropdownMenuItem>Print Invoice</DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href={`/api/orders/${order.id}/invoice`}>Print Invoice</a>
+                </DropdownMenuItem>
                 <DropdownMenuItem>Contact Customer</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -372,6 +381,17 @@ export default function OrderDetailsClientPage({
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="grid auto-rows-max items-start gap-4 md:col-span-2">
+            {order.source === 'online_store' && (
+              <OrderAmendmentPanel
+                orderId={order.id}
+                currency={orderCurrency}
+                items={displayItems}
+                cancelled={['Canceled', 'Cancelled'].includes(
+                  order.shippingStatus
+                )}
+                onHoldChange={setAmendmentHold}
+              />
+            )}
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-start">

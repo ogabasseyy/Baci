@@ -1,3 +1,4 @@
+import type { PaidOrderAmendmentStatus } from '@/schemas/order-amendment-document';
 import type { TrackOrderItem } from './order-item-row';
 
 export interface TimelineEvent {
@@ -17,6 +18,7 @@ export interface TimelineEvent {
 export interface OrderData {
   order: {
     id: string;
+    amendment?: PaidOrderAmendmentStatus;
     order_number: string;
     status: string;
     payment_status: string;

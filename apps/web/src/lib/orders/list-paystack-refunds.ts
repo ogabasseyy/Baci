@@ -141,11 +141,14 @@ export async function listPaystackRefunds(
   reference: string,
   options: {
     deadlineMs?: number;
+    expectedAmount?: number;
     expectedCapture?: {
       id: string;
       domain: 'test' | 'live';
-      amountKobo: number;
-    };
+    } & (
+      | { amountKobo: number; integrationId?: never }
+      | { integrationId: string; amountKobo?: never }
+    );
   } = {}
 ): Promise<ProviderRefund[]> {
   // The reference travels only through encodeURIComponent into a query
@@ -218,19 +221,33 @@ export async function listPaystackRefunds(
   const transactionId =
     wireText !== null && /^[1-9][0-9]*$/.test(wireText) ? wireText : null;
   if (transactionId === null) throw new Error('Unverified refund transaction');
+  const data = verified.payload.data as Record<string, unknown> | null;
+  if (
+    options.expectedAmount !== undefined &&
+    data?.amount !== options.expectedAmount
+  ) {
+    throw new Error('Refund capture mismatch');
+  }
   const expected = options.expectedCapture;
   if (expected) {
-    const data = verified.payload.data as Record<string, unknown> | null;
     if (
       transactionId !== expected.id ||
       data?.status !== 'success' ||
       data.reference !== reference ||
       data.domain !== expected.domain ||
-      data.amount !== expected.amountKobo ||
+      (expected.amountKobo !== undefined &&
+        data.amount !== expected.amountKobo) ||
+      (expected.integrationId !== undefined &&
+        data.integration != null &&
+        String(data.integration) !== expected.integrationId) ||
       typeof data.currency !== 'string' ||
       data.currency.toUpperCase() !== 'NGN'
     ) {
-      throw new Error('Saved Paystack capture mismatch');
+      throw new Error(
+        expected.amountKobo === undefined
+          ? 'Refund capture mismatch'
+          : 'Saved Paystack capture mismatch'
+      );
     }
   }
   const refunds: ProviderRefund[] = [];

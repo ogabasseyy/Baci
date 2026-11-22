@@ -51,9 +51,9 @@ export async function isLatestChatMessage(
   binding: ChatAutoReplyBinding,
   conversationId: number,
   messageId: number
-): Promise<boolean> {
+): Promise<boolean | null> {
   const result = await listMerchantInboxMessages(binding, { conversationId });
-  if (!result.ok) return false;
+  if (!result.ok) return null;
   return (
     result.messages.findLast((message) => message.sender !== 'system')?.id ===
     messageId

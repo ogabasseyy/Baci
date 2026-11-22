@@ -133,9 +133,9 @@ describe('isLatestChatMessage', () => {
     expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
   });
 
-  it('is false when the messages cannot be read', async () => {
+  it('is null when the messages cannot be read', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     stubFetch(() => ({ status: 500 }));
-    expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBeNull();
   });
 });

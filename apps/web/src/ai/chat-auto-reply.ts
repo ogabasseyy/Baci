@@ -201,25 +201,41 @@ export async function generateChatAutoReply(input: {
         },
       };
     }
-    // A failed search throws: an outage must never reach the model as "no
-    // matching products", so the caller hands over instead.
-    let [search, currency] = await Promise.all([
-      handleSearchProducts({ query: input.question }),
-      loadChatwootMerchantCurrency(input.merchantId),
-    ]);
-    if (search.products.length === 0) {
-      const previousUserTurn = input.history.findLast(
-        (turn) =>
-          turn.role === 'user' &&
-          turn.content.trim().length > 0 &&
-          turn.content.trim() !== input.question.trim()
-      );
-      if (previousUserTurn) {
-        search = await handleSearchProducts({
-          query: previousUserTurn.content,
-        });
+    // A failed or stalled search throws: an outage must never reach the model
+    // as "no matching products", so the caller hands over instead.
+    const LOOKUP_DEADLINE_MS = 10_000;
+    const lookupWithDeadline = async () => {
+      let [found, merchantCurrency] = await Promise.all([
+        handleSearchProducts({ query: input.question }),
+        loadChatwootMerchantCurrency(input.merchantId),
+      ]);
+      if (found.products.length === 0) {
+        const previousUserTurn = input.history.findLast(
+          (turn) =>
+            turn.role === 'user' &&
+            turn.content.trim().length > 0 &&
+            turn.content.trim() !== input.question.trim()
+        );
+        if (previousUserTurn) {
+          found = await handleSearchProducts({
+            query: previousUserTurn.content,
+          });
+        }
       }
-    }
+      return [found, merchantCurrency] as const;
+    };
+    let lookupTimer: ReturnType<typeof setTimeout> | undefined;
+    const [search, currency] = await Promise.race([
+      lookupWithDeadline(),
+      new Promise<never>((_, reject) => {
+        lookupTimer = setTimeout(
+          () => reject(new Error('Catalog lookup timed out')),
+          LOOKUP_DEADLINE_MS
+        );
+      }),
+    ]).finally(() => {
+      if (lookupTimer) clearTimeout(lookupTimer);
+    });
     // Prices without a currency are ambiguous: never show them.
     if (search.products.length > 0 && !currency?.currency) {
       return { ok: false, reason: 'unavailable' };

@@ -200,13 +200,17 @@ export function OxygenApplicationDialog({
           <OxygenSelfieDismissedContext.Provider value={selfieDismissed}>
             <OxygenSelfieOpenContext.Provider value={Boolean(selfieUrl)}>
               <OxygenSelfieRenewalContext.Provider
-                value={(handler) => {
-                  selfieRenew.current = handler;
-                  return () => {
-                    if (selfieRenew.current === handler)
-                      selfieRenew.current = null;
-                  };
-                }}
+                value={
+                  embedded
+                    ? null
+                    : (handler) => {
+                        selfieRenew.current = handler;
+                        return () => {
+                          if (selfieRenew.current === handler)
+                            selfieRenew.current = null;
+                        };
+                      }
+                }
               >
                 <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
                   <OxygenCheckoutCloseContext.Provider value={close}>

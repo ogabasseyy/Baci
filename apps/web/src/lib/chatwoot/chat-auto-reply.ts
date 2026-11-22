@@ -173,7 +173,15 @@ export async function runChatAutoReply(
   // Generation can take a while: a person may have replied, or a later
   // message may have asked for one, since the webhook arrived.
   if (!(await isStillPending(binding, conversationId))) return 'skipped';
-  if (!(await isLatestChatMessage(binding, conversationId, event.id))) {
+  const latest = await isLatestChatMessage(binding, conversationId, event.id);
+  if (latest === null) {
+    return handOver(
+      binding,
+      conversationId,
+      'the message history could not be checked'
+    );
+  }
+  if (!latest) {
     return 'skipped';
   }
   const sent = await postAssistantMessage(binding, {

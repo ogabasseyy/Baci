@@ -7,12 +7,13 @@ import type { ChatAutoReplyBinding } from './chat-auto-reply-config';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
-async function providerPost(
+/** The HTTP status, or null when the request never completed. */
+async function providerPostStatus(
   binding: ChatAutoReplyBinding,
   path: string,
   token: string,
   body: Record<string, unknown>
-): Promise<boolean> {
+): Promise<number | null> {
   const url = new URL(
     `/api/v1/accounts/${binding.accountId}${path}`,
     binding.apiOrigin
@@ -37,14 +38,26 @@ async function providerPost(
         path: path.replace(/\/\d+/g, '/:id'),
       });
     }
-    return response.ok;
+    return response.status;
   } catch {
     console.error('[chat-auto-reply] provider request failed', {
       status: null,
       path: path.replace(/\/\d+/g, '/:id'),
     });
-    return false;
+    return null;
   }
+}
+
+const isOk = (status: number | null) =>
+  status !== null && status >= 200 && status < 300;
+
+async function providerPost(
+  binding: ChatAutoReplyBinding,
+  path: string,
+  token: string,
+  body: Record<string, unknown>
+): Promise<boolean> {
+  return isOk(await providerPostStatus(binding, path, token, body));
 }
 
 /** Posts as the assistant bot: a public reply, or a private staff note. */
@@ -140,16 +153,26 @@ export function postAssistantMessage(
 }
 
 /** Moves a conversation to a person's queue (`open`) or back (`pending`). */
-export function setConversationStatus(
+export async function setConversationStatus(
   binding: ChatAutoReplyBinding,
   input: { conversationId: number; status: 'open' | 'pending' }
 ): Promise<boolean> {
-  return providerPost(
+  const path = `/conversations/${input.conversationId}/toggle_status`;
+  const body = { status: input.status };
+  const status = await providerPostStatus(
     binding,
-    `/conversations/${input.conversationId}/toggle_status`,
+    path,
     binding.botApiAccessToken,
-    { status: input.status }
+    body
   );
+  if (isOk(status)) return true;
+  if (
+    (status === 401 || status === 403) &&
+    binding.apiAccessToken !== binding.botApiAccessToken
+  ) {
+    return providerPost(binding, path, binding.apiAccessToken, body);
+  }
+  return false;
 }
 
 /** Replaces the conversation's whole label list (merge before calling). */

@@ -427,6 +427,7 @@ interface PaymentResult {
     bank_name: string;
     account_number: string;
     account_name: string;
+    account_expires_at?: string | null;
   };
   crypto_payment?: {
     address: string;
@@ -2025,6 +2026,9 @@ export async function POST(request: NextRequest) {
                 bank_name: chargeResult.bank_name,
                 account_number: chargeResult.account_number,
                 account_name: chargeResult.account_name,
+                ...(chargeResult.account_expires_at
+                  ? { account_expires_at: chargeResult.account_expires_at }
+                  : {}),
               },
               reference: chargeResult.reference,
               platformFee: fees.platformFee / 100,

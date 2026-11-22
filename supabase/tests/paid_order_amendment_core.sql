@@ -87,7 +87,8 @@ BEGIN
     PERFORM public.preview_paid_order_amendment(v_order,jsonb_build_object(
       'lineId',v_line,'replacement',jsonb_build_object('kind','variant','id',v_new_variant)));
     RAISE EXCEPTION 'cross-tenant preview succeeded';
-  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  EXCEPTION WHEN no_data_found THEN
+    IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
   END;
   PERFORM set_config('request.jwt.claim.sub',v_actor::text,true);
   v_preview := public.preview_paid_order_amendment(v_order,jsonb_build_object(

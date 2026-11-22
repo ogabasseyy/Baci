@@ -378,6 +378,41 @@ describe('GET /api/orders/[id]/invoice', () => {
     });
   });
 
+  it('does not issue an amended invoice from an incomplete money snapshot', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      error: null,
+      data: {
+        amendment: {
+          state: 'settled',
+          holdFulfillment: false,
+          balanceDueMinor: 0,
+          refundOwedMinor: 0,
+          documentId: null,
+          documentNumber: null,
+        },
+        documentNumber: null,
+        inputs: {
+          order: { total: null, subtotal: 300000, amount_paid: 300000 },
+          items: [],
+        },
+      },
+    });
+    vi.mocked(createClient).mockReturnValue({
+      ...createSupabaseMock(),
+      rpc,
+    } as unknown as ReturnType<typeof createClient>);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/orders/${ORDER_ID}/invoice?revision=original`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(503);
+    expect(generateReceiptBlob).not.toHaveBeenCalled();
+  });
+
   it('attaches order-level IMEI details only to the device item', async () => {
     const response = await GET(
       new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),

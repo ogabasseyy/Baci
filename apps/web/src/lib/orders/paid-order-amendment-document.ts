@@ -68,33 +68,42 @@ const documentOrderSchema = z.object({
   fulfillment_details: z.record(z.string(), z.unknown()).nullish(),
 });
 
-const projectionSchema = z.object({
-  inputs: z.object({
-    order: documentOrderSchema,
-    items: z.array(z.record(z.string(), z.unknown())),
-    payments: z.array(z.record(z.string(), z.unknown())).optional(),
-    sellerTax: z
-      .object({
-        registrationStatus: z.string().nullable(),
-        rate: z.number().nullable(),
-      })
-      .nullish(),
-    revisedTaxPinned: z.boolean().optional(),
-    taxSubtotals: z
-      .array(
-        z.object({
-          vat_category_code: z.string(),
-          vat_rate: z.number(),
-          taxable_amount: z.number(),
-          tax_amount: z.number(),
-          exemption_reason: z.string().nullable(),
+const projectionSchema = z
+  .object({
+    inputs: z.object({
+      order: documentOrderSchema,
+      items: z.array(z.record(z.string(), z.unknown())),
+      payments: z.array(z.record(z.string(), z.unknown())).optional(),
+      sellerTax: z
+        .object({
+          registrationStatus: z.string().nullable(),
+          rate: z.number().nullable(),
         })
-      )
-      .nullish(),
-  }),
-  amendment: paidOrderAmendmentStatusSchema.nullable(),
-  documentNumber: z.number().int().positive().nullable(),
-});
+        .nullish(),
+      revisedTaxPinned: z.boolean().optional(),
+      taxSubtotals: z
+        .array(
+          z.object({
+            vat_category_code: z.string(),
+            vat_rate: z.number(),
+            taxable_amount: z.number(),
+            tax_amount: z.number(),
+            exemption_reason: z.string().nullable(),
+          })
+        )
+        .nullish(),
+    }),
+    amendment: paidOrderAmendmentStatusSchema.nullable(),
+    documentNumber: z.number().int().positive().nullable(),
+  })
+  .refine(
+    ({ amendment, inputs }) =>
+      amendment === null ||
+      (typeof inputs.order.total === 'number' &&
+        typeof inputs.order.subtotal === 'number' &&
+        typeof inputs.order.amount_paid === 'number'),
+    'Amended document snapshots require complete monetary totals'
+  );
 
 export async function loadPaidOrderDocument(
   client: Pick<SupabaseClient, 'rpc'>,

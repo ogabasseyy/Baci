@@ -100,7 +100,8 @@ BEGIN
   BEGIN
     PERFORM public.read_paid_order_amendment_workspace(o);
     RAISE EXCEPTION 'shopper accessed staff timeline';
-  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  EXCEPTION WHEN no_data_found THEN
+    IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
   END;
   PERFORM set_config('request.jwt.claim.sub',gen_random_uuid()::text,true);
   BEGIN

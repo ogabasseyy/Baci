@@ -20,3 +20,61 @@ BEGIN
 END;
 $$;
 ROLLBACK;
+
+BEGIN;
+DO $$
+DECLARE
+  f jsonb := pg_temp.amendment_settlement_seed(0,NULL,false);
+  foreign_order jsonb;
+  selection jsonb := jsonb_build_object('lineId',f->>'line','ignored','unused',
+    'replacement',jsonb_build_object('kind','product','id',f->>'replacement','ignored','unused'));
+  confirmation jsonb;
+  preview jsonb;
+  confirmed jsonb;
+BEGIN
+  preview := public.preview_paid_order_amendment((f->>'order')::uuid,selection);
+  IF (SELECT p.selection FROM private.paid_order_amendment_previews p WHERE id=(preview->>'previewId')::uuid)
+    IS DISTINCT FROM jsonb_build_object('lineId',f->>'line',
+      'replacement',jsonb_build_object('kind','product','id',f->>'replacement'))
+  THEN RAISE EXCEPTION 'preview retained unsupported fields'; END IF;
+  confirmation := jsonb_build_object('previewId',preview->>'previewId','customerAgreed',true,
+    'reason','Synthetic replacement','idempotencyKey','fixture-isolation');
+  confirmed := public.confirm_paid_order_amendment((f->>'order')::uuid,confirmation);
+  foreign_order := pg_temp.amendment_settlement_seed(0,NULL,false);
+  IF auth.uid() IS DISTINCT FROM (foreign_order->>'actor')::uuid
+  THEN RAISE EXCEPTION 'fixture did not switch to a different merchant'; END IF;
+
+  BEGIN
+    PERFORM public.preview_paid_order_amendment((f->>'order')::uuid,selection);
+    RAISE EXCEPTION 'foreign preview succeeded';
+  EXCEPTION WHEN no_data_found THEN
+    IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.confirm_paid_order_amendment((f->>'order')::uuid,confirmation);
+    RAISE EXCEPTION 'foreign confirmation replay succeeded';
+  EXCEPTION WHEN no_data_found THEN
+    IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.read_paid_order_amendment_workspace((f->>'order')::uuid);
+    RAISE EXCEPTION 'foreign workspace read succeeded';
+  EXCEPTION WHEN no_data_found THEN
+    IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.search_paid_order_amendment_replacements((f->>'order')::uuid,(f->>'line')::uuid,'replacement');
+    RAISE EXCEPTION 'foreign catalog search succeeded';
+  EXCEPTION WHEN no_data_found THEN
+    IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.run_paid_order_amendment_action((f->>'order')::uuid,(confirmed->>'amendmentId')::uuid,
+      '{"action":"reverse","reason":"Synthetic request","idempotencyKey":"fixture-isolation"}');
+    RAISE EXCEPTION 'foreign amendment action succeeded';
+  EXCEPTION WHEN no_data_found THEN
+    IF SQLERRM <> 'amendment_not_found' THEN RAISE; END IF;
+  END;
+END;
+$$;
+ROLLBACK;

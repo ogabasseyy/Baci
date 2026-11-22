@@ -903,11 +903,11 @@ export function getDedicatedAccount(
   init?: { signal?: AbortSignal }
 ): Promise<PaystackResult<DedicatedAccountResponse>> {
   if (!/^\d{1,20}$/.test(dedicatedAccountId)) {
-    return {
+    return Promise.resolve({
       success: false,
       error: 'Invalid dedicated account ID',
       code: 'VALIDATION_ERROR',
-    };
+    });
   }
 
   return paystackRequest<DedicatedAccountResponse>(

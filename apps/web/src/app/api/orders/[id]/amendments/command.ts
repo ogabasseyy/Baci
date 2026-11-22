@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { checkRateLimit } from '@/lib/rate-limiter';
 import {
   amendmentActionParams,
   amendmentActionSchema,
@@ -76,6 +77,20 @@ export async function runAmendmentCommand(
           { error: 'Invalid replacement search' },
           { status: 400 }
         );
+      if (
+        !(await checkRateLimit(
+          auth.supabase,
+          auth.user.id,
+          'order_amendment_replacement_search',
+          30,
+          1
+        ))
+      ) {
+        return NextResponse.json(
+          { error: 'Too many replacement searches. Please try again shortly.' },
+          { status: 429, headers: { 'Retry-After': '60' } }
+        );
+      }
       return amendmentResponse(
         await auth.supabase.rpc('search_paid_order_amendment_replacements', {
           ...args,

@@ -185,8 +185,17 @@ async function processRefundAttempt(
     process.env.PAID_ORDER_AMENDMENT_PAYSTACK_INTEGRATION_ID !==
       claim.integrationId ||
     !providerKey.startsWith(claim.domain === 'live' ? 'sk_live_' : 'sk_test_')
-  )
+  ) {
+    // The preflight lease only delays the next lookup. It never marks a refund
+    // as submitted or prevents recovery once the worker credentials match.
+    logger.error({
+      message: 'Amendment refund worker integration does not match the attempt',
+      attemptId: id,
+      domain: claim.domain,
+      integrationId: claim.integrationId,
+    });
     return;
+  }
 
   if (claim.submit || claim.preflightReview) {
     // Keep undispatched work queued while provider preflight is unavailable.
@@ -228,7 +237,7 @@ async function processRefundAttempt(
     );
     if (dispatch.error) throw new Error('Unable to authorize amendment refund');
     if (dispatch.data !== true) return;
-    await paystackRequest('/refund', {
+    const submitted = await paystackRequest('/refund', {
       method: 'POST',
       body: JSON.stringify({
         transaction: claim.captureReference,
@@ -237,6 +246,18 @@ async function processRefundAttempt(
       }),
       signal: AbortSignal.timeout(8_000),
     });
+    if (!submitted.success) {
+      logger.warn({
+        message: 'Amendment refund submission did not return acceptance',
+        attemptId: id,
+        code: submitted.code,
+      });
+    }
   }
-  await reconcileRefund(supabase, claim.reference);
+  if ((await reconcileRefund(supabase, claim.reference)) === 'retry') {
+    logger.warn({
+      message: 'Amendment refund still requires provider reconciliation',
+      attemptId: id,
+    });
+  }
 }

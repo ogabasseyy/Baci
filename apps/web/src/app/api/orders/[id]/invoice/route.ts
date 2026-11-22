@@ -280,10 +280,7 @@ export async function GET(
     }
     // Fetch tax subtotals if VAT registered
     let taxSubtotals: TaxSubtotalRow[] = [];
-    if (
-      merchant.vat_registration_status === 'registered' &&
-      !projection.data?.amendment
-    ) {
+    if (merchant.vat_registration_status === 'registered') {
       const { data: subtotals, error: taxError } = await supabase
         .from('order_tax_subtotals')
         .select(
@@ -445,7 +442,11 @@ export async function GET(
     });
 
     // Build tax subtotals for invoice
-    const invoiceTaxSubtotals: TaxSubtotal[] = taxSubtotals.map((st) => ({
+    const isRevisedAmendment =
+      Boolean(projection.data?.amendment) && version.data !== 'original';
+    const invoiceTaxSubtotals: TaxSubtotal[] = (
+      isRevisedAmendment ? [] : taxSubtotals
+    ).map((st) => ({
       vat_category_code: st.vat_category_code,
       vat_rate: st.vat_rate,
       taxable_amount: Number(st.taxable_amount),
@@ -454,6 +455,18 @@ export async function GET(
     }));
 
     const derivedLineTaxSubtotals = deriveTaxSubtotalsFromInvoiceItems(items);
+    if (isRevisedAmendment) {
+      for (const subtotal of derivedLineTaxSubtotals) {
+        const stored = taxSubtotals.find(
+          (row) =>
+            row.vat_category_code === subtotal.vat_category_code &&
+            row.vat_rate === subtotal.vat_rate
+        );
+        if (stored?.exemption_reason) {
+          subtotal.exemption_reason = stored.exemption_reason;
+        }
+      }
+    }
     if (
       invoiceTaxSubtotals.length === 0 &&
       derivedLineTaxSubtotals.length > 0 &&

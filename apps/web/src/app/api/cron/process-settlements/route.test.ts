@@ -96,6 +96,7 @@ describe('POST /api/cron/process-settlements', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('process_due_settlements');
     expect(mocks.loggerError).toHaveBeenCalledWith({
       message: 'Amendment refund worker could not complete its pass',
+      error: expect.any(Error),
     });
   });
 

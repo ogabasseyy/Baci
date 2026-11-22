@@ -57,6 +57,19 @@ BEGIN
     FROM public.transactions WHERE id = v_payment) IS DISTINCT FROM '157' THEN
     RAISE EXCEPTION 'capture did not acquire the certified fee proof';
   END IF;
+  PERFORM public.record_merchant_settlement(v_merchant,'order',v_order,'paystack',
+    v_ref,100,0,1,'Synthetic integration-wallet capture','{"paystack_collection":"integration"}');
+  IF NOT EXISTS (
+    SELECT 1 FROM public.transactions WHERE id = v_payment AND amount = 100 AND status = 'completed'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM public.merchant_settlements s
+    JOIN public.merchant_wallets w ON w.id = s.wallet_id
+    WHERE s.source_id = v_order AND s.status = 'pending'
+      AND s.gross_amount = 100 AND s.net_amount = 99 AND w.upcoming_balance = 99
+      AND s.metadata->>'paystack_collection' = 'integration'
+  ) THEN
+    RAISE EXCEPTION 'integration-wallet settlement did not use the order principal';
+  END IF;
   PERFORM set_config('request.jwt.claim.sub',v_owner::text,true);
   PERFORM set_config('request.jwt.claim.role','authenticated',true);
   PERFORM public.cancel_order_as_merchant(v_order,'fixture cancellation','automatic');

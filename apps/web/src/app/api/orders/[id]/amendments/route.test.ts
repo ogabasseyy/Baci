@@ -7,11 +7,13 @@ import { GET, POST } from './route';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
+  rateLimit: vi.fn(),
   rpc: vi.fn(),
 }));
 
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
+vi.mock('@/lib/rate-limiter', () => ({ checkRateLimit: mocks.rateLimit }));
 
 const id = '11111111-1111-4111-8111-111111111111';
 const context = { params: Promise.resolve({ id }) };
@@ -33,10 +35,20 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.auth.mockResolvedValue({ supabase: { rpc: mocks.rpc }, user: { id } });
   mocks.csrf.mockResolvedValue({ valid: true });
+  mocks.rateLimit.mockResolvedValue(true);
   mocks.rpc.mockResolvedValue({ data: { amendmentId: id }, error: null });
 });
 
 describe('paid order amendment routes', () => {
+  it('rate-limits replacement search before querying the catalog', async () => {
+    mocks.rateLimit.mockResolvedValueOnce(false);
+    const search = new Request(
+      `https://test.invalid/api/orders/amendments?lineId=${id}&search=phone`
+    ) as NextRequest;
+    expect((await GET(search, context)).status).toBe(429);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('requires authentication before querying the order', async () => {
     mocks.auth.mockResolvedValue({ user: null });
     expect((await GET(request(), context)).status).toBe(401);

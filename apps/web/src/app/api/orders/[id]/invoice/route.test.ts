@@ -277,6 +277,9 @@ describe('GET /api/orders/[id]/invoice', () => {
                 variant_name: original ? '128 GB' : '256 GB',
                 price: original ? 300000 : 350000,
                 quantity: 1,
+                vat_category_code: 'Z',
+                vat_rate: 0,
+                vat_amount: 0,
               },
             ],
           },
@@ -284,6 +287,18 @@ describe('GET /api/orders/[id]/invoice', () => {
       };
     });
     const supabase = createSupabaseMock({
+      taxSubtotals: {
+        data: [
+          {
+            vat_category_code: 'Z',
+            vat_rate: 0,
+            taxable_amount: 300000,
+            tax_amount: 0,
+            exemption_reason: 'Fixture zero-rated category',
+          },
+        ],
+        error: null,
+      },
       order: {
         data: { ...(orderResult.data as object), source: 'online_store' },
         error: null,
@@ -307,7 +322,14 @@ describe('GET /api/orders/[id]/invoice', () => {
         ]),
       }),
       expect.anything(),
-      expect.anything()
+      expect.objectContaining({
+        taxSubtotals: [
+          expect.objectContaining({
+            vat_category_code: 'Z',
+            taxable_amount: 300000,
+          }),
+        ],
+      })
     );
     const revised = await GET(
       new NextRequest(
@@ -329,7 +351,16 @@ describe('GET /api/orders/[id]/invoice', () => {
         fulfillment_details: null,
       }),
       expect.anything(),
-      expect.anything()
+      expect.objectContaining({
+        taxSubtotals: [
+          expect.objectContaining({
+            vat_category_code: 'Z',
+            taxable_amount: 350000,
+            tax_amount: 0,
+            exemption_reason: 'Fixture zero-rated category',
+          }),
+        ],
+      })
     );
     expect(rpc).toHaveBeenLastCalledWith('read_paid_order_amendment_document', {
       p_order_id: ORDER_ID,

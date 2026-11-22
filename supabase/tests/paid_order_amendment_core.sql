@@ -243,6 +243,7 @@ DECLARE
   deleted_line uuid := gen_random_uuid();
   equal_order uuid := gen_random_uuid();
   equal_line uuid := gen_random_uuid();
+  equal_offer uuid := gen_random_uuid();
   preview jsonb;
   result jsonb;
   snapshot jsonb;
@@ -346,10 +347,12 @@ BEGIN
   -- once. A settled equal swap leaves no amendment refund to block it.
   UPDATE private.paid_order_amendment_config SET scenarios = ARRAY['paystack_integration_wallet:condition_offer:equal']
     WHERE merchant_id = m;
-  UPDATE public.product_offers SET price = 300000 WHERE id = new_offer;
+  INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity)
+  VALUES (equal_offer,old_product,m,'new',300000,1);
   INSERT INTO public.orders(id,merchant_id,order_number,source,currency,payment_method,
-    payment_status,shipping_status,total,subtotal,amount_paid)
-  VALUES (equal_order,m,'FIXTURE-EQUAL-OFFER','online_store','NGN','card','paid','pending',300000,300000,300000);
+    payment_status,shipping_status,total,subtotal,amount_paid,checkout_idempotency_key)
+  VALUES (equal_order,m,'FIXTURE-EQUAL-OFFER','online_store','NGN','card','paid','pending',300000,300000,300000,
+    'fixture-equal-original-checkout');
   INSERT INTO public.order_items(id,order_id,product_id,product_offer_id,offer_id,condition,name,price,quantity,vat_rate,vat_amount)
   VALUES (equal_line,equal_order,old_product,old_offer,old_offer,'used','Equal fixture original',300000,1,0,0);
   INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway,
@@ -360,14 +363,19 @@ BEGIN
   VALUES (m,'order',equal_order,'paystack','fixture-equal-offer',300000,299000,current_date,
     '{"paystack_collection":"integration"}');
   preview := public.preview_paid_order_amendment(equal_order,jsonb_build_object(
-    'lineId',equal_line,'replacement',jsonb_build_object('kind','condition_offer','id',new_offer)));
+    'lineId',equal_line,'replacement',jsonb_build_object('kind','condition_offer','id',equal_offer)));
   result := public.confirm_paid_order_amendment(equal_order,jsonb_build_object(
     'previewId',preview->>'previewId','customerAgreed',true,'reason','Fixture equal swap',
     'idempotencyKey','fixture-equal-offer-confirmation'));
   IF result->>'state' IS DISTINCT FROM 'settled' THEN RAISE EXCEPTION 'expected settled equal swap'; END IF;
+  SELECT items INTO STRICT snapshot FROM public.get_storefront_order_replay_economics(m,'fixture-equal-original-checkout');
+  IF snapshot IS DISTINCT FROM jsonb_build_array(jsonb_build_object(
+    'product_id',old_product,'offer_id',old_offer,'condition','used','assurance_fee',0,'quantity',1,'has_assurance',false))
+    OR EXISTS (SELECT 1 FROM public.get_storefront_order_replay_economics(gen_random_uuid(),'fixture-equal-original-checkout'))
+  THEN RAISE EXCEPTION 'checkout replay no longer matches the original offer and condition: %', snapshot; END IF;
   PERFORM public.cancel_order_as_merchant(equal_order,'Fixture ordinary cancellation','automatic');
   IF (SELECT stock_quantity FROM public.product_offers WHERE id = old_offer) IS DISTINCT FROM 1
-    OR (SELECT stock_quantity FROM public.product_offers WHERE id = new_offer) IS DISTINCT FROM 1
+    OR (SELECT stock_quantity FROM public.product_offers WHERE id = equal_offer) IS DISTINCT FROM 1
     OR (SELECT stock_quantity FROM public.products WHERE id = old_product) IS DISTINCT FROM 8
     OR (SELECT stock_quantity FROM public.products WHERE id = new_product) IS DISTINCT FROM 7
   THEN RAISE EXCEPTION 'ordinary cancellation restored the wrong stock pool'; END IF;

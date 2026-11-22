@@ -67,19 +67,36 @@ describe('bugfix: the order refetch after an address save asked for the bound qu
       result.current.updateAddressField('city', 'Yaba');
       result.current.updateAddressField('state', 'Lagos');
     });
+    const savedAddress = {
+      address: '2 Merchant Road',
+      city: 'Yaba',
+      name: 'Ada',
+      phone: '0801',
+      state: 'Lagos',
+    };
+    const quoteCallsBeforeSave = server.getQuote.mock.calls.length;
     const patch = Promise.withResolvers<void>();
     server.patch.mockReturnValueOnce(patch.promise);
     let save: Promise<unknown> | undefined;
     act(() => {
       save = result.current.saveAddressAndRequestQuote();
     });
-    server.storedAddress = { ...server.storedAddress, city: 'Yaba' };
+    // The order read sees the committed address before the PATCH returns.
+    server.storedAddress = savedAddress;
     rerender({ current: { ...order, shipping_address: server.storedAddress } });
     await act(async () => {
       patch.resolve();
       await save;
     });
-    expect(server.patch).toHaveBeenCalledOnce();
+    expect(server.patch).toHaveBeenCalledExactlyOnceWith({
+      shipping_address: savedAddress,
+    });
+    expect(server.getQuote).toHaveBeenCalledTimes(quoteCallsBeforeSave + 1);
+    expect(server.getQuote).toHaveBeenLastCalledWith(
+      'order-1',
+      undefined,
+      expect.any(AbortSignal)
+    );
     expect(result.current.state).toBe('ready');
     expect(result.current.quote?.price).toBe(11000);
   });

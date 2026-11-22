@@ -4,11 +4,11 @@ import { describe, expect, it } from '@jest/globals';
 
 const packagePath = require.resolve('node-forge/package.json');
 
-// Upstream 1.4.1 supersedes the local RSA backport and fixes eleven newer
+// Upstream 1.4.3 supersedes the local RSA backport and fixes the reported
 // advisories. The companion RSA behavior test retains the forged-signature vector.
 describe('node-forge upstream security fixes', () => {
   it('installs the patched upstream release', () => {
-    expect(JSON.parse(readFileSync(packagePath, 'utf8')).version).toBe('1.4.1');
+    expect(JSON.parse(readFileSync(packagePath, 'utf8')).version).toBe('1.4.3');
   });
   it('retains canonical DER validation for RSA DigestInfo', () => {
     const source = readFileSync(

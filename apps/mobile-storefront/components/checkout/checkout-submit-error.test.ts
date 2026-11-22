@@ -452,12 +452,15 @@ describe('handleCheckoutSubmitError', () => {
     // createOrder committed order-9 before Paystack init rejected, but the
     // initializer emits payment_started only on success: no flow opened, so
     // the funnel failure would be unmatched. The diagnostic still fires.
+    const refreshQuote = jest.fn();
     handleCheckoutSubmitError(
       new OrderError('Failed to initialize payment', 'PAYMENT_INIT_ERROR'),
       'paystack' as Parameters<typeof handleCheckoutSubmitError>[1],
-      'order-9'
+      'order-9',
+      refreshQuote
     );
 
+    expect(refreshQuote).not.toHaveBeenCalled();
     expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
     expect(trackError).toHaveBeenCalledWith(
       'checkout_failed',

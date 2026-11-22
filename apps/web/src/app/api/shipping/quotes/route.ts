@@ -238,7 +238,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = NextResponse.json(toPublicQuoteResponse(response));
+    const result = NextResponse.json({
+      ...toPublicQuoteResponse(response),
+      ...(data.shipmentType === 'domestic' &&
+      quoteRequest.receiver.countryCode === 'NG'
+        ? { receiverState: quoteRequest.receiver.state }
+        : {}),
+    });
     result.headers.set('Cache-Control', 'no-store');
     if (persistenceResults.length && quoteRequest.merchantId) {
       const capability = createQuoteReadCapability(

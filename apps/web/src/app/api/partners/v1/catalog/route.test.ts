@@ -184,6 +184,24 @@ describe('CrossRem catalog', () => {
     expect(after).not.toHaveBeenCalled();
   });
 
+  it('serves the team credential the same snapshot and a bodyless conditional response', async () => {
+    const teamToken = 'crossrem-team-feed-token-synthetic-test-00001';
+    vi.stubEnv('CROSSREM_PARTNER_CATALOG_TOKEN', teamToken);
+
+    const full = await GET(request(`Bearer ${teamToken}`));
+    expect(full.status).toBe(200);
+    expect(await full.json()).toEqual(snapshot);
+    const etag = full.headers.get('etag');
+    expect(etag).toMatch(/^"[a-f0-9]{64}"$/);
+
+    const unchanged = await GET(
+      request(`Bearer ${teamToken}`, etag ?? undefined)
+    );
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get('etag')).toBe(etag);
+    expect(await unchanged.text()).toBe('');
+  });
+
   it('hides internal details when the catalog cannot be built', async () => {
     loadCrossRemCatalog.mockRejectedValue(new Error('private storage detail'));
 

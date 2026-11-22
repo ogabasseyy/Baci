@@ -1,10 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrderItem } from '@/components/orders/new-order.types';
+import { buildOrderGiglQuoteRequest } from '../../web/src/lib/shipping/build-order-gigl-quote-request';
 
 const mocks = vi.hoisted(() => ({
   createManualOrderWithItems: vi.fn(),
   alert: vi.fn(),
+  authenticatedFetch: vi.fn(),
   invalidateQueries: vi.fn(),
   supabaseFrom: vi.fn(),
 }));
@@ -13,6 +15,12 @@ vi.mock('react-native', () => ({
   StatusBar: () => null,
   Alert: { alert: mocks.alert },
 }));
+
+vi.mock('@/hooks/orders/authenticated-fetch', () => ({
+  createAuthenticatedFetch: mocks.authenticatedFetch,
+}));
+
+vi.mock('@/lib/api-client', () => ({ BASE_URL: 'https://example.invalid' }));
 
 vi.mock('@/lib/manual-order-persistence', () => ({
   createManualOrderWithItems: mocks.createManualOrderWithItems,
@@ -28,6 +36,8 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
+import { getOrderGiglQuote } from '@/lib/order-gigl-shipping';
+import { createNewOrderCustomerActions } from './createNewOrderCustomerActions';
 import { submitNewOrder } from './submitNewOrder';
 
 type SubmitNewOrderParams = Parameters<typeof submitNewOrder>[0];
@@ -133,6 +143,119 @@ describe('submitNewOrder', () => {
       'Please select a customer for this order'
     );
     expect(mocks.createManualOrderWithItems).not.toHaveBeenCalled();
+  });
+
+  it('uses the address entered for an existing customer from manual order creation through the GIG quote', async () => {
+    const setCustomer = vi.fn();
+    const destination = {
+      address: '10 Hospital Road',
+      city: 'Lokoja',
+      state: 'Kogi',
+      country: 'Nigeria',
+      countryCode: 'NG',
+      latitude: 7.8,
+      longitude: 6.7,
+    };
+    const actions = createNewOrderCustomerActions({
+      createCustomer: vi.fn(),
+      merchantId: 'merchant-1',
+      newCustomer: {
+        ...destination,
+        companyName: '',
+        customerType: 'individual',
+        email: '',
+        firstName: 'Ada',
+        lastName: '',
+        phone: '08030000000',
+      },
+      setCustomer,
+      setCustomerSearch: vi.fn(),
+      setDuplicateCustomer: vi.fn(),
+      setIsCreatingCustomer: vi.fn(),
+      setNewCustomer: vi.fn(),
+      setSelectedCountryCode: vi.fn(),
+      setShowCustomerModal: vi.fn(),
+    });
+    actions.handleSelectCustomer(
+      {
+        id: 'customer-1',
+        address: null,
+        company_name: null,
+        customer_type: 'individual',
+        first_name: 'Ada',
+        full_name: 'Ada Merchant',
+        last_name: 'Merchant',
+        phone: '08030000000',
+        email: null,
+      },
+      true
+    );
+
+    await submitNewOrder(
+      createSubmitParams({
+        customer: setCustomer.mock.lastCall?.[0],
+        selectedBranchId: null,
+        selectedChannel: 'physical',
+      })
+    );
+
+    const persisted = mocks.createManualOrderWithItems.mock.lastCall?.[1];
+    expect(persisted.order.shipping_address).toMatchObject(destination);
+    const provider = vi.fn().mockResolvedValue({
+      quote: {
+        id: '11111111-1111-4111-8111-111111111111',
+        provider: 'GIGL',
+        serviceTier: 'GoStandard',
+        carrierName: 'GIG Logistics',
+        displayName: 'GIG Logistics',
+        estimatedDays: 2,
+        price: 10900,
+        currency: 'NGN',
+        pickupIncluded: true,
+        insuranceIncluded: false,
+        expiresAt: '2026-07-02T13:00:00.000Z',
+      },
+      availableBalance: 20000,
+      shortfall: 0,
+      canBook: true,
+    });
+    mocks.authenticatedFetch.mockImplementationOnce(
+      async (url: string, options: RequestInit) => {
+        expect(url).toContain('/orders/order-1/shipping/gigl-quote');
+        expect(JSON.parse(String(options.body))).toEqual({});
+        const built = await buildOrderGiglQuoteRequest(
+          {
+            ...persisted.order,
+            id: 'order-1',
+            order_items: persisted.buildItems('order-1'),
+          },
+          {
+            name: 'Store',
+            address: '1 Store Road',
+            city: 'Ikeja',
+            state: 'Lagos',
+            phone: '08040000000',
+            country: 'Nigeria',
+            countryCode: 'NG',
+          }
+        );
+        expect(built.ok).toBe(true);
+        if (!built.ok) throw new Error(built.code);
+        return Response.json(await provider(built.request));
+      }
+    );
+
+    const quote = await getOrderGiglQuote('order-1');
+    expect(quote.quote.price).toBe(10900);
+    expect(provider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        receiver: expect.objectContaining({
+          ...destination,
+          phone: '08030000000',
+        }),
+        items: [expect.objectContaining({ name: 'Phone', quantity: 1 })],
+      })
+    );
   });
 
   it('creates the order, invalidates queries, and shows success', async () => {

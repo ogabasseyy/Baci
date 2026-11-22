@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
 import {
-  matchesQuoteDestination,
+  getQuoteDestinationMismatchFields,
   type OrderShippingAddressForQuote,
 } from './order-quote-destination-address';
 import {
@@ -102,7 +102,7 @@ export async function enrichShippingAddressWithQuoteDestination(
   }
 
   if (!shippingAddress) {
-    throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_DESTINATION_MISMATCH');
+    throw OrderQuoteDestinationMismatchError.forFields(['shippingAddress']);
   }
 
   const expiresAt = Date.parse(quote.expires_at ?? '');
@@ -123,8 +123,12 @@ export async function enrichShippingAddressWithQuoteDestination(
     throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_REQUEST_MISSING');
   }
 
-  if (!matchesQuoteDestination(shippingAddress, quoteRequest)) {
-    throw new OrderQuoteDestinationMismatchError();
+  const mismatchFields = getQuoteDestinationMismatchFields(
+    shippingAddress,
+    quoteRequest
+  );
+  if (mismatchFields.length > 0) {
+    throw OrderQuoteDestinationMismatchError.forFields(mismatchFields);
   }
   validateQuoteCheckoutContext(quote, quoteRequest, {
     ...context,
@@ -152,7 +156,7 @@ export async function enrichShippingAddressWithQuoteDestination(
     receiverLatitude.status === 'invalid' ||
     receiverLongitude.status === 'invalid'
   ) {
-    throw new OrderQuoteDestinationMismatchError();
+    throw OrderQuoteDestinationMismatchError.forFields(['coordinates']);
   }
   const quotePin = shippingCoordinatePairSchema.safeParse({
     ...(receiverLatitude.status === 'valid'
@@ -163,7 +167,7 @@ export async function enrichShippingAddressWithQuoteDestination(
       : {}),
   });
   if (!orderPin.success || !quotePin.success) {
-    throw new OrderQuoteDestinationMismatchError();
+    throw OrderQuoteDestinationMismatchError.forFields(['coordinates']);
   }
   const { latitude: orderLatitude, longitude: orderLongitude } = orderPin.data;
   const { latitude: quoteLatitude, longitude: quoteLongitude } = quotePin.data;
@@ -184,12 +188,26 @@ export async function enrichShippingAddressWithQuoteDestination(
       (Math.abs(orderLatitude - quoteLatitude) > 1e-6 ||
         Math.abs(orderLongitude - quoteLongitude) > 1e-6))
   ) {
-    throw new OrderQuoteDestinationMismatchError();
+    throw OrderQuoteDestinationMismatchError.forFields(['coordinates']);
   }
 
+  const normalizeLabel = (value: string | null | undefined) =>
+    (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const adoptQuotedState =
+    normalizeLabel(shippingAddress.state) !==
+    normalizeLabel(quoteRequest.receiver.state);
   context.onValidatedQuoteProvider?.(quote.provider);
   return {
     ...shippingAddress,
+    // The matcher above proved this is a state-label difference with the same
+    // street and city. Persist the priced quote's exact address and canonical
+    // state so later shipment booking uses the attested destination.
+    ...(adoptQuotedState
+      ? {
+          state: quoteRequest.receiver.state,
+          address: quoteRequest.receiver.address,
+        }
+      : {}),
     ...(!orderHasPin &&
     quoteHasPin &&
     (context.isNewOrder || options.persistAttestedCoordinates)

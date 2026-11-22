@@ -1,6 +1,6 @@
 # CrossRem catalog feed v1
 
-`GET /api/partners/v1/catalog` returns one complete JSON snapshot for the configured merchant. Send `Authorization: Bearer <token>`. Generate at least 32 random bytes and encode them as unpadded base64url for `CROSSREM_CATALOG_TOKEN` in each approved environment.
+`GET /api/partners/v1/catalog` returns one complete JSON snapshot for the configured merchant. Send `Authorization: Bearer <token>`. Generate separate tokens from at least 32 random bytes encoded as unpadded base64url. Use `CROSSREM_CATALOG_TOKEN` for Baci checks and `CROSSREM_PARTNER_CATALOG_TOKEN` for the CrossRem team. Both credentials are catalog-only. Changing or removing the team credential and deploying the updated configuration leaves the Baci credential valid.
 
 The response includes `schema_version: 1`, `currency: "NGN"` and `listings`. Each listing has the existing `listing_id`, the exact Baci product and optional variant or offer ID, title, image and product URLs, product type, brand, condition and condition label, availability and prices in kobo. Always read `condition` directly rather than inferring it from `product_url` query params (which normalize offer conditions such as `uk_used` to `used`). The `base_price_minor` field is the current Ogabassey merchandise price for the exact item. CrossRem displays `price_minor`, which is the base plus 6%, rounded to the nearest kobo. Protection and delivery are excluded from both prices. Missing brand or category data is represented by null. Legacy categories can have a label without a stable category key.
 
@@ -32,7 +32,7 @@ ON CONFLICT (merchant_id) DO NOTHING;
 The Ogabassey baseline includes 4,501 Google listing IDs. The Riversong Vision 20S 20000mAh keeps its original ID and uses the merchant-confirmed New condition when the source condition is blank. The public Ogabassey feed used SKU-expanded mode when we validated the baseline on 19 November 2026. CrossRem stores and joins on the pinned `listing_id` from that baseline. A later Google toggle to family mode does not change a pinned ID. A family ID captured in a future migration stays bound to the exact SKU identified by its Google product link, even when Google starts showing a different representative SKU. Confirm that CrossRem's stored keys match the pinned IDs before resuming sync. The endpoint returns 401 for missing, invalid, or unusable credentials. After authentication, it returns 503 if bindings are missing or any active binding cannot resolve uniquely. This protects CrossRem's previous catalog from an incomplete snapshot. For a confirmed withdrawal, mark the binding retired. The next complete snapshot omits its ID and CrossRem can deactivate it. Partner HTTP responses are private.
 
 
-The registry retains all 4,501 original IDs. Five IDs are retired after the Ogabassey catalog archived the Redmi Pad Pro 5G, Redmi Pad Pro and Redmi 15C 5G. The registry has 4,496 active listings.
+The registry retains all 4,501 original IDs. It has 4,475 active listings and 26 retired IDs whose products are archived in the Ogabassey catalog.
 
 For managed base products, availability follows the quantity Baci can reserve for an order. When only the legacy stock field is positive, correct the managed quantity after verifying the inventory. A legacy count alone does not make the listing available for a quote.
 

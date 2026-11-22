@@ -8,6 +8,11 @@ const mockGetRedvaultPaymentAvailability =
   jest.fn<
     (...args: unknown[]) => Promise<{ available: boolean; reason: string }>
   >();
+let mockOxygen: { visible: boolean; disabledReason?: string };
+jest.mock('./use-oxygen-checkout-availability', () => ({
+  useOxygenCheckoutAvailability: () => mockOxygen,
+}));
+const mockSetSavingsSelection = jest.fn();
 let mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
@@ -15,6 +20,7 @@ jest.mock('@/hooks/use-checkout-savings', () => ({
     checkoutSavingsBalance: 0,
     getLiveSavingsSelection: () => undefined,
     savingsSelection: undefined,
+    setSavingsSelection: mockSetSavingsSelection,
   }),
 }));
 
@@ -54,9 +60,21 @@ const items: CartItem[] = [
   },
 ];
 
+const checkoutParams = {
+  assuranceFee: 0,
+  deliveryFee: 5_000,
+  isAuthenticated: false,
+  items,
+  merchantId: 'merchant-1',
+  merchantSlug: 'ogabassey',
+  step: 'payment' as const,
+  subtotal: 500_000,
+};
+
 describe('useCheckoutPaymentController selection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOxygen = { visible: false };
     mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
     mockCalculateCommerce.mockImplementation(() =>
       Promise.reject(new Error('offline'))
@@ -68,16 +86,7 @@ describe('useCheckoutPaymentController selection', () => {
 
   it('starts unselected and only selects an instrument after an intent opens', () => {
     const { result } = renderHook(() =>
-      useCheckoutPaymentController({
-        assuranceFee: 0,
-        deliveryFee: 5_000,
-        isAuthenticated: false,
-        items,
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        step: 'payment',
-        subtotal: 500_000,
-      })
+      useCheckoutPaymentController(checkoutParams)
     );
 
     expect(result.current.paymentTab).toBeNull();
@@ -96,22 +105,32 @@ describe('useCheckoutPaymentController selection', () => {
     expect(result.current.selectedPayment).toBeNull();
   });
 
+  it('clears a selected Oxygen method when staging availability is lost', () => {
+    mockOxygen = { visible: true };
+    const { result, rerender } = renderHook(
+      ({ subtotal }: { subtotal: number }) =>
+        useCheckoutPaymentController({
+          ...checkoutParams,
+          isAuthenticated: true,
+          subtotal,
+        }),
+      { initialProps: { subtotal: 500_000 } }
+    );
+    act(() => result.current.setSelectedPayment('oxygen'));
+    expect(result.current.selectedPayment).toBe('oxygen');
+    mockOxygen = { visible: true, disabledReason: 'Oxygen unavailable' };
+    rerender({ subtotal: 500_001 });
+    expect(result.current.availablePaymentMethods).toContain('oxygen');
+    expect(result.current.selectedPayment).toBeNull();
+  });
+
   it('selects REDVAULT only after the server availability result succeeds', async () => {
     mockGetRedvaultPaymentAvailability.mockResolvedValue({
       available: true,
       reason: 'staging_test_mode',
     });
     const { result } = renderHook(() =>
-      useCheckoutPaymentController({
-        assuranceFee: 0,
-        deliveryFee: 5_000,
-        isAuthenticated: false,
-        items,
-        merchantId: 'merchant-1',
-        merchantSlug: 'ogabassey',
-        step: 'payment',
-        subtotal: 500_000,
-      })
+      useCheckoutPaymentController(checkoutParams)
     );
 
     await act(async () => undefined);
@@ -129,14 +148,9 @@ describe('useCheckoutPaymentController selection', () => {
     const { result, rerender } = renderHook(
       ({ merchantId }: { merchantId: string }) =>
         useCheckoutPaymentController({
-          assuranceFee: 0,
+          ...checkoutParams,
           deliveryFee: 0,
-          isAuthenticated: false,
-          items,
           merchantId,
-          merchantSlug: 'ogabassey',
-          step: 'payment',
-          subtotal: 500000,
         }),
       { initialProps: { merchantId: 'merchant-1' } }
     );
@@ -157,15 +171,10 @@ describe('useCheckoutPaymentController selection', () => {
     const { result, rerender } = renderHook(
       ({ customerId }: { customerId: string }) =>
         useCheckoutPaymentController({
-          assuranceFee: 0,
-          customerId,
+          ...checkoutParams,
           deliveryFee: 0,
           isAuthenticated: true,
-          items,
-          merchantId: 'merchant-1',
-          merchantSlug: 'ogabassey',
-          step: 'payment',
-          subtotal: 500000,
+          customerId,
         }),
       { initialProps: { customerId: 'customer-a' } }
     );
@@ -188,14 +197,9 @@ describe('useCheckoutPaymentController selection', () => {
     const { result, rerender } = renderHook(
       ({ userId }: { userId: string }) =>
         useCheckoutPaymentController({
-          assuranceFee: 0,
+          ...checkoutParams,
           deliveryFee: 0,
           isAuthenticated: true,
-          items,
-          merchantId: 'merchant-1',
-          merchantSlug: 'ogabassey',
-          step: 'payment',
-          subtotal: 500000,
           userId,
         }),
       { initialProps: { userId: 'user-a' } }
@@ -250,6 +254,23 @@ describe('useCheckoutPaymentController selection', () => {
     rerender({});
 
     expect(result.current.selectedPayment).toBeNull();
+  });
+
+  it('clears full-payment credits when the customer chooses Oxygen', () => {
+    mockOxygen = { visible: true };
+    const { result } = renderHook(() =>
+      useCheckoutPaymentController(checkoutParams)
+    );
+    act(() => {
+      result.current.setSelectedPayment('paystack');
+      result.current.setWalletSelection({ amount: 1000, use: true });
+    });
+    act(() => result.current.handleSelectPaymentTab('installments'));
+    expect(result.current.walletSelection?.use).toBe(true);
+    act(() => result.current.setSelectedPayment('oxygen'));
+    expect(result.current.selectedPayment).toBe('oxygen');
+    expect(result.current.walletSelection).toBeUndefined();
+    expect(mockSetSavingsSelection).toHaveBeenCalledWith(undefined);
   });
 
   it('collapses an intent when none of its instruments remain available', () => {

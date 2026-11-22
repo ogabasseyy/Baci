@@ -1,5 +1,7 @@
+import NetInfo from '@react-native-community/netinfo';
 import {
   ApiError,
+  checkNetworkConnectivity,
   fetchJsonWithRetry,
   fetchWithRetry,
   RetryExhaustedError,
@@ -137,5 +139,51 @@ describe('api core retry helpers', () => {
       status: 400,
     });
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isolated local staging connectivity', () => {
+  const runtime = globalThis as typeof globalThis & {
+    __baciOxygenStagingRuntime?: unknown;
+  };
+  afterEach(() => {
+    delete runtime.__baciOxygenStagingRuntime;
+    jest.restoreAllMocks();
+  });
+  it('allows a connected simulator to reach the pinned local staging backend without internet', async () => {
+    runtime.__baciOxygenStagingRuntime = {
+      profile: { apiOrigin: 'http://localhost:3000' },
+    };
+    jest.spyOn(NetInfo, 'fetch').mockResolvedValue({
+      isConnected: true,
+      isInternetReachable: false,
+    } as Awaited<ReturnType<typeof NetInfo.fetch>>);
+    await expect(checkNetworkConnectivity()).resolves.toBe(true);
+  });
+  it('keeps the internet check for normal customers', async () => {
+    jest.spyOn(NetInfo, 'fetch').mockResolvedValue({
+      isConnected: true,
+      isInternetReachable: false,
+    } as Awaited<ReturnType<typeof NetInfo.fetch>>);
+    await expect(checkNetworkConnectivity()).resolves.toBe(false);
+  });
+  it('does not bypass offline state or a remote staging origin', async () => {
+    const fetch = jest.spyOn(NetInfo, 'fetch');
+    runtime.__baciOxygenStagingRuntime = {
+      profile: { apiOrigin: 'http://localhost:3000' },
+    };
+    fetch.mockResolvedValue({
+      isConnected: false,
+      isInternetReachable: false,
+    } as Awaited<ReturnType<typeof NetInfo.fetch>>);
+    await expect(checkNetworkConnectivity()).resolves.toBe(false);
+    runtime.__baciOxygenStagingRuntime = {
+      profile: { apiOrigin: 'https://staging.example.com' },
+    };
+    fetch.mockResolvedValue({
+      isConnected: true,
+      isInternetReachable: false,
+    } as Awaited<ReturnType<typeof NetInfo.fetch>>);
+    await expect(checkNetworkConnectivity()).resolves.toBe(false);
   });
 });

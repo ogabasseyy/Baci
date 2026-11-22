@@ -129,7 +129,7 @@ describe('CreateOrderRequestSchema REDVAULT credits', () => {
   });
 });
 
-describe('OrderResponseSchema currency', () => {
+describe('OrderResponseSchema', () => {
   const baseResponse = {
     order: {
       id: 'order-1',
@@ -152,6 +152,28 @@ describe('OrderResponseSchema currency', () => {
     if (result.success) {
       expect(result.data.order.currency).toBe('KES');
     }
+  });
+
+  it('requires JSON numbers for Oxygen receipt amounts', () => {
+    const receipt = {
+      ...baseResponse,
+      order: { ...baseResponse.order, payment_method: 'oxygen', total: 5750.5 },
+      amountDueToGateway: 5750.5,
+    };
+
+    expect(OrderResponseSchema.parse(receipt).order.total).toBe(5750.5);
+    expect(
+      OrderResponseSchema.safeParse({
+        ...receipt,
+        order: { ...receipt.order, total: '5750.5' },
+      }).success
+    ).toBe(false);
+    expect(
+      OrderResponseSchema.safeParse({
+        ...receipt,
+        amountDueToGateway: '5750.5',
+      }).success
+    ).toBe(false);
   });
 
   it('leaves currency undefined for older responses that omit it', () => {

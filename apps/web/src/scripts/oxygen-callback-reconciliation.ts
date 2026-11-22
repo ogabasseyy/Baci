@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import { runOxygenEligibilityBackground } from '@/lib/payments/oxygen/background-eligibility';
 import { readOxygenCallbackBacklog } from '@/lib/payments/oxygen/runtime-callback-backlog';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
 import { reconcileOxygenCallbacks } from '@/lib/payments/oxygen/runtime-reconciliation';
@@ -9,7 +10,9 @@ const WORKER_TIMEOUT_MS = 300_000;
 const BACKLOG_ALERT_AGE_SECONDS = 15 * 60;
 
 export async function runOxygenCallbackReconciliationCli(): Promise<number> {
-  if (process.env.OXYGEN_CALLBACK_DRAIN_ENABLED !== 'true') {
+  const callbacks = process.env.OXYGEN_CALLBACK_DRAIN_ENABLED === 'true';
+  const eligibility = process.env.OXYGEN_ELIGIBILITY_BACKGROUND_ENABLED === 'true';
+  if (!callbacks && !eligibility) {
     console.log(JSON.stringify({ enabled: false }));
     return 0;
   }
@@ -21,6 +24,23 @@ export async function runOxygenCallbackReconciliationCli(): Promise<number> {
   }
 
   const worker = await connection.worker();
+  let eligibilityFailed = false;
+  if (eligibility) {
+    try {
+      await runOxygenEligibilityBackground({
+        worker,
+        provider: connection.provider,
+        partner: connection.partnerReference,
+        environment: connection.environment,
+        hosts: connection.hosts,
+        deadlineMs: callbacks ? deadlineMs - 120_000 : deadlineMs,
+      });
+    } catch {
+      console.error(JSON.stringify({ error: 'Oxygen eligibility worker failed' }));
+      eligibilityFailed = true;
+    }
+  }
+  if (!callbacks) return eligibilityFailed ? 1 : 0;
   await reconcileOxygenCallbacks(
     worker,
     connection.provider,
@@ -54,7 +74,7 @@ export async function runOxygenCallbackReconciliationCli(): Promise<number> {
   }
 
   console.log(JSON.stringify({ enabled: true, backlog }));
-  return 0;
+  return eligibilityFailed ? 1 : 0;
 }
 
 const currentFile = process.argv[1]

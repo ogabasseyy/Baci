@@ -3,6 +3,7 @@ DO $$
 DECLARE
   merchant constant uuid := '11111111-1111-4111-8111-111111111111';
   product constant uuid := '44444444-4444-4444-8444-444444444444';
+  default_variant constant uuid := '21691862-b5bc-406d-859a-5df9bf98184e';
   removed_product constant uuid := '33333333-3333-4333-8333-333333333333';
   removed_line uuid := gen_random_uuid();
   source uuid := gen_random_uuid();
@@ -19,14 +20,18 @@ DECLARE
   linked_recovery_handoff uuid := gen_random_uuid();
   restored_handoff uuid := gen_random_uuid();
   linked_grant uuid := gen_random_uuid();
-  saved_cart uuid := gen_random_uuid();
-  customer uuid := gen_random_uuid();
-  account_user uuid := gen_random_uuid();
-  after_merge_handoff uuid := gen_random_uuid();
   guest_cart uuid;
   source_version integer;
+  imported_version integer;
   result jsonb;
 BEGIN
+  INSERT INTO public.product_variants(id, merchant_id, product_id, attributes, condition, price_override, stock_quantity)
+  VALUES (default_variant, merchant, product, 'null', NULL, 15, 20);
+  -- Inventory anchors are stock bookkeeping rows and cannot be sold as SKUs.
+  INSERT INTO public.product_variants(id, merchant_id, product_id, is_inventory_anchor)
+  VALUES (gen_random_uuid(), merchant, product, true);
+  UPDATE public.products SET condition = 'new', default_variant_id = default_variant
+  WHERE id = product AND merchant_id = merchant;
   INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
   VALUES (source, merchant, now() + interval '1 day'),
          (destination, merchant, now() + interval '1 day');
@@ -36,7 +41,9 @@ BEGIN
   INSERT INTO public.commerce_cart_legacy_refs(merchant_id, provider, legacy_hash, cart_id)
   VALUES (merchant, 'mcp', 'import-test-source', source);
   INSERT INTO public.commerce_cart_lines(merchant_id, cart_id, product_id, quantity, last_unit_price_minor)
-  VALUES (merchant, source, product, 1, 1500), (merchant, destination, product, 1, 1500);
+  VALUES (merchant, source, product, 1, 1500);
+  INSERT INTO public.commerce_cart_lines(merchant_id, cart_id, product_id, variant_id, condition, quantity, last_unit_price_minor)
+  VALUES (merchant, destination, product, default_variant, 'new', 1, 1500);
   INSERT INTO public.commerce_cart_lines(id, merchant_id, cart_id, product_id, quantity, last_unit_price_minor)
   VALUES (removed_line, merchant, source, removed_product, 1, 25000);
   PERFORM pg_temp.handoff_claim(source, source_grant, 'legacy:mcp:test-import');
@@ -64,10 +71,17 @@ BEGIN
     'connect', 'web', destination, source_version, NULL, NULL, NULL);
   IF result->>'code' IS DISTINCT FROM 'not_found' OR coalesce(result->>'ok', 'false') = 'true'
   THEN RAISE EXCEPTION 'The generic writer accepted an import-only handoff: %', result; END IF;
+  PERFORM pg_temp.check_mcp_import_sku_matching(
+    merchant, product, default_variant, source, destination, destination_grant, handoff, source_version
+  );
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'import-attempt', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'grantId' IS DISTINCT FROM destination_grant::text
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 2::bigint
   THEN RAISE EXCEPTION 'Expected a one-plus-one import retaining the destination grant: %', result; END IF;
+  IF (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = destination) <> 1
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = destination
+       AND product_id = product AND variant_id = default_variant AND condition = 'new' AND quantity = 2)
+  THEN RAISE EXCEPTION 'Expected the website default SKU to consolidate to one line with quantity two: %', result; END IF;
   IF EXISTS (
     SELECT 1 FROM public.commerce_cart_lines
     WHERE cart_id = destination AND product_id = removed_product
@@ -75,8 +89,15 @@ BEGIN
   IF (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = source) IS DISTINCT FROM 1::bigint
      OR EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE cart_id = destination AND principal_id = 'legacy:mcp:test-import')
   THEN RAISE EXCEPTION 'Import modified the source or shared recipient access'; END IF;
+  imported_version := (result->'state'->>'version')::integer;
+  IF imported_version IS DISTINCT FROM (SELECT version FROM public.commerce_carts WHERE id = destination)
+  THEN RAISE EXCEPTION 'Import did not report the persisted destination version: %', result; END IF;
   result := public.commerce_cart_import_mcp_handoff('import-test-link', handoff, 'reopen-new-attempt', source_version);
-  IF result->>'replayed' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Reopening did not replay: %', result; END IF;
+  IF result->>'replayed' IS DISTINCT FROM 'true'
+     OR (result->'state'->>'version')::integer IS DISTINCT FROM imported_version
+     OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = destination) <> 1
+     OR (SELECT quantity FROM public.commerce_cart_lines WHERE cart_id = destination) IS DISTINCT FROM 2
+  THEN RAISE EXCEPTION 'Reopening changed the consolidated cart: %', result; END IF;
   result := public.commerce_cart_import_mcp_handoff('import-test-link-2', second_handoff, 'second-link', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true'
      OR result->>'grantId' IS DISTINCT FROM destination_grant::text
@@ -104,6 +125,8 @@ BEGIN
   guest_cart := (result->'state'->>'cartId')::uuid;
   IF result->>'ok' IS DISTINCT FROM 'true' OR guest_cart IN (source, destination)
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = guest_cart) IS DISTINCT FROM 1::bigint
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = guest_cart
+       AND product_id = product AND variant_id = default_variant AND condition = 'new')
      OR (SELECT count(*) FROM public.commerce_cart_grants WHERE cart_id = guest_cart
           AND principal_id = 'new-website-import-test') <> 1
      OR EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE cart_id = guest_cart AND principal_id = 'legacy:mcp:test-import')
@@ -114,6 +137,12 @@ BEGIN
 
   -- Link cleanup must not discard the quantity already imported.
   DELETE FROM public.commerce_cart_handoffs WHERE id IN (handoff, second_handoff);
+  -- A configured default does not make a product with multiple SKUs unambiguous.
+  INSERT INTO public.product_variants(id, merchant_id, product_id, attributes, condition, stock_quantity)
+  VALUES ('66666666-0000-4000-8000-000000000001', merchant, removed_product, '{}', 'new', 20),
+    ('66666666-0000-4000-8000-000000000002', merchant, removed_product, '{"color":"white"}', 'new', 20);
+  UPDATE public.products SET condition = 'new', default_variant_id = '66666666-0000-4000-8000-000000000001'
+  WHERE id = removed_product AND merchant_id = merchant;
   PERFORM pg_temp.handoff_claim(source, source_grant, 'legacy:mcp:test-import');
   result := public.commerce_cart_mutate(source, 'add-after-handoff', source_version,
     jsonb_build_object('type', 'add', 'item', jsonb_build_object('productId', removed_product), 'quantity', 1));
@@ -140,7 +169,8 @@ BEGIN
   result := public.commerce_cart_import_mcp_handoff('import-updated-link', changed_handoff, 'forward-update', source_version);
   IF result->>'ok' IS DISTINCT FROM 'true'
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination AND product_id = product) IS DISTINCT FROM 2::bigint
-     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination AND product_id = removed_product) IS DISTINCT FROM 1::bigint
+     OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = destination
+       AND product_id = removed_product AND variant_id IS NULL AND condition IS NULL AND quantity = 1)
   THEN RAISE EXCEPTION 'A new source version did not copy just new quantities: %', result; END IF;
   result := public.commerce_cart_import_mcp_handoff('import-updated-link', changed_handoff, 'repeat-update', source_version);
   IF result->>'replayed' IS DISTINCT FROM 'true'
@@ -210,39 +240,9 @@ BEGIN
      OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = destination AND product_id = product) IS DISTINCT FROM 2::bigint
   THEN RAISE EXCEPTION 'Restoring a source quantity duplicated units already transferred: %', result; END IF;
 
-  -- An account merge keeps the saved cart ID and retires the guest cart.
-  UPDATE public.merchants SET premium_features = '["shared_cart","shared_cart_accounts"]'
-  WHERE id = merchant;
-  INSERT INTO public.customers(id, merchant_id, user_id) VALUES (customer, merchant, account_user);
-  INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
-  VALUES (saved_cart, merchant, now() + interval '1 day');
-  INSERT INTO public.commerce_cart_customer_carts(merchant_id, customer_id, cart_id)
-  VALUES (merchant, customer, saved_cart);
-  PERFORM set_config('request.jwt.claims', (auth.jwt() || jsonb_build_object(
-    'role', 'commerce_cart_account_linker', 'cart_customer_id', customer,
-    'cart_account_user_id', account_user
-  ))::text, true);
-  result := public.commerce_cart_link_account(jsonb_build_object(
-    'operationId', 'after-mcp-import-merge', 'choice', 'merge', 'expectedSavedCartId', saved_cart,
-    'expectedSavedVersion', 1, 'expectedCurrentVersion',
-    (SELECT version FROM public.commerce_carts WHERE id = destination),
-    'lines', (SELECT jsonb_agg(jsonb_build_object(
-      'item', jsonb_build_object('productId', product_id), 'quantity', quantity
-    )) FROM public.commerce_cart_lines WHERE cart_id = destination)
-  ), 'import-account-merge', gen_random_uuid(), '{"type":"web"}');
-  IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'cartId' IS DISTINCT FROM saved_cart::text
-  THEN RAISE EXCEPTION 'Account merge fixture failed: %', result; END IF;
-  PERFORM pg_temp.handoff_claim(saved_cart, (result->>'grantId')::uuid, result->>'principalId');
-  INSERT INTO public.commerce_cart_handoffs(id, handoff_hash, merchant_id, source_cart_id,
-    origin_principal_id, operation_id, destination, expires_at)
-  VALUES (after_merge_handoff, 'import-after-account-merge', merchant, source, 'legacy:mcp:test-import',
-    'legacy-handoff:mcp-import:after-account-merge', '{"type":"web"}', now() + interval '5 minutes');
-  result := public.commerce_cart_import_mcp_handoff('import-after-account-merge', after_merge_handoff,
-    'after-account-merge', source_version);
-  IF result->>'replayed' IS DISTINCT FROM 'true'
-     OR result->'state'->>'cartId' IS DISTINCT FROM saved_cart::text
-     OR (SELECT sum(quantity) FROM public.commerce_cart_lines WHERE cart_id = saved_cart AND product_id = product) IS DISTINCT FROM 2::bigint
-  THEN RAISE EXCEPTION 'Account merge lost the website import history: %', result; END IF;
+  PERFORM pg_temp.check_mcp_import_account_merge(
+    merchant, product, default_variant, source, destination, source_version
+  );
 END $$;
 
 DO $$

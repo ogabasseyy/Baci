@@ -25,6 +25,7 @@ function mockDetails(location?: unknown) {
         city: 'Port Harcourt',
         formattedAddress: prediction.description,
         location,
+        lga: 'Port Harcourt',
         state: 'Rivers',
       },
     }),
@@ -92,4 +93,18 @@ describe('address lookup failures', () => {
     errorSpy.mockRestore();
     warnSpy.mockRestore();
   });
+});
+
+it('preserves a supplied Nigerian LGA separately from the city', async () => {
+  fetchMock.mockReset();
+  global.fetch = fetchMock;
+  fetchMock.mockResolvedValueOnce({
+    ok: true,
+    json: async () => ({
+      details: { city: 'Lagos', state: 'Lagos', lga: 'Ikeja' },
+    }),
+  } as Response);
+  await expect(
+    fetchPlaceDetails({ prediction, sessionToken: 'session-lga' })
+  ).resolves.toMatchObject({ city: 'Lagos', lga: 'Ikeja' });
 });

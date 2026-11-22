@@ -82,8 +82,12 @@ export function planOrderGiglAddressSave(
       next.longitude = longitude;
       changed = true;
     }
-  } else if (trimmed(receiver.address) !== trimmed(stored.address)) {
-    // A new street invalidates the old map pin, matching the server merge.
+  } else if (
+    (['address', 'city', 'state'] as const).some(
+      (field) => trimmed(next[field]) !== trimmed(stored[field])
+    )
+  ) {
+    // The old map pin cannot describe an edited destination.
     delete next.latitude;
     delete next.longitude;
   }

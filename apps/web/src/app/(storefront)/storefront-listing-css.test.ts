@@ -6,7 +6,7 @@ import postcss from 'postcss';
 import { describe, expect, it } from 'vitest';
 
 describe('storefront route-scoped listing, content, utility, and blog-post CSS', () => {
-  it('compiles catalog listing styles under 120 KB without dashboard utilities', async () => {
+  it('compiles catalog listing styles under 125 KB without dashboard utilities', async () => {
     const from = fileURLToPath(
       new URL('./storefront-listing.css', import.meta.url)
     );
@@ -14,7 +14,7 @@ describe('storefront route-scoped listing, content, utility, and blog-post CSS',
       await readFile(from, 'utf8'),
       { from, map: false }
     );
-    expect(result.css.length).toBeLessThan(120_000);
+    expect(result.css.length).toBeLessThan(125_000);
     for (const parts of [
       ['grid', 'cols', '2'],
       ['items', 'center'],

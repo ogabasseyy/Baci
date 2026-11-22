@@ -11,8 +11,7 @@ import {
   createQuizStartRequestId,
   startQuizAttemptV2,
 } from '@/services/quiz-attempts';
-import type { QuizV2Attempt } from '@/services/quiz-types';
-import { QuizServiceError } from '@/services/quiz-types';
+import { QuizServiceError, type QuizV2Attempt } from '@/services/quiz-types';
 import { useAuthStore } from '@/stores/auth-store';
 import {
   createQuizAdsPrewarm,
@@ -22,9 +21,7 @@ import { getQuizErrorMessage } from './QuizScreen.utils';
 import { useQuizDateOfBirthGate } from './useQuizDateOfBirthGate';
 import { useQuizStartGate } from './useQuizStartGate';
 
-// Server error code raised by QuizAgeGateError (route-helpers-guards.ts) when a
-// stored date of birth fails the 18+ gate. Detected client-side to reopen the
-// correction gate rather than stranding the shopper.
+// Raised by QuizAgeGateError when a stored DOB fails the 18+ gate.
 const QUIZ_AGE_RESTRICTED_CODE = 'quiz_age_restricted';
 const START_FAILED_FALLBACK = 'Quiz action failed';
 
@@ -193,7 +190,7 @@ export function useQuizStartFlow({
               throw createQuizSessionChangedError();
             }
             try {
-              return await startQuizAttemptV2({
+              const startInput = {
                 acceptedRulesVersion: event.rulesVersion,
                 deviceFingerprint,
                 eventId,
@@ -201,8 +198,12 @@ export function useQuizStartFlow({
                 integrityTier,
                 mode: event.mode,
                 startRequestId,
-                termsAccepted: true,
-              });
+                termsAccepted: true as const,
+                ...(event.backendMode === 'edge_rooms'
+                  ? { backendMode: 'edge_rooms' as const }
+                  : {}),
+              };
+              return await startQuizAttemptV2(startInput);
             } catch (error) {
               if (
                 error instanceof QuizServiceError &&

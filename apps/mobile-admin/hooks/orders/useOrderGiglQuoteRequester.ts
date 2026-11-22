@@ -24,7 +24,20 @@ interface UseOrderGiglQuoteRequesterParams {
 type InitialAddressOrder = Parameters<typeof getOrderGiglInitialAddress>[0];
 
 function addressBasis(order?: OrderGiglStoredAddressSource) {
-  return JSON.stringify(order?.shipping_address ?? null);
+  // The bound quote is scoped to these semantic destination fields. Using
+  // their signature also ignores JSONB key-order changes during a refetch.
+  return addressSignature(order);
+}
+
+function addressSignature(order?: OrderGiglStoredAddressSource) {
+  return getOrderGiglAddressSignature(
+    getOrderGiglInitialAddress({
+      customer_phone: order?.customer_phone,
+      // Stored JSON, read the same way the panel reads the order.
+      shipping_address:
+        order?.shipping_address as InitialAddressOrder['shipping_address'],
+    })
+  );
 }
 
 /**
@@ -56,17 +69,40 @@ export function useOrderGiglQuoteRequester({
   const fetchQuote = async (
     orderId: string,
     preview: boolean,
-    signal: AbortSignal
+    signal: AbortSignal,
+    saveAddress = true
   ) => {
+    const order = currentStoredOrder();
+    const startingAddressBasis = addressBasis(order);
+    let signature = preview ? null : addressSignature(order);
     let addressSaved = false;
     try {
-      return await requestOrderGiglQuote({
+      const result = await requestOrderGiglQuote({
         cacheScope: previewCacheScope,
-        draft: addressRef.current,
+        draft: preview || saveAddress ? addressRef.current : {},
         onAddressSaved: (shippingAddress) => {
           addressSaved = true;
+          if (signal.aborted) return;
+          const savedAddressOrder = {
+            ...order,
+            shipping_address: shippingAddress,
+          };
+          const savedAddressSignature = addressSignature(savedAddressOrder);
+          const currentBasis = addressBasis(storedRef.current);
+          if (
+            currentBasis !== startingAddressBasis &&
+            currentBasis !== savedAddressSignature
+          ) {
+            throw Object.assign(
+              new Error('Delivery address changed while saving.'),
+              { code: 'stale_order_quote_inputs' }
+            );
+          }
+          signature = savedAddressSignature;
           savedRef.current = {
-            basis: addressBasis(storedRef.current),
+            // The overlay only replaces the address version this save began
+            // from. A newer refetch must remain authoritative.
+            basis: startingAddressBasis,
             shippingAddress,
           };
         },
@@ -74,8 +110,21 @@ export function useOrderGiglQuoteRequester({
         preview,
         queryClient,
         signal,
-        storedOrder: currentStoredOrder(),
+        storedOrder: order,
       });
+      if (
+        !signal.aborted &&
+        signature !== null &&
+        signature !== addressSignature(currentStoredOrder())
+      ) {
+        throw Object.assign(
+          new Error('Delivery address changed while pricing.'),
+          {
+            code: 'stale_order_quote_inputs',
+          }
+        );
+      }
+      return { result, signature };
     } finally {
       // Refresh the order only after the bind settles, so the refetch cannot
       // restart the quote request while it is still in flight.
@@ -89,21 +138,7 @@ export function useOrderGiglQuoteRequester({
     clear: () => {
       savedRef.current = null;
     },
-    /**
-     * Signature of the stored address a bound quote is priced from, in the
-     * form the panel derives from the order (saved details included).
-     */
-    storedAddressSignature: () => {
-      const order = currentStoredOrder();
-      return getOrderGiglAddressSignature(
-        getOrderGiglInitialAddress({
-          customer_phone: order?.customer_phone,
-          // Stored JSON, read the same way the panel reads the order.
-          shipping_address:
-            order?.shipping_address as InitialAddressOrder['shipping_address'],
-        })
-      );
-    },
+    storedAddressSignature: () => addressSignature(currentStoredOrder()),
     readCachedPreview: (orderId: string) =>
       readCachedOrderGiglPreview({
         cacheScope: previewCacheScope,

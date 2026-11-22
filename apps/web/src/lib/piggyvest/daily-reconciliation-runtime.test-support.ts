@@ -51,6 +51,13 @@ export function ledger(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The moved-legacy-wallet read with no wallet holding money again. */
+export const NO_MIGRATED_LEGACY_WALLETS = {
+  count: 0,
+  totalBalance: '0.00',
+  wallets: [],
+};
+
 /** Wallet pay part of the report with nothing outstanding. */
 export const NO_WALLET_PAY_WORK = {
   stuckPayments: [],
@@ -66,7 +73,8 @@ export const NO_WALLET_PAY_WORK = {
 export function executeWith(
   snapshotResult: unknown = snapshot(),
   ledgerResult: unknown = ledger(),
-  walletPayResult: unknown = NO_WALLET_PAY_WORK
+  walletPayResult: unknown = NO_WALLET_PAY_WORK,
+  migratedResult: unknown = NO_MIGRATED_LEGACY_WALLETS
 ) {
   return vi.fn(async (statement?: string) => ({
     rows: [
@@ -75,7 +83,9 @@ export function executeWith(
           ? ledgerResult
           : statement?.includes('read_wallet_pay_reconciliation')
             ? walletPayResult
-            : snapshotResult,
+            : statement?.includes('read_migrated_legacy_wallet_balances')
+              ? migratedResult
+              : snapshotResult,
       },
     ],
   }));

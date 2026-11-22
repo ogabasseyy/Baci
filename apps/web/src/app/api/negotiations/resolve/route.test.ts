@@ -236,6 +236,41 @@ describe('POST /api/negotiations/resolve', () => {
     });
   });
 
+  it('rolls back and skips notifications if the saved counter amount is missing', async () => {
+    await setupAuth({
+      authenticated: true,
+      hasAccess: true,
+      merchantId: 'merchant-123',
+    });
+    mockSupabaseUpdates(
+      {
+        data: {
+          id: validBody.negotiationId,
+          merchant_id: 'merchant-123',
+          customer_id: null,
+          customer_email: 'guest@example.com',
+          type: 'total',
+          item_info: null,
+          offered_price: 5000,
+          counter_offer: null,
+          status: 'countered',
+        },
+        error: null,
+      },
+      { data: { id: validBody.negotiationId }, error: null }
+    );
+    const response = await POST(
+      createRequest({ ...validBody, status: 'countered', counterOffer: 6000 })
+    );
+    expect(response.status).toBe(502);
+    expect(mockNotifyGuestNegotiationResponseByEmail).not.toHaveBeenCalled();
+    expect(mockNotifyNegotiationResponse).not.toHaveBeenCalled();
+    expect(updateCalls[1].payload).toEqual({
+      status: 'pending',
+      counter_offer: null,
+    });
+  });
+
   it('returns 401 when not authenticated', async () => {
     await setupAuth({ authenticated: false });
 

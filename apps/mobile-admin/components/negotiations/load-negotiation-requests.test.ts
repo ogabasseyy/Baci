@@ -81,7 +81,11 @@ describe('loadNegotiationRequests', () => {
     results.push(
       {
         data: [
-          { id: 'n1', customer_id: null, customer_email: 'guest@example.com' },
+          {
+            id: 'n1',
+            customer_id: null,
+            customer_email: ' Guest@Example.com ',
+          },
         ],
         error: null,
       },

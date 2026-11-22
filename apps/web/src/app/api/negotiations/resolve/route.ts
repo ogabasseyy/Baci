@@ -70,12 +70,19 @@ function notifyResolvedNegotiation({
   }
   const resolvedType: 'single' | 'total' = negotiationType;
 
+  const savedCounterAmount = Number(negotiation.counter_offer);
+  if (
+    negotiationStatus === 'countered' &&
+    (!Number.isFinite(savedCounterAmount) || savedCounterAmount <= 0)
+  ) {
+    throw new Error('Missing or invalid saved counter offer amount');
+  }
   const itemName = negotiation.item_info?.name ?? null;
   const acceptedPrice =
     negotiationStatus === 'accepted' && negotiation.offered_price != null
       ? Number(negotiation.offered_price)
       : negotiationStatus === 'countered'
-        ? Number(negotiation.counter_offer)
+        ? savedCounterAmount
         : null;
   const productSlug = negotiation.item_info?.product_slug ?? null;
 

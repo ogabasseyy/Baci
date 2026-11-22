@@ -1,3 +1,4 @@
+import { normalizeNegotiationCustomerEmail } from '@baci/shared';
 import { supabase } from '@/lib/supabase';
 import type { NegotiationCardRequest } from './NegotiationCard';
 
@@ -27,8 +28,9 @@ export async function loadNegotiationRequests(
   const guestEmails = [
     ...new Set(
       (data ?? [])
-        .filter((row) => !row.customer_id && row.customer_email)
-        .map((row) => row.customer_email)
+        .filter((row) => !row.customer_id)
+        .map((row) => normalizeNegotiationCustomerEmail(row.customer_email))
+        .filter((email) => email !== null)
     ),
   ];
   const [profiles, guests] = await Promise.all([
@@ -51,7 +53,7 @@ export async function loadNegotiationRequests(
   if (guests.error) throw guests.error;
   const guestNames = new Map(
     (guests.data ?? []).map((profile) => [
-      profile.email,
+      normalizeNegotiationCustomerEmail(profile.email),
       profile.full_name?.trim() ||
         [profile.first_name, profile.last_name]
           .filter(Boolean)
@@ -74,7 +76,9 @@ export async function loadNegotiationRequests(
     customer_name:
       (row.customer_id
         ? names.get(row.customer_id)
-        : guestNames.get(row.customer_email)) || null,
+        : guestNames.get(
+            normalizeNegotiationCustomerEmail(row.customer_email)
+          )) || null,
     // cart_snapshot is arbitrary client-supplied JSONB; coerce anything that
     // isn't an array to null so one malformed row can't crash the list on .map.
     cart_snapshot: Array.isArray(row.cart_snapshot) ? row.cart_snapshot : null,

@@ -240,7 +240,8 @@ export async function POST(request: NextRequest) {
 
     const result = NextResponse.json({
       ...toPublicQuoteResponse(response),
-      ...(data.shipmentType === 'domestic' && data.receiver.countryCode === 'NG'
+      ...(data.shipmentType === 'domestic' &&
+      quoteRequest.receiver.countryCode === 'NG'
         ? { receiverState: quoteRequest.receiver.state }
         : {}),
     });

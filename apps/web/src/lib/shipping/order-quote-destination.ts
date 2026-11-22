@@ -199,8 +199,9 @@ export async function enrichShippingAddressWithQuoteDestination(
   context.onValidatedQuoteProvider?.(quote.provider);
   return {
     ...shippingAddress,
-    // Keep aliases admitted by checkout compatible with the booking guard.
-    // A previously accepted case/whitespace-only variation stays intact for replay.
+    // The matcher above proved this is a state-label difference with the same
+    // street and city. Persist the priced quote's exact address and canonical
+    // state so later shipment booking uses the attested destination.
     ...(adoptQuotedState
       ? {
           state: quoteRequest.receiver.state,

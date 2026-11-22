@@ -346,4 +346,39 @@ describe('POST /api/shipping/quotes', () => {
       []
     );
   });
+
+  it('returns the normalized state for mobile-shaped domestic quote requests', async () => {
+    mockCreateServerClient.mockResolvedValue(
+      buildSupabaseMock({ id: 'user-1' })
+    );
+    const { POST } = await import('./route');
+
+    const response = await POST(
+      buildQuoteRequest({
+        shipmentType: 'domestic',
+        receiver: {
+          name: 'Ada Buyer',
+          phone: '08011112222',
+          address: '3 Example Street',
+          city: 'Abuja',
+          state: 'Abuja',
+          country: 'Nigeria',
+        },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      receiverState: 'FCT - Abuja',
+    });
+    expect(mockGetQuotes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        receiver: expect.objectContaining({
+          countryCode: 'NG',
+          state: 'FCT - Abuja',
+        }),
+      }),
+      []
+    );
+  });
 });

@@ -1,45 +1,14 @@
 import type { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { POST as action } from './[amendmentId]/actions/route';
-import { POST as preview } from './preview/route';
+import { describe, expect, it } from 'vitest';
+import { context, id, mocks, request } from './amendment-route.test-support';
 import { GET, POST } from './route';
 
-const mocks = vi.hoisted(() => ({
-  auth: vi.fn(),
-  csrf: vi.fn(),
-  logError: vi.fn(),
-  rateLimit: vi.fn(),
-  rpc: vi.fn(),
-}));
-
-vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
-vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
-vi.mock('@/lib/logger', () => ({ logger: { error: mocks.logError } }));
-vi.mock('@/lib/rate-limiter', () => ({ checkRateLimit: mocks.rateLimit }));
-
-const id = '11111111-1111-4111-8111-111111111111';
-const context = { params: Promise.resolve({ id }) };
 const confirmBody = {
   customerAgreed: true,
   idempotencyKey: 'fixture-confirm-a',
   previewId: id,
   reason: 'Customer requested a replacement',
 };
-
-function request(body?: unknown) {
-  return new Request('https://test.invalid/api/orders/amendments', {
-    body: body === undefined ? undefined : JSON.stringify(body),
-    method: body === undefined ? 'GET' : 'POST',
-  }) as NextRequest;
-}
-
-beforeEach(() => {
-  vi.resetAllMocks();
-  mocks.auth.mockResolvedValue({ supabase: { rpc: mocks.rpc }, user: { id } });
-  mocks.csrf.mockResolvedValue({ valid: true });
-  mocks.rateLimit.mockResolvedValue(true);
-  mocks.rpc.mockResolvedValue({ data: { amendmentId: id }, error: null });
-});
 
 describe('paid order amendment routes', () => {
   it('logs the database code without exposing unexpected RPC messages', async () => {
@@ -57,28 +26,6 @@ describe('paid order amendment routes', () => {
       message: 'Order amendment RPC returned an unexpected error',
       databaseCode: 'P0001',
     });
-  });
-
-  it.each([
-    'payment_capture_in_flight',
-    'order_not_cancellable',
-  ])('maps %s to a recovery cancellation conflict', async (code) => {
-    mocks.rpc.mockResolvedValueOnce({
-      data: null,
-      error: { code: 'P0001', message: code },
-    });
-    const response = await action(
-      request({
-        action: 'cancel_for_recovery',
-        idempotencyKey: 'fixture-recovery-cancel',
-        reason: 'Synthetic recovery',
-      }),
-      { params: Promise.resolve({ id, amendmentId: id }) }
-    );
-
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({ code });
-    expect(mocks.logError).not.toHaveBeenCalled();
   });
 
   it('rate-limits replacement search before querying the catalog', async () => {
@@ -106,21 +53,10 @@ describe('paid order amendment routes', () => {
     );
   });
 
-  it('rate-limits write requests and handles the database preview limit', async () => {
+  it('rate-limits confirmation before dispatching a write', async () => {
     mocks.rateLimit.mockResolvedValueOnce(false);
     expect((await POST(request(confirmBody), context)).status).toBe(429);
     expect(mocks.rpc).not.toHaveBeenCalled();
-
-    mocks.rpc.mockResolvedValueOnce({
-      data: null,
-      error: { code: 'P0001', message: 'amendment_rate_limited' },
-    });
-    const response = await preview(
-      request({ lineId: id, replacement: { id, kind: 'product' } }),
-      context
-    );
-    expect(response.status).toBe(429);
-    expect(response.headers.get('Retry-After')).toBe('60');
   });
 
   it('requires authentication before querying the order', async () => {
@@ -145,53 +81,6 @@ describe('paid order amendment routes', () => {
       method: 'POST',
     });
     expect((await POST(invalid as NextRequest, context)).status).toBe(400);
-    expect(mocks.rpc).not.toHaveBeenCalled();
-  });
-
-  it('sends replacement identity and tenant-scoped order ID to preview', async () => {
-    const body = { lineId: id, replacement: { id, kind: 'variant' } };
-    expect((await preview(request(body), context)).status).toBe(200);
-    expect(mocks.rpc).toHaveBeenCalledWith('preview_paid_order_amendment', {
-      p_order_id: id,
-      p_payload: body,
-    });
-  });
-
-  it('accepts only a verified evidence ID and uses the authenticated order action RPC', async () => {
-    const actionContext = { params: Promise.resolve({ id, amendmentId: id }) };
-    const topUp = {
-      action: 'record_top_up',
-      evidenceId: id,
-      idempotencyKey: 'fixture-top-up',
-    };
-    expect(
-      (await action(request({ ...topUp, amountMinor: 5000 }), actionContext))
-        .status
-    ).toBe(400);
-    expect(mocks.rpc).not.toHaveBeenCalled();
-    expect((await action(request(topUp), actionContext)).status).toBe(200);
-    expect(mocks.rpc).toHaveBeenCalledWith('run_paid_order_amendment_action', {
-      p_order_id: id,
-      p_amendment_id: id,
-      p_payload: topUp,
-    });
-  });
-
-  it('does not invoke a settlement command when CSRF fails', async () => {
-    mocks.csrf.mockResolvedValueOnce({ valid: false });
-    const actionContext = { params: Promise.resolve({ id, amendmentId: id }) };
-    expect(
-      (
-        await action(
-          request({
-            action: 'reverse',
-            reason: 'Synthetic',
-            idempotencyKey: 'fixture-reverse',
-          }),
-          actionContext
-        )
-      ).status
-    ).toBe(403);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 

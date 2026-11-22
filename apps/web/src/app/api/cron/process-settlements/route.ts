@@ -96,7 +96,12 @@ export async function POST(request: Request) {
       }
     }
     if (parsedQuery.data.cancellationsOnly === 'true') {
-      return processCancellationDrain(supabase, sendEmail, notifyMerchant);
+      return processCancellationDrain(
+        supabase,
+        sendEmail,
+        notifyMerchant,
+        invocationStartedAt
+      );
     }
 
     // 1. Process due settlements

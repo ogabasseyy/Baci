@@ -122,6 +122,18 @@ export async function runAmendmentCommand(
     );
   }
 
+  if (
+    !(await checkRateLimit(
+      auth.supabase,
+      auth.user.id,
+      'order_amendment_write',
+      30,
+      1
+    ))
+  ) {
+    return amendmentRateLimitResponse();
+  }
+
   if (command === 'action') {
     const ids = amendmentActionParams.safeParse(routeParams);
     const action = amendmentActionSchema.safeParse(body);
@@ -180,6 +192,10 @@ function amendmentResponse({
     );
   }
 
+  if (error.code === 'P0001' && error.message === 'amendment_rate_limited') {
+    return amendmentRateLimitResponse();
+  }
+
   if (error.code === '55P03') {
     return NextResponse.json(
       {
@@ -201,4 +217,11 @@ function amendmentResponse({
         { error: 'Unable to process order amendment' },
         { status: 500 }
       );
+}
+
+function amendmentRateLimitResponse() {
+  return NextResponse.json(
+    { error: 'Too many item-change requests. Please try again shortly.' },
+    { status: 429, headers: { 'Retry-After': '60' } }
+  );
 }

@@ -55,4 +55,8 @@
 
 ## Release record
 
+- The merchant invoice uses the web dashboard session. Mobile admin is outside the pilot surface.
+- The settlement worker holds pending Paystack integration-wallet credits while an amendment refund is open. An upgrade awaiting payment still holds fulfillment. Its previously captured principal remains eligible for ordinary settlement, and only verified bank evidence can fund the additional amount.
+- Apply migrations in chronological registry order. Use a forward migration to repair a failed rollout and preserve existing provider bindings, refund references, and invoice history.
+
 This record accompanies the draft pull request. Current-head Codex and Muse reviews, required CI, selected merchant settings, deployment verification, and Finance and Operations decisions are pending. Finance still owns the policy for actual fees and withdrawn funds. The launch surface remains the web dashboard, with one confirmed amendment per order and fulfillment held through an outstanding payment, refund or merchant adjustment.

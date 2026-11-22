@@ -49,6 +49,23 @@ describe('paid order amendment routes', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it('rate-limits write requests and handles the database preview limit', async () => {
+    mocks.rateLimit.mockResolvedValueOnce(false);
+    expect((await POST(request(confirmBody), context)).status).toBe(429);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'P0001', message: 'amendment_rate_limited' },
+    });
+    const response = await preview(
+      request({ lineId: id, replacement: { id, kind: 'product' } }),
+      context
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+  });
+
   it('requires authentication before querying the order', async () => {
     mocks.auth.mockResolvedValue({ user: null });
     expect((await GET(request(), context)).status).toBe(401);

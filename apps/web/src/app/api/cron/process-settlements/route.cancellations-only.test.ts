@@ -52,7 +52,8 @@ describe('POST /api/cron/process-settlements?cancellationsOnly=true', () => {
     expect(mocks.processCancellationDrain).toHaveBeenCalledWith(
       expect.objectContaining({ from: mocks.from, rpc: mocks.rpc }),
       mocks.sendEmail,
-      mocks.notifyMerchant
+      mocks.notifyMerchant,
+      expect.any(Number)
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ success: true });

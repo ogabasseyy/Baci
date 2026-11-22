@@ -1,53 +1,16 @@
-import { beforeEach, expect, it, jest } from '@jest/globals';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { logger } from '@/lib/logger';
-import { trackError } from '@/services/analytics';
-import { useCartStore } from '@/stores/cart-store';
-import { deferredBankOfferCart } from './deferred-bank-offer-cart';
-
-jest.mock('@react-native-async-storage/async-storage', () => ({
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  getAllKeys: jest.fn(),
-}));
-jest.mock('@/stores/cart-store', () => ({
-  useCartStore: {
-    getState: jest.fn(),
-    persist: { hasHydrated: jest.fn(() => true) },
-  },
-}));
-jest.mock('@/lib/logger', () => ({
-  logger: { info: jest.fn(), warn: jest.fn() },
-}));
-jest.mock('@/services/analytics', () => ({ trackError: jest.fn() }));
-
-const stored = new Map<string, string>();
-const clearCart = jest.fn<() => Promise<void>>();
-const item = { id: 'line-1', product_id: 'product-1', quantity: 1, price: 95 };
-const reference = `BCO-${'a'.repeat(32)}`;
-const otherReference = `BCO-${'b'.repeat(32)}`;
-function cart(quantity = 1) {
-  jest.mocked(useCartStore.getState).mockReturnValue({
-    checkoutGeneration: 'generation-1',
-    items: [{ ...item, quantity }],
-    clearCart,
-  } as never);
-}
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  stored.clear();
-  jest
-    .mocked(AsyncStorage.getAllKeys)
-    .mockImplementation(async () => [...stored.keys()]);
-  cart();
-  jest
-    .mocked(AsyncStorage.getItem)
-    .mockImplementation(async (key) => stored.get(key) ?? null);
-  jest.mocked(AsyncStorage.setItem).mockImplementation(async (key, value) => {
-    stored.set(key, value);
-  });
-});
+import { expect, it, jest } from '@jest/globals';
+import {
+  AsyncStorage,
+  cart,
+  clearCart,
+  deferredBankOfferCart,
+  logger,
+  otherReference,
+  reference,
+  stored,
+  trackError,
+  useCartStore,
+} from './deferred-bank-offer-cart.test-utils';
 
 it.each([
   'new checkout',
@@ -82,6 +45,31 @@ it.each([
   } finally {
     now.mockRestore();
   }
+});
+
+it('keeps a new checkout recoverable when retiring an old snapshot exceeds storage quota', async () => {
+  const oldKey = `bank-offer-checkout-cart:order-1:${reference}`;
+  const identity = deferredBankOfferCart.capture() as string;
+  stored.set(oldKey, identity);
+  stored.set('other-storage-key', 'preserved');
+  jest
+    .mocked(AsyncStorage.setItem)
+    .mockImplementationOnce((key, value) => {
+      stored.set(key, value);
+      return Promise.resolve();
+    })
+    .mockRejectedValueOnce(new Error('storage quota'));
+
+  await deferredBankOfferCart.remember('order-2', otherReference, identity);
+  expect(jest.mocked(AsyncStorage.getMany).mock.calls).toEqual([[[oldKey]]]);
+  expect(stored.get(oldKey)).toBe(identity);
+  expect(stored.get('other-storage-key')).toBe('preserved');
+  await deferredBankOfferCart.clearIfUnchanged(
+    'order-2',
+    otherReference,
+    () => true
+  );
+  expect(clearCart).toHaveBeenCalledTimes(1);
 });
 
 it('does not snapshot a cart before storage hydration', () => {

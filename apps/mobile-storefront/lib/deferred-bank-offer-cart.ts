@@ -97,16 +97,23 @@ async function expireAbandonedSnapshots(currentKey: string, now: number) {
   const keys = await runCartStep('expire', 'list_snapshots', () =>
     AsyncStorage.getAllKeys()
   );
-  for (const key of keys) {
-    if (key === currentKey || !key.startsWith(SNAPSHOT_PREFIX)) continue;
+  const snapshotKeys = keys.filter(
+    (key) => key !== currentKey && key.startsWith(SNAPSHOT_PREFIX)
+  );
+  if (snapshotKeys.length === 0) return;
+  const snapshots = await runCartStep('expire', 'read_snapshot', () =>
+    AsyncStorage.getMany(snapshotKeys)
+  );
+  for (const [key, value] of Object.entries(snapshots)) {
+    if (!value || value === CONSUMED_MARKER) continue;
+    const { expiresAt } = readSnapshot(value);
+    // Older snapshots have no timestamp. A fresh checkout can retire them.
+    if (expiresAt !== undefined && expiresAt > now) continue;
     await serializeCartOperation(key, async () => {
-      const value = await runCartStep('expire', 'read_snapshot', () =>
+      const current = await runCartStep('expire', 'read_snapshot', () =>
         AsyncStorage.getItem(key)
       );
-      if (!value || value === CONSUMED_MARKER) return;
-      const { expiresAt } = readSnapshot(value);
-      // Older snapshots have no timestamp. A fresh checkout can retire them.
-      if (expiresAt !== undefined && expiresAt > now) return;
+      if (current !== value) return;
       await runCartStep('expire', 'mark_consumed', () =>
         AsyncStorage.setItem(key, CONSUMED_MARKER)
       );

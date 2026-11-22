@@ -28,7 +28,7 @@ LANGUAGE sql AS $$
     checkout_idempotency_key)
   VALUES (p_id, '11111111-1111-4111-8111-111111111111', p_number, 5000.00, 'NGN',
     'bank_transfer', 'unpaid', 'shopper@example.com', 'token-' || p_number,
-    'cw-chk-' || repeat('a', 64));
+    'cw-chk-' || encode(sha256(convert_to(p_number, 'UTF8')), 'hex'));
 $$;
 
 CREATE FUNCTION pg_temp.begin_attempt(p_order uuid, p_token text, p_ref text)
@@ -149,6 +149,23 @@ DO $$ BEGIN
   IF NOT private.release_unfulfilled_chat_paystack_dva_attempt(
        'a0000000-0000-4000-8000-000000000006', 'BAC-AAAAAAAAAAA6') THEN
     RAISE EXCEPTION 'older alias history must not block release';
+  END IF;
+END $$;
+
+-- 7. A legacy row with no assigned_at fences the order even beside a dated expired alias.
+SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000007', 'FENCE-7');
+INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
+  account_name, provider, assigned_at, expires_at)
+VALUES
+  ('a0000000-0000-4000-8000-000000000007', '0000000071', 'Test Bank',
+   'Test Name', 'paystack', NULL, NULL),
+  ('a0000000-0000-4000-8000-000000000007', '0000000072', 'Test Bank',
+   'Test Name', 'paystack', clock_timestamp() - interval '5 hours',
+   clock_timestamp() - interval '4 hours');
+DO $$ BEGIN
+  IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000007',
+       'token-FENCE-7', 'BAC-AAAAAAAAAAA7') = 'claimed' THEN
+    RAISE EXCEPTION 'a legacy NULL-assigned row must block a new claim';
   END IF;
 END $$;
 

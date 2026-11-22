@@ -1,6 +1,6 @@
 -- Fence concurrent and indeterminate Paystack account requests from chat.
 -- Reservation and webhook matching continue to use order_payment_accounts.
-CREATE TABLE private.chat_paystack_dva_attempts (
+CREATE TABLE IF NOT EXISTS private.chat_paystack_dva_attempts (
   order_id uuid PRIMARY KEY REFERENCES public.orders(id) ON DELETE CASCADE,
   reference text NOT NULL,
   prior_assignment_at timestamptz
@@ -9,7 +9,7 @@ ALTER TABLE private.chat_paystack_dva_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE private.chat_paystack_dva_attempts
   FROM PUBLIC, anon, authenticated, service_role;
 
-CREATE FUNCTION public.begin_chat_paystack_dva_attempt(p_tracking_token text)
+CREATE OR REPLACE FUNCTION public.begin_chat_paystack_dva_attempt(p_tracking_token text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   claims jsonb := auth.jwt()->'paystack_dva_attempt';
@@ -106,6 +106,15 @@ BEGIN
   -- persisted assignment may already have reached Paystack and stays fenced.
   IF attempt.order_id IS NOT NULL AND
     (account.assigned_at IS NULL OR account.assigned_at IS NOT DISTINCT FROM attempt.prior_assignment_at) THEN
+    RETURN pending;
+  END IF;
+
+  -- Newest-row selection must not hide an older legacy row of unknown state.
+  IF EXISTS (
+    SELECT 1 FROM public.order_payment_accounts a
+    WHERE a.order_id = order_row.id AND a.provider = 'paystack'
+      AND a.assigned_at IS NULL
+  ) THEN
     RETURN pending;
   END IF;
 

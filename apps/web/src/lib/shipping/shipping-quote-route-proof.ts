@@ -5,8 +5,8 @@ import { getSupabaseServiceRoleKey } from '@/env';
 
 /**
  * Proof minted by the server immediately after it receives a provider quote.
- * The database verifier uses the existing server-only Supabase service-role
- * key stored in Vault, but this format has its own version and domain prefix.
+ * The signer and database verifier prefer a dedicated key. Deployments without
+ * that key continue to use their existing key while they migrate.
  */
 export interface ShippingQuoteRouteProof {
   action: string;
@@ -24,8 +24,10 @@ const DOMAIN = 'baci:shipping-quote-rpc:v1';
 
 function secret(): string {
   try {
-    const value = getSupabaseServiceRoleKey().trim();
-    if (!value) throw new Error('empty service role key');
+    const value =
+      process.env.BACI_SHIPPING_QUOTE_ROUTE_HMAC?.trim() ||
+      getSupabaseServiceRoleKey().trim();
+    if (!value) throw new Error('empty quote signing key');
     return value;
   } catch {
     throw new Error('missing_shipping_quote_rpc_server_secret');

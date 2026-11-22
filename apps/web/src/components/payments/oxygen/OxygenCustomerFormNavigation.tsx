@@ -6,12 +6,14 @@ export function OxygenCustomerFormNavigation({
   continuing,
   disabled,
   onBack,
+  continueLabel,
 }: {
   step: number;
   busy: boolean;
   continuing: 'saving' | 'starting' | null;
   disabled: boolean;
   onBack(): void;
+  continueLabel?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 pt-1">
@@ -36,11 +38,12 @@ export function OxygenCustomerFormNavigation({
         disabled={disabled}
         type="submit"
       >
-        {step === 0
-          ? 'Continue to bank details'
-          : step === 1
-            ? 'Continue to income details'
-            : 'Continue verification'}
+        {continueLabel ??
+          (step === 0
+            ? 'Continue to bank details'
+            : step === 1
+              ? 'Continue to income details'
+              : 'Continue verification')}
       </OxygenLoadingButton>
     </div>
   );

@@ -29,6 +29,7 @@
     "BACI_REMOTE_CACHE_DROPPED_BUST_DISTRUST_MS",
     "PIGGYVEST_EGRESS_RELAY_URL",
     "PIGGYVEST_EGRESS_RELAY_SECRET",
+    "EKAETTE_CHATWOOT_AI_REPLY_ENABLED",
     "EKAETTE_CHATWOOT_CHALLENGE_ISSUER",
     "EKAETTE_CHATWOOT_CHALLENGE_PRIVATE_KEY",
     "EKAETTE_CHATWOOT_CHECKOUT_ENABLED",
@@ -47,14 +48,8 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        ".next/**",
-        "!.next/cache/**",
-        "dist/**"
-      ],
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
       "env": [
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",

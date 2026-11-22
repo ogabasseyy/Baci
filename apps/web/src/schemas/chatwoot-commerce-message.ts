@@ -71,6 +71,7 @@ export const chatwootCommerceMessageSchema = z.discriminatedUnion('event', [
           sessionToken,
           cartVersion: z.number().int().positive().safe(),
           paymentMethod: z.enum(['bank_transfer', 'oxygen']).optional(),
+          carrierQuoteId: postgresUuidSchema.optional(),
           customer: z
             .object({
               firstName: shortText(60),

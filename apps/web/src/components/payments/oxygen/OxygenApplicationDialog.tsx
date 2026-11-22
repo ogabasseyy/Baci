@@ -3,6 +3,10 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import {
+  getOxygenChatStep,
+  oxygenChatJourney,
+} from '@/lib/payments/oxygen/chat-journey';
+import {
   type OxygenJourneyStage,
   trackOxygenJourney,
 } from '@/lib/payments/oxygen/journey-events';
@@ -35,6 +39,7 @@ export function OxygenApplicationDialog({
   currency,
   selfieOrigins = [],
   hostedOrigins = [],
+  embedded = false,
 }: {
   orderId: string;
   merchantSlug?: string;
@@ -44,10 +49,12 @@ export function OxygenApplicationDialog({
   prefill?: OxygenCustomerPrefill;
   selfieOrigins?: readonly string[];
   hostedOrigins?: readonly string[];
+  embedded?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<OxygenJourneyStage>('loading');
   const [open, setOpen] = useState(true);
+  const [chatStage, setChatStage] = useState<OxygenJourneyStage>('loading');
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
   const [selfieDismissed, setSelfieDismissed] = useState(false);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
@@ -58,6 +65,7 @@ export function OxygenApplicationDialog({
 
   useEffect(() => {
     if (!open) return;
+    if (embedded) return;
     dialog.current?.showModal();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -68,7 +76,7 @@ export function OxygenApplicationDialog({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('pagehide', leave);
     };
-  }, [open, orderId]);
+  }, [embedded, open, orderId]);
 
   useEffect(() => {
     if (!hostedOpen) return;
@@ -106,9 +114,28 @@ export function OxygenApplicationDialog({
       )}
       <dialog
         ref={dialog}
+        open={embedded ? open : undefined}
+        style={
+          embedded
+            ? {
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                maxWidth: 'none',
+                maxHeight: '100%',
+                margin: 0,
+                padding: 0,
+                borderWidth: 0,
+                overflow: 'hidden',
+                display: open ? 'flex' : 'none',
+                flexDirection: 'column',
+              }
+            : undefined
+        }
         aria-labelledby="oxygen-application-title"
         aria-describedby="oxygen-application-description"
-        className={`${styles.dialog} bg-white ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''}`}
+        className={`${styles.dialog} bg-white ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''} ${embedded ? styles.inlineDialog : ''}`}
         onCancel={(event) => {
           event.preventDefault();
           if (selfieUrl) {
@@ -135,23 +162,40 @@ export function OxygenApplicationDialog({
           <p id="oxygen-application-description" className="sr-only">
             Review your details and choose a payment plan.
           </p>
-          <button
-            type="button"
-            aria-label="Close application"
-            className={`${styles.close} absolute right-4 top-4 flex size-11 items-center justify-center rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2`}
-            onClick={close}
-          >
-            <X aria-hidden="true" className="size-5" />
-          </button>
+          {!embedded && (
+            <button
+              type="button"
+              aria-label="Close application"
+              className={`${styles.close} absolute right-4 top-4 flex size-11 items-center justify-center rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2`}
+              onClick={close}
+            >
+              <X aria-hidden="true" className="size-5" />
+            </button>
+          )}
         </header>
+        {embedded &&
+          !hostedOpen &&
+          chatStage !== 'bank' &&
+          chatStage !== 'income' && (
+            <p
+              role="status"
+              className="mx-4 mt-4 rounded-2xl rounded-tl-sm bg-rose-50 px-4 py-3 text-sm leading-relaxed text-gray-900"
+            >
+              {oxygenConversationPrompt(chatStage)}
+            </p>
+          )}
         <OxygenSelfieSurfaceContext.Provider
-          value={(url, workflowId) => {
-            if (isOxygenSelfieUrl(url, selfieOrigins)) {
-              setSelfieDismissed(false);
-              setSelfieWorkflowId(workflowId);
-              setSelfieUrl(url);
-            }
-          }}
+          value={
+            embedded
+              ? null
+              : (url, workflowId) => {
+                  if (isOxygenSelfieUrl(url, selfieOrigins)) {
+                    setSelfieDismissed(false);
+                    setSelfieWorkflowId(workflowId);
+                    setSelfieUrl(url);
+                  }
+                }
+          }
         >
           <OxygenSelfieDismissedContext.Provider value={selfieDismissed}>
             <OxygenSelfieOpenContext.Provider value={Boolean(selfieUrl)}>
@@ -166,22 +210,38 @@ export function OxygenApplicationDialog({
               >
                 <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
                   <OxygenCheckoutCloseContext.Provider value={close}>
-                    <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
+                    <OxygenPaymentSurfaceContext.Provider
+                      value={embedded ? null : setPaymentUrl}
+                    >
                       <OxygenHostedOriginsContext.Provider
                         value={hostedOrigins}
                       >
                         <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
-                          <div className={styles.body} hidden={hostedOpen}>
+                          <div
+                            className={styles.body}
+                            hidden={hostedOpen}
+                            style={
+                              embedded
+                                ? {
+                                    minHeight: 0,
+                                    overflowY: 'auto',
+                                    padding: '0.75rem 1rem',
+                                  }
+                                : undefined
+                            }
+                          >
                             <OxygenProviderFlow
                               active={open && !selfieUrl}
                               orderId={orderId}
                               merchantSlug={merchantSlug}
                               prefill={prefill}
+                              conversational={embedded}
                               productAmount={productAmount}
                               products={products}
                               currency={currency}
                               onProgress={(value) => {
                                 stage.current = value;
+                                if (embedded) setChatStage(value);
                               }}
                             />
                           </div>
@@ -232,4 +292,33 @@ export function OxygenApplicationDialog({
       </dialog>
     </>
   );
+}
+
+function oxygenConversationPrompt(stage: OxygenJourneyStage): string {
+  switch (stage) {
+    case 'loading':
+      return 'I’m getting your application ready. Give me a moment.';
+    case 'phone':
+      return oxygenChatJourney.phoneCode.prompt;
+    case 'address':
+      return oxygenChatJourney.proofOfAddress.prompt;
+    case 'address_review':
+      return oxygenChatJourney.addressReview.prompt;
+    case 'offer':
+      return 'Let’s review the next step for your plan. Use the secure card below when you’re ready.';
+    case 'upfront_payment':
+      return oxygenChatJourney.upfrontPayment.prompt;
+    case 'repayment_setup':
+      return oxygenChatJourney.repaymentSetup.prompt;
+    case 'verification':
+      return oxygenChatJourney.eligibility.prompt;
+    case 'identity':
+    case 'bank':
+    case 'income':
+    case 'selfie':
+    case 'eligibility':
+      return oxygenChatJourney[stage].prompt;
+    default:
+      return getOxygenChatStep(stage).prompt;
+  }
 }

@@ -42,6 +42,7 @@ export async function initializeChatwootCheckoutBankTransfer(input: {
       },
       orderCurrency: 'NGN',
       trackingToken: input.trackingToken,
+      paymentType: 'bank_transfer',
     });
     if (
       !nonEmpty(dva?.bank_name) ||

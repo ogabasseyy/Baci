@@ -1,8 +1,13 @@
 import styles from './OxygenCustomerFormFields.module.css';
 
-export function firstInvalidOxygenControl(form: HTMLFormElement, step: number) {
+export function firstInvalidOxygenControl(
+  form: HTMLFormElement,
+  step: number,
+  turn?: number
+) {
+  const section = `[data-step="${step}"]${turn === undefined ? '' : ` [data-oxygen-chat-question="${turn}"]`}`;
   const controls = form.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
-    `[data-step="${step}"] input, [data-step="${step}"] select`
+    `${section} input, ${section} select`
   );
   return Array.from(controls).find((control) => !control.checkValidity());
 }

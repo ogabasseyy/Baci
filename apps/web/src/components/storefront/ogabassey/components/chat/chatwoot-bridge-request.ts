@@ -1,5 +1,6 @@
 import { cartRoute } from '@/hooks/cart/shared-cart-client-support';
-import { buildCsrfHeaders } from '@/lib/csrf';
+import { initializeCsrfToken } from '@/lib/api-client';
+import { CSRF_HEADER_NAME, getClientCsrfToken } from '@/lib/csrf';
 
 export async function postChatwootBridgeJson(
   path: string,
@@ -9,11 +10,16 @@ export async function postChatwootBridgeJson(
   options: { allowNonOkResponse?: boolean } = {}
 ): Promise<Record<string, unknown> | null> {
   try {
+    const csrfToken = getClientCsrfToken() ?? (await initializeCsrfToken(signal));
+    if (!csrfToken) return null;
     const response = await fetch(cartRoute(path, storeSlug), {
       method: 'POST',
       credentials: 'same-origin',
       cache: 'no-store',
-      headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+      headers: {
+        'Content-Type': 'application/json',
+        [CSRF_HEADER_NAME]: csrfToken,
+      },
       body: JSON.stringify(body),
       signal,
     });

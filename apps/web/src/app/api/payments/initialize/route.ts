@@ -150,7 +150,7 @@ const PaymentInitRequestSchema = z.object({
   items: z.array(OrderItemSchema).optional(),
   channels: z.array(z.string()).optional(),
   // Payment type: 'dva' for Dedicated Virtual Account (bank transfer)
-  payment_type: z.enum(['dva']).optional(),
+  payment_type: z.enum(['dva', 'bank_transfer']).optional(),
   // Crypto payment options (only for juicyway gateway)
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
@@ -1500,7 +1500,7 @@ export async function POST(request: NextRequest) {
     const hasPaystackSubaccount =
       !!merchantWithPaystack.paystack_subaccount_code;
     const gateway: PaymentGateway =
-      data.payment_type === 'dva'
+      data.payment_type === 'dva' || data.payment_type === 'bank_transfer'
         ? 'paystack'
         : data.gateway && PAYMENT_GATEWAYS.includes(data.gateway)
           ? data.gateway
@@ -1785,6 +1785,64 @@ export async function POST(request: NextRequest) {
               reference,
               platformFee: fees.platformFee / 100,
               merchantAmount: fees.merchantAmount / 100,
+            };
+          } else if (data.payment_type === 'bank_transfer') {
+            if (
+              !isNigerianPaystackCustomer(
+                data,
+                formatPhoneToE164(paymentData.customer_phone)
+              )
+            ) {
+              return createErrorResponse(
+                'Bank transfer is only available for Nigerian checkout details. Please choose card payment or another available method.',
+                'PAYMENT_METHOD_COUNTRY_UNSUPPORTED',
+                400
+              );
+            }
+
+            const amountInKobo = Math.round(paymentData.amount * 100);
+            const fees = calculatePaystackFee(amountInKobo);
+            const { transactionChargeKobo, retainedShippingKobo } =
+              await resolvePaystackSplitTransactionCharge({
+                client: await createServerSupabaseClient(),
+                customerEmail: paymentData.customer_email,
+                orderId: paymentData.order_id,
+                merchantId,
+                amountKobo: amountInKobo,
+                platformFeeKobo: fees.platformFee,
+              });
+
+            const { createPaystackBankTransferCharge } = await import(
+              '@/lib/agentic/paystack'
+            );
+            const chargeResult = await createPaystackBankTransferCharge({
+              email: paymentData.customer_email,
+              amountKobo: amountInKobo,
+              reference,
+              subaccount: merchantWithPaystack.paystack_subaccount_code,
+              transactionChargeKobo,
+              metadata: {
+                merchant_id: merchantId,
+                order_id: paymentData.order_id,
+                customer_name: paymentData.customer_name,
+                gateway: 'paystack',
+                payment_type: 'bank_transfer',
+                platform_fee_kobo: fees.platformFee,
+                retained_shipping_kobo: retainedShippingKobo,
+              },
+            });
+
+            paymentResult = {
+              authorization_url: '',
+              dva: {
+                bank_name: chargeResult.bank_name,
+                account_number: chargeResult.account_number,
+                account_name: chargeResult.account_name,
+              },
+              reference: chargeResult.reference,
+              platformFee: fees.platformFee / 100,
+              merchantAmount:
+                (fees.merchantAmount - retainedShippingKobo) / 100,
             };
           } else {
             paymentResult = await initializePaystack(

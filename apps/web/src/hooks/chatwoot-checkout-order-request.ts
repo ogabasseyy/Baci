@@ -64,7 +64,7 @@ export function buildChatwootCheckoutOrderRequest(
       quoteMatchesMethod: true,
       selectedQuoteId: String(delivery.quote.id),
       merchantRateId: delivery.merchantRateId,
-      provider: null,
+      provider: delivery.carrier ?? null,
       address: delivery.address,
     },
     sharedCart: {

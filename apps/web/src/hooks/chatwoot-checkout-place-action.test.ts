@@ -113,7 +113,7 @@ describe('handleChatwootCheckoutPlace', () => {
     });
     expect(JSON.parse(String(calls[2]?.init.body))).toMatchObject({
       gateway: 'paystack',
-      payment_type: 'dva',
+      payment_type: 'bank_transfer',
       order_id: 'order-uuid',
       merchant_id: 'merchant-1',
       customer_email: 'ada@example.com',

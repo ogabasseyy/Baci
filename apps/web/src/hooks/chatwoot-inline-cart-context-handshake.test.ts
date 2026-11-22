@@ -94,6 +94,18 @@ describe('handleChatwootInlineContextHandshake', () => {
     );
   });
 
+  it('releases a request that arrived before the storefront cart was ready', async () => {
+    const value = input(requestMessage());
+    value.isCurrent.mockReturnValue(false);
+
+    await handleChatwootInlineContextHandshake(value);
+
+    expect(value.ensureCartSession).not.toHaveBeenCalled();
+    expect(value.post).toHaveBeenCalledWith('baci-commerce-context-denied:', {
+      requestId,
+    });
+  });
+
   it('does not ask the server for a challenge when cart-session provisioning fails', async () => {
     const value = input(requestMessage());
     value.ensureCartSession.mockResolvedValue({ ok: false });

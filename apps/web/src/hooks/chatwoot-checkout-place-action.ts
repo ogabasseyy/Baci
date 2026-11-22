@@ -28,6 +28,7 @@ import type {
 import { reviewedChatwootCheckoutItems } from './chatwoot-checkout-reviewed-items';
 import { startChatwootCheckoutPayment } from './chatwoot-checkout-start-payment';
 import { isChatwootCheckoutSubtotalBasisEqual } from './chatwoot-checkout-subtotal-basis';
+import { resolveChatwootCarrierQuote } from './chatwoot-confirmed-carrier-quote';
 
 type PlaceData = Extract<
   ChatwootCommerceMessage,
@@ -226,19 +227,37 @@ async function placeForKeys(
   ) {
     return fail('cart_unsupported');
   }
-  const delivery = await resolveChatwootCheckoutDelivery({
-    merchantId: merchant.id,
-    customer: request.customer,
-    address: request.address,
-    choice: request.delivery,
-    quoteItems: display.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      negotiatedPrice: item.negotiatedPrice,
-    })),
-    cartSubtotal: snapshot.itemsSubtotalMinor / 100,
-  });
+  const carrier = request.carrierQuoteId
+    ? resolveChatwootCarrierQuote({
+        id: request.carrierQuoteId,
+        cartKey: `${authorizedCartId}:${request.cartVersion}`,
+        merchantId: merchant.id,
+        conversationId: request.conversationId,
+      })
+    : null;
+  if (request.carrierQuoteId && !carrier) return fail('delivery_unavailable');
+  const delivery = carrier
+    ? {
+        ok: true as const,
+        method: 'door' as const,
+        quote: carrier.quote,
+        carrier: 'GIGL' as const,
+        merchantRateId: null,
+        address: { ...carrier.address, phone: request.customer.phone },
+      }
+    : await resolveChatwootCheckoutDelivery({
+        merchantId: merchant.id,
+        customer: request.customer,
+        address: request.address,
+        choice: request.delivery,
+        quoteItems: display.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          negotiatedPrice: item.negotiatedPrice,
+        })),
+        cartSubtotal: snapshot.itemsSubtotalMinor / 100,
+      });
   if (!delivery.ok) return fail(delivery.code);
   // Nothing to finance or transfer: a free cart with free delivery would be finalized by
   // the order route with no payment step for the chat to offer.

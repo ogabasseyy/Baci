@@ -9,6 +9,40 @@ import {
 } from './product-card-projection.test-support';
 
 describe('projectChatwootProductCard variants', () => {
+  it('uses the selected variant’s public photo and discards invalid URLs', () => {
+    const result = project(
+      product({
+        has_variants: true,
+        product_variants: [
+          {
+            id: variantId,
+            product_id: productId,
+            attributes: { color: 'Blue' },
+            primary_image: 'https://cdn.example.com/blue.avif',
+            stock_quantity: 1,
+          },
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            product_id: productId,
+            attributes: { color: 'Green' },
+            primary_image: 'http://cdn.example.com/green.avif',
+            images: [{ url: 'https://cdn.example.com/green.avif' }],
+            stock_quantity: 1,
+          },
+        ],
+      })
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      product: {
+        variants: [
+          { image: 'https://cdn.example.com/blue.avif' },
+          { image: 'https://cdn.example.com/green.avif' },
+        ],
+      },
+    });
+  });
+
   it('rejects a variant family with an empty variant array', () => {
     expect(
       project(

@@ -8,15 +8,18 @@ import {
   storefrontChatAccountSchemas,
 } from '@/schemas/storefront-chat-account';
 import type { ChatCancellationOutcome } from './chat-cancellation-state';
+import { ChatOrderTracking } from './chat-order-tracking';
 import type { useChatAccountScope } from './use-chat-account-scope';
 
 export function ChatOrderPanel({
   merchantSlug,
   basePath,
   scope,
+  onContinueApplication,
 }: {
   merchantSlug: string;
   basePath: string;
+  onContinueApplication?: (orderId: string) => void;
   scope: ReturnType<typeof useChatAccountScope>;
 }) {
   const [orders, setOrders] = useState<StorefrontChatOrder[] | null>(null);
@@ -215,6 +218,19 @@ export function ChatOrderPanel({
           >
             View order details
           </a>
+          <ChatOrderTracking order={order} merchantSlug={merchantSlug} />
+          {onContinueApplication &&
+            order.payment_method === 'oxygen' &&
+            order.payment_status === 'unpaid' &&
+            order.shipping_status !== 'cancelled' && (
+              <button
+                type="button"
+                className="mt-2 block rounded-lg border px-3 py-2 font-medium"
+                onClick={() => onContinueApplication(order.id)}
+              >
+                Continue Pay Small Small
+              </button>
+            )}
           {results[order.id] ? (
             <p role="status" className="mt-2">
               {results[order.id]}

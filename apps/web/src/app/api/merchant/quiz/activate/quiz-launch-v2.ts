@@ -1,9 +1,4 @@
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
-import {
-  isQuizEdgeProvisioningConfigured,
-  provisionQuizEdgeRooms,
-  rollbackQuizEdgeDraftBackendMode,
-} from '@/lib/quiz/quiz-edge-provision';
 import { getQuizRulesVersion } from '@/lib/quiz/quiz-rules-version';
 import { scheduleReservationProductPurge } from '@/lib/schedule-reservation-product-purge';
 import type { MerchantQuizActivationV2Input } from '@/schemas/quiz';
@@ -12,6 +7,11 @@ import type {
   QuizSupabaseClient,
 } from '../generate/quiz-generate-helpers';
 import { isQuizDraftEvent } from '../generate/quiz-generate-helpers';
+import {
+  prepareEdgeRoomsBeforeLaunch,
+  resolveLateEdgeLaunchFallback,
+  rollbackEdgeDraftAndAnnotateFailure,
+} from './quiz-launch-edge';
 
 export type QuizLaunchV2Result =
   | { event: QuizDraftEvent; ok: true }
@@ -32,80 +32,6 @@ export async function findLaunchedMerchantQuizV2(args: {
     .maybeSingle();
 
   return error || !isQuizDraftEvent(data) ? null : data;
-}
-
-async function findLaunchedMerchantQuizWithBackendV2(args: {
-  eventId: string;
-  merchantId: string;
-  supabase: QuizSupabaseClient;
-}): Promise<
-  | (QuizDraftEvent & {
-      backend_mode?: string;
-      expected_room_count?: number | null;
-    })
-  | null
-> {
-  const { data, error } = await args.supabase
-    .from('quiz_events')
-    .select('id, slug, status, title, backend_mode, expected_room_count')
-    .eq('id', args.eventId)
-    .eq('merchant_id', args.merchantId)
-    .eq('contract_version', 2)
-    .in('status', ['active', 'scheduled'])
-    .maybeSingle();
-
-  if (error || !isQuizDraftEvent(data)) return null;
-  const row = data as {
-    backend_mode?: unknown;
-    expected_room_count?: unknown;
-  };
-  const backendMode =
-    typeof row.backend_mode === 'string' ? row.backend_mode : undefined;
-  const expectedRoomCount =
-    typeof row.expected_room_count === 'number'
-      ? row.expected_room_count
-      : null;
-  return {
-    ...(backendMode ? { backend_mode: backendMode } : {}),
-    expected_room_count: expectedRoomCount,
-    id: data.id,
-    slug: data.slug,
-    status: data.status,
-    title: data.title,
-  };
-}
-
-function resolveAlreadyLaunchedEdgeResult(
-  alreadyLaunched: QuizDraftEvent & {
-    backend_mode?: string;
-    expected_room_count?: number | null;
-  },
-  expectedRoomCount: number
-): QuizLaunchV2Result {
-  if (alreadyLaunched.backend_mode !== 'edge_rooms') {
-    return {
-      code: 'QUIZ_BACKEND_MODE_LOCKED',
-      message:
-        'This quiz is already launched on Standard Postgres and cannot be switched to Edge Rooms.',
-      ok: false,
-    };
-  }
-  if (alreadyLaunched.expected_room_count !== expectedRoomCount) {
-    return {
-      code: 'QUIZ_EDGE_ROOM_COUNT_LOCKED',
-      message: `This quiz is already launched with ${alreadyLaunched.expected_room_count ?? 'configured'} Edge rooms and cannot be changed to ${expectedRoomCount}.`,
-      ok: false,
-    };
-  }
-  return {
-    event: {
-      id: alreadyLaunched.id,
-      slug: alreadyLaunched.slug,
-      status: alreadyLaunched.status,
-      title: alreadyLaunched.title,
-    },
-    ok: true,
-  };
 }
 
 function resolveTiming(input: MerchantQuizActivationV2Input, now: Date) {
@@ -129,7 +55,11 @@ function resolveTiming(input: MerchantQuizActivationV2Input, now: Date) {
   };
 }
 
-function getLiveLaunchFailure(code?: string): QuizLaunchV2Result {
+function getLiveLaunchFailure(code?: string): {
+  code: string;
+  message: string;
+  ok: false;
+} {
   if (code === 'QZ047')
     return {
       code: 'QUIZ_LIVE_REGULATORY_EVIDENCE_REQUIRED',
@@ -198,20 +128,7 @@ export async function launchMerchantQuizDraftV2(args: {
     input.edgeRoomCount ?? (input.mode === 'live' ? 16 : 4);
 
   if (wantsEdgeRooms) {
-    if (!isQuizEdgeProvisioningConfigured()) {
-      return {
-        code: 'QUIZ_EDGE_NOT_CONFIGURED',
-        message:
-          'Cloudflare Edge Quiz Rooms are not configured on this server (missing QUIZ_EDGE_WORKER_URL or QUIZ_INTERNAL_COORDINATOR_SECRET).',
-        ok: false,
-      };
-    }
-
-    // Provision Cloudflare Edge rooms BEFORE flipping launch status so a
-    // Worker/RPC failure never leaves a live or scheduled event half-provisioned.
-    // `prepare_quiz_edge_rooms_v2` only permits drafts, so retries on an
-    // already-launched event return `QUIZ_EVENT_NOT_DRAFT` without touching DOs.
-    const provisioned = await provisionQuizEdgeRooms({
+    const edgeOutcome = await prepareEdgeRoomsBeforeLaunch({
       eventId: input.eventId,
       expectedRoomCount,
       launchConfig: {
@@ -226,27 +143,7 @@ export async function launchMerchantQuizDraftV2(args: {
       merchantId,
       supabase,
     });
-
-    if (!provisioned.ok) {
-      if (provisioned.code === 'QUIZ_EVENT_NOT_DRAFT') {
-        const alreadyLaunched = await findLaunchedMerchantQuizWithBackendV2({
-          eventId: input.eventId,
-          merchantId,
-          supabase,
-        });
-        if (alreadyLaunched) {
-          return resolveAlreadyLaunchedEdgeResult(
-            alreadyLaunched,
-            expectedRoomCount
-          );
-        }
-      }
-      return {
-        code: provisioned.code,
-        message: provisioned.message,
-        ok: false,
-      };
-    }
+    if (edgeOutcome) return edgeOutcome;
   }
 
   if (input.mode === 'live') {
@@ -277,35 +174,21 @@ export async function launchMerchantQuizDraftV2(args: {
     }
 
     if (error?.code === 'QZ046') {
-      if (wantsEdgeRooms) {
-        const alreadyLaunched = await findLaunchedMerchantQuizWithBackendV2({
-          eventId: input.eventId,
-          merchantId,
-          supabase,
-        });
-        if (alreadyLaunched) {
-          const resolved = resolveAlreadyLaunchedEdgeResult(
-            alreadyLaunched,
-            expectedRoomCount
-          );
-          if (resolved.ok) {
-            expireProductBlogCache(merchantId);
-            scheduleReservationProductPurge({
-              merchantId,
-              sourceId: input.eventId,
-              source: 'quiz',
-              supabase,
-            });
-          }
-          return resolved;
-        }
-      } else {
-        const alreadyLaunched = await findLaunchedMerchantQuizV2({
-          eventId: input.eventId,
-          merchantId,
-          supabase,
-        });
-        if (alreadyLaunched) {
+      const fallback = wantsEdgeRooms
+        ? await resolveLateEdgeLaunchFallback({
+            eventId: input.eventId,
+            expectedRoomCount,
+            merchantId,
+            raceLabel: 'live',
+            supabase,
+          })
+        : await findLaunchedMerchantQuizV2({
+            eventId: input.eventId,
+            merchantId,
+            supabase,
+          }).then((event) => (event ? { event, ok: true as const } : null));
+      if (fallback) {
+        if (fallback.ok) {
           expireProductBlogCache(merchantId);
           scheduleReservationProductPurge({
             merchantId,
@@ -313,18 +196,20 @@ export async function launchMerchantQuizDraftV2(args: {
             source: 'quiz',
             supabase,
           });
-          return { event: alreadyLaunched, ok: true };
         }
+        return fallback;
       }
     }
-    if (wantsEdgeRooms) {
-      await rollbackQuizEdgeDraftBackendMode({
-        eventId: input.eventId,
-        merchantId,
-        supabase,
-      });
-    }
-    return getLiveLaunchFailure(error?.code);
+
+    const failure = getLiveLaunchFailure(error?.code);
+    return wantsEdgeRooms
+      ? rollbackEdgeDraftAndAnnotateFailure({
+          eventId: input.eventId,
+          failure,
+          merchantId,
+          supabase,
+        })
+      : failure;
   }
 
   const { data, error } = await supabase
@@ -350,44 +235,39 @@ export async function launchMerchantQuizDraftV2(args: {
     .eq('status', 'draft')
     .select('id, slug, status, title')
     .maybeSingle();
+
+  const genericFailure = {
+    code: 'QUIZ_LAUNCH_FAILED',
+    message: 'The reviewed quiz could not be launched.',
+    ok: false as const,
+  };
   if (error) {
-    if (wantsEdgeRooms) {
-      await rollbackQuizEdgeDraftBackendMode({
-        eventId: input.eventId,
-        merchantId,
-        supabase,
-      });
-    }
-    return {
-      code: 'QUIZ_LAUNCH_FAILED',
-      message: 'The reviewed quiz could not be launched.',
-      ok: false,
-    };
+    return wantsEdgeRooms
+      ? rollbackEdgeDraftAndAnnotateFailure({
+          eventId: input.eventId,
+          failure: genericFailure,
+          merchantId,
+          supabase,
+        })
+      : genericFailure;
   }
   if (isQuizDraftEvent(data)) return { event: data, ok: true };
 
   if (wantsEdgeRooms) {
-    const alreadyLaunched = await findLaunchedMerchantQuizWithBackendV2({
+    const fallback = await resolveLateEdgeLaunchFallback({
       eventId: input.eventId,
+      expectedRoomCount,
+      merchantId,
+      raceLabel: 'test-mode',
+      supabase,
+    });
+    if (fallback) return fallback;
+    return rollbackEdgeDraftAndAnnotateFailure({
+      eventId: input.eventId,
+      failure: genericFailure,
       merchantId,
       supabase,
     });
-    if (alreadyLaunched) {
-      return resolveAlreadyLaunchedEdgeResult(
-        alreadyLaunched,
-        expectedRoomCount
-      );
-    }
-    await rollbackQuizEdgeDraftBackendMode({
-      eventId: input.eventId,
-      merchantId,
-      supabase,
-    });
-    return {
-      code: 'QUIZ_LAUNCH_FAILED',
-      message: 'The reviewed quiz could not be launched.',
-      ok: false,
-    };
   }
 
   const alreadyLaunched = await findLaunchedMerchantQuizV2({
@@ -397,9 +277,5 @@ export async function launchMerchantQuizDraftV2(args: {
   });
   return alreadyLaunched
     ? { event: alreadyLaunched, ok: true }
-    : {
-        code: 'QUIZ_LAUNCH_FAILED',
-        message: 'The reviewed quiz could not be launched.',
-        ok: false,
-      };
+    : genericFailure;
 }

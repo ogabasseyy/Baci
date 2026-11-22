@@ -5,6 +5,17 @@ import {
   getQuizInternalCoordinatorSecret,
 } from '@/lib/quiz/quiz-edge-config';
 
+const edgeVariantSchema = z.object({
+  id: z.string().min(1),
+  slotId: z.string().min(1),
+  prompt: z.string().min(1),
+  options: z.array(
+    z.object({ id: z.string().min(1), label: z.string().min(1) })
+  ),
+  answerKeyHash: z.string().min(1),
+  active: z.boolean(),
+});
+
 const edgeProvisionPayloadSchema = z.object({
   roomIds: z.array(z.string().min(1)).min(1).max(256),
   config: z.object({
@@ -32,27 +43,16 @@ const edgeProvisionPayloadSchema = z.object({
           id: z.string().min(1),
           slotIndex: z.number().int().positive(),
           active: z.boolean(),
-          variants: z
-            .array(
-              z.object({
-                id: z.string().min(1),
-                slotId: z.string().min(1),
-                prompt: z.string().min(1),
-                options: z.array(
-                  z.object({
-                    id: z.string().min(1),
-                    label: z.string().min(1),
-                  })
-                ),
-                answerKeyHash: z.string().min(1),
-                active: z.boolean(),
-              })
-            )
-            .min(1),
+          variants: z.array(edgeVariantSchema).min(1),
         })
       )
       .min(1),
   }),
+});
+
+const edgeInitRoomsResponseSchema = z.object({
+  ok: z.literal(true),
+  roomCount: z.number().int().positive(),
 });
 
 export interface QuizEdgeProvisionSupabase {
@@ -85,11 +85,6 @@ export function isQuizEdgeProvisioningConfigured(): boolean {
   return Boolean(getQuizEdgeWorkerUrl() && getQuizInternalCoordinatorSecret());
 }
 
-/**
- * Reverts a draft event's `backend_mode` back to `'postgres'` via the
- * `reset_quiz_edge_rooms_draft_v2` SECURITY DEFINER RPC when Edge room
- * initialization or the subsequent launch step fails.
- */
 export async function rollbackQuizEdgeDraftBackendMode(args: {
   eventId: string;
   merchantId: string;
@@ -98,10 +93,7 @@ export async function rollbackQuizEdgeDraftBackendMode(args: {
   try {
     const { error } = await args.supabase.rpc(
       'reset_quiz_edge_rooms_draft_v2',
-      {
-        p_event_id: args.eventId,
-        p_merchant_id: args.merchantId,
-      }
+      { p_event_id: args.eventId, p_merchant_id: args.merchantId }
     );
     if (error) {
       logger.error({
@@ -129,35 +121,31 @@ export async function rollbackQuizEdgeDraftBackendMode(args: {
 function mapPrepareRpcError(code?: string): QuizEdgeProvisionResult {
   // Defensive mapping for `guard_quiz_event_backend_mode_lock_v2` (QZ060);
   // draft-only gating normally returns QZ061 first for non-draft events.
-  if (code === 'QZ060') {
+  if (code === 'QZ060')
     return {
       code: 'QUIZ_BACKEND_MODE_LOCKED',
       message: 'Cannot switch backend mode after players have checked in.',
       ok: false,
     };
-  }
-  if (code === 'QZ061') {
+  if (code === 'QZ061')
     return {
       code: 'QUIZ_EVENT_NOT_DRAFT',
       message: 'Quiz event is no longer a draft and cannot be re-provisioned.',
       ok: false,
     };
-  }
-  if (code === 'QZ003') {
+  if (code === 'QZ003')
     return {
       code: 'QUIZ_QUESTION_POOL_INCOMPLETE',
       message: 'Quiz question pool is incomplete for Edge Rooms provisioning.',
       ok: false,
     };
-  }
-  if (code === '22023') {
+  if (code === '22023')
     return {
       code: 'QUIZ_EDGE_CONFIG_INVALID',
       message:
         'Invalid Edge Rooms configuration (room count must be between 1 and 256).',
       ok: false,
     };
-  }
   return {
     code: 'QUIZ_EDGE_PROVISION_FAILED',
     message: 'Could not prepare quiz rooms in the database.',
@@ -165,12 +153,10 @@ function mapPrepareRpcError(code?: string): QuizEdgeProvisionResult {
   };
 }
 
-/**
- * Sets `backend_mode = 'edge_rooms'` and `expected_room_count` on a draft quiz
- * event via `prepare_quiz_edge_rooms_v2`, then initializes all room Durable
- * Objects and the EventCoordinatorDO on the Cloudflare Quiz Edge Worker before
- * launch flips the event status.
- */
+function formatRollbackSuffix(rolledBack: boolean): string {
+  return rolledBack ? '' : ' (automatic draft reset also failed)';
+}
+
 export async function provisionQuizEdgeRooms(args: {
   eventId: string;
   expectedRoomCount: number;
@@ -211,7 +197,6 @@ export async function provisionQuizEdgeRooms(args: {
     'prepare_quiz_edge_rooms_v2',
     rpcArgs
   );
-
   if (error) {
     logger.error({
       code: error.code,
@@ -232,10 +217,10 @@ export async function provisionQuizEdgeRooms(args: {
       merchantId: args.merchantId,
       message: 'prepare_quiz_edge_rooms_v2 returned an invalid payload',
     });
-    await rollbackQuizEdgeDraftBackendMode(args);
+    const rolledBack = await rollbackQuizEdgeDraftBackendMode(args);
     return {
       code: 'QUIZ_EDGE_PROVISION_INVALID_PAYLOAD',
-      message: 'Quiz question pool is incomplete for Edge Rooms provisioning.',
+      message: `Quiz question pool is incomplete for Edge Rooms provisioning${formatRollbackSuffix(rolledBack)}.`,
       ok: false,
     };
   }
@@ -260,15 +245,40 @@ export async function provisionQuizEdgeRooms(args: {
         message: 'Cloudflare Worker init-rooms returned non-2xx status',
         status: response.status,
       });
-      await rollbackQuizEdgeDraftBackendMode(args);
+      const rolledBack = await rollbackQuizEdgeDraftBackendMode(args);
       return {
         code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
-        message: `Cloudflare Edge Worker rejected room provisioning (HTTP ${response.status}).`,
+        message: `Cloudflare Edge Worker rejected room provisioning (HTTP ${response.status})${formatRollbackSuffix(rolledBack)}.`,
         ok: false,
       };
     }
 
-    return { ok: true, roomCount: parsed.data.roomIds.length };
+    let ackJson: unknown;
+    try {
+      ackJson = await response.json();
+    } catch {
+      ackJson = null;
+    }
+    const ack = edgeInitRoomsResponseSchema.safeParse(ackJson);
+    if (!ack.success || ack.data.roomCount !== parsed.data.roomIds.length) {
+      logger.error({
+        actualRoomCount: ack.success ? ack.data.roomCount : null,
+        event: 'quiz_edge_init_rooms_invalid_response',
+        eventId: args.eventId,
+        expectedRoomCount: parsed.data.roomIds.length,
+        merchantId: args.merchantId,
+        message:
+          'Cloudflare Worker init-rooms returned an invalid or partial acknowledgement',
+      });
+      const rolledBack = await rollbackQuizEdgeDraftBackendMode(args);
+      return {
+        code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
+        message: `Cloudflare Edge Worker did not confirm all quiz rooms were initialized${formatRollbackSuffix(rolledBack)}.`,
+        ok: false,
+      };
+    }
+
+    return { ok: true, roomCount: ack.data.roomCount };
   } catch (cause) {
     logger.error({
       cause: cause instanceof Error ? cause.message : String(cause),
@@ -277,11 +287,10 @@ export async function provisionQuizEdgeRooms(args: {
       merchantId: args.merchantId,
       message: 'Cloudflare Worker init-rooms request failed',
     });
-    await rollbackQuizEdgeDraftBackendMode(args);
+    const rolledBack = await rollbackQuizEdgeDraftBackendMode(args);
     return {
       code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
-      message:
-        'Could not reach Cloudflare Edge Worker to initialize quiz rooms.',
+      message: `Could not reach Cloudflare Edge Worker to initialize quiz rooms${formatRollbackSuffix(rolledBack)}.`,
       ok: false,
     };
   }

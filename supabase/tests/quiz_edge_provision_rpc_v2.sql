@@ -68,7 +68,7 @@ INSERT INTO public.quiz_events (
     '99000000-0000-4000-8000-000000000401',
     '99000000-0000-4000-8000-000000000101',
     'edge-prov-draft', 'Edge Prov Draft', 'draft',
-    NULL, NULL,
+    '2026-11-22T10:00:00Z', '2026-11-22T10:05:00Z',
     'test', 2, 'test-v1', 2, 15, 30, 300, 3, 'Africa/Lagos',
     'postgres', '{}'::jsonb
   ),

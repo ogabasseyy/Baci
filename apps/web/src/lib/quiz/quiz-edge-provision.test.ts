@@ -166,6 +166,38 @@ describe('provisionQuizEdgeRooms', () => {
     });
   });
 
+  it('fails closed and rolls back when Worker returns HTTP 200 with mismatched roomCount or ok:false', async () => {
+    process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz-edge.example.com';
+    process.env.QUIZ_INTERNAL_COORDINATOR_SECRET = 'coord-secret-xyz';
+
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: validPayload, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, roomCount: 1 }), {
+        status: 200,
+      })
+    );
+
+    const result = await provisionQuizEdgeRooms({
+      eventId: 'evt-1',
+      expectedRoomCount: 2,
+      fetchImpl: fetchMock as unknown as typeof fetch,
+      merchantId: 'merch-1',
+      supabase: { rpc },
+    });
+
+    expect(result).toMatchObject({
+      code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
+      ok: false,
+    });
+    expect(rpc).toHaveBeenNthCalledWith(2, 'reset_quiz_edge_rooms_draft_v2', {
+      p_event_id: 'evt-1',
+      p_merchant_id: 'merch-1',
+    });
+  });
+
   it('maps QZ061, QZ003, and 22023 RPC errors to dedicated error codes', async () => {
     process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz-edge.example.com';
     process.env.QUIZ_INTERNAL_COORDINATOR_SECRET = 'coord-secret-xyz';

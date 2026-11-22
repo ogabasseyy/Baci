@@ -1,5 +1,10 @@
+import {
+  BANK_CARD_OFFER_REFERENCE_PATTERN,
+  hasBankCardOfferReferencePrefix,
+} from '@baci/shared/constants';
 import { router } from 'expo-router';
 import type { RefObject } from 'react';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import {
   trackCheckoutPaymentCompletedOnce,
@@ -69,6 +74,10 @@ export async function settleOrderCompletion(
     setPaymentStatus,
     trackingToken,
   } = context;
+  const bankOfferReference =
+    reference && BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)
+      ? reference
+      : null;
 
   paymentCompletionStartedRef.current = true;
   clearPendingLoadTimeout();
@@ -77,6 +86,14 @@ export async function settleOrderCompletion(
   // cancellation/error callbacks while verification is still running.
   setPaymentStatus('processing');
   if (orderId && !redvaultVerified) {
+    if (!bankOfferReference && hasBankCardOfferReferencePrefix(reference)) {
+      paymentCompletionStartedRef.current = false;
+      setPaymentStatus('error');
+      setErrorMessage(
+        'The payment reference is invalid. Return to checkout and try again.'
+      );
+      return;
+    }
     // Prefer the canonical order total: `amount` is only the residual due
     // at the gateway after wallet/savings credits.
     const purchaseTotal = orderTotal ?? amount ?? 0;
@@ -89,14 +106,22 @@ export async function settleOrderCompletion(
       trackingToken,
       reference,
     });
-    // The shopper may have left while verification was pending (up to
-    // its full timeout): a late response must not record a conversion
-    // or erase the cart after unmount — a new storefront cart built
-    // since would be destroyed even though navigation refuses to run.
+    // A late response must not record a conversion, erase the cart, or
+    // navigate after the shopper has left the gateway.
     if (!isMountedRef.current) {
       return;
     }
     if (verification.paid) {
+      if (bankOfferReference) {
+        await deferredBankOfferCart
+          .clearIfUnchanged(
+            orderId,
+            bankOfferReference,
+            () => isMountedRef.current
+          )
+          .catch(() => undefined);
+        if (!isMountedRef.current) return;
+      }
       // The tracked order already carries the checkout identity,
       // breakdown, and line items: forward them so the durable claim is
       // consumed with full attribution (later polling cannot enrich it).
@@ -146,12 +171,15 @@ export async function settleOrderCompletion(
           : 'Payment could not be confirmed. Please try again.'
       );
       return;
-    } else if (verification.reconciliation) {
-      // Captured money with no active paid order: route to the
-      // reconciliation state instead of the generic confirmation. The
-      // cart stays intact for a fresh attempt; settlement polling is
-      // skipped there since a cancelled order can never become paid.
-      setPaymentStatus('success');
+    } else if (verification.reconciliation || bankOfferReference) {
+      // Keep the cart for reconciliation or a bank offer still awaiting
+      // verification. The order screen checks the reference before rendering.
+      setPaymentStatus(
+        verification.reconciliation &&
+          verification.reconciliation !== 'payment_reversed'
+          ? 'success'
+          : 'pending'
+      );
       scheduleDelayedNavigation(() => {
         router.replace({
           pathname: '/order-success',
@@ -188,7 +216,8 @@ export async function settleOrderCompletion(
     }
   }
   setPaymentStatus('success');
-  await clearCart();
+  // Bank offers use the saved cart identity in the verified-paid branch.
+  if (!bankOfferReference) await clearCart();
   scheduleDelayedNavigation(() => {
     router.replace({
       pathname: '/order-success',

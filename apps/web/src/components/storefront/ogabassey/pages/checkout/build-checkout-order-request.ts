@@ -1,12 +1,14 @@
 import { getAdTrackingData } from '@/lib/ad-tracking-cookies';
 import type { CheckoutOrderItem } from '@/lib/checkout/build-order-items';
 import { getForwardableSelectedQuoteId } from './get-forwardable-selected-quote-id';
+import type { BankCardOfferSelection } from './preview-bank-card-offer';
 import type { DeliveryMethod, SharedCartOrderBinding } from './types';
 
 export interface CheckoutOrderRequestInput {
   merchantId: string;
   items: CheckoutOrderItem[];
   paymentMethod: string;
+  bankCardOffer?: BankCardOfferSelection;
   acceptsMarketing: boolean;
   customer: { name: string; email: string; phone: string; userId?: string };
   money: {
@@ -45,20 +47,23 @@ export function buildCheckoutOrderRequest({
   merchantId,
   items,
   paymentMethod,
+  bankCardOffer,
   acceptsMarketing,
   customer,
   money,
   delivery,
   sharedCart,
 }: CheckoutOrderRequestInput) {
-  const expectedTotal = Math.max(
-    0,
-    money.subtotal +
-      money.shipping +
-      money.giftWrapping +
-      money.tax -
-      money.discountAmount
-  );
+  const expectedTotal = bankCardOffer
+    ? bankCardOffer.payableKobo / 100
+    : Math.max(
+        0,
+        money.subtotal +
+          money.shipping +
+          money.giftWrapping +
+          money.tax -
+          money.discountAmount
+      );
   return {
     merchant_id: merchantId,
     customer_email: customer.email,
@@ -73,7 +78,8 @@ export function buildCheckoutOrderRequest({
     expected_total: expectedTotal,
     client_total: expectedTotal,
     ...(money.discountCode ? { discount_code: money.discountCode } : {}),
-    payment_method: paymentMethod,
+    payment_method: bankCardOffer ? 'bank_card_offer' : paymentMethod,
+    ...(bankCardOffer ? { bank_card_offer_id: bankCardOffer.id } : {}),
     payment_status: 'unpaid' as const,
     shipping_status: 'pending' as const,
     shipping_address: delivery.address,

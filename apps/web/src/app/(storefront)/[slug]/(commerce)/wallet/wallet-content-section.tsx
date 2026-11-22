@@ -1,9 +1,12 @@
+import Link from 'next/link';
 import { OgabasseyV2Wallet } from '@/components/storefront/ogabassey/pages/wallet';
 import { SavingsScreen } from '@/components/storefront/piggyvest-savings/savings-screen';
+import { asRoute } from '@/lib/routes';
 import { piggyvestSavingsScreenSchema } from '@/schemas/piggyvest-savings-screen';
 import { LocalSavingsWallet } from './local-savings-wallet';
 
 interface WalletContentSectionProps {
+  giftCardsHref?: string;
   initialShowFunding?: boolean;
   initialShowUsdtFunding?: boolean;
   initialUsdtAmount?: number;
@@ -35,6 +38,20 @@ export function WalletContentSection(props: WalletContentSectionProps) {
       <h1 id="wallet-page-title" className="sr-only">
         Wallet Balance
       </h1>
+      {props.giftCardsHref && (
+        <nav
+          aria-label="Wallet Services"
+          className="mx-auto max-w-2xl px-4 py-4"
+        >
+          <h2 className="font-semibold">Wallet Services</h2>
+          <Link
+            href={asRoute(props.giftCardsHref)}
+            className="inline-flex min-h-11 items-center underline underline-offset-4"
+          >
+            Gift Cards
+          </Link>
+        </nav>
+      )}
       {stagingSelected ? (
         <SavingsScreen source={stagingSource} />
       ) : localSavings ? (

@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 const cartState = vi.hoisted(() => ({
   cart: [],
@@ -16,9 +16,19 @@ vi.mock('./hooks/use-cart-handoff', () => ({
 import { App } from './index';
 const products = [{ id: 'phone', name: 'Phone', price: 100 }];
 afterEach(() => {
+  delete document.documentElement.dataset.ogabasseyCatalogOnly;
   delete window.openai;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('shows browse controls without offering a separate widget cart in conversation cart mode', () => {
+  document.documentElement.dataset.ogabasseyCatalogOnly = 'true';
+  window.openai = { toolOutput: { products }, displayMode: 'inline' };
+  render(<App />);
+  expect(screen.getByRole('heading', { name: 'Phone' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Review on Ogabassey' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Add to cart' })).toBeNull();
 });
 
 it('resizes when host errors appear and clear without ResizeObserver', () => {

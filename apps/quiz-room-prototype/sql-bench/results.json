@@ -1,0 +1,318 @@
+{
+  "generatedAt": "2026-11-18T18:48:47.269Z",
+  "environment": {
+    "postgresVersion": "17.11 (Homebrew)",
+    "cpuCores": 12,
+    "totalMemoryGb": 96,
+    "synchronousCommit": "on"
+  },
+  "stage1PrototypeSqlTest": "PASSED",
+  "partA_normalizedEmailIndexAndLegacyTriggers": {
+    "indexComparison": [
+      {
+        "eventAttempts": 1000,
+        "totalCustomers": 50000,
+        "checkInNormalizedEmailLookup": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 60.332,
+            "planningTimeMs": 0.344,
+            "sharedHitBlocks": 940,
+            "sharedReadBlocks": 0,
+            "nodeType": "Seq Scan",
+            "indexName": null
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.157,
+            "planningTimeMs": 0.517,
+            "sharedHitBlocks": 1,
+            "sharedReadBlocks": 3,
+            "nodeType": "Index Scan",
+            "indexName": "idx_customers_merchant_quiz_normalized_email_all"
+          }
+        },
+        "legacyIdentityCapTriggerQuery": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 57.557,
+            "planningTimeMs": 0.729,
+            "sharedHitBlocks": 36893,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "customersScanNodeType": "Index Scan",
+            "customersIndexName": "customers_pkey",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":485.41,\"Total Cost\":485.42,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":57.523,\"Actual Total Time\":57.524,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":36893,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Loca"
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.048,
+            "planningTimeMs": 1.028,
+            "sharedHitBlocks": 6,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "customersScanNodeType": "Index Scan",
+            "customersIndexName": "idx_customers_merchant_quiz_normalized_email_all",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":12.74,\"Total Cost\":12.75,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":0.018,\"Actual Total Time\":0.018,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":6,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Local Read B"
+          }
+        }
+      },
+      {
+        "eventAttempts": 10000,
+        "totalCustomers": 50000,
+        "checkInNormalizedEmailLookup": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 145.213,
+            "planningTimeMs": 1.122,
+            "sharedHitBlocks": 940,
+            "sharedReadBlocks": 0,
+            "nodeType": "Seq Scan",
+            "indexName": null
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.042,
+            "planningTimeMs": 0.462,
+            "sharedHitBlocks": 1,
+            "sharedReadBlocks": 3,
+            "nodeType": "Index Scan",
+            "indexName": "idx_customers_merchant_quiz_normalized_email_all"
+          }
+        },
+        "legacyIdentityCapTriggerQuery": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 176.899,
+            "planningTimeMs": 0.999,
+            "sharedHitBlocks": 36951,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "customersScanNodeType": "Index Scan",
+            "customersIndexName": "customers_pkey",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":4011.59,\"Total Cost\":4011.6,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":176.861,\"Actual Total Time\":176.861,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":36951,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"L"
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.045,
+            "planningTimeMs": 0.935,
+            "sharedHitBlocks": 6,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "customersScanNodeType": "Index Scan",
+            "customersIndexName": "idx_customers_merchant_quiz_normalized_email_all",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":12.75,\"Total Cost\":12.76,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":0.017,\"Actual Total Time\":0.017,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":6,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Local Read B"
+          }
+        }
+      },
+      {
+        "eventAttempts": 50000,
+        "totalCustomers": 50000,
+        "checkInNormalizedEmailLookup": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 59.34,
+            "planningTimeMs": 0.406,
+            "sharedHitBlocks": 940,
+            "sharedReadBlocks": 0,
+            "nodeType": "Seq Scan",
+            "indexName": null
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.04,
+            "planningTimeMs": 0.516,
+            "sharedHitBlocks": 1,
+            "sharedReadBlocks": 3,
+            "nodeType": "Index Scan",
+            "indexName": "idx_customers_merchant_quiz_normalized_email_all"
+          }
+        },
+        "legacyIdentityCapTriggerQuery": {
+          "withoutIndex": {
+            "withIndex": false,
+            "executionTimeMs": 57.74,
+            "planningTimeMs": 0.833,
+            "sharedHitBlocks": 938,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "customersScanNodeType": "Seq Scan",
+            "customersIndexName": null,
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":14963.88,\"Total Cost\":14963.89,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":57.707,\"Actual Total Time\":57.707,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":938,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Lo"
+          },
+          "withIndex": {
+            "withIndex": true,
+            "executionTimeMs": 0.058,
+            "planningTimeMs": 0.791,
+            "sharedHitBlocks": 8,
+            "sharedReadBlocks": 0,
+            "nodeType": "Aggregate",
+            "customersScanNodeType": "Index Scan",
+            "customersIndexName": "idx_customers_merchant_quiz_normalized_email_all",
+            "planSummary": "{\"Node Type\":\"Aggregate\",\"Strategy\":\"Plain\",\"Partial Mode\":\"Simple\",\"Parallel Aware\":false,\"Async Capable\":false,\"Startup Cost\":12.88,\"Total Cost\":12.89,\"Plan Rows\":1,\"Plan Width\":4,\"Actual Startup Time\":0.026,\"Actual Total Time\":0.026,\"Actual Rows\":1,\"Actual Loops\":1,\"Shared Hit Blocks\":8,\"Shared Read Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Local Hit Blocks\":0,\"Local Read B"
+          }
+        }
+      }
+    ],
+    "legacyPerRowTriggerRun": {
+      "attempts": 500,
+      "answers": 5000,
+      "elapsedMs": 680.2,
+      "attemptsPerSec": 735.1,
+      "answersPerSec": 7350.6,
+      "walBytes": 6621536,
+      "walBytesPerAttempt": 13243.1,
+      "triggerCalls": {
+        "quizEnforceIdentityAttemptCap": 500,
+        "accumulateQuizAttemptScoreV2": 5000,
+        "refreshQuizLiveStandingV2": 6000
+      }
+    }
+  },
+  "partB_edgeStagingAndSetWiseScoring": {
+    "scale100k": {
+      "label": "100k",
+      "totalAttempts": 100000,
+      "totalAnswersStaged": 985000,
+      "roomCount": 200,
+      "batchSize": 500,
+      "ingest": {
+        "elapsedMs": 3577.8,
+        "attemptsPerSec": 27950.5,
+        "answersPerSec": 275312.6,
+        "walBytes": 216906224,
+        "walMb": 206.86
+      },
+      "preScore": {
+        "elapsedMs": 10844.9,
+        "batchesScored": 190,
+        "attemptsScored": 95000,
+        "attemptsPerSec": 8759.9,
+        "walBytes": 70594240,
+        "walMb": 67.32
+      },
+      "seal": {
+        "elapsedMs": 86.5,
+        "roomsSealed": 200
+      },
+      "scoring": {
+        "elapsedMs": 3962.4,
+        "attemptsPerSec": 25237.2,
+        "walBytes": 151540832,
+        "walMb": 144.52,
+        "tailBatchesScored": 10,
+        "tailAttemptsScored": 5000,
+        "attemptsWritten": 100000,
+        "questionsWritten": 0,
+        "answersWritten": 0,
+        "resultsWritten": 100000
+      },
+      "backfillSample": {
+        "elapsedMs": 3656.9,
+        "attemptsBackfilled": 10000,
+        "questionsWritten": 98560,
+        "answersWritten": 98560,
+        "answersPerSec": 26952.2,
+        "remainingAttempts": 90000
+      },
+      "doubleImportCheck": {
+        "duplicateBatchReturnedDuplicateFlag": true,
+        "rescoreAttemptsWritten": 0,
+        "rescoreQuestionsWritten": 0,
+        "rescoreAnswersWritten": 0
+      },
+      "triggerIsolation": {
+        "quizEnforceIdentityAttemptCapCalls": 0,
+        "accumulateQuizAttemptScoreV2Calls": 0,
+        "refreshQuizLiveStandingV2Calls": 0,
+        "liveStandingsRowsLeaked": 0
+      },
+      "canonicalCounts": {
+        "attempts": 100000,
+        "questions": 98560,
+        "answers": 98560,
+        "results": 100000
+      },
+      "concurrentCheckout": {
+        "completed": 1469,
+        "errorCount": 0,
+        "p50Ms": 0.878,
+        "p95Ms": 2.808,
+        "p99Ms": 10.69,
+        "maxMs": 23.297
+      }
+    },
+    "scale1m": {
+      "label": "1m",
+      "totalAttempts": 1000000,
+      "totalAnswersStaged": 9850000,
+      "roomCount": 2000,
+      "batchSize": 500,
+      "ingest": {
+        "elapsedMs": 37828.3,
+        "attemptsPerSec": 26435.2,
+        "answersPerSec": 260387.2,
+        "walBytes": 2362153200,
+        "walMb": 2252.72
+      },
+      "preScore": {
+        "elapsedMs": 120087.9,
+        "batchesScored": 1900,
+        "attemptsScored": 950000,
+        "attemptsPerSec": 7910.9,
+        "walBytes": 949951344,
+        "walMb": 905.94
+      },
+      "seal": {
+        "elapsedMs": 308.6,
+        "roomsSealed": 2000
+      },
+      "scoring": {
+        "elapsedMs": 41219,
+        "attemptsPerSec": 24260.6,
+        "walBytes": 1493539072,
+        "walMb": 1424.35,
+        "tailBatchesScored": 100,
+        "tailAttemptsScored": 50000,
+        "attemptsWritten": 1000000,
+        "questionsWritten": 0,
+        "answersWritten": 0,
+        "resultsWritten": 1000000
+      },
+      "backfillSample": {
+        "elapsedMs": 3743.5,
+        "attemptsBackfilled": 10000,
+        "questionsWritten": 98530,
+        "answersWritten": 98530,
+        "answersPerSec": 26320.2,
+        "remainingAttempts": 990000
+      },
+      "doubleImportCheck": {
+        "duplicateBatchReturnedDuplicateFlag": true,
+        "rescoreAttemptsWritten": 0,
+        "rescoreQuestionsWritten": 0,
+        "rescoreAnswersWritten": 0
+      },
+      "triggerIsolation": {
+        "quizEnforceIdentityAttemptCapCalls": 0,
+        "accumulateQuizAttemptScoreV2Calls": 0,
+        "refreshQuizLiveStandingV2Calls": 0,
+        "liveStandingsRowsLeaked": 0
+      },
+      "canonicalCounts": {
+        "attempts": 1000000,
+        "questions": 98530,
+        "answers": 98530,
+        "results": 1000000
+      },
+      "concurrentCheckout": {
+        "completed": 13034,
+        "errorCount": 0,
+        "p50Ms": 0.927,
+        "p95Ms": 6.655,
+        "p99Ms": 19.176,
+        "maxMs": 89.298
+      }
+    }
+  }
+}

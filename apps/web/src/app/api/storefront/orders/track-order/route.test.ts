@@ -53,7 +53,8 @@ function makeTrackedOrder(overrides: Record<string, unknown> = {}) {
 
 describe('GET /api/storefront/orders/track-order', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockAnonClient.rpc.mockResolvedValue({ data: null, error: null });
     vi.mocked(createAnonClient).mockReturnValue(mockAnonClient as never);
   });
 
@@ -87,7 +88,11 @@ describe('GET /api/storefront/orders/track-order', () => {
 
     expect(response.status).toBe(200);
     expect(data.order.order_number).toBe('#00001234');
-    expect(mockAnonClient.rpc).toHaveBeenCalledTimes(2);
+    expect(
+      mockAnonClient.rpc.mock.calls.filter(
+        ([name]) => name === 'get_order_tracking'
+      )
+    ).toHaveLength(2);
     expect(mockAnonClient.rpc).toHaveBeenNthCalledWith(
       1,
       'get_order_tracking',
@@ -127,7 +132,11 @@ describe('GET /api/storefront/orders/track-order', () => {
 
     expect(response.status).toBe(200);
     expect(data.order.order_number).toBe('ORD-241204-A7K3-2');
-    expect(mockAnonClient.rpc).toHaveBeenCalledTimes(1);
+    expect(
+      mockAnonClient.rpc.mock.calls.filter(
+        ([name]) => name === 'get_order_tracking'
+      )
+    ).toHaveLength(1);
     expect(mockAnonClient.rpc).toHaveBeenCalledWith('get_order_tracking', {
       p_merchant_slug: 'test-store',
       p_order_id: null,
@@ -135,6 +144,66 @@ describe('GET /api/storefront/orders/track-order', () => {
       p_email: null,
       p_tracking_token: 'track-token-123',
     });
+  });
+
+  it('loads the amendment using the same guest proof as the order', async () => {
+    mockAnonClient.rpc
+      .mockResolvedValueOnce({ data: [makeTrackedOrder()], error: null })
+      .mockResolvedValueOnce({
+        data: {
+          state: 'awaiting_refund',
+          holdFulfillment: true,
+          balanceDueMinor: 0,
+          refundOwedMinor: 5000000,
+          documentId: null,
+          documentNumber: null,
+          order: {
+            total: 250000,
+            subtotal: 250000,
+            amount_paid: 300000,
+            payment_status: 'paid',
+            shipping_status: 'cancelled',
+            updated_at: '2026-11-21T20:00:00Z',
+            cancelled_at: '2026-11-21T19:59:00Z',
+            paid_at: null,
+            shipped_at: null,
+            delivered_at: null,
+          },
+          items: [
+            {
+              id: 'fixture-line',
+              name: 'Replacement',
+              quantity: 1,
+              price: 250000,
+            },
+          ],
+        },
+        error: null,
+      });
+    const response = await GET(
+      new NextRequest(
+        'https://example.com/api/storefront/orders/track-order?token=track-token-123&merchant_slug=test-store'
+      )
+    );
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.order.amendment.state).toBe('awaiting_refund');
+    expect(data.order.total).toBe(250000);
+    expect(data.order.status).toBe('cancelled');
+    expect(data.timeline.at(-1)).toMatchObject({
+      title: 'Cancelled',
+      timestamp: '2026-11-21T19:59:00Z',
+    });
+    expect(data.items[0].product_name).toBe('Replacement');
+    expect(mockAnonClient.rpc).toHaveBeenLastCalledWith(
+      'read_paid_order_amendment_tracking',
+      {
+        p_order_id: 'order-123',
+        p_merchant_slug: 'test-store',
+        p_tracking_token: 'track-token-123',
+        p_email: null,
+      }
+    );
   });
 
   it('exposes tax and gift-wrapping components for settlement attribution', async () => {
@@ -160,6 +229,7 @@ describe('GET /api/storefront/orders/track-order', () => {
       data: [makeTrackedOrder({ notification_delivered: true })],
       error: null,
     });
+    mockAnonClient.rpc.mockResolvedValueOnce({ data: null, error: null });
     mockAnonClient.rpc.mockResolvedValueOnce({
       data: [makeTrackedOrder({})],
       error: null,
@@ -182,6 +252,7 @@ describe('GET /api/storefront/orders/track-order', () => {
       data: [makeTrackedOrder({ payment_method: 'invoice' })],
       error: null,
     });
+    mockAnonClient.rpc.mockResolvedValueOnce({ data: null, error: null });
     mockAnonClient.rpc.mockResolvedValueOnce({
       data: [makeTrackedOrder({})],
       error: null,

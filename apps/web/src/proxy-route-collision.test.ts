@@ -70,7 +70,11 @@ function collectLiveFirstSegments(
   return found;
 }
 
-const EXACT_LIVE_PAGE_SEGMENTS = new Set(['black-friday', 'unlock-orders']);
+const EXACT_LIVE_PAGE_SEGMENTS = new Set([
+  'black-friday',
+  'gift-cards',
+  'unlock-orders',
+]);
 
 describe('bugfix: retired-slug prefix strip shadowed a live storefront route', () => {
   beforeEach(() => {

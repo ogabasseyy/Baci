@@ -120,6 +120,7 @@ export function resolveHostedStagingPushCapability(
 }
 
 export function getNativePushRegistration(): NativePushRegistration | null {
+  if (process.env.EXPO_PUBLIC_OXYGEN_STAGING === '1') return null;
   const telemetryExcluded = isStorefrontTelemetryExcluded();
   if (!telemetryExcluded) {
     const extra = isRecord(Constants.expoConfig)
@@ -130,9 +131,7 @@ export function getNativePushRegistration(): NativePushRegistration | null {
       isRecord(eas) && typeof eas.projectId === 'string'
         ? eas.projectId
         : undefined;
-    return {
-      projectId,
-    };
+    return { projectId };
   }
   if (Platform.OS !== 'android' && Platform.OS !== 'ios') return null;
   return resolveHostedStagingPushCapability(Constants.expoConfig, Platform.OS, {

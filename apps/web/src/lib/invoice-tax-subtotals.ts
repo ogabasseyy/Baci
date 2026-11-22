@@ -23,7 +23,8 @@ function exemptionReasonForCategory(vatCategoryCode: string) {
 }
 
 export function deriveTaxSubtotalsFromInvoiceItems(
-  items: TaxSubtotalLineItem[]
+  items: TaxSubtotalLineItem[],
+  storedRows: TaxSubtotal[] = []
 ): TaxSubtotal[] {
   const subtotals = new Map<string, TaxSubtotal>();
 
@@ -50,7 +51,12 @@ export function deriveTaxSubtotalsFromInvoiceItems(
       vat_rate: vatRate,
       taxable_amount: lineTaxableAmount(item),
       tax_amount: vatAmount,
-      exemption_reason: exemptionReasonForCategory(vatCategoryCode),
+      exemption_reason:
+        storedRows.find(
+          (row) =>
+            row.vat_category_code === vatCategoryCode &&
+            row.vat_rate === vatRate
+        )?.exemption_reason ?? exemptionReasonForCategory(vatCategoryCode),
     });
   }
 

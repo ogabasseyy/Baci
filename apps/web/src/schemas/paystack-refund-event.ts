@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
 
+export const paystackAmendmentRefundReference = z
+  .string()
+  .regex(/^BAC-AMEND-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i);
+
 // Paystack refund.* webhook payload, parsed before the handler touches the
 // database. Field selection mirrors what the reconciler reads: the refund
 // resource ID, its provider status, and the original payment reference in
@@ -17,7 +21,9 @@ export const paystackRefundEventSchema = z
   .object({
     data: z
       .object({
-        id: z.number().int().optional(),
+        id: z
+          .union([z.number().int(), z.string().regex(/^[1-9][0-9]{0,19}$/)])
+          .optional(),
         status: z.string().optional(),
         transaction: z
           .union([
@@ -42,13 +48,17 @@ export const paystackRefundEventSchema = z
         : undefined;
     const flatReference = data?.transaction_reference;
     const hasRefundId =
-      typeof data?.id === 'number' &&
-      Number.isSafeInteger(data.id) &&
-      data.id > 0;
+      typeof data?.id === 'string' ||
+      (typeof data?.id === 'number' &&
+        Number.isSafeInteger(data.id) &&
+        data.id > 0);
     const hasReference =
       selectPaystackRefundReference(nestedReference, flatReference) !==
       undefined;
-    if (!hasRefundId && !hasReference) {
+    const hasAmendmentReference = paystackAmendmentRefundReference.safeParse(
+      data?.refund_reference ?? data?.reference
+    ).success;
+    if (!hasRefundId && !hasReference && !hasAmendmentReference) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message:

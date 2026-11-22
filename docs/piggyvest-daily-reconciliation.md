@@ -97,6 +97,20 @@ anything is wrong. It resends, settles and releases nothing.
 
    It never writes a credit or moves money.
 
+7. **Moved legacy wallets holding money again.** Old in-app wallets that the
+   legacy migration runbook (S10) already moved to PiggyVest by hand carry a
+   `piggyvest_legacy_migration` ledger row. If one of them shows a balance
+   again (for example a refund that was already on its way when it was
+   emptied), the email lists it (wallet id and amount, at most 10, the rest
+   counted) and the run **pages** (`legacy_migrated_with_balance=<count>`).
+   The customer was already paid in PiggyVest once: never credit PiggyVest a
+   second time; resolve it by hand (see `piggyvest-legacy-migration-runbook.md`).
+   It reads only the integration's own merchant (PiggyVest is Ogabassey-only),
+   through `piggyvest_primary.read_migrated_legacy_wallet_balances` (evidence
+   login), returns no names, emails or phone numbers, and never moves money.
+   A failed read pages (`legacy_migrated_unreadable`); it is read even when
+   the main report fails.
+
 The page is the existing `piggyvest_money_alert` event with code
 `PIGGYVEST_RECONCILIATION_MISMATCH` (see `piggyvest-money-alerts.md`). It also
 pages if the report email cannot be sent.

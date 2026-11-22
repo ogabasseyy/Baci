@@ -144,4 +144,58 @@ describe('verifyTransaction', () => {
     expect(result).toMatchObject({ success: true });
     if (result.success) expect(result.data.id).toBe(big);
   });
+
+  it('rejects malformed transaction identity in textIds mode', async () => {
+    const { verifyTransaction } = await import(
+      '@/lib/verify-paystack-transaction'
+    );
+    const raw = JSON.stringify({
+      data: {
+        id: 'not-a-number',
+        reference: 'PSK-1',
+        currency: 'NGN',
+        status: 'success',
+      },
+      status: true,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => raw,
+      })
+    );
+
+    await expect(
+      verifyTransaction('PSK-1', undefined, { textIds: true })
+    ).resolves.toMatchObject({
+      success: false,
+      code: 'INVALID_VERIFICATION_RESPONSE',
+    });
+  });
+
+  it('preserves terminal status and merchant evidence without capture metadata', async () => {
+    const { verifyTransaction } = await import(
+      '@/lib/verify-paystack-transaction'
+    );
+    const data = {
+      id: '9007199254740993',
+      reference: 'PSK-1',
+      currency: 'NGN',
+      status: 'reversed',
+      domain: 'test',
+      customer: { email: 'customer@example.com' },
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ status: true, data }),
+      })
+    );
+
+    await expect(
+      verifyTransaction('PSK-1', undefined, { textIds: true })
+    ).resolves.toEqual({ success: true, data });
+  });
 });

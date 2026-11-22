@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { paystackCancellationCaptureAmounts } from '@/lib/orders/paystack-cancellation-capture-amounts';
 import type { CompletedPaymentMatch } from './fetch-completed-payments-by-reference';
 import { fileInvalidPaystackRefundEvidenceReview } from './file-invalid-paystack-refund-evidence-review';
 import type { RefundRecoveryEvidence } from './file-paystack-refund-candidate-reviews';
@@ -87,6 +88,42 @@ export async function recordRecoveredPaystackRefund(
     });
     return;
   }
+  const captureAmounts = paystackCancellationCaptureAmounts(payment);
+  if (
+    !captureAmounts ||
+    (captureAmounts.grossMinor !== captureAmounts.principalMinor &&
+      (current.amount !== captureAmounts.grossMinor ||
+        current.currency !== 'NGN'))
+  ) {
+    await filePaystackRefundRecoveryReview(supabase, {
+      candidates: [
+        {
+          payment_transaction_id: payment.id,
+          order_id: payment.order_id,
+          amount: payment.amount,
+          gateway_reference: payment.gateway_reference,
+        },
+      ],
+      merchantId: payment.merchant_id,
+      metadata: {
+        provider_refund_id: refundId,
+        payment_transaction_id: payment.id,
+      },
+      orderId: payment.order_id,
+      paystackRef: String(refundId),
+      providerRefundStatus: current.status,
+      reason:
+        'Paystack surcharge capture requires a verified full cancellation refund',
+    });
+    return;
+  }
+  const surcharged =
+    captureAmounts.grossMinor !== captureAmounts.principalMinor;
+  const refundAmount =
+    (surcharged ? captureAmounts.principalMinor : current.amount) / 100;
+  const providerAmountEvidence = surcharged
+    ? { provider_refund_amount_minor: current.amount }
+    : {};
   // A concurrent event (or the in-flight initiation) may record the row
   // first: on conflict, reconcile the winning row instead of failing.
   const refundRowId = crypto.randomUUID();
@@ -104,13 +141,14 @@ export async function recordRecoveredPaystackRefund(
     order_id: payment.order_id,
     merchant_id: payment.merchant_id,
     transaction_type: 'refund',
-    amount: current.amount / 100,
+    amount: refundAmount,
     currency: current.currency,
     status: 'refund_pending',
     gateway: 'paystack',
     gateway_reference: String(refundId),
     description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
     metadata: {
+      ...providerAmountEvidence,
       payment_transaction_id: payment.id,
       provider_payment_transaction_id: evidence.providerPaymentTransactionId,
       ...(failedVerdict ? {} : { provider_refund_status: providerVerdict }),
@@ -163,9 +201,10 @@ export async function recordRecoveredPaystackRefund(
     order_id: payment.order_id,
     merchant_id: payment.merchant_id,
     gateway_reference: String(refundId),
-    amount: current.amount / 100,
+    amount: refundAmount,
     currency: current.currency,
     metadata: {
+      ...providerAmountEvidence,
       payment_transaction_id: payment.id,
       provider_payment_transaction_id: evidence.providerPaymentTransactionId,
       ...(failedVerdict ? {} : { provider_refund_status: providerVerdict }),

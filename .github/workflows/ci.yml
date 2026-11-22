@@ -475,6 +475,8 @@ jobs:
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_checkout_complete_vouchers.py
       - name: Test shared cart validated-price order binding
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_remaining_review.py
+      - name: Test MCP website cart handoff and replay
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_commerce_cart_handoff_attachment_lifetime.py --mcp-import
       - name: Test Chatwoot cart add receipt authority
         run: PATH="/usr/lib/postgresql/18/bin:$PATH" python3 supabase/tests/run_chatwoot_cart_add_receipts.py
       - name: Test shared cart reviewed assurance binding

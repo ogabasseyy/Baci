@@ -1,5 +1,7 @@
 import { ArrowRight } from 'lucide-react';
 import type React from 'react';
+import { useRef } from 'react';
+import { useChatwootLauncherClearance } from '../../use-chatwoot-launcher-clearance';
 import styles from './cart-page-mobile-checkout-bar.module.css';
 import { CartPageNegotiationIcon } from './cart-page-negotiation-icon';
 
@@ -18,8 +20,15 @@ export function CartPageMobileCheckoutBar({
   onCheckoutClick,
   onOpenTotalNegotiation,
 }: CartPageMobileCheckoutBarProps) {
+  const barRef = useRef<HTMLDivElement>(null);
+  // The Chatwoot launcher lifts itself above this bar while it shows.
+  useChatwootLauncherClearance(barRef);
+
   return (
-    <div className={`fixed bottom-24 left-0 right-0 bg-white border-t border-gray-200 p-3 items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] z-40 ${styles.checkoutBar}`}>
+    <div
+      ref={barRef}
+      className={`fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] items-center gap-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] z-40 ${styles.checkoutBar}`}
+    >
       {hasPriceNegotiation && !hasNonNegotiableCartItem && (
         <button
           type="button"

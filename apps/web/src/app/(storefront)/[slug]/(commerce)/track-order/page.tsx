@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { PaidOrderAmendmentNotice } from '@/components/paid-order-amendment-notice';
 import {
   ThemedBadge,
   ThemedButton,
@@ -623,6 +624,12 @@ function OrderTrackContent() {
             </CardContent>
           </ThemedCard>
 
+          {orderData.order.amendment && (
+            <PaidOrderAmendmentNotice
+              amendment={orderData.order.amendment}
+              currency={orderData.order.currency}
+            />
+          )}
           {/* Order Items */}
           <ThemedCard>
             <CardHeader>

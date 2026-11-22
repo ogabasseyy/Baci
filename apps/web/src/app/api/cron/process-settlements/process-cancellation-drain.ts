@@ -49,9 +49,9 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 export async function processCancellationDrain(
   supabase: ServiceClient,
   sendCancellationEmail: typeof sendEmail,
-  sendMerchantPush: MerchantRefundPushSender
+  sendMerchantPush: MerchantRefundPushSender,
+  workersStartedAt = Date.now()
 ) {
-  const workersStartedAt = Date.now();
   // Bound the parallel reconcile phase so the serial drains behind it keep
   // a guaranteed share of the invocation instead of computing zero limits.
   // When refund verification pends, cap the phase before it consumes the

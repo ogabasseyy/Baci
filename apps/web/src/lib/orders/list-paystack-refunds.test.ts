@@ -48,6 +48,54 @@ describe('listPaystackRefunds', () => {
       expect.anything()
     );
   });
+  it('checks the exact capture before listing its refunds for an amendment', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response({
+        id: '6',
+        reference: 'capture-1',
+        currency: 'NGN',
+        domain: 'test',
+        integration: 987,
+      })
+    );
+    vi.stubGlobal('fetch', fetcher);
+    await expect(
+      listPaystackRefunds('capture-1', {
+        expectedCapture: { id: '5', domain: 'test', integrationId: '987' },
+      })
+    ).rejects.toThrow('Refund capture mismatch');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    987, 456,
+  ])('checks the verified capture integration (%s)', async (integration) => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          id: '5',
+          reference: 'capture-1',
+          currency: 'NGN',
+          domain: 'test',
+          integration,
+          status: 'success',
+        })
+      )
+      .mockResolvedValueOnce(response([]));
+    vi.stubGlobal('fetch', fetcher);
+    const refunds = listPaystackRefunds('capture-1', {
+      expectedCapture: { id: '5', domain: 'test', integrationId: '987' },
+    });
+
+    if (integration === 987) {
+      await expect(refunds).resolves.toEqual([]);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } else {
+      await expect(refunds).rejects.toThrow('Refund capture mismatch');
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
   it('matches bare numeric and legacy string transaction identities', async () => {
     const fetcher = vi.fn();
     verifiedLister(fetcher);

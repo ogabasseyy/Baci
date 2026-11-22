@@ -6,8 +6,13 @@ import {
   it,
   jest,
 } from '@jest/globals';
+import { getOxygenStagingProfile } from './oxygen-staging-profile';
 
 const originalEnvironment = { ...process.env };
+
+jest.mock('./oxygen-staging-profile', () => ({
+  getOxygenStagingProfile: jest.fn(() => null),
+}));
 
 let mockPlatformOS: 'ios' | 'android' | 'web' = 'ios';
 
@@ -26,6 +31,7 @@ describe('tracking transparency wrapper', () => {
     mockPlatformOS = 'ios';
     delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
     delete process.env.EXPO_PUBLIC_LOCAL_STOREFRONT;
+    jest.mocked(getOxygenStagingProfile).mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -57,6 +63,24 @@ describe('tracking transparency wrapper', () => {
       status: 'denied',
     });
     expect(loadNativeTracking).not.toHaveBeenCalled();
+  });
+
+  it('never requests tracking in isolated Oxygen staging on iOS', async () => {
+    const staging = await import('./oxygen-staging-profile');
+    jest.mocked(staging.getOxygenStagingProfile).mockReturnValue({} as never);
+    const getTrackingPermissionsAsync = jest.fn();
+    jest.doMock('expo-tracking-transparency', () => ({
+      getTrackingPermissionsAsync,
+    }));
+    const { getTrackingPermissionStatus, requestTrackingPermissionStatus } =
+      await import('./tracking-transparency');
+    await expect(getTrackingPermissionStatus()).resolves.toEqual({
+      status: 'denied',
+    });
+    await expect(requestTrackingPermissionStatus()).resolves.toEqual({
+      status: 'denied',
+    });
+    expect(getTrackingPermissionsAsync).not.toHaveBeenCalled();
   });
 
   it('returns undetermined when the iOS tracking module fails during import', async () => {

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 import { buildDevelopmentStorefrontExpoConfig as buildDevelopmentConfig } from './config/development-storefront-expo-config';
+import { buildOxygenStagingExpoConfig } from './config/oxygen-staging-expo-config';
 
 // Local .env values (Supabase URL/key, API origin, merchant id) must be
 // visible to the first branch decision below: dotenv fills gaps without
@@ -28,7 +29,9 @@ if (process.env.NODE_ENV !== 'test') {
 // config/development-storefront-expo-config.test.mjs ('rejects release, CI,
 // malformed mode and competing test modes'), so a stray staging flag can
 // never silently misbuild as production.
-const developmentStorefrontConfig = buildDevelopmentConfig(process.env);
+const developmentStorefrontConfig =
+  buildOxygenStagingExpoConfig(process.env) ??
+  buildDevelopmentConfig(process.env);
 
 const buildStorefrontConfig: (context: ConfigContext) => ExpoConfig =
   developmentStorefrontConfig

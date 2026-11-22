@@ -66,10 +66,12 @@ function createSupabase(
     },
     error: null,
   },
-  savedQuoteSenderPhone = quoteSender.phone
+  savedQuoteSenderPhone = quoteSender.phone,
+  source?: string
 ) {
   const order = {
     id: 'order-1',
+    source,
     customer_name: 'Customer',
     customer_email: 'customer@example.com',
     customer_phone: '08000000001',
@@ -77,11 +79,19 @@ function createSupabase(
     selected_quote_id: 'quote-1',
     shipping_provider: 'GIGL',
     ...prepaidGiglCustomerCheckoutPayment,
+    ...(source === 'partner'
+      ? {
+          payment_method: 'external',
+          shipping_funding_source: 'merchant_wallet',
+        }
+      : {}),
     shipping_address: {
       address: 'Receiver Road',
       city: 'Abuja',
       state: 'Abuja',
       phone: '08000000001',
+      latitude: 6.5,
+      longitude: 3.3,
     },
     order_items: [{ name: 'Widget', quantity: 1, price: 5000 }],
   };
@@ -102,8 +112,6 @@ function createSupabase(
       sender: { ...quoteSender, phone: savedQuoteSenderPhone },
       receiver: {
         ...order.shipping_address,
-        latitude: 6.5,
-        longitude: 3.3,
         name: order.customer_name,
         phone: order.customer_phone,
         country: 'Nigeria',
@@ -218,6 +226,27 @@ describe('bookOrderShipment sender selection', () => {
         }),
       })
     );
+  });
+
+  it('books a partner shipment from its paid pickup after the merchant address changes', async () => {
+    const db = createSupabase(
+      {
+        data: {
+          business_name: 'Merchant',
+          business_address: '50 Changed Pickup Street, Ikeja',
+          phone: '08000000002',
+          state_code: 'LA',
+        },
+        error: null,
+      },
+      quoteSender.phone,
+      'partner'
+    );
+    await bookOrderShipment(db, 'merchant-1', 'order-1');
+
+    expect(
+      vi.mocked(shippingService.bookShipment).mock.calls[0]?.[1].sender
+    ).toMatchObject({ address: quoteSender.address, postalCode: '100001' });
   });
 
   it('bugfix: refuses to book GIG with the truncated store phone (+23415781)', async () => {

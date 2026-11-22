@@ -19,8 +19,27 @@ export const chatWebhookMessageCreatedSchema = z.object({
   content: z.string().nullish(),
   account: z.object({ id: providerId }),
   inbox: z.object({ id: providerId }),
-  conversation: z.object({ id: providerId }),
-  sender: z.object({ name: z.string().nullish() }).nullish(),
+  conversation: z.object({
+    id: providerId,
+    status: z.string().max(40).nullish(),
+    // The provider caps neither label length nor count. Labels are optional
+    // context here, so over-long ones are dropped and the list is cut to 50
+    // rather than failing the whole event, which would lose the message.
+    labels: z
+      .array(z.string())
+      .transform((labels) =>
+        labels.filter((label) => label.length <= 100).slice(0, 50)
+      )
+      .nullish(),
+  }),
+  sender: z
+    .object({ name: z.string().nullish(), type: z.string().max(40).nullish() })
+    .nullish(),
+  // Only presence is read: an attachment-only message has no text, and an
+  // automation or campaign message is not a person's reply.
+  attachments: z.array(z.unknown()).max(100).nullish(),
+  content_attributes: z.record(z.string(), z.unknown()).nullish(),
+  additional_attributes: z.record(z.string(), z.unknown()).nullish(),
 });
 
 export type ChatWebhookMessageCreated = z.infer<

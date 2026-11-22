@@ -48,6 +48,82 @@ describe('CheckoutReconciliationView', () => {
     expect(screen.getByText(/Your cart is still intact/)).toBeInTheDocument();
   });
 
+  it('shows an explicit reversal and a support link with the order number', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber="BAC-42"
+        getHref={getHref}
+        outcome="reversed"
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Payment reversed' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('#BAC-42')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Wait for the reversal to be confirmed/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /Contact our support team/ })
+    ).toHaveAttribute('href', '/test-store/contact');
+  });
+
+  it('directs an unauthorized shopper to their orders without showing an order number', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber="BAC-42"
+        getHref={getHref}
+        outcome="access_required"
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Sign in to check your payment' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /Track Order Status/ })
+    ).toHaveAttribute('href', '/test-store/account/orders');
+    expect(screen.queryByText(/^#/)).not.toBeInTheDocument();
+  });
+
+  it('shows support guidance before a reviewed attempt can be retried', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber="BAC-42"
+        getHref={getHref}
+        outcome="bank_offer_review"
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Payment attempt under review' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('#BAC-42')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /try again/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('suggests refreshing after verification is unavailable without offering another payment', () => {
+    render(
+      <CheckoutReconciliationView
+        orderNumber="BAC-42"
+        getHref={getHref}
+        outcome="verification_unavailable"
+      />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Payment verification unavailable' })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Refresh this page/)).toBeInTheDocument();
+    expect(screen.queryByText('#BAC-42')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /try again/i })
+    ).not.toBeInTheDocument();
+  });
+
   it('omits the order number line when unknown', () => {
     render(<CheckoutReconciliationView orderNumber={null} getHref={getHref} />);
 

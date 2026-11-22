@@ -1,4 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
@@ -45,10 +46,13 @@ import { confirmPaystackWalletDvaTopUp } from '@/lib/payments/confirm-paystack-w
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchant-invoice-partial-balance-review';
 import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
+import { routePaystackAmendmentRefund } from '@/lib/payments/paystack-amendment-refund';
+import { readPaystackCheckoutCustomerFeeMinor } from '@/lib/payments/paystack-checkout-customer-fee';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
 import { recordChatOrderSettlement } from '@/lib/payments/record-chat-order-settlement';
 import { recordOrderUpdateFailureSettlement } from '@/lib/payments/record-order-update-failure-settlement';
+import { resolvePaidOrderCheckoutCapture } from '@/lib/payments/resolve-paid-order-checkout-capture';
 import { scheduleWalletTopUpCreditNotification } from '@/lib/payments/schedule-wallet-top-up-credit-notification';
 import {
   calculatePlatformFee,
@@ -76,6 +80,8 @@ import {
   referenceSchema,
 } from '@/schemas/payments';
 import { paystackRefundEventSchema } from '@/schemas/paystack-refund-event';
+import { handleBankCardOfferDispute } from './handle-bank-card-offer-dispute';
+import { handleBankCardOfferWebhook } from './handle-bank-card-offer-webhook';
 import {
   dispatchPaystackCheckoutOnlyWebhook,
   dispatchPaystackSharedKeyWebhook,
@@ -217,7 +223,11 @@ function getVerifiedAmount(
     typeof gatewayResponse.currency === 'string'
       ? gatewayResponse.currency
       : undefined;
-  const amount = gateway === 'paystack' ? rawAmount / 100 : rawAmount;
+  const amount =
+    gateway === 'paystack'
+      ? (rawAmount - readPaystackCheckoutCustomerFeeMinor(gatewayResponse)) /
+        100
+      : rawAmount;
 
   return { amount, currency };
 }
@@ -669,10 +679,35 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      const supabase = createServiceClient();
+      const amendmentRefund = await routePaystackAmendmentRefund(
+        supabase,
+        parsed.data.data
+      );
+      if (amendmentRefund === 'ignored') {
+        return NextResponse.json({ message: 'Event ignored' });
+      }
+      if (amendmentRefund !== 'untracked') {
+        return amendmentRefund === 'recorded'
+          ? NextResponse.json({ message: 'Amendment refund reconciled' })
+          : NextResponse.json(
+              { error: 'Amendment refund verification pending' },
+              { status: 503 }
+            );
+      }
       return handlePaystackCancellationRefundEvent(
-        createServiceClient(),
+        supabase,
         parsed.data as unknown as Record<string, unknown>
       );
+    }
+
+    if (gateway === 'paystack') {
+      const dispute = await handleBankCardOfferDispute(
+        body.event,
+        body.data,
+        createServiceClient
+      );
+      if (dispute) return dispute;
     }
 
     // Extract reference and check event type based on gateway
@@ -754,6 +789,17 @@ export async function POST(request: NextRequest) {
     // Webhook handlers have no user cookies — use service client to bypass RLS
     const supabase = createServiceClient();
 
+    // Bank offer captures must pass the shared verification path before any
+    // transaction flip or fallback settlement can run.
+    if (hasBankCardOfferReferencePrefix(reference)) {
+      return await handleBankCardOfferWebhook({
+        gateway,
+        reference,
+        supabase,
+        finalize: finalizeOrderGatewayPayment,
+      });
+    }
+
     // Verify payment with the appropriate gateway
     let paymentStatus: string;
     let gatewayResponse: Record<string, unknown>;
@@ -815,7 +861,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const verifiedAmount = getVerifiedAmount(gateway, gatewayResponse);
+    let verifiedAmount = getVerifiedAmount(gateway, gatewayResponse);
 
     if (
       (gateway === 'paystack' || gateway === 'korapay') &&
@@ -830,6 +876,36 @@ export async function POST(request: NextRequest) {
         { error: 'Payment amount verification failed' },
         { status: 422 }
       );
+    }
+
+    if (gateway === 'paystack') {
+      const capture = await resolvePaidOrderCheckoutCapture({
+        gatewayResponse,
+        reference,
+        signedEvent: body.data,
+        supabase,
+      });
+      if (capture === 'unavailable' || capture === 'awaiting_evidence') {
+        return NextResponse.json(
+          { error: 'Payment capture reconciliation temporarily unavailable' },
+          { status: 503 }
+        );
+      }
+      if (capture === 'original_replay') {
+        return NextResponse.json({
+          message: 'Original order payment already recorded',
+        });
+      }
+      if (capture === 'review' || capture === 'unapplied') {
+        return NextResponse.json({
+          code: 'PAID_ORDER_CAPTURE_REQUIRES_REVIEW',
+          message: 'Payment capture recorded for reconciliation',
+        });
+      }
+    }
+
+    if (gateway === 'paystack') {
+      verifiedAmount = getVerifiedAmount(gateway, gatewayResponse);
     }
 
     if (verifiedAmount) {

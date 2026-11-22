@@ -131,6 +131,7 @@ describe('POST /api/webhooks/chatwoot/[webhookKey] push', () => {
       'a claim lost to another delivery',
       { status: 'skipped', reason: 'already_claimed' },
     ],
+    ['a push the merchant turned off', { status: 'skipped', reason: 'muted' }],
   ])('does not log %s', async (_label, push) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocks.push.mockResolvedValue(push);

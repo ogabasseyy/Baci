@@ -8,11 +8,21 @@ interface RenderedEmail {
   html: string;
 }
 
-/** Appends report lines (already plain text) to a rendered report email. */
-export function withEmailLines(email: RenderedEmail, lines: readonly string[]) {
-  if (lines.length === 0) return email;
+/**
+ * Appends report lines (already plain text) to a rendered report email. With
+ * `attention`, a check outside the main report pages, so the subject is
+ * prefixed and an "all clear" main report can never read as all clear.
+ */
+export function withEmailLines(
+  email: RenderedEmail,
+  lines: readonly string[],
+  attention = false
+) {
+  if (lines.length === 0 && !attention) return email;
   return {
-    subject: email.subject,
+    subject: attention
+      ? `ATTENTION, see below: ${email.subject}`
+      : email.subject,
     text: [email.text, '', ...lines].join('\n'),
     html: `${email.html}${lines
       .map((line) => `<p>${escapeHtmlText(line)}</p>`)

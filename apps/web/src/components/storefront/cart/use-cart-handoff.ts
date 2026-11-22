@@ -6,11 +6,10 @@ import { loadDestinationCart } from './cart-handoff-destination-loader';
 import {
   type Choice,
   clearActiveHandoff,
-  clearHandoffAttempt,
+  clearTerminalHandoff,
   fetchJson,
   loadActiveHandoff,
   loadAttemptBody,
-  loadOrCreateAttemptId,
   lockedAttemptChoice,
   type MergeConflictView,
   mergeResolutionList,
@@ -20,7 +19,9 @@ import {
   recordResolutionList,
   redactHandoffFragment,
 } from './cart-handoff-support';
+import { prepareHandoffRedeemBody } from './prepare-handoff-redeem-body';
 import { useHandoffRedeem } from './use-handoff-redeem';
+import { useMcpHandoffAutoImport } from './use-mcp-handoff-auto-import';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
   const { token, handoffId } = props;
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -58,6 +59,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   }, []);
 
   const loadStarted = useRef(false);
+  const autoImport = useMcpHandoffAutoImport(handoffId, token, redeem);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: this effect loads once; refresh is intentionally user-triggered thereafter.
   useEffect(() => {
@@ -67,17 +69,6 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     redeem.restorePersistedAttempt();
     void loadPreview();
   }, []);
-
-  function loadDestination(
-    slug: string | null,
-    signal?: AbortSignal
-  ): Promise<void> {
-    return loadDestinationCart(
-      { bootstrapRequired, setDestCart, setDestChecked, setDestinationError },
-      slug,
-      signal
-    );
-  }
 
   async function loadPreview(
     signal?: AbortSignal
@@ -109,9 +100,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         // Definitive failure: the link is dead, so drop the locator
         // and attempt state instead of restoring this screen on every
         // later cart-page load. Retryable failures keep them.
-        clearHandoffAttempt(handoffId);
-        clearActiveHandoff(handoffId);
-        redeem.clearLockedChoice();
+        clearTerminalHandoff(handoffId, redeem.clearLockedChoice);
         setLoadError(
           'This link is no longer valid. Ask the sender for a fresh one.'
         );
@@ -121,15 +110,26 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       if (payload.merchant?.slug)
         recordActiveHandoff(token, handoffId, payload.merchant.slug);
       if (payload.status === 'pending') {
-        await loadDestination(payload.merchant?.slug ?? null, signal);
+        const destination = await loadDestinationCart(
+          {
+            bootstrapRequired,
+            setDestCart,
+            setDestChecked,
+            setDestinationError,
+            incoming: payload.snapshot
+              ? { cart: payload.snapshot, handoffId }
+              : undefined,
+          },
+          payload.merchant?.slug ?? null,
+          signal
+        );
+        await autoImport(payload, destination, signal);
       } else {
         setDestChecked(true);
         if (payload.status === 'expired') {
           // Terminal: drop the attempt and locator so later cart-page
           // loads do not restore this dead continuation.
-          clearHandoffAttempt(handoffId);
-          clearActiveHandoff(handoffId);
-          redeem.clearLockedChoice();
+          clearTerminalHandoff(handoffId, redeem.clearLockedChoice);
         }
         if (payload.status === 'consumed') {
           // A link consumed by our own earlier attempt (whose success
@@ -150,6 +150,11 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
             // Terminal with nothing to replay: drop the locator so
             // later cart-page loads do not restore this dead handoff.
             clearActiveHandoff(handoffId);
+            if (payload.importMcp) {
+              window.location.replace(
+                window.location.pathname + window.location.search
+              );
+            }
           }
         }
       }
@@ -184,16 +189,14 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       await postRedeem(persistedBody);
       return;
     }
-    const attemptId = loadOrCreateAttemptId(handoffId);
-    const base = {
-      attemptId,
-      choice,
-      destCartId: destCart?.cartId,
-      expectedDestVersion: destCart?.version,
-      expectedIncomingVersion: preview.snapshot.version,
+    const base = prepareHandoffRedeemBody(
+      preview,
+      destCart,
       handoffId,
       token,
-    };
+      choice
+    );
+    if (!base) return;
     if (choice !== 'merge' || !destCart) {
       // Lock only once a redemption is actually about to be sent:
       // client-side preflight exits (capacity, conflicts) commit
@@ -255,18 +258,19 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       );
       return;
     }
-    lockChoice('merge');
-    const attemptId = loadOrCreateAttemptId(handoffId);
-    const ok = await postRedeem({
-      attemptId,
-      choice: 'merge',
-      destCartId: destCart.cartId,
-      expectedDestVersion: destCart.version,
-      expectedIncomingVersion: preview.snapshot.version,
+    const base = prepareHandoffRedeemBody(
+      preview,
+      destCart,
       handoffId,
+      token,
+      'merge'
+    );
+    if (!base) return;
+    lockChoice('merge');
+    const ok = await postRedeem({
+      ...base,
       lines: planned.lines,
       resolutions: resolutionList,
-      token,
     });
     if (ok) {
       setConflicts([]);

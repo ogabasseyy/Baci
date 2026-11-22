@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { mapPartnerDeliveryConflict } from '@/lib/shipping/map-partner-delivery-conflict';
 
 /**
  * Map known wallet-charge trigger rejections to stable 409 responses so
@@ -9,6 +10,9 @@ export function mapOrderPatchUpdateError(updateError: {
   message?: string;
 }): NextResponse | null {
   const message = updateError.message ?? '';
+
+  const partnerConflict = mapPartnerDeliveryConflict(message);
+  if (partnerConflict) return partnerConflict;
 
   if (message.includes('active_shipping_charge_address_edit_blocked')) {
     return NextResponse.json(

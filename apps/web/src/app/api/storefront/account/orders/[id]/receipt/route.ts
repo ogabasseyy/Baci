@@ -8,6 +8,7 @@ import {
   getStorefrontAccountDocumentData,
   StorefrontAccountDocumentError,
 } from '@/lib/storefront-account-document-data';
+import { paidOrderDocumentVersionSchema } from '@/schemas/order-amendment-document';
 import {
   storefrontAccountDocumentParamsSchema,
   storefrontAccountDocumentQuerySchema,
@@ -45,12 +46,17 @@ export async function GET(
   const parsedParams = storefrontAccountDocumentParamsSchema.safeParse(
     await params
   );
-  const merchantSlug = new URL(request.url).searchParams.get('merchantSlug');
+  const search = new URL(request.url).searchParams;
+  const merchantSlug = search.get('merchantSlug');
+  const revision = search.get('revision');
+  const version = paidOrderDocumentVersionSchema.safeParse(
+    revision ?? 'current'
+  );
   const parsedQuery = storefrontAccountDocumentQuerySchema.safeParse({
     merchantSlug,
   });
 
-  if (!parsedParams.success || !parsedQuery.success) {
+  if (!parsedParams.success || !parsedQuery.success || !version.success) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
@@ -75,6 +81,9 @@ export async function GET(
       userId: auth.user.id,
       merchantSlug: parsedQuery.data.merchantSlug,
       orderId: parsedParams.data.id,
+      ...(version.data === 'current'
+        ? { view: 'fulfilled_receipt' as const }
+        : { version: version.data }),
     });
 
     if (!data.order.receipt_eligible) {
@@ -103,7 +112,7 @@ export async function GET(
         'Content-Type': 'application/pdf',
         'Content-Disposition': buildPdfContentDisposition(
           'receipt',
-          data.order.order_number
+          data.receiptOrder.order_number
         ),
         'Cache-Control': 'private, no-store',
       },

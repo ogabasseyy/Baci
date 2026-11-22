@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { getOxygenStagingProfile } from './oxygen-staging-profile';
 import { isStorefrontTelemetryExcluded } from './storefront-telemetry-excluded';
 
 type TrackingTransparencyPermission = {
@@ -33,13 +34,18 @@ async function tryLoadTrackingTransparency(): Promise<TrackingTransparencyModule
 }
 
 export function canRequestTrackingTransparency(): boolean {
-  return Platform.OS === 'ios' && !isStorefrontTelemetryExcluded();
+  return (
+    Platform.OS === 'ios' &&
+    !isStorefrontTelemetryExcluded() &&
+    !getOxygenStagingProfile()
+  );
 }
 
 export async function getTrackingPermissionStatus(): Promise<TrackingTransparencyPermission> {
   // Sanitized QA builds omit the native tracking usage description. Even a
   // permission read can terminate iOS; never load ATT or imply consent there.
-  if (isStorefrontTelemetryExcluded()) return { status: 'denied' };
+  if (isStorefrontTelemetryExcluded() || getOxygenStagingProfile())
+    return { status: 'denied' };
   if (!canRequestTrackingTransparency()) {
     return { status: 'granted' };
   }
@@ -60,7 +66,8 @@ export async function getTrackingPermissionStatus(): Promise<TrackingTransparenc
 export async function requestTrackingPermissionStatus(): Promise<TrackingTransparencyPermission> {
   // Sanitized QA builds omit the native tracking usage description. Even a
   // permission read can terminate iOS; never load ATT or imply consent there.
-  if (isStorefrontTelemetryExcluded()) return { status: 'denied' };
+  if (isStorefrontTelemetryExcluded() || getOxygenStagingProfile())
+    return { status: 'denied' };
   if (!canRequestTrackingTransparency()) {
     return { status: 'granted' };
   }

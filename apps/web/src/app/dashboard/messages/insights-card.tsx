@@ -10,7 +10,7 @@ import {
   type MerchantInboxInsightDays,
 } from '@/schemas/merchant-inbox-insights-query';
 import type { MerchantInboxInsights } from '@/schemas/merchant-inbox-insights-response';
-import { formatInsightDuration } from './insights-format';
+import { formatInsightCount, formatInsightDuration } from './insights-format';
 import { InsightsStat as Stat } from './insights-stat';
 
 type State =
@@ -62,7 +62,7 @@ export function InsightsCard() {
       {state.status === 'ready' ? (
         <dl
           className={cn(
-            'mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6'
+            'mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4'
           )}
         >
           <Stat
@@ -74,10 +74,18 @@ export function InsightsCard() {
             value={String(state.insights.customerMessages)}
           />
           <Stat
-            label="Your replies"
+            label="Replies sent (you and the assistant)"
             value={String(state.insights.storeReplies)}
           />
           <Stat label="Resolved" value={String(state.insights.resolved)} />
+          <Stat
+            label="New chats answered by assistant"
+            value={formatInsightCount(state.insights.handledByAi)}
+          />
+          <Stat
+            label="New chats handled by you"
+            value={formatInsightCount(state.insights.handledByMerchant)}
+          />
           <Stat
             label="First reply time"
             value={formatInsightDuration(

@@ -128,6 +128,9 @@ the coordinator then checks every line against the PiggyVest statement. Customer
    time: the customer was already paid once. Stop and ask the owner. The script
    refuses that wallet on purpose, so the extra amount needs a new reviewed
    change.
+7. After that, the daily PiggyVest reconciliation does this check every day:
+   it pages and lists any migrated wallet that holds money again (check 7 in
+   `piggyvest-daily-reconciliation.md`). Treat that page as in step 6.
 
 ## If something goes wrong
 

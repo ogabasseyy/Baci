@@ -36,14 +36,18 @@ describe('getAuthenticatedUser', () => {
     mocks.cookies.mockResolvedValue({ get: vi.fn() });
   });
 
-  it('tags a valid Authorization bearer session as bearer authentication', async () => {
+  it.each([
+    'Bearer token',
+    'bearer token',
+    'BEARER  token',
+  ])('tags %s as bearer authentication', async (authorization) => {
     const supabase = authClient({ id: 'bearer-user' });
     mocks.createSupabaseClient.mockReturnValue(supabase);
 
     await expect(
       getAuthenticatedUser(
         new Request('https://baci.test', {
-          headers: { Authorization: 'Bearer token' },
+          headers: { Authorization: authorization },
         })
       )
     ).resolves.toMatchObject({

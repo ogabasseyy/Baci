@@ -75,7 +75,6 @@ export function createRepository(
   overrides: Partial<OrderWalletFundingIntentRepository> = {}
 ) {
   const repository: OrderWalletFundingIntentRepository = {
-    ensureWalletPaymentAccount: vi.fn(async () => walletAccount),
     expireStaleWalletFundingIntents: vi.fn(async () => undefined),
     findActiveOrderIntent: vi.fn(async () => null),
     findActiveWalletAccountIntents: vi.fn(async () => []),

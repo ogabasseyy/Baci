@@ -18,6 +18,8 @@ export function readChatwootCommerceMessage(
   const prefixes = [
     'baci-cart-quantity:',
     'baci-cart-request:',
+    'baci-checkout-place-request:',
+    'baci-checkout-payment-status-request:',
     'baci-checkout-review-request:',
     'baci-delivery-options-request:',
     'baci-product-request:',

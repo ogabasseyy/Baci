@@ -70,6 +70,107 @@ describe('useOrderGiglQuoteRequester', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['order', 'order-1'] });
   });
 
+  it('rejects a quote when a newer stored destination arrives during the save', async () => {
+    let finishSave: (() => void) | undefined;
+    api.saveAddress.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        })
+    );
+    const { rerender, result } = renderRequester();
+    let request: Promise<unknown> | undefined;
+    await act(async () => {
+      request = result.current.fetch('order-1', false, signal);
+      await Promise.resolve();
+      rerender({
+        order: {
+          shipping_address: {
+            address: '99 New Street',
+            city: 'Yaba',
+            state: 'Lagos',
+            phone: '0801',
+          },
+        },
+      });
+    });
+
+    await act(async () => {
+      finishSave?.();
+      await expect(request).rejects.toMatchObject({
+        code: 'stale_order_quote_inputs',
+      });
+    });
+    expect(api.getQuote).not.toHaveBeenCalled();
+  });
+
+  it('accepts the saved destination when its refetch arrives before the save response', async () => {
+    let finishSave: (() => void) | undefined;
+    api.saveAddress.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        })
+    );
+    const { rerender, result } = renderRequester();
+    let request: Promise<unknown> | undefined;
+    await act(async () => {
+      request = result.current.fetch('order-1', false, signal);
+      await Promise.resolve();
+      rerender({
+        order: {
+          shipping_address: {
+            address: '1 Allen',
+            city: 'Ikeja',
+            state: 'Lagos',
+            phone: '0801',
+            name: 'Ada',
+          },
+        },
+      });
+    });
+
+    await act(async () => {
+      finishSave?.();
+      await expect(request).resolves.toMatchObject({
+        result: { quote: { price: 11000 } },
+      });
+    });
+    expect(api.getQuote).toHaveBeenCalledOnce();
+  });
+
+  it('accepts the same saved-address basis when a refetch only reorders keys', async () => {
+    let finishSave: (() => void) | undefined;
+    api.saveAddress.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        })
+    );
+    const { rerender, result } = renderRequester();
+    let request: Promise<unknown> | undefined;
+    await act(async () => {
+      request = result.current.fetch('order-1', false, signal);
+      await Promise.resolve();
+      rerender({
+        order: {
+          shipping_address: {
+            phone: '0801',
+            name: 'Ada',
+            address: '1 Allen',
+          },
+        },
+      });
+    });
+
+    await act(async () => {
+      finishSave?.();
+      await expect(request).resolves.toMatchObject({
+        result: { quote: { price: 11000 } },
+      });
+    });
+  });
+
   it('does not save again on retry while the cached order is still stale', async () => {
     const { result } = renderRequester();
     await act(() => result.current.fetch('order-1', false, signal));

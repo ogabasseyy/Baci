@@ -86,6 +86,24 @@ const PRE_START_ERROR_CODES = new Set([
   'PAYMENT_INIT_TIMEOUT',
 ]);
 
+const REQUOTE_CODES = new Set([
+  'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
+  'INTERNATIONAL_QUOTE_EXPIRED',
+  'INTERNATIONAL_QUOTE_ORDER_MISMATCH',
+  'INTERNATIONAL_QUOTE_PROVIDER_MISMATCH',
+  'INTERNATIONAL_QUOTE_REQUEST_MISSING',
+  'SHIPPING_QUOTE_REQUIRED',
+]);
+
+// A merchant mismatch signals that the quote belongs to another storefront,
+// not that this customer's address quote merely expired. Keep it on the hard
+// failure path rather than silently creating a fresh quote under this host.
+
+// A quote lookup failure is returned as a 500 and intentionally stays on the
+// generic pre-order error path. A transient server failure is not evidence that
+// the saved quote is invalid, so do not discard it and trigger another carrier
+// request automatically.
+
 export function handleCheckoutSubmitError(
   error: unknown,
   selectedPayment: PaymentMethodType,
@@ -93,9 +111,28 @@ export function handleCheckoutSubmitError(
   // (e.g. a provider-init throw): threading it lets the funnel failure
   // serialize behind order_created and join to the order instead of
   // arriving first with an undefined id.
-  orderId?: string
+  orderId?: string,
+  onShippingQuoteRejected?: () => void
 ) {
   if (error instanceof OrderError) {
+    const quoteCode =
+      error.code === 'VALIDATION_ERROR' && typeof error.details === 'string'
+        ? error.details.toUpperCase()
+        : '';
+    if (!orderId && REQUOTE_CODES.has(quoteCode)) {
+      trackError(
+        'checkout_shipping_quote_rejected',
+        'Delivery quote rejected before order creation',
+        { error_code: quoteCode, payment_method: selectedPayment }
+      );
+      onShippingQuoteRejected?.();
+      Alert.alert(
+        'Delivery quote changed',
+        'Review your delivery details and select a fresh shipping quote before placing your order.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
     if (
       !PRE_ORDER_ERROR_CODES.has(error.code) &&
       !PRE_START_ERROR_CODES.has(error.code)

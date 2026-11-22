@@ -9,10 +9,14 @@ import {
 const mocks = vi.hoisted(() => ({
   initiatePaystackRefund: vi.fn(),
   quarantineRefund: vi.fn(),
+  verifyTransaction: vi.fn(),
 }));
 
 vi.mock('@/lib/initiate-paystack-refund', () => ({
   initiateRefund: mocks.initiatePaystackRefund,
+}));
+vi.mock('@/lib/paystack', () => ({
+  verifyTransaction: mocks.verifyTransaction,
 }));
 
 vi.mock('./quarantine-order-cancellation-refund', () => ({
@@ -38,12 +42,19 @@ describe('initiatePaystackCancellationRefunds', () => {
     mockAcceptedRefund(mocks.initiatePaystackRefund, overrides);
   }
 
-  it('quarantines a sub-kobo leg instead of refunding the whole transaction', async () => {
+  it.each([
+    0.001,
+    0,
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])('quarantines an invalid refund leg of %s before calling Paystack', async (amount) => {
+    const invalidLeg = { ...transaction, amount };
     const refundIds = await initiatePaystackCancellationRefunds({
       order,
       refundedPaymentIds: new Set(),
       supabase,
-      transactions: [{ ...transaction, amount: 0.001 }],
+      transactions: [invalidLeg],
     });
 
     // 0.001 rounds to 0 kobo, which the provider call would read as a
@@ -51,9 +62,68 @@ describe('initiatePaystackCancellationRefunds', () => {
     // call goes out.
     expect(refundIds).toEqual([]);
     expect(mocks.initiatePaystackRefund).not.toHaveBeenCalled();
-    const subKobo = { ...transaction, amount: 0.001 };
     expect(mocks.quarantineRefund).toHaveBeenCalledWith(
-      expect.objectContaining({ transactions: [subKobo] })
+      expect.objectContaining({ transactions: [invalidLeg] })
+    );
+  });
+
+  it('refunds the certified gross but records only the order principal', async () => {
+    acceptedRefund();
+    await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [
+        {
+          ...transaction,
+          amount: 100,
+          gateway_response: {
+            amount: 10157,
+            requested_amount: 10000,
+            baci_paystack_checkout_customer_fee_minor: 157,
+          },
+        },
+      ],
+    });
+    expect(mocks.initiatePaystackRefund).toHaveBeenCalledExactlyOnceWith(
+      'PSK-1',
+      10157,
+      'Order cancelled',
+      undefined
+    );
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 100,
+        metadata: expect.objectContaining({
+          provider_refund_amount_minor: 10157,
+        }),
+      })
+    );
+  });
+
+  it('submits and records the exact remainder of an amended payment leg', async () => {
+    acceptedRefund();
+    await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [
+        { ...transaction, amount: 300_000, refundAmountMinor: 25_000_000 },
+      ],
+    });
+    expect(mocks.initiatePaystackRefund).toHaveBeenCalledExactlyOnceWith(
+      'PSK-1',
+      25_000_000,
+      'Order cancelled',
+      undefined
+    );
+    expect(insert).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        amount: 250_000,
+        metadata: expect.objectContaining({
+          payment_transaction_id: transaction.id,
+        }),
+      })
     );
   });
 

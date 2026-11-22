@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CustomerWalletPaymentAccountError } from '@/lib/customer-wallet-payment-accounts';
 import { createOrderWalletFundingIntent } from '@/lib/order-wallet-funding-intents';
 import {
   createRepository,
@@ -15,25 +14,18 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-describe('createOrderWalletFundingIntent provisioning fallbacks', () => {
+describe('createOrderWalletFundingIntent read-only account resolution', () => {
   beforeEach(() => {
     mockLoggerError.mockClear();
   });
 
-  it('returns a typed missing-phone fallback when checkout consent cannot provision a DVA', async () => {
+  it('requires the dedicated funding-account consent flow when no account exists', async () => {
     const repository = createRepository({
-      ensureWalletPaymentAccount: vi.fn(() => {
-        throw new CustomerWalletPaymentAccountError(
-          'CUSTOMER_PHONE_REQUIRED',
-          'Customer phone number is required'
-        );
-      }),
       resolveWalletPaymentAccount: vi.fn(async () => null),
     });
 
     const result = await createOrderWalletFundingIntent({
-      consent: true,
-      customer: { ...customer, phone: null },
+      customer,
       merchant,
       orderId: 'order-1',
       repository,
@@ -41,47 +33,21 @@ describe('createOrderWalletFundingIntent provisioning fallbacks', () => {
     });
 
     expect(result).toEqual({
-      code: 'CUSTOMER_PHONE_REQUIRED',
+      code: 'WALLET_DVA_CONSENT_REQUIRED',
       kind: 'fallback',
     });
+    expect(repository.insertOrderWalletFundingIntent).not.toHaveBeenCalled();
   });
 
-  it('returns a typed missing-name fallback when checkout consent cannot provision a DVA', async () => {
+  it('returns a setup fallback when the caller-scoped account read fails', async () => {
+    const error = new Error('RLS account lookup unavailable');
     const repository = createRepository({
-      ensureWalletPaymentAccount: vi.fn(() => {
-        throw new CustomerWalletPaymentAccountError(
-          'CUSTOMER_NAME_REQUIRED',
-          'Customer first and last names are required'
-        );
+      resolveWalletPaymentAccount: vi.fn(() => {
+        throw error;
       }),
-      resolveWalletPaymentAccount: vi.fn(async () => null),
     });
 
     const result = await createOrderWalletFundingIntent({
-      consent: true,
-      customer: { ...customer, first_name: null, last_name: null },
-      merchant,
-      orderId: 'order-1',
-      repository,
-      now: new Date('2026-05-26T12:00:00.000Z'),
-    });
-
-    expect(result).toEqual({
-      code: 'CUSTOMER_NAME_REQUIRED',
-      kind: 'fallback',
-    });
-  });
-
-  it('returns a setup fallback when DVA provisioning throws an unexpected error', async () => {
-    const repository = createRepository({
-      ensureWalletPaymentAccount: vi.fn(() => {
-        throw new Error('Paystack unavailable');
-      }),
-      resolveWalletPaymentAccount: vi.fn(async () => null),
-    });
-
-    const result = await createOrderWalletFundingIntent({
-      consent: true,
       customer,
       merchant,
       orderId: 'order-1',
@@ -93,12 +59,12 @@ describe('createOrderWalletFundingIntent provisioning fallbacks', () => {
       code: 'WALLET_DVA_SETUP_FAILED',
       kind: 'fallback',
     });
+    expect(repository.insertOrderWalletFundingIntent).not.toHaveBeenCalled();
     expect(mockLoggerError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to resolve wallet account for order funding intent',
         orderId: 'order-1',
       })
     );
-    expect(repository.insertOrderWalletFundingIntent).not.toHaveBeenCalled();
   });
 });

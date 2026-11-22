@@ -78,6 +78,15 @@ describe('renderRootStackScreens', () => {
     expect(tabsOptions.headerShown).toBe(false);
   });
 
+  it('disables interactive back gestures on Oxygen checkout so signature strokes cannot pop the screen', () => {
+    const oxygen = screens.find((screen) => screen.key === 'oxygen-checkout');
+
+    expect(oxygen?.props).toMatchObject({
+      name: 'oxygen-checkout',
+      options: { gestureEnabled: false },
+    });
+  });
+
   it('threads the muted background colour into the utilities screen', () => {
     const utilities = screens.find((child) => {
       const props = child.props as { name?: string };

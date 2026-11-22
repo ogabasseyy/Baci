@@ -82,6 +82,7 @@ it.each([
   );
   expect(action.status).toBe(503);
   expect(await action.json()).toEqual({
+    code: 'OXYGEN_RUNTIME_UNAVAILABLE',
     error: 'Provider connection unavailable',
   });
   expect(action.headers.get('cache-control')).toBe('no-store');

@@ -214,6 +214,80 @@ function connectBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('POST /api/storefront/cart/handoff/redeem', () => {
+  it('sets the active hint after import without replacing the website session proof', async () => {
+    mocks.cartPayload = {
+      ok: true,
+      currentVersion: 4,
+      grantId: DEST_GRANT_ID,
+      state: rawState({
+        cartId: DEST_CART_ID,
+        version: 4,
+        lines: [rawLine({ quantity: 2 })],
+      }),
+    };
+    const response = await postRedeem({
+      body: connectBody({ choice: 'import_mcp', destCartId: DEST_CART_ID }),
+      headers: { cookie: `baci-cart-${MERCHANT_ID}=${destSessionProof()}` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-cookie')).toContain(
+      `baci-cart-hint-${MERCHANT_ID}=1`
+    );
+    expect(response.headers.get('set-cookie')).not.toContain(
+      `baci-cart-${MERCHANT_ID}=`
+    );
+    expect(await response.json()).toMatchObject({
+      choice: 'import_mcp',
+      cart: { cartId: DEST_CART_ID, lines: [{ quantity: 2 }] },
+    });
+    expect(mocks.cartRpcCalls).toEqual([
+      {
+        name: 'commerce_cart_import_mcp_handoff',
+        args: expect.objectContaining({
+          p_handoff_id: HANDOFF_ID,
+          p_incoming_version: 3,
+        }),
+      },
+    ]);
+  });
+
+  it('rejects native and client-supplied MCP imports before the RPC', async () => {
+    const body = connectBody({
+      choice: 'import_mcp',
+      destCartId: DEST_CART_ID,
+    });
+    const native = await postRedeem({
+      body,
+      headers: { authorization: `Bearer ${destSessionProof()}` },
+    });
+    expect(native.status).toBe(403);
+    const forged = await postRedeem({
+      body: { ...body, lines: [] },
+      headers: { cookie: `baci-cart-${MERCHANT_ID}=${destSessionProof()}` },
+    });
+    expect(forged.status).toBe(400);
+    expect(mocks.cartRpcCalls).toHaveLength(0);
+  });
+
+  it('installs recovered website authority and tells the browser to resume the pending import', async () => {
+    mocks.cartPayload = {
+      ok: true,
+      replayed: true,
+      resumeImport: true,
+      grantId: DEST_GRANT_ID,
+      state: rawState({ cartId: DEST_CART_ID }),
+    };
+    const response = await postRedeem({
+      body: connectBody({ choice: 'import_mcp' }),
+      headers: { cookie: `baci-cart-${MERCHANT_ID}=${destBootstrapProof()}` },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-cookie')).toContain(
+      `baci-cart-${MERCHANT_ID}=`
+    );
+    expect(await response.json()).toMatchObject({ resumeImport: true });
+  });
+
   it.each([
     'web',
     'native',
@@ -670,4 +744,20 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
       expect(JSON.stringify(call)).not.toContain('ch1.');
     }
   });
+});
+
+it('rejects a destination revision on an automatic MCP import', async () => {
+  const { cartHandoffRedeemRequestSchema } = await import('@/schemas/cart');
+  const body = connectBody({
+    choice: 'import_mcp',
+    destCartId: DEST_CART_ID,
+    expectedIncomingVersion: 1,
+  });
+  expect(cartHandoffRedeemRequestSchema.safeParse(body).success).toBe(true);
+  expect(
+    cartHandoffRedeemRequestSchema.safeParse({
+      ...body,
+      expectedDestVersion: 1,
+    }).success
+  ).toBe(false);
 });

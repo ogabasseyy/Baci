@@ -47,6 +47,7 @@ const NON_CACHEABLE_STOREFRONT_FIRST_SEGMENTS = new Set<string>([
   'delete-account',
   'receipts',
   'order-success',
+  'gift-cards',
   'member-status',
   'imei-check',
   'quiz',
@@ -115,6 +116,7 @@ const STOREFRONT_ROUTE_FIRST_SEGMENTS = new Set<string>([
 // otherwise it reaches the categorized PDP as before.
 const RETIRED_SLUG_STRIP_EXACT_LIVE_PAGE_SEGMENTS = new Set<string>([
   'black-friday',
+  'gift-cards',
   'unlock-orders',
 ]);
 

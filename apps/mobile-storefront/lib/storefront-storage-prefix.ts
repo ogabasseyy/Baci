@@ -1,6 +1,7 @@
 import { getHostedStorefrontConfiguration } from './hosted-storefront-configuration';
 import { hostedStorefrontRuntime } from './hosted-storefront-runtime';
 import { getLocalStorefrontStoragePrefix } from './local-storefront-storage-prefix';
+import { getOxygenStagingProfile } from './oxygen-staging-profile';
 
 export function getStorefrontStoragePrefix(
   mode: unknown = process.env.EXPO_PUBLIC_HOSTED_STOREFRONT,
@@ -8,6 +9,8 @@ export function getStorefrontStoragePrefix(
   trustedConfiguration?: { supabaseOrigins: readonly string[] },
   development = typeof __DEV__ !== 'undefined' && __DEV__
 ): string {
+  const oxygen = getOxygenStagingProfile();
+  if (oxygen) return oxygen.storagePrefix;
   if (mode === undefined || mode === '' || mode === '0')
     return getLocalStorefrontStoragePrefix();
   if (mode !== '1') throw new Error('Invalid hosted storage mode');

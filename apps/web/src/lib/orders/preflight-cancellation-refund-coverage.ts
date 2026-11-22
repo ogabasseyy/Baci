@@ -16,6 +16,7 @@ import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reason
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 
 export interface CancellationRefundCoveragePreflight {
+  amendmentRemainders: Map<string, number>;
   linkedPaymentId: (row: { metadata: unknown }) => string | null;
   manualLinkedLegIds: Set<string>;
   manualPendingLegIds: Set<string>;
@@ -63,6 +64,7 @@ export async function preflightCancellationRefundCoverage({
     unlinkedRefunds,
   } = classifyCancellationRefundLinks(refundRows, linkLegs);
   const {
+    amendmentRemainders,
     manualLinkedLegIds,
     manualPendingLegIds,
     mismatchedIds,
@@ -203,6 +205,7 @@ export async function preflightCancellationRefundCoverage({
     throw new DeferredError('cancellation_refund_awaiting_provider_completion');
   }
   return {
+    amendmentRemainders,
     linkedPaymentId,
     manualLinkedLegIds,
     manualPendingLegIds: new Set([

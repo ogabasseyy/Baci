@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { isUsdtWalletEnabled } from '@/env';
@@ -7,7 +8,9 @@ import {
   getCachedMerchant,
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
+import { isGiftCardPreviewEnabled } from '@/lib/gift-cards/preview-catalog';
 import { isLocalStorefrontTest } from '@/lib/local-storefront-test';
+import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
@@ -68,6 +71,11 @@ async function WalletContent({ params, searchParams }: WalletPageProps) {
 
   return (
     <WalletContentSection
+      giftCardsHref={
+        isGiftCardPreviewEnabled(merchant.slug)
+          ? `${getStorefrontPathPrefix(await headers(), merchant)}/gift-cards`
+          : undefined
+      }
       localSavings={
         isLocalStorefrontTest() &&
         merchant.id === '10000000-0000-4000-8000-000000000001'

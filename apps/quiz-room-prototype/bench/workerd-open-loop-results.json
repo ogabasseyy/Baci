@@ -1,0 +1,50 @@
+{
+  "generatedAt": "2026-11-18T18:48:57.528Z",
+  "runtime": "wrangler-dev-local-workerd",
+  "loadPoints": [
+    {
+      "offeredRps": 100,
+      "totalScheduled": 250,
+      "completed": 250,
+      "droppedIterations": 0,
+      "errors": 0,
+      "achievedRps": 100.25020108345734,
+      "httpP50Ms": 2.078625000000102,
+      "httpP95Ms": 4.074166999999761,
+      "httpP99Ms": 7.657458000000133
+    },
+    {
+      "offeredRps": 250,
+      "totalScheduled": 625,
+      "completed": 625,
+      "droppedIterations": 0,
+      "errors": 0,
+      "achievedRps": 250.32978445804503,
+      "httpP50Ms": 1.5203329999994821,
+      "httpP95Ms": 3.3783329999996567,
+      "httpP99Ms": 8.73883399999977
+    },
+    {
+      "offeredRps": 400,
+      "totalScheduled": 1000,
+      "completed": 1000,
+      "droppedIterations": 0,
+      "errors": 0,
+      "achievedRps": 400.1865869961869,
+      "httpP50Ms": 1.278958999999304,
+      "httpP95Ms": 2.510582999999315,
+      "httpP99Ms": 4.939958000000843
+    },
+    {
+      "offeredRps": 600,
+      "totalScheduled": 1500,
+      "completed": 1500,
+      "droppedIterations": 0,
+      "errors": 0,
+      "achievedRps": 600.3423951993495,
+      "httpP50Ms": 1.2342079999998532,
+      "httpP95Ms": 6.804166999998415,
+      "httpP99Ms": 28.92108300000109
+    }
+  ]
+}

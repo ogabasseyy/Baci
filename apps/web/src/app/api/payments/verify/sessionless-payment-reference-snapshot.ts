@@ -1,8 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  type GuestPaymentReferenceSnapshot,
-  parsePaymentReferenceSnapshotRow,
-} from './guest-payment-reference-snapshot';
+import type { GuestPaymentReferenceSnapshot } from './guest-payment-reference-snapshot';
+import { readSessionlessPaymentReferenceSnapshot } from './read-sessionless-payment-reference-snapshot';
 
 /**
  * Bearer-owned read model for sessionless verification: the
@@ -19,18 +17,10 @@ export async function getSessionlessPaymentReferenceSnapshot(
   reference: string
 ): Promise<GuestPaymentReferenceSnapshot | null> {
   try {
-    const { data, error } = await bearerClient.rpc(
-      'get_sessionless_payment_reference_snapshot',
-      { p_gateway_reference: reference }
+    return await readSessionlessPaymentReferenceSnapshot(
+      bearerClient,
+      reference
     );
-    if (error) {
-      return null;
-    }
-    const row = Array.isArray(data) ? data[0] : null;
-    if (!row || typeof row !== 'object') {
-      return null;
-    }
-    return parsePaymentReferenceSnapshotRow(row as Record<string, unknown>);
   } catch {
     return null;
   }

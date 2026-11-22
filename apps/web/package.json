@@ -6,6 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "process:gift-card-petrock-order": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/process-gift-card-petrock-order.ts",
     "brilstash:build": "tsx src/scripts/build-brilstash-catalogue.ts",
     "brilstash:verify": "tsx src/scripts/verify-brilstash-feed.ts",
     "brilstash:manage": "tsx src/scripts/manage-brilstash-catalogue.ts",
@@ -51,6 +52,7 @@
     "process:event-deliveries": "tsx src/scripts/process-event-deliveries.ts",
     "reconcile:paystack-dva": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/reconcile-paystack-dva.ts",
     "reconcile:paystack:unmatched-partial": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/reconcile-paystack-unmatched-partial.ts",
+    "check:bank-offer-partial-refund": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/check-bank-offer-partial-refund.cli.ts",
     "sync:jumia-orders": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/sync-jumia-orders.ts",
     "mcp": "tsx mcp-server/server.ts",
     "test:checkout:build": "tsc --project tsconfig.checkout-browser.json && next build tests/checkout-browser/harness",

@@ -14,6 +14,7 @@ import {
   getStorefrontAccountDocumentData,
   StorefrontAccountDocumentError,
 } from '@/lib/storefront-account-document-data';
+import { paidOrderDocumentVersionSchema } from '@/schemas/order-amendment-document';
 import {
   storefrontAccountDocumentParamsSchema,
   storefrontAccountDocumentQuerySchema,
@@ -47,12 +48,17 @@ export async function GET(
   const parsedParams = storefrontAccountDocumentParamsSchema.safeParse(
     await params
   );
-  const merchantSlug = new URL(request.url).searchParams.get('merchantSlug');
+  const search = new URL(request.url).searchParams;
+  const merchantSlug = search.get('merchantSlug');
+  const revision = search.get('revision');
+  const version = paidOrderDocumentVersionSchema.safeParse(
+    revision ?? 'original'
+  );
   const parsedQuery = storefrontAccountDocumentQuerySchema.safeParse({
     merchantSlug,
   });
 
-  if (!parsedParams.success || !parsedQuery.success) {
+  if (!parsedParams.success || !parsedQuery.success || !version.success) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
@@ -77,6 +83,7 @@ export async function GET(
       userId: auth.user.id,
       merchantSlug: parsedQuery.data.merchantSlug,
       orderId: parsedParams.data.id,
+      ...(revision ? { version: version.data } : {}),
     });
     // Manual orders live or die by the availability gate like the archive:
     // a sender-refused manual row (failed content validity, cancelled)
@@ -135,6 +142,7 @@ export async function GET(
 
     const receiptOrder = {
       ...data.receiptOrder,
+      order_number: data.invoiceData.invoice_number,
       items: mergeReceiptItemsWithInvoiceMetadata(
         data.receiptOrder.items,
         data.invoiceData.items
@@ -162,7 +170,7 @@ export async function GET(
         'Content-Type': 'application/pdf',
         'Content-Disposition': buildPdfContentDisposition(
           data.invoiceData.invoice_type_code === '325' ? 'proforma' : 'invoice',
-          data.order.order_number
+          data.invoiceData.invoice_number
         ),
         'Cache-Control': 'private, no-store',
       },

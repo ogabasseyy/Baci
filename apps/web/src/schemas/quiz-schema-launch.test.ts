@@ -67,4 +67,42 @@ describe('merchantQuizActivationV2RequestSchema', () => {
       }).success
     ).toBe(false);
   });
+
+  it('rejects edgeRoomCount unless backendMode is edge_rooms', () => {
+    const base = {
+      answerKeyReview: { questions: [{ correctOptionId: 'a', position: 1 }] },
+      confirmActivation: true,
+      eventId: '11111111-1111-4111-8111-111111111111',
+      maxAttempts: 10,
+      mode: 'test',
+      rulesVersion: 'test-v1',
+      timePerQuestionSeconds: 10,
+      timeZone: 'Africa/Lagos',
+      timing: { kind: 'immediate', liveWindowSeconds: 300 },
+      variantsPerQuestion: 1,
+    };
+
+    expect(
+      merchantQuizActivationV2RequestSchema.safeParse({
+        ...base,
+        edgeRoomCount: 8,
+      }).success
+    ).toBe(false);
+
+    expect(
+      merchantQuizActivationV2RequestSchema.safeParse({
+        ...base,
+        backendMode: 'postgres',
+        edgeRoomCount: 8,
+      }).success
+    ).toBe(false);
+
+    expect(
+      merchantQuizActivationV2RequestSchema.safeParse({
+        ...base,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 8,
+      }).success
+    ).toBe(true);
+  });
 });

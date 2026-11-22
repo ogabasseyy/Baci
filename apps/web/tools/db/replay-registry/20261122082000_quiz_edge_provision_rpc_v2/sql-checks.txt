@@ -1,0 +1,1 @@
+supabase/tests/quiz_edge_provision_rpc_v2.sql

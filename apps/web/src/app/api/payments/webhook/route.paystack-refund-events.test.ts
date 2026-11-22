@@ -134,6 +134,35 @@ describe('POST /api/payments/webhook paystack refund events', () => {
     );
   });
 
+  it('routes a signed bank-offer dispute before the charge-success gate', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const body = {
+      event: 'charge.dispute.create',
+      data: { id: 42, transaction: { reference } },
+    };
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+    mockServiceClient.rpc = rpc;
+    const response = await POST(
+      createMockRequest(body, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(body),
+          'test-paystack-secret'
+        ),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      code: 'BANK_CARD_OFFER_DISPUTE_REVIEW',
+    });
+    expect(rpc).toHaveBeenCalledWith('record_bank_card_offer_dispute', {
+      p_dispute_id: '42',
+      p_event: body.event,
+      p_outcome: 'open',
+      p_reference: reference,
+    });
+    expect(mockReconcilePaystackRefundEvent).not.toHaveBeenCalled();
+  });
+
   it('rejects a malformed Paystack refund payload before reconciling', async () => {
     const body = {
       event: 'refund.processed',

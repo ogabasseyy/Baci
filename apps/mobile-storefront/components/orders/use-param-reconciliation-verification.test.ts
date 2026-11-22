@@ -1,9 +1,13 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import { useParamReconciliationVerification } from './use-param-reconciliation-verification';
 
 jest.mock('@/components/payment-gateway/verify-order-payment', () => ({
   verifyOrderPaymentForCompletion: jest.fn(),
+}));
+jest.mock('@/lib/deferred-bank-offer-cart', () => ({
+  deferredBankOfferCart: { clearIfUnchanged: jest.fn(async () => undefined) },
 }));
 
 const mockedVerify = verifyOrderPaymentForCompletion as jest.Mock;
@@ -16,6 +20,56 @@ describe('useParamReconciliationVerification', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('clears the saved basket only after verified bank-offer settlement', async () => {
+    mockedVerify
+      .mockResolvedValueOnce({ paid: false })
+      .mockResolvedValueOnce({ paid: true });
+    const reference = `BCO-${'d'.repeat(32)}`;
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        reference,
+        retryDelayMs: 100,
+      })
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
+    expect(result.current.bankOfferPaid).toBe(false);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(100);
+    });
+    expect(deferredBankOfferCart.clearIfUnchanged).toHaveBeenCalledWith(
+      'order-1',
+      reference,
+      expect.any(Function)
+    );
+    expect(result.current.verified).toBe(false);
+    expect(result.current.bankOfferPaid).toBe(true);
+  });
+
+  it('still reports the verified payment when cart cleanup fails', async () => {
+    mockedVerify.mockResolvedValueOnce({ paid: true });
+    jest
+      .mocked(deferredBankOfferCart.clearIfUnchanged)
+      .mockRejectedValueOnce(new Error('private storage details'));
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        reference: `BCO-${'d'.repeat(32)}`,
+      })
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.bankOfferPaid).toBe(true);
   });
 
   it('resolves true for a verified reconciliation arrival', async () => {
@@ -55,6 +109,56 @@ describe('useParamReconciliationVerification', () => {
       await Promise.resolve();
     });
     expect(result.current.verified).toBe(false);
+    expect(result.current.exhausted).toBe(false);
+    expect(result.current.bankOfferPaid).toBe(false);
+  });
+
+  it('leaves a bank offer pending until provider verification confirms a verdict', async () => {
+    mockedVerify.mockResolvedValueOnce({ paid: false }).mockResolvedValueOnce({
+      paid: false,
+      reconciliation: 'payment_reversed',
+    });
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        reference: `BCO-${'d'.repeat(32)}`,
+        retryDelayMs: 100,
+      })
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.verified).toBeUndefined();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(100);
+    });
+    expect(result.current.verified).toBe(true);
+    expect(result.current.reconciliation).toBe('payment_reversed');
+  });
+
+  it.each([
+    'failed',
+    'cancelled',
+    'abandoned',
+  ])('stops retrying a definitively %s bank offer', async (terminalFailure) => {
+    mockedVerify.mockResolvedValue({ paid: false, terminalFailure });
+    const { result } = renderHook(() =>
+      useParamReconciliationVerification({
+        isParamReconciliation: true,
+        requireVerifiedPayment: true,
+        orderId: 'order-1',
+        reference: `BCO-${'d'.repeat(32)}`,
+        retryDelayMs: 100,
+      })
+    );
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(500);
+    });
+    expect(mockedVerify).toHaveBeenCalledTimes(1);
+    expect(result.current.reconciliation).toBe('payment_failed');
     expect(result.current.exhausted).toBe(false);
   });
 

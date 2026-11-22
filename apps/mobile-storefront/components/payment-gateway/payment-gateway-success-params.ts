@@ -1,4 +1,5 @@
 import type { OrderCompletionContext } from './payment-gateway-order-completion';
+import type { OrderPaymentVerification } from './verify-order-payment';
 
 /**
  * Success-route parameters for the order confirmation screen. The
@@ -12,7 +13,7 @@ import type { OrderCompletionContext } from './payment-gateway-order-completion'
 export function buildOrderSuccessParams(
   context: OrderCompletionContext,
   verifiedOrderNumber: string | undefined,
-  reconciliation?: 'order_cancelled' | 'order_skipped'
+  reconciliation?: OrderPaymentVerification['reconciliation']
 ) {
   const {
     gateway,

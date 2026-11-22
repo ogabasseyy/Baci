@@ -1,9 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { type OxygenProofPicker, useOxygenProof } from './use-oxygen-proof';
 
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }), {
-  virtual: true,
-});
+jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
 jest.mock('expo-file-system', () => ({ File: jest.fn() }));
 describe('transient Oxygen proof', () => {
   const asset = {

@@ -64,6 +64,7 @@ import {
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { initializeBankCardOfferRequest } from './initialize-bank-card-offer-request';
 import { retiredGatewayResponse } from './retired-gateway';
 
 // Types & Constants
@@ -154,7 +155,7 @@ const PaymentInitRequestSchema = z.object({
   // Crypto payment options (only for juicyway gateway)
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
-  payment_method: z.literal('uba_redvault').optional(),
+  payment_method: z.enum(['uba_redvault', 'bank_card_offer']).optional(),
   // Order-bound proof for guest REDVAULT initialization (below).
   tracking_token: z.string().min(1).max(128).optional(),
 });
@@ -1041,9 +1042,8 @@ async function initializeKorapay(
 
 export async function POST(request: NextRequest) {
   try {
-    // CSRF exemption: This is a public storefront endpoint for checkout payment.
-    // Guest users do not have CSRF tokens. The route validates order ownership
-    // via get_order_payment_snapshot RPC (order_id + email match).
+    // Standard guest checkout validates order ownership with the payment
+    // snapshot RPC. Signed-in bank offers also require CSRF protection.
 
     // Parse and validate request body
     const body = await request.clone().json();
@@ -1060,6 +1060,19 @@ export async function POST(request: NextRequest) {
     const data = parseResult.data;
     const retired = retiredGatewayResponse(data.gateway);
     if (retired) return retired;
+    if (data.payment_method === 'bank_card_offer') {
+      return await initializeBankCardOfferRequest(
+        request,
+        data,
+        async (merchantId, userId) =>
+          createStorefrontOrderRpcClient({
+            fallbackClient: await createServerSupabaseClient(),
+            hasCanonicalDeliveryMetadata: false,
+            merchantId,
+            userId,
+          })
+      );
+    }
     const redvaultRequested = data.payment_method === 'uba_redvault';
     const redvaultCustomerAuth = redvaultRequested
       ? await authenticateApiRequest(request)
@@ -1170,6 +1183,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (orderSnapshot.payment_method === 'bank_card_offer') {
+      return createErrorResponse(
+        'This order requires bank card offer payment initialization',
+        'BANK_CARD_OFFER_PAYMENT_METHOD_REQUIRED',
+        409
+      );
+    }
     const orderRequiresRedvault =
       orderSnapshot.payment_method === 'uba_redvault';
     if (orderRequiresRedvault && !redvaultRequested) {

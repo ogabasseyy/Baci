@@ -1,11 +1,17 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import { useEffect, useState } from 'react';
-import { verifyOrderPaymentForCompletion } from '@/components/payment-gateway/verify-order-payment';
+import {
+  type OrderPaymentVerification,
+  verifyOrderPaymentForCompletion,
+} from '@/components/payment-gateway/verify-order-payment';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 
 interface ParamReconciliationVerificationInput {
   isParamReconciliation: boolean;
   orderId?: string;
   trackingToken?: string;
   reference?: string;
+  requireVerifiedPayment?: boolean;
   /**
    * Bounded retries for inconclusive (transient) verification. A
    * reconciliation deep link that hits a network/parse failure must
@@ -23,6 +29,9 @@ export interface ParamReconciliationVerification {
    * success, and exhaustion (below) is never success either.
    */
   verified: boolean | undefined;
+  bankOfferPaid: boolean;
+  invalidPaymentLink: boolean;
+  reconciliation: OrderPaymentVerification['reconciliation'] | 'payment_failed';
   /**
    * True once the bounded retries are spent while the lookup stays
    * inconclusive (e.g. a network/API outage), or immediately when the
@@ -51,18 +60,26 @@ export function useParamReconciliationVerification({
   orderId,
   trackingToken,
   reference,
+  requireVerifiedPayment = false,
   maxAttempts = 3,
   retryDelayMs = 750,
 }: ParamReconciliationVerificationInput): ParamReconciliationVerification {
-  const [verified, setVerified] = useState<boolean | undefined>(undefined);
+  const invalidPaymentLink =
+    requireVerifiedPayment &&
+    (!reference || !BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference));
+  const [outcome, setOutcome] = useState<
+    | ParamReconciliationVerification['reconciliation']
+    | 'bank_offer_paid'
+    | false
+  >(undefined);
   const [exhausted, setExhausted] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers bounded verification after exhaustion; the attempt counter restarts inside the effect on each run.
   useEffect(() => {
-    setVerified(undefined);
+    setOutcome(undefined);
     setExhausted(false);
-    if (!isParamReconciliation) {
+    if (!isParamReconciliation || invalidPaymentLink) {
       return;
     }
     if (!orderId) {
@@ -81,11 +98,19 @@ export function useParamReconciliationVerification({
         orderId,
         trackingToken,
         reference,
-      }).then((result) => {
+      }).then(async (result) => {
         if (cancelled) {
           return;
         }
-        if (result.inconclusive && !result.reconciliation) {
+        if (requireVerifiedPayment && result.terminalFailure) {
+          setOutcome('payment_failed');
+          return;
+        }
+        if (
+          !result.reconciliation &&
+          !result.paid &&
+          (result.inconclusive || requireVerifiedPayment)
+        ) {
           attempt += 1;
           if (attempt < maxAttempts) {
             retryTimer = setTimeout(runVerification, retryDelayMs * attempt);
@@ -97,7 +122,20 @@ export function useParamReconciliationVerification({
           setExhausted(true);
           return;
         }
-        setVerified(!!result.reconciliation);
+        if (requireVerifiedPayment && result.paid && reference) {
+          // Cart storage failures are logged in the helper and retain the
+          // snapshot for retry. They must not alter the verified payment.
+          await deferredBankOfferCart
+            .clearIfUnchanged(orderId, reference, () => !cancelled)
+            .catch(() => undefined);
+        }
+        if (!cancelled)
+          setOutcome(
+            result.reconciliation ??
+              (requireVerifiedPayment && result.paid
+                ? 'bank_offer_paid'
+                : false)
+          );
       });
     };
     runVerification();
@@ -112,9 +150,11 @@ export function useParamReconciliationVerification({
     orderId,
     trackingToken,
     reference,
+    requireVerifiedPayment,
     maxAttempts,
     retryDelayMs,
     retryNonce,
+    invalidPaymentLink,
   ]);
 
   // Plain closure: React Compiler handles memoization (AGENTS.md).
@@ -122,5 +162,16 @@ export function useParamReconciliationVerification({
     setRetryNonce((nonce) => nonce + 1);
   };
 
-  return { verified, exhausted, retry };
+  return {
+    invalidPaymentLink,
+    verified:
+      outcome === undefined
+        ? undefined
+        : outcome !== false && outcome !== 'bank_offer_paid',
+    bankOfferPaid: outcome === 'bank_offer_paid',
+    reconciliation:
+      outcome === 'bank_offer_paid' ? undefined : outcome || undefined,
+    exhausted,
+    retry,
+  };
 }

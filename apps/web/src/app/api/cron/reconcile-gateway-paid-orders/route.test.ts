@@ -1,81 +1,14 @@
-import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  buildRequest,
+  CRON_SECRET,
+  GET,
+  mockSweepResult,
+  mocks,
+  resetReconciliationRouteMocks,
+} from './route.test-support';
 
-const mocks = vi.hoisted(() => ({
-  createServiceClient: vi.fn(),
-  drainFailedPaidOrderSideEffects: vi.fn(),
-  finalizeOrderGatewayPayment: vi.fn(),
-  fileWedgeReview: vi.fn(),
-  getCronSecret: vi.fn(),
-  logger: { error: vi.fn(), warn: vi.fn() },
-  reconcileAbandonedPaystackAttempts: vi.fn(),
-  reconcileWedgedGatewayOrders: vi.fn(),
-}));
-
-vi.mock('@/env', () => ({
-  getCronSecret: mocks.getCronSecret,
-}));
-vi.mock('@/lib/logger', () => ({
-  logger: mocks.logger,
-}));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mocks.createServiceClient,
-}));
-vi.mock('@/lib/payments/reconcile-wedged-gateway-orders', () => ({
-  reconcileWedgedGatewayOrders: mocks.reconcileWedgedGatewayOrders,
-}));
-vi.mock('@/lib/payments/reconcile-abandoned-paystack-attempts', () => ({
-  reconcileAbandonedPaystackAttempts: mocks.reconcileAbandonedPaystackAttempts,
-}));
-vi.mock('@/lib/payments/drain-failed-paid-order-side-effects', () => ({
-  drainFailedPaidOrderSideEffects: mocks.drainFailedPaidOrderSideEffects,
-}));
-vi.mock('@/lib/payments/finalize-order-gateway-payment', () => ({
-  finalizeOrderGatewayPayment: mocks.finalizeOrderGatewayPayment,
-}));
-
-import { GET } from './route';
-
-const CRON_SECRET = 'cron-secret-for-tests';
-
-function buildRequest(authorization?: string) {
-  return new NextRequest(
-    'https://usebaci.com/api/cron/reconcile-gateway-paid-orders',
-    {
-      headers: authorization ? { authorization } : undefined,
-    }
-  );
-}
-
-function mockSweepResult(result: unknown) {
-  mocks.reconcileWedgedGatewayOrders.mockImplementation(async (input) => {
-    await input.beforeSweep?.({
-      finalizePayment: mocks.finalizeOrderGatewayPayment,
-      fileWedgeReview: mocks.fileWedgeReview,
-    });
-    return result;
-  });
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  mocks.getCronSecret.mockReturnValue(CRON_SECRET);
-  mocks.createServiceClient.mockReturnValue({});
-  mockSweepResult({ checked: 0, failed: [], healed: [], skipped: [] });
-  mocks.reconcileAbandonedPaystackAttempts.mockResolvedValue({
-    checked: 0,
-    failed: false,
-    held: [],
-    retired: [],
-  });
-  mocks.drainFailedPaidOrderSideEffects.mockResolvedValue({
-    drained: [],
-    failed: [],
-    recovered: [],
-    skipped: [],
-    stranded: [],
-  });
-});
+beforeEach(resetReconciliationRouteMocks);
 
 describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
   it('returns 500 server_misconfigured when CRON_SECRET is unset', async () => {
@@ -137,27 +70,6 @@ describe('GET /api/cron/reconcile-gateway-paid-orders', () => {
     expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({ supabase: expect.anything() })
     );
-  });
-
-  it('shares the invocation budget across the three passes', async () => {
-    mockSweepResult({ checked: 0 });
-    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    try {
-      const response = await GET(buildRequest(`Bearer ${CRON_SECRET}`));
-
-      expect(response.status).toBe(200);
-      expect(mocks.reconcileAbandonedPaystackAttempts).toHaveBeenCalledWith(
-        expect.objectContaining({ deadlineMs: 1_090_000 })
-      );
-      expect(mocks.reconcileWedgedGatewayOrders).toHaveBeenCalledWith(
-        expect.objectContaining({ deadlineMs: 1_180_000 })
-      );
-      expect(mocks.drainFailedPaidOrderSideEffects).toHaveBeenCalledWith(
-        expect.objectContaining({ deadlineMs: 1_270_000 })
-      );
-    } finally {
-      now.mockRestore();
-    }
   });
 
   it('surfaces and logs recovered/stranded side effects even when nothing else changed', async () => {

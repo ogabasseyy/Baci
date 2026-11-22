@@ -52,6 +52,7 @@
     "process:event-deliveries": "tsx src/scripts/process-event-deliveries.ts",
     "reconcile:paystack-dva": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/reconcile-paystack-dva.ts",
     "reconcile:paystack:unmatched-partial": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/reconcile-paystack-unmatched-partial.ts",
+    "check:bank-offer-partial-refund": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/check-bank-offer-partial-refund.cli.ts",
     "sync:jumia-orders": "NODE_OPTIONS=--conditions=react-server tsx src/scripts/sync-jumia-orders.ts",
     "mcp": "tsx mcp-server/server.ts",
     "test:checkout:build": "tsc --project tsconfig.checkout-browser.json && next build tests/checkout-browser/harness",

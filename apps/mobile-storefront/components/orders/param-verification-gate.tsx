@@ -3,6 +3,7 @@ import { OrderReconciliationErrorView } from '@/components/orders/OrderReconcili
 import type Colors from '@/constants/Colors';
 
 interface ParamVerificationGateInput {
+  invalidPaymentLink: boolean;
   isParamReconciliation: boolean;
   paramReconciliationVerified: boolean | undefined;
   isParamVerificationExhausted: boolean;
@@ -11,6 +12,7 @@ interface ParamVerificationGateInput {
   isDark: boolean;
   orderNumber?: string;
   onContinueShopping: () => void;
+  onViewOrders: () => void;
 }
 
 /**
@@ -22,6 +24,7 @@ interface ParamVerificationGateInput {
  * Extracted from the order-success screen (300-line file limit).
  */
 export function renderParamVerificationGate({
+  invalidPaymentLink,
   isParamReconciliation,
   paramReconciliationVerified,
   isParamVerificationExhausted,
@@ -30,22 +33,22 @@ export function renderParamVerificationGate({
   isDark,
   orderNumber,
   onContinueShopping,
+  onViewOrders,
 }: ParamVerificationGateInput): ReactNode | undefined {
   const unresolved =
     isParamReconciliation && paramReconciliationVerified === undefined;
-  if (unresolved && !isParamVerificationExhausted) {
-    return null;
-  }
-  if (unresolved && isParamVerificationExhausted) {
+  if (invalidPaymentLink || (unresolved && isParamVerificationExhausted)) {
     return (
       <OrderReconciliationErrorView
         colors={colors}
         isDark={isDark}
-        orderNumber={orderNumber}
-        onRetry={retryParamVerification}
+        invalidPaymentLink={invalidPaymentLink}
+        orderNumber={invalidPaymentLink ? undefined : orderNumber}
+        onRetry={invalidPaymentLink ? undefined : retryParamVerification}
+        onViewOrders={invalidPaymentLink ? onViewOrders : undefined}
         onContinueShopping={onContinueShopping}
       />
     );
   }
-  return undefined;
+  return unresolved ? null : undefined;
 }

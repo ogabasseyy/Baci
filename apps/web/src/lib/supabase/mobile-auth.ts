@@ -18,10 +18,9 @@ export async function getAuthenticatedUser(request: Request) {
 
   // Check for Bearer token from Authorization header (mobile/API)
   const authHeader = request.headers.get('Authorization');
+  const accessToken = authHeader?.match(/^bearer\s+(.+)$/i)?.[1].trim();
 
-  if (authHeader?.startsWith('Bearer ')) {
-    const accessToken = authHeader.slice(7);
-
+  if (accessToken) {
     const supabase = createSupabaseClient(url, anonKey, {
       auth: {
         autoRefreshToken: false,

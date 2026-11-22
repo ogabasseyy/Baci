@@ -7,6 +7,7 @@ import {
   providerInboxMessageListSchema,
 } from '@/schemas/merchant-inbox';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
+import { readCustomerLinkToken } from './merchant-inbox-customer-link';
 import {
   compareMerchantInboxMessages,
   projectMerchantInboxConversation,
@@ -88,7 +89,13 @@ export async function listMerchantInboxConversations(
     view?: MerchantInboxView;
   }
 ): Promise<
-  | { ok: true; conversations: MerchantInboxConversation[]; hasMore: boolean }
+  | {
+      ok: true;
+      conversations: MerchantInboxConversation[];
+      hasMore: boolean;
+      /** Signed customer links by conversation id; verify before use. */
+      links: Record<number, string>;
+    }
   | MerchantInboxFailure
 > {
   const viewQuery = input.view ? providerQueryForView(input.view) : null;
@@ -111,8 +118,19 @@ export async function listMerchantInboxConversations(
   const parsed = providerInboxConversationListSchema.safeParse(response.body);
   if (!parsed.success) return { ok: false, code: 'unavailable' };
   const { payload } = parsed.data.data;
+  // Signed links ride along per conversation, outside the projected rows, so
+  // a token can never leak into a response by accident.
+  const links: Record<number, string> = {};
   const conversations = payload
-    .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
+    .map((raw) => {
+      const conversation = projectMerchantInboxConversation(
+        raw,
+        binding.inboxId
+      );
+      const token = conversation ? readCustomerLinkToken(raw) : null;
+      if (conversation && token) links[conversation.id] = token;
+      return conversation;
+    })
     .filter((value): value is MerchantInboxConversation => value !== null)
     .filter((value) => !input.view || matchesView(value, input.view))
     // Ordering must not depend on the provider honouring `sort_by`.
@@ -129,7 +147,7 @@ export async function listMerchantInboxConversations(
   // fetch. Measured on the provider's page, not on the rows kept for this
   // inbox, because that is what decides whether a next page exists.
   const hasMore = payload.length > 0;
-  return { ok: true, conversations, hasMore };
+  return { ok: true, conversations, hasMore, links };
 }
 
 /**
@@ -141,7 +159,8 @@ export async function getMerchantInboxConversation(
   binding: MerchantInboxBinding,
   conversationId: number
 ): Promise<
-  { ok: true; conversation: MerchantInboxConversation } | MerchantInboxFailure
+  | { ok: true; conversation: MerchantInboxConversation; link: string | null }
+  | MerchantInboxFailure
 > {
   const response = await providerGet(
     binding,
@@ -155,7 +174,11 @@ export async function getMerchantInboxConversation(
   if (!conversation || conversation.id !== conversationId) {
     return { ok: false, code: 'not_found' };
   }
-  return { ok: true, conversation };
+  return {
+    ok: true,
+    conversation,
+    link: readCustomerLinkToken(response.body),
+  };
 }
 
 /** Returns one page of a bound conversation's messages, oldest first. */

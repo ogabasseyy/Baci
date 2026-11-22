@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { listMerchantInboxConversations } from '@/lib/chatwoot/merchant-inbox-client';
+import { loadCustomerBadges } from '@/lib/chatwoot/merchant-inbox-customer';
 import {
   merchantInboxError,
   merchantInboxJson,
@@ -31,8 +32,23 @@ export async function GET(request: NextRequest) {
       'temporarily_unavailable'
     );
   }
+  // Verified signed-in customers get a badge; this never fails the list.
+  const badges = await loadCustomerBadges({
+    supabase: resolved.supabase,
+    merchantId: resolved.merchantId,
+    links: result.links,
+  });
+  const withCustomers = result.conversations.map((conversation) =>
+    badges[conversation.id]
+      ? { ...conversation, customer: badges[conversation.id] }
+      : conversation
+  );
+  const conversations =
+    query.data.view === 'returning'
+      ? withCustomers.filter((c) => (c.customer?.orderCount ?? 0) > 0)
+      : withCustomers;
   return merchantInboxJson({
-    conversations: result.conversations,
+    conversations,
     hasMore: result.hasMore,
     page: query.data.page,
   });

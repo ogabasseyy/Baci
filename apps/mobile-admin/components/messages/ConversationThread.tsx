@@ -8,10 +8,12 @@ import {
   View,
 } from 'react-native';
 import { ConversationActions } from '@/components/messages/ConversationActions';
+import { CustomerCard } from '@/components/messages/CustomerCard';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { ReplyBox } from '@/components/messages/ReplyBox';
 import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useInboxCustomer } from '@/hooks/useInboxCustomer';
 import { useInboxManage } from '@/hooks/useInboxManage';
 import { useInboxReply } from '@/hooks/useInboxReply';
 import { useInboxThread } from '@/hooks/useInboxThread';
@@ -26,6 +28,10 @@ export function ConversationThread({
   const { colors } = useTheme();
   const thread = useInboxThread(conversationId);
   const { messages, conversation, refetch } = thread;
+  const customer = useInboxCustomer({
+    conversationId,
+    merchantId: thread.merchantId,
+  });
   const manage = useInboxManage({
     conversationId,
     merchantId: thread.merchantId,
@@ -77,6 +83,9 @@ export function ConversationThread({
               onDone={() => router.back()}
               onUpdate={manage.update}
             />
+          ) : null}
+          {customer.data ? (
+            <CustomerCard colors={colors} customer={customer.data} />
           ) : null}
           <FlatList
             contentContainerStyle={styles.list}

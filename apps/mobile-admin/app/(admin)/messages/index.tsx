@@ -37,6 +37,10 @@ const EMPTY: Record<InboxView, { title: string; body: string }> = {
     title: 'No follow-ups',
     body: 'Use Follow up inside a chat to bring it back at the right time.',
   },
+  returning: {
+    title: 'No customer chats',
+    body: 'Chats from signed-in customers who have ordered before show up here.',
+  },
   done: {
     title: 'No finished chats yet',
     body: 'Chats you mark Done are kept here.',

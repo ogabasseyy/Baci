@@ -1,12 +1,14 @@
 import {
   type InboxConversation,
   type InboxConversationsPage,
+  type InboxCustomerProfile,
   type InboxMessage,
   type InboxSearchResponse,
   type InboxThreadPage,
   type InboxUpdate,
   type InboxView,
   inboxConversationsResponseSchema,
+  inboxCustomerResponseSchema,
   inboxReplyResponseSchema,
   inboxSearchResponseSchema,
   inboxThreadResponseSchema,
@@ -35,6 +37,14 @@ export async function updateInboxConversation(
     body: JSON.stringify(update),
   });
   return inboxUpdateResponseSchema.parse(data).conversation;
+}
+
+/** The signed-in customer behind a chat, or null for a guest chat. */
+export async function fetchInboxCustomer(
+  conversationId: number
+): Promise<InboxCustomerProfile | null> {
+  const data = await apiClient<unknown>(`${BASE}/${conversationId}/customer`);
+  return inboxCustomerResponseSchema.parse(data).customer;
 }
 
 /** Chats matching a name, contact or message text. */

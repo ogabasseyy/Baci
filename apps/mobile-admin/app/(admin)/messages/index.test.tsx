@@ -274,4 +274,28 @@ describe('MessagesScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
     expect(screen.getByText('Ada Test')).toBeInTheDocument();
   });
+
+  it('marks a returning customer on the row and offers a Customers view', () => {
+    const linked = {
+      ...conversation(6, 'Linked Test', 'customer'),
+      customer: { orderCount: 3, totalSpent: 150000 },
+    };
+    mocks.query.mockReturnValue(ready([linked]));
+    render(<MessagesScreen />);
+
+    expect(screen.getByText('Returning · 3 orders')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customers' }));
+    expect(mocks.query).toHaveBeenLastCalledWith('returning');
+  });
+
+  it('shows Signed in for a customer with no orders yet', () => {
+    const fresh = {
+      ...conversation(7, 'Fresh Test', 'customer'),
+      customer: { orderCount: 0, totalSpent: 0 },
+    };
+    mocks.query.mockReturnValue(ready([fresh]));
+    render(<MessagesScreen />);
+    expect(screen.getByText('Signed in')).toBeInTheDocument();
+  });
 });

@@ -12,3 +12,8 @@ export const inboxThreadKey = (
   merchantId: string | undefined,
   conversationId: number
 ) => ['inbox-thread', merchantId, conversationId] as const;
+
+export const inboxCustomerKey = (
+  merchantId: string | undefined,
+  conversationId: number
+) => ['inbox-customer', merchantId, conversationId] as const;

@@ -103,6 +103,8 @@ describe('resolveMerchantInboxRequest', () => {
       {
         ok: true,
         binding,
+        supabase,
+        merchantId: MERCHANT_ID,
       }
     );
     expect(mocks.getMerchantInboxBinding).toHaveBeenCalledWith(MERCHANT_ID);

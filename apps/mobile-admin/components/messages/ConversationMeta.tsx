@@ -28,9 +28,12 @@ export function ConversationMeta({
   conversation: InboxConversation;
 }) {
   const tags = conversation.tags ?? [];
+  const customer = conversation.customer;
   const followUp =
     !!conversation.followUp && conversation.status !== 'resolved';
-  if (!conversation.priority && !followUp && tags.length === 0) return null;
+  if (!conversation.priority && !followUp && tags.length === 0 && !customer) {
+    return null;
+  }
 
   const hot =
     conversation.priority === 'urgent' || conversation.priority === 'high';
@@ -39,6 +42,16 @@ export function ConversationMeta({
 
   return (
     <View style={styles.row}>
+      {customer ? (
+        <View style={[styles.pill, { backgroundColor: colors.successLight }]}>
+          <Ionicons color={colors.success} name="person" size={12} />
+          <Text style={[styles.text, { color: colors.success }]}>
+            {customer.orderCount > 0
+              ? `Returning · ${customer.orderCount} ${customer.orderCount === 1 ? 'order' : 'orders'}`
+              : 'Signed in'}
+          </Text>
+        </View>
+      ) : null}
       {conversation.priority ? (
         <View
           style={[

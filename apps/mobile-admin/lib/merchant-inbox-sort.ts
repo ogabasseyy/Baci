@@ -8,13 +8,18 @@ const time = (iso: string | null | undefined): number =>
 const rank = (c: InboxConversation): number =>
   c.priority ? PRIORITY_RANK[c.priority] : 0;
 
+/** A signed-in customer who has bought before. */
+export const isReturningCustomer = (c: InboxConversation): boolean =>
+  (c.customer?.orderCount ?? 0) > 0;
+
 /** A follow-up whose time has come: marked, but no longer snoozed. */
 export function isFollowUpDue(c: InboxConversation): boolean {
   return !!c.followUp && c.status !== 'snoozed' && c.status !== 'resolved';
 }
 
 /**
- * Most important first. Priority always leads. Then, per view: "Needs reply"
+ * Most important first. Priority always leads, then returning customers
+ * (people who have already bought), then, per view: "Needs reply"
  * puts the chat that has waited longest first; "Follow-up" puts due ones
  * first, then the soonest to come back; the rest stay newest first.
  */
@@ -42,6 +47,10 @@ export function sortInbox(
     return newestFirst(a, b);
   };
   return [...conversations].sort(
-    (a, b) => rank(b) - rank(a) || tieBreak(a, b) || a.id - b.id
+    (a, b) =>
+      rank(b) - rank(a) ||
+      Number(isReturningCustomer(b)) - Number(isReturningCustomer(a)) ||
+      tieBreak(a, b) ||
+      a.id - b.id
   );
 }

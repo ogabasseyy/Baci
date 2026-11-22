@@ -83,3 +83,31 @@ describe('isFollowUpDue', () => {
     expect(isFollowUpDue(chat(1))).toBe(false);
   });
 });
+
+describe('sortInbox with customers', () => {
+  const returning = { orderCount: 3, totalSpent: 150000 };
+
+  it('puts returning customers before guests of the same priority', () => {
+    const sorted = sortInbox(
+      [chat(1), chat(2, { customer: returning }), chat(3)],
+      'needs_reply'
+    );
+    expect(ids(sorted)).toEqual([2, 1, 3]);
+  });
+
+  it('still lets an explicit priority beat a returning customer', () => {
+    const sorted = sortInbox(
+      [chat(1, { customer: returning }), chat(2, { priority: 'urgent' })],
+      'needs_reply'
+    );
+    expect(ids(sorted)).toEqual([2, 1]);
+  });
+
+  it('does not treat a signed-in customer with no orders as returning', () => {
+    const sorted = sortInbox(
+      [chat(1), chat(2, { customer: { orderCount: 0, totalSpent: 0 } })],
+      'needs_reply'
+    );
+    expect(ids(sorted)).toEqual([1, 2]);
+  });
+});

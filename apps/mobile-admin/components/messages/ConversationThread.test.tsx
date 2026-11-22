@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   back: vi.fn(),
   choose: vi.fn(),
+  customer: vi.fn(),
 }));
 
 vi.mock('expo-router', () => ({
@@ -23,6 +24,9 @@ vi.mock('@/components/ui/showChoiceSheet', () => ({
 }));
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: LIGHT_COLORS }),
+}));
+vi.mock('@/hooks/useInboxCustomer', () => ({
+  useInboxCustomer: () => mocks.customer(),
 }));
 vi.mock('@/hooks/useInboxThread', () => ({
   useInboxThread: () => mocks.thread(),
@@ -75,6 +79,7 @@ function renderThread() {
 describe('ConversationThread', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.customer.mockReturnValue({ data: null });
     mocks.refetch.mockResolvedValue({
       isError: false,
       data: { pages: [{ messages }] },
@@ -150,6 +155,7 @@ describe('ConversationThread', () => {
 describe('ConversationThread business tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.customer.mockReturnValue({ data: null });
     mocks.refetch.mockResolvedValue({
       isError: false,
       data: { pages: [{ messages }] },
@@ -237,5 +243,54 @@ describe('ConversationThread business tools', () => {
 
     await waitFor(() => expect(mocks.api).toHaveBeenCalledTimes(1));
     expect(mocks.back).not.toHaveBeenCalled();
+  });
+});
+
+describe('ConversationThread customer card', () => {
+  const profile = {
+    name: 'Ada Obi',
+    memberSince: null,
+    orderCount: 5,
+    totalSpent: 412000,
+    loyaltyPoints: 0,
+    recentOrders: [],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.thread.mockReturnValue({
+      conversation: {
+        id: 9,
+        status: 'open',
+        unreadCount: 0,
+        customerName: 'small-meadow-890',
+        lastActivityAt: null,
+        lastMessage: null,
+      },
+      messages,
+      merchantId: 'm1',
+      isLoading: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: mocks.refetch,
+    });
+  });
+
+  it('shows who is writing when the chat is linked to a signed-in customer', () => {
+    mocks.customer.mockReturnValue({ data: profile });
+    renderThread();
+    expect(screen.getByText('Ada Obi')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Returning customer · 5 orders/)
+    ).toBeInTheDocument();
+  });
+
+  it('shows no card for a guest chat', () => {
+    mocks.customer.mockReturnValue({ data: null });
+    renderThread();
+    expect(screen.queryByText(/Returning customer/)).toBeNull();
+    expect(screen.queryByText(/Signed-in customer/)).toBeNull();
   });
 });

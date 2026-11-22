@@ -37,7 +37,15 @@ export async function resolveMerchantInboxRequest(
   request: NextRequest,
   action: 'view' | 'edit'
 ): Promise<
-  | { ok: true; binding: MerchantInboxBinding }
+  | {
+      ok: true;
+      binding: MerchantInboxBinding;
+      /** The caller's own RLS-scoped client, for reads on their store. */
+      supabase: NonNullable<
+        Awaited<ReturnType<typeof authenticateApiRequest>>['supabase']
+      >;
+      merchantId: string;
+    }
   | { ok: false; response: NextResponse }
 > {
   // Web cookie sessions and mobile-admin Bearer sessions, both under RLS.
@@ -78,5 +86,10 @@ export async function resolveMerchantInboxRequest(
       ),
     };
   }
-  return { ok: true, binding };
+  return {
+    ok: true,
+    binding,
+    supabase,
+    merchantId: merchantContext.merchantId,
+  };
 }

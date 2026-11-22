@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  type MerchantInboxCustomerBadge,
+  merchantInboxCustomerBadgeSchema,
+} from './merchant-inbox-customer';
 import { INBOX_PRIORITIES } from './merchant-inbox-manage';
 
 const providerId = z.number().int().positive().safe();
@@ -33,7 +37,12 @@ export const providerInboxConversationSchema = z.object({
   created_at: unixSeconds.nullish(),
   meta: z
     .object({
-      sender: z.object({ name: z.string().nullish() }).nullish(),
+      sender: z
+        .object({
+          name: z.string().nullish(),
+          custom_attributes: z.record(z.string(), z.unknown()).nullish(),
+        })
+        .nullish(),
     })
     .nullish(),
   last_non_activity_message: providerInboxMessageSchema.nullish(),
@@ -67,7 +76,7 @@ export const merchantInboxListQuerySchema = z.object({
     .default('all'),
   /** A smart view; when present it decides the status filter itself. */
   view: z
-    .enum(['all', 'needs_reply', 'unread', 'follow_up', 'done'])
+    .enum(['all', 'needs_reply', 'unread', 'follow_up', 'done', 'returning'])
     .optional(),
 });
 
@@ -110,6 +119,8 @@ export type MerchantInboxConversation = {
   /** Marked "follow up": snoozed, or reopened and due. */
   followUp?: boolean;
   snoozedUntil?: string | null;
+  /** A verified signed-in customer of this store, when the chat is linked. */
+  customer?: MerchantInboxCustomerBadge | null;
 };
 
 /** Baci's own inbox responses, validated again in the browser. */
@@ -132,6 +143,7 @@ export const merchantInboxConversationSchema = z.object({
   priority: z.enum(INBOX_PRIORITIES).nullable().optional(),
   followUp: z.boolean().optional(),
   snoozedUntil: z.string().min(1).max(40).nullable().optional(),
+  customer: merchantInboxCustomerBadgeSchema.nullable().optional(),
 }) satisfies z.ZodType<MerchantInboxConversation>;
 
 export const merchantInboxConversationsResponseSchema = z.object({

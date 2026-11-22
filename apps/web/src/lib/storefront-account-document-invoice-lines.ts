@@ -51,6 +51,7 @@ export interface BuildInvoiceContentInput {
   orderItems: StorefrontOrderItem[];
   itemRows: StorefrontAccountDocumentItemRow[];
   taxRows: StorefrontAccountDocumentTaxSubtotalRow[];
+  deriveRevisedTax?: boolean;
   taxAmount: number;
   subtotal: number;
   shippingFee: number;
@@ -73,6 +74,7 @@ export function buildInvoiceContent({
   orderItems,
   itemRows,
   taxRows,
+  deriveRevisedTax = false,
   taxAmount,
   subtotal,
   shippingFee,
@@ -207,7 +209,7 @@ export function buildInvoiceContent({
     };
   });
 
-  const taxSubtotals: TaxSubtotal[] = taxRows.map((subtotalRow) => ({
+  const storedTaxSubtotals: TaxSubtotal[] = taxRows.map((subtotalRow) => ({
     vat_category_code: subtotalRow.vat_category_code,
     vat_rate: asNumber(subtotalRow.vat_rate),
     taxable_amount: asNumber(subtotalRow.taxable_amount),
@@ -215,8 +217,11 @@ export function buildInvoiceContent({
     exemption_reason: subtotalRow.exemption_reason || undefined,
   }));
 
-  const derivedLineTaxSubtotals =
-    deriveTaxSubtotalsFromInvoiceItems(invoiceItems);
+  const taxSubtotals = deriveRevisedTax ? [] : storedTaxSubtotals;
+  const derivedLineTaxSubtotals = deriveTaxSubtotalsFromInvoiceItems(
+    invoiceItems,
+    storedTaxSubtotals
+  );
   if (
     taxSubtotals.length === 0 &&
     derivedLineTaxSubtotals.length > 0 &&

@@ -265,6 +265,15 @@ describe('GET /api/orders/[id]/invoice', () => {
           },
           documentNumber: original ? null : 1,
           inputs: {
+            taxSubtotals: [
+              {
+                vat_category_code: 'Z',
+                vat_rate: 0,
+                taxable_amount: 300000,
+                tax_amount: 0,
+                exemption_reason: 'Fixture zero-rated category',
+              },
+            ],
             order: {
               total: original ? 300000 : 350000,
               subtotal: original ? 300000 : 350000,
@@ -288,16 +297,8 @@ describe('GET /api/orders/[id]/invoice', () => {
     });
     const supabase = createSupabaseMock({
       taxSubtotals: {
-        data: [
-          {
-            vat_category_code: 'Z',
-            vat_rate: 0,
-            taxable_amount: 300000,
-            tax_amount: 0,
-            exemption_reason: 'Fixture zero-rated category',
-          },
-        ],
-        error: null,
+        data: null,
+        error: { message: 'RLS denied live tax rows' },
       },
       order: {
         data: { ...(orderResult.data as object), source: 'online_store' },

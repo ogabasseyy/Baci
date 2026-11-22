@@ -187,7 +187,7 @@ describe('CustomerOrderDetailsContent', () => {
     ).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Revised invoice' })).toBeNull();
     expect(
-      screen.getByRole('link', { name: 'Download Invoice' })
+      screen.getByRole('link', { name: 'Download Original Invoice' })
     ).toHaveAttribute(
       'href',
       '/api/storefront/account/orders/order-1/invoice?merchantSlug=ogabassey'

@@ -67,7 +67,9 @@ export function CustomerOrderDetailsContent({
       ? 'Download Receipt'
       : isProformaInvoice
         ? 'Download Proforma Invoice'
-        : 'Download Invoice';
+        : order.amendment && !order.amendment.documentId
+          ? 'Download Original Invoice'
+          : 'Download Invoice';
   const documentRevision = order.amendment
     ? order.current_document_kind === 'receipt'
       ? 'current'

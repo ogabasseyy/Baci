@@ -11,10 +11,10 @@ $$;
 BEGIN;
 DO $$
 DECLARE
-  f jsonb := pg_temp.amendment_settlement_seed(5000000);
+  f jsonb := pg_temp.amendment_settlement_seed(5000000,NULL,false);
   o uuid := (f->>'order')::uuid;
   m uuid := (f->>'merchant')::uuid;
-  a uuid := (f->>'amendment')::uuid;
+  a uuid;
   shopper uuid := gen_random_uuid();
   staff uuid := gen_random_uuid();
   customer uuid := gen_random_uuid();
@@ -29,6 +29,12 @@ DECLARE
   token text := 'synthetic-order-proof-2026';
   slug text;
 BEGIN
+  INSERT INTO public.order_tax_subtotals(order_id,vat_category_code,vat_rate,taxable_amount,tax_amount,exemption_reason)
+    VALUES (o,'Z',0,300000,0,'Synthetic zero-rate snapshot');
+  a := (public.confirm_paid_order_amendment(o,jsonb_build_object(
+    'previewId',f->>'preview','customerAgreed',true,'reason','Synthetic swap','idempotencyKey','fixture-confirm'
+  ))->>'amendmentId')::uuid;
+  f := f || jsonb_build_object('amendment',a);
   PERFORM set_config('request.jwt.claim.role','service_role',true);
   INSERT INTO auth.users(id,instance_id,aud,role,email,created_at,updated_at)
     VALUES (shopper,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','fixture-buyer@example.invalid',now(),now());
@@ -51,6 +57,10 @@ BEGIN
   IF (public.read_paid_order_amendment_workspace(o)->>'canEdit')::boolean IS DISTINCT FROM true
     OR public.read_paid_order_amendment_workspace(o)->>'confirmationKey' IS NOT NULL THEN
     RAISE EXCEPTION 'another editor received the submitter confirmation key or was denied workspace access';
+  END IF;
+  IF public.read_paid_order_amendment_document(o,'original')#>>'{inputs,taxSubtotals,0,exemption_reason}'
+    IS DISTINCT FROM 'Synthetic zero-rate snapshot' THEN
+    RAISE EXCEPTION 'staff invoice projection lost the tax snapshot';
   END IF;
   PERFORM set_config('request.jwt.claim.sub',f->>'actor',true);
   original := public.read_paid_order_amendment_document(o);
@@ -78,7 +88,9 @@ BEGIN
   END IF;
 
   PERFORM set_config('request.jwt.claim.sub',shopper::text,true);
-  IF public.read_paid_order_amendment_document(o,'current')#>>'{amendment,state}' <> 'settled' THEN
+  IF public.read_paid_order_amendment_document(o,'current')#>>'{amendment,state}' <> 'settled'
+    OR public.read_paid_order_amendment_document(o,'current')#>>'{inputs,taxSubtotals,0,exemption_reason}'
+      IS DISTINCT FROM 'Synthetic zero-rate snapshot' THEN
     RAISE EXCEPTION 'owned customer order cannot read the revised invoice';
   END IF;
   BEGIN

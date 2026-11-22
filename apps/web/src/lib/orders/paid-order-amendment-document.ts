@@ -28,11 +28,62 @@ export type PaidOrderDocumentVersion = z.infer<
   typeof paidOrderDocumentVersionSchema
 >;
 
+const money = z.number().nullish();
+const text = z.string().nullish();
+const documentOrderSchema = z.object({
+  order_number: text,
+  currency: text,
+  total: money,
+  subtotal: money,
+  amount_paid: money,
+  payment_status: text,
+  created_at: text,
+  updated_at: text,
+  shipping_status: text,
+  paid_at: text,
+  shipped_at: text,
+  delivered_at: text,
+  cancelled_at: text,
+  transaction_date: text,
+  invoice_issue_date: text,
+  tax_point_date: text,
+  invoice_type_code: text,
+  customer_name: text,
+  customer_email: text,
+  customer_phone: text,
+  shipping_address: z
+    .union([z.string(), z.record(z.string(), z.unknown())])
+    .nullish(),
+  tax_amount: money,
+  shipping_fee: money,
+  discount_amount: money,
+  tax_exclusive_amount: money,
+  tax_inclusive_amount: money,
+  invoice_note: text,
+  buyer_reference: text,
+  purchase_order_reference: text,
+  payment_terms: text,
+  payment_due_date: text,
+  notes: text,
+  fulfillment_details: z.record(z.string(), z.unknown()).nullish(),
+});
+
 const projectionSchema = z.object({
   inputs: z.object({
-    order: z.record(z.string(), z.unknown()),
+    order: documentOrderSchema,
     items: z.array(z.record(z.string(), z.unknown())),
     payments: z.array(z.record(z.string(), z.unknown())).optional(),
+    taxSubtotals: z
+      .array(
+        z.object({
+          vat_category_code: z.string(),
+          vat_rate: z.number(),
+          taxable_amount: z.number(),
+          tax_amount: z.number(),
+          exemption_reason: z.string().nullable(),
+        })
+      )
+      .nullish(),
   }),
   amendment: paidOrderAmendmentStatusSchema.nullable(),
   documentNumber: z.number().int().positive().nullable(),

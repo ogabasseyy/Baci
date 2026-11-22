@@ -253,6 +253,8 @@ export async function GET(
         { status: projection.error === 'not_found' ? 404 : 503 }
       );
     }
+    // The document reader validates money and strips fields outside the
+    // invoice snapshot before applying historical values.
     if (projection.data) Object.assign(order, projection.data.inputs.order);
     const documentNumber = projection.data?.documentNumber ?? null;
     const itemsQuery = supabase
@@ -279,8 +281,12 @@ export async function GET(
       );
     }
     // Fetch tax subtotals if VAT registered
-    let taxSubtotals: TaxSubtotalRow[] = [];
-    if (merchant.vat_registration_status === 'registered') {
+    const pinnedTaxSubtotals = projection.data?.inputs.taxSubtotals;
+    let taxSubtotals: TaxSubtotalRow[] = pinnedTaxSubtotals ?? [];
+    if (
+      merchant.vat_registration_status === 'registered' &&
+      pinnedTaxSubtotals == null
+    ) {
       const { data: subtotals, error: taxError } = await supabase
         .from('order_tax_subtotals')
         .select(
@@ -444,29 +450,18 @@ export async function GET(
     // Build tax subtotals for invoice
     const isRevisedAmendment =
       Boolean(projection.data?.amendment) && version.data !== 'original';
-    const invoiceTaxSubtotals: TaxSubtotal[] = (
-      isRevisedAmendment ? [] : taxSubtotals
-    ).map((st) => ({
+    const storedTaxSubtotals: TaxSubtotal[] = taxSubtotals.map((st) => ({
       vat_category_code: st.vat_category_code,
       vat_rate: st.vat_rate,
       taxable_amount: Number(st.taxable_amount),
       tax_amount: Number(st.tax_amount),
       exemption_reason: st.exemption_reason || undefined,
     }));
-
-    const derivedLineTaxSubtotals = deriveTaxSubtotalsFromInvoiceItems(items);
-    if (isRevisedAmendment) {
-      for (const subtotal of derivedLineTaxSubtotals) {
-        const stored = taxSubtotals.find(
-          (row) =>
-            row.vat_category_code === subtotal.vat_category_code &&
-            row.vat_rate === subtotal.vat_rate
-        );
-        if (stored?.exemption_reason) {
-          subtotal.exemption_reason = stored.exemption_reason;
-        }
-      }
-    }
+    const invoiceTaxSubtotals = isRevisedAmendment ? [] : storedTaxSubtotals;
+    const derivedLineTaxSubtotals = deriveTaxSubtotalsFromInvoiceItems(
+      items,
+      storedTaxSubtotals
+    );
     if (
       invoiceTaxSubtotals.length === 0 &&
       derivedLineTaxSubtotals.length > 0 &&

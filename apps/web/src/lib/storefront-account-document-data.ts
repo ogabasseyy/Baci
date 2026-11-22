@@ -160,9 +160,11 @@ export async function getStorefrontAccountDocumentData({
     // under customer RLS, so the download gate would validate an empty set
     // and serve an invoice the sender rejects. Load the ownership-checked
     // customer projection like transactions and payment accounts.
-    amendment
-      ? { data: [], error: null }
-      : loadStorefrontCustomerTaxSubtotals(supabase, [orderId]),
+    document.data?.inputs.taxSubtotals != null
+      ? { data: document.data.inputs.taxSubtotals, error: null }
+      : amendment
+        ? { data: [], error: null }
+        : loadStorefrontCustomerTaxSubtotals(supabase, [orderId]),
     // Authoritative gate for the customer "Cancel Order" CTA. The customer-scoped
     // client cannot read the merchant-only transactions table, so this server RPC
     // is the source of truth. Fail-closed: any error means "not cancellable".
@@ -266,6 +268,9 @@ export async function getStorefrontAccountDocumentData({
     ),
     taxRows: (taxResult.data ||
       []) as StorefrontAccountDocumentTaxSubtotalRow[],
+    deriveRevisedTax: Boolean(
+      amendment && (view || (version && version !== 'original'))
+    ),
     paymentStatus,
     shippingStatus,
     currentDocumentKind,

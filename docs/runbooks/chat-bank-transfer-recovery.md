@@ -13,3 +13,5 @@ A pending chat bank-transfer attempt blocks a new account request while the firs
    ```
 
 4. A `true` result allows the same order to try bank transfer again. A `false` result means the database left the claim intact. Check the current reference, claim age, order status, saved assignment, and transactions before taking further action.
+
+A saved account row with no `assigned_at` may be an older live account, so the database never releases a claim past it and the order stays pending. Check that row with Paystack and resolve it by hand in the incident record; do not delete it to force a retry.

@@ -75,6 +75,39 @@ async function findLaunchedMerchantQuizWithBackendV2(args: {
   };
 }
 
+function resolveAlreadyLaunchedEdgeResult(
+  alreadyLaunched: QuizDraftEvent & {
+    backend_mode?: string;
+    expected_room_count?: number | null;
+  },
+  expectedRoomCount: number
+): QuizLaunchV2Result {
+  if (alreadyLaunched.backend_mode !== 'edge_rooms') {
+    return {
+      code: 'QUIZ_BACKEND_MODE_LOCKED',
+      message:
+        'This quiz is already launched on Standard Postgres and cannot be switched to Edge Rooms.',
+      ok: false,
+    };
+  }
+  if (alreadyLaunched.expected_room_count !== expectedRoomCount) {
+    return {
+      code: 'QUIZ_EDGE_ROOM_COUNT_LOCKED',
+      message: `This quiz is already launched with ${alreadyLaunched.expected_room_count ?? 'configured'} Edge rooms and cannot be changed to ${expectedRoomCount}.`,
+      ok: false,
+    };
+  }
+  return {
+    event: {
+      id: alreadyLaunched.id,
+      slug: alreadyLaunched.slug,
+      status: alreadyLaunched.status,
+      title: alreadyLaunched.title,
+    },
+    ok: true,
+  };
+}
+
 function resolveTiming(input: MerchantQuizActivationV2Input, now: Date) {
   if (input.timing.kind === 'scheduled') {
     return {
@@ -202,30 +235,10 @@ export async function launchMerchantQuizDraftV2(args: {
           supabase,
         });
         if (alreadyLaunched) {
-          if (alreadyLaunched.backend_mode !== 'edge_rooms') {
-            return {
-              code: 'QUIZ_BACKEND_MODE_LOCKED',
-              message:
-                'This quiz is already launched on Standard Postgres and cannot be switched to Edge Rooms.',
-              ok: false,
-            };
-          }
-          if (alreadyLaunched.expected_room_count !== expectedRoomCount) {
-            return {
-              code: 'QUIZ_EDGE_ROOM_COUNT_LOCKED',
-              message: `This quiz is already launched with ${alreadyLaunched.expected_room_count ?? 'configured'} Edge rooms and cannot be changed to ${expectedRoomCount}.`,
-              ok: false,
-            };
-          }
-          return {
-            event: {
-              id: alreadyLaunched.id,
-              slug: alreadyLaunched.slug,
-              status: alreadyLaunched.status,
-              title: alreadyLaunched.title,
-            },
-            ok: true,
-          };
+          return resolveAlreadyLaunchedEdgeResult(
+            alreadyLaunched,
+            expectedRoomCount
+          );
         }
       }
       return {
@@ -264,20 +277,44 @@ export async function launchMerchantQuizDraftV2(args: {
     }
 
     if (error?.code === 'QZ046') {
-      const alreadyLaunched = await findLaunchedMerchantQuizV2({
-        eventId: input.eventId,
-        merchantId,
-        supabase,
-      });
-      if (alreadyLaunched) {
-        expireProductBlogCache(merchantId);
-        scheduleReservationProductPurge({
+      if (wantsEdgeRooms) {
+        const alreadyLaunched = await findLaunchedMerchantQuizWithBackendV2({
+          eventId: input.eventId,
           merchantId,
-          sourceId: input.eventId,
-          source: 'quiz',
           supabase,
         });
-        return { event: alreadyLaunched, ok: true };
+        if (alreadyLaunched) {
+          const resolved = resolveAlreadyLaunchedEdgeResult(
+            alreadyLaunched,
+            expectedRoomCount
+          );
+          if (resolved.ok) {
+            expireProductBlogCache(merchantId);
+            scheduleReservationProductPurge({
+              merchantId,
+              sourceId: input.eventId,
+              source: 'quiz',
+              supabase,
+            });
+          }
+          return resolved;
+        }
+      } else {
+        const alreadyLaunched = await findLaunchedMerchantQuizV2({
+          eventId: input.eventId,
+          merchantId,
+          supabase,
+        });
+        if (alreadyLaunched) {
+          expireProductBlogCache(merchantId);
+          scheduleReservationProductPurge({
+            merchantId,
+            sourceId: input.eventId,
+            source: 'quiz',
+            supabase,
+          });
+          return { event: alreadyLaunched, ok: true };
+        }
       }
     }
     if (wantsEdgeRooms) {
@@ -329,24 +366,40 @@ export async function launchMerchantQuizDraftV2(args: {
   }
   if (isQuizDraftEvent(data)) return { event: data, ok: true };
 
-  const alreadyLaunched = await findLaunchedMerchantQuizV2({
-    eventId: input.eventId,
-    merchantId,
-    supabase,
-  });
-  if (alreadyLaunched) {
-    return { event: alreadyLaunched, ok: true };
-  }
   if (wantsEdgeRooms) {
+    const alreadyLaunched = await findLaunchedMerchantQuizWithBackendV2({
+      eventId: input.eventId,
+      merchantId,
+      supabase,
+    });
+    if (alreadyLaunched) {
+      return resolveAlreadyLaunchedEdgeResult(
+        alreadyLaunched,
+        expectedRoomCount
+      );
+    }
     await rollbackQuizEdgeDraftBackendMode({
       eventId: input.eventId,
       merchantId,
       supabase,
     });
+    return {
+      code: 'QUIZ_LAUNCH_FAILED',
+      message: 'The reviewed quiz could not be launched.',
+      ok: false,
+    };
   }
-  return {
-    code: 'QUIZ_LAUNCH_FAILED',
-    message: 'The reviewed quiz could not be launched.',
-    ok: false,
-  };
+
+  const alreadyLaunched = await findLaunchedMerchantQuizV2({
+    eventId: input.eventId,
+    merchantId,
+    supabase,
+  });
+  return alreadyLaunched
+    ? { event: alreadyLaunched, ok: true }
+    : {
+        code: 'QUIZ_LAUNCH_FAILED',
+        message: 'The reviewed quiz could not be launched.',
+        ok: false,
+      };
 }

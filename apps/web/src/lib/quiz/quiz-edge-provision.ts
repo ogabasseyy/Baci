@@ -127,6 +127,8 @@ export async function rollbackQuizEdgeDraftBackendMode(args: {
 }
 
 function mapPrepareRpcError(code?: string): QuizEdgeProvisionResult {
+  // Defensive mapping for `guard_quiz_event_backend_mode_lock_v2` (QZ060);
+  // draft-only gating normally returns QZ061 first for non-draft events.
   if (code === 'QZ060') {
     return {
       code: 'QUIZ_BACKEND_MODE_LOCKED',

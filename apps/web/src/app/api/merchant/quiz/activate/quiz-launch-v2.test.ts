@@ -465,4 +465,58 @@ describe('launchMerchantQuizDraftV2', () => {
       supabase: { rpc },
     });
   });
+
+  it('returns QUIZ_BACKEND_MODE_LOCKED on late QZ046 fallback when a racing launch won on postgres', async () => {
+    mockIsQuizEdgeConfigured.mockReturnValue(true);
+    mockProvisionQuizEdgeRooms.mockResolvedValueOnce({
+      ok: true,
+      roomCount: 8,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'QZ046', message: 'quiz_event_already_launched' },
+    });
+    const lookupBuilder = {
+      eq: vi.fn(() => lookupBuilder),
+      in: vi.fn(() => lookupBuilder),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          backend_mode: 'postgres',
+          expected_room_count: null,
+          id: baseInput.eventId,
+          slug: 'quiz',
+          status: 'active',
+          title: 'Quiz',
+        },
+        error: null,
+      }),
+      select: vi.fn(() => lookupBuilder),
+    };
+
+    const result = await launchMerchantQuizDraftV2({
+      input: {
+        ...baseInput,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 8,
+        maxAttempts: 1,
+        mode: 'live',
+        regulatoryCompliance: {
+          basis: 'free_skill_competition',
+          evidenceReference: 'COUNSEL-2026-08-05',
+          jurisdiction: 'NG-LA',
+        },
+        rulesVersion: 'live-v1',
+        timing: { kind: 'immediate', liveWindowSeconds: 60 },
+        variantsPerQuestion: 3,
+      },
+      merchantId: 'merchant-1',
+      now: new Date('2026-08-05T08:00:00.000Z'),
+      supabase: { from: vi.fn(() => lookupBuilder), rpc } as never,
+    });
+
+    expect(result).toMatchObject({
+      code: 'QUIZ_BACKEND_MODE_LOCKED',
+      ok: false,
+    });
+  });
 });

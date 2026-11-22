@@ -10,6 +10,7 @@ export function captureSubmittedCheckoutCart(
   return {
     itemsSnapshot: items.map((item) => ({
       ...item,
+      // Cart variant attributes are flat string values.
       ...(item.variant_attributes && {
         variant_attributes: { ...item.variant_attributes },
       }),

@@ -76,7 +76,7 @@ describe('listPaystackRefunds', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it('lists only GET requests for a matching saved capture', async () => {
+  it('reads through a short refund page before finding the end of the history', async () => {
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(
@@ -89,16 +89,19 @@ describe('listPaystackRefunds', () => {
           currency: 'NGN',
         })
       )
-      .mockResolvedValueOnce(response([refund]));
+      .mockResolvedValueOnce(response([refund]))
+      .mockResolvedValueOnce(response([{ ...refund, id: 2 }]))
+      .mockResolvedValueOnce(response([]));
     vi.stubGlobal('fetch', fetcher);
     await expect(
       listPaystackRefunds('capture-1', {
         expectedCapture: { id: '5', domain: 'live', amountKobo: 1000 },
       })
-    ).resolves.toHaveLength(1);
+    ).resolves.toHaveLength(2);
     expect(
       fetcher.mock.calls.map(([, options]) => options.method ?? 'GET')
-    ).toEqual(['GET', 'GET']);
+    ).toEqual(['GET', 'GET', 'GET', 'GET']);
+    expect(fetcher.mock.calls[3]?.[0]).toContain('page=3');
   });
 
   it('matches bare numeric and legacy string transaction identities', async () => {

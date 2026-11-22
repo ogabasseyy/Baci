@@ -289,8 +289,9 @@ export async function listPaystackRefunds(
         status: candidate.status,
       });
     }
-    // A full page is not proof that all refunds were read.
-    if (envelope.data.length < 100) return refunds;
+    // For the balance check, a short page may reflect a provider page
+    // cap. Read through the first empty page before trusting the total.
+    if (expected ? rows.length === 0 : rows.length < 100) return refunds;
   }
   throw new Error('Refund pagination requires review');
 }

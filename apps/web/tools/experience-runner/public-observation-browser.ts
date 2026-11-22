@@ -1,61 +1,22 @@
 import { createHash } from 'node:crypto';
 import type { Browser } from 'playwright-core';
-import { z } from 'zod';
 import {
   productionDeliveryOrigins,
   productionOrigin,
 } from '@/lib/experience/production-origins';
+import { publicObservationPayload } from '@/schemas/experience-public-observation-payload';
 import { installPublicCartBrowserRoutes } from './public-cart-browser-route';
 import { createPublicCommerceEvidence } from './public-commerce-evidence';
 import { observePublicCommerce } from './public-observation-commerce';
+import { observeNativePublicCommerce } from './public-observation-native-commerce';
 import {
   MAX_PUBLIC_OBSERVATION_BYTES,
-  MAX_PUBLIC_OBSERVATION_RESOURCES,
   MAX_PUBLIC_RESOURCE_BYTES,
 } from './public-observation-resource-limit';
 import { inspectPublicRoutes } from './public-observation-routes';
 
 const hash = (value: string | Buffer) =>
   createHash('sha256').update(value).digest('hex');
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const routeSchema = z.object({
-  path: z.string().max(240),
-  title: z.string().min(1).max(500),
-  canonical: z.url(),
-});
-const payloadSchema = z.object({
-  version: z.literal(1),
-  origin: z.string(),
-  product: z.object({
-    origin: z.string(),
-    merchantId: z.uuid(),
-    productId: z.uuid(),
-    variantId: z.uuid().optional(),
-  }),
-  expected: z.object({
-    buildDigest: digest,
-    scriptDigest: digest,
-    styleDigest: digest,
-    assets: z.record(z.string(), digest),
-    routes: z.array(routeSchema).min(1).max(128),
-    product: z.object({
-      id: z.uuid(),
-      path: z.string().max(240),
-      variantId: z.uuid().optional(),
-    }),
-  }),
-  resources: z
-    .array(
-      z.object({
-        url: z.url(),
-        mime: z.string().max(128),
-        bytes: z.string().max(4 * Math.ceil(MAX_PUBLIC_RESOURCE_BYTES / 3)),
-        headers: z.record(z.string(), z.string()),
-      })
-    )
-    .min(1)
-    .max(MAX_PUBLIC_OBSERVATION_RESOURCES),
-});
 type Request = { url: string; method: 'GET' | 'POST'; body?: string };
 
 /** Browser must be in the network-disabled sandbox; this function never grants network access. */
@@ -64,7 +25,7 @@ export async function observePublicBrowser(
   browser: Browser,
   relay: (request: Request) => Promise<{ status: number; body: string }>
 ) {
-  const payload = payloadSchema.parse(input);
+  const payload = publicObservationPayload.parse(input);
   const origin = productionOrigin(payload.origin);
   const productOrigin = productionOrigin(payload.product.origin);
   const expected = payload.expected;
@@ -128,15 +89,24 @@ export async function observePublicBrowser(
       throw Error('PUBLIC_ROUTE_MISMATCH');
     return { ...route, frameUrl };
   });
-  const home = routes.find((route) => route.path === '/');
-  const product = routes.find((route) => route.path === expected.product.path);
-  if (!home || !product) throw Error('PUBLIC_ROUTE_MISMATCH');
+  const entry = routes.find((route) => route.path === '/') ?? routes[0];
+  const productPath = expected.product.path;
+  const productCanonical = `${origin}${productPath}`;
+  const productFrame = routes.find((route) => route.path === productPath);
+  if (
+    expected.product.native
+      ? productFrame || !unique.has(productCanonical)
+      : !productFrame
+  )
+    throw Error('PUBLIC_ROUTE_MISMATCH');
   const evidence = createPublicCommerceEvidence({
     origin,
     merchantId: payload.product.merchantId,
     productId: payload.product.productId,
     variantId: payload.product.variantId,
-    paths: routes.map((route) => route.path),
+    paths: expected.product.native
+      ? [...routes.map((route) => route.path), productPath]
+      : routes.map((route) => route.path),
   });
   const context = await browser.newContext({ serviceWorkers: 'block' });
   const served = new Set<string>();
@@ -171,31 +141,43 @@ export async function observePublicBrowser(
     });
     const page = await context.newPage();
     try {
-      const response = await page.goto(product.canonical, {
+      const response = await page.goto(productCanonical, {
         waitUntil: 'domcontentloaded',
         timeout: 45000,
       });
-      if (response?.status() !== 200 || page.url() !== product.canonical)
+      if (response?.status() !== 200 || page.url() !== productCanonical)
         throw Error('PUBLIC_ROUTE_MISMATCH');
       const frame = page.locator('iframe[data-baci-experience-build]');
-      await frame.first().waitFor({ state: 'attached', timeout: 45000 });
-      if (
-        (await frame.count()) !== 1 ||
-        (await frame.getAttribute('data-baci-experience-build')) !==
-          expected.buildDigest ||
-        (await frame.getAttribute('sandbox')) !== 'allow-scripts' ||
-        (await frame.getAttribute('src')) !== product.frameUrl
-      )
-        throw Error('PUBLIC_FRAME_MISMATCH');
-      await page
-        .frameLocator('iframe[data-baci-experience-build]')
-        .locator('html[data-baci-hydration="ready"]')
-        .waitFor({ timeout: 45000 });
-      const actualFrame = await (await frame.elementHandle())?.contentFrame();
-      if (!actualFrame || actualFrame.url() !== product.frameUrl)
-        throw Error('PUBLIC_FRAME_MISMATCH');
+      if (productFrame) {
+        await frame.first().waitFor({ state: 'attached', timeout: 45000 });
+        if (
+          (await frame.count()) !== 1 ||
+          (await frame.getAttribute('data-baci-experience-build')) !==
+            expected.buildDigest ||
+          (await frame.getAttribute('sandbox')) !== 'allow-scripts' ||
+          (await frame.getAttribute('src')) !== productFrame.frameUrl
+        )
+          throw Error('PUBLIC_FRAME_MISMATCH');
+        await page
+          .frameLocator('iframe[data-baci-experience-build]')
+          .locator('html[data-baci-hydration="ready"]')
+          .waitFor({ timeout: 45000 });
+        const actualFrame = await (await frame.elementHandle())?.contentFrame();
+        if (!actualFrame || actualFrame.url() !== productFrame.frameUrl)
+          throw Error('PUBLIC_FRAME_MISMATCH');
+      } else {
+        const canonical = page.locator('link[rel~="canonical"]');
+        if (
+          (await frame.count()) !== 0 ||
+          (await canonical.count()) !== 1 ||
+          (await canonical.getAttribute('href')) !== productCanonical
+        )
+          throw Error('PUBLIC_ROUTE_MISMATCH');
+      }
       armed = true;
-      const commerce = await observePublicCommerce(page, evidence);
+      const commerce = productFrame
+        ? await observePublicCommerce(page, evidence)
+        : await observeNativePublicCommerce(page, expected.product, evidence);
       if (!served.has(script[0].url) || !served.has(style.url) || forbidden)
         throw Error('PUBLIC_OBSERVATION_INCOMPLETE');
       const findRoute = (path: string) => {
@@ -206,13 +188,21 @@ export async function observePublicBrowser(
       const steps = [
         {
           action: 'navigate' as const,
-          path: '/',
-          evidenceDigest: hash(JSON.stringify(findRoute('/'))),
+          path: entry.path,
+          evidenceDigest: hash(JSON.stringify(findRoute(entry.path))),
         },
         {
           action: 'product' as const,
-          path: product.path,
-          evidenceDigest: hash(JSON.stringify(findRoute(product.path))),
+          path: productPath,
+          evidenceDigest: productFrame
+            ? hash(JSON.stringify(findRoute(productPath)))
+            : hash(
+                JSON.stringify({
+                  path: productPath,
+                  title: await page.title(),
+                  status: 200,
+                })
+              ),
         },
         ...commerce,
       ];

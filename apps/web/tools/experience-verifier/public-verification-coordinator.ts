@@ -92,7 +92,20 @@ export async function createPublicVerificationCoordinator(settings: {
     deriveExpected: (binding) =>
       derivePublicVerificationPlan(binding, runtime, signal),
     fetchPages: (binding, expected) =>
-      fetchPublicPages(binding.canonicalBase, expected.routes, network),
+      fetchPublicPages(
+        binding.canonicalBase,
+        expected.product.native
+          ? [
+              ...expected.routes,
+              {
+                path: expected.product.path,
+                canonical: `${binding.canonicalBase}${expected.product.path}`,
+                native: true,
+              },
+            ]
+          : expected.routes,
+        network
+      ),
     observe: async (binding, output, pages, expected) => {
       const framework = await fetchFrameworkAssets(
         binding.canonicalBase,

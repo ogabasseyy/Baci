@@ -33,6 +33,21 @@ it('fetches exactly the bound HTML pages without executing their scripts', async
     routes.map((r) => r.canonical)
   );
 });
+
+it('reads native product titles from the canonical document', async () => {
+  const { path, canonical } = routes[1];
+  const result = await fetchPublicPages(
+    origin,
+    [{ path, canonical, native: true }],
+    { resolve, network: fixture() }
+  );
+  expect(result[0]).toMatchObject({
+    path,
+    canonical,
+    title: 'Device',
+    status: 200,
+  });
+});
 it('recognizes canonical among whitespace-separated rel tokens and rejects duplicate canonicals', async () => {
   const document = html('Synthetic shop', `${origin}/`).replace(
     'rel="canonical"',

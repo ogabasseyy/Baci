@@ -43,8 +43,7 @@ export async function derivePublicVerificationPlan(
     binding.head.merchantId !== binding.merchantId ||
     binding.head.buildDigest !== binding.buildDigest ||
     binding.head.version !== binding.publicationRevision ||
-    !binding.head.routes.some((route) => route.view === 'home') ||
-    !binding.head.routes.some((route) => route.view === 'product')
+    !binding.head.routes.length
   )
     throw Error('PUBLIC_BINDING_MISMATCH');
   const merchant = { id: binding.merchantId, slug: binding.slug };
@@ -64,6 +63,9 @@ export async function derivePublicVerificationPlan(
     : undefined;
   const productPath = normalizeExperiencePath(
     product.canonicalPath ?? `/products/${product.slug}`
+  );
+  const nativeProduct = !binding.head.routes.some(
+    (route) => route.view === 'product'
   );
   const routes = [];
   for (const route of binding.head.routes) {
@@ -101,14 +103,25 @@ export async function derivePublicVerificationPlan(
       id: product.id,
       slug: product.slug,
       ...(variant ? { variantId: variant.id } : {}),
+      ...(nativeProduct ? { native: true as const } : {}),
       path: productPath,
     },
     journeySteps: [
-      { action: 'navigate' as const, path: '/' },
+      {
+        action: 'navigate' as const,
+        path:
+          routes.find((route) => route.path === '/')?.path ?? routes[0].path,
+      },
       { action: 'product' as const, path: productPath },
       { action: 'cart-add' as const, path: productPath },
-      { action: 'cart-read' as const, path: '/cart' },
-      { action: 'checkout-review' as const, path: '/checkout' },
+      {
+        action: 'cart-read' as const,
+        path: nativeProduct ? productPath : '/cart',
+      },
+      {
+        action: 'checkout-review' as const,
+        path: nativeProduct ? productPath : '/checkout',
+      },
     ],
   };
 }

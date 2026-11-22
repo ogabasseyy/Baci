@@ -4,7 +4,10 @@ import { productionOrigin } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
 import { createBoundPublicFetcher } from './public-fetch';
 
-type Route = { path: string; canonical: string; title: string };
+type Route = { path: string; canonical: string } & (
+  | { title: string; native?: never }
+  | { native: true; title?: never }
+);
 
 /** Read the bound public documents without executing merchant scripts or following redirects. */
 export async function fetchPublicPages(
@@ -23,8 +26,7 @@ export async function fetchPublicPages(
     const path = normalizeExperiencePath(route.path);
     if (
       path !== route.path ||
-      !route.title ||
-      route.title.length > 500 ||
+      (!route.native && (!route.title || route.title.length > 500)) ||
       seen.has(path)
     )
       throw Error('INVALID_PUBLIC_ROUTES');
@@ -62,6 +64,7 @@ export async function fetchPublicPages(
       document = new JSDOM(html);
       const head = document.window.document.head;
       const titles = head.querySelectorAll('title');
+      const title = titles[0]?.textContent;
       const links = [...head.querySelectorAll('link')].filter((link) =>
         (link.getAttribute('rel') ?? '')
           .toLowerCase()
@@ -77,7 +80,9 @@ export async function fetchPublicPages(
       );
       if (
         titles.length !== 1 ||
-        titles[0].textContent !== route.title ||
+        !title ||
+        title.length > 500 ||
+        (!route.native && title !== route.title) ||
         links.length !== 1 ||
         links[0].getAttribute('href') !== route.canonical ||
         refresh ||
@@ -86,6 +91,7 @@ export async function fetchPublicPages(
         throw Error('PUBLIC_PAGE_MISMATCH');
       pages.push({
         ...route,
+        title,
         status: 200 as const,
         digest: digestBytes(response.body),
         bytes: response.body,

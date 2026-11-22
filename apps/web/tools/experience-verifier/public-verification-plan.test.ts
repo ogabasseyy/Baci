@@ -140,3 +140,30 @@ it('keeps the catalog order when choosing the first available variant', async ()
   const result = await derivePublicVerificationPlan(binding, deps);
   expect(result.product.variantId).toBe('variant-z');
 });
+
+it.each([
+  '/',
+  '/pages/story',
+])('plans partial coverage for %s and a native PDP', async (path) => {
+  const route = head.routes.find((item) => item.path === path);
+  if (!route) throw Error('FIXTURE_ROUTE_MISSING');
+  const partial = { ...head, routes: [route] };
+  const deps = fixture();
+  deps.resolveBoundary.mockResolvedValueOnce({
+    manifest: partial,
+    title: 'Synthetic page',
+    canonicalUrl: `https://shop.example${path}`,
+    bootstrap: { route: { routeId: route.view } },
+  });
+  const plan = await derivePublicVerificationPlan(
+    { ...binding, head: partial },
+    deps
+  );
+  expect(plan.routes.map((item) => item.path)).toEqual([path]);
+  expect(plan.product).toMatchObject({
+    native: true,
+    path: product.canonicalPath,
+  });
+  expect(plan.journeySteps[0]).toEqual({ action: 'navigate', path });
+  expect(deps.resolveBoundary).toHaveBeenCalledTimes(1);
+});

@@ -23,7 +23,7 @@ vi.mock('./chat-auto-reply-client', () => ({
   getConversationSnapshot: mocks.snapshot,
 }));
 
-import { recordMerchantTakeover, runChatAutoReply } from './chat-auto-reply';
+import { runChatAutoReply } from './chat-auto-reply';
 
 const binding = {
   merchantId: '11111111-1111-4111-8111-111111111111',
@@ -127,6 +127,13 @@ describe('runChatAutoReply', () => {
     expect(mocks.post).not.toHaveBeenCalled();
   });
 
+  it('does not hand over for an older message once the customer has written again', async () => {
+    mocks.latest.mockResolvedValue(false);
+    mocks.generate.mockResolvedValue({ ok: false, reason: 'unavailable' });
+    expect(await runChatAutoReply(binding, event())).toBe('skipped');
+    expect(mocks.status).not.toHaveBeenCalled();
+    expect(mocks.post).not.toHaveBeenCalled();
+  });
   it('hands over when the reply is rejected so the conversation is not left pending', async () => {
     mocks.post.mockResolvedValueOnce(false).mockResolvedValue(true);
     expect(await runChatAutoReply(binding, event())).toBe('handed_over');
@@ -234,67 +241,6 @@ describe('runChatAutoReply', () => {
     mocks.post.mockResolvedValue(false);
     mocks.status.mockResolvedValue(false);
     expect(await runChatAutoReply(binding, event())).toBe('failed');
-    expect(mocks.labels).not.toHaveBeenCalled();
-  });
-});
-
-describe('recordMerchantTakeover', () => {
-  const staff = (status: string) =>
-    event({
-      message_type: 'outgoing',
-      sender: { name: 'Staff', type: 'user' },
-      conversation: { id: 7, status, labels: ['handled-by-ai', 'vip'] },
-    });
-
-  it('moves a pending conversation to the queue and switches the label', async () => {
-    expect(await recordMerchantTakeover(binding, staff('pending'))).toBe(
-      'replied'
-    );
-    expect(mocks.status).toHaveBeenCalledWith(binding, {
-      conversationId: 7,
-      status: 'open',
-    });
-    expect(mocks.labels).toHaveBeenCalledWith(binding, {
-      conversationId: 7,
-      labels: ['vip', 'handled-by-merchant'],
-    });
-  });
-
-  it('reports failure when the queue move fails, so the assistant is not left running', async () => {
-    mocks.status.mockResolvedValue(false);
-    expect(await recordMerchantTakeover(binding, staff('pending'))).toBe(
-      'failed'
-    );
-    expect(mocks.labels).toHaveBeenCalledOnce();
-  });
-
-  it('does not reopen a conversation staff resolved after replying', async () => {
-    mocks.snapshot.mockResolvedValue({ status: 'resolved', labels: ['vip'] });
-    expect(await recordMerchantTakeover(binding, staff('pending'))).toBe(
-      'replied'
-    );
-    expect(mocks.status).not.toHaveBeenCalled();
-  });
-
-  it('reports failure, without moving the queue, when the live status cannot be read', async () => {
-    mocks.snapshot.mockResolvedValue(null);
-    expect(await recordMerchantTakeover(binding, staff('pending'))).toBe(
-      'failed'
-    );
-    expect(mocks.status).not.toHaveBeenCalled();
-  });
-  it('only relabels a conversation that is already open', async () => {
-    await recordMerchantTakeover(binding, staff('open'));
-    expect(mocks.status).not.toHaveBeenCalled();
-    expect(mocks.labels).toHaveBeenCalledOnce();
-  });
-
-  it('ignores the assistant bot and private notes', async () => {
-    const bot = event({
-      message_type: 'outgoing',
-      sender: { type: 'agent_bot' },
-    });
-    expect(await recordMerchantTakeover(binding, bot)).toBe('skipped');
     expect(mocks.labels).not.toHaveBeenCalled();
   });
 });

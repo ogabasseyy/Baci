@@ -159,18 +159,22 @@ export async function runChatAutoReply(
     question,
     history,
   });
+  // Generation can take a while. A later customer message has its own run,
+  // so this one stays out of it: no answer and no handover for a question
+  // that has been superseded.
+  if (!(await isLatestChatMessage(binding, conversationId, event.id))) {
+    return 'skipped';
+  }
   if (!result.ok) {
     return handOver(binding, conversationId, 'the assistant was unavailable');
   }
   const reason = needsHandover(result.reply);
   if (reason) return handOver(binding, conversationId, reason);
 
-  // Generation can take a while: a person may have replied, or a later
-  // message may have asked for one, since the webhook arrived.
+  // Read last, right before sending: a person may have replied meanwhile.
+  // The send itself carries no status condition, so a takeover in the moment
+  // between this read and the send can still be followed by one reply.
   if (!(await isStillPending(binding, conversationId))) return 'skipped';
-  if (!(await isLatestChatMessage(binding, conversationId, event.id))) {
-    return 'skipped';
-  }
   const sent = await postAssistantMessage(binding, {
     conversationId,
     content: result.reply.reply,

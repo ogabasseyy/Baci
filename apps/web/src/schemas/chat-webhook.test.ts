@@ -200,6 +200,14 @@ describe('message_created assistant fields', () => {
     ).toBe(true);
   });
 
+  it('drops an over-long label instead of rejecting the message', () => {
+    const parsed = chatWebhookMessageCreatedSchema.parse({
+      ...base,
+      conversation: { id: 4, labels: ['vip', 'x'.repeat(101)] },
+    });
+    expect(parsed.conversation.labels).toEqual(['vip']);
+  });
+
   it('rejects labels that are not a short list of strings', () => {
     expect(
       chatWebhookMessageCreatedSchema.safeParse({

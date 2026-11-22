@@ -62,6 +62,16 @@ describe('withNarrowDownNudge', () => {
     expect(withNarrowDownNudge(original, 3)).toEqual(original);
   });
 
+  it('leaves a reply alone when the line would push it past the length limit', () => {
+    const long = {
+      reply: 'a'.repeat(950),
+      confidence: 0.9,
+      needsHuman: false,
+      intent: 'discover' as const,
+    };
+    expect(withNarrowDownNudge(long, 3)).toEqual(long);
+  });
+
   it('does not repeat it when the reply already says it', () => {
     const original = draft({
       intent: 'recommend',

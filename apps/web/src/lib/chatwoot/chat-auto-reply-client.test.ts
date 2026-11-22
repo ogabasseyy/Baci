@@ -86,6 +86,18 @@ describe('chat auto-reply provider client', () => {
     ]);
   });
 
+  it('does not retry a status move that timed out or hit a server error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = stubFetch(() => ({ status: 500 }));
+    expect(
+      await setConversationStatus(binding, {
+        conversationId: 7,
+        status: 'open',
+      })
+    ).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('sets labels with the agent credential', async () => {
     const fetchMock = stubFetch(() => ({ body: {} }));
     await setConversationLabels(binding, {

@@ -10,6 +10,8 @@ const DIGEST_PREFIX = 'sha256:';
 const SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const pendingCartOperations = new Map<string, Promise<void>>();
 
+// Checkout and reconciliation keep going after a cart-storage failure.
+// Keep the diagnostic here, where the operation and failed stage are known.
 async function runCartStep<T>(
   operation: 'save' | 'cleanup' | 'expire',
   stage:

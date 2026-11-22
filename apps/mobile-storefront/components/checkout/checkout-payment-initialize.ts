@@ -161,6 +161,7 @@ export async function initializeGatewayAndRoute({
     checkoutCartIdentity &&
     BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)
   ) {
+    // The helper reports the storage failure and keeps gateway navigation available.
     await deferredBankOfferCart
       .remember(orderId, reference, checkoutCartIdentity)
       .catch(() => undefined);

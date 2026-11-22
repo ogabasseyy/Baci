@@ -227,6 +227,13 @@ it('preserves the original marker for retry when clearing fails', async () => {
   await expect(
     deferredBankOfferCart.clearIfUnchanged('order-1', reference, () => true)
   ).rejects.toThrow('retryable cart write');
+  expect(jest.mocked(trackError).mock.calls).toEqual([
+    [
+      'bank_offer_cart_storage',
+      'Cart snapshot operation failed',
+      { operation: 'cleanup', stage: 'clear_cart' },
+    ],
+  ]);
   expect(jest.mocked(logger.warn).mock.calls).toEqual([
     [
       'Bank card checkout',

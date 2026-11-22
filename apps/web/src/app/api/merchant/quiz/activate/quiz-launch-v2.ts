@@ -1,4 +1,8 @@
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
+import {
+  isQuizEdgeProvisioningConfigured,
+  provisionQuizEdgeRooms,
+} from '@/lib/quiz/quiz-edge-provision';
 import { getQuizRulesVersion } from '@/lib/quiz/quiz-rules-version';
 import { scheduleReservationProductPurge } from '@/lib/schedule-reservation-product-purge';
 import type { MerchantQuizActivationV2Input } from '@/schemas/quiz';
@@ -111,6 +115,39 @@ export async function launchMerchantQuizDraftV2(args: {
 
   const timing = resolveTiming(input, now);
   const questionCount = input.answerKeyReview.questions.length;
+  const wantsEdgeRooms = input.backendMode === 'edge_rooms';
+  const expectedRoomCount =
+    input.edgeRoomCount ?? (input.mode === 'live' ? 16 : 4);
+
+  if (wantsEdgeRooms && !isQuizEdgeProvisioningConfigured()) {
+    return {
+      code: 'QUIZ_EDGE_NOT_CONFIGURED',
+      message:
+        'Cloudflare Edge Quiz Rooms are not configured on this server (missing QUIZ_EDGE_WORKER_URL or QUIZ_INTERNAL_COORDINATOR_SECRET).',
+      ok: false,
+    };
+  }
+
+  const finalizeEdgeIfRequested = async (
+    event: QuizDraftEvent
+  ): Promise<QuizLaunchV2Result> => {
+    if (!wantsEdgeRooms) return { event, ok: true };
+    const provisioned = await provisionQuizEdgeRooms({
+      eventId: event.id,
+      expectedRoomCount,
+      merchantId,
+      supabase,
+    });
+    if (!provisioned.ok) {
+      return {
+        code: provisioned.code,
+        message: provisioned.message,
+        ok: false,
+      };
+    }
+    return { event, ok: true };
+  };
+
   if (input.mode === 'live') {
     const regulatory = input.regulatoryCompliance;
     if (!regulatory) return getLiveLaunchFailure('QZ047');
@@ -135,7 +172,7 @@ export async function launchMerchantQuizDraftV2(args: {
         source: 'quiz',
         supabase,
       });
-      return { event: data, ok: true };
+      return finalizeEdgeIfRequested(data);
     }
 
     if (error?.code === 'QZ046') {
@@ -152,7 +189,7 @@ export async function launchMerchantQuizDraftV2(args: {
           source: 'quiz',
           supabase,
         });
-        return { event: alreadyLaunched, ok: true };
+        return finalizeEdgeIfRequested(alreadyLaunched);
       }
     }
     return getLiveLaunchFailure(error?.code);
@@ -188,7 +225,7 @@ export async function launchMerchantQuizDraftV2(args: {
       ok: false,
     };
   }
-  if (isQuizDraftEvent(data)) return { event: data, ok: true };
+  if (isQuizDraftEvent(data)) return finalizeEdgeIfRequested(data);
 
   const alreadyLaunched = await findLaunchedMerchantQuizV2({
     eventId: input.eventId,
@@ -196,7 +233,7 @@ export async function launchMerchantQuizDraftV2(args: {
     supabase,
   });
   return alreadyLaunched
-    ? { event: alreadyLaunched, ok: true }
+    ? finalizeEdgeIfRequested(alreadyLaunched)
     : {
         code: 'QUIZ_LAUNCH_FAILED',
         message: 'The reviewed quiz could not be launched.',

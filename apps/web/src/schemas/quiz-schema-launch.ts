@@ -54,7 +54,9 @@ export const merchantQuizActivationV2RequestSchema = z
         .min(1)
         .max(QUIZ_MAX_LOGICAL_QUESTIONS),
     }),
+    backendMode: z.enum(['postgres', 'edge_rooms']).optional(),
     confirmActivation: z.literal(true),
+    edgeRoomCount: z.coerce.number().int().min(1).max(256).optional(),
     eventId: quizUuidSchema,
     maxAttempts: z.coerce
       .number()

@@ -120,4 +120,30 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- 6. Older expired aliases must not block releasing a stuck claim.
+SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000006', 'FENCE-6');
+INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
+  account_name, provider, assigned_at, expires_at, assignment_customer_email,
+  payable_amount)
+VALUES
+  ('a0000000-0000-4000-8000-000000000006', '0000000061', 'Test Bank',
+   'Test Name', 'paystack', clock_timestamp() - interval '9 hours',
+   clock_timestamp() - interval '8 hours', 'shopper@example.com', 5000.00),
+  ('a0000000-0000-4000-8000-000000000006', '0000000062', 'Test Bank',
+   'Test Name', 'paystack', clock_timestamp() - interval '5 hours',
+   clock_timestamp() - interval '4 hours', 'shopper@example.com', 5000.00);
+DO $$ BEGIN
+  IF pg_temp.begin_attempt('a0000000-0000-4000-8000-000000000006',
+       'token-FENCE-6', 'BAC-AAAAAAAAAAA6') IS DISTINCT FROM 'claimed' THEN
+    RAISE EXCEPTION 'expired aliases must allow a fresh claim';
+  END IF;
+  UPDATE private.chat_paystack_dva_attempts
+    SET claimed_at = clock_timestamp() - interval '1 hour'
+    WHERE order_id = 'a0000000-0000-4000-8000-000000000006';
+  IF NOT private.release_unfulfilled_chat_paystack_dva_attempt(
+       'a0000000-0000-4000-8000-000000000006', 'BAC-AAAAAAAAAAA6') THEN
+    RAISE EXCEPTION 'older alias history must not block release';
+  END IF;
+END $$;
+
 ROLLBACK;

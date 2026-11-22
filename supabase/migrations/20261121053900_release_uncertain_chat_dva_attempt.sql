@@ -45,7 +45,8 @@ BEGIN
       WHERE account.order_id = attempt.order_id AND account.provider = 'paystack'
         AND (
           account.assigned_at IS NULL
-          OR account.assigned_at IS DISTINCT FROM attempt.prior_assignment_at
+          -- Older alias history is irrelevant; only a newer assignment blocks.
+          OR account.assigned_at > coalesce(attempt.prior_assignment_at, '-infinity'::timestamptz)
           OR least(account.expires_at, account.assigned_at + interval '90 minutes')
             > clock_timestamp()
         )

@@ -5,7 +5,7 @@ vi.mock('@/lib/api-client', () => ({ fetchWithCsrf }));
 
 import { sendOxygenWorkflowAction } from './oxygen-workflow-action-request';
 
-it('advertises support for safe eligibility reasons on action requests', () => {
+it('advertises support for safe eligibility reasons and progress on action requests', () => {
   sendOxygenWorkflowAction('{}');
   expect(fetchWithCsrf).toHaveBeenCalledWith(
     '/api/payments/oxygen/workflows/actions',
@@ -13,7 +13,10 @@ it('advertises support for safe eligibility reasons on action requests', () => {
       method: 'POST',
       body: '{}',
       cache: 'no-store',
-      headers: { 'x-oxygen-eligibility-reason': '1' },
+      headers: {
+        'x-oxygen-eligibility-reason': '1',
+        'x-oxygen-eligibility-progress': '1',
+      },
     }
   );
 });

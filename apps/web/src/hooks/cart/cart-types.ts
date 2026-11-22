@@ -14,6 +14,8 @@ export interface SharedCartLineMarkers {
   pendingTempId?: string | null;
   /** True when the line is confirmed but its catalog details failed to load. */
   hydrationFailed?: boolean;
+  /** Persisted catalog status for confirmed lines. Older cache entries omit it. */
+  catalogPlaceholder?: boolean;
 }
 
 export type SharedCartDisplayItem = CartItem & SharedCartLineMarkers;

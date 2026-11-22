@@ -7,6 +7,7 @@ export type StoreCreditPaymentMethod =
   | 'pay_on_delivery'
   | 'credpal'
   | 'credit_direct'
+  | 'oxygen'
   | 'klump'
   | 'juicyway'
   | 'invoice'

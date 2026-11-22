@@ -1,34 +1,64 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { verifyCheckoutPayment } from './verify-checkout-payment';
+import { handlers, params } from './verify-checkout-payment.test-support';
 
 const request = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: request }));
 
-function handlers() {
-  return {
-    capturePaymentCompleted: vi.fn(),
-    capturePaymentFailed: vi.fn(),
-    clearCart: vi.fn(),
-    redirectToCheckout: vi.fn(),
-    scheduleFailedRedirect: vi.fn(),
-    setIsVerifying: vi.fn(),
-    setOrderNumber: vi.fn(),
-    setPaymentMethod: vi.fn(),
-    setStatus: vi.fn(),
-  };
-}
-
-const params = {
-  merchantSlug: 'ogabassey',
-  orderId: 'order-id',
-  paymentMethod: null,
-  pendingRedvaultOrder: false,
-  reference: null,
-  trackingToken: null,
-};
-
 describe('verifyCheckoutPayment', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    undefined,
+    'different-order',
+  ])('preserves the cart when a successful provider response has order ID %s', async (orderId) => {
+    request.mockResolvedValueOnce(
+      Response.json({
+        orderId,
+        success: true,
+        status: 'success',
+        finalizationOutcome: 'completed',
+      })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, reference: 'reference' },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith(
+      'verification_unavailable'
+    );
+    expect(callbacks.clearCart).not.toHaveBeenCalled();
+    expect(callbacks.capturePaymentCompleted).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    params.orderId,
+  ])('accepts the verified provider order when the URL order is %s', async (orderId) => {
+    request.mockResolvedValueOnce(
+      Response.json({
+        orderId: params.orderId,
+        success: true,
+        status: 'success',
+        finalizationOutcome: 'completed',
+      })
+    );
+    const callbacks = handlers();
+
+    await verifyCheckoutPayment(
+      { ...params, orderId, reference: 'reference' },
+      callbacks
+    );
+
+    expect(callbacks.setStatus).toHaveBeenCalledWith('success');
+    expect(callbacks.clearCart).toHaveBeenCalledOnce();
+    expect(callbacks.capturePaymentCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: params.orderId })
+    );
+  });
 
   it.each([
     'unpaid',

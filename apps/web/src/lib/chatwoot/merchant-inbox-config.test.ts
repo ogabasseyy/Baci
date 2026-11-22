@@ -68,6 +68,31 @@ describe('getMerchantInboxBinding', () => {
     expect(getMerchantInboxBinding(MERCHANT_A, withReports(42))).toBeNull();
   });
 
+  it('carries an optional bot credential and rejects a malformed one', () => {
+    const withBot = (botApiAccessToken: unknown) =>
+      env({
+        EKAETTE_CHATWOOT_INBOX_BINDINGS: JSON.stringify([
+          {
+            merchantId: MERCHANT_A,
+            accountId: 1,
+            inboxId: 10,
+            apiAccessToken: TOKEN_A,
+            botApiAccessToken,
+          },
+        ]),
+      });
+    expect(
+      getMerchantInboxBinding(MERCHANT_A, withBot(TOKEN_B))?.botApiAccessToken
+    ).toBe(TOKEN_B);
+    expect(
+      getMerchantInboxBinding(MERCHANT_A, withBot('has space'))
+    ).toBeNull();
+    expect(getMerchantInboxBinding(MERCHANT_A, withBot(7))).toBeNull();
+    expect(getMerchantInboxBinding(MERCHANT_A, env())).not.toHaveProperty(
+      'botApiAccessToken'
+    );
+  });
+
   it('returns null for a merchant without a binding', () => {
     expect(
       getMerchantInboxBinding('33333333-3333-4333-8333-333333333333', env())

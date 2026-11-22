@@ -100,6 +100,22 @@ describe('resolveRedvaultSubmitFence', () => {
     );
   });
 
+  it('routes saved bank offer to payment verification and leaves checkout intact', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    const options = buildOptions({
+      reusableOrder: null,
+      clearStoredOrder: false,
+      bankOfferVerification: { orderId: 'order-1', reference },
+    });
+
+    await expect(resolveRedvaultSubmitFence(options)).resolves.toBe(true);
+    expect(options.pushSuccessRoute).toHaveBeenCalledWith(
+      `/checkout/success?orderId=order-1&reference=${reference}`
+    );
+    expect(options.clearCart).not.toHaveBeenCalled();
+    expect(options.clearPendingCheckoutOrder).not.toHaveBeenCalled();
+  });
+
   it('cancels a blocking ordinary order and continues', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response('{"success":true,"cancelled":true}', { status: 200 })

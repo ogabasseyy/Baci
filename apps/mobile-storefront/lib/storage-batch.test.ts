@@ -12,6 +12,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getAsyncStorageEntries,
+  getStorageEntriesAcrossBackends,
   removeAsyncStorageItems,
 } from './storage-batch';
 
@@ -193,4 +194,35 @@ describe('storage batching helpers', () => {
       'multi remove failed'
     );
   });
+});
+
+it('reads scoped AsyncStorage misses and removes only scoped staging keys', async () => {
+  const storagePrefix = 'baci-oxygen-staging.v2.test.';
+  Reflect.set(globalThis, '__baciOxygenStagingRuntime', {
+    profile: { storagePrefix },
+  });
+  try {
+    storageMock.getItem.mockClear().mockResolvedValue('saved fallback');
+    storageMock.removeItem.mockClear().mockResolvedValue(undefined);
+    const native = {
+      getString: jest.fn((key: string) =>
+        key === `${storagePrefix}native` ? 'native data' : undefined
+      ),
+    };
+    await expect(
+      getStorageEntriesAcrossBackends(['persisted', 'native'], native)
+    ).resolves.toEqual([
+      ['persisted', 'saved fallback'],
+      ['native', 'native data'],
+    ]);
+    expect(storageMock.getItem.mock.calls).toEqual([
+      [`${storagePrefix}persisted`],
+    ]);
+    await removeAsyncStorageItems(['persisted']);
+    expect(storageMock.removeItem.mock.calls).toEqual([
+      [`${storagePrefix}persisted`],
+    ]);
+  } finally {
+    Reflect.deleteProperty(globalThis, '__baciOxygenStagingRuntime');
+  }
 });

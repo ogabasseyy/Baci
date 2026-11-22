@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   getQuote: vi.fn(),
   getWallet: vi.fn(),
   requestFundingAccount: vi.fn(),
+  saveAddress: vi.fn(),
 }));
 
 const appState = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ vi.mock('@/lib/order-gigl-shipping', () => {
     getOrderGiglQuote: api.getQuote,
     OrderGiglShippingError: TestShippingError,
     requestMerchantWalletFundingAccount: api.requestFundingAccount,
+    saveOrderGiglShippingAddress: api.saveAddress,
   };
 });
 
@@ -173,7 +175,7 @@ describe('useOrderGiglShipping', () => {
 
   it('requotes when only the saved Google coordinates change', async () => {
     type Props = { latitude: number; longitude: number };
-    const { rerender } = renderHook(
+    const { rerender, result: hook } = renderHook(
       ({ latitude, longitude }: Props) =>
         useOrderGiglShipping({
           enabled: true,
@@ -192,7 +194,8 @@ describe('useOrderGiglShipping', () => {
     await flushPromises();
 
     expect(api.getQuote).toHaveBeenCalledTimes(2);
-    expect(api.getQuote.mock.calls[1]?.[1]).toMatchObject({
+    expect(api.getQuote.mock.calls[1]?.[1]).toBeUndefined();
+    expect(hook.current.addressDraft).toMatchObject({
       latitude: 6.602,
       longitude: 3.352,
     });
@@ -211,6 +214,9 @@ describe('useOrderGiglShipping', () => {
         useOrderGiglShipping({
           enabled: true,
           initialAddress: { address: '1 Allen', phone: '0801' },
+          storedOrder: {
+            shipping_address: { address: '1 Allen', phone: '0801' },
+          },
           orderId: 'order-1',
         }),
       { wrapper }
@@ -221,10 +227,15 @@ describe('useOrderGiglShipping', () => {
       hook.current.updateAddressField('city', 'Ikeja');
       hook.current.updateAddressField('state', 'Lagos');
     });
-    await act(() => hook.current.requestQuote());
-    expect(api.getQuote).toHaveBeenLastCalledWith(
+    await act(() => hook.current.saveAddressAndRequestQuote());
+    expect(api.saveAddress).toHaveBeenCalledWith(
       'order-1',
       { address: '1 Allen', city: 'Ikeja', state: 'Lagos', phone: '0801' },
+      expect.any(AbortSignal)
+    );
+    expect(api.getQuote).toHaveBeenLastCalledWith(
+      'order-1',
+      undefined,
       expect.any(AbortSignal)
     );
   });

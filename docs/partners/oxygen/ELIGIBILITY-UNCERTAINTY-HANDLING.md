@@ -9,3 +9,20 @@ The operator should preserve the existing order, application reference, command 
 There is currently no authorized automatic reconciliation or operator mutation in this path. A provider response or contract confirmation needs a separately reviewed, reference-bound reconciliation procedure before the saved fence can be cleared. Until then the customer cannot automatically advance from this state; closing and returning preserves the same pending state. No booking, activation or settlement is implied.
 
 On 4 November 2026, Oxygen's public [eligibility documentation](https://oxygenxfinance.gitbook.io/oxygenxfinance-docs/third-party-collection/eligibility-checks.md) described `POST /v1/loan-request/get` as an eligibility status request. Its examples do not specify whether the request starts or restarts an assessment, or whether it is safe to repeat after a lost response. The label alone does not establish an idempotency contract; keep the fence until Oxygen confirms that behavior or provides an authoritative recovery operation.
+
+## Checks after the customer leaves
+
+The VPS Oxygen worker can check saved, explicitly pending applications with the
+same provider references. Enable `OXYGEN_ELIGIBILITY_BACKGROUND_ENABLED=true`
+only after applying the eligibility background migration and deploying the
+worker. The first check is due after five minutes. The next checks wait ten,
+twenty, and then thirty minutes between attempts, with a 24-hour limit.
+Customer-initiated checks still use the existing checkout button and share the
+workflow's single active command.
+
+When a worker check saves confirmed offers, the same transaction enqueues a
+notification. The link resumes the saved application, including any remaining identity checks. Production uses
+mobile push when an active storefront token exists on the customer's account,
+with email for web or when push is unavailable. Staging checks can run without
+sending customer notifications. The worker marks uncertain delivery for
+follow-up without automatically sending another message.

@@ -9,6 +9,7 @@ import {
   generateQuizDraft,
   type QuizAnswerKeyReview,
   type QuizDraftConfiguration,
+  type QuizEdgeLaunchOptions,
   type QuizLaunchInput,
 } from './quiz-admin-actions';
 import { QuizAdminResult } from './quiz-admin-result';
@@ -100,7 +101,8 @@ export function QuizAdminClient({
 
   const activate = (
     answerKeyReview: QuizAnswerKeyReview,
-    regulatoryCompliance?: QuizLaunchInput['regulatoryCompliance']
+    regulatoryCompliance?: QuizLaunchInput['regulatoryCompliance'],
+    edgeOptions?: QuizEdgeLaunchOptions
   ) => {
     if (!result || !configuration) return;
     const eventId = result.event.id;
@@ -142,6 +144,14 @@ export function QuizAdminClient({
     }
     setIsActivating(true);
     activateQuizEvent(eventId, answerKeyReview, {
+      ...(edgeOptions?.backendMode === 'edge_rooms'
+        ? {
+            backendMode: 'edge_rooms' as const,
+            ...(edgeOptions.edgeRoomCount
+              ? { edgeRoomCount: edgeOptions.edgeRoomCount }
+              : {}),
+          }
+        : {}),
       maxAttempts: launchPolicy.maxAttempts,
       mode: configuration.mode,
       ...(regulatoryCompliance ? { regulatoryCompliance } : {}),

@@ -55,6 +55,7 @@ const DYNAMIC_ENTRYPOINTS = [
   '(commerce)/checkout/crypto/page.tsx',
   '(commerce)/checkout/page.tsx',
   '(commerce)/checkout/success/page.tsx',
+  '(commerce)/gift-cards/page.tsx',
   '(commerce)/order-success/page.tsx',
   '(commerce)/track-order/page.tsx',
   '(commerce)/wallet/page.tsx',

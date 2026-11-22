@@ -4,6 +4,7 @@ import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { logger } from '@/lib/logger';
 import { drainFailedPaidOrderSideEffects } from '@/lib/payments/drain-failed-paid-order-side-effects';
 import type { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
+import { recheckPaidBankCardOfferCaptures } from '@/lib/payments/recheck-paid-bank-card-offer-captures';
 import {
   type AbandonedPaystackAttemptSummary,
   reconcileAbandonedPaystackAttempts,
@@ -16,14 +17,16 @@ import { createServiceClient } from '@/lib/supabase/service';
 // Manual fallback only — DO NOT re-enable Vercel Cron for this route.
 // Scheduled execution lives in vps-workers (deploy.sh crontab →
 // run-web-cron.mjs), which invokes this CRON_SECRET-gated endpoint over the
-// custom domain; keep the CRON_SECRET gating intact. Three passes:
+// the custom domain; keep the CRON_SECRET gating intact.
 // 1. Retire Paystack attempts that the provider confirms were abandoned/failed.
 // 2. Heal "wedged" gateway order payments — completed transaction, order
 //    never flipped to paid — after re-verifying with the gateway.
-// 3. Drain failed paid-order side effects (settlement/email/ad tracking)
+// 3. Recheck paid bank-offer captures for reversals in a bounded pass.
+// 4. Drain failed paid-order side effects (settlement/email/ad tracking)
 //    for orders that ARE paid but whose outbox recorded a failure.
 // Safety net behind the webhook's own heal-on-retry path.
 export const maxDuration = 300;
+const BANK_OFFER_RECHECK_BUDGET_MS = 20_000;
 
 export async function GET(request: NextRequest) {
   const cronSecret = getCronSecret();
@@ -44,10 +47,13 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
     const scheduleAfter = (task: () => Promise<void>) => after(task);
-    // The three serial passes share the invocation budget in equal
-    // cumulative shares: a slow backlog in an early pass must not starve
-    // the recovery jobs behind it or terminate the route.
     const invocationStartedAt = Date.now();
+    // Keep the full existing side-effect window. Reserve the paid-offer
+    // pass from the end of the wedge sweep's share of the invocation.
+    const recheckDeadlineMs = reconcileGatewayPassDeadlineMs(
+      invocationStartedAt,
+      1
+    );
     let abandonedAttemptSweep: AbandonedPaystackAttemptSummary = {
       checked: 0,
       completed: [],
@@ -83,13 +89,43 @@ export async function GET(request: NextRequest) {
           });
         }
       },
-      deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 1),
+      deadlineMs: recheckDeadlineMs - BANK_OFFER_RECHECK_BUDGET_MS,
       scheduleAfter,
       supabase,
     });
     if (!authorities) throw new Error('gateway_authority_unavailable');
+    const sideEffectDeadlineMs = reconcileGatewayPassDeadlineMs(
+      invocationStartedAt,
+      2
+    );
+    const bankOfferStartedAt = Date.now();
+    const bankOfferRecheckSkipped = bankOfferStartedAt >= recheckDeadlineMs;
+    const emptyRecheck = { checked: 0, failed: 0, retrying: 0, reversed: 0 };
+    if (bankOfferRecheckSkipped) {
+      logger.warn({
+        message:
+          'Paid bank card offer recheck skipped: invocation budget exhausted',
+      });
+    }
+    const bankOfferRecheck = bankOfferRecheckSkipped
+      ? emptyRecheck
+      : await recheckPaidBankCardOfferCaptures({
+          deadlineMs: Math.min(
+            recheckDeadlineMs,
+            bankOfferStartedAt + BANK_OFFER_RECHECK_BUDGET_MS
+          ),
+          finalizePayment: authorities.finalizePayment,
+          scheduleAfter,
+          supabase,
+        }).catch((error: unknown) => {
+          logger.warn({
+            error,
+            message: 'Paid bank card offer recheck pass failed',
+          });
+          return { ...emptyRecheck, failed: 1 };
+        });
     const sideEffectDrain = await drainFailedPaidOrderSideEffects({
-      deadlineMs: reconcileGatewayPassDeadlineMs(invocationStartedAt, 2),
+      deadlineMs: sideEffectDeadlineMs,
       finalizePayment: authorities.finalizePayment,
       fileWedgeReview: authorities.fileWedgeReview,
       scheduleAfter,
@@ -99,6 +135,9 @@ export async function GET(request: NextRequest) {
     if (
       abandonedAttemptSweep.checked > 0 ||
       abandonedAttemptSweepFailed ||
+      bankOfferRecheck.failed > 0 ||
+      bankOfferRecheck.retrying > 0 ||
+      bankOfferRecheck.reversed > 0 ||
       summary.checked > 0 ||
       sideEffectDrain.drained.length > 0 ||
       sideEffectDrain.failed.length > 0 ||
@@ -110,6 +149,7 @@ export async function GET(request: NextRequest) {
           'reconcile-gateway-paid-orders found gateway payment records to reconcile',
         abandonedAttemptSweep,
         abandonedAttemptSweepFailed,
+        bankOfferRecheck,
         sideEffectDrain,
         summary,
       });
@@ -120,10 +160,17 @@ export async function GET(request: NextRequest) {
         checked_at: new Date().toISOString(),
         abandonedAttemptSweep,
         abandonedAttemptSweepFailed,
+        bankOfferRecheck,
+        bankOfferRecheckSkipped,
         ...summary,
         sideEffectDrain,
       },
-      { status: abandonedAttemptSweepFailed ? 503 : 200 }
+      {
+        status:
+          abandonedAttemptSweepFailed || bankOfferRecheck.failed > 0
+            ? 503
+            : 200,
+      }
     );
   } catch (error) {
     logger.error({

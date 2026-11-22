@@ -119,7 +119,7 @@ const AuthorizationSchema = z.object({
 
 export const PaymentVerificationSchema = z.object({
   id: z.number(),
-  status: z.enum(PAYMENT_STATUSES),
+  status: z.enum([...PAYMENT_STATUSES, 'reversal-pending']),
   reference: z.string(),
   amount: z.number(),
   requested_amount: z.number().optional(),
@@ -208,6 +208,7 @@ export interface Subaccount {
 export interface PaymentInitData {
   email: string;
   amount: number; // Amount in kobo (NGN smallest unit)
+  currency?: string;
   reference?: string;
   callback_url?: string;
   metadata?: Record<string, unknown>;

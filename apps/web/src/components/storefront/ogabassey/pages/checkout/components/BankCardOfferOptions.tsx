@@ -1,0 +1,66 @@
+'use client';
+
+import { useContext } from 'react';
+import { BankCardOfferOptionsContext } from './bank-card-offer-options-context';
+
+export function BankCardOfferOptions() {
+  const model = useContext(BankCardOfferOptionsContext);
+  if (!model) return null;
+  return (
+    <>
+      {model.options.map(({ offer, price }) => (
+        <button
+          key={offer.id}
+          type="button"
+          aria-pressed={model.selectedId === offer.id}
+          onClick={() => model.select(offer.id)}
+          className="flex items-center justify-between gap-3 rounded-xl border border-store-background-text/15 p-3 text-left aria-pressed:border-store-primary aria-pressed:bg-store-primary/5"
+        >
+          <span>
+            <span className="block font-semibold">
+              {offer.verifiedIssuerName} card offer
+            </span>
+            <span className="block text-sm text-store-background-text/70">
+              {offer.cardBrands
+                .map(
+                  (brand) =>
+                    ({
+                      visa: 'Visa',
+                      verve: 'Verve',
+                      mastercard: 'Mastercard',
+                    })[brand]
+                )
+                .join(', ')}
+              {' · Save '}
+              {model.format(price.discountKobo)}
+            </span>
+          </span>
+          <span className="shrink-0 font-semibold">
+            {model.format(price.payableKobo)}
+          </span>
+        </button>
+      ))}
+      {model.recovery && (
+        <button
+          type="button"
+          aria-pressed={model.recovery.active}
+          onClick={model.recovery.select}
+          className="flex items-center justify-between gap-3 rounded-xl border border-store-background-text/15 p-3 text-left aria-pressed:border-store-primary aria-pressed:bg-store-primary/5"
+        >
+          <span className="font-semibold">Continue saved bank offer</span>
+          <span className="shrink-0 font-semibold">{model.recovery.total}</span>
+        </button>
+      )}
+      {!model.recovery?.active && model.selectedId &&
+        !model.options.some(({ offer }) => offer.id === model.selectedId) && (
+          <button
+            type="button"
+            className="text-left text-sm underline"
+            onClick={() => model.select(null)}
+          >
+            This bank offer is unavailable for this checkout. Clear selection
+          </button>
+        )}
+    </>
+  );
+}

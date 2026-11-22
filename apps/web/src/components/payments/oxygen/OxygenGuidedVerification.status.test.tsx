@@ -185,3 +185,27 @@ it('keeps a confirmed selfie return in loading while the saved KYC snapshot catc
   expect(screen.queryByRole('button')).toBeNull();
   expect(submit).not.toHaveBeenCalled();
 });
+
+it('shows the reported statement review while eligibility is pending', () => {
+  render(
+    <OxygenGuidedVerification
+      snapshot={{
+        ...base,
+        state: {
+          ...base.state,
+          kyc: { ...kyc, selfie_status: 'DONE' },
+          eligibilityStatus: 'pending',
+          eligibilityProgress: 'bank_statement',
+        },
+      }}
+      busy
+      error=""
+      submit={vi.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('heading', {
+      name: 'Oxygen is checking your bank statement',
+    })
+  ).toBeVisible();
+});

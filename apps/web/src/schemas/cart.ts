@@ -170,7 +170,7 @@ const handoffInputLineSchema = cartInputLineSchema.extend({
 export const cartHandoffRedeemRequestSchema = z
   .strictObject({
     attemptId: z.string().trim().min(1).max(128),
-    choice: z.enum(['connect', 'merge', 'keep_existing']),
+    choice: z.enum(['connect', 'merge', 'keep_existing', 'import_mcp']),
     destCartId: z.uuid().optional(),
     expectedDestVersion: z.number().int().min(1).optional(),
     expectedIncomingVersion: z.number().int().min(1).optional(),
@@ -180,6 +180,24 @@ export const cartHandoffRedeemRequestSchema = z
     token: z.string().regex(/^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
   })
   .superRefine((value, context) => {
+    if (value.choice === 'import_mcp') {
+      if (value.expectedDestVersion !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['expectedDestVersion'],
+          message: 'An MCP import uses the locked destination revision',
+        });
+      }
+      if (!value.expectedIncomingVersion || value.lines || value.resolutions) {
+        context.addIssue({
+          code: 'custom',
+          path: ['choice'],
+          message:
+            'A versioned MCP import cannot contain client-supplied items',
+        });
+      }
+      return;
+    }
     if (value.choice !== 'merge') return;
     for (const key of [
       'lines',

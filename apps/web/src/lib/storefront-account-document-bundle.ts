@@ -40,6 +40,7 @@ interface BuildStorefrontAccountDocumentBundleInput {
   transactions: StorefrontAccountDocumentTransactionRow[];
   paymentAccount: StorefrontAccountDocumentPaymentAccountRow | null;
   taxRows: StorefrontAccountDocumentTaxSubtotalRow[];
+  deriveRevisedTax?: boolean;
   paymentStatus: string;
   shippingStatus: string;
   currentDocumentKind: 'invoice' | 'receipt';
@@ -54,6 +55,7 @@ export function buildStorefrontAccountDocumentBundle({
   transactions,
   paymentAccount,
   taxRows,
+  deriveRevisedTax,
   paymentStatus,
   shippingStatus,
   currentDocumentKind,
@@ -134,6 +136,7 @@ export function buildStorefrontAccountDocumentBundle({
     orderItems,
     itemRows,
     taxRows,
+    deriveRevisedTax,
     taxAmount,
     subtotal,
     shippingFee,

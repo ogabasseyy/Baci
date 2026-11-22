@@ -45,3 +45,27 @@ it('retains an existing checkout identity through cache clearing and a restart',
     require('../lib/checkout-attempt-key') as typeof import('../lib/checkout-attempt-key');
   expect(await reloaded.getCheckoutAttemptKey(payload, 'cart-one')).toBe(first);
 });
+
+it('preserves staging checkout keys that the storage adapter exposes by logical name', () => {
+  const storagePrefix = 'baci-oxygen-staging.v2.test.';
+  try {
+    jest.doMock('../lib/oxygen-staging-profile', () => ({
+      getOxygenStagingProfile: () => ({ storagePrefix }),
+    }));
+    const { getClearableCacheStorageKeys } =
+      require('../components/settings/clear-cache-keys') as typeof import('../components/settings/clear-cache-keys');
+    expect(
+      getClearableCacheStorageKeys([
+        'checkout-installation-id-v1',
+        'checkout-generation-v1',
+        'checkout-auth-partition-v1',
+        'checkout-pending-redvault-order-v1',
+        'checkout-attempt-credit-v1:active-generation',
+        'checkout-idempotency-item-sort-v2:active-generation',
+        'cache:products',
+      ])
+    ).toEqual(['cache:products', 'REACT_QUERY_OFFLINE_CACHE']);
+  } finally {
+    jest.dontMock('../lib/oxygen-staging-profile');
+  }
+});

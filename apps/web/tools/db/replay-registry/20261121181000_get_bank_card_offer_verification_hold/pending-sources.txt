@@ -1,0 +1,1 @@
+e503e4dcff0ab2dafe43e8d6b15adfd4de3a528f1187ac3bbe661dfeb5af0c0a 20261121181000_get_bank_card_offer_verification_hold.sql

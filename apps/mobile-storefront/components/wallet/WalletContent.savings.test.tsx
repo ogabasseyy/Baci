@@ -1,11 +1,5 @@
 import { expect, it, jest } from '@jest/globals';
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { WalletContent } from './WalletContent';
 import { setWalletTestCustomer } from './wallet-auth.test-support';
@@ -64,6 +58,8 @@ jest.mock('expo-image', () => ({
 
 it('passes the exact resolver to completed savings recovery and closes on success', async () => {
   const props = createWalletContentProps();
+  const resolution = Promise.withResolvers<true>();
+  props.onResolveSavingsVariant.mockReturnValueOnce(resolution.promise);
   const goal = {
     ...props.activeSavingsGoal,
     status: 'completed' as const,
@@ -80,12 +76,12 @@ it('passes the exact resolver to completed savings recovery and closes on succes
   fireEvent.press(screen.getByRole('radio', { name: '256GB' }));
   expect(props.onResolveSavingsVariant).not.toHaveBeenCalled();
   fireEvent.press(screen.getByRole('button', { name: 'Confirm this option' }));
-  await waitFor(() =>
-    expect(props.onResolveSavingsVariant).toHaveBeenCalledWith('variant-1')
-  );
-  await waitFor(() =>
-    expect(screen.queryByRole('radio', { name: '256GB' })).toBeNull()
-  );
+  expect(props.onResolveSavingsVariant).toHaveBeenCalledWith('variant-1');
+  expect(screen.getByRole('radio', { name: '256GB' })).toBeOnTheScreen();
+  await act(async () => {
+    resolution.resolve(true);
+  });
+  expect(screen.queryByRole('radio', { name: '256GB' })).toBeNull();
 });
 
 it('renders savings progress modal and wires manual contribution actions', async () => {

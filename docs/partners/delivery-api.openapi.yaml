@@ -1,0 +1,425 @@
+openapi: 3.1.0
+info:
+  title: Baci Partner Commerce API
+  version: 1.0.0
+  description: |
+    The catalog is live for the pilot. Delivery quotes, paid-order intake, and tracking are pre-live
+    for CrossRem. Baci confirms live GIG booking and payment and payout verification before enabling
+    these capabilities. Baci supplies connection credentials and the base URL during onboarding.
+servers:
+  - url: https://ogabassey.com/api/partners/v1
+    description: Ogabassey pilot. Confirm capabilities with Baci before use.
+paths:
+  /catalog:
+    get:
+      operationId: getCatalog
+      security: [{CatalogCredential: []}]
+      parameters:
+        - in: header
+          name: If-None-Match
+          schema: {type: string}
+      responses:
+        '200':
+          description: Complete catalog snapshot. Replace the saved catalog only after validation.
+          headers:
+            ETag:
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, currency, listings]
+                properties:
+                  schema_version: {const: 1}
+                  currency: {const: NGN}
+                  listings:
+                    type: array
+                    items: {$ref: '#/components/schemas/CatalogListing'}
+        '304':
+          description: The saved catalog is current. There is no response body.
+          headers:
+            ETag:
+              schema: {type: string}
+        '401':
+          description: Catalog credential missing or invalid.
+          headers:
+            WWW-Authenticate:
+              schema: {const: Bearer}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CatalogError'}
+        '403':
+          description: Valid partner credential without catalog scope.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CatalogError'}
+        '503':
+          description: A complete snapshot is unavailable. Keep the last good catalog.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CatalogError'}
+        '429':
+          description: The connection exceeded the catalog polling limit. Keep the last good catalog and honor Retry-After.
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 1}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CatalogError'}
+  /quotes:
+    post:
+      operationId: createDeliveryQuote
+      description: A configured settlement policy is required. Keep one active quote for each purchase and preserve its ID once charging starts. If a payment attempt is uncertain, reconcile it before requesting a replacement quote or charge.
+      security: [{QuoteCredential: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuoteRequest'}
+      responses:
+        '201':
+          description: A stored domestic door-delivery quote. Quote expiry does not reserve stock.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeliveryQuote'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: A listing is missing, retired, unavailable, or has insufficient quantity.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: No eligible door-delivery service for the address.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /orders:
+    post:
+      operationId: submitOrder
+      description: Submit payment captured during the quote validity window. Delivery of the submission may occur after the quote expires.
+      security: [{OrderCredential: []}]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          description: Keep this value and the original request body for all retries.
+          schema: {type: string, pattern: '^[A-Za-z0-9_.:-]{16,128}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderSubmission'}
+      responses:
+        '200':
+          description: The submitted order has already been accepted. The receipt includes its original Baci order ID.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OrderReceipt'
+                  - properties:
+                      status: {const: accepted}
+        '202':
+          description: The submission was stored and either awaits verification or requires review.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OrderReceipt'
+                  - properties:
+                      status: {enum: [pending_verification, payment_verified, settlement_verified, review_required]}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: The claimed payment amount differs from the quote total, or the quote, order reference, or idempotency key conflicts with a previous submission.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InvalidOrderResponse'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /order-submissions:
+    get:
+      operationId: getOrderSubmission
+      description: Supply exactly one partner_order_id. Duplicate references and additional query parameters are rejected.
+      security: [{OrderCredential: []}]
+      parameters:
+        - in: query
+          name: partner_order_id
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        '200': {$ref: '#/components/responses/Receipt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InvalidOrderResponse'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /orders/{orderId}:
+    get:
+      operationId: getOrderTracking
+      security: [{OrderCredential: []}]
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Status of an order accepted through this merchant–partner connection.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [order_id, partner_order_id, payment_status, shipping_status, tracking, request_id]
+                properties:
+                  order_id: {type: string, format: uuid}
+                  partner_order_id: {type: string}
+                  payment_status:
+                    type: string
+                    enum: [unpaid, pending, partially_paid, paid, partially_refunded, refunded, cancelled, chargeback, unknown]
+                  shipping_status:
+                    type: string
+                    enum: [pending, processing, shipped, picked_up, in_transit, out_for_delivery, delivered, cancelled, returned, failed, unknown]
+                  tracking:
+                    oneOf:
+                      - {type: 'null'}
+                      - type: object
+                        required: [provider, tracking_number]
+                        properties:
+                          provider: {type: string, pattern: '^[A-Za-z0-9_-]{1,32}$'}
+                          tracking_number: {type: string, minLength: 1, maxLength: 128}
+                  request_id: {type: string, format: uuid}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/InvalidOrderResponse'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    CatalogCredential: {type: http, scheme: bearer}
+    QuoteCredential: {type: http, scheme: bearer}
+    OrderCredential: {type: http, scheme: bearer}
+  responses:
+    Receipt:
+      description: Stored submission status. Accepted receipts include the Baci order ID.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OrderReceipt'}
+    BadRequest:
+      description: Invalid input or idempotency header.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthorized:
+      description: Missing or invalid credential.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: Credential lacks permission for this operation.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    NotFound:
+      description: The resource was not found for this merchant–partner connection.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    PayloadTooLarge:
+      description: Request body exceeds 8192 bytes.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    RateLimited:
+      description: Retry after the provided delay, or use backoff when no delay is provided.
+      headers:
+        Retry-After:
+          schema: {type: integer, minimum: 1}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InvalidOrderResponse:
+      description: Baci could not interpret stored order data. Use the request ID for support and check the original order reference before retrying.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unavailable:
+      description: A temporary dependency failure. Retry with backoff using the same order identity.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    CatalogError:
+      type: object
+      additionalProperties: false
+      required: [error, request_id]
+      properties:
+        error: {type: string}
+        request_id: {type: string, format: uuid}
+    CatalogListing:
+      type: object
+      required: [listing_id, product_id, title, image_url, product_url, product_type, brand, condition,
+        condition_label, availability, base_price_minor, price_minor, protection_included]
+      properties:
+        listing_id: {type: string}
+        product_id: {type: string, format: uuid}
+        variant_id: {type: [string, 'null'], format: uuid}
+        offer_id: {type: [string, 'null'], format: uuid}
+        title: {type: string}
+        image_url: {type: string}
+        product_url: {type: string}
+        product_type:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [key, label]
+              properties:
+                key: {type: [string, 'null']}
+                label: {type: string}
+        brand: {type: [string, 'null']}
+        condition: {type: string}
+        condition_label: {type: string}
+        availability: {enum: [in_stock, out_of_stock]}
+        base_price_minor: {type: integer, minimum: 1}
+        price_minor: {type: integer, minimum: 1}
+        protection_included: {type: boolean}
+    QuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [items, destination]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: Each listing ID can appear once.
+          items:
+            type: object
+            additionalProperties: false
+            required: [listing_id, quantity]
+            properties:
+              listing_id: {type: string, minLength: 1, maxLength: 128}
+              quantity: {type: integer, minimum: 1, maximum: 20}
+        destination:
+          type: object
+          additionalProperties: false
+          required: [address_line1, city, state, country_code]
+          properties:
+            address_line1: {type: string, minLength: 1, maxLength: 256}
+            address_line2: {type: string, minLength: 1, maxLength: 256}
+            city: {type: string, minLength: 1, maxLength: 100}
+            state: {type: string, minLength: 1, maxLength: 100}
+            country_code: {const: NG}
+            postal_code: {type: string, minLength: 1, maxLength: 16}
+            coordinates:
+              type: object
+              additionalProperties: false
+              required: [latitude, longitude]
+              properties:
+                latitude: {type: number, minimum: -90, maximum: 90}
+                longitude: {type: number, minimum: -180, maximum: 180}
+    DeliveryQuote:
+      type: object
+      required: [quote_id, currency, items, subtotal_minor, tax_minor, delivery_minor, total_minor,
+        service, estimated_days, expires_at, stock_reserved, request_id]
+      properties:
+        quote_id: {type: string, format: uuid}
+        currency: {const: NGN}
+        items:
+          type: array
+          items:
+            type: object
+            required: [listing_id, quantity, condition, unit_price_minor]
+            properties:
+              listing_id: {type: string}
+              quantity: {type: integer}
+              condition: {type: string}
+              unit_price_minor: {type: integer}
+        subtotal_minor: {type: integer}
+        tax_minor: {type: integer, minimum: 0, description: Baci VAT due on the underlying merchant items.}
+        delivery_minor: {type: integer}
+        total_minor: {type: integer}
+        service: {type: string}
+        estimated_days: {type: number}
+        expires_at: {type: string, format: date-time}
+        stock_reserved: {const: false}
+        request_id: {type: string, format: uuid}
+    OrderSubmission:
+      type: object
+      additionalProperties: false
+      required: [quote_id, partner_order_id, recipient, payment]
+      properties:
+        quote_id: {type: string, format: uuid}
+        partner_order_id: {type: string, minLength: 1, maxLength: 128}
+        recipient:
+          type: object
+          additionalProperties: false
+          required: [name, phone, email]
+          properties:
+            name: {type: string, minLength: 1, maxLength: 160}
+            phone: {type: string, pattern: '^\+[1-9][0-9]{7,14}$'}
+            email: {type: string, format: email, maxLength: 254}
+        payment:
+          type: object
+          additionalProperties: false
+          required: [source, reference, amount_minor, currency]
+          properties:
+            source: {type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$'}
+            reference: {type: string, minLength: 1, maxLength: 200}
+            amount_minor: {type: integer, minimum: 1, maximum: 9007199254740991}
+            currency: {const: NGN}
+    OrderReceipt:
+      type: object
+      required: [submission_id, partner_order_id, received_at, status, request_id]
+      properties:
+        submission_id: {type: string, format: uuid}
+        partner_order_id: {type: string}
+        received_at: {type: string, format: date-time}
+        status: {enum: [pending_verification, payment_verified, settlement_verified, review_required, accepted]}
+        order_id: {type: string, format: uuid}
+        review_reason: {enum: [SETTLEMENT_REVIEW_REQUIRED, ORDER_REVIEW_REQUIRED]}
+        request_id: {type: string, format: uuid}
+      allOf:
+        - if:
+            properties:
+              status: {const: accepted}
+          then:
+            required: [order_id]
+          else:
+            not:
+              required: [order_id]
+        - if:
+            properties:
+              status: {const: review_required}
+          then:
+            required: [review_reason]
+          else:
+            not:
+              required: [review_reason]
+    Error:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          required: [code]
+          properties:
+            code:
+              enum: [INVALID_IDEMPOTENCY_KEY, INVALID_REQUEST, UNAUTHORIZED, SCOPE_REQUIRED,
+                ORDER_NOT_FOUND, ORDER_SUBMISSION_NOT_FOUND, QUOTE_NOT_FOUND, LISTING_UNAVAILABLE, ORDER_CONFLICT, ORDER_AMOUNT_MISMATCH,
+                ADDRESS_UNSERVICEABLE, RATE_LIMITED, CARRIER_UNAVAILABLE, ORDER_INTAKE_UNAVAILABLE,
+                ORDER_LOOKUP_UNAVAILABLE, ORDER_RESPONSE_INVALID, QUOTE_UNAVAILABLE, QUOTE_ORIGIN_UNAVAILABLE, QUOTE_SETTLEMENT_UNAVAILABLE, PAYLOAD_TOO_LARGE]
+        request_id: {type: string, format: uuid}

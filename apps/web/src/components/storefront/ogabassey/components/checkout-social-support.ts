@@ -1,5 +1,11 @@
 /** Only offer checkout OAuth where the callback allowlist has been verified. */
-export function supportsCheckoutSocialSignIn(hostname: string, isProduction: boolean): boolean {
+export function supportsCheckoutSocialSignIn(
+  hostname: string,
+  isProduction: boolean
+): boolean {
   const host = hostname.toLowerCase();
-  return host === 'ogabassey.com' || (!isProduction && (host === 'localhost' || host === '127.0.0.1'));
+  if (!isProduction && (host === 'localhost' || host === '127.0.0.1')) {
+    return true;
+  }
+  return host === 'ogabassey.com' || host === 'www.ogabassey.com';
 }

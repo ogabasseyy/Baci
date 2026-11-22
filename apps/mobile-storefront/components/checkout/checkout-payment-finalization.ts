@@ -17,6 +17,7 @@ import { startWalletFundedBankTransferCheckout } from './checkout-wallet-funded-
 
 interface FinalizeCheckoutPaymentParams {
   attribution?: CheckoutCompletionAttribution;
+  checkoutCartIdentity?: string | null;
   clearCart: () => void | Promise<void>;
   customerEmail: string;
   customerName: string;
@@ -37,6 +38,7 @@ interface FinalizeCheckoutPaymentParams {
 
 export async function finalizeCheckoutPayment({
   attribution,
+  checkoutCartIdentity,
   clearCart,
   customerEmail,
   customerName,
@@ -161,6 +163,7 @@ export async function finalizeCheckoutPayment({
     }
 
     await initializeGatewayAndRoute({
+      checkoutCartIdentity,
       customerEmail,
       customerName,
       customerPhone,

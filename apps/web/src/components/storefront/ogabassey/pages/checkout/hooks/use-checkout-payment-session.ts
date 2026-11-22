@@ -135,7 +135,10 @@ export function useCheckoutPaymentSession({
     ) {
       // A persisted Redvault fence remains authoritative during method
       // changes; the submit-time recovery resolver alone can clear it.
-      if (pendingCheckoutOrder?.paymentMethod !== 'uba_redvault') {
+      if (
+        pendingCheckoutOrder?.paymentMethod !== 'uba_redvault' &&
+        pendingCheckoutOrder?.paymentMethod !== 'bank_card_offer'
+      ) {
         clearPendingCheckoutOrder();
       }
       setRedvaultSummary(null);

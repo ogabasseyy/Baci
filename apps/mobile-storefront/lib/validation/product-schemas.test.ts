@@ -173,3 +173,10 @@ describe('parseApiResponse', () => {
     );
   });
 });
+
+test('retains the customer merchant binding used by Oxygen staging admission', () => {
+  const merchantId = '11111111-1111-4111-8111-111111111111';
+  expect(
+    CustomerRowSchema.parse({ ...validCustomer, merchant_id: merchantId })
+  ).toHaveProperty('merchant_id', merchantId);
+});

@@ -1,8 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import type { Route } from 'next';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { resolveVariantSelection } from '@baci/shared/lib';
 import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
@@ -16,7 +15,10 @@ import {
   type InitialCriticalVariantSelection,
 } from './critical-commerce-selection';
 import { RouteOfferMissingNotice } from '../pages/product-details-page/route-offer-missing-notice';
-import { AssuranceDefaultNote } from '../pages/product-details-page/assurance-default-note';
+import {
+  OgabasseyPdpCriticalCommerceControls,
+  type OgabasseyPdpCriticalCommerceControlsProps,
+} from './critical-commerce-controls.client';
 import {
   OgabasseyPdpCriticalCommerceProvider,
   useOgabasseyPdpCriticalCommerce,
@@ -24,11 +26,16 @@ import {
 } from './critical-commerce-state.client';
 import { OgabasseyPdpCriticalVariantSelectors } from './critical-variant-selectors.client';
 
+export { OgabasseyPdpCriticalCommerceControls } from './critical-commerce-controls.client';
 export {
   OgabasseyPdpCriticalCommerceConditionFact,
   OgabasseyPdpCriticalConditionBadge,
 } from './critical-commerce-condition.client';
-export { OgabasseyPdpCriticalCommerceProvider } from './critical-commerce-state.client';
+export {
+  OgabasseyPdpCriticalCommerceProvider,
+  useOgabasseyPdpCriticalCommerce,
+  useOptionalOgabasseyPdpCriticalCommerce,
+} from './critical-commerce-state.client';
 
 interface OgabasseyPdpCriticalCommerceClientProps {
   cartHref: Route;
@@ -40,11 +47,6 @@ interface OgabasseyPdpCriticalCommerceClientProps {
   variantAxes?: string[];
   variantAxisOptions?: Record<string, string[]>;
   variantCount: number;
-}
-
-interface OgabasseyPdpCriticalCommerceControlsProps {
-  cartHref: Route;
-  productName: string;
 }
 
 export function OgabasseyPdpCriticalProductImage({
@@ -150,100 +152,6 @@ export function OgabasseyPdpCriticalCommerceSummary() {
         />
       </div>
     </>
-  );
-}
-
-export function OgabasseyPdpCriticalCommerceControls({
-  cartHref,
-  productName,
-}: OgabasseyPdpCriticalCommerceControlsProps) {
-  const {
-    addToCartBlockedAttempt,
-    addToCartBlocker,
-    canAddToCart,
-    handleAddToCart,
-    isAtMaxQuantity,
-    maxQuantity,
-    quantity,
-    quantityInCart,
-    setQuantity,
-  } = useOgabasseyPdpCriticalCommerce();
-  const blockerHintId = useId();
-  // Only sold-out stock hard-disables the button. Every other blocker is
-  // something the shopper can fix, so the button stays tappable and the
-  // tap explains what to choose instead of doing nothing.
-  const isSoldOut = addToCartBlocker?.kind === 'out-of-stock';
-
-  return (
-    <div
-      data-ogabassey-pdp-commerce-controls
-      aria-label="Purchase controls"
-      role="group"
-    >
-      <div
-        data-ogabassey-pdp-commerce-quantity
-        aria-label="Quantity"
-      >
-        <button
-          aria-label={`Decrease quantity for ${productName}`}
-          disabled={quantity <= 1}
-          onClick={() => setQuantity((current) => Math.max(1, current - 1))}
-          type="button"
-        >
-          -
-        </button>
-        <output aria-live="polite">{quantity}</output>
-        <button
-          aria-label={`Increase quantity for ${productName}`}
-          disabled={isAtMaxQuantity}
-          onClick={() =>
-            setQuantity((current) =>
-              maxQuantity === null
-                ? current + 1
-                : Math.min(maxQuantity, current + 1)
-            )
-          }
-          type="button"
-        >
-          +
-        </button>
-      </div>
-      <button
-        aria-describedby={addToCartBlocker ? blockerHintId : undefined}
-        aria-disabled={addToCartBlocker && !isSoldOut ? true : undefined}
-        data-ogabassey-pdp-commerce-primary-action
-        disabled={isSoldOut}
-        onClick={handleAddToCart}
-        type="button"
-      >
-        Add to cart
-      </button>
-      {addToCartBlocker ? (
-        <p
-          data-attention={addToCartBlockedAttempt > 0 ? 'true' : undefined}
-          data-ogabassey-pdp-commerce-blocker
-          id={blockerHintId}
-          role="status"
-        >
-          {/* Re-inserting the text on every blocked tap makes the stable
-              status region announce it again. */}
-          <span key={addToCartBlockedAttempt}>
-            {addToCartBlocker.message}
-          </span>
-        </p>
-      ) : null}
-      <AssuranceDefaultNote
-        canPurchase={canAddToCart}
-        quantityInCart={quantityInCart}
-      />
-      <Link
-        data-ogabassey-pdp-commerce-secondary-action
-        href={cartHref}
-        prefetch={false}
-      >
-        View cart
-      </Link>
-    </div>
   );
 }
 

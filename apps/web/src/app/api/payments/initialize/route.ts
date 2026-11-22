@@ -60,11 +60,13 @@ import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-pa
 import {
   calculatePlatformFee as calculatePaystackFee,
   initializeTransaction as initializePaystackPayment,
+  isPaystackConfigured,
   type PaymentChannel,
 } from '@/lib/paystack';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { initializeBankCardOfferRequest } from './initialize-bank-card-offer-request';
 import { retiredGatewayResponse } from './retired-gateway';
 
 // Types & Constants
@@ -155,7 +157,7 @@ const PaymentInitRequestSchema = z.object({
   // Crypto payment options (only for juicyway gateway)
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
-  payment_method: z.literal('uba_redvault').optional(),
+  payment_method: z.enum(['uba_redvault', 'bank_card_offer']).optional(),
   // Order-bound proof for guest REDVAULT initialization (below).
   tracking_token: z.string().min(1).max(128).optional(),
 });
@@ -879,15 +881,11 @@ async function initializeJuicyway(
   };
 }
 
-async function initializePaystack(
+async function preparePaystackPayment(
   data: AuthorizedPaymentInitRequest,
-  merchant: { paystack_subaccount_code: string | null },
-  gatewaySettings: GatewaySettings,
-  redirectUrl: string,
-  reference: string,
-  merchantId: string,
-  splitClient: Pick<SupabaseClient, 'rpc'>
-): Promise<PaymentResult> {
+  splitClient: Pick<SupabaseClient, 'rpc'>,
+  merchantId: string
+) {
   const amountInKobo = Math.round(data.amount * 100);
   const fees = calculatePaystackFee(amountInKobo);
   // Baci keeps the platform fee plus any customer-paid GIG delivery fee;
@@ -907,7 +905,6 @@ async function initializePaystack(
     ? formatPhoneToE164(data.customer_phone)
     : undefined;
 
-  // Debug log to confirm what we have after formatting
   console.log(
     '[PaymentInit] Paystack Phone Debug:',
     sanitizeForLog(
@@ -924,21 +921,52 @@ async function initializePaystack(
       'Invalid phone number provided. Please enter a valid mobile number.'
     );
   }
+  if (!isPaystackConfigured()) throw new Error('Paystack is not configured');
+  if (!data.customer_email || amountInKobo < 100)
+    throw new Error('Paystack requires an email and at least 100 kobo');
+  return {
+    amountInKobo,
+    fees,
+    transactionChargeKobo,
+    retainedShippingKobo,
+    customerPhone,
+  };
+}
 
+async function initializePaystack(
+  data: AuthorizedPaymentInitRequest,
+  merchant: { paystack_subaccount_code: string | null },
+  gatewaySettings: GatewaySettings,
+  redirectUrl: string,
+  reference: string,
+  merchantId: string,
+  prepared: Awaited<ReturnType<typeof preparePaystackPayment>>,
+  cardOnly: boolean,
+  integrationWalletCheckout: boolean
+): Promise<PaymentResult> {
+  const {
+    amountInKobo,
+    fees,
+    transactionChargeKobo,
+    retainedShippingKobo,
+    customerPhone,
+  } = prepared;
   const paystackData = await initializePaystackPayment({
     email: data.customer_email,
     amount: amountInKobo,
     phone: customerPhone,
     reference,
     callback_url: redirectUrl,
-    subaccount: merchant.paystack_subaccount_code as string,
-    transaction_charge: transactionChargeKobo,
-    bearer: 'account',
-    channels: getPaystackChannelsForCustomer(
-      data,
-      customerPhone,
-      gatewaySettings
-    ),
+    ...(integrationWalletCheckout
+      ? {}
+      : {
+          subaccount: merchant.paystack_subaccount_code as string,
+          transaction_charge: transactionChargeKobo,
+          bearer: 'account' as const,
+        }),
+    channels: cardOnly
+      ? ['card']
+      : getPaystackChannelsForCustomer(data, customerPhone, gatewaySettings),
     metadata: {
       merchant_id: merchantId,
       order_id: data.order_id,
@@ -1042,9 +1070,8 @@ async function initializeKorapay(
 
 export async function POST(request: NextRequest) {
   try {
-    // CSRF exemption: This is a public storefront endpoint for checkout payment.
-    // Guest users do not have CSRF tokens. The route validates order ownership
-    // via get_order_payment_snapshot RPC (order_id + email match).
+    // Standard guest checkout validates order ownership with the payment
+    // snapshot RPC. Signed-in bank offers also require CSRF protection.
 
     // Parse and validate request body
     const body = await request.clone().json();
@@ -1061,6 +1088,19 @@ export async function POST(request: NextRequest) {
     const data = parseResult.data;
     const retired = retiredGatewayResponse(data.gateway);
     if (retired) return retired;
+    if (data.payment_method === 'bank_card_offer') {
+      return await initializeBankCardOfferRequest(
+        request,
+        data,
+        async (merchantId, userId) =>
+          createStorefrontOrderRpcClient({
+            fallbackClient: await createServerSupabaseClient(),
+            hasCanonicalDeliveryMetadata: false,
+            merchantId,
+            userId,
+          })
+      );
+    }
     const redvaultRequested = data.payment_method === 'uba_redvault';
     const redvaultCustomerAuth = redvaultRequested
       ? await authenticateApiRequest(request)
@@ -1171,6 +1211,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (orderSnapshot.payment_method === 'bank_card_offer') {
+      return createErrorResponse(
+        'This order requires bank card offer payment initialization',
+        'BANK_CARD_OFFER_PAYMENT_METHOD_REQUIRED',
+        409
+      );
+    }
     const orderRequiresRedvault =
       orderSnapshot.payment_method === 'uba_redvault';
     if (orderRequiresRedvault && !redvaultRequested) {
@@ -1655,6 +1702,88 @@ export async function POST(request: NextRequest) {
       return cachedTrackingToken;
     }
 
+    const claimClient = await createServerSupabaseClient();
+    let preparedPaystack:
+      | Awaited<ReturnType<typeof preparePaystackPayment>>
+      | undefined;
+    if (gateway === 'paystack' && data.payment_type !== 'dva') {
+      try {
+        preparedPaystack = await preparePaystackPayment(
+          paymentData,
+          claimClient,
+          merchantId
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        return createErrorResponse(
+          `Payment gateway (paystack) initialization failed: ${message}`,
+          'GATEWAY_INIT_ERROR',
+          502
+        );
+      }
+    }
+
+    const { data: amendmentClaim, error: amendmentClaimError } =
+      await claimClient.rpc('claim_checkout_for_paid_order_amendment', {
+        p_order_id: paymentData.order_id,
+        p_tracking_token: data.tracking_token ?? null,
+        p_gateway:
+          gateway !== 'paystack'
+            ? gateway
+            : data.payment_type === 'dva'
+              ? 'paystack_dva'
+              : merchantWithPaystack.paystack_subaccount_code
+                ? 'paystack'
+                : 'paystack_no_subaccount',
+        p_reference: reference,
+        p_currency: chargeCurrency,
+        p_expected_amount_minor: Math.round(payableAmount * 100),
+        p_platform_fee_minor: preparedPaystack?.fees.platformFee ?? null,
+        p_retained_shipping_minor:
+          preparedPaystack?.retainedShippingKobo ?? null,
+      });
+    if (amendmentClaimError?.code === '42501') {
+      return createErrorResponse(
+        'Order ownership proof is required to initialize payment',
+        'ORDER_PAYMENT_PROOF_REQUIRED',
+        403
+      );
+    }
+    if (amendmentClaimError?.message === 'checkout_gateway_not_configured') {
+      return createErrorResponse(
+        'Paystack is not configured for this merchant',
+        'GATEWAY_NOT_CONFIGURED',
+        400
+      );
+    }
+    if (amendmentClaimError?.message === 'checkout_payment_details_changed') {
+      return createErrorResponse(
+        'The order payment details changed. Please try again.',
+        'CHECKOUT_PAYMENT_DETAILS_CHANGED',
+        409
+      );
+    }
+    if (amendmentClaimError?.code === 'P0001') {
+      return createErrorResponse(
+        'This order cannot start an ordinary checkout payment',
+        'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+        409
+      );
+    }
+    if (
+      amendmentClaimError ||
+      !['untracked', 'claimed', 'claimed_integration'].includes(amendmentClaim)
+    ) {
+      return createErrorResponse(
+        'Unable to verify payment availability',
+        'ORDER_PAYMENT_CLAIM_UNAVAILABLE',
+        503
+      );
+    }
+
+    const integrationWalletCheckout = amendmentClaim === 'claimed_integration';
+
     // Initialize payment based on gateway
     let paymentResult: PaymentResult;
 
@@ -1678,8 +1807,12 @@ export async function POST(request: NextRequest) {
           );
           break;
 
-        case 'paystack':
-          if (!merchantWithPaystack.paystack_subaccount_code) {
+        case 'paystack': {
+          const subaccountCode = merchantWithPaystack.paystack_subaccount_code;
+          if (
+            !subaccountCode &&
+            (!integrationWalletCheckout || data.payment_type === 'dva')
+          ) {
             return createErrorResponse(
               'Paystack is not configured for this merchant',
               'GATEWAY_NOT_CONFIGURED',
@@ -1688,7 +1821,7 @@ export async function POST(request: NextRequest) {
           }
 
           // DVA (Dedicated Virtual Account) for bank transfer payments
-          if (data.payment_type === 'dva') {
+          if (data.payment_type === 'dva' && subaccountCode) {
             if (!gatewaySettings.wallet_paystack_dva_enabled) {
               return createErrorResponse(
                 'Bank transfer is not enabled for this merchant.',
@@ -1788,7 +1921,9 @@ export async function POST(request: NextRequest) {
                 last_name: lastName,
                 phone: paymentData.customer_phone || '',
               },
-              { subaccount: merchantWithPaystack.paystack_subaccount_code }
+              {
+                subaccount: subaccountCode,
+              }
             );
 
             // B1 (Δ-10): persist the DVA assignment so the webhook can
@@ -1829,6 +1964,8 @@ export async function POST(request: NextRequest) {
               merchantAmount: fees.merchantAmount / 100,
             };
           } else {
+            if (!preparedPaystack)
+              throw new Error('Prepared Paystack checkout is missing');
             paymentResult = await initializePaystack(
               paymentData,
               merchantWithPaystack,
@@ -1836,10 +1973,13 @@ export async function POST(request: NextRequest) {
               redirectUrl,
               reference,
               merchantId,
-              await createServerSupabaseClient()
+              preparedPaystack,
+              amendmentClaim !== 'untracked',
+              integrationWalletCheckout
             );
           }
           break;
+        }
         case 'credit_direct':
         case 'credpal': {
           // For client-side BNPL gateways, we redirect to the specialized launcher page

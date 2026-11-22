@@ -59,6 +59,15 @@ describe('paystack helpers', () => {
     });
   });
 
+  it('recognizes a verified transaction whose refund is pending', async () => {
+    const { PaymentVerificationSchema } = await import('@/lib/paystack');
+
+    expect(
+      PaymentVerificationSchema.shape.status.safeParse('reversal-pending')
+        .success
+    ).toBe(true);
+  });
+
   it('includes authorization details in verifyTransaction responses', async () => {
     const { verifyTransaction } = await import('@/lib/paystack');
     vi.stubGlobal(

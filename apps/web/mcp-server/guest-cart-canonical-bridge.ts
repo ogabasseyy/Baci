@@ -98,6 +98,9 @@ export function createGuestCanonicalBridge(
 ): GuestCanonicalBridge | null {
   if (!configured) return null;
   const url = new URL(configured);
+  const handoff = process.env.BACI_MCP_GUEST_CREDENTIAL_ENABLED === 'true'
+    ? 'import_mcp'
+    : true;
   if (
     url.protocol !== 'https:' ||
     !allowedOrigins.includes(url.origin) ||
@@ -177,19 +180,32 @@ export function createGuestCanonicalBridge(
   }
   function cartReply(token: string, reply: z.infer<typeof replySchema>) {
     if (!reply.state) throw new Error('Canonical cart unavailable');
-    return { cart_token: token, items: reply.state.lines.map((x) => ({ product_id: x.productId, quantity: x.quantity })),
-      expires_at: reply.state.expiresAt, cart_url: reply.continueUrl ?? undefined,
-      canonical_cart_id: reply.state.cartId, version: reply.state.version };
+    const items = reply.state.lines.map((line) => ({
+      product_id: line.productId,
+      quantity: line.quantity,
+    }));
+    const cartUrl =
+      handoff === 'import_mcp' && items.length === 0
+        ? new URL('/cart', url.origin).href
+        : (reply.continueUrl ?? undefined);
+    return {
+      cart_token: token,
+      items,
+      expires_at: reply.state.expiresAt,
+      cart_url: cartUrl,
+      canonical_cart_id: reply.state.cartId,
+      version: reply.state.version,
+    };
   }
   return {
-    async read(token) { return cartReply(token, await send(token, { handoff: true, operationId: randomUUID() })); },
+    async read(token) { return cartReply(token, await send(token, { handoff, operationId: randomUUID() })); },
     async update(token, input) {
       const reply = await send(token, {
         productId: input.product_id,
         quantity: input.quantity,
         expectedVersion: input.expectedVersion,
         operationId: input.operationId,
-        handoff: true,
+        handoff,
       });
       return cartReply(token, reply);
     },

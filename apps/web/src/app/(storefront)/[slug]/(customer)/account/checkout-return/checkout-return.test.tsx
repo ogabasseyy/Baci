@@ -49,3 +49,11 @@ it('does not redirect to a different origin', () => {
     screen.getByRole('link', { name: 'Return to checkout' })
   ).toHaveAttribute('href', '/ogabassey/checkout');
 });
+it('validates checkout paths using the same URI-encoded slug prefix as basePath', () => {
+  mocks.session.isLoading = false;
+  mocks.session.isAuthenticated = true;
+  render(
+    <CheckoutReturn slug="my store" next="/my%20store/checkout?resume=1" />
+  );
+  expect(mocks.replace).toHaveBeenCalledWith('/my%20store/checkout?resume=1');
+});

@@ -21,11 +21,9 @@ import {
   withEmailLines,
 } from './daily-reconciliation-send';
 import {
-  readWalletPaySummary,
-  type WalletPaySummary,
-  walletPayEmailLines,
-  walletPayPageReason,
-} from './daily-reconciliation-wallet-pay';
+  readSideChecks,
+  type SideChecks,
+} from './daily-reconciliation-side-checks';
 import { isPiggyvestFeatureFlagSet } from './piggyvest-feature-on';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
@@ -212,8 +210,9 @@ export async function runPiggyvestDailyReconciliation(
   const deps = { ...defaultDeps(), ...options.deps };
   let report: ReconciliationReport;
   let runtime: NullableRuntime = null;
-  // undefined: not run (no runtime); null: wallet pay could not be read.
-  let walletPay: WalletPaySummary | null | undefined;
+  // undefined: not run (no runtime). Each side check reports its own
+  // unreadable state, so a failed read is never clear.
+  let sideChecks: SideChecks | undefined;
   try {
     runtime = deps.readRuntime(env);
   } catch {
@@ -267,27 +266,27 @@ export async function runPiggyvestDailyReconciliation(
           generatedAt: deps.now(),
         };
       }
-      // Read on its own: a failed main report must not hide stuck payments.
-      walletPay = await readWalletPaySummary({
+      // Read on their own: a failed main report must not hide them.
+      sideChecks = await readSideChecks({
         execute: ports.execute,
         ...runtime.configuration,
-      }).catch(() => null);
+      });
     }
   }
   const emailed = await deliverReconciliationEmail({
     address: env.PIGGYVEST_RECONCILIATION_REPORT_EMAIL,
     email: withEmailLines(
       renderReconciliationEmail(report),
-      walletPay === undefined ? [] : walletPayEmailLines(walletPay)
+      sideChecks?.lines ?? [],
+      sideChecks?.attention === true
     ),
     sendEmail: deps.sendEmail,
   });
-  // The email-failure marker goes first: the alert reason is clipped at
-  // 120 characters and must never lose it behind a long count list.
+  // Reasons are clipped at 120 characters: short high-risk markers go first.
   const reasons = [
     emailed ? null : 'report_email_failed',
+    ...(sideChecks?.reasons ?? []),
     pageReasonOf(report),
-    walletPay === undefined ? null : walletPayPageReason(walletPay),
   ];
   const reason = reasons.filter(Boolean).join(' ');
   if (reason) deps.emitAlert('PIGGYVEST_RECONCILIATION_MISMATCH', { reason });

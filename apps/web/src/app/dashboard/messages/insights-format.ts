@@ -14,3 +14,8 @@ export function formatInsightDuration(seconds: number | null): string {
   const restHours = hours % 24;
   return restHours ? `${days} d ${restHours} h` : `${days} d`;
 }
+
+/** A whole number, or "—" when the provider could not be read. */
+export function formatInsightCount(count: number | null): string {
+  return count === null ? '—' : String(count);
+}

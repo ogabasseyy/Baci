@@ -15,7 +15,13 @@ import {
 } from './chatwoot-widget.test-support';
 
 const mocks = vi.hoisted(() => ({
-  bridge: vi.fn((_props: { storeSlug: string; widgetOrigin: string }) => null),
+  bridge: vi.fn(
+    (_props: {
+      storeSlug: string;
+      widgetOrigin: string;
+      checkoutEnabled?: boolean;
+    }) => null
+  ),
   pathname: '/shop',
   reload: vi.fn(),
 }));
@@ -28,6 +34,7 @@ vi.mock('./ogabassey/components/chat/chatwoot-inline-cart-bridge', () => ({
   ChatwootInlineCartBridge: (props: {
     storeSlug: string;
     widgetOrigin: string;
+    checkoutEnabled?: boolean;
   }) => {
     mocks.bridge(props);
     return null;
@@ -120,6 +127,7 @@ describe('ChatwootWidget', () => {
     expect(mocks.bridge).toHaveBeenCalledWith({
       storeSlug: 'shop',
       widgetOrigin: config.platformOrigin,
+      checkoutEnabled: false,
     });
     expect(screen.getByTestId('support-active')).toHaveTextContent('true');
   });
@@ -162,6 +170,33 @@ describe('ChatwootWidget', () => {
     expect(mocks.bridge).toHaveBeenCalledWith({
       storeSlug: config.storeSlug,
       widgetOrigin: config.platformOrigin,
+      checkoutEnabled: false,
+    });
+  });
+
+  it('passes the server checkout flag to the bridge only when it is exactly true', () => {
+    const run = vi.fn(({ websiteToken, baseUrl }) => {
+      (window as Window & { $chatwoot?: Record<string, unknown> }).$chatwoot = {
+        websiteToken,
+        baseUrl,
+      };
+    });
+    (window as Window & { chatwootSDK?: { run: typeof run } }).chatwootSDK = {
+      run,
+    };
+
+    render(
+      <ChatwootWidget config={{ ...config, checkoutEnabled: true }}>
+        <span>storefront</span>
+      </ChatwootWidget>
+    );
+    fireEvent.load(document.getElementById('baci-chatwoot-sdk') as HTMLElement);
+    fireEvent(window, new Event('chatwoot:ready'));
+
+    expect(mocks.bridge).toHaveBeenCalledWith({
+      storeSlug: 'shop',
+      widgetOrigin: config.platformOrigin,
+      checkoutEnabled: true,
     });
   });
 

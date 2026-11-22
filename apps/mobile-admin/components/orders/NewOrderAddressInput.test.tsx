@@ -4,6 +4,7 @@ import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
 import { NewOrderAddressInput } from './NewOrderAddressInput';
+import { applyCustomerDeliveryAddressUpdate } from './NewOrderCustomerDeliveryAddress';
 
 const googlePlacesState: {
   lastProps?: Record<string, unknown>;
@@ -86,6 +87,39 @@ function makeController(
 }
 
 describe('NewOrderAddressInput', () => {
+  it('does not allow an object address update to overwrite customer identity', () => {
+    const previous = {
+      id: 'customer-1',
+      name: 'Ada Lovelace',
+      email: 'ada@example.test',
+      phone: '08030000000',
+      address: 'Old street',
+      city: 'Ikeja',
+      state: 'Lagos',
+    };
+    const update = {
+      address: '12 Marina',
+      city: 'Lagos Island',
+      state: 'Lagos',
+      name: 'Changed name',
+      phone: '00000000000',
+      id: 'wrong-customer',
+      email: 'wrong@example.test',
+    } as unknown as React.SetStateAction<
+      import('./new-order.types').DeliveryInfo
+    >;
+
+    expect(applyCustomerDeliveryAddressUpdate(previous, update)).toMatchObject({
+      id: 'customer-1',
+      name: 'Ada Lovelace',
+      email: 'ada@example.test',
+      phone: '08030000000',
+      address: '12 Marina',
+      city: 'Lagos Island',
+      state: 'Lagos',
+    });
+  });
+
   it('renders a plain TextInput when googleMapsApiKey is undefined', () => {
     render(
       <NewOrderAddressInput
@@ -140,7 +174,7 @@ describe('NewOrderAddressInput', () => {
     expect(setDeliveryInfo).toHaveBeenCalled();
   });
 
-  it('preserves city and state when the fallback address changes', () => {
+  it('requires fresh locality when the fallback street changes', () => {
     const setDeliveryInfo = vi.fn();
     render(
       <NewOrderAddressInput
@@ -176,13 +210,153 @@ describe('NewOrderAddressInput', () => {
       })
     ).toEqual({
       address: '12 Marina',
-      city: 'Lagos',
+      city: '',
       name: '',
       phone: '',
-      state: 'Lagos State',
+      state: '',
+      country: '',
+      countryCode: '',
+      postalCode: '',
       latitude: undefined,
       longitude: undefined,
     });
+  });
+
+  it.each([
+    'City',
+    'State',
+  ])('clears the old pin when the delivery %s changes', (field) => {
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({ setDeliveryInfo })}
+        googleMapsApiKey={undefined}
+      />
+    );
+    fireEvent.change(screen.getByPlaceholderText(field), {
+      target: { value: 'New locality' },
+    });
+    const update = setDeliveryInfo.mock.calls[0][0];
+    const address = update({
+      address: 'Old address',
+      city: 'Ikeja',
+      state: 'Lagos',
+      name: 'Ada',
+      phone: '08030000000',
+      latitude: 6.6,
+      longitude: 3.4,
+    });
+    expect(address[field.toLowerCase()]).toBe('New locality');
+    expect(address.latitude).toBeUndefined();
+    expect(address.longitude).toBeUndefined();
+  });
+
+  it('keeps a pin when locality changes only in capitalization', () => {
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({ setDeliveryInfo })}
+        googleMapsApiKey={undefined}
+      />
+    );
+    fireEvent.change(screen.getByPlaceholderText('City'), {
+      target: { value: 'Ikeja' },
+    });
+    const update = setDeliveryInfo.mock.calls[0][0];
+    expect(
+      update({
+        address: 'Saved street',
+        city: 'ikeja',
+        state: 'Lagos',
+        name: 'Ada',
+        phone: '08030000000',
+        latitude: 6.6,
+        longitude: 3.4,
+      })
+    ).toMatchObject({ city: 'Ikeja', latitude: 6.6, longitude: 3.4 });
+  });
+
+  it('does not show a street-change warning for a case-only locality edit', () => {
+    render(
+      <NewOrderAddressInput
+        controller={makeController({
+          deliveryInfo: {
+            address: 'Saved street',
+            city: 'ikeja',
+            name: 'Ada',
+            phone: '08030000000',
+            state: 'Lagos',
+          },
+        })}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+    const onNotFound = googlePlacesState.lastProps?.onNotFound as
+      | (() => void)
+      | undefined;
+    act(() => onNotFound?.());
+
+    fireEvent.change(screen.getByPlaceholderText('City'), {
+      target: { value: 'Ikeja' },
+    });
+
+    expect(
+      screen.queryByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps locality confirmation after reverting a pin-invalidating edit', () => {
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({
+          deliveryInfo: {
+            address: 'Saved street',
+            city: 'Lagos',
+            name: 'Ada',
+            phone: '08030000000',
+            state: 'Lagos',
+          },
+          setDeliveryInfo,
+        })}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+    const onNotFound = googlePlacesState.lastProps?.onNotFound as
+      | (() => void)
+      | undefined;
+    act(() => onNotFound?.());
+
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText('City'), {
+        target: { value: 'Ikeja' },
+      });
+      fireEvent.change(screen.getByPlaceholderText('City'), {
+        target: { value: 'Lagos' },
+      });
+    });
+
+    const firstUpdate = setDeliveryInfo.mock.calls[0][0] as (
+      previous: AddressInputController['deliveryInfo']
+    ) => AddressInputController['deliveryInfo'];
+    expect(
+      firstUpdate({
+        address: 'Saved street',
+        city: 'Lagos',
+        name: 'Ada',
+        phone: '08030000000',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.4,
+      })
+    ).toMatchObject({ latitude: undefined, longitude: undefined });
+    expect(
+      screen.getByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).toBeInTheDocument();
   });
 
   it('updates city and state through dedicated fallback inputs', () => {
@@ -404,7 +578,7 @@ describe('NewOrderAddressInput', () => {
     });
   });
 
-  it('clears stale geocoding on the first keystroke that differs from the selection', async () => {
+  it('clears locality and pin for a substantive street edit and asks the user to re-enter locality', async () => {
     const setDeliveryInfo = vi.fn();
 
     render(
@@ -450,7 +624,14 @@ describe('NewOrderAddressInput', () => {
       }
     );
     await Promise.resolve();
-    textInputProps?.onChangeText?.('42 Marina, Ikeja, Lago');
+    await act(async () => {
+      textInputProps?.onChangeText?.('42 Marina, Ikeja, Lago');
+    });
+    expect(
+      screen.getByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).toBeInTheDocument();
 
     expect(setDeliveryInfo).toHaveBeenCalledTimes(2);
     const editUpdater = setDeliveryInfo.mock.calls[1][0] as (
@@ -478,6 +659,179 @@ describe('NewOrderAddressInput', () => {
       country: '',
       countryCode: '',
       postalCode: '',
+      latitude: undefined,
+      longitude: undefined,
+    });
+  });
+
+  it('preserves a selected destination for a formatting-only street edit', async () => {
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({
+          deliveryInfo: {
+            address: '42 Marina, Ikeja, Lagos',
+            city: 'Ikeja',
+            name: '',
+            phone: '',
+            state: 'Lagos',
+            latitude: 6.6,
+            longitude: 3.3,
+          },
+          setDeliveryInfo,
+        })}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+
+    const textInputProps = googlePlacesState.lastProps?.textInputProps as
+      | { onChangeText?: (text: string) => void }
+      | undefined;
+    await act(async () => {
+      textInputProps?.onChangeText?.(' 42 marina ,   ikeja, lagos ');
+    });
+
+    const update = setDeliveryInfo.mock.calls[0][0] as (
+      previous: AddressInputController['deliveryInfo']
+    ) => AddressInputController['deliveryInfo'];
+    expect(
+      update({
+        address: '42 Marina, Ikeja, Lagos',
+        city: 'Ikeja',
+        name: '',
+        phone: '',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.3,
+      })
+    ).toMatchObject({
+      address: ' 42 marina ,   ikeja, lagos ',
+      city: 'Ikeja',
+      state: 'Lagos',
+      latitude: 6.6,
+      longitude: 3.3,
+    });
+    expect(
+      screen.queryByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).toBeNull();
+  });
+
+  it('keeps manual locality confirmation visible after a formatting-only street edit', async () => {
+    const controller = makeController({
+      deliveryInfo: {
+        address: 'Old address',
+        city: 'Old city',
+        name: '',
+        phone: '',
+        state: 'Old state',
+      },
+    });
+    const view = render(
+      <NewOrderAddressInput
+        controller={controller}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+
+    const getTextInputProps = () =>
+      googlePlacesState.lastProps?.textInputProps as
+        | { onChangeText?: (text: string) => void }
+        | undefined;
+    await act(async () => {
+      getTextInputProps()?.onChangeText?.('New address');
+    });
+    view.rerender(
+      <NewOrderAddressInput
+        controller={{
+          ...controller,
+          deliveryInfo: {
+            ...controller.deliveryInfo,
+            address: 'New address',
+            city: 'Yaba',
+            state: 'Lagos',
+          },
+        }}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+
+    await act(async () => {
+      getTextInputProps()?.onChangeText?.('New address,');
+    });
+
+    expect(
+      screen.getByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('State')).toBeInTheDocument();
+  });
+
+  it('does not compare rapid street edits with a stale pre-selection address', () => {
+    const initialAddress = {
+      address: 'Old address',
+      city: 'Old city',
+      name: '',
+      phone: '',
+      state: 'Old state',
+      country: 'Nigeria',
+      countryCode: 'NG',
+      latitude: 6.1,
+      longitude: 3.2,
+    };
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({
+          deliveryInfo: initialAddress,
+          setDeliveryInfo,
+        })}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+
+    const onPress = googlePlacesState.lastProps?.onPress as
+      | ((
+          data: { description: string },
+          details: {
+            address_components: Array<{ long_name: string; types: string[] }>;
+            geometry: { location: { lat: number; lng: number } };
+          }
+        ) => void)
+      | undefined;
+    const textInputProps = googlePlacesState.lastProps?.textInputProps as
+      | { onChangeText?: (text: string) => void }
+      | undefined;
+
+    act(() => {
+      onPress?.(
+        { description: 'New address' },
+        {
+          address_components: [
+            { long_name: 'New city', types: ['locality'] },
+            { long_name: 'New state', types: ['administrative_area_level_1'] },
+          ],
+          geometry: { location: { lat: 7.2, lng: 4.3 } },
+        }
+      );
+      textInputProps?.onChangeText?.('New address ');
+      // This returns to the initial street before React rerenders. A stale
+      // closure sees it as formatting-only and would retain the new place pin.
+      textInputProps?.onChangeText?.('Old address');
+    });
+
+    const finalAddress = setDeliveryInfo.mock.calls.reduce(
+      (previous, [update]) =>
+        typeof update === 'function' ? update(previous) : update,
+      initialAddress
+    );
+    expect(finalAddress).toMatchObject({
+      address: 'Old address',
+      city: '',
+      state: '',
       latitude: undefined,
       longitude: undefined,
     });

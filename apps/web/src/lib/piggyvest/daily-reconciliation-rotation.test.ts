@@ -4,6 +4,7 @@ import {
   env,
   ledger,
   makeDeps,
+  NO_MIGRATED_LEGACY_WALLETS,
   NO_WALLET_PAY_WORK,
   snapshot,
 } from './daily-reconciliation-runtime.test-support';
@@ -31,6 +32,8 @@ function rotatingExecutor() {
       return { rows: [{ result: ledger() }] };
     if (statement.includes('read_wallet_pay_reconciliation'))
       return { rows: [{ result: NO_WALLET_PAY_WORK }] };
+    if (statement.includes('read_migrated_legacy_wallet_balances'))
+      return { rows: [{ result: NO_MIGRATED_LEGACY_WALLETS }] };
     const slot = (JSON.parse(String(params[2])) as { rotationSlot: number })
       .rotationSlot;
     const wallets = windowFor(slot);

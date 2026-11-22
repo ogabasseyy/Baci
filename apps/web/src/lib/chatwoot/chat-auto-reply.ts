@@ -178,7 +178,12 @@ export async function runChatAutoReply(
   // Generation can take a while. A later customer message has its own run,
   // so this one stays out of it: no answer and no handover for a question
   // that has been superseded.
-  if (!done.latest) return 'skipped';
+  if (done.latest === false) return 'skipped';
+  // The messages could not be read, so nothing says this was superseded:
+  // a person takes it rather than the customer waiting with nobody queued.
+  if (done.latest === null) {
+    return handOver(binding, conversationId, 'the chat could not be read');
+  }
   const result = done.generated;
   if (!result.ok) {
     return handOver(binding, conversationId, 'the assistant was unavailable');

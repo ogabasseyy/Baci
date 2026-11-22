@@ -43,16 +43,17 @@ export async function loadChatAutoReplyHistory(
  * to an older run that finished late, so counting either would leave this
  * question unanswered. A repeat delivery of the same message is dropped at
  * intake, and a person's reply is caught by the conversation leaving
- * `pending`. Unreadable counts as not latest: staying quiet is safer than
- * answering out of turn.
+ * `pending`. Null means the messages could not be read: that is not the same
+ * as superseded, and the caller hands over rather than going quiet with
+ * nobody queued.
  */
 export async function isLatestChatMessage(
   binding: ChatAutoReplyBinding,
   conversationId: number,
   messageId: number
-): Promise<boolean> {
+): Promise<boolean | null> {
   const result = await listMerchantInboxMessages(binding, { conversationId });
-  if (!result.ok) return false;
+  if (!result.ok) return null;
   const latestQuestion = result.messages.findLast(
     (message) => message.sender === 'customer'
   );

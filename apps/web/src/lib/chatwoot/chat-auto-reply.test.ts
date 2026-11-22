@@ -134,6 +134,14 @@ describe('runChatAutoReply', () => {
     expect(mocks.status).not.toHaveBeenCalled();
     expect(mocks.post).not.toHaveBeenCalled();
   });
+  it('hands over when the latest-message read fails, instead of going quiet', async () => {
+    mocks.latest.mockResolvedValue(null);
+    expect(await runChatAutoReply(binding, event())).toBe('handed_over');
+    expect(mocks.post).not.toHaveBeenCalledWith(
+      binding,
+      expect.objectContaining({ content: 'Yes, it is in stock.' })
+    );
+  });
   it('hands over when the whole run overruns its time limit', async () => {
     vi.useFakeTimers();
     try {

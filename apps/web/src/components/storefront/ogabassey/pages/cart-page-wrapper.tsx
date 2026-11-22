@@ -78,10 +78,14 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
 
   useEffect(() => {
     let reloading = false;
+    const cartPath = window.location.pathname;
+    let previousHash = window.location.hash;
     function acceptHandoffNavigation() {
-      const handoff = parseHandoffPairing(window.location.hash);
+      const hash = window.location.hash;
+      if (reloading || window.location.pathname !== cartPath || hash === previousHash) return;
+      previousHash = hash;
+      const handoff = parseHandoffPairing(hash);
       if (
-        reloading ||
         !handoff ||
         !cartHandoffPairingTokenSchema.safeParse(handoff.token).success ||
         !cartHandoffRedeemRequestSchema.shape.token.safeParse(handoff.token).success ||
@@ -97,9 +101,13 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
     const navigation = window.navigation;
     // History API writes can change the fragment without emitting hashchange.
     navigation?.addEventListener('currententrychange', acceptHandoffNavigation);
+    const legacyHistoryCheck = navigation
+      ? undefined
+      : window.setInterval(acceptHandoffNavigation, 1000);
     window.addEventListener('hashchange', acceptHandoffNavigation);
     return () => {
       navigation?.removeEventListener('currententrychange', acceptHandoffNavigation);
+      window.clearInterval(legacyHistoryCheck);
       window.removeEventListener('hashchange', acceptHandoffNavigation);
     };
   }, []);

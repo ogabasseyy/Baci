@@ -111,13 +111,38 @@ describe('CartPageWrapper handoff', () => {
       render(<CartPageWrapper merchantId="merchant-1" />);
       expect(await screen.findByText('Cart page')).toBeInTheDocument();
 
-      window.history.pushState({}, '', validFragment);
+      window.history.pushState({}, '', `/ogabassey/checkout${validFragment}`);
+      navigation.dispatchEvent(new Event('currententrychange'));
+      expect(reloadCartHandoffDocument).not.toHaveBeenCalled();
+
+      window.history.pushState({}, '', `/ogabassey/cart${validFragment}`);
       navigation.dispatchEvent(new Event('currententrychange'));
       expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
 
       window.dispatchEvent(new HashChangeEvent('hashchange'));
       expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
     } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('detects programmatic history updates on browsers without the Navigation API', () => {
+    vi.stubGlobal('navigation', undefined);
+    vi.useFakeTimers();
+    try {
+      mockSearch('');
+      window.history.replaceState({}, '', '/ogabassey/cart');
+      const { unmount } = render(<CartPageWrapper merchantId="merchant-1" />);
+      expect(screen.getByText('Cart page')).toBeInTheDocument();
+
+      window.history.replaceState({}, '', validFragment);
+      vi.advanceTimersByTime(1000);
+      expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
+
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
       vi.unstubAllGlobals();
     }
   });

@@ -2,6 +2,7 @@ import type { NegotiationCartLine, NegotiationItemInfo } from '@baci/shared';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import { palette } from '@/constants/Colors';
+import { formatCurrency } from '@/lib/utils';
 import { formatCurrency as formatPrice } from '@/utils/format';
 import { formatNegotiationItemMeta } from './format-negotiation-item-meta';
 import { negotiationCardStyles as styles } from './NegotiationCard.styles';
@@ -202,7 +203,7 @@ export function NegotiationCard({
       ) : null}
       {item.status === 'countered' && item.counter_offer != null ? (
         <Text style={[styles.newPrice, { color: colors.primary }]}>
-          Your counter offer: {formatPrice(item.counter_offer)}
+          Your counter offer: {formatCurrency(item.counter_offer)}
         </Text>
       ) : null}
       <NegotiationContactActions

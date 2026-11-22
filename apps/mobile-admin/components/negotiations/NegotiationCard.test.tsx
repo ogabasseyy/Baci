@@ -109,17 +109,17 @@ const baseItem: NegotiationCardRequest = {
 };
 
 describe('NegotiationCard', () => {
-  it('shows customer identity and the saved counter offer', () => {
+  it('shows customer identity and the exact saved counter offer', () => {
     renderCard({
       ...baseItem,
       customer_name: 'Chidi Okeke',
       status: 'countered',
-      counter_offer: 850000,
+      counter_offer: 850000.5,
     });
     expect(screen.getByText('Chidi Okeke')).toBeInTheDocument();
     expect(screen.getByText('+2348031234567')).toBeInTheDocument();
     expect(screen.getByText(/Your counter offer:/)).toHaveTextContent(
-      '850,000'
+      '850,000.50'
     );
   });
 

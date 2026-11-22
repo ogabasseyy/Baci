@@ -20,10 +20,17 @@ vi.mock('@/lib/api-base-url', () => ({ BASE_URL: 'https://test.invalid' }));
 vi.mock('./authenticated-fetch', () => ({
   AuthenticatedFetchPreflightError: class extends Error {},
 }));
-vi.mock('@/lib/paid-order-amendment-api', async (load) => ({
-  ...(await load<typeof import('@/lib/paid-order-amendment-api')>()),
-  paidOrderAmendment: { workspace: mocks.workspace, confirm: mocks.confirm },
-}));
+vi.mock(import('@/lib/paid-order-amendment-api'), async (load) => {
+  const actual = await load();
+  return {
+    ...actual,
+    paidOrderAmendment: {
+      ...actual.paidOrderAmendment,
+      workspace: mocks.workspace,
+      confirm: mocks.confirm,
+    },
+  };
+});
 vi.mock('@/lib/storage', () => ({
   asyncStorage: {
     getItem: mocks.get,

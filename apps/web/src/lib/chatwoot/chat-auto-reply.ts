@@ -6,6 +6,7 @@ import {
   CHAT_AUTO_REPLY_MIN_CONFIDENCE,
   type ChatAutoReply,
 } from '@/schemas/chat-auto-reply';
+import { CHAT_SANTA_OFFERS_KEY } from '@/schemas/chat-santa-offer';
 import type { ChatWebhookMessageCreated } from '@/schemas/chat-webhook';
 import {
   getConversationSnapshot,
@@ -178,6 +179,13 @@ export async function runChatAutoReply(
   const sent = await postAssistantMessage(binding, {
     conversationId,
     content: result.reply.reply,
+    ...(result.santaOffers?.length
+      ? {
+          contentAttributes: {
+            [CHAT_SANTA_OFFERS_KEY]: result.santaOffers,
+          },
+        }
+      : {}),
   });
   // A rejected reply (an expired bot credential, say) must not leave the
   // customer pending with nobody queued: a person takes it from here.

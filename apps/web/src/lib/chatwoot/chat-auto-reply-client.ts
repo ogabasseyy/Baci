@@ -61,7 +61,12 @@ async function providerPost(
 /** Posts as the assistant bot: a public reply, or a private staff note. */
 export function postAssistantMessage(
   binding: ChatAutoReplyBinding,
-  input: { conversationId: number; content: string; isPrivate?: boolean }
+  input: {
+    conversationId: number;
+    content: string;
+    isPrivate?: boolean;
+    contentAttributes?: Record<string, unknown>;
+  }
 ): Promise<boolean> {
   return providerPost(
     binding,
@@ -71,6 +76,9 @@ export function postAssistantMessage(
       content: input.content,
       message_type: 'outgoing',
       private: input.isPrivate === true,
+      ...(input.contentAttributes
+        ? { content_attributes: input.contentAttributes }
+        : {}),
     }
   );
 }

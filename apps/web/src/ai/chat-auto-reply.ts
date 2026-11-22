@@ -7,6 +7,8 @@ import {
   type ChatAutoReplyTurn,
   formatChatAutoReplyProducts,
 } from '@/ai/chat-auto-reply-prompt';
+import { answerSantaWish } from '@/ai/chat-auto-reply-santa';
+import { CHAT_AUTO_REPLY_SANTA_ADDENDUM } from '@/ai/chat-auto-reply-santa-prompt';
 import { handleSearchProducts } from '@/ai/chat-catalog-handlers';
 import { generateObjectWithChain } from '@/ai/generate-object-with-chain';
 import {
@@ -14,13 +16,20 @@ import {
   checkRateLimit,
   sanitizePromptInput,
 } from '@/ai/provider';
-import { resolveAgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
+import {
+  type AgenticChatTenant,
+  resolveAgenticChatTenant,
+} from '@/lib/agentic/agentic-chat-tenant';
 import { loadChatwootMerchantCurrency } from '@/lib/chatwoot/merchant-currency';
+import { isSantaModeActive } from '@/lib/chatwoot/santa-mode';
 import {
   CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH,
+  CHAT_AUTO_REPLY_MIN_CONFIDENCE,
   type ChatAutoReply,
+  chatAutoReplySantaSchema,
   chatAutoReplySchema,
 } from '@/schemas/chat-auto-reply';
+import type { ChatSantaOffer } from '@/schemas/chat-santa-offer';
 
 const OVERALL_TIMEOUT_MS = 20_000;
 // Catalog and currency lookups carry no timeout of their own. Bounding them
@@ -39,8 +48,27 @@ function withLookupDeadline<T>(work: Promise<T>): Promise<T> {
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
 
+/** A failed wish falls back to the normal answer, which never offers a deal. */
+async function answerSantaWishSafely(
+  tenant: AgenticChatTenant,
+  input: {
+    conversationId: number;
+    question: string;
+    history: readonly ChatAutoReplyTurn[];
+  }
+) {
+  try {
+    return await answerSantaWish({ tenant, ...input });
+  } catch {
+    console.error('[chat-auto-reply] santa wish failed', {
+      conversationId: input.conversationId,
+    });
+    return null;
+  }
+}
+
 export type ChatAutoReplyResult =
-  | { ok: true; reply: ChatAutoReply }
+  | { ok: true; reply: ChatAutoReply; santaOffers?: ChatSantaOffer[] }
   | { ok: false; reason: 'rate_limited' | 'unavailable' };
 
 /**
@@ -100,9 +128,16 @@ export async function generateChatAutoReply(input: {
       input.question,
       CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH
     ).value;
-    const { object } = await generateObjectWithChain({
-      schema: chatAutoReplySchema,
-      system: CHAT_AUTO_REPLY_SYSTEM_PROMPT,
+    // Santa mode needs the flag, December in Lagos and the Santa store.
+    const santa = isSantaModeActive({
+      merchantId: input.merchantId,
+      santaTenantMerchantId: tenant.merchantId,
+    });
+    const { object: generated } = await generateObjectWithChain({
+      schema: santa ? chatAutoReplySantaSchema : chatAutoReplySchema,
+      system: santa
+        ? `${CHAT_AUTO_REPLY_SYSTEM_PROMPT}${CHAT_AUTO_REPLY_SANTA_ADDENDUM}`
+        : CHAT_AUTO_REPLY_SYSTEM_PROMPT,
       messages: [
         ...input.history.map((turn) => ({
           role: turn.role,
@@ -127,6 +162,27 @@ export async function generateChatAutoReply(input: {
           ? 'empty reply without handover'
           : null,
     });
+    const isWish = santa && generated.intent === 'wish';
+    // "wish" is a Santa-mode routing signal only; the rest of the assistant
+    // keeps its normal intent set.
+    const object: ChatAutoReply = {
+      ...generated,
+      intent: generated.intent === 'wish' ? undefined : generated.intent,
+    };
+    if (
+      isWish &&
+      !object.needsHuman &&
+      object.confidence >= CHAT_AUTO_REPLY_MIN_CONFIDENCE
+    ) {
+      const wish = await answerSantaWishSafely(tenant, input);
+      if (wish) {
+        return {
+          ok: true,
+          reply: { ...object, reply: wish.reply },
+          santaOffers: wish.offers,
+        };
+      }
+    }
     return {
       ok: true,
       reply: withNarrowDownNudge(withCartLimit(object), search.products.length),

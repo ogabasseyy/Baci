@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-22T04:53:31+00:00",
-  "source_revision": "e86a6ef9df09a27b44dd2e5507f49340454ff5c0",
-  "evidence_digest": "eb2dd5c5728e6b894e78c2de4df45487720f9015c761f35bba272d43ae469574",
-  "claims_digest": "d4827f8ded5c5e49d4a9f19275fc19000701a08b8325dd88b1dc96dd28a73bcb",
-  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, locality recovery, duplicate-customer destination matching, and GIG quote binding after the main-branch sync. Previously reviewed capability claims remain code-evidenced only; no production capability promotion.",
+  "reviewed_at": "2026-11-22T05:24:51+00:00",
+  "source_revision": "9e3f4e4e431260d22b7b608257523bfb35ec86a6",
+  "evidence_digest": "6a12c01c84df837e4668b4a44e3a4a216b24acb5d914aa5da56876d2a134dbb3",
+  "claims_digest": "b62ff5f6e13d081a7bf1caa709ee8a183d4201a3e5d80a9d45d9d3bab7261727",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, locality recovery, duplicate-customer destination matching, and GIG quote binding after syncing to current main. Retained the current main review of paid partner pickup and parcel binding and the previously reviewed expense evidence. All claims remain code-evidenced only; no production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

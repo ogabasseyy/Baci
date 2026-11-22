@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -16,6 +17,7 @@ interface InboxSearchResultsProps {
   isLoadingMore: boolean;
   isPending: boolean;
   onLoadMore: () => void;
+  onRetry: () => void;
   results: { conversation: InboxConversation; snippet: string | null }[];
   term: string;
 }
@@ -27,6 +29,7 @@ export function InboxSearchResults({
   isLoadingMore,
   isPending,
   onLoadMore,
+  onRetry,
   results,
   term,
 }: InboxSearchResultsProps) {
@@ -52,6 +55,13 @@ export function InboxSearchResults({
         <Text style={[styles.title, { color: colors.text }]}>
           Search is not available right now.
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onRetry}
+          style={styles.retry}
+        >
+          <Text style={{ color: colors.primary }}>Tap to retry</Text>
+        </Pressable>
       </View>
     );
   }
@@ -84,6 +94,11 @@ export function InboxSearchResults({
 }
 
 const styles = StyleSheet.create({
+  retry: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: SPACING.touchTarget,
+  },
   centered: {
     alignItems: 'center',
     gap: SPACING.sm,

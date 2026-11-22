@@ -15,6 +15,7 @@ vi.mock('react-native-google-places-autocomplete', () => ({
     textInputProps: {
       accessibilityLabel: string;
       editable: boolean;
+      value: string;
       onChangeText: (text: string) => void;
     };
     query: Record<string, string>;
@@ -24,6 +25,7 @@ vi.mock('react-native-google-places-autocomplete', () => ({
       <input
         aria-label={textInputProps.accessibilityLabel}
         disabled={!textInputProps.editable}
+        value={textInputProps.value}
         onChange={(event) => textInputProps.onChangeText(event.target.value)}
       />
       <span role="status">{query.components}</span>
@@ -86,10 +88,71 @@ afterEach(() => {
 });
 
 describe('ShipmentFlowGiglPanel places autocomplete', () => {
+  it('shows the saved destination and asks before editing it', () => {
+    const onEditAddress = vi.fn();
+    const onRetryQuote = vi.fn();
+    const { rerender } = render(
+      <ShipmentFlowGiglPanel
+        {...props}
+        onRetryQuote={onRetryQuote}
+        selected
+        missingFields={[]}
+        addressDraft={{ address: '1 Allen', city: 'Ikeja', state: 'Lagos' }}
+        onEditAddress={onEditAddress}
+      />
+    );
+    expect(screen.getByText('Deliver to 1 Allen, Ikeja, Lagos')).toBeTruthy();
+    expect(screen.queryByLabelText('Shipping address')).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit shipping address' })
+    );
+    expect(onEditAddress).toHaveBeenCalledOnce();
+    expect(onRetryQuote).not.toHaveBeenCalled();
+
+    rerender(
+      <ShipmentFlowGiglPanel
+        {...props}
+        onRetryQuote={onRetryQuote}
+        selected
+        missingFields={['city']}
+        onEditAddress={onEditAddress}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save address and get quote' })
+    );
+    expect(onRetryQuote).toHaveBeenCalledOnce();
+  });
+
+  it('allows street correction when only locality is missing', () => {
+    const onEditAddress = vi.fn();
+    render(
+      <ShipmentFlowGiglPanel
+        {...props}
+        addressDraft={{ address: '1 Allen', city: '', state: '' }}
+        missingFields={['city', 'state']}
+        onEditAddress={onEditAddress}
+        selected
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit shipping address' })
+    );
+    expect(onEditAddress).toHaveBeenCalledOnce();
+  });
+
   it('sends address, city, state and pin from the selected place', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'key');
-    render(<ShipmentFlowGiglPanel {...props} />);
+    render(
+      <ShipmentFlowGiglPanel
+        {...props}
+        addressDraft={{ address: 'Saved street' }}
+      />
+    );
+    expect(screen.getByDisplayValue('Saved street')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe('country:NG');
+    expect(screen.queryByLabelText('Shipping address')).toBeNull();
     fireEvent.click(screen.getByText('Pick place'));
     expect(props.onPlaceSelect).toHaveBeenCalledWith({
       address: '12 Allen Ave, Ikeja',
@@ -103,28 +166,42 @@ describe('ShipmentFlowGiglPanel places autocomplete', () => {
   it('keeps typed search text in the address draft', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'key');
     render(<ShipmentFlowGiglPanel {...props} />);
-    fireEvent.change(screen.getByLabelText('Search shipping address'), {
-      target: { value: '12 Allen' },
-    });
+    fireEvent.change(
+      screen.getByLabelText('Search or enter shipping address'),
+      {
+        target: { value: '12 Allen' },
+      }
+    );
     expect(props.onAddressFieldChange).toHaveBeenCalledWith(
       'address',
       '12 Allen'
     );
+    expect(
+      screen.getByText(
+        'No suggestion? Type the full street address here, then enter the city and state below.'
+      )
+    ).toBeTruthy();
   });
 
   it('disables the search while a quote is loading', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'key');
     render(<ShipmentFlowGiglPanel {...props} state="loading" />);
     expect(
-      (screen.getByLabelText('Search shipping address') as HTMLInputElement)
-        .disabled
+      (
+        screen.getByLabelText(
+          'Search or enter shipping address'
+        ) as HTMLInputElement
+      ).disabled
     ).toBe(true);
   });
 
   it('keeps manual entry usable when no Maps key is configured', () => {
     vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', '');
     render(<ShipmentFlowGiglPanel {...props} />);
-    expect(screen.queryByLabelText('Search shipping address')).toBeNull();
+    expect(
+      screen.queryByLabelText('Search or enter shipping address')
+    ).toBeNull();
+    expect(screen.getByLabelText('Shipping address')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Shipping city'), {
       target: { value: 'Abuja' },
     });

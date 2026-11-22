@@ -179,6 +179,45 @@ describe('createNewOrderCustomerActions', () => {
     });
   });
 
+  it.each([
+    ['12 Allen Avenue', 'Ikeja', 'Lagos', 6.6, 3.35],
+    [' 12 allen avenue, ', 'Ikeja', 'Lagos', 6.6, 3.35],
+    ['10 Hospital Road', '', '', undefined, undefined],
+  ])('only reuses profile locality when the entered street still matches', (address, city, state, latitude, longitude) => {
+    const setCustomer = vi.fn();
+    const actions = makeActions({
+      newCustomer: { ...createEmptyNewCustomerDraft(), address },
+      setCustomer,
+    });
+    actions.handleSelectCustomer(
+      {
+        id: 'customer-1',
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.35,
+        company_name: null,
+        customer_type: 'individual',
+        email: null,
+        first_name: 'Ada',
+        full_name: 'Ada Merchant',
+        last_name: 'Merchant',
+        phone: '08030000000',
+      },
+      true
+    );
+    expect(setCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: address.trim(),
+        city,
+        state,
+        latitude,
+        longitude,
+      })
+    );
+  });
+
   it('bugfix: preserves structured locality when reusing an existing customer', () => {
     const setCustomer = vi.fn();
     const actions = makeActions({ setCustomer });
@@ -216,5 +255,91 @@ describe('createNewOrderCustomerActions', () => {
       postalCode: '100001',
       state: 'Lagos',
     });
+  });
+
+  it('reuses the profile pin when locality differs only by comma spacing', () => {
+    const setCustomer = vi.fn();
+    const actions = makeActions({
+      newCustomer: {
+        ...createEmptyNewCustomerDraft(),
+        address: ' 12 allen avenue, ',
+        city: 'Ikeja',
+        state: ' Lagos ',
+      },
+      setCustomer,
+    });
+
+    actions.handleSelectCustomer(
+      {
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.35,
+        company_name: null,
+        customer_type: 'individual',
+        email: null,
+        first_name: 'Ada',
+        full_name: 'Ada Merchant',
+        id: 'customer-1',
+        last_name: 'Merchant',
+        phone: '08030000000',
+      },
+      true
+    );
+
+    expect(setCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        city: 'Ikeja',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.35,
+      })
+    );
+  });
+
+  it('reuses the matching profile locality when its country code is blank', () => {
+    const setCustomer = vi.fn();
+    const actions = makeActions({
+      newCustomer: {
+        ...createEmptyNewCustomerDraft(),
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        countryCode: 'NG',
+      },
+      setCustomer,
+    });
+
+    actions.handleSelectCustomer(
+      {
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        country_code: null,
+        latitude: 6.6,
+        longitude: 3.35,
+        company_name: null,
+        customer_type: 'individual',
+        email: null,
+        first_name: 'Ada',
+        full_name: 'Ada Lovelace',
+        id: 'customer-no-country-code',
+        last_name: 'Lovelace',
+        phone: '08012345678',
+        zip_code: null,
+      },
+      true
+    );
+
+    expect(setCustomer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.35,
+      })
+    );
   });
 });

@@ -6,9 +6,16 @@ import {
   isPlatformHost,
   isValidCustomDomain,
   normalizeHostname,
+  RESERVED_SUBDOMAINS,
 } from './host';
 
 describe('proxy host helpers', () => {
+  it('reserves the chat engine label alongside the other infra hosts', () => {
+    expect(RESERVED_SUBDOMAINS.has('chat')).toBe(true);
+    expect(RESERVED_SUBDOMAINS.has('support')).toBe(true);
+    expect(RESERVED_SUBDOMAINS.has('chat-store')).toBe(false);
+  });
+
   it('normalizes ports and accepts only one valid merchant label', () => {
     expect(normalizeHostname('Shop.UseBaci.com:443')).toBe('shop.usebaci.com');
     expect(extractSubdomain('shop.usebaci.com', 'usebaci.com')).toBe('shop');

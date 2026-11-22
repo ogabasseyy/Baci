@@ -20,6 +20,7 @@ export const RESERVED_SUBDOMAINS = new Set([
   'status',
   'support',
   'help',
+  'chat',
 ]);
 
 export const VALID_SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;

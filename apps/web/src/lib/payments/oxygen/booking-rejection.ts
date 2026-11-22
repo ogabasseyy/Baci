@@ -6,3 +6,11 @@ export const oxygenStatementRequiredMessage =
 export const oxygenActiveLoanCode = 'OXYGEN_ACTIVE_LOAN';
 export const oxygenActiveLoanMessage =
   'Oxygen says you already have an active loan. Please contact support for help continuing your application. Your progress is saved.';
+
+export class OxygenActiveLoanPreflightError extends Error {
+  readonly code = oxygenActiveLoanCode;
+
+  constructor() {
+    super(oxygenActiveLoanMessage);
+  }
+}

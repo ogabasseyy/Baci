@@ -82,7 +82,10 @@ export function NewOrderScreenContent({
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          <NewOrderDetailsSection controller={controller} />
+          <NewOrderDetailsSection
+            allowOrderAddressEdit
+            controller={controller}
+          />
           <NewOrderChannelSection controller={controller} />
           <NewOrderItemsSection controller={controller} />
           <NewOrderNotesSection controller={controller} />

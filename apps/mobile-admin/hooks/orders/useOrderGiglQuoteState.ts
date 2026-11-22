@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
+import { resolveOrderGiglQuoteConfirmationGate } from '@/lib/order-gigl-quote-confirmation';
 import type {
   OrderGiglQuote,
   OrderGiglQuoteResult,
 } from '@/lib/order-gigl-shipping';
 import {
+  isOrderGiglQuoteFresh,
   type OrderGiglWalletState,
   toOrderGiglWalletState,
 } from '@/lib/order-gigl-shipping-state';
@@ -19,6 +21,7 @@ export function useOrderGiglQuoteState() {
   const [wallet, setWalletState] = useState<OrderGiglWalletState | null>(null);
   const walletRef = useRef<OrderGiglWalletState | null>(null);
   const quoteBoundRef = useRef(false);
+  const confirmationRef = useRef(false);
   const boundSignatureRef = useRef<string | null>(null);
   quoteRef.current = quote;
 
@@ -36,7 +39,33 @@ export function useOrderGiglQuoteState() {
     boundSignatureRef.current = boundSignature;
   };
 
+  const confirm = async (preview: boolean, refresh: () => Promise<unknown>) => {
+    const gate = resolveOrderGiglQuoteConfirmationGate({
+      confirmationInFlight: confirmationRef.current,
+      preview,
+      quoteBound: quoteBoundRef.current,
+      hasQuote: Boolean(quoteRef.current),
+      canBook: Boolean(walletRef.current?.canBook),
+      quoteFresh: quoteRef.current
+        ? isOrderGiglQuoteFresh(quoteRef.current)
+        : false,
+      boundChargeRecovery: Boolean(walletRef.current?.boundChargeRecovery),
+    });
+    if (gate === 'deny') return false;
+    if (gate === 'allow') return true;
+    confirmationRef.current = true;
+    try {
+      await refresh();
+      return false;
+    } finally {
+      confirmationRef.current = false;
+    }
+  };
   return {
+    confirm,
+    resetConfirmation: () => {
+      confirmationRef.current = false;
+    },
     /** A null signature applies an unbound (preview) quote. */
     applyQuote: (
       result: OrderGiglQuoteResult,

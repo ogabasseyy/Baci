@@ -4,7 +4,10 @@ import {
   cartLineIdentity,
   planCartMerge,
 } from '@baci/shared/cart';
-import { clearAttemptBody } from './cart-handoff-attempt-store';
+import {
+  clearActiveHandoff,
+  clearAttemptBody,
+} from './cart-handoff-attempt-store';
 
 export {
   clearActiveHandoff,
@@ -21,6 +24,7 @@ export interface PreviewMerchant {
 }
 
 export interface PreviewResponse {
+  importMcp?: boolean;
   status: 'pending' | 'consumed' | 'expired';
   merchant: PreviewMerchant | null;
   snapshot: CartSnapshot | null;
@@ -44,7 +48,7 @@ export interface MergeConflictView {
   incoming: ConflictOption;
 }
 
-export type Choice = 'connect' | 'merge' | 'keep_existing';
+export type Choice = 'connect' | 'merge' | 'keep_existing' | 'import_mcp';
 
 export function attemptStorageKey(handoffId: string): string {
   return `baci-cart-handoff-attempt:${handoffId}`;
@@ -113,7 +117,8 @@ export function lockedAttemptChoice(handoffId: string): Choice | null {
     if (
       stored === 'connect' ||
       stored === 'merge' ||
-      stored === 'keep_existing'
+      stored === 'keep_existing' ||
+      stored === 'import_mcp'
     ) {
       attemptChoices.set(key, stored);
       return stored;
@@ -155,6 +160,15 @@ export function clearHandoffAttempt(handoffId: string): void {
   }
 }
 
+export function clearTerminalHandoff(
+  handoffId: string,
+  clearChoice: () => void
+): void {
+  clearHandoffAttempt(handoffId);
+  clearActiveHandoff(handoffId);
+  clearChoice();
+}
+
 export function formatMinor(minor: number, currency: string): string {
   try {
     return new Intl.NumberFormat('en-NG', {
@@ -185,6 +199,10 @@ export function describeOption(
 
 export function fetchJson(url: string, init?: RequestInit): Promise<Response> {
   return fetch(url, { referrerPolicy: 'no-referrer', ...init });
+}
+
+export function reloadCartHandoffDocument(): void {
+  window.location.reload();
 }
 
 /** Remove pairing secrets while preserving the shopper's path and query. */

@@ -28,7 +28,7 @@ export type ResolveBookingMerchantSenderResult =
  * (for example "+23415781") must stop booking before any provider request.
  * Domestic origins are Nigerian, so national-format numbers are read as +234.
  */
-function isBookableSenderPhone(phone: string): boolean {
+export function isBookableSenderPhone(phone: string): boolean {
   if (!isPlausibleMerchantContactPhone(phone)) return false;
   // normalizePhoneToE164 returns digits only, without a leading "+"
   // (e.g. "2348146978921"), so a Nigerian number must be 234 + 10 digits.

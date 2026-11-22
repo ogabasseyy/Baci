@@ -82,6 +82,18 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: bundle install --jobs 4 --retry 3
 
+      - name: Test ActiveSupport backport on source fixture
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.test.rb
+
+      - name: Apply ActiveSupport security backport
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.rb
+
+      - name: Verify installed ActiveSupport security backport
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.test.rb --verify-installed
+
       - name: Disable Node type stripping
         run: echo "NODE_OPTIONS=--no-strip-types" >> "$GITHUB_ENV"
 

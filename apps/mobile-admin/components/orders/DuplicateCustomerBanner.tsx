@@ -11,7 +11,9 @@ import type { SelectableCustomer } from './new-order.types';
 interface DuplicateCustomerBannerProps {
   colors: ThemeColors;
   duplicateCustomer: SelectableCustomer;
+  disabled?: boolean;
   handleSelectCustomer: (customer: SelectableCustomer) => void;
+  keepsEnteredAddress?: boolean;
   resetNewCustomerForm: () => void;
   setDuplicateCustomer: Dispatch<SetStateAction<SelectableCustomer | null>>;
   setIsCreatingCustomer: Dispatch<SetStateAction<boolean>>;
@@ -20,7 +22,9 @@ interface DuplicateCustomerBannerProps {
 export function DuplicateCustomerBanner({
   colors,
   duplicateCustomer,
+  disabled = false,
   handleSelectCustomer,
+  keepsEnteredAddress = false,
   resetNewCustomerForm,
   setDuplicateCustomer,
   setIsCreatingCustomer,
@@ -39,9 +43,16 @@ export function DuplicateCustomerBanner({
       <Text style={{ color: colors.warning, fontWeight: '600' }}>
         ⚠️ Customer Already Exists
       </Text>
+      {keepsEnteredAddress ? (
+        <Text style={{ color: colors.text }}>
+          The address you entered will be used for this order.
+        </Text>
+      ) : null}
       <Pressable
         accessibilityLabel="Use existing customer"
         accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        disabled={disabled}
         onPress={() => {
           handleSelectCustomer(duplicateCustomer);
           setDuplicateCustomer(null);
@@ -54,6 +65,7 @@ export function DuplicateCustomerBanner({
           borderRadius: 8,
           flexDirection: 'row',
           gap: 12,
+          opacity: disabled ? 0.5 : 1,
           padding: 12,
         }}
       >

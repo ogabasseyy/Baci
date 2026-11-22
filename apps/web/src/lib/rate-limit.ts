@@ -152,7 +152,7 @@ function denyWithoutDistributedBackend(
   };
 }
 
-async function applyRateLimit(
+export async function applyRateLimit(
   identifier: string,
   pattern: string,
   config: RateLimitConfig

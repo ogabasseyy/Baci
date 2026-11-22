@@ -75,7 +75,14 @@ export const CartSidebar: React.FC = () => {
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath || ''}${path === '/' ? '' : path}`;
 
-  const { closeCart, handleCheckout, isCheckoutLoading, isIdentityOpen, setIsIdentityOpen } = useCartCheckout(isCartOpen, setIsCartOpen, getHref('/checkout'));
+  const {
+    closeCart,
+    handleCheckout,
+    isCheckoutLoading,
+    isIdentityOpen,
+    setIsIdentityOpen,
+    checkoutError,
+  } = useCartCheckout(isCartOpen, setIsCartOpen, getHref('/checkout'));
 
   const {
     negotiationState,
@@ -94,52 +101,33 @@ export const CartSidebar: React.FC = () => {
 
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
-  // Track a logical cart once per open drawer; catalog hydration can replace row objects.
   const lastCartView = useRef<string | null>(null);
   useEffect(() => {
     if (!isCartOpen || displayCart.length === 0) {
       lastCartView.current = null;
       return;
     }
-    if (
-      isCartOpen &&
-      displayCart.length > 0 &&
-      cartMerchantContextMatches
-    ) {
+    if (isCartOpen && displayCart.length > 0 && cartMerchantContextMatches) {
       const fingerprint = JSON.stringify([
-        merchant?.id, merchant?.payout_currency ?? 'NGN',
-        displayCart.map(item => JSON.stringify([item.id, item.variantId ?? null,
-          item.offerId ?? null, item.condition ?? null,
+        merchant?.id,
+        merchant?.payout_currency ?? 'NGN',
+        displayCart.map((item) => JSON.stringify([
+          item.id, item.variantId ?? null, item.offerId ?? null, item.condition ?? null,
           Object.entries(item.variantAttributes ?? {}).sort(([a], [b]) => a.localeCompare(b)),
-          item.selectedColor ?? null, item.selectedStorage ?? null,
-          item.quantity, item.price,
+          item.selectedColor ?? null, item.selectedStorage ?? null, item.quantity, item.price,
         ])).sort(),
       ]);
       if (lastCartView.current === fingerprint) return;
       lastCartView.current = fingerprint;
-      // Cart items already satisfy the Product shape analytics expects.
       const analyticsProducts = displayCart.map((item) => ({
         product: item,
         quantity: item.quantity,
       }));
-
-      analytics.viewCart(
-        analyticsProducts,
-        merchant?.payout_currency ?? 'NGN',
-        {
-          merchantId: merchant?.id || '',
-          // If we had user data context, we would pass it here
-          // userData: { email: user?.email, ... }
-        }
-      );
+      analytics.viewCart(analyticsProducts, merchant?.payout_currency ?? 'NGN', {
+        merchantId: merchant?.id || '',
+      });
     }
-  }, [
-    isCartOpen,
-    cart,
-    cartMerchantContextMatches,
-    merchant?.id,
-    merchant?.payout_currency,
-  ]);
+  }, [isCartOpen, cart, cartMerchantContextMatches, merchant?.id, merchant?.payout_currency]);
 
   if (!isCartOpen) return null;
 
@@ -160,19 +148,20 @@ export const CartSidebar: React.FC = () => {
 
         {/* Sidebar Panel - SWIPES FROM RIGHT */}
         <div className="absolute inset-y-0 right-0 max-w-full flex">
-          <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
+          <div className="w-screen max-w-md bg-store-background shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <div className="px-4 sm:px-6 py-4 border-b border-store-border flex items-center justify-between bg-store-background shrink-0">
+              <h2 className="text-xl font-bold text-store-background-text flex items-center gap-2">
                 <ShoppingBag className="text-store-primary" />
                 Your Cart
-                <span className="text-sm font-medium text-gray-500 ml-2">
+                <span className="text-sm font-medium text-store-background-text/60 ml-2">
                   ({displayCart.length} items)
                 </span>
               </h2>
-              <button type="button"
+              <button
+                type="button"
                 onClick={closeCart}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500 hover:text-store-primary"
+                className="p-2 hover:bg-store-background-text/10 rounded-full transition-colors text-store-background-text/60 hover:text-store-primary"
                 aria-label="Close cart"
               >
                 <X size={24} />
@@ -181,7 +170,7 @@ export const CartSidebar: React.FC = () => {
 
             {/* Cart Items List */}
             <div
-              className={`flex-1 overflow-y-auto p-6 ${displayCart.length === 0 ? 'flex flex-col' : 'space-y-6'}`}
+              className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-store-background-text/5 ${displayCart.length === 0 ? 'flex flex-col' : 'space-y-4'}`}
             >
               {displayCart.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center">
@@ -215,7 +204,7 @@ export const CartSidebar: React.FC = () => {
                   ))}
 
                   {/* Dynamic Ad Placement in Cart */}
-                  <div className="mt-8 border-t border-gray-100 pt-4">
+                  <div className="mt-8 border-t border-store-border pt-4">
                     <AdUnit placementKey="CART_MPU" />
                   </div>
                 </>
@@ -229,6 +218,7 @@ export const CartSidebar: React.FC = () => {
                 hasPriceNegotiation={hasPriceNegotiation}
                 hasNonNegotiableCartItem={hasNonNegotiableCartItem}
                 isCheckoutLoading={isCheckoutLoading}
+                checkoutError={checkoutError}
                 cartHref={asRoute(getHref('/cart'))}
                 onNegotiateTotal={openTotalNegotiation}
                 onCheckout={handleCheckout}

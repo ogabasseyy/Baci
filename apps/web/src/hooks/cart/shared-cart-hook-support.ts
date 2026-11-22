@@ -10,7 +10,6 @@ import type { CartMergeConflict } from '@/lib/cart/merge';
 import type { Product } from '@/lib/products';
 import type {
   AddToCartOptions,
-  CartItem,
   SharedCartDisplayItem,
   SharedCartImportStatus,
   SharedCartSyncStatus,
@@ -154,9 +153,18 @@ export function targetForLine(
   return { kind: 'identity', key: cartLineIdentity(cartItemToIdentity(line)) };
 }
 
-export function seedProducts(cached: CartItem[]): Record<string, Product> {
+export function seedProducts(
+  cached: SharedCartDisplayItem[]
+): Record<string, Product> {
   const products: Record<string, Product> = {};
   for (const item of cached) {
+    // Old confirmed entries carry no catalog status. Recheck them once
+    // instead of treating the cached display fields as catalog data.
+    if (
+      item.catalogPlaceholder === true ||
+      (item.serverLineId && item.catalogPlaceholder !== false)
+    )
+      continue;
     products[cartLineIdentity(cartItemToIdentity(item))] = item as Product;
   }
   return products;

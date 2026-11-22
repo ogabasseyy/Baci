@@ -55,7 +55,10 @@ it('fetches and validates an uncached snapshot', async () => {
     `/api/payments/oxygen/workflows/actions?workflowId=${id}`,
     {
       cache: 'no-store',
-      headers: { 'x-oxygen-eligibility-reason': '1' },
+      headers: {
+        'x-oxygen-eligibility-reason': '1',
+        'x-oxygen-eligibility-progress': '1',
+      },
     }
   );
   await expect(

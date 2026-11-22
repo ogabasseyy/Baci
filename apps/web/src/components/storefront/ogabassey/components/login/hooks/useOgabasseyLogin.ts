@@ -191,6 +191,9 @@ export function useOgabasseyLogin({
     setEditingEmail(true);
   };
 
+  const socialReturnTo =
+    redirectTo && redirectTo !== '/account' ? redirectTo : undefined;
+
   /**
    * Sign in with Google
    */
@@ -199,7 +202,10 @@ export function useOgabasseyLogin({
     setIsGoogleLoading(true);
 
     await runSocialSignIn(
-      signInWithGoogle,
+      () =>
+        socialReturnTo
+          ? signInWithGoogle(socialReturnTo)
+          : signInWithGoogle(),
       'Failed to sign in with Google',
       setError,
       setIsGoogleLoading
@@ -214,7 +220,8 @@ export function useOgabasseyLogin({
     setIsAppleLoading(true);
 
     await runSocialSignIn(
-      signInWithApple,
+      () =>
+        socialReturnTo ? signInWithApple(socialReturnTo) : signInWithApple(),
       'Failed to sign in with Apple',
       setError,
       setIsAppleLoading

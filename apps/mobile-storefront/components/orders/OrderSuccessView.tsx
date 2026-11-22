@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Stack } from 'expo-router';
+import type { ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AdSlot } from '@/components/ads/AdSlot';
@@ -32,147 +33,157 @@ export function OrderSuccessView({
   isCommercialDocument = false,
   isDocumentLoading = false,
   isPaid = false,
+  oxygenPlanConfirmed = false,
   isPermissionFlowActive = false,
   isReceiptPreviewActive = false,
   isFullscreenAdActive = false,
   showPermissionModal,
 }: OrderSuccessViewProps) {
-  const resolvedDeliveryEstimate =
-    resolveOrderSuccessDeliveryEstimate(deliveryEstimate);
-  const successTone = getOrderSuccessTone(
-    paymentMethod,
-    isPaid,
-    isCommercialDocument
-  );
+  const resolvedDeliveryEstimate = oxygenPlanConfirmed
+    ? 'Shared once processing starts'
+    : resolveOrderSuccessDeliveryEstimate(deliveryEstimate);
+  const successTone = oxygenPlanConfirmed
+    ? {
+        documentLabel: null,
+        eyebrow: 'Oxygen plan confirmed',
+        title: 'Order Confirmed',
+        subtitle: 'Your Oxygen payment plan is active.',
+        nextDocumentTitle: 'Upfront payment confirmed',
+        nextDocumentText:
+          'Oxygen confirmed your down payment and repayment setup.',
+      }
+    : getOrderSuccessTone(paymentMethod, isPaid, isCommercialDocument);
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        edges={['top', 'left', 'right']}
+      <OrderSuccessScroll
+        embedded={oxygenPlanConfirmed}
+        color={colors.background}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          <View style={styles.content}>
-            <View style={styles.iconContainer}>
-              <SuccessIcon size={84} color={colors.success} />
-            </View>
-            <View
-              style={[
-                styles.eyebrowPill,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(217, 59, 48, 0.16)'
-                    : 'rgba(217, 59, 48, 0.08)',
-                },
-              ]}
-            >
-              <Text style={styles.eyebrowText}>{successTone.eyebrow}</Text>
-            </View>
-            <Text style={[styles.title, { color: colors.text }]}>
-              {successTone.title}
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {successTone.subtitle}
-            </Text>
-            <View
-              style={[
-                styles.orderInfo,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <View style={styles.orderRow}>
-                <Ionicons
-                  name="receipt-outline"
-                  size={18}
-                  color={BRAND.primary}
-                />
-                <Text
-                  style={[styles.orderLabel, { color: colors.textSecondary }]}
-                >
-                  Order Number
-                </Text>
-                <Text style={[styles.orderValue, { color: colors.text }]}>
-                  #{orderNumber || 'Processing...'}
-                </Text>
-              </View>
-              <View
-                style={[styles.divider, { backgroundColor: colors.border }]}
+        <View style={styles.content}>
+          <View style={styles.iconContainer}>
+            <SuccessIcon size={84} color={colors.success} />
+          </View>
+          <View
+            style={[
+              styles.eyebrowPill,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(217, 59, 48, 0.16)'
+                  : 'rgba(217, 59, 48, 0.08)',
+              },
+            ]}
+          >
+            <Text style={styles.eyebrowText}>{successTone.eyebrow}</Text>
+          </View>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {successTone.title}
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {successTone.subtitle}
+          </Text>
+          <View
+            style={[
+              styles.orderInfo,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.orderRow}>
+              <Ionicons
+                name="receipt-outline"
+                size={18}
+                color={BRAND.primary}
               />
-              <View style={styles.orderRow}>
-                <Ionicons name="time-outline" size={18} color={BRAND.primary} />
-                <Text
-                  style={[styles.orderLabel, { color: colors.textSecondary }]}
-                >
-                  {getOrderSuccessDeliveryLabel(deliveryEstimate)}
-                </Text>
-                <Text style={[styles.orderValue, { color: colors.text }]}>
-                  {resolvedDeliveryEstimate}
-                </Text>
-              </View>
-              {reference ? (
-                <>
-                  <View
-                    style={[styles.divider, { backgroundColor: colors.border }]}
-                  />
-                  <View style={styles.orderRow}>
-                    <Ionicons
-                      name="card-outline"
-                      size={18}
-                      color={BRAND.primary}
-                    />
-                    <Text
-                      style={[
-                        styles.orderLabel,
-                        { color: colors.textSecondary },
-                      ]}
-                    >
-                      Payment Ref
-                    </Text>
-                    <Text style={[styles.orderValue, { color: colors.text }]}>
-                      {reference}
-                    </Text>
-                  </View>
-                </>
-              ) : null}
+              <Text
+                style={[styles.orderLabel, { color: colors.textSecondary }]}
+              >
+                Order Number
+              </Text>
+              <Text style={[styles.orderValue, { color: colors.text }]}>
+                {orderNumber
+                  ? `#${orderNumber}`
+                  : oxygenPlanConfirmed
+                    ? 'Unavailable'
+                    : '#Processing...'}
+              </Text>
             </View>
-            <OrderSuccessNextSteps
-              colors={colors}
-              nextDocumentTitle={successTone.nextDocumentTitle}
-              nextDocumentText={successTone.nextDocumentText}
+            <View
+              style={[styles.divider, { backgroundColor: colors.border }]}
             />
-            <View style={styles.actions}>
-              {onViewDocument ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={successTone.documentLabel}
-                  accessibilityState={{ disabled: isDocumentLoading }}
-                  disabled={isDocumentLoading}
-                  style={[
-                    styles.documentButton,
-                    {
-                      backgroundColor: BRAND.primary,
-                      opacity: isDocumentLoading ? 0.72 : 1,
-                    },
-                  ]}
-                  onPress={onViewDocument}
-                >
+            <View style={styles.orderRow}>
+              <Ionicons name="time-outline" size={18} color={BRAND.primary} />
+              <Text
+                style={[styles.orderLabel, { color: colors.textSecondary }]}
+              >
+                {getOrderSuccessDeliveryLabel(deliveryEstimate)}
+              </Text>
+              <Text style={[styles.orderValue, { color: colors.text }]}>
+                {resolvedDeliveryEstimate}
+              </Text>
+            </View>
+            {reference ? (
+              <>
+                <View
+                  style={[styles.divider, { backgroundColor: colors.border }]}
+                />
+                <View style={styles.orderRow}>
                   <Ionicons
-                    name="document-text-outline"
+                    name="card-outline"
                     size={18}
-                    color={Colors.light.white}
+                    color={BRAND.primary}
                   />
-                  <Text style={styles.documentButtonText}>
-                    {isDocumentLoading
-                      ? 'Preparing document...'
-                      : successTone.documentLabel}
+                  <Text
+                    style={[styles.orderLabel, { color: colors.textSecondary }]}
+                  >
+                    Payment Ref
                   </Text>
-                </Pressable>
-              ) : null}
+                  <Text style={[styles.orderValue, { color: colors.text }]}>
+                    {reference}
+                  </Text>
+                </View>
+              </>
+            ) : null}
+          </View>
+          <OrderSuccessNextSteps
+            colors={colors}
+            nextDocumentTitle={successTone.nextDocumentTitle}
+            nextDocumentText={successTone.nextDocumentText}
+            processingText={
+              oxygenPlanConfirmed
+                ? 'We’ll start processing once merchant payment is confirmed.'
+                : undefined
+            }
+          />
+          <View style={styles.actions}>
+            {onViewDocument && successTone.documentLabel ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={successTone.documentLabel}
+                accessibilityState={{ disabled: isDocumentLoading }}
+                disabled={isDocumentLoading}
+                style={[
+                  styles.documentButton,
+                  {
+                    backgroundColor: BRAND.primary,
+                    opacity: isDocumentLoading ? 0.72 : 1,
+                  },
+                ]}
+                onPress={onViewDocument}
+              >
+                <Ionicons
+                  name="document-text-outline"
+                  size={18}
+                  color={Colors.light.white}
+                />
+                <Text style={styles.documentButtonText}>
+                  {isDocumentLoading
+                    ? 'Preparing document...'
+                    : successTone.documentLabel}
+                </Text>
+              </Pressable>
+            ) : null}
+            {onLeaveGoogleReview && !oxygenPlanConfirmed ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Leave a Google Review"
@@ -189,64 +200,94 @@ export function OrderSuccessView({
                   Leave a Google Review
                 </Text>
               </Pressable>
-              <View style={styles.actionRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Continue Shopping"
-                  style={[
-                    styles.secondaryButton,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: colors.card,
-                    },
-                  ]}
-                  onPress={onContinueShopping}
+            ) : null}
+            <View style={styles.actionRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Continue Shopping"
+                style={[
+                  styles.secondaryButton,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                  },
+                ]}
+                onPress={onContinueShopping}
+              >
+                <Text
+                  style={[styles.secondaryButtonText, { color: colors.text }]}
                 >
-                  <Text
-                    style={[styles.secondaryButtonText, { color: colors.text }]}
-                  >
-                    Continue Shopping
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="View Orders"
-                  style={[
-                    styles.secondaryButton,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: colors.card,
-                    },
-                  ]}
-                  onPress={onViewOrders}
+                  Continue Shopping
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="View Orders"
+                style={[
+                  styles.secondaryButton,
+                  {
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                  },
+                ]}
+                onPress={onViewOrders}
+              >
+                <Text
+                  style={[styles.secondaryButtonText, { color: colors.text }]}
                 >
-                  <Text
-                    style={[styles.secondaryButtonText, { color: colors.text }]}
-                  >
-                    View Orders
-                  </Text>
-                </Pressable>
-              </View>
-              {/* The permission modal, the native system prompt behind it,
+                  View Orders
+                </Text>
+              </Pressable>
+            </View>
+            {/* The permission modal, the native system prompt behind it,
                   the receipt preview, and a presented post-order
                   interstitial each cover this screen; unmount the slot
                   while any of them is active so no obscured delivery is
                   requested or attributed. */}
-              {showPermissionModal ||
-              isPermissionFlowActive ||
-              isReceiptPreviewActive ||
-              isFullscreenAdActive ? null : (
-                <AdSlot placement="ORDER_SUCCESS_BANNER" />
-              )}
-            </View>
+            {oxygenPlanConfirmed ||
+            showPermissionModal ||
+            isPermissionFlowActive ||
+            isReceiptPreviewActive ||
+            isFullscreenAdActive ? null : (
+              <AdSlot placement="ORDER_SUCCESS_BANNER" />
+            )}
           </View>
-        </ScrollView>
-      </SafeAreaView>
-      <PermissionModal
-        visible={showPermissionModal}
-        onGrant={onPermissionGrant}
-        onDeny={onPermissionDeny}
-      />
+        </View>
+      </OrderSuccessScroll>
+      {!oxygenPlanConfirmed ? (
+        <PermissionModal
+          visible={showPermissionModal}
+          onGrant={onPermissionGrant}
+          onDeny={onPermissionDeny}
+        />
+      ) : null}
     </>
+  );
+}
+
+function OrderSuccessScroll({
+  embedded,
+  color,
+  children,
+}: {
+  embedded: boolean;
+  color: string;
+  children: ReactNode;
+}) {
+  // OxygenCheckoutScreen already provides the theme and outer ScrollView.
+  if (embedded) return <SafeAreaView edges={['top']}>{children}</SafeAreaView>;
+  return (
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: color }]}
+      edges={['top', 'left', 'right']}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {children}
+      </ScrollView>
+    </SafeAreaView>
   );
 }

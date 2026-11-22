@@ -1,5 +1,6 @@
 import type { GoogleMerchantListing } from '@/app/api/feed/google-merchant/feed-builder';
 import { logger } from '@/lib/logger';
+import { toKobo } from '@/lib/shipping/to-kobo';
 import type { CrossRemListingBinding } from '@/schemas/crossrem-listing-binding';
 import { CONDITION_LABELS } from './condition-labels';
 import { getSellableIdentity } from './sellable-identity';
@@ -14,10 +15,15 @@ function rejectBinding(message: string, listingId: string): never {
 
 function toListing(
   row: GoogleMerchantListing,
-  binding: CrossRemListingBinding
+  binding: CrossRemListingBinding,
+  availableQuantity: number
 ) {
-  const basePriceMinor = Math.round(row.price * 100);
-  if (!Number.isSafeInteger(basePriceMinor) || basePriceMinor <= 0) {
+  const basePriceMinor = toKobo(row.price);
+  if (
+    basePriceMinor === null ||
+    !Number.isSafeInteger(basePriceMinor) ||
+    basePriceMinor <= 0
+  ) {
     rejectBinding('Invalid CrossRem merchandise price', binding.listingId);
   }
 
@@ -49,14 +55,15 @@ function toListing(
     condition_label: CONDITION_LABELS[binding.condition],
     base_price_minor: basePriceMinor,
     price_minor: priceMinor,
-    availability: row.stock > 0 ? 'in_stock' : 'out_of_stock',
+    availability: availableQuantity > 0 ? 'in_stock' : 'out_of_stock',
     protection_included: false,
   };
 }
 
 export function projectCatalog(
   rows: GoogleMerchantListing[],
-  bindings: readonly CrossRemListingBinding[]
+  bindings: readonly CrossRemListingBinding[],
+  stockByListing?: Map<string, number>
 ) {
   const confirmedNewProducts = new Set(
     bindings
@@ -102,7 +109,20 @@ export function projectCatalog(
       boundIdentities.add(key);
       if (binding.retired) return [];
       const row = rowsByIdentity.get(key);
-      return row ? [toListing(row, binding)] : [];
+      if (!row) return [];
+      // The order writer reserves stock_quantity. Google can still show a
+      // legacy stock count when that reservable quantity is zero.
+      const managedStock = row.variant
+        ? row.variant.stock_quantity
+        : row.product.stock_quantity;
+      const quoteStock = row.offer
+        ? row.offer.stock_quantity
+        : row.product.manage_stock === true
+          ? managedStock
+          : row.stock;
+      const availableQuantity = quoteStock ?? 0;
+      stockByListing?.set(binding.listingId, availableQuantity);
+      return [toListing(row, binding, availableQuantity)];
     })
     .sort((a, b) =>
       a.listing_id < b.listing_id ? -1 : a.listing_id > b.listing_id ? 1 : 0

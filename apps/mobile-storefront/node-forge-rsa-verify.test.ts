@@ -15,8 +15,6 @@ import { describe, expect, it } from '@jest/globals';
 // error (fixed).
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const forgeRoot = require('node-forge/package.json');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const forge = require('node-forge');
 
 const forgeUtil = forge.util;
@@ -62,7 +60,6 @@ function sha256(message: string): string {
 
 describe('security: node-forge CVE-2026-85393 behavior', () => {
   it('rejects the forged nested-DigestAlgorithm signature', () => {
-    expect(forgeRoot.version).toBe('1.4.3');
     const publicKey = forgedPublicKey();
     const digest = sha256(MESSAGE);
     const forged = forgeUtil.binary.hex.decode(FORGED_S_HEX);

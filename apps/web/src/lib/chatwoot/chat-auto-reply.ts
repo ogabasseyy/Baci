@@ -41,10 +41,12 @@ export type ChatAutoReplyOutcome =
 const HISTORY_DEADLINE_MS = 6_000;
 // One limit for everything before the decision to reply or hand over: the
 // history read, the model and the latest-message check together. The route
-// may run for 60 seconds, and a handover needs up to 15 of them (a live
-// status read, then the queue move with its credential fallback), so the
-// work is cut off here rather than by the platform with nobody queued.
-const WORK_DEADLINE_MS = 40_000;
+// may run for 60 seconds. After this limit a reply still needs a live status
+// read and the send (up to 5 seconds each), and a handover that follows a
+// refused send needs another status read and the queue move with its
+// credential fallback (up to 15): 30 + 10 + 15 stays inside the route's time,
+// so the platform never cuts the run off with nobody queued.
+const WORK_DEADLINE_MS = 30_000;
 
 /** Labels are merged against the live list, never the webhook's old copy. */
 async function updateLabels(

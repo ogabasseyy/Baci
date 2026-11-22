@@ -139,7 +139,7 @@ describe('runChatAutoReply', () => {
     try {
       mocks.generate.mockReturnValue(new Promise(() => {}));
       const run = runChatAutoReply(binding, event());
-      await vi.advanceTimersByTimeAsync(40_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(await run).toBe('handed_over');
       expect(mocks.status).toHaveBeenCalledWith(binding, {
         conversationId: 7,

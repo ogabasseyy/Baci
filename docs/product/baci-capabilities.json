@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-22T09:04:56+00:00",
-  "source_revision": "110e959ae05aeef3ebdf61b17423060720030ffa",
-  "evidence_digest": "d94e0d6d7e05d5893969a8614b56a6661f00258ca664de70c61a6e9ecdcc4a72",
-  "claims_digest": "11f9bdc9b6f32dd0095d5382be56a3d7e2909c3549a49f514a660a899d818b81",
+  "reviewed_at": "2026-11-22T09:36:50+00:00",
+  "source_revision": "b2ed6e25669480fb33345c499690ccb22a348924",
+  "evidence_digest": "00215535c9fc7805f04ae25b3e0e394eb88dd03a1d743d0bc5e169d996ab013f",
+  "claims_digest": "384ec280e4c456bc5879640ed5829d9c8fd8048f0eb1f52781b319162f2c73f0",
   "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order address preservation, rapid street edits, incomplete duplicate-customer drafts, pending Places details, and GIG quote/save concurrency after syncing to current main. Re-reviewed current-main customer checkout quote rejection, destination/state matching, and stale-quote recovery alongside the retained paid partner pickup and parcel-binding evidence. The previously reviewed expense evidence remains in scope. All claims remain code-evidenced only; no production capability promotion. Re-reviewed the dashboard order details, ordinary cancellation, and invoice document paths alongside the feature-gated paid-order item replacement flow. Paid-order replacement remains outside the published production capability claims.",
   "capabilities": [
     {

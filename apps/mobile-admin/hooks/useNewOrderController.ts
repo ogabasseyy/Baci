@@ -55,6 +55,7 @@ export function useNewOrderController({
   const [customer, setCustomer] = useState<CustomerInfo>(
     createEmptyCustomerInfo
   );
+  const [customerSelectionRevision, setCustomerSelectionRevision] = useState(0);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -144,6 +145,8 @@ export function useNewOrderController({
     createCustomer: createCustomerMutation.mutateAsync,
     merchantId: merchant?.id,
     newCustomer: customerDraft.newCustomer,
+    onCustomerSelected: () =>
+      setCustomerSelectionRevision((revision) => revision + 1),
     setCustomer,
     setCustomerSearch: customerDraft.setCustomerSearch,
     setDuplicateCustomer: customerDraft.setDuplicateCustomer,
@@ -212,6 +215,7 @@ export function useNewOrderController({
     colors,
     createCustomerMutation,
     customer,
+    customerSelectionRevision,
     customersData,
     customersQuery,
     customItem,

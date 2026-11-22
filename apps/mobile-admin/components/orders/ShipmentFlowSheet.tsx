@@ -3,11 +3,10 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareModalContainer } from '@/components/ui/KeyboardAwareModalContainer';
 import { isRuntimePlatform } from '@/config/runtime-platform';
-import { SHIPPING_PROVIDER_LABELS } from '@/constants/shipping-provider-labels';
 import { useTheme } from '@/hooks/useTheme';
 import { CheckoutShippingRecoveryPanel } from './CheckoutShippingRecoveryPanel';
 import { ShipmentFlowFooter } from './ShipmentFlowFooter';
-import { ShipmentFlowGiglPanel } from './ShipmentFlowGiglPanel';
+import { ShipmentFlowGiglMethod } from './ShipmentFlowGiglMethod';
 import { ShipmentFlowHeader } from './ShipmentFlowHeader';
 import { ShipmentFlowProgress } from './ShipmentFlowProgress';
 import {
@@ -222,27 +221,12 @@ export function ShipmentFlowSheet({
                 externalWaybill={externalWaybill}
                 giglPanel={
                   !giglShipping ? undefined : (
-                    <ShipmentFlowGiglPanel
-                      addressDraft={giglShipping.addressDraft}
-                      error={giglShipping.error}
-                      fundingAccount={giglShipping.fundingAccount}
-                      missingFields={giglShipping.missingFields}
-                      onAddressFieldChange={giglShipping.updateAddressField}
-                      onFundWallet={() => void giglShipping.startFunding()}
-                      onPlaceSelect={giglShipping.selectAddressPlace}
-                      onRefreshFundingAccount={() =>
-                        void giglShipping.refreshFundingAccount()
-                      }
-                      onModeChange={() => {
+                    <ShipmentFlowGiglMethod
+                      shipping={giglShipping}
+                      selected={selectedMode === 'provider'}
+                      onSelect={() => {
                         if (!recoveryBusy) onModeChange('provider');
                       }}
-                      onRetryQuote={() => void giglShipping.requestQuote()}
-                      onTransferred={giglShipping.startTransferPoll}
-                      providerName={SHIPPING_PROVIDER_LABELS.GIGL}
-                      quote={giglShipping.quote}
-                      selected={selectedMode === 'provider'}
-                      state={giglShipping.state}
-                      wallet={giglShipping.wallet}
                     />
                   )
                 }

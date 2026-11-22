@@ -8,6 +8,7 @@ import {
 } from '@/schemas/merchant-inbox';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
 import { readCustomerLinkToken } from './merchant-inbox-customer-link';
+import { buildMerchantInboxListRows } from './merchant-inbox-list-rows';
 import {
   compareMerchantInboxMessages,
   projectMerchantInboxConversation,
@@ -15,7 +16,6 @@ import {
 } from './merchant-inbox-projection';
 import {
   type MerchantInboxView,
-  matchesView,
   providerQueryForView,
 } from './merchant-inbox-views';
 
@@ -118,27 +118,11 @@ export async function listMerchantInboxConversations(
   const parsed = providerInboxConversationListSchema.safeParse(response.body);
   if (!parsed.success) return { ok: false, code: 'unavailable' };
   const { payload } = parsed.data.data;
-  // Signed links ride along per conversation, outside the projected rows, so
-  // a token can never leak into a response by accident.
-  const links: Record<number, string> = {};
-  const conversations = payload
-    .map((raw) => {
-      const conversation = projectMerchantInboxConversation(
-        raw,
-        binding.inboxId
-      );
-      const token = conversation ? readCustomerLinkToken(raw) : null;
-      if (conversation && token) links[conversation.id] = token;
-      return conversation;
-    })
-    .filter((value): value is MerchantInboxConversation => value !== null)
-    .filter((value) => !input.view || matchesView(value, input.view))
-    // Ordering must not depend on the provider honouring `sort_by`.
-    .sort(
-      (a, b) =>
-        (b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0) -
-        (a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0)
-    );
+  const { conversations, links } = buildMerchantInboxListRows(
+    payload,
+    binding.inboxId,
+    input.view
+  );
   // The provider's page size is a server setting a caller cannot pin, and its
   // total is read before the page rows, so a conversation arriving between
   // the two makes the total stale. Neither is trusted to end paging: any

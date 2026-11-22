@@ -2,6 +2,7 @@ import { partialMatchKey } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 import {
   inboxConversationsKey,
+  inboxCustomerKey,
   inboxSearchKey,
   inboxSearchPrefix,
   inboxThreadKey,
@@ -75,5 +76,20 @@ describe('inbox query keys', () => {
     expect(
       refreshes(inboxSearchPrefix(undefined), inboxSearchKey('m1', 'a'))
     ).toBe(false);
+  });
+});
+
+describe('inboxCustomerKey', () => {
+  it('keeps one cache entry per merchant and chat', () => {
+    expect(inboxCustomerKey('m1', 9)).toEqual(['inbox-customer', 'm1', 9]);
+    expect(inboxCustomerKey('m1', 9)).not.toEqual(inboxCustomerKey('m1', 10));
+    expect(inboxCustomerKey('m1', 9)).not.toEqual(inboxCustomerKey('m2', 9));
+  });
+
+  it('is never refreshed by the list, thread or search prefixes', () => {
+    const key = inboxCustomerKey('m1', 9);
+    expect(refreshes(inboxConversationsKey('m1'), key)).toBe(false);
+    expect(refreshes(inboxSearchPrefix('m1'), key)).toBe(false);
+    expect(refreshes(inboxThreadKey('m1', 9), key)).toBe(false);
   });
 });

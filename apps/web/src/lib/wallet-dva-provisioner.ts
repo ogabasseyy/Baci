@@ -73,6 +73,14 @@ export function createWalletDvaAccountWriter() {
           'WALLET_DVA_ORDER_ALIAS_CONFLICT',
           'This Paystack account is still reserved for an active order payment',
         ],
+        invalid_wallet_dva_arguments: [
+          'WALLET_DVA_STORAGE_ERROR',
+          'Wallet funding account storage rejected the owner or provider details',
+        ],
+        wallet_dva_owner_or_merchant_mismatch: [
+          'WALLET_DVA_STORAGE_ERROR',
+          'Wallet funding account storage rejected the owner or provider details',
+        ],
       } as const;
       const mapped = safeError[code as keyof typeof safeError];
       if (mapped) {

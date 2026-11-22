@@ -35,14 +35,68 @@ function isBoundedText(value: string, maximum: number) {
   );
 }
 
-const SAFE_DATABASE_CODES = new Set([
+const SAFE_P0001_CODES = [
   'WALLET_DVA_DISABLED_ACCOUNT',
   'WALLET_DVA_PENDING_REVIEW_CONFLICT',
   'WALLET_DVA_PROVIDER_CUSTOMER_CONFLICT',
   'WALLET_DVA_RECEIVER_CONFLICT',
   'WALLET_DVA_SUBACCOUNT_CONFLICT',
   'PAYSTACK_DVA_ALIAS_CONFLICT',
-]);
+] as const;
+
+function matchesCodePrefix(message: string, code: string) {
+  return (
+    message === code ||
+    message.startsWith(`${code}:`) ||
+    message.startsWith(`${code} `)
+  );
+}
+
+function extractSafeDatabaseErrorCode(error: unknown): string | null {
+  if (
+    !error ||
+    typeof error !== 'object' ||
+    !('message' in error) ||
+    typeof error.message !== 'string'
+  ) {
+    return null;
+  }
+
+  const sqlState =
+    'code' in error && typeof error.code === 'string'
+      ? error.code.trim()
+      : undefined;
+  const normalizedMessage = error.message
+    .trim()
+    .replace(/^ERROR:\s*/i, '')
+    .trim();
+
+  if (sqlState === undefined || sqlState === 'P0001') {
+    const conflictCode = SAFE_P0001_CODES.find((code) =>
+      matchesCodePrefix(normalizedMessage, code)
+    );
+    if (conflictCode) return conflictCode;
+  }
+
+  if (
+    sqlState === '22023' &&
+    matchesCodePrefix(normalizedMessage, 'invalid_wallet_dva_arguments')
+  ) {
+    return 'invalid_wallet_dva_arguments';
+  }
+
+  if (
+    sqlState === '42501' &&
+    matchesCodePrefix(
+      normalizedMessage,
+      'wallet_dva_owner_or_merchant_mismatch'
+    )
+  ) {
+    return 'wallet_dva_owner_or_merchant_mismatch';
+  }
+
+  return null;
+}
 
 export interface WalletDvaProvisionerInput {
   accountName: string;
@@ -85,7 +139,7 @@ export function createWalletDvaProvisionerExecutor(
       !/^CUS_[A-Za-z0-9]+$/.test(input.providerCustomerCode) ||
       !/^ACCT_[A-Za-z0-9]+$/.test(input.providerSubaccountCode) ||
       (input.providerAccountId !== null &&
-        input.providerAccountId.length > 128) ||
+        !/^\d{1,20}$/.test(input.providerAccountId)) ||
       !/^\d{10}$/.test(input.accountNumber) ||
       !isBoundedText(input.accountName, 160) ||
       !isBoundedText(input.bankName, 120) ||
@@ -141,14 +195,9 @@ export function createWalletDvaProvisionerExecutor(
       );
       return written.rows[0]?.result;
     } catch (error) {
-      if (
-        error &&
-        typeof error === 'object' &&
-        'message' in error &&
-        typeof error.message === 'string' &&
-        SAFE_DATABASE_CODES.has(error.message.trim())
-      ) {
-        throw new Error(error.message.trim());
+      const safeCode = extractSafeDatabaseErrorCode(error);
+      if (safeCode) {
+        throw new Error(safeCode);
       }
       throw new Error('Wallet DVA writer unavailable');
     } finally {

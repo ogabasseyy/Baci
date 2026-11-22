@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockConnect, mockEnd, mockQuery, mockClientConfig } = vi.hoisted(
@@ -148,5 +149,96 @@ describe('wallet DVA provisioner executor', () => {
       })
     ).rejects.toThrow('Wallet DVA writer unavailable');
     expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '',
+    'paystack-id-1',
+    '123456789012345678901',
+  ])('rejects non-numeric or overlong providerAccountId (%j) before connecting', async (providerAccountId) => {
+    await expect(
+      createWalletDvaProvisionerExecutor(configuration)({
+        ...input,
+        providerAccountId,
+      })
+    ).rejects.toThrow('Wallet DVA writer unavailable');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  it('maps SQLSTATE P0001 conflict codes with detail suffixes and preserves 22023/42501 validation rejections', async () => {
+    const okSession = {
+      rows: [
+        {
+          database_name: 'postgres',
+          login_name: 'baci_wallet_dva_provisioner',
+          role_name: 'baci_wallet_dva_provisioner',
+          safe: true,
+          tls: true,
+        },
+      ],
+    };
+    const execute = createWalletDvaProvisionerExecutor(configuration);
+
+    mockQuery.mockResolvedValueOnce(okSession).mockRejectedValueOnce(
+      Object.assign(new Error('ERROR: PAYSTACK_DVA_ALIAS_CONFLICT: active'), {
+        code: 'P0001',
+      })
+    );
+    await expect(execute(input)).rejects.toThrow('PAYSTACK_DVA_ALIAS_CONFLICT');
+
+    mockQuery.mockResolvedValueOnce(okSession).mockRejectedValueOnce(
+      Object.assign(new Error('invalid_wallet_dva_arguments'), {
+        code: '22023',
+      })
+    );
+    await expect(execute(input)).rejects.toThrow(
+      'invalid_wallet_dva_arguments'
+    );
+
+    mockQuery.mockResolvedValueOnce(okSession).mockRejectedValueOnce(
+      Object.assign(new Error('wallet_dva_owner_or_merchant_mismatch'), {
+        code: '42501',
+      })
+    );
+    await expect(execute(input)).rejects.toThrow(
+      'wallet_dva_owner_or_merchant_mismatch'
+    );
+
+    mockQuery.mockResolvedValueOnce(okSession).mockRejectedValueOnce(
+      Object.assign(new Error('PAYSTACK_DVA_ALIAS_CONFLICT'), {
+        code: '42P01',
+      })
+    );
+    await expect(execute(input)).rejects.toThrow(
+      'Wallet DVA writer unavailable'
+    );
+  });
+
+  it('pins the shared wallet DVA alias trigger and writer SQL argument checks', () => {
+    const aliasSql = readFileSync(
+      `${process.cwd()}/../../supabase/migrations/20260825010000_serialize_paystack_dva_cross_flow_aliases.sql`,
+      'utf8'
+    );
+    const repairSql = readFileSync(
+      `${process.cwd()}/../../supabase/migrations/20260827050000_repair_paystack_dva_alias_snapshot_guards.sql`,
+      'utf8'
+    );
+    const writerSql = readFileSync(
+      `${process.cwd()}/../../supabase/migrations/20261122064203_wallet_dva_restricted_writer.sql`,
+      'utf8'
+    );
+
+    expect(aliasSql).toContain(
+      'CREATE OR REPLACE FUNCTION public.guard_wallet_paystack_dva_alias()'
+    );
+    expect(aliasSql).toContain(
+      "ERRCODE = 'P0001', MESSAGE = 'PAYSTACK_DVA_ALIAS_CONFLICT'"
+    );
+    expect(repairSql).toContain(
+      'CREATE TRIGGER guard_wallet_paystack_dva_alias'
+    );
+    expect(repairSql).toContain('ON public.customer_wallet_payment_accounts');
+    expect(writerSql).toContain("p_provider_account_id !~ '^[0-9]{1,20}$'");
+    expect(writerSql).toContain("pg_catalog.btrim(p_bank_slug) = ''");
   });
 });

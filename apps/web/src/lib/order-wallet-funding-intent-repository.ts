@@ -31,9 +31,7 @@ type SupabaseError = { message?: string };
 
 function parseMoney(value: unknown, label: string) {
   const amount = Number(value);
-  if (!Number.isFinite(amount)) {
-    throw new Error(`Invalid ${label}`);
-  }
+  if (!Number.isFinite(amount)) throw new Error(`Invalid ${label}`);
   return roundMoney(amount);
 }
 
@@ -49,15 +47,18 @@ function parseIntentStatus(value: unknown) {
   throw new Error(`Unsupported wallet funding status: ${String(value)}`);
 }
 
+function optionalString(value: unknown) {
+  return typeof value === 'string' ? value : null;
+}
+
 function normalizeIntent(
   row: Record<string, unknown>
 ): OrderWalletFundingIntent {
   if (typeof row.provider !== 'string' || row.provider.length === 0) {
     throw new Error('Missing wallet funding provider');
   }
-  const provider = row.provider;
-  if (provider !== 'paystack') {
-    throw new Error(`Unsupported wallet funding provider: ${provider}`);
+  if (row.provider !== 'paystack') {
+    throw new Error(`Unsupported wallet funding provider: ${row.provider}`);
   }
 
   return {
@@ -71,17 +72,11 @@ function normalizeIntent(
     fundedAmount: parseMoney(row.funded_amount, 'intent funded amount'),
     id: String(row.id),
     idempotencyKey: String(row.idempotency_key),
-    lastGatewayReference:
-      typeof row.last_gateway_reference === 'string'
-        ? row.last_gateway_reference
-        : null,
-    lastTransactionId:
-      typeof row.last_transaction_id === 'string'
-        ? row.last_transaction_id
-        : null,
+    lastGatewayReference: optionalString(row.last_gateway_reference),
+    lastTransactionId: optionalString(row.last_transaction_id),
     merchantId: String(row.merchant_id),
     orderId: String(row.order_id),
-    provider,
+    provider: row.provider,
     status: parseIntentStatus(row.status),
     targetOrderAmount: parseMoney(
       row.target_order_amount,
@@ -103,9 +98,8 @@ function getDataRow(data: unknown): Record<string, unknown> | null {
 }
 
 function throwIfError(error: SupabaseError | null | undefined, label: string) {
-  if (error) {
+  if (error)
     throw new Error(`${label}: ${error.message ?? 'Supabase query failed'}`);
-  }
 }
 
 function getIntentStartFromExpiresAt(expiresAt: string) {

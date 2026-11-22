@@ -49,7 +49,7 @@ BEGIN
     OR p_provider_customer_code !~ '^CUS_[A-Za-z0-9]+$'
     OR p_provider_subaccount_code IS NULL
     OR p_provider_subaccount_code !~ '^ACCT_[A-Za-z0-9]+$'
-    OR (p_provider_account_id IS NOT NULL AND length(p_provider_account_id) > 128)
+    OR (p_provider_account_id IS NOT NULL AND p_provider_account_id !~ '^[0-9]{1,20}$')
     OR p_account_number IS NULL
     OR p_account_number !~ '^[0-9]{10}$'
     OR p_account_name IS NULL
@@ -60,7 +60,7 @@ BEGIN
     OR pg_catalog.btrim(p_bank_name) = ''
     OR length(p_bank_name) > 120
     OR p_bank_name ~ '[[:cntrl:]]'
-    OR (p_bank_slug IS NOT NULL AND length(p_bank_slug) > 120)
+    OR (p_bank_slug IS NOT NULL AND (pg_catalog.btrim(p_bank_slug) = '' OR length(p_bank_slug) > 120 OR p_bank_slug ~ '[[:cntrl:]]'))
     OR p_currency IS NULL
     OR p_currency IS DISTINCT FROM 'NGN'
     OR p_consented_at IS NULL

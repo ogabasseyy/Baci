@@ -61,22 +61,29 @@ describe('customer wallet payment account creation', () => {
     expect(createDedicatedAccountForWallet).not.toHaveBeenCalled();
   });
 
-  it('does not create a provider account when the restricted writer is unavailable', async () => {
+  it('does not create a provider account when the restricted writer is null or undefined', async () => {
     const accountQuery = createMaybeSingleQuery(null);
     const supabase = {
       from: vi.fn(() => accountQuery),
     } as unknown as SupabaseClient;
 
-    await expect(
-      ensureCustomerWalletPaymentAccount({
-        consentedAt: new Date('2026-05-21T10:00:00.000Z'),
-        customer,
-        merchant,
-        supabase,
-        userId: customer.user_id,
-        walletDvaWriter: null,
-      })
-    ).rejects.toMatchObject({ code: 'WALLET_DVA_WRITER_UNAVAILABLE' });
+    for (const walletDvaWriter of [
+      null,
+      undefined as unknown as Parameters<
+        typeof ensureCustomerWalletPaymentAccount
+      >[0]['walletDvaWriter'],
+    ]) {
+      await expect(
+        ensureCustomerWalletPaymentAccount({
+          consentedAt: new Date('2026-05-21T10:00:00.000Z'),
+          customer,
+          merchant,
+          supabase,
+          userId: customer.user_id,
+          walletDvaWriter,
+        })
+      ).rejects.toMatchObject({ code: 'WALLET_DVA_WRITER_UNAVAILABLE' });
+    }
 
     expect(createOrGetCustomer).not.toHaveBeenCalled();
     expect(createDedicatedAccountForWallet).not.toHaveBeenCalled();

@@ -115,4 +115,21 @@ describe('wallet DVA account writer result boundary', () => {
       code: 'WALLET_DVA_ORDER_ALIAS_CONFLICT',
     });
   });
+
+  it('maps SQL argument and owner mismatch rejections to WALLET_DVA_STORAGE_ERROR instead of writer unavailable', async () => {
+    const writer = createWalletDvaAccountWriter();
+    mockExecute.mockRejectedValueOnce(
+      new Error('invalid_wallet_dva_arguments')
+    );
+    await expect(writer?.(input)).rejects.toMatchObject({
+      code: 'WALLET_DVA_STORAGE_ERROR',
+    });
+
+    mockExecute.mockRejectedValueOnce(
+      new Error('wallet_dva_owner_or_merchant_mismatch')
+    );
+    await expect(writer?.(input)).rejects.toMatchObject({
+      code: 'WALLET_DVA_STORAGE_ERROR',
+    });
+  });
 });

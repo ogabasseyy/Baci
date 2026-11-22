@@ -255,10 +255,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     mockRpc.mockResolvedValue({ data: false, error: null });
 
     const response = await POST(
-      postRequest({
-        consent: true,
-        merchantSlug: 'ogabassey',
-      })
+      postRequest({ consent: true, merchantSlug: 'ogabassey' })
     );
 
     expect(response.status).toBe(403);
@@ -274,10 +271,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     );
 
     const response = await POST(
-      postRequest({
-        consent: true,
-        merchantSlug: 'ogabassey',
-      })
+      postRequest({ consent: true, merchantSlug: 'ogabassey' })
     );
     const body = await response.json();
 
@@ -289,10 +283,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     mockEnsureCustomerWalletPaymentAccount.mockRejectedValue(new Error('boom'));
 
     const response = await POST(
-      postRequest({
-        consent: true,
-        merchantSlug: 'ogabassey',
-      })
+      postRequest({ consent: true, merchantSlug: 'ogabassey' })
     );
     const body = await response.json();
 

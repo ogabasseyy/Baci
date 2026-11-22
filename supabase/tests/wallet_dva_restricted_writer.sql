@@ -84,11 +84,11 @@ BEGIN
   ) VALUES
     ('86110000-0000-4000-8000-000000000301', '86110000-0000-4000-8000-000000000001',
      '86110000-0000-4000-8000-000000000012', 'paystack', 'CUS_WalletOwner2',
-     'ACCT_walletdva1', 'paystack-pending-2', '2222222222', 'Pending Owner',
+     'ACCT_walletdva1', '200002', '2222222222', 'Pending Owner',
      'Wema Bank', NULL, 'NGN', 'pending_review', now()),
     ('86110000-0000-4000-8000-000000000302', '86110000-0000-4000-8000-000000000002',
      '86110000-0000-4000-8000-000000000021', 'paystack', 'CUS_WalletOwner3',
-     'ACCT_walletdva2', 'paystack-disabled-3', '4444444444', 'Disabled Owner',
+     'ACCT_walletdva2', '300003', '4444444444', 'Disabled Owner',
      'Wema Bank', NULL, 'NGN', 'disabled', now());
 END;
 $fixtures$;
@@ -135,7 +135,7 @@ BEGIN
     '86110000-0000-4000-8000-000000000101',
     '86110000-0000-4000-8000-000000000011',
     '86110000-0000-4000-8000-000000000001',
-    'CUS_WalletOwner1', 'ACCT_walletdva1', 'paystack-id-1',
+    'CUS_WalletOwner1', 'ACCT_walletdva1', '100001',
     '1234567890', 'José Store / Zoë', 'Wéma Bank', 'wema-bank', 'NGN', now()
   );
   SELECT count(*) INTO v_keys FROM jsonb_object_keys(v_first);
@@ -151,7 +151,7 @@ BEGIN
     '86110000-0000-4000-8000-000000000101',
     '86110000-0000-4000-8000-000000000011',
     '86110000-0000-4000-8000-000000000001',
-    'CUS_WalletOwner1', 'ACCT_walletdva1', 'paystack-id-1',
+    'CUS_WalletOwner1', 'ACCT_walletdva1', '100001',
     '3333333333', 'A concurrent result', 'Other Bank', NULL, 'NGN', now()
   );
   IF v_retry->>'id' IS DISTINCT FROM v_first->>'id'
@@ -166,7 +166,7 @@ BEGIN
       '86110000-0000-4000-8000-000000000102',
       '86110000-0000-4000-8000-000000000011',
       '86110000-0000-4000-8000-000000000001',
-      'CUS_WalletOwner1', 'ACCT_walletdva1', 'paystack-id-1',
+      'CUS_WalletOwner1', 'ACCT_walletdva1', '100001',
       '1234567890', 'Forged Owner', 'Wema', NULL, 'NGN', now()
     );
     RAISE EXCEPTION 'cross-owner write unexpectedly succeeded';
@@ -179,7 +179,7 @@ BEGIN
       '86110000-0000-4000-8000-000000000102',
       '86110000-0000-4000-8000-000000000012',
       '86110000-0000-4000-8000-000000000002',
-      'CUS_WalletOwner2', 'ACCT_walletdva1', 'paystack-id-2',
+      'CUS_WalletOwner2', 'ACCT_walletdva1', '200002',
       '2222222222', 'Wrong Merchant', 'Wema', NULL, 'NGN', now()
     );
     RAISE EXCEPTION 'cross-merchant subaccount write unexpectedly succeeded';
@@ -194,7 +194,7 @@ BEGIN
       '86110000-0000-4000-8000-000000000104',
       '86110000-0000-4000-8000-000000000013',
       '86110000-0000-4000-8000-000000000001',
-      'CUS_WalletOwner4', 'ACCT_walletdva1', 'paystack-id-4',
+      'CUS_WalletOwner4', 'ACCT_walletdva1', '400004',
       '1234567890', 'Other Owner', 'Wema', NULL, 'NGN', now()
     );
   EXCEPTION WHEN raise_exception THEN
@@ -211,7 +211,7 @@ BEGIN
       '86110000-0000-4000-8000-000000000104',
       '86110000-0000-4000-8000-000000000013',
       '86110000-0000-4000-8000-000000000001',
-      'CUS_WalletOwner4', 'ACCT_walletdva1', 'paystack-id-4',
+      'CUS_WalletOwner4', 'ACCT_walletdva1', '400004',
       '9876543210', 'Alias Owner', 'Wema', NULL, 'NGN', now()
     );
   EXCEPTION WHEN raise_exception THEN
@@ -228,7 +228,7 @@ BEGIN
       '86110000-0000-4000-8000-000000000102',
       '86110000-0000-4000-8000-000000000012',
       '86110000-0000-4000-8000-000000000001',
-      'CUS_WalletOwner2', 'ACCT_walletdva1', 'paystack-pending-2',
+      'CUS_WalletOwner2', 'ACCT_walletdva1', '200002',
       '5555555555', 'Changed Pending Owner', 'Wema Bank', NULL, 'NGN', now()
     );
   EXCEPTION WHEN raise_exception THEN
@@ -242,7 +242,7 @@ BEGIN
     '86110000-0000-4000-8000-000000000102',
     '86110000-0000-4000-8000-000000000012',
     '86110000-0000-4000-8000-000000000001',
-    'CUS_WalletOwner2', 'ACCT_walletdva1', 'paystack-pending-2',
+    'CUS_WalletOwner2', 'ACCT_walletdva1', '200002',
     '2222222222', 'Pending Owner Verified', 'Wema Bank', NULL, 'NGN', now()
   );
   IF v_retry->>'status' IS DISTINCT FROM 'active'
@@ -257,7 +257,7 @@ BEGIN
       '86110000-0000-4000-8000-000000000103',
       '86110000-0000-4000-8000-000000000021',
       '86110000-0000-4000-8000-000000000002',
-      'CUS_WalletOwner3', 'ACCT_walletdva2', 'paystack-disabled-3',
+      'CUS_WalletOwner3', 'ACCT_walletdva2', '300003',
       '4444444444', 'Disabled Owner', 'Wema Bank', NULL, 'NGN', now()
     );
   EXCEPTION WHEN raise_exception THEN
@@ -273,10 +273,36 @@ BEGIN
       '86110000-0000-4000-8000-000000000103',
       '86110000-0000-4000-8000-000000000021',
       '86110000-0000-4000-8000-000000000002',
-      'CUS_WalletOwner3', 'ACCT_walletdva2', 'paystack-id-3',
+      'CUS_WalletOwner3', 'ACCT_walletdva2', '300003',
       '9876543211', NULL, 'Wema', NULL, 'NGN', now()
     );
     RAISE EXCEPTION 'NULL account name unexpectedly accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    NULL;
+  END;
+
+  BEGIN
+    PERFORM wallet_dva_private.record_paystack_customer_wallet_dva(
+      '86110000-0000-4000-8000-000000000103',
+      '86110000-0000-4000-8000-000000000021',
+      '86110000-0000-4000-8000-000000000002',
+      'CUS_WalletOwner3', 'ACCT_walletdva2', 'non-numeric',
+      '9876543211', 'Valid Owner', 'Wema', NULL, 'NGN', now()
+    );
+    RAISE EXCEPTION 'non-numeric provider_account_id unexpectedly accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    NULL;
+  END;
+
+  BEGIN
+    PERFORM wallet_dva_private.record_paystack_customer_wallet_dva(
+      '86110000-0000-4000-8000-000000000103',
+      '86110000-0000-4000-8000-000000000021',
+      '86110000-0000-4000-8000-000000000002',
+      'CUS_WalletOwner3', 'ACCT_walletdva2', '300003',
+      '9876543211', 'Valid Owner', 'Wema', '   ', 'NGN', now()
+    );
+    RAISE EXCEPTION 'blank bank_slug unexpectedly accepted';
   EXCEPTION WHEN invalid_parameter_value THEN
     NULL;
   END;
@@ -293,7 +319,7 @@ BEGIN
       '86110000-0000-4000-8000-000000000101',
       '86110000-0000-4000-8000-000000000011',
       '86110000-0000-4000-8000-000000000001',
-      'CUS_WalletOwner1', 'ACCT_walletdva1', 'paystack-id-1',
+      'CUS_WalletOwner1', 'ACCT_walletdva1', '100001',
       '1111111111', 'Authenticated Forgery', 'Wema', NULL, 'NGN', now()
     );
     RAISE EXCEPTION 'authenticated role unexpectedly executed writer operation';

@@ -39,6 +39,7 @@ import {
 } from '@/lib/receipt-pdf-generator';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
+import { unamendedOrderSummarySchema } from '@/schemas/order-amendment';
 
 const paramsSchema = z.object({
   id: z.string().uuid(),
@@ -324,7 +325,7 @@ export async function GET(
       });
       if (
         status.error ||
-        !z.object({ summary: z.null() }).safeParse(status.data).success
+        !unamendedOrderSummarySchema.safeParse(status.data).success
       ) {
         return NextResponse.json(
           { error: 'Unable to load invoice revision' },

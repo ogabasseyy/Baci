@@ -59,6 +59,28 @@ describe('paid order amendment routes', () => {
     });
   });
 
+  it.each([
+    'payment_capture_in_flight',
+    'order_not_cancellable',
+  ])('maps %s to a recovery cancellation conflict', async (code) => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'P0001', message: code },
+    });
+    const response = await action(
+      request({
+        action: 'cancel_for_recovery',
+        idempotencyKey: 'fixture-recovery-cancel',
+        reason: 'Synthetic recovery',
+      }),
+      { params: Promise.resolve({ id, amendmentId: id }) }
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code });
+    expect(mocks.logError).not.toHaveBeenCalled();
+  });
+
   it('rate-limits replacement search before querying the catalog', async () => {
     mocks.rateLimit.mockResolvedValueOnce(false);
     const search = new Request(
@@ -66,6 +88,22 @@ describe('paid order amendment routes', () => {
     ) as NextRequest;
     expect((await GET(search, context)).status).toBe(429);
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('validates and trims replacement search input before querying the catalog', async () => {
+    function search(value: string) {
+      return new Request(
+        `https://test.invalid/api/orders/amendments?lineId=${id}&search=${encodeURIComponent(value)}`
+      ) as NextRequest;
+    }
+
+    expect((await GET(search(' p '), context)).status).toBe(400);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect((await GET(search(' phone '), context)).status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'search_paid_order_amendment_replacements',
+      { p_order_id: id, p_line_id: id, p_search: 'phone' }
+    );
   });
 
   it('rate-limits write requests and handles the database preview limit', async () => {

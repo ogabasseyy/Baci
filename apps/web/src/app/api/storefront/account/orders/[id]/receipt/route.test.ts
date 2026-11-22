@@ -216,7 +216,10 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
     );
   });
 
-  it('renders the current fulfilled receipt with revised details and its version number', async () => {
+  it.each([
+    '',
+    '&revision=current',
+  ])('renders the current fulfilled receipt with revised details and its version number (%s)', async (revision) => {
     vi.mocked(authenticateApiRequest).mockResolvedValue(
       createAuthenticatedAuthResult()
     );
@@ -227,7 +230,7 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
 
     const response = await GET(
       createRequest(
-        `/api/storefront/account/orders/${ORDER_ID}/receipt?merchantSlug=${MERCHANT_SLUG}&revision=current`
+        `/api/storefront/account/orders/${ORDER_ID}/receipt?merchantSlug=${MERCHANT_SLUG}${revision}`
       ),
       { params: Promise.resolve({ id: ORDER_ID }) }
     );
@@ -243,6 +246,28 @@ describe('GET /api/storefront/account/orders/[id]/receipt', () => {
       expect.objectContaining({ order_number: 'ORD-1001-R2' }),
       expect.anything(),
       expect.objectContaining({ documentKind: 'receipt' })
+    );
+  });
+
+  it('uses the archived snapshot for an explicit original receipt request', async () => {
+    vi.mocked(authenticateApiRequest).mockResolvedValue(
+      createAuthenticatedAuthResult()
+    );
+    vi.mocked(getStorefrontAccountDocumentData).mockResolvedValue(
+      createDocumentData({})
+    );
+    vi.mocked(generateReceiptBlob).mockReturnValue(new Blob(['receipt']));
+
+    const response = await GET(
+      createRequest(
+        `/api/storefront/account/orders/${ORDER_ID}/receipt?merchantSlug=${MERCHANT_SLUG}&revision=original`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(getStorefrontAccountDocumentData).toHaveBeenCalledWith(
+      expect.objectContaining({ version: 'original' })
     );
   });
 

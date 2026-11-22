@@ -2,6 +2,13 @@ import { z } from 'zod';
 
 export const amendmentOrderParams = z.object({ id: z.uuid() });
 
+export const amendmentReplacementSearchSchema = z.object({
+  lineId: z.uuid(),
+  search: z.string().trim().min(2).max(80),
+});
+
+export const unamendedOrderSummarySchema = z.object({ summary: z.null() });
+
 export const amendmentPreviewSchema = z.strictObject({
   lineId: z.uuid(),
   replacement: z.strictObject({

@@ -50,7 +50,7 @@ export async function GET(
   const merchantSlug = search.get('merchantSlug');
   const revision = search.get('revision');
   const version = paidOrderDocumentVersionSchema.safeParse(
-    revision ?? 'original'
+    revision ?? 'current'
   );
   const parsedQuery = storefrontAccountDocumentQuerySchema.safeParse({
     merchantSlug,
@@ -81,11 +81,9 @@ export async function GET(
       userId: auth.user.id,
       merchantSlug: parsedQuery.data.merchantSlug,
       orderId: parsedParams.data.id,
-      ...(revision === 'current'
+      ...(version.data === 'current'
         ? { view: 'fulfilled_receipt' as const }
-        : revision
-          ? { version: version.data }
-          : {}),
+        : { version: version.data }),
     });
 
     if (!data.order.receipt_eligible) {

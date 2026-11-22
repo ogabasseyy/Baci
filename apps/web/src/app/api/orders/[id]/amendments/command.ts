@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
@@ -10,6 +9,7 @@ import {
   amendmentConfirmSchema,
   amendmentOrderParams,
   amendmentPreviewSchema,
+  amendmentReplacementSearchSchema,
 } from '@/schemas/order-amendment';
 
 type Context = { params: Promise<{ id: string }> };
@@ -33,6 +33,11 @@ const conflicts: ReadonlyMap<string, string> = new Map([
   ['already_amended', 'This order already has an amendment.'],
   ['amendment_ineligible', 'This order or replacement is not eligible.'],
   ['amendment_payment_open', 'Resolve the existing payment attempt first.'],
+  [
+    'payment_capture_in_flight',
+    'Wait for the payment attempt to finish before cancelling.',
+  ],
+  ['order_not_cancellable', 'This order can no longer be cancelled.'],
   [
     'amendment_fulfillment_open',
     'The order already has a fulfillment commitment.',
@@ -67,12 +72,10 @@ export async function runAmendmentCommand(
   if (command === 'read') {
     const search = new URL(request.url).searchParams;
     if (search.has('lineId') || search.has('search')) {
-      const selection = z
-        .object({ lineId: z.uuid(), search: z.string().trim().min(2).max(80) })
-        .safeParse({
-          lineId: search.get('lineId'),
-          search: search.get('search'),
-        });
+      const selection = amendmentReplacementSearchSchema.safeParse({
+        lineId: search.get('lineId'),
+        search: search.get('search'),
+      });
       if (!selection.success)
         return NextResponse.json(
           { error: 'Invalid replacement search' },

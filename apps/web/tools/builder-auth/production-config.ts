@@ -4,53 +4,17 @@ import {
   BUILDER_ISSUER,
   BUILDER_RESOURCE,
 } from '../../src/lib/builder-connector/resource.ts';
+import { builderAuthOperatorSchema } from '../../src/schemas/experience-builder-auth.ts';
 import {
   MAX_CONNECTION_TTL_SECONDS,
   MIN_CONNECTION_TTL_SECONDS,
 } from './connection-lifetime.ts';
 
-const bytes32 = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]{43}$/)
-  .refine((value) => {
-    const bytes = Buffer.from(value, 'base64url');
-    return bytes.length === 32 && bytes.toString('base64url') === value;
-  });
-const privateKey = z.strictObject({
-  kty: z.literal('EC'),
-  crv: z.literal('P-256'),
-  x: bytes32,
-  y: bytes32,
-  d: bytes32,
-  alg: z.literal('ES256'),
-  kid: z.string().min(1).max(100),
-});
-const schema = z.strictObject({
-  databaseUrl: z.string().min(1).max(4096),
-  socketPath: z.string().min(1).max(100),
-  clientId: z.literal('baci-chatgpt-builder-v1'),
-  callback: z.string().url(),
-  cookieKeys: z.array(z.string().min(32).max(256)).min(1).max(3),
-  signingKeys: z.array(privateKey).min(1).max(3),
-  vault: z.strictObject({
-    activeKeyId: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/),
-    keys: z.record(z.string().regex(/^[A-Za-z0-9_-]{1,40}$/), bytes32),
-  }),
-  upstream: z.strictObject({
-    issuer: z.string().url(),
-    clientId: z.string().min(1).max(256),
-    clientSecret: z.string().min(16).max(1024),
-  }),
-  supabase: z.strictObject({
-    url: z.string().url(),
-    anonKey: z.string().min(1).max(8192),
-  }),
-  connectionTtlSeconds: z
-    .number()
-    .int()
-    .min(MIN_CONNECTION_TTL_SECONDS)
-    .max(MAX_CONNECTION_TTL_SECONDS),
-});
+const schema = builderAuthOperatorSchema(
+  z,
+  MIN_CONNECTION_TTL_SECONDS,
+  MAX_CONNECTION_TTL_SECONDS
+);
 
 /** Parses only trusted operator input. It never exposes configuration values in errors. */
 export function parseProductionAuthConfig(input: unknown) {

@@ -1,41 +1,7 @@
-import { z } from 'zod';
 import { validateCanonicalRootDomain } from '@/lib/experience/canonical-domain';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
+import { builderProductionConfig } from '@/schemas/experience-operator-config';
 import { runnerEndpoint } from '../experience-runner/runner-transport';
-
-const key = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]{43}$/)
-  .refine((value) => {
-    const bytes = Buffer.from(value, 'base64url');
-    return bytes.length === 32 && bytes.toString('base64url') === value;
-  });
-const port = z.number().int().min(1).max(65535);
-const schema = z.strictObject({
-  port,
-  deliveryPort: port,
-  authPort: port,
-  ownerPort: port,
-  verifierPort: port,
-  verifierKey: key,
-  backgroundBuilds: z.literal(true).optional(),
-  previewKey: key,
-  buildKey: key,
-  runner: z.strictObject({
-    endpoint: z.string().min(1).max(1000),
-    key,
-    toolchainDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  }),
-  previewDatabaseUrl: z.string().min(1).max(4096),
-  rendererDatabaseUrl: z.string().min(1).max(4096),
-  hostOrigin: z.string().max(1000),
-  executionOrigin: z.string().max(1000),
-  rootDomain: z.string().min(1).max(253),
-  supabase: z.strictObject({
-    url: z.string().max(1000),
-    anonKey: z.string().max(8192),
-  }),
-});
 
 function restrictedDatabaseUrl(value: string, login: string): URL {
   const url = new URL(value);
@@ -56,7 +22,7 @@ function restrictedDatabaseUrl(value: string, login: string): URL {
 /** Private operator input only. No request-selected paths, identities or keys. */
 export function parseBuilderProductionConfig(input: unknown) {
   try {
-    const config = schema.parse(input);
+    const config = builderProductionConfig.parse(input);
     if (
       new Set([
         config.port,

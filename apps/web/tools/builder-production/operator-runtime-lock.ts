@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto';
 import { parse, stringify } from 'yaml';
-import { z } from 'zod';
+import {
+  operatorLockDependencies,
+  operatorLockDependency,
+  operatorLockRecord,
+  pinnedOperatorPnpm,
+} from '../../src/schemas/experience-operator-lock.ts';
 
-const record = z.record(z.string(), z.unknown());
-const dependency = z.object({ specifier: z.string(), version: z.string() });
 const runtimeNames = ['next', 'jsdom', 'sharp', 'react', 'react-dom'] as const;
 
 /** Preserve exact workspace snapshots and the Next patch; never resolve new versions. */
@@ -13,20 +16,22 @@ export function createOperatorRuntimeLock(input: {
   patch: Uint8Array;
   packageManager: string;
 }) {
-  const lock = record.parse(parse(input.lockfile));
-  const workspace = record.parse(parse(input.workspace));
-  const importers = record.parse(lock.importers);
-  const web = record.parse(importers['apps/web']);
-  const dependencies = record.parse(web.dependencies);
-  const devDependencies = record.parse(web.devDependencies ?? {});
-  const packages = record.parse(lock.packages);
-  const snapshots = record.parse(lock.snapshots);
-  const patches = record.parse(lock.patchedDependencies);
-  const workspacePatches = record.parse(workspace.patchedDependencies);
+  const lock = operatorLockRecord.parse(parse(input.lockfile));
+  const workspace = operatorLockRecord.parse(parse(input.workspace));
+  const importers = operatorLockRecord.parse(lock.importers);
+  const web = operatorLockRecord.parse(importers['apps/web']);
+  const dependencies = operatorLockRecord.parse(web.dependencies);
+  const devDependencies = operatorLockRecord.parse(web.devDependencies ?? {});
+  const packages = operatorLockRecord.parse(lock.packages);
+  const snapshots = operatorLockRecord.parse(lock.snapshots);
+  const patches = operatorLockRecord.parse(lock.patchedDependencies);
+  const workspacePatches = operatorLockRecord.parse(
+    workspace.patchedDependencies
+  );
   const selected = Object.fromEntries(
     runtimeNames.map((name) => [
       name,
-      dependency.parse(dependencies[name] ?? devDependencies[name]),
+      operatorLockDependency.parse(dependencies[name] ?? devDependencies[name]),
     ])
   );
   const nextVersion = selected.next.version.split('(')[0];
@@ -51,11 +56,9 @@ export function createOperatorRuntimeLock(input: {
       !key.startsWith(`${patchKey}(patch_hash=${hash})`)
     )
       throw Error('UNSUPPORTED_RUNTIME_PATCH');
-    const snapshot = record.parse(snapshots[key]);
+    const snapshot = operatorLockRecord.parse(snapshots[key]);
     for (const group of ['dependencies', 'optionalDependencies']) {
-      const deps = z
-        .record(z.string(), z.string())
-        .parse(snapshot[group] ?? {});
+      const deps = operatorLockDependencies.parse(snapshot[group] ?? {});
       for (const [name, version] of Object.entries(deps)) {
         if (version.startsWith('link:') || version.startsWith('workspace:'))
           throw Error('UNSUPPORTED_RUNTIME_LINK');
@@ -72,10 +75,7 @@ export function createOperatorRuntimeLock(input: {
   const selectedPackages = Object.fromEntries(
     Object.entries(packages).filter(([key]) => packageKeys.has(key))
   );
-  const version = z
-    .string()
-    .regex(/^pnpm@\d+\.\d+\.\d+$/)
-    .parse(input.packageManager);
+  const version = pinnedOperatorPnpm.parse(input.packageManager);
   return {
     packageJson: `${JSON.stringify({ private: true, type: 'module', packageManager: version, dependencies: Object.fromEntries(runtimeNames.map((name) => [name, selected[name].specifier])) }, null, 2)}\n`,
     lockfile: stringify({

@@ -7,7 +7,12 @@ import { createOperatorRuntimeLock } from '../../tools/builder-production/operat
 const root = resolve('../..');
 const lockfile = readFileSync(resolve(root, 'pnpm-lock.yaml'), 'utf8');
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
-const patch = readFileSync(resolve(root, 'patches/next@16.4.1.patch'));
+const original = parse(lockfile);
+const nextVersion =
+  original.importers['apps/web'].dependencies.next.version.split('(')[0];
+const patchKey = `next@${nextVersion}`;
+const patchPath = `patches/${patchKey}.patch`;
+const patch = readFileSync(resolve(root, patchPath));
 const packageManager = JSON.parse(
   readFileSync(resolve(root, 'package.json'), 'utf8')
 ).packageManager as string;
@@ -19,7 +24,6 @@ it('preserves exact locked runtime snapshots and the protected Next patch', () =
     patch,
     packageManager,
   });
-  const original = parse(lockfile);
   const subset = parse(output.lockfile);
   const manifest = JSON.parse(output.packageJson);
   expect(manifest.dependencies.react).toBe(
@@ -39,9 +43,9 @@ it('preserves exact locked runtime snapshots and the protected Next patch', () =
   for (const [key, value] of Object.entries(subset.packages))
     expect(value).toEqual(original.packages[key]);
   expect(subset.patchedDependencies).toEqual({
-    'next@16.4.1': original.patchedDependencies['next@16.4.1'],
+    [patchKey]: original.patchedDependencies[patchKey],
   });
-  expect(output.patchPath).toBe('patches/next@16.4.1.patch');
+  expect(output.patchPath).toBe(patchPath);
   expect(output).toEqual(
     createOperatorRuntimeLock({ lockfile, workspace, patch, packageManager })
   );

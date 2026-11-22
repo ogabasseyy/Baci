@@ -1,5 +1,7 @@
-import { z } from 'zod';
-import { experienceBuildInput } from '@/schemas/experience-job';
+import {
+  experienceBuildInput,
+  experienceFinalizedOperation,
+} from '@/schemas/experience-job';
 import {
   type OwnerRequestContext,
   ownerRpcArgs,
@@ -46,12 +48,7 @@ export async function readExperienceOperation(
   // Check the stored grant again after the independent job read.
   await requireExperienceOwner(ctx, 'storefront.read');
   if (job.status !== 'finalized') return job;
-  const parsed = z
-    .object({
-      buildId: z.uuid(),
-      buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-    })
-    .safeParse(job);
+  const parsed = experienceFinalizedOperation.safeParse(job);
   if (!parsed.success) throw Error('BUILD_FAILED');
   return {
     ...job,

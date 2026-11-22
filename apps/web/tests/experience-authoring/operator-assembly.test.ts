@@ -30,11 +30,14 @@ it('assembles an isolated review candidate with exact artifact hashes and a lock
           .digest('hex')
       ).toBe(digest);
     }
+    const nextVersion = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
+    ).dependencies.next;
     expect(Object.keys(manifest.files).sort()).toEqual([
       'builder.mjs',
       'helper.py',
       'package.json',
-      'patches/next@16.4.1.patch',
+      `patches/next@${nextVersion}.patch`,
       'pnpm-lock.yaml',
       'pnpm-workspace.yaml',
       'preflight.mjs',

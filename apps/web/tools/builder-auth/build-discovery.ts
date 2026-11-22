@@ -1,17 +1,8 @@
 import { z } from 'zod';
+import { builderAuthDiscoverySchemas } from '../../src/schemas/experience-builder-auth.ts';
 
 export const LINKED_BUILD_READ_TIMEOUT_MS = 10_000;
-const uuid = z.uuid();
-const connectionSchema = z.object({
-  connectionId: uuid,
-  actorUserId: uuid,
-  grantVersion: z.number().int().positive().safe(),
-  status: z.literal('active'),
-  expiresAt: z.string(),
-  revokedAt: z.null(),
-  scopes: z.array(z.string()),
-  allowedMerchantIds: z.array(uuid).max(1),
-});
+const { uuid, connection, ids: buildIds } = builderAuthDiscoverySchemas(z);
 type Binding = {
   connectionId: string;
   actorUserId: string;
@@ -41,10 +32,7 @@ export function createLinkedBuildDiscovery(deps: {
     async runOnce(after: string | null = null, admission?: AbortSignal) {
       admission?.throwIfAborted();
       if (after !== null) uuid.parse(after);
-      const ids = z
-        .array(uuid)
-        .max(20)
-        .parse(await deps.listConnections(after, 20));
+      const ids = buildIds.parse(await deps.listConnections(after, 20));
       let cursor: string | null = null;
       let executed = 0;
       let failed = 0;
@@ -54,9 +42,7 @@ export function createLinkedBuildDiscovery(deps: {
         cursor = id;
         connections++;
         try {
-          const parsed = connectionSchema.safeParse(
-            await deps.readConnection(id)
-          );
+          const parsed = connection.safeParse(await deps.readConnection(id));
           admission?.throwIfAborted();
           if (
             !parsed.success ||
@@ -89,7 +75,7 @@ export function createLinkedBuildDiscovery(deps: {
             });
             signal.throwIfAborted();
             if (result.error) throw Error('Discovery unavailable');
-            const jobs = z.array(uuid).max(20).parse(result.data);
+            const jobs = buildIds.parse(result.data);
             if (jobs.length) {
               await deps.execute({
                 ...binding,

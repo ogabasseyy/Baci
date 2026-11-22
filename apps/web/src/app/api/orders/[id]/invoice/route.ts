@@ -247,7 +247,9 @@ export async function GET(
       order.source === 'online_store' || revisionValue
         ? await loadPaidOrderDocument(supabase, orderId, version.data)
         : { data: null, error: null };
-    if (projection.error) {
+    const checkUnamendedFallback =
+      projection.error === 'unavailable' && version.data === 'original';
+    if (projection.error && !checkUnamendedFallback) {
       return NextResponse.json(
         { error: 'Unable to load invoice revision' },
         { status: projection.error === 'not_found' ? 404 : 503 }
@@ -312,6 +314,23 @@ export async function GET(
       }
 
       taxSubtotals = subtotals || [];
+    }
+
+    if (checkUnamendedFallback) {
+      // Verify after reading the live invoice data. An amendment leaves durable
+      // history, so a null summary also rules out a swap during those reads.
+      const status = await supabase.rpc('read_paid_order_amendment', {
+        p_order_id: orderId,
+      });
+      if (
+        status.error ||
+        !z.object({ summary: z.null() }).safeParse(status.data).success
+      ) {
+        return NextResponse.json(
+          { error: 'Unable to load invoice revision' },
+          { status: 503 }
+        );
+      }
     }
 
     const typedOrderItems = orderItems as OrderItem[];

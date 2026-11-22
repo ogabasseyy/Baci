@@ -413,6 +413,42 @@ describe('GET /api/orders/[id]/invoice', () => {
     expect(generateReceiptBlob).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { summary: null, expectedStatus: 200 },
+    { summary: { state: 'settled' }, expectedStatus: 503 },
+  ])('falls back from a document RPC outage only after confirming the original is unamended ($expectedStatus)', async ({
+    summary,
+    expectedStatus,
+  }) => {
+    const supabase = createSupabaseMock();
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        error: { code: 'PGRST202' },
+        data: null,
+      })
+      .mockResolvedValueOnce({ error: null, data: { summary } });
+    vi.mocked(createClient).mockReturnValue({
+      ...supabase,
+      rpc,
+    } as unknown as ReturnType<typeof createClient>);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/orders/${ORDER_ID}/invoice?revision=original`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(expectedStatus);
+    expect(rpc).toHaveBeenLastCalledWith('read_paid_order_amendment', {
+      p_order_id: ORDER_ID,
+    });
+    expect(generateReceiptBlob).toHaveBeenCalledTimes(
+      expectedStatus === 200 ? 1 : 0
+    );
+  });
+
   it('attaches order-level IMEI details only to the device item', async () => {
     const response = await GET(
       new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),

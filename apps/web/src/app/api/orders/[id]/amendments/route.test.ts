@@ -7,12 +7,14 @@ import { GET, POST } from './route';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
+  logError: vi.fn(),
   rateLimit: vi.fn(),
   rpc: vi.fn(),
 }));
 
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
+vi.mock('@/lib/logger', () => ({ logger: { error: mocks.logError } }));
 vi.mock('@/lib/rate-limiter', () => ({ checkRateLimit: mocks.rateLimit }));
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -40,6 +42,23 @@ beforeEach(() => {
 });
 
 describe('paid order amendment routes', () => {
+  it('logs the database code without exposing unexpected RPC messages', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'P0001', message: 'unexpected_detail' },
+    });
+
+    const response = await POST(request(confirmBody), context);
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Unable to process order amendment',
+    });
+    expect(mocks.logError).toHaveBeenCalledExactlyOnceWith({
+      message: 'Order amendment RPC returned an unexpected error',
+      databaseCode: 'P0001',
+    });
+  });
+
   it('rate-limits replacement search before querying the catalog', async () => {
     mocks.rateLimit.mockResolvedValueOnce(false);
     const search = new Request(

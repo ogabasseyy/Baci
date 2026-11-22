@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { logger } from '@/lib/logger';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import {
   amendmentActionParams,
@@ -208,15 +209,20 @@ function amendmentResponse({
 
   const conflict =
     error.code === 'P0001' ? conflicts.get(error.message) : undefined;
-  return conflict
-    ? NextResponse.json(
-        { code: error.message, error: conflict },
-        { status: 409 }
-      )
-    : NextResponse.json(
-        { error: 'Unable to process order amendment' },
-        { status: 500 }
-      );
+  if (conflict) {
+    return NextResponse.json(
+      { code: error.message, error: conflict },
+      { status: 409 }
+    );
+  }
+  logger.error({
+    message: 'Order amendment RPC returned an unexpected error',
+    databaseCode: /^[A-Z0-9]{5,8}$/.test(error.code) ? error.code : 'UNKNOWN',
+  });
+  return NextResponse.json(
+    { error: 'Unable to process order amendment' },
+    { status: 500 }
+  );
 }
 
 function amendmentRateLimitResponse() {

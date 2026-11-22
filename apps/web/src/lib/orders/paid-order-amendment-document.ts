@@ -33,7 +33,7 @@ const text = z.string().nullish();
 const documentOrderSchema = z.object({
   order_number: text,
   currency: text,
-  total: money,
+  total: z.number(),
   subtotal: money,
   amount_paid: money,
   payment_status: text,
@@ -99,8 +99,7 @@ const projectionSchema = z
   .refine(
     ({ amendment, inputs }) =>
       amendment === null ||
-      (typeof inputs.order.total === 'number' &&
-        typeof inputs.order.subtotal === 'number' &&
+      (typeof inputs.order.subtotal === 'number' &&
         typeof inputs.order.amount_paid === 'number'),
     'Amended document snapshots require complete monetary totals'
   );
@@ -129,7 +128,7 @@ export async function loadPaidOrderDocument(
   const parsed = projectionSchema.safeParse(data);
   return parsed.success
     ? { data: parsed.data, error: null }
-    : { data: null, error: 'unavailable' as const };
+    : { data: null, error: 'invalid' as const };
 }
 
 export async function loadTrackingAmendment(

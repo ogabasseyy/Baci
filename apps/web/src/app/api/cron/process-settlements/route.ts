@@ -115,6 +115,9 @@ export async function POST(request: Request) {
       return cancellation.value;
     }
 
+    // Give due amendment refunds and wallet corrections a short head start
+    // before releasing daily settlements. The SQL hold protects only orders
+    // with open refunds, and later drains also use the original cron clock.
     await drainAmendmentWork(supabase, invocationStartedAt);
     // 1. Process due settlements
     const { data: processResult, error: processError } = await supabase.rpc(

@@ -1,4 +1,9 @@
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
+import {
+  prepareEdgeRoomsBeforeLaunch,
+  resolveLateEdgeLaunchFallback,
+  rollbackEdgeDraftAndAnnotateFailure,
+} from '@/lib/quiz/quiz-launch-edge';
 import { getQuizRulesVersion } from '@/lib/quiz/quiz-rules-version';
 import { scheduleReservationProductPurge } from '@/lib/schedule-reservation-product-purge';
 import type { MerchantQuizActivationV2Input } from '@/schemas/quiz';
@@ -7,11 +12,6 @@ import type {
   QuizSupabaseClient,
 } from '../generate/quiz-generate-helpers';
 import { isQuizDraftEvent } from '../generate/quiz-generate-helpers';
-import {
-  prepareEdgeRoomsBeforeLaunch,
-  resolveLateEdgeLaunchFallback,
-  rollbackEdgeDraftAndAnnotateFailure,
-} from './quiz-launch-edge';
 
 export type QuizLaunchV2Result =
   | { event: QuizDraftEvent; ok: true }

@@ -1,3 +1,8 @@
+import type {
+  QuizDraftEvent,
+  QuizSupabaseClient,
+} from '@/app/api/merchant/quiz/generate/quiz-generate-helpers';
+import { isQuizDraftEvent } from '@/app/api/merchant/quiz/generate/quiz-generate-helpers';
 import { logger } from '@/lib/logger';
 import {
   isQuizEdgeProvisioningConfigured,
@@ -5,11 +10,6 @@ import {
   type QuizEdgeLaunchConfig,
   rollbackQuizEdgeDraftBackendMode,
 } from '@/lib/quiz/quiz-edge-provision';
-import type {
-  QuizDraftEvent,
-  QuizSupabaseClient,
-} from '../generate/quiz-generate-helpers';
-import { isQuizDraftEvent } from '../generate/quiz-generate-helpers';
 
 export type QuizEdgeLaunchOutcome =
   | { event: QuizDraftEvent; ok: true }

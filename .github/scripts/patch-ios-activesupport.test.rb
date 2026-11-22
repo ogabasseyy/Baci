@@ -43,6 +43,18 @@ rescue exception_class
   true
 end
 
+def capture_regexp_matching_calls
+  calls = []
+  matching_methods = [:match?, :match, :=~, :===]
+  trace = TracePoint.new(:c_call) do |event|
+    calls << event.method_id if event.self.is_a?(Regexp) && matching_methods.include?(event.method_id)
+  end
+  result = trace.enable { yield }
+  [result, calls]
+ensure
+  trace&.disable
+end
+
 def with_fixture
   source_path = File.join(
     Gem.loaded_specs.fetch("activesupport").full_gem_path,
@@ -95,19 +107,33 @@ run_test("patches pristine or preserves cached patched source and normal lookups
     assert_equal(String, ActiveSupport::Inflector.safe_constantize("String"), "ordinary constant lookup")
     assert_equal(nil, ActiveSupport::Inflector.safe_constantize("DefinitelyMissingConstant"), "unknown constant lookup")
 
+    detected_methods = capture_regexp_matching_calls { Regexp.new("ordinary").match?("ordinary") }
+    assert_equal([:match?], detected_methods.last, "Regexp call observer control")
+
     original_constantize = ActiveSupport::Inflector.method(:constantize)
     begin
       ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
         raise LoadError, "Unable to autoload constant String"
       end
-      assert_equal(nil, ActiveSupport::Inflector.safe_constantize("String"), "matching autoload error")
+      matched_result, matched_regexp_calls = capture_regexp_matching_calls do
+        ActiveSupport::Inflector.safe_constantize("String")
+      end
+      assert_equal(nil, matched_result, "matching autoload error")
+      assert_equal([], matched_regexp_calls, "matching autoload error avoids Regexp matching")
 
       ActiveSupport::Inflector.define_singleton_method(:constantize) do |_name|
         raise LoadError, "Unable to autoload constant UnrelatedName"
       end
-      assert_raises(LoadError, "nonmatching autoload error") do
-        ActiveSupport::Inflector.safe_constantize("String")
+      nonmatching_result, nonmatching_regexp_calls = capture_regexp_matching_calls do
+        begin
+          ActiveSupport::Inflector.safe_constantize("String")
+          :returned
+        rescue LoadError
+          :raised
+        end
       end
+      assert_equal(:raised, nonmatching_result, "nonmatching autoload error")
+      assert_equal([], nonmatching_regexp_calls, "nonmatching autoload error avoids Regexp matching")
     ensure
       ActiveSupport::Inflector.define_singleton_method(:constantize, original_constantize)
     end

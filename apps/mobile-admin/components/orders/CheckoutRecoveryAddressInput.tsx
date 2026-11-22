@@ -42,6 +42,7 @@ export function CheckoutRecoveryAddressInput({
       textInputProps={{
         accessibilityLabel,
         editable: !disabled,
+        value: address,
         onChangeText: (text) => {
           if (
             isDisabled.current ||

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-21T08:22:47+00:00",
-  "source_revision": "c2ba3c99ea390e0dab89012d842d72b659b5ce4b",
-  "evidence_digest": "843e888e9bc4f09713486152adcf9263f7c517a449f79eca7a45f7fc948448ee",
-  "claims_digest": "1683fe9a99ec4b8e6d95346ba8e10b3ed36eaf1b808a18af530e29eccd80fe82",
-  "review_scope": "Source evidence only. Re-reviewed shipment booking after paid partner pickup and parcel binding. The partner path still requires merchant authorization, verified payment and settlement, and an attested matching GIG wallet quote. Provider booking and delivery still require live evidence. Other bound capability sources match the prior reviewed revision. No production capability promotion.",
+  "reviewed_at": "2026-11-22T06:56:38+00:00",
+  "source_revision": "319d0fcb1374db4eea5719674da761a7660a3780",
+  "evidence_digest": "88fca9f73357f73e64bb700f576bd01d2c66830b8c29c5ea0711b8e4b4f5a9e9",
+  "claims_digest": "cbf53c0cc42ca1d63a43e64b215698dabe9583b220c035b0e8838be85171b787",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order address preservation, rapid street edits, incomplete duplicate-customer drafts, pending Places details, and GIG quote/save concurrency after syncing to current main. Re-reviewed current-main customer checkout quote rejection, destination/state matching, and stale-quote recovery alongside the retained paid partner pickup and parcel-binding evidence. The previously reviewed expense evidence remains in scope. All claims remain code-evidenced only; no production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

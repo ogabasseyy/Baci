@@ -7,6 +7,12 @@
 
 BEGIN;
 
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-4222-8222-222222222222',
+  true
+);
+
 INSERT INTO auth.users (id, instance_id, aud, role, email)
 VALUES ('22222222-2222-4222-8222-222222222222',
   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',

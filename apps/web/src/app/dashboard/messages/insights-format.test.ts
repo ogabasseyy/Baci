@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatInsightDuration } from './insights-format';
+import { formatInsightCount, formatInsightDuration } from './insights-format';
 
 describe('formatInsightDuration', () => {
   it.each([
@@ -13,5 +13,13 @@ describe('formatInsightDuration', () => {
     [187_200, '2 d 4 h'],
   ])('formats %s as %s', (input, expected) => {
     expect(formatInsightDuration(input)).toBe(expected);
+  });
+});
+
+describe('formatInsightCount', () => {
+  it('shows a dash for an unreadable count, not a zero', () => {
+    expect(formatInsightCount(null)).toBe('—');
+    expect(formatInsightCount(0)).toBe('0');
+    expect(formatInsightCount(12)).toBe('12');
   });
 });

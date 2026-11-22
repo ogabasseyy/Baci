@@ -1,11 +1,7 @@
-import { EXPERIENCE_LIMITS } from '@baci/shared/experience';
-import { z } from 'zod';
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
+import { experienceSourceHeadRow } from '@/schemas/experience-source-head';
 import { experienceSourcePatch } from '@/schemas/experience-source-patch';
-import {
-  experienceDigest,
-  experienceSourcePath,
-} from '@/schemas/experience-upload';
+import { experienceSourcePath } from '@/schemas/experience-upload';
 import {
   type OwnerRequestContext,
   ownerRpcArgs,
@@ -18,19 +14,6 @@ import {
   sourcePage,
   writeChunk,
 } from './upload-service';
-
-const sourceHeadRow = z.strictObject({
-  artifact_id: z.uuid(),
-  version: z.number().int().positive(),
-  artifact: z.strictObject({
-    source_digest: experienceDigest,
-    entry: experienceSourcePath,
-    files: z
-      .array(z.strictObject({ path: experienceSourcePath }))
-      .min(1)
-      .max(EXPERIENCE_LIMITS.files),
-  }),
-});
 
 export async function readSourceHead(inputCtx: OwnerRequestContext) {
   const ctx = await requireExperienceOwner(inputCtx);
@@ -52,7 +35,7 @@ export async function readSourceHead(inputCtx: OwnerRequestContext) {
       entry: null,
       files: [],
     };
-  const row = sourceHeadRow.parse(data);
+  const row = experienceSourceHeadRow.parse(data);
   return {
     artifactId: row.artifact_id,
     sourceDigest: row.artifact.source_digest,

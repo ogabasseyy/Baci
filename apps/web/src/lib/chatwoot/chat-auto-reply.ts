@@ -39,6 +39,12 @@ export type ChatAutoReplyOutcome =
   | 'failed';
 
 const HISTORY_DEADLINE_MS = 6_000;
+// One limit for everything before the decision to reply or hand over: the
+// history read, the model and the latest-message check together. The route
+// may run for 60 seconds, and a handover needs up to 15 of them (a live
+// status read, then the queue move with its credential fallback), so the
+// work is cut off here rather than by the platform with nobody queued.
+const WORK_DEADLINE_MS = 40_000;
 
 /** Labels are merged against the live list, never the webhook's old copy. */
 async function updateLabels(
@@ -148,23 +154,30 @@ export async function runChatAutoReply(
   const question = (event.content ?? '')
     .trim()
     .slice(0, CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH);
-  const history = await withDeadline(
-    loadChatAutoReplyHistory(binding, conversationId, event.id),
-    HISTORY_DEADLINE_MS,
-    []
-  );
-  const result = await generateChatAutoReply({
-    merchantId: binding.merchantId,
-    conversationId,
-    question,
-    history,
-  });
+  const work = (async () => {
+    const history = await withDeadline(
+      loadChatAutoReplyHistory(binding, conversationId, event.id),
+      HISTORY_DEADLINE_MS,
+      []
+    );
+    const generated = await generateChatAutoReply({
+      merchantId: binding.merchantId,
+      conversationId,
+      question,
+      history,
+    });
+    const latest = await isLatestChatMessage(binding, conversationId, event.id);
+    return { generated, latest };
+  })().catch(() => null);
+  const done = await withDeadline(work, WORK_DEADLINE_MS, null);
+  if (!done) {
+    return handOver(binding, conversationId, 'the assistant took too long');
+  }
   // Generation can take a while. A later customer message has its own run,
   // so this one stays out of it: no answer and no handover for a question
   // that has been superseded.
-  if (!(await isLatestChatMessage(binding, conversationId, event.id))) {
-    return 'skipped';
-  }
+  if (!done.latest) return 'skipped';
+  const result = done.generated;
   if (!result.ok) {
     return handOver(binding, conversationId, 'the assistant was unavailable');
   }

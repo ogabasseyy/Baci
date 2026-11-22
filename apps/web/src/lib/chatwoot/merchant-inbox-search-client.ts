@@ -16,8 +16,13 @@ export type MerchantInboxSearchResult = {
   snippet: string | null;
 };
 
-/** Most matches shown per page; each is read in full, so this stays small. */
-const MAX_HITS_PER_PAGE = 20;
+/**
+ * Every match of a provider page is read in full (a few at a time), so none is
+ * lost when the app moves on to the next provider page. The provider's own
+ * pages are 25 (message search) and 15 (contact search); this bound is only a
+ * guard against an unexpectedly large page.
+ */
+const MAX_ROWS_PER_PROVIDER_PAGE = 100;
 const HYDRATE_CONCURRENCY = 5;
 const INCOMING = 0;
 
@@ -57,7 +62,7 @@ async function searchByContact(
   if (!Array.isArray(rows)) return { ok: false, code: 'unavailable' };
 
   const hits: Hit[] = [];
-  for (const row of rows) {
+  for (const row of rows.slice(0, MAX_ROWS_PER_PROVIDER_PAGE)) {
     if (!isRecord(row)) continue;
     const id = positiveId(row.id);
     // The search spans every inbox of the account: keep only this store's.
@@ -104,7 +109,7 @@ async function searchByMessage(
   if (!Array.isArray(rows)) return { ok: false, code: 'unavailable' };
 
   const hits: Hit[] = [];
-  for (const row of rows) {
+  for (const row of rows.slice(0, MAX_ROWS_PER_PROVIDER_PAGE)) {
     if (!isRecord(row)) continue;
     const id = positiveId(row.id);
     // The request is already limited to this inbox; the row must agree.
@@ -166,7 +171,7 @@ export async function searchMerchantInboxConversations(
     else if (!known.snippet && hit.snippet) known.snippet = hit.snippet;
   }
 
-  const hits = [...merged.values()].slice(0, MAX_HITS_PER_PAGE);
+  const hits = [...merged.values()];
   const results = await readInChunks(binding, hits);
   // Every match failed to load: the engine is unwell, not "no results".
   if (hits.length > 0 && results.length === 0) {

@@ -1,18 +1,13 @@
 import { describe, expect, it } from '@jest/globals';
 
-// Behavioral guard for the node-forge RSA PKCS#1 v1.5 backport
-// (GHSA-86w9-cpqp-85rv / CVE-2026-85393). The companion
-// patch-integrity test pins the backport's presence; this test proves the
-// installed forge actually rejects the forged nested-DigestAlgorithm
-// signature while still accepting a valid one, so neither a dropped
-// backport nor a reject-everything regression can pass silently.
+// Historical regression guard for node-forge RSA PKCS#1 v1.5 verification
+// (GHSA-86w9-cpqp-85rv / CVE-2026-85393). The companion patch-integrity test
+// asserts the upstream fixed version and DigestInfo validation invariant.
 //
 // Vectors are the upstream digitalbazaar/forge#1152 regression test
 // (2048-bit key, e=3, SHA-256 over 'hello world!'): the forged S carries
 // a garbage OCTET STRING as an extra unconsumed child of the nested
-// DigestAlgorithm SEQUENCE. Verified locally: pristine 1.4.0 returns
-// true for S (vulnerable), the backported copy throws the DigestInfo
-// error (fixed).
+// DigestAlgorithm SEQUENCE. Upstream node-forge 1.4.3 includes the fix.
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const forge = require('node-forge');

@@ -179,8 +179,11 @@ overrides:
   "@modelcontextprotocol/sdk": "^1.31.0"
   # SDK 58 worklets 0.13.0; keep lockstep with react-native-reanimated (#2960).
   react-native-worklets: "0.13.0"
-  # Keep the web runtime on Hono versions that include the November 2026
-  # advisory fixes while remaining on the existing Hono 4 / Node server 2 lines.
+  # Keep the existing parseBody, fragment-query, toSSG, and boundary-component
+  # fixes, plus GHSA-46wx-v44x-9hh2, GHSA-4m76-xfj5-7975,
+  # GHSA-4h7h-rv7c-7m2v, GHSA-h7mg-cq63-vhpq, and GHSA-3gg2-335m-rxc6.
+  # Those November 2026 advisories are fixed in Hono 4.13.16; pin 4.13.19 for
+  # the current compatible Hono 4 release and stay on Node server 2.
   hono: "4.13.19"
   "@hono/node-server": "2.1.6"
   # Pin svgo 3.3.5 for the removeScripts executable-link/foreignObject bypasses.

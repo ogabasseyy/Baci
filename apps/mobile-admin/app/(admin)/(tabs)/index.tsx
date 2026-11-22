@@ -31,6 +31,7 @@ import { useOrders } from '@/hooks/useOrders';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { useStoreReadiness } from '@/hooks/useStoreReadiness';
 import { useTheme } from '@/hooks/useTheme';
+import { useWaitingChatCount } from '@/hooks/useWaitingChatCount';
 import { pickAndUploadFavicon } from '@/lib/upload/pickAndUploadFavicon';
 
 // Helper to get currency symbol from merchant's payout_currency
@@ -74,6 +75,7 @@ export default function HomeScreen() {
   const [period, setPeriod] = useState<TimePeriod>('week');
   const [showPeriodPicker, setShowPeriodPicker] = useState(false);
   const { stats, revenueData, refetch } = useDashboardStats(period);
+  const waitingChats = useWaitingChatCount();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -397,6 +399,7 @@ export default function HomeScreen() {
             <QuickActionButton
               icon="chatbox-ellipses-outline"
               label="Messages"
+              badgeCount={waitingChats}
               iconColor={colors.orange}
               backgroundColor={colors.orangeLight}
               onPress={() => router.push('/(admin)/messages' as never)}

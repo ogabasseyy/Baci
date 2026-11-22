@@ -89,8 +89,14 @@ describe('HomeScreen', () => {
     render(<HomeScreen />);
 
     expect(screen.queryByRole('button', { name: 'Add Product' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Messages' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Messages/ }));
 
     expect(router.push).toHaveBeenCalledWith('/(admin)/messages');
+  });
+
+  it('shows how many chats are waiting as a counter on Messages', () => {
+    render(<HomeScreen />);
+
+    expect(screen.getByTestId('badge-Messages').textContent).toBe('3');
   });
 });

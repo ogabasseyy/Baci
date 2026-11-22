@@ -66,6 +66,11 @@ export function useChatwootCustomerLink(
     // Each sync gets a number; only the newest may act on its answer.
     let generation = 0;
     let lastSyncAt = 0;
+    let trailing: ReturnType<typeof setTimeout> | undefined;
+    const cancelTrailing = () => {
+      if (trailing !== undefined) clearTimeout(trailing);
+      trailing = undefined;
+    };
     let lastHint = readCustomerSessionHint();
 
     // `force` is for a sign-out we just saw happen: remove the note even if no
@@ -141,14 +146,31 @@ export function useChatwootCustomerLink(
       const changed = hint !== lastHint;
       lastHint = hint;
       if (hint !== '1') {
+        cancelTrailing();
         generation++;
         clearLink(true);
         return;
       }
-      if (changed || Date.now() - lastSyncAt >= RESYNC_MIN_MS) void sync();
+      const wait = RESYNC_MIN_MS - (Date.now() - lastSyncAt);
+      if (changed || wait <= 0) {
+        cancelTrailing();
+        void sync();
+        return;
+      }
+      // Too soon to ask again, but the notice may be a real account switch
+      // (the hint stays '1'): drop any answer still in flight, which may belong
+      // to the account just left, and check once the window has passed.
+      generation++;
+      if (trailing === undefined) {
+        trailing = setTimeout(() => {
+          trailing = undefined;
+          void sync();
+        }, wait);
+      }
     });
     return () => {
       cancelled = true;
+      cancelTrailing();
       unsubscribe();
       crossTab.unsubscribe();
     };

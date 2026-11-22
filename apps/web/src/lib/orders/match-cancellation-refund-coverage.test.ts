@@ -38,6 +38,43 @@ const linkedPaymentId = (candidate: { metadata: unknown }) =>
     : null;
 
 describe('matchCancellationRefundCoverage', () => {
+  it('leaves a 250,000 naira remainder after a verified amendment refund', () => {
+    const amendment = row({
+      amount: 50_000,
+      metadata: {
+        payment_transaction_id: 'payment-1',
+        provider_refund_status: 'processed',
+        paid_order_amendment_refund_id: 'fixture-operation',
+        provider_refund_id: '786',
+      },
+    });
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      orderCurrency: 'NGN',
+      refundRows: [amendment],
+      transactions: [leg({ amount: 300_000 })],
+    });
+    expect(coverage.mismatchedIds.size).toBe(0);
+    expect(coverage.amendmentRemainders.get('payment-1')).toBe(25_000_000);
+    const completed = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      orderCurrency: 'NGN',
+      refundRows: [
+        amendment,
+        row({
+          amount: 250_000,
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+      ],
+      transactions: [leg({ amount: 300_000 })],
+    });
+    expect(completed.amendmentRemainders.size).toBe(0);
+    expect(completed.refundedPaymentIds.has('payment-1')).toBe(true);
+  });
+
   it('marks a leg refunded when verified rows cover it', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,

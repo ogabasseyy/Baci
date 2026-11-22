@@ -13,6 +13,7 @@ import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cance
 import { verifyBankOfferRefundEvidence } from '@/lib/orders/verify-bank-offer-refund-evidence';
 import { bankCardOfferReferenceSchema } from '@/schemas/bank-card-offer-reference';
 import { PartialCancellationRefundError } from './partial-cancellation-refund-error';
+import { paystackCancellationCaptureAmounts } from './paystack-cancellation-capture-amounts';
 import { DeferredError } from './run-order-cancellation-side-effect';
 
 // Reserve a complete provider call and time to persist its outcome.
@@ -70,7 +71,9 @@ export async function initiatePaystackCancellationRefunds({
 
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
-    const transactionAmount = Number(transaction.amount);
+    const transactionAmount = transaction.refundAmountMinor === undefined
+      ? Number(transaction.amount)
+      : transaction.refundAmountMinor / 100;
     const isBankOffer = bankCardOfferReferenceSchema.safeParse(
       transaction.gateway_reference
     ).success;
@@ -84,7 +87,7 @@ export async function initiatePaystackCancellationRefunds({
       bankOfferLegsForReview.push(transaction);
       continue;
     }
-    let koboAmount = isBankOffer ? 0 : Math.round(transactionAmount * 100);
+    let koboAmount = isBankOffer ? 0 : (transaction.refundAmountMinor ?? Math.round(transactionAmount * 100));
     let dispatchEvidence: BankOfferRefundEvidence | undefined;
     // Paystack defaults to a full refund when the amount is omitted.
     if (
@@ -210,9 +213,29 @@ export async function initiatePaystackCancellationRefunds({
         continue;
       }
     }
+    const capture = isBankOffer ? null : paystackCancellationCaptureAmounts(transaction);
+    if (
+      !isBankOffer && (!capture ||
+      (capture.grossMinor !== capture.principalMinor &&
+        koboAmount !== capture.principalMinor))
+    ) {
+      await quarantineRefund({
+        order,
+        preflight: true,
+        reason:
+          'Paystack surcharge capture requires a verified full cancellation refund',
+        supabase,
+        transactions: [transaction],
+      });
+      continue;
+    }
+    const providerAmountMinor =
+      capture && capture.grossMinor !== capture.principalMinor
+        ? capture.grossMinor
+        : koboAmount;
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,
-      koboAmount,
+      providerAmountMinor,
       reason || 'Order cancelled',
       providerTimeoutMs
     );
@@ -238,6 +261,7 @@ export async function initiatePaystackCancellationRefunds({
         transactionAmount: isBankOffer
           ? formatVerifiedKobo(koboAmount)
           : transactionAmount,
+        providerAmountMinor: isBankOffer ? undefined : providerAmountMinor,
       })
     );
   }

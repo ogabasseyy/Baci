@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { buildPdfContentDisposition } from '@/lib/download-filename';
 import { logger } from '@/lib/logger';
+import { paidOrderDocumentVersionSchema } from '@/lib/orders/paid-order-amendment-document';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { generateReceiptBlob } from '@/lib/receipt-pdf-generator';
 import {
@@ -45,12 +46,17 @@ export async function GET(
   const parsedParams = storefrontAccountDocumentParamsSchema.safeParse(
     await params
   );
-  const merchantSlug = new URL(request.url).searchParams.get('merchantSlug');
+  const search = new URL(request.url).searchParams;
+  const merchantSlug = search.get('merchantSlug');
+  const revision = search.get('revision');
+  const version = paidOrderDocumentVersionSchema.safeParse(
+    revision ?? 'original'
+  );
   const parsedQuery = storefrontAccountDocumentQuerySchema.safeParse({
     merchantSlug,
   });
 
-  if (!parsedParams.success || !parsedQuery.success) {
+  if (!parsedParams.success || !parsedQuery.success || !version.success) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
@@ -75,6 +81,11 @@ export async function GET(
       userId: auth.user.id,
       merchantSlug: parsedQuery.data.merchantSlug,
       orderId: parsedParams.data.id,
+      ...(revision === 'current'
+        ? { view: 'fulfilled_receipt' as const }
+        : revision
+          ? { version: version.data }
+          : {}),
     });
 
     if (!data.order.receipt_eligible) {
@@ -103,7 +114,7 @@ export async function GET(
         'Content-Type': 'application/pdf',
         'Content-Disposition': buildPdfContentDisposition(
           'receipt',
-          data.order.order_number
+          data.receiptOrder.order_number
         ),
         'Cache-Control': 'private, no-store',
       },

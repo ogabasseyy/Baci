@@ -116,13 +116,14 @@ vi.mock('@/lib/supabase/admin', () => ({
 // The proof-bound GIG fee read runs on the request-scoped client.
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn().mockResolvedValue({
-    rpc: vi.fn((name: string) =>
-      Promise.resolve(
-        name === 'get_order_paystack_split_retained_shipping_kobo'
-          ? { data: 0, error: null }
-          : { data: null, error: null }
-      )
-    ),
+    rpc: vi.fn(async (name: string) => {
+      if (name === 'claim_checkout_for_paid_order_amendment') {
+        return { data: 'untracked', error: null };
+      }
+      return name === 'get_order_paystack_split_retained_shipping_kobo'
+        ? { data: 0, error: null }
+        : { data: null, error: null };
+    }),
   }),
 }));
 

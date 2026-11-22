@@ -6,6 +6,7 @@ import {
   type ReceiptOrder,
   resolveReceiptItemFulfillmentAttachment,
 } from '@baci/shared';
+import { formatOrderItemDisplayName } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -24,6 +25,10 @@ import type {
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
+import {
+  loadPaidOrderDocument,
+  paidOrderDocumentVersionSchema,
+} from '@/lib/orders/paid-order-amendment-document';
 import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
@@ -44,6 +49,8 @@ interface OrderItem {
   line_id: number | null;
   name: string;
   item_description: string | null;
+  condition?: string | null;
+  variant_name?: string | null;
   quantity: number;
   price: number;
   unit_code: string | null;
@@ -87,7 +94,7 @@ interface ShippingAddress {
  */
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -111,6 +118,16 @@ export async function GET(
       );
     }
     const orderId = parsed.data.id;
+    const revisionValue = new URL(request.url).searchParams.get('revision');
+    const version = paidOrderDocumentVersionSchema.safeParse(
+      revisionValue ?? 'original'
+    );
+    if (!version.success) {
+      return NextResponse.json(
+        { error: 'Invalid invoice revision' },
+        { status: 400 }
+      );
+    }
 
     // Fetch order with all related data. `orders.merchant_id` stores the
     // merchant UUID, not the auth user UUID, so the explicit tenant scope is
@@ -147,7 +164,6 @@ export async function GET(
       `
       )
       .eq('id', orderId)
-      .eq('merchants.user_id', user.id)
       .single();
 
     if (orderError || !order) {
@@ -217,17 +233,44 @@ export async function GET(
     const merchant = md as MerchantData;
 
     if (merchant.user_id !== user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      const permission = await supabase.rpc('check_staff_permission', {
+        p_user_id: user.id,
+        p_merchant_id: merchant.id,
+        p_resource: 'orders',
+        p_action: 'view',
+      });
+      if (permission.error || permission.data !== true) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
-    // Fetch order items
-    const { data: orderItems, error: itemsError } = await supabase
+    const projection =
+      order.source === 'online_store' || revisionValue
+        ? await loadPaidOrderDocument(supabase, orderId, version.data)
+        : { data: null, error: null };
+    if (projection.error) {
+      return NextResponse.json(
+        { error: 'Unable to load invoice revision' },
+        { status: projection.error === 'not_found' ? 404 : 503 }
+      );
+    }
+    if (projection.data) Object.assign(order, projection.data.inputs.order);
+    const documentNumber = projection.data?.documentNumber ?? null;
+    const itemsQuery = supabase
       .from('order_items')
       .select(
         'id, line_id, name, item_description, quantity, price, assurance_fee, unit_code, line_extension_amount, vat_category_code, vat_rate, vat_amount, sellers_item_id, product_id'
       )
       .eq('order_id', orderId)
       .order('line_id', { ascending: true });
+    const { data: orderItems, error: itemsError } = projection.data
+      ? {
+          data: projection.data.inputs.items as unknown as Awaited<
+            typeof itemsQuery
+          >['data'],
+          error: null,
+        }
+      : await itemsQuery;
 
     if (itemsError) {
       console.error('Error fetching order items:', itemsError);
@@ -236,10 +279,12 @@ export async function GET(
         { status: 500 }
       );
     }
-
     // Fetch tax subtotals if VAT registered
     let taxSubtotals: TaxSubtotalRow[] = [];
-    if (merchant.vat_registration_status === 'registered') {
+    if (
+      merchant.vat_registration_status === 'registered' &&
+      !projection.data?.amendment
+    ) {
       const { data: subtotals, error: taxError } = await supabase
         .from('order_tax_subtotals')
         .select(
@@ -264,7 +309,9 @@ export async function GET(
 
     const typedOrderItems = orderItems as OrderItem[];
     const orderFulfillment = normalizeReceiptFulfillmentDetails(
-      order.fulfillment_details
+      projection.data
+        ? projection.data.inputs.order.fulfillment_details
+        : order.fulfillment_details
     );
     const hasDeviceItem = typedOrderItems.some((item) =>
       isDeviceReceiptItemName(item.name || '')
@@ -379,7 +426,13 @@ export async function GET(
       return {
         line_id: invoiceLineId,
         product_id: item.product_id || undefined,
-        name: item.name || '',
+        name: projection.data?.amendment
+          ? formatOrderItemDisplayName({
+              baseName: item.name,
+              condition: item.condition,
+              variantName: item.variant_name,
+            })
+          : item.name || '',
         description: desc,
         quantity: item.quantity,
         unit_code: item.unit_code || 'EA',
@@ -494,7 +547,9 @@ export async function GET(
       error: paymentAccountError,
       transactionError,
       paymentAccount,
-    } = await resolveInvoicePaymentAccount(supabase, orderId, isPaidOrder);
+    } = projection.data?.amendment
+      ? { error: null, transactionError: null, paymentAccount: null }
+      : await resolveInvoicePaymentAccount(supabase, orderId, isPaidOrder);
 
     if (paymentAccountError || transactionError) {
       console.error('Error fetching invoice payment account data:', orderId, {
@@ -527,7 +582,8 @@ export async function GET(
     const invoiceData: InvoiceData = {
       // Document identifiers
       invoice_number:
-        order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`,
+        (order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`) +
+        (documentNumber ? `-R${documentNumber}` : ''),
       invoice_type_code: resolveInvoiceTypeCode({
         paymentMethod: order.payment_method,
         isPaid: isPaidOrder,
@@ -596,7 +652,11 @@ export async function GET(
       amount_paid: amountPaid,
 
       // Additional info
-      notes: order.invoice_note || order.notes || undefined,
+      notes: documentNumber
+        ? `Revised invoice R${documentNumber} for order ${order.order_number}`
+        : projection.data?.amendment
+          ? 'Archived copy of the original order'
+          : order.invoice_note || order.notes || undefined,
       payment_terms: order.payment_terms || undefined,
       payment_account: paymentAccount
         ? {
@@ -604,7 +664,7 @@ export async function GET(
             account_name: paymentAccount.account_name || undefined,
             bank_name: paymentAccount.bank_name || undefined,
           }
-        : merchant.bank_account_number
+        : !projection.data?.amendment && merchant.bank_account_number
           ? {
               account_number: merchant.bank_account_number,
               account_name:
@@ -694,10 +754,14 @@ export async function GET(
       brand_colors: merchant.brand_colors || undefined,
       vat_registration_status: merchant.vat_registration_status,
       vat_rate: merchant.vat_rate,
-      bank_code: merchant.bank_code,
-      bank_account_number: merchant.bank_account_number,
-      bank_name: merchant.bank_name,
-      bank_account_name: merchant.bank_account_name,
+      bank_code: projection.data?.amendment ? null : merchant.bank_code,
+      bank_account_number: projection.data?.amendment
+        ? null
+        : merchant.bank_account_number,
+      bank_name: projection.data?.amendment ? null : merchant.bank_name,
+      bank_account_name: projection.data?.amendment
+        ? null
+        : merchant.bank_account_name,
       social_media: merchant.social_media,
       pages: merchant.pages,
     };

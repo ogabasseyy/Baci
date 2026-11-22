@@ -21,6 +21,7 @@ type RefundSuccess = Extract<
 export async function recordPaystackCancellationRefund({
   order,
   paystackRefund,
+  providerAmountMinor,
   reason,
   supabase,
   transaction,
@@ -33,6 +34,7 @@ export async function recordPaystackCancellationRefund({
     order_number: string | null;
   };
   paystackRefund: RefundSuccess;
+  providerAmountMinor?: number;
   reason?: string;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction;
@@ -68,6 +70,12 @@ export async function recordPaystackCancellationRefund({
   // repeat no-op correctly once the RPC has persisted it.
   const failedVerdict =
     providerStatus === 'failed' || providerStatus === 'needs-attention';
+  const amountEvidence =
+    providerAmountMinor !== undefined &&
+    typeof transactionAmount === 'number' &&
+    providerAmountMinor !== Math.round(transactionAmount * 100)
+      ? { provider_refund_amount_minor: providerAmountMinor }
+      : {};
   const providerTransaction = paystackRefund.data.transaction;
   const providerPaymentId =
     typeof providerTransaction === 'number'
@@ -98,6 +106,7 @@ export async function recordPaystackCancellationRefund({
           gateway_reference: String(paystackRefund.data.id),
           description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
           metadata: {
+            ...amountEvidence,
             cancellation_reason: reason ?? null,
             payment_transaction_id: transaction.id,
             provider_payment_transaction_id:
@@ -153,6 +162,7 @@ export async function recordPaystackCancellationRefund({
     gateway_reference: String(paystackRefund.data.id),
     description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
     metadata: {
+      ...amountEvidence,
       cancellation_reason: reason ?? null,
       payment_transaction_id: transaction.id,
       provider_payment_transaction_id: providerPaymentId,
@@ -190,6 +200,9 @@ export async function recordPaystackCancellationRefund({
         conflicting?.gateway_reference === String(paystackRefund.data.id) &&
         conflictingLeg === transaction.id &&
         refundAuditAmountsMatch(conflicting?.amount, transactionAmount) &&
+        (conflicting?.metadata as Record<string, unknown> | null)
+          ?.provider_refund_amount_minor ===
+          amountEvidence.provider_refund_amount_minor &&
         normalizeCurrencyCode(conflicting?.currency) ===
           normalizeCurrencyCode(
             transaction.currency || order.currency || 'NGN'

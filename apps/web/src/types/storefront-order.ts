@@ -1,5 +1,6 @@
 import type { ReceiptOrder } from '@baci/shared';
 import type { PaymentStatus, ShippingStatus } from '@baci/shared/types';
+import type { PaidOrderAmendmentStatus } from '@/lib/orders/paid-order-amendment-document';
 import type { MerchantPickupAddress } from '@/lib/shipping/merchant-rates/types';
 
 export interface StorefrontOrderItem {
@@ -76,6 +77,7 @@ export interface StorefrontShippingAddress {
 }
 
 export interface StorefrontOrder {
+  amendment?: PaidOrderAmendmentStatus;
   id: string;
   order_number: string;
   created_at: string;

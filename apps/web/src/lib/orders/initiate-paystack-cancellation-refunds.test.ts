@@ -67,6 +67,66 @@ describe('initiatePaystackCancellationRefunds', () => {
     );
   });
 
+  it('refunds the certified gross but records only the order principal', async () => {
+    acceptedRefund();
+    await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [
+        {
+          ...transaction,
+          amount: 100,
+          gateway_response: {
+            amount: 10157,
+            requested_amount: 10000,
+            baci_paystack_checkout_customer_fee_minor: 157,
+          },
+        },
+      ],
+    });
+    expect(mocks.initiatePaystackRefund).toHaveBeenCalledExactlyOnceWith(
+      'PSK-1',
+      10157,
+      'Order cancelled',
+      undefined
+    );
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: 100,
+        metadata: expect.objectContaining({
+          provider_refund_amount_minor: 10157,
+        }),
+      })
+    );
+  });
+
+  it('submits and records the exact remainder of an amended payment leg', async () => {
+    acceptedRefund();
+    await initiatePaystackCancellationRefunds({
+      order,
+      refundedPaymentIds: new Set(),
+      supabase,
+      transactions: [
+        { ...transaction, amount: 300_000, refundAmountMinor: 25_000_000 },
+      ],
+    });
+    expect(mocks.initiatePaystackRefund).toHaveBeenCalledExactlyOnceWith(
+      'PSK-1',
+      25_000_000,
+      'Order cancelled',
+      undefined
+    );
+    expect(insert).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        amount: 250_000,
+        metadata: expect.objectContaining({
+          payment_transaction_id: transaction.id,
+        }),
+      })
+    );
+  });
+
   it('audits accepted refunds as refund_pending before returning', async () => {
     acceptedRefund();
 

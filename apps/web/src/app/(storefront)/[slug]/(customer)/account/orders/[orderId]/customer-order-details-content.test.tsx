@@ -88,6 +88,40 @@ describe('CustomerOrderDetailsContent', () => {
     );
   });
 
+  it('links a fulfilled amended order to the revised receipt and keeps its original invoice', () => {
+    render(
+      <CustomerOrderDetailsContent
+        order={{
+          ...baseOrder,
+          current_document_kind: 'receipt',
+          receipt_eligible: true,
+          amendment: {
+            state: 'settled',
+            holdFulfillment: false,
+            balanceDueMinor: 0,
+            refundOwedMinor: 0,
+            documentId: '1afb87c4-43a3-4be3-97ad-76bc4926b111',
+            documentNumber: 2,
+          },
+        }}
+        merchantSlug="ogabassey"
+        basePath="/ogabassey"
+      />
+    );
+    expect(
+      screen.getByRole('link', { name: /download receipt/i })
+    ).toHaveAttribute(
+      'href',
+      '/api/storefront/account/orders/order-1/receipt?merchantSlug=ogabassey&revision=current'
+    );
+    expect(
+      screen.getByRole('link', { name: 'Original invoice' })
+    ).toHaveAttribute(
+      'href',
+      '/api/storefront/account/orders/order-1/invoice?merchantSlug=ogabassey'
+    );
+  });
+
   it('renders the receipt CTA and valid product routes once eligible', () => {
     render(
       <CustomerOrderDetailsContent

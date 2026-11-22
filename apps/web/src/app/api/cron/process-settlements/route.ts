@@ -3,6 +3,8 @@ import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
+import { drainPaidOrderAmendmentUpdates } from '@/lib/orders/paid-order-amendment-update';
+import { drainPaystackAmendmentRefunds } from '@/lib/payments/paystack-amendment-refund';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
@@ -61,6 +63,27 @@ export async function POST(request: Request) {
     }
 
     const supabase = createServiceClient();
+    if (process.env.PAID_ORDER_AMENDMENT_REFUND_WORKER_ENABLED === 'true') {
+      try {
+        await drainPaystackAmendmentRefunds(
+          supabase,
+          invocationStartedAt + 35_000
+        );
+      } catch {
+        logger.error({
+          message: 'Amendment refund worker could not complete its pass',
+        });
+      }
+    }
+    if (process.env.PAID_ORDER_AMENDMENT_UPDATES_ENABLED === 'true') {
+      try {
+        await drainPaidOrderAmendmentUpdates(supabase, Date.now() + 15_000);
+      } catch {
+        logger.error({
+          message: 'Amendment update worker could not complete its pass',
+        });
+      }
+    }
     if (parsedQuery.data.cancellationsOnly === 'true') {
       return processCancellationDrain(supabase, sendEmail, notifyMerchant);
     }

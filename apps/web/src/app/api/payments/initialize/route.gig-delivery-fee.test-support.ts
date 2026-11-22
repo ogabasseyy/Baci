@@ -91,6 +91,8 @@ function createMockSupabase() {
   return {
     rpc: vi.fn((name: string, args?: unknown) => {
       rpcCalls.push({ name, args });
+      if (name === 'claim_checkout_for_paid_order_amendment')
+        return Promise.resolve({ data: 'untracked', error: null });
       if (name === 'get_order_payment_snapshot')
         return Promise.resolve({
           data: [

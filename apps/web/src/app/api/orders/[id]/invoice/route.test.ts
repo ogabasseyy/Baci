@@ -245,6 +245,95 @@ describe('GET /api/orders/[id]/invoice', () => {
     );
   });
 
+  it('renders a pinned amendment invoice from one snapshot and leaves original links intact', async () => {
+    const version = 'a95fed79-47c8-4cae-bfd0-b61c9900d1cd';
+    const rpc = vi.fn(async (_name: string, args: { p_version: string }) => {
+      const original = args.p_version === 'original';
+      return {
+        error: null,
+        data: {
+          amendment: {
+            state: 'awaiting_payment',
+            holdFulfillment: true,
+            balanceDueMinor: 5000000,
+            refundOwedMinor: 0,
+            documentId: version,
+            documentNumber: 1,
+          },
+          documentNumber: original ? null : 1,
+          inputs: {
+            order: {
+              total: original ? 300000 : 350000,
+              subtotal: original ? 300000 : 350000,
+              amount_paid: 300000,
+            },
+            items: [
+              {
+                id: 'snapshot',
+                name: original ? 'Original phone' : 'Revised phone',
+                variant_name: original ? '128 GB' : '256 GB',
+                price: original ? 300000 : 350000,
+                quantity: 1,
+              },
+            ],
+          },
+        },
+      };
+    });
+    const supabase = createSupabaseMock({
+      order: {
+        data: { ...(orderResult.data as object), source: 'online_store' },
+        error: null,
+      },
+    });
+    vi.mocked(createClient).mockReturnValue({
+      ...supabase,
+      rpc,
+    } as unknown as ReturnType<typeof createClient>);
+    const context = { params: Promise.resolve({ id: ORDER_ID }) };
+    const original = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      context
+    );
+    expect(original.status).toBe(200);
+    expect(generateReceiptBlob).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        total: 300000,
+        items: expect.arrayContaining([
+          expect.objectContaining({ product_name: 'Original phone (128 GB)' }),
+        ]),
+      }),
+      expect.anything(),
+      expect.anything()
+    );
+    const revised = await GET(
+      new NextRequest(
+        `http://localhost/api/orders/${ORDER_ID}/invoice?revision=${version}`
+      ),
+      context
+    );
+    expect(revised.status).toBe(200);
+    expect(revised.headers.get('Content-Disposition')).toContain('ORD-1001-R1');
+    expect(generateReceiptBlob).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        total: 350000,
+        balance: 50000,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            product_name: expect.stringMatching(/Revised phone.*256 GB/),
+          }),
+        ]),
+        fulfillment_details: null,
+      }),
+      expect.anything(),
+      expect.anything()
+    );
+    expect(rpc).toHaveBeenLastCalledWith('read_paid_order_amendment_document', {
+      p_order_id: ORDER_ID,
+      p_version: version,
+    });
+  });
+
   it('attaches order-level IMEI details only to the device item', async () => {
     const response = await GET(
       new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),

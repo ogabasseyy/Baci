@@ -886,7 +886,9 @@ async function initializePaystack(
   redirectUrl: string,
   reference: string,
   merchantId: string,
-  splitClient: Pick<SupabaseClient, 'rpc'>
+  splitClient: Pick<SupabaseClient, 'rpc'>,
+  cardOnly: boolean,
+  integrationWalletCheckout: boolean
 ): Promise<PaymentResult> {
   const amountInKobo = Math.round(data.amount * 100);
   const fees = calculatePaystackFee(amountInKobo);
@@ -931,14 +933,16 @@ async function initializePaystack(
     phone: customerPhone,
     reference,
     callback_url: redirectUrl,
-    subaccount: merchant.paystack_subaccount_code as string,
-    transaction_charge: transactionChargeKobo,
-    bearer: 'account',
-    channels: getPaystackChannelsForCustomer(
-      data,
-      customerPhone,
-      gatewaySettings
-    ),
+    ...(integrationWalletCheckout
+      ? {}
+      : {
+          subaccount: merchant.paystack_subaccount_code as string,
+          transaction_charge: transactionChargeKobo,
+          bearer: 'account' as const,
+        }),
+    channels: cardOnly
+      ? ['card']
+      : getPaystackChannelsForCustomer(data, customerPhone, gatewaySettings),
     metadata: {
       merchant_id: merchantId,
       order_id: data.order_id,
@@ -1674,6 +1678,46 @@ export async function POST(request: NextRequest) {
       return cachedTrackingToken;
     }
 
+    const claimClient = await createServerSupabaseClient();
+    const { data: amendmentClaim, error: amendmentClaimError } =
+      await claimClient.rpc('claim_checkout_for_paid_order_amendment', {
+        p_order_id: paymentData.order_id,
+        p_tracking_token: data.tracking_token ?? null,
+        p_gateway:
+          gateway === 'paystack' && data.payment_type === 'dva'
+            ? 'paystack_dva'
+            : gateway,
+        p_reference: reference,
+        p_currency: chargeCurrency,
+        p_expected_amount_minor: Math.round(payableAmount * 100),
+      });
+    if (amendmentClaimError?.code === '42501') {
+      return createErrorResponse(
+        'Order ownership proof is required to initialize payment',
+        'ORDER_PAYMENT_PROOF_REQUIRED',
+        403
+      );
+    }
+    if (amendmentClaimError?.code === 'P0001') {
+      return createErrorResponse(
+        'This order cannot start an ordinary checkout payment',
+        'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+        409
+      );
+    }
+    if (
+      amendmentClaimError ||
+      !['untracked', 'claimed', 'claimed_integration'].includes(amendmentClaim)
+    ) {
+      return createErrorResponse(
+        'Unable to verify payment availability',
+        'ORDER_PAYMENT_CLAIM_UNAVAILABLE',
+        503
+      );
+    }
+
+    const integrationWalletCheckout = amendmentClaim === 'claimed_integration';
+
     // Initialize payment based on gateway
     let paymentResult: PaymentResult;
 
@@ -1697,8 +1741,12 @@ export async function POST(request: NextRequest) {
           );
           break;
 
-        case 'paystack':
-          if (!merchantWithPaystack.paystack_subaccount_code) {
+        case 'paystack': {
+          const subaccountCode = merchantWithPaystack.paystack_subaccount_code;
+          if (
+            !subaccountCode &&
+            (!integrationWalletCheckout || data.payment_type === 'dva')
+          ) {
             return createErrorResponse(
               'Paystack is not configured for this merchant',
               'GATEWAY_NOT_CONFIGURED',
@@ -1707,7 +1755,7 @@ export async function POST(request: NextRequest) {
           }
 
           // DVA (Dedicated Virtual Account) for bank transfer payments
-          if (data.payment_type === 'dva') {
+          if (data.payment_type === 'dva' && subaccountCode) {
             if (!gatewaySettings.wallet_paystack_dva_enabled) {
               return createErrorResponse(
                 'Bank transfer is not enabled for this merchant.',
@@ -1762,7 +1810,9 @@ export async function POST(request: NextRequest) {
                 last_name: lastName,
                 phone: paymentData.customer_phone || '',
               },
-              { subaccount: merchantWithPaystack.paystack_subaccount_code }
+              {
+                subaccount: subaccountCode,
+              }
             );
 
             const fees = calculatePaystackFee(
@@ -1814,10 +1864,13 @@ export async function POST(request: NextRequest) {
               redirectUrl,
               reference,
               merchantId,
-              await createServerSupabaseClient()
+              await createServerSupabaseClient(),
+              amendmentClaim !== 'untracked',
+              integrationWalletCheckout
             );
           }
           break;
+        }
         case 'credit_direct':
         case 'credpal': {
           // For client-side BNPL gateways, we redirect to the specialized launcher page

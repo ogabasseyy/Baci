@@ -129,9 +129,8 @@ export async function GET(
       );
     }
 
-    // Fetch order with all related data. `orders.merchant_id` stores the
-    // merchant UUID, not the auth user UUID, so the explicit tenant scope is
-    // enforced through the inner merchant ownership filter below.
+    // Fetch through the authenticated order RLS policy. That policy also
+    // admits customers, so separately require merchant order-view access.
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(
@@ -240,7 +239,7 @@ export async function GET(
         p_action: 'view',
       });
       if (permission.error || permission.data !== true) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
       }
     }
 

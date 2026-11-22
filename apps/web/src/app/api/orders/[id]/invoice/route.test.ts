@@ -161,12 +161,14 @@ function createQuery<T>(result: T) {
 }
 
 function createSupabaseMock({
+  canViewOrders = false,
   items = orderItemsResult,
   order = orderResult,
   paymentAccounts = paymentAccountsResult,
   taxSubtotals = taxSubtotalsResult,
   user = { id: 'user-1' },
 }: {
+  canViewOrders?: boolean;
   items?: QueryResult;
   order?: QueryResult;
   paymentAccounts?: QueryResult;
@@ -192,6 +194,7 @@ function createSupabaseMock({
       }),
     },
     from,
+    rpc: vi.fn().mockResolvedValue({ data: canViewOrders, error: null }),
     queries: {
       paymentAccountsQuery,
     },
@@ -1206,6 +1209,36 @@ describe('GET /api/orders/[id]/invoice', () => {
 
     expect(response.status).toBe(404);
     expect(generateReceiptBlob).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('requires merchant order-view permission for a non-owner (%s)', async (canViewOrders) => {
+    const supabase = createSupabaseMock({
+      canViewOrders,
+      user: { id: 'another-user' },
+    });
+    vi.mocked(createClient).mockReturnValue(
+      supabase as unknown as ReturnType<typeof createClient>
+    );
+    const response = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith('check_staff_permission', {
+      p_user_id: 'another-user',
+      p_merchant_id: 'merchant-1',
+      p_resource: 'orders',
+      p_action: 'view',
+    });
+    expect(response.status).toBe(canViewOrders ? 200 : 404);
+    if (!canViewOrders) {
+      await expect(response.json()).resolves.toEqual({
+        error: 'Order not found',
+      });
+      expect(generateReceiptBlob).not.toHaveBeenCalled();
+    }
   });
 
   it('returns 500 when order items cannot be loaded', async () => {

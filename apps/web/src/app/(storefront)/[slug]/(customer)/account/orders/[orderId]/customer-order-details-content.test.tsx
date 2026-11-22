@@ -163,6 +163,31 @@ describe('CustomerOrderDetailsContent', () => {
     expect(screen.getByText('Blue / 128GB')).toBeInTheDocument();
   });
 
+  it('shows the original invoice while the revision has no pinned document', () => {
+    render(
+      <CustomerOrderDetailsContent
+        order={{
+          ...baseOrder,
+          current_document_kind: 'invoice',
+          amendment: {
+            state: 'awaiting_payment',
+            holdFulfillment: true,
+            balanceDueMinor: 500,
+            refundOwedMinor: 0,
+            documentId: null,
+            documentNumber: null,
+          },
+        }}
+        merchantSlug="ogabassey"
+        basePath="/ogabassey"
+      />
+    );
+    expect(
+      screen.getByRole('link', { name: 'Original invoice' })
+    ).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Revised invoice' })).toBeNull();
+  });
+
   it('renders condition and variant metadata for order items', () => {
     render(
       <CustomerOrderDetailsContent

@@ -684,6 +684,9 @@ export async function POST(request: NextRequest) {
         supabase,
         parsed.data.data
       );
+      if (amendmentRefund === 'ignored') {
+        return NextResponse.json({ message: 'Event ignored' });
+      }
       if (amendmentRefund !== 'untracked') {
         return amendmentRefund === 'recorded'
           ? NextResponse.json({ message: 'Amendment refund reconciled' })

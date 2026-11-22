@@ -47,6 +47,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('signed amendment refund routing', () => {
+  it('acknowledges an unknown explicit reference but retries a failed lookup', async () => {
+    const { rpc, database } = fixture();
+    rpc
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'Unavailable' } });
+
+    await expect(
+      routePaystackAmendmentRefund(database, { refund_reference: reference })
+    ).resolves.toBe('ignored');
+    await expect(
+      routePaystackAmendmentRefund(database, { refund_reference: reference })
+    ).resolves.toBe('retry');
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+
   it('uses the refund reference from an event before a provider ID is recorded', async () => {
     const { rpc, database } = fixture();
     rpc

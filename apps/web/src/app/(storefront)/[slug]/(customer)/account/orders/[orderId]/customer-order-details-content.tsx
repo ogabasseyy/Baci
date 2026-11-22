@@ -117,13 +117,15 @@ export function CustomerOrderDetailsContent({
                       Original invoice
                     </a>
                   </Button>
-                  <Button asChild variant="outline" size="sm">
-                    <a
-                      href={`/api/storefront/account/orders/${order.id}/invoice?merchantSlug=${encodeURIComponent(merchantSlug)}&revision=${order.amendment.documentId ?? 'current'}`}
-                    >
-                      Revised invoice
-                    </a>
-                  </Button>
+                  {order.amendment.documentId && (
+                    <Button asChild variant="outline" size="sm">
+                      <a
+                        href={`/api/storefront/account/orders/${order.id}/invoice?merchantSlug=${encodeURIComponent(merchantSlug)}&revision=${order.amendment.documentId}`}
+                      >
+                        Revised invoice
+                      </a>
+                    </Button>
+                  )}
                 </div>
               </>
             )}

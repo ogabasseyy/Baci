@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   drainFailedOrderCancellationSideEffects: vi.fn(),
+  drainPaystackAmendmentRefunds: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
   reconcileCompletedPaystackCancellationRefunds: vi.fn(),
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
@@ -48,6 +49,9 @@ vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
 vi.mock('@/lib/payments/drain-paystack-refund-notifications', () => ({
   drainPaystackRefundNotifications: mocks.drainPaystackRefundNotifications,
 }));
+vi.mock('@/lib/payments/paystack-amendment-refund', () => ({
+  drainPaystackAmendmentRefunds: mocks.drainPaystackAmendmentRefunds,
+}));
 vi.mock(
   '@/lib/payments/reconcile-pending-paystack-cancellation-refunds',
   () => ({
@@ -79,6 +83,18 @@ describe('POST /api/cron/process-settlements', () => {
       mock.mockReset();
     }
     stubDefaultSettlementRun(mocks);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('does not release due settlements when refund reconciliation is unavailable', async () => {
+    vi.stubEnv('PAID_ORDER_AMENDMENT_REFUND_WORKER_ENABLED', 'true');
+    mocks.drainPaystackAmendmentRefunds.mockRejectedValue(new Error('offline'));
+
+    const response = await POST(makeCronRequest());
+
+    expect(response.status).toBe(503);
+    expect(mocks.rpc).not.toHaveBeenCalledWith('process_due_settlements');
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 
   it('rejects requests without the configured cron secret before processing settlements', async () => {

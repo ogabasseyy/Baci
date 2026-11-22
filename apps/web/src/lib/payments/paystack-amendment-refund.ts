@@ -104,7 +104,7 @@ async function reconcileRefund(supabase: Database, reference: string) {
 export async function routePaystackAmendmentRefund(
   supabase: Database,
   event: Record<string, unknown> | undefined
-): Promise<'untracked' | 'retry' | 'recorded'> {
+): Promise<'untracked' | 'retry' | 'recorded' | 'ignored'> {
   const reference = paystackAmendmentRefundReference.safeParse(
     event?.refund_reference ?? event?.reference
   );
@@ -133,7 +133,9 @@ export async function routePaystackAmendmentRefund(
     }
   );
   if (error) return 'retry';
-  if (data == null) return reference.success ? 'retry' : 'untracked';
+  // Dispatch requires a committed attempt, so a missing explicit amendment
+  // reference is not an early webhook. Keep it out of cancellation routing.
+  if (data == null) return reference.success ? 'ignored' : 'untracked';
   const ownedReference = paystackAmendmentRefundReference.safeParse(data);
   return ownedReference.success
     ? reconcileRefund(supabase, ownedReference.data)

@@ -1,114 +1,16 @@
 // @vitest-environment jsdom
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook } from '@testing-library/react';
-import { createElement, type PropsWithChildren } from 'react';
+import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OrderGiglReceiver } from '@/lib/order-gigl-shipping';
-import { getOrderGiglInitialAddress } from '@/lib/order-shipment';
+import {
+  differsFromStored,
+  flushPromises,
+  renderBoundQuote,
+  server,
+  trim,
+} from './useOrderGiglShipping.address-save.test-support';
 import { quoteResult } from './useOrderGiglShipping.lifecycle.test-support';
-
-type StoredAddress = Record<string, unknown>;
-
-// A fake admin GIG quote endpoint that applies the bind_admin_gigl_quote
-// stale_order_quote_inputs guard: a receiver override that differs from the
-// order's stored shipping address is refused with 409.
-const server = vi.hoisted(() => ({
-  getQuote: vi.fn(),
-  patch: vi.fn(),
-  storedAddress: {} as StoredAddress,
-}));
-
-vi.mock('react-native', () => ({
-  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
-}));
-vi.mock('@/lib/order-gigl-shipping', () => {
-  class TestShippingError extends Error {
-    code?: string;
-    status: number;
-    constructor(message: string, status: number, code?: string) {
-      super(message);
-      this.code = code;
-      this.status = status;
-    }
-  }
-  return {
-    getMerchantWalletSummary: vi.fn(),
-    getOrRequestMerchantWalletFundingAccount: vi.fn(),
-    getOrderGiglQuote: server.getQuote,
-    OrderGiglShippingError: TestShippingError,
-    saveOrderGiglShippingAddress: async (
-      _orderId: string,
-      shippingAddress: StoredAddress
-    ) => {
-      server.patch({ shipping_address: shippingAddress });
-      server.storedAddress = shippingAddress;
-    },
-  };
-});
-
-import { useOrderGiglShipping } from './useOrderGiglShipping';
-
-const trim = (value: unknown) =>
-  typeof value === 'string' ? value.trim() : '';
-
-function differsFromStored(receiver: OrderGiglReceiver) {
-  return (['address', 'city', 'state', 'phone'] as const).some(
-    (field) =>
-      receiver[field] !== undefined &&
-      trim(receiver[field]) !== trim(server.storedAddress[field])
-  );
-}
-
-function wrapper({ children }: PropsWithChildren) {
-  return createElement(
-    QueryClientProvider,
-    { client: new QueryClient() },
-    children
-  );
-}
-
-async function flushPromises() {
-  await act(async () => {
-    for (let index = 0; index < 6; index += 1) await Promise.resolve();
-  });
-}
-
-interface TestOrder {
-  customer_name: string;
-  customer_phone: string | null;
-  shipping_address: StoredAddress;
-}
-
-function renderBoundQuote(order: TestOrder) {
-  server.storedAddress = order.shipping_address;
-  return renderHook(
-    ({ current }: { current: TestOrder }) =>
-      useOrderGiglShipping({
-        enabled: true,
-        initialAddress: getOrderGiglInitialAddress(current),
-        orderId: 'order-1',
-        storedOrder: current,
-      }),
-    { initialProps: { current: order }, wrapper }
-  );
-}
-
-async function saveTypedCityAndState() {
-  const order = {
-    customer_name: 'Ada',
-    customer_phone: '0801',
-    shipping_address: { address: '1 Allen', name: 'Ada', phone: '0801' },
-  };
-  const view = renderBoundQuote(order);
-  await flushPromises();
-  act(() => {
-    view.result.current.updateAddressField('city', 'Ikeja ');
-    view.result.current.updateAddressField('state', 'Lagos');
-  });
-  await act(() => view.result.current.requestQuote());
-  return { ...view, order };
-}
 
 describe('bugfix: GIG bind refused typed address details as stale inputs', () => {
   beforeEach(() => {
@@ -139,6 +41,127 @@ describe('bugfix: GIG bind refused typed address details as stale inputs', () =>
     vi.setSystemTime('2026-09-01T17:00:00.000Z');
   });
 
+  it('uses the saved address for a manual order until an explicit edit is saved', async () => {
+    const { result } = renderBoundQuote({
+      source: 'physical',
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: {
+        address: '1 Allen',
+        city: 'Ikeja',
+        state: 'Lagos',
+        name: 'Ada',
+        phone: '0801',
+      },
+    });
+    await flushPromises();
+    expect(result.current.addressDraft.address).toBe('1 Allen');
+    expect(server.patch).not.toHaveBeenCalled();
+    expect(result.current.state).toBe('ready');
+
+    act(() => result.current.beginAddressEdit?.());
+    expect(result.current.missingFields).not.toContain('phone');
+    act(() => {
+      result.current.updateAddressField('address', '10 Hospital Road');
+      result.current.updateAddressField('city', 'Lokoja');
+      result.current.updateAddressField('state', 'Kogi');
+    });
+    expect(result.current.quote).toBeNull();
+    expect(server.patch).not.toHaveBeenCalled();
+    server.getQuote.mockClear();
+    server.getQuote.mockImplementationOnce(async (_id, receiver) => {
+      expect(receiver).toBeUndefined();
+      expect(server.storedAddress).toMatchObject({
+        address: '10 Hospital Road',
+        city: 'Lokoja',
+        state: 'Kogi',
+      });
+      return quoteResult;
+    });
+    await act(() => result.current.saveAddressAndRequestQuote());
+    expect(server.patch).toHaveBeenCalledOnce();
+    expect(result.current.state).toBe('ready');
+    expect(result.current.error).toBeNull();
+  });
+
+  it('does not price a manual order when saving the edited destination fails', async () => {
+    const { result } = renderBoundQuote({
+      source: 'physical',
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: { address: '1 Allen', city: 'Ikeja', state: 'Lagos' },
+    });
+    await flushPromises();
+    server.getQuote.mockClear();
+    server.patch.mockRejectedValueOnce(new Error('Address save failed'));
+    act(() => result.current.beginAddressEdit?.());
+    act(() => result.current.updateAddressField('city', 'Lokoja'));
+
+    await act(() => result.current.saveAddressAndRequestQuote());
+
+    expect(server.patch).toHaveBeenCalledOnce();
+    expect(server.getQuote).not.toHaveBeenCalled();
+    expect(result.current.error).toBe('Address save failed');
+  });
+
+  it('asks the merchant to review the saved address after a stale quote response', async () => {
+    server.getQuote.mockRejectedValueOnce(
+      Object.assign(new Error('Stale quote'), {
+        code: 'stale_order_quote_inputs',
+      })
+    );
+    const { result } = renderBoundQuote({
+      source: 'physical',
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: { address: '1 Allen', city: 'Ikeja', state: 'Lagos' },
+    });
+    await flushPromises();
+
+    expect(result.current.addressDraft.address).toBe('1 Allen');
+    expect(result.current.state).toBe('missing_address');
+    expect(result.current.missingFields).toContain('address');
+    expect(result.current.error).toMatch(/review the delivery address/i);
+    expect(server.patch).not.toHaveBeenCalled();
+  });
+
+  it('reveals locality fields when a street edit clears them from an address-only missing state', async () => {
+    server.getQuote.mockRejectedValueOnce(
+      Object.assign(new Error('Incomplete'), {
+        code: 'ORDER_SHIPPING_ADDRESS_INCOMPLETE',
+        missing: ['address'],
+      })
+    );
+    const { result } = renderBoundQuote({
+      customer_name: 'Ada',
+      customer_phone: '0801',
+      shipping_address: {
+        city: 'Ikeja',
+        name: 'Ada',
+        phone: '0801',
+        state: 'Lagos',
+      },
+    });
+    await flushPromises();
+
+    expect(result.current.missingFields).toEqual(['address']);
+    act(() => result.current.updateAddressField('address', '10 Hospital Road'));
+    expect(result.current.missingFields).toEqual(['address', 'city', 'state']);
+
+    act(() => {
+      result.current.updateAddressField('city', 'Yaba');
+      result.current.updateAddressField('state', 'Lagos');
+    });
+    await act(() => result.current.saveAddressAndRequestQuote());
+
+    expect(server.patch).toHaveBeenCalledOnce();
+    expect(server.storedAddress).toMatchObject({
+      address: '10 Hospital Road',
+      city: 'Yaba',
+      state: 'Lagos',
+    });
+  });
+
   it('saves typed city and state to the order before binding instead of failing with 409', async () => {
     const { result } = renderBoundQuote({
       customer_name: 'Ada',
@@ -152,7 +175,7 @@ describe('bugfix: GIG bind refused typed address details as stale inputs', () =>
       result.current.updateAddressField('city', 'Ikeja');
       result.current.updateAddressField('state', 'Lagos');
     });
-    await act(() => result.current.requestQuote());
+    await act(() => result.current.saveAddressAndRequestQuote());
 
     expect(server.patch).toHaveBeenCalledWith({
       shipping_address: {
@@ -173,7 +196,7 @@ describe('bugfix: GIG bind refused typed address details as stale inputs', () =>
     expect(result.current.quote?.price).toBe(11000);
   });
 
-  it('saves the customer phone when the stored delivery phone is blank instead of failing with 409', async () => {
+  it('uses the saved customer phone fallback without editing the order', async () => {
     const { result } = renderBoundQuote({
       customer_name: 'Ada',
       customer_phone: '0801',
@@ -187,9 +210,8 @@ describe('bugfix: GIG bind refused typed address details as stale inputs', () =>
     });
     await flushPromises();
 
-    expect(server.patch).toHaveBeenCalledWith({
-      shipping_address: expect.objectContaining({ phone: '0801' }),
-    });
+    expect(server.patch).not.toHaveBeenCalled();
+    expect(result.current.addressDraft.phone).toBe('0801');
     expect(result.current.error).toBeNull();
     expect(result.current.state).toBe('ready');
   });
@@ -214,62 +236,6 @@ describe('bugfix: GIG bind refused typed address details as stale inputs', () =>
       undefined,
       expect.any(AbortSignal)
     );
-    expect(result.current.state).toBe('ready');
-  });
-});
-
-describe('bugfix: the order refetch after an address save asked for the bound quote again', () => {
-  beforeEach(() => {
-    server.getQuote.mockReset();
-    server.patch.mockReset();
-    server.getQuote.mockImplementation(async () => {
-      const stored = server.storedAddress;
-      if (!trim(stored.city) || !trim(stored.state)) {
-        throw Object.assign(new Error('Incomplete'), {
-          code: 'ORDER_SHIPPING_ADDRESS_INCOMPLETE',
-          missing: ['city', 'state'],
-        });
-      }
-      return quoteResult;
-    });
-    vi.useFakeTimers();
-    vi.setSystemTime('2026-09-01T17:00:00.000Z');
-  });
-
-  it('keeps the bound quote when the refreshed order carries the saved address', async () => {
-    const { order, rerender, result } = await saveTypedCityAndState();
-    expect(server.patch).toHaveBeenCalledOnce();
-    const requestsAfterBind = server.getQuote.mock.calls.length;
-
-    rerender({
-      current: { ...order, shipping_address: server.storedAddress },
-    });
-    await flushPromises();
-
-    // Every /api/orders request shares one small per-IP rate limit.
-    expect(server.getQuote).toHaveBeenCalledTimes(requestsAfterBind);
-    expect(server.patch).toHaveBeenCalledOnce();
-    expect(result.current.state).toBe('ready');
-    expect(result.current.quote?.price).toBe(11000);
-  });
-
-  it('asks again when the refreshed order carries a different address', async () => {
-    const { order, rerender, result } = await saveTypedCityAndState();
-    const requestsAfterBind = server.getQuote.mock.calls.length;
-    server.storedAddress = { ...server.storedAddress, state: 'Ogun' };
-
-    rerender({
-      current: { ...order, shipping_address: server.storedAddress },
-    });
-    await flushPromises();
-
-    expect(server.getQuote).toHaveBeenCalledTimes(requestsAfterBind + 1);
-    expect(server.getQuote).toHaveBeenLastCalledWith(
-      'order-1',
-      undefined,
-      expect.any(AbortSignal)
-    );
-    expect(server.patch).toHaveBeenCalledOnce();
     expect(result.current.state).toBe('ready');
   });
 });

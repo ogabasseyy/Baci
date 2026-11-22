@@ -6,31 +6,42 @@ import {
   CHECKOUT_INSTALLATION_STORAGE_KEY,
   CHECKOUT_PENDING_REDVAULT_ORDER_STORAGE_KEY,
 } from '@/config/checkout-storage';
+import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
 import { QUERY_CACHE_STORAGE_KEY } from '@/lib/query-client';
 
-const CLEAR_CACHE_PRESERVED_KEYS = new Set([
-  CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
-  CHECKOUT_GENERATION_STORAGE_KEY,
-  CHECKOUT_INSTALLATION_STORAGE_KEY,
-  CHECKOUT_PENDING_REDVAULT_ORDER_STORAGE_KEY,
-  'app-settings-storage',
-  'app-theme-storage',
-  'auth-storage',
-  'cart-storage',
-  'comparison-storage',
-  'saved-storage',
-  'search_history',
-  '@baci_storefront_push_token',
-  'baci_offline_mutation_queue',
-  'permission-booster-storage',
-]);
+const checkoutPrefix = getOxygenStagingProfile()?.storagePrefix;
+
+function logicalKey(key: string) {
+  return checkoutPrefix && key.startsWith(checkoutPrefix)
+    ? key.slice(checkoutPrefix.length)
+    : key;
+}
+
+const CLEAR_CACHE_PRESERVED_KEYS = new Set(
+  [
+    CHECKOUT_AUTH_PARTITION_STORAGE_KEY,
+    CHECKOUT_GENERATION_STORAGE_KEY,
+    CHECKOUT_INSTALLATION_STORAGE_KEY,
+    CHECKOUT_PENDING_REDVAULT_ORDER_STORAGE_KEY,
+    'app-settings-storage',
+    'app-theme-storage',
+    'auth-storage',
+    'cart-storage',
+    'comparison-storage',
+    'saved-storage',
+    'search_history',
+    '@baci_storefront_push_token',
+    'baci_offline_mutation_queue',
+    'permission-booster-storage',
+  ].map(logicalKey)
+);
 
 const CLEAR_CACHE_PRESERVED_PREFIXES = [
   'supabase',
   'baci:savings-reminder-',
   '@baci_storefront_push_opt_out_',
-  `${CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY}:`,
-  `${CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY}:`,
+  `${logicalKey(CHECKOUT_ATTEMPT_CREDIT_STORAGE_KEY)}:`,
+  `${logicalKey(CHECKOUT_IDEMPOTENCY_ITEM_SORT_V2_STORAGE_KEY)}:`,
 ] as const;
 
 function isClearableCacheStorageKey(key: string): boolean {
@@ -50,5 +61,7 @@ export function getClearableCacheStorageKeys(
 ): string[] {
   const keys = new Set(storageKeys);
   keys.add(QUERY_CACHE_STORAGE_KEY);
-  return Array.from(keys).filter(isClearableCacheStorageKey);
+  return Array.from(keys).filter((key) =>
+    isClearableCacheStorageKey(logicalKey(key))
+  );
 }

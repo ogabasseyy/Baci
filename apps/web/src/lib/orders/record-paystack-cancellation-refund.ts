@@ -21,6 +21,7 @@ type RefundSuccess = Extract<
 export async function recordPaystackCancellationRefund({
   order,
   paystackRefund,
+  providerAmountMinor,
   reason,
   supabase,
   transaction,
@@ -33,10 +34,12 @@ export async function recordPaystackCancellationRefund({
     order_number: string | null;
   };
   paystackRefund: RefundSuccess;
+  providerAmountMinor?: number;
   reason?: string;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction;
-  transactionAmount: number;
+  // A verified bank-offer amount is passed as decimal text to PostgreSQL.
+  transactionAmount: number | string;
 }): Promise<number> {
   // Defense in depth behind initiateRefund's payload validation: a
   // successful response without a refund object may still have
@@ -67,6 +70,12 @@ export async function recordPaystackCancellationRefund({
   // repeat no-op correctly once the RPC has persisted it.
   const failedVerdict =
     providerStatus === 'failed' || providerStatus === 'needs-attention';
+  const amountEvidence =
+    providerAmountMinor !== undefined &&
+    typeof transactionAmount === 'number' &&
+    providerAmountMinor !== Math.round(transactionAmount * 100)
+      ? { provider_refund_amount_minor: providerAmountMinor }
+      : {};
   const providerTransaction = paystackRefund.data.transaction;
   const providerPaymentId =
     typeof providerTransaction === 'number'
@@ -97,6 +106,7 @@ export async function recordPaystackCancellationRefund({
           gateway_reference: String(paystackRefund.data.id),
           description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
           metadata: {
+            ...amountEvidence,
             cancellation_reason: reason ?? null,
             payment_transaction_id: transaction.id,
             provider_payment_transaction_id:
@@ -152,6 +162,7 @@ export async function recordPaystackCancellationRefund({
     gateway_reference: String(paystackRefund.data.id),
     description: `Refund for cancelled order #${order.order_number || order.id.slice(0, 8)}`,
     metadata: {
+      ...amountEvidence,
       cancellation_reason: reason ?? null,
       payment_transaction_id: transaction.id,
       provider_payment_transaction_id: providerPaymentId,
@@ -188,7 +199,10 @@ export async function recordPaystackCancellationRefund({
         normalizePaymentGateway(conflicting?.gateway) === 'PAYSTACK' &&
         conflicting?.gateway_reference === String(paystackRefund.data.id) &&
         conflictingLeg === transaction.id &&
-        Number(conflicting?.amount) === transactionAmount &&
+        refundAuditAmountsMatch(conflicting?.amount, transactionAmount) &&
+        (conflicting?.metadata as Record<string, unknown> | null)
+          ?.provider_refund_amount_minor ===
+          amountEvidence.provider_refund_amount_minor &&
         normalizeCurrencyCode(conflicting?.currency) ===
           normalizeCurrencyCode(
             transaction.currency || order.currency || 'NGN'
@@ -212,4 +226,17 @@ export async function recordPaystackCancellationRefund({
     }
   }
   return paystackRefund.data.id;
+}
+
+function refundAuditAmountsMatch(
+  persisted: unknown,
+  expected: string | number
+) {
+  if (typeof expected === 'number') return Number(persisted) === expected;
+  if (typeof persisted !== 'string' && typeof persisted !== 'number')
+    return false;
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(String(persisted));
+  if (!match) return false;
+  const fraction = (match[2] ?? '').replace(/0+$/, '').padEnd(2, '0');
+  return `${match[1]}.${fraction}` === expected;
 }

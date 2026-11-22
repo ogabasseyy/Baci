@@ -171,6 +171,10 @@ const orderCreateSchemaBase = z
       .string()
       .min(1)
       .transform((val) => sanitizeText(val)),
+    bank_card_offer_id: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{1,63}$/)
+      .optional(),
     payment_status: z.string().default('unpaid'),
     shipping_status: z.string().default('pending'),
     shipping_address: orderShippingAddressSchema.optional(),
@@ -243,6 +247,20 @@ const orderCreateSchemaBase = z
   })
   .and(orderDeliveryMetadataSchema)
   .superRefine((data, ctx) => {
+    if (data.payment_method === 'bank_card_offer' && !data.bank_card_offer_id) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A bank card offer ID is required for this payment method',
+        path: ['bank_card_offer_id'],
+      });
+    }
+    if (data.bank_card_offer_id && data.payment_method !== 'bank_card_offer') {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A bank card offer requires bank card offer payment',
+        path: ['bank_card_offer_id'],
+      });
+    }
     if (!data.use_savings_credit) {
       return;
     }

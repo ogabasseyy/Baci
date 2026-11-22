@@ -1,4 +1,9 @@
 import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
+import {
+  prepareEdgeRoomsBeforeLaunch,
+  resolveLateEdgeLaunchFallback,
+  rollbackEdgeDraftAndAnnotateFailure,
+} from '@/lib/quiz/quiz-launch-edge';
 import { getQuizRulesVersion } from '@/lib/quiz/quiz-rules-version';
 import { scheduleReservationProductPurge } from '@/lib/schedule-reservation-product-purge';
 import type { MerchantQuizActivationV2Input } from '@/schemas/quiz';
@@ -50,7 +55,11 @@ function resolveTiming(input: MerchantQuizActivationV2Input, now: Date) {
   };
 }
 
-function getLiveLaunchFailure(code?: string): QuizLaunchV2Result {
+function getLiveLaunchFailure(code?: string): {
+  code: string;
+  message: string;
+  ok: false;
+} {
   if (code === 'QZ047')
     return {
       code: 'QUIZ_LIVE_REGULATORY_EVIDENCE_REQUIRED',
@@ -108,9 +117,35 @@ export async function launchMerchantQuizDraftV2(args: {
       ok: false,
     };
   }
+  if (input.mode === 'live' && !input.regulatoryCompliance) {
+    return getLiveLaunchFailure('QZ047');
+  }
 
   const timing = resolveTiming(input, now);
   const questionCount = input.answerKeyReview.questions.length;
+  const wantsEdgeRooms = input.backendMode === 'edge_rooms';
+  const expectedRoomCount =
+    input.edgeRoomCount ?? (input.mode === 'live' ? 16 : 4);
+
+  if (wantsEdgeRooms) {
+    const edgeOutcome = await prepareEdgeRoomsBeforeLaunch({
+      eventId: input.eventId,
+      expectedRoomCount,
+      launchConfig: {
+        endsAt: timing.endsAt,
+        maxAttempts: input.maxAttempts,
+        questionCount,
+        rulesVersion: input.rulesVersion,
+        startsAt: timing.startsAt,
+        status: timing.status,
+        timePerQuestionSeconds: input.timePerQuestionSeconds,
+      },
+      merchantId,
+      supabase,
+    });
+    if (edgeOutcome) return edgeOutcome;
+  }
+
   if (input.mode === 'live') {
     const regulatory = input.regulatoryCompliance;
     if (!regulatory) return getLiveLaunchFailure('QZ047');
@@ -139,23 +174,42 @@ export async function launchMerchantQuizDraftV2(args: {
     }
 
     if (error?.code === 'QZ046') {
-      const alreadyLaunched = await findLaunchedMerchantQuizV2({
-        eventId: input.eventId,
-        merchantId,
-        supabase,
-      });
-      if (alreadyLaunched) {
-        expireProductBlogCache(merchantId);
-        scheduleReservationProductPurge({
-          merchantId,
-          sourceId: input.eventId,
-          source: 'quiz',
-          supabase,
-        });
-        return { event: alreadyLaunched, ok: true };
+      const fallback = wantsEdgeRooms
+        ? await resolveLateEdgeLaunchFallback({
+            eventId: input.eventId,
+            expectedRoomCount,
+            merchantId,
+            raceLabel: 'live',
+            supabase,
+          })
+        : await findLaunchedMerchantQuizV2({
+            eventId: input.eventId,
+            merchantId,
+            supabase,
+          }).then((event) => (event ? { event, ok: true as const } : null));
+      if (fallback) {
+        if (fallback.ok) {
+          expireProductBlogCache(merchantId);
+          scheduleReservationProductPurge({
+            merchantId,
+            sourceId: input.eventId,
+            source: 'quiz',
+            supabase,
+          });
+        }
+        return fallback;
       }
     }
-    return getLiveLaunchFailure(error?.code);
+
+    const failure = getLiveLaunchFailure(error?.code);
+    return wantsEdgeRooms
+      ? rollbackEdgeDraftAndAnnotateFailure({
+          eventId: input.eventId,
+          failure,
+          merchantId,
+          supabase,
+        })
+      : failure;
   }
 
   const { data, error } = await supabase
@@ -181,14 +235,40 @@ export async function launchMerchantQuizDraftV2(args: {
     .eq('status', 'draft')
     .select('id, slug, status, title')
     .maybeSingle();
+
+  const genericFailure = {
+    code: 'QUIZ_LAUNCH_FAILED',
+    message: 'The reviewed quiz could not be launched.',
+    ok: false as const,
+  };
   if (error) {
-    return {
-      code: 'QUIZ_LAUNCH_FAILED',
-      message: 'The reviewed quiz could not be launched.',
-      ok: false,
-    };
+    return wantsEdgeRooms
+      ? rollbackEdgeDraftAndAnnotateFailure({
+          eventId: input.eventId,
+          failure: genericFailure,
+          merchantId,
+          supabase,
+        })
+      : genericFailure;
   }
   if (isQuizDraftEvent(data)) return { event: data, ok: true };
+
+  if (wantsEdgeRooms) {
+    const fallback = await resolveLateEdgeLaunchFallback({
+      eventId: input.eventId,
+      expectedRoomCount,
+      merchantId,
+      raceLabel: 'test-mode',
+      supabase,
+    });
+    if (fallback) return fallback;
+    return rollbackEdgeDraftAndAnnotateFailure({
+      eventId: input.eventId,
+      failure: genericFailure,
+      merchantId,
+      supabase,
+    });
+  }
 
   const alreadyLaunched = await findLaunchedMerchantQuizV2({
     eventId: input.eventId,
@@ -197,9 +277,5 @@ export async function launchMerchantQuizDraftV2(args: {
   });
   return alreadyLaunched
     ? { event: alreadyLaunched, ok: true }
-    : {
-        code: 'QUIZ_LAUNCH_FAILED',
-        message: 'The reviewed quiz could not be launched.',
-        ok: false,
-      };
+    : genericFailure;
 }

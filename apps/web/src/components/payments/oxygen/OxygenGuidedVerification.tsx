@@ -213,7 +213,7 @@ export function OxygenGuidedVerification({
       ) : (
         <OxygenVerificationActivity />
       )}
-      <div className="space-y-2">
+      <div className="space-y-2" aria-live="polite">
         <h3 className="text-xl font-bold text-gray-900">
           {oxygenVerificationHeading({
             selfie: Boolean(selfie),
@@ -226,6 +226,10 @@ export function OxygenGuidedVerification({
             identityComplete,
             bvnDone: state.kyc?.bvn_status === 'DONE',
             eligibilityFailed,
+            eligibilityProgress:
+              state.eligibilityStatus === 'pending'
+                ? state.eligibilityProgress
+                : undefined,
           })}
         </h3>
         <p className="text-sm leading-relaxed text-gray-500">
@@ -276,7 +280,7 @@ export function OxygenGuidedVerification({
             ? 'Continue NIN check'
             : ninRetry
               ? 'Try NIN check again'
-              : retryStatus
+              : retryStatus || (review && !eligibilityFailed)
                 ? 'Check for an update'
                 : 'Try again'}
         </OxygenLoadingButton>

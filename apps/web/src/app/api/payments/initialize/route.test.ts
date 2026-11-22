@@ -111,6 +111,7 @@ vi.mock('@/lib/korapay', () => ({
 // Paystack mocks
 const mockInitializePaystack = vi.fn();
 vi.mock('@/lib/paystack', () => ({
+  isPaystackConfigured: () => true,
   initializeTransaction: (...args: unknown[]) =>
     mockInitializePaystack(...args),
   calculatePlatformFee: (amount: number) => ({
@@ -144,6 +145,7 @@ const MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const ORDER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 let rpcResult: { data: unknown; error: unknown };
+let amendmentCheckoutClaimResult: { data: unknown; error: unknown };
 let rpcTransactionResult: { data: unknown; error: unknown };
 let rpcDvaReservationResult: { data: unknown; error: unknown };
 let redvaultAttemptInitializeResult: { data: unknown; error: unknown };
@@ -171,6 +173,8 @@ function createMockSupabase() {
         });
       if (name === 'get_order_paystack_split_retained_shipping_kobo')
         return Promise.resolve({ data: 0, error: null });
+      if (name === 'claim_checkout_for_paid_order_amendment')
+        return Promise.resolve(amendmentCheckoutClaimResult);
       if (name === 'create_payment_transaction')
         return Promise.resolve(rpcTransactionResult);
       if (name === 'reserve_paystack_order_payment_account')
@@ -309,6 +313,7 @@ function setupDefaults() {
     ],
     error: null,
   };
+  amendmentCheckoutClaimResult = { data: 'untracked', error: null };
   rpcTransactionResult = { data: null, error: null };
   rpcDvaReservationResult = { data: 'inserted', error: null };
   redvaultAttemptInitializeResult = { data: null, error: null };
@@ -369,6 +374,137 @@ describe('POST /api/payments/initialize', () => {
       bank_name: 'Wema Bank',
     });
     setupDefaults();
+  });
+
+  it('rejects ordinary checkout before any provider call when an amendment wins', async () => {
+    amendmentCheckoutClaimResult = {
+      data: null,
+      error: { code: 'P0001', message: 'amendment_payment_open' },
+    };
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        tracking_token: 'track-token-123',
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+    });
+    expect(mockInitializePaystack).not.toHaveBeenCalled();
+    expect(
+      rpcCalls.some(({ name }) => name === 'create_payment_transaction')
+    ).toBe(false);
+  });
+
+  it('initializes integration-wallet pilot orders without a split or subaccount', async () => {
+    amendmentCheckoutClaimResult = { data: 'claimed_integration', error: null };
+    merchantResult = {
+      data: {
+        id: MERCHANT_ID,
+        business_name: 'Test Store',
+        slug: 'test-store',
+        paystack_subaccount_code: null,
+      },
+      error: null,
+    };
+    mockInitializePaystack.mockResolvedValueOnce({
+      authorization_url: 'https://checkout.paystack.com/sandbox-fixture',
+    });
+    const res = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        tracking_token: 'track-token-123',
+      })
+    );
+    expect(res.status).toBe(200);
+    const payload = mockInitializePaystack.mock.calls.at(-1)?.[0];
+    expect(payload.channels).toEqual(['card']);
+    expect(payload).not.toHaveProperty('subaccount');
+    expect(payload).not.toHaveProperty('transaction_charge');
+    expect(rpcCalls).toContainEqual({
+      name: 'claim_checkout_for_paid_order_amendment',
+      args: expect.objectContaining({ p_gateway: 'paystack_no_subaccount' }),
+    });
+  });
+
+  it('does not claim or submit after a local Paystack preflight failure', async () => {
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        customer_phone: 'not-a-phone',
+        tracking_token: 'track-token-123',
+      })
+    );
+    expect(response.status).toBe(502);
+    expect(
+      rpcCalls.some(
+        ({ name }) => name === 'claim_checkout_for_paid_order_amendment'
+      )
+    ).toBe(false);
+    expect(mockInitializePaystack).not.toHaveBeenCalled();
+  });
+
+  it('holds the checkout claim through provider acceptance and a failed local write', async () => {
+    amendmentCheckoutClaimResult = { data: 'claimed', error: null };
+    rpcTransactionResult = {
+      data: null,
+      error: { code: 'XX000', message: 'Synthetic transaction write failure' },
+    };
+    const providerCalled = Promise.withResolvers<void>();
+    const providerResponse = Promise.withResolvers<{
+      authorization_url: string;
+    }>();
+    mockInitializePaystack.mockImplementationOnce(() => {
+      providerCalled.resolve();
+      return providerResponse.promise;
+    });
+
+    const result = POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        tracking_token: 'track-token-123',
+      })
+    );
+    await Promise.race([
+      providerCalled.promise,
+      result.then(() => {
+        throw new Error('Checkout returned before calling the provider');
+      }),
+    ]);
+    const claim = rpcCalls.find(
+      ({ name }) => name === 'claim_checkout_for_paid_order_amendment'
+    );
+    expect(claim).toBeDefined();
+    expect(mockInitializePaystack).toHaveBeenCalledWith(
+      expect.objectContaining({ channels: ['card'] })
+    );
+    expect(
+      rpcCalls.some(({ name }) => name === 'create_payment_transaction')
+    ).toBe(false);
+
+    providerResponse.resolve({
+      authorization_url: 'https://paystack.com/pay/synthetic',
+    });
+    const response = await result;
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      code: 'TRANSACTION_CREATE_FAILED',
+    });
+    expect(
+      rpcCalls.filter(
+        ({ name }) => name === 'claim_checkout_for_paid_order_amendment'
+      )
+    ).toHaveLength(1);
+    expect(
+      rpcCalls.filter(({ name }) => name === 'create_payment_transaction')
+    ).toHaveLength(1);
+    expect(mockInitializePaystack).toHaveBeenCalledTimes(1);
   });
 
   describe('validation', () => {

@@ -62,12 +62,14 @@ export async function requestOrderGiglQuote({
       ? fetchOrderGiglPreview(queryClient, { cacheScope, orderId, receiver })
       : getOrderGiglQuote(orderId, receiver, signal, true);
   }
-  if (!storedOrder) return getOrderGiglQuote(orderId, receiver, signal);
+  if (!storedOrder) return getOrderGiglQuote(orderId, undefined, signal);
   const plan = receiver
     ? planOrderGiglAddressSave(storedOrder, receiver)
     : ({ kind: 'unchanged' } as const);
   if (plan.kind === 'locked') {
-    return getOrderGiglQuote(orderId, receiver, signal);
+    throw new Error(
+      'This order already has a shipping quote or checkout shipping. Review the address in Edit Order.'
+    );
   }
   if (plan.kind === 'save') {
     await saveOrderGiglShippingAddress(orderId, plan.shippingAddress, signal);

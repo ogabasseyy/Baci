@@ -1,0 +1,1 @@
+supabase/tests/piggyvest_migrated_legacy_wallet_balances.sql

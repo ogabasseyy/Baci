@@ -4,6 +4,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { CustomerOrderActions } from '@/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-actions';
 import { CustomerOrderPaymentHistory } from '@/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-payment-history';
+import { PaidOrderAmendmentNotice } from '@/components/paid-order-amendment-notice';
 import { OxygenOrderPlan } from '@/components/payments/oxygen/OxygenOrderPlan';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -66,8 +67,15 @@ export function CustomerOrderDetailsContent({
       ? 'Download Receipt'
       : isProformaInvoice
         ? 'Download Proforma Invoice'
-        : 'Download Invoice';
-  const documentHref = `/api/storefront/account/orders/${order.id}/${order.current_document_kind}?merchantSlug=${encodeURIComponent(merchantSlug)}`;
+        : order.amendment && !order.amendment.documentId
+          ? 'Download Original Invoice'
+          : 'Download Invoice';
+  const documentRevision = order.amendment
+    ? order.current_document_kind === 'receipt'
+      ? 'current'
+      : order.amendment.documentId
+    : null;
+  const documentHref = `/api/storefront/account/orders/${order.id}/${order.current_document_kind}?merchantSlug=${encodeURIComponent(merchantSlug)}${documentRevision ? `&revision=${documentRevision}` : ''}`;
   const firstItem = order.items[0];
   let buyAgainHref: Route | null = null;
   if (firstItem?.product_id) {
@@ -97,6 +105,32 @@ export function CustomerOrderDetailsContent({
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <div className="space-y-6">
+            {order.amendment && (
+              <>
+                <PaidOrderAmendmentNotice
+                  amendment={order.amendment}
+                  currency={currency}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button asChild variant="outline" size="sm">
+                    <a
+                      href={`/api/storefront/account/orders/${order.id}/invoice?merchantSlug=${encodeURIComponent(merchantSlug)}`}
+                    >
+                      Original invoice
+                    </a>
+                  </Button>
+                  {order.amendment.documentId && (
+                    <Button asChild variant="outline" size="sm">
+                      <a
+                        href={`/api/storefront/account/orders/${order.id}/invoice?merchantSlug=${encodeURIComponent(merchantSlug)}&revision=${order.amendment.documentId}`}
+                      >
+                        Revised invoice
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>Items</CardTitle>

@@ -20,6 +20,8 @@ const {
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: mockAuthenticateApiRequest,
   hasPermission: vi.fn(() => true),
+  hasBearerAuthScheme: (request: Request) =>
+    /^\s*Bearer(?:\s|$)/i.test(request.headers.get('authorization') ?? ''),
 }));
 
 vi.mock('@/lib/agentic/checkout-order-tax', () => ({
@@ -220,13 +222,13 @@ export function buildSupabaseMock() {
   return { rpc, supabase };
 }
 
-export function resetOrderRouteMocks() {
+export function resetOrderRouteMocks(userId?: string) {
   vi.clearAllMocks();
   const { supabase } = buildSupabaseMock();
   mockAuthenticateApiRequest.mockResolvedValue({
     error: null,
     supabase,
-    user: null,
+    user: userId ? { id: userId, email: 'customer@example.com' } : null,
   });
   mockComputeAgenticOrderTax.mockResolvedValue(75);
   mockComputeOrderNegotiationDiscount.mockResolvedValue({

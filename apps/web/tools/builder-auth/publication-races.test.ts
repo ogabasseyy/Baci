@@ -17,10 +17,28 @@ it('serializes duplicate confirmations and deduplicates identical effects with d
   const b = await f.request(secondKey);
   const p = await f.proof(a.intentId as string);
   const q = await f.proof(b.intentId as string);
-  const results = await Promise.all([
-    f.owner((c) => f.run(c, 'builder_confirm_publication', [a.intentId, p])),
-    f.owner((c) => f.run(c, 'builder_confirm_publication', [b.intentId, q])),
-  ]);
+  const confirmations = [
+    () =>
+      f.owner((c) => f.run(c, 'builder_confirm_publication', [a.intentId, p])),
+    () =>
+      f.owner((c) => f.run(c, 'builder_confirm_publication', [b.intentId, q])),
+  ];
+  const attempts = await Promise.allSettled(
+    confirmations.map((confirm) => confirm())
+  );
+  expect(attempts.some(({ status }) => status === 'fulfilled')).toBe(true);
+  const results = await Promise.all(
+    attempts.map((attempt, index) => {
+      if (attempt.status === 'fulfilled') return attempt.value;
+      // The nonblocking website guard may reject a concurrent attempt. Retry
+      // that exact confirmation only after the winning transaction has settled.
+      expect(attempt.reason).toMatchObject({
+        code: '40001',
+        message: 'website_busy',
+      });
+      return confirmations[index]();
+    })
+  );
   expect(results[0]).toEqual(results[1]);
   expect(await f.request(secondKey, b.version as string)).toEqual(results[0]);
   expect(

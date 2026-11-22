@@ -265,3 +265,31 @@ it.each([
     )
   ).rejects.toThrow();
 });
+
+it.each([
+  [
+    'We are currently reviewing your bank statement. Please check back later.',
+    'bank_statement',
+  ],
+  ['We are fetching your bank statement', 'bank_statement'],
+  ['Almost there! We are retrieving your credit score', 'credit_score'],
+  [
+    'We are currently reviewing your eligibility. Please check back later.',
+    'eligibility_review',
+  ],
+  ['We are currently processing your request', undefined],
+])('maps pending progress without retaining the provider message', async (message, progress) => {
+  const state: OxygenProviderState = { applicationReference: 'application' };
+  await refreshOxygenEligibility(context, state, {
+    call: vi.fn().mockResolvedValue({
+      ...response,
+      status: 'PENDING',
+      message,
+      is_eligible: false,
+    }),
+  });
+  expect(state).toMatchObject({ eligibilityStatus: 'pending' });
+  expect(state).not.toHaveProperty('eligible');
+  expect(state).not.toHaveProperty('message');
+  expect(state.eligibilityProgress).toBe(progress);
+});

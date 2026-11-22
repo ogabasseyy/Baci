@@ -1,8 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const { mockExpireProductBlogCache, mockReservationPurge } = vi.hoisted(() => ({
+const {
+  mockExpireProductBlogCache,
+  mockIsQuizEdgeConfigured,
+  mockProvisionQuizEdgeRooms,
+  mockReservationPurge,
+  mockRollbackQuizEdgeDraft,
+} = vi.hoisted(() => ({
   mockExpireProductBlogCache: vi.fn(),
+  mockIsQuizEdgeConfigured: vi.fn(() => true),
+  mockProvisionQuizEdgeRooms: vi.fn(),
   mockReservationPurge: vi.fn(),
+  mockRollbackQuizEdgeDraft: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('@/lib/schedule-reservation-product-purge', () => ({
   scheduleReservationProductPurge: mockReservationPurge,
@@ -10,6 +19,12 @@ vi.mock('@/lib/schedule-reservation-product-purge', () => ({
 
 vi.mock('@/lib/expire-product-blog-cache', () => ({
   expireProductBlogCache: mockExpireProductBlogCache,
+}));
+
+vi.mock('@/lib/quiz/quiz-edge-provision', () => ({
+  isQuizEdgeProvisioningConfigured: mockIsQuizEdgeConfigured,
+  provisionQuizEdgeRooms: mockProvisionQuizEdgeRooms,
+  rollbackQuizEdgeDraftBackendMode: mockRollbackQuizEdgeDraft,
 }));
 
 import { launchMerchantQuizDraftV2 } from './quiz-launch-v2';
@@ -235,5 +250,273 @@ describe('launchMerchantQuizDraftV2', () => {
       'active',
       'scheduled',
     ]);
+  });
+
+  it('provisions Edge rooms BEFORE launching and aborts launch on provisioning failure', async () => {
+    mockIsQuizEdgeConfigured.mockReturnValue(true);
+    mockProvisionQuizEdgeRooms.mockResolvedValueOnce({
+      code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
+      message: 'Worker unreachable',
+      ok: false,
+    });
+    const rpc = vi.fn();
+    const from = vi.fn();
+
+    const result = await launchMerchantQuizDraftV2({
+      input: {
+        ...baseInput,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 8,
+        maxAttempts: 1,
+        mode: 'live',
+        regulatoryCompliance: {
+          basis: 'free_skill_competition',
+          evidenceReference: 'COUNSEL-2026-08-05',
+          jurisdiction: 'NG-LA',
+        },
+        rulesVersion: 'live-v1',
+        timing: { kind: 'immediate', liveWindowSeconds: 60 },
+        variantsPerQuestion: 3,
+      },
+      merchantId: 'merchant-1',
+      now: new Date('2026-08-05T08:00:00.000Z'),
+      supabase: { from, rpc } as never,
+    });
+
+    expect(result).toEqual({
+      code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
+      message: 'Worker unreachable',
+      ok: false,
+    });
+    expect(rpc).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('returns already-launched edge_rooms event idempotently without re-initializing rooms', async () => {
+    mockIsQuizEdgeConfigured.mockReturnValue(true);
+    mockProvisionQuizEdgeRooms.mockResolvedValueOnce({
+      code: 'QUIZ_EVENT_NOT_DRAFT',
+      message: 'Not a draft',
+      ok: false,
+    });
+    const lookupBuilder = {
+      eq: vi.fn(() => lookupBuilder),
+      in: vi.fn(() => lookupBuilder),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          backend_mode: 'edge_rooms',
+          expected_room_count: 4,
+          id: baseInput.eventId,
+          slug: 'quiz',
+          status: 'active',
+          title: 'Quiz',
+        },
+        error: null,
+      }),
+      select: vi.fn(() => lookupBuilder),
+    };
+    const from = vi.fn(() => lookupBuilder);
+    const rpc = vi.fn();
+
+    const result = await launchMerchantQuizDraftV2({
+      input: {
+        ...baseInput,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 4,
+      },
+      merchantId: 'merchant-1',
+      now: new Date('2026-08-05T08:00:00.000Z'),
+      supabase: { from, rpc } as never,
+    });
+
+    expect(result).toEqual({
+      event: {
+        id: baseInput.eventId,
+        slug: 'quiz',
+        status: 'active',
+        title: 'Quiz',
+      },
+      ok: true,
+    });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects switching an already-launched postgres event to edge_rooms', async () => {
+    mockIsQuizEdgeConfigured.mockReturnValue(true);
+    mockProvisionQuizEdgeRooms.mockResolvedValueOnce({
+      code: 'QUIZ_EVENT_NOT_DRAFT',
+      message: 'Not a draft',
+      ok: false,
+    });
+    const lookupBuilder = {
+      eq: vi.fn(() => lookupBuilder),
+      in: vi.fn(() => lookupBuilder),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          backend_mode: 'postgres',
+          id: baseInput.eventId,
+          slug: 'quiz',
+          status: 'active',
+          title: 'Quiz',
+        },
+        error: null,
+      }),
+      select: vi.fn(() => lookupBuilder),
+    };
+
+    const result = await launchMerchantQuizDraftV2({
+      input: {
+        ...baseInput,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 4,
+      },
+      merchantId: 'merchant-1',
+      now: new Date('2026-08-05T08:00:00.000Z'),
+      supabase: { from: vi.fn(() => lookupBuilder) } as never,
+    });
+
+    expect(result).toMatchObject({
+      code: 'QUIZ_BACKEND_MODE_LOCKED',
+      ok: false,
+    });
+  });
+
+  it('rejects idempotent edge retry when requested edgeRoomCount drifts from expected_room_count', async () => {
+    mockIsQuizEdgeConfigured.mockReturnValue(true);
+    mockProvisionQuizEdgeRooms.mockResolvedValueOnce({
+      code: 'QUIZ_EVENT_NOT_DRAFT',
+      message: 'Not a draft',
+      ok: false,
+    });
+    const lookupBuilder = {
+      eq: vi.fn(() => lookupBuilder),
+      in: vi.fn(() => lookupBuilder),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          backend_mode: 'edge_rooms',
+          expected_room_count: 4,
+          id: baseInput.eventId,
+          slug: 'quiz',
+          status: 'active',
+          title: 'Quiz',
+        },
+        error: null,
+      }),
+      select: vi.fn(() => lookupBuilder),
+    };
+
+    const result = await launchMerchantQuizDraftV2({
+      input: {
+        ...baseInput,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 16,
+      },
+      merchantId: 'merchant-1',
+      now: new Date('2026-08-05T08:00:00.000Z'),
+      supabase: { from: vi.fn(() => lookupBuilder) } as never,
+    });
+
+    expect(result).toMatchObject({
+      code: 'QUIZ_EDGE_ROOM_COUNT_LOCKED',
+      ok: false,
+    });
+  });
+
+  it('rolls back draft backend_mode when live launch RPC fails after edge provisioning', async () => {
+    mockIsQuizEdgeConfigured.mockReturnValue(true);
+    mockProvisionQuizEdgeRooms.mockResolvedValueOnce({
+      ok: true,
+      roomCount: 8,
+    });
+    mockRollbackQuizEdgeDraft.mockClear();
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'QZ044', message: 'quiz_prize_stock_exhausted' },
+    });
+
+    const result = await launchMerchantQuizDraftV2({
+      input: {
+        ...baseInput,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 8,
+        maxAttempts: 1,
+        mode: 'live',
+        regulatoryCompliance: {
+          basis: 'free_skill_competition',
+          evidenceReference: 'COUNSEL-2026-08-05',
+          jurisdiction: 'NG-LA',
+        },
+        rulesVersion: 'live-v1',
+        timing: { kind: 'immediate', liveWindowSeconds: 60 },
+        variantsPerQuestion: 3,
+      },
+      merchantId: 'merchant-1',
+      now: new Date('2026-08-05T08:00:00.000Z'),
+      supabase: { rpc } as never,
+    });
+
+    expect(result).toMatchObject({
+      code: 'QUIZ_PRIZE_INVENTORY_UNAVAILABLE',
+      ok: false,
+    });
+    expect(mockRollbackQuizEdgeDraft).toHaveBeenCalledWith({
+      eventId: baseInput.eventId,
+      merchantId: 'merchant-1',
+      supabase: { rpc },
+    });
+  });
+
+  it('returns QUIZ_BACKEND_MODE_LOCKED on late QZ046 fallback when a racing launch won on postgres', async () => {
+    mockIsQuizEdgeConfigured.mockReturnValue(true);
+    mockProvisionQuizEdgeRooms.mockResolvedValueOnce({
+      ok: true,
+      roomCount: 8,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'QZ046', message: 'quiz_event_already_launched' },
+    });
+    const lookupBuilder = {
+      eq: vi.fn(() => lookupBuilder),
+      in: vi.fn(() => lookupBuilder),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          backend_mode: 'postgres',
+          expected_room_count: null,
+          id: baseInput.eventId,
+          slug: 'quiz',
+          status: 'active',
+          title: 'Quiz',
+        },
+        error: null,
+      }),
+      select: vi.fn(() => lookupBuilder),
+    };
+
+    const result = await launchMerchantQuizDraftV2({
+      input: {
+        ...baseInput,
+        backendMode: 'edge_rooms',
+        edgeRoomCount: 8,
+        maxAttempts: 1,
+        mode: 'live',
+        regulatoryCompliance: {
+          basis: 'free_skill_competition',
+          evidenceReference: 'COUNSEL-2026-08-05',
+          jurisdiction: 'NG-LA',
+        },
+        rulesVersion: 'live-v1',
+        timing: { kind: 'immediate', liveWindowSeconds: 60 },
+        variantsPerQuestion: 3,
+      },
+      merchantId: 'merchant-1',
+      now: new Date('2026-08-05T08:00:00.000Z'),
+      supabase: { from: vi.fn(() => lookupBuilder), rpc } as never,
+    });
+
+    expect(result).toMatchObject({
+      code: 'QUIZ_BACKEND_MODE_LOCKED',
+      ok: false,
+    });
   });
 });

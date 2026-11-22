@@ -1,3 +1,4 @@
+import { normalizeStreetAddressForComparison } from './normalize-street-address';
 import type {
   OrderGiglMissingField,
   OrderGiglReceiver,
@@ -16,7 +17,17 @@ export function applyAddressField(
   value: string
 ): Draft {
   if (!PIN_FIELDS.includes(field)) return { ...draft, [field]: value };
+  if (
+    field === 'address' &&
+    normalizeStreetAddressForComparison(draft.address ?? '') ===
+      normalizeStreetAddressForComparison(value)
+  ) {
+    return { ...draft, address: value };
+  }
   const { latitude: _lat, longitude: _lng, ...rest } = draft;
+  if (field === 'address') {
+    return { ...rest, address: value, city: '', state: '' };
+  }
   return { ...rest, [field]: value };
 }
 

@@ -1,3 +1,4 @@
+import { hasBankCardOfferReferencePrefix } from '@baci/shared/constants';
 import type { TrackedCompletionAttribution } from '@/lib/tracked-order-completion';
 import { checkReferenceSettled } from './verify-order-payment-reference-settlement';
 import {
@@ -35,7 +36,7 @@ export interface OrderPaymentVerification extends TrackedCompletionAttribution {
    * make such an order paid. Ordinary cancelled rows (no proven
    * capture) use `terminalFailure` instead.
    */
-  reconciliation?: 'order_cancelled' | 'order_skipped';
+  reconciliation?: 'order_cancelled' | 'order_skipped' | 'payment_reversed';
   /**
    * Transport/parse failure (not a verified unpaid row): callers that
    * must not treat absence-of-proof as proof-of-absence — the
@@ -96,7 +97,20 @@ export async function verifyOrderPaymentForCompletion({
           currency: settled.currency ?? paidAttribution.currency,
         };
       }
-      return tracked;
+      // A cached paid row cannot confirm a bank offer after a reversal.
+      return hasBankCardOfferReferencePrefix(reference) ? settled : tracked;
+    }
+    if (
+      tracked.reconciliation &&
+      reference &&
+      hasBankCardOfferReferencePrefix(reference)
+    ) {
+      const settled = await checkReferenceSettled(
+        orderId,
+        reference,
+        trackingToken
+      );
+      return settled.reconciliation === 'payment_reversed' ? settled : tracked;
     }
     if (tracked.paid || tracked.reconciliation) {
       return tracked;

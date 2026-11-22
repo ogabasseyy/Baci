@@ -29,7 +29,7 @@ export interface GoogleMerchantFeedData {
   imageManifest: ImageManifestMap;
 }
 
-const GOOGLE_MERCHANT_FEED_DATA_CACHE_VERSION = 'variant-feed-data-v6';
+const GOOGLE_MERCHANT_FEED_DATA_CACHE_VERSION = 'variant-feed-data-v7';
 
 function getJoinedCategory(
   product: RawFeedProductRow

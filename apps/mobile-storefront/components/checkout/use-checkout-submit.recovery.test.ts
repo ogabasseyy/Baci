@@ -276,7 +276,8 @@ describe('useCheckoutSubmit recovery', () => {
     expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
       checkoutError,
       'paystack',
-      undefined
+      undefined,
+      expect.any(Function)
     );
   });
 

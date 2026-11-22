@@ -161,6 +161,52 @@ describe('Admin GIGL provider, persistence, binding, and wallet behavior', () =>
     });
   });
 
+  it('holds partner delivery when the fresh GIG rate differs from the settled fee', async () => {
+    mocks.bindRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'partner_delivery_price_changed' },
+    });
+    const response = await subject({ receiver });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'PARTNER_DELIVERY_PRICE_CHANGED',
+    });
+  });
+
+  it('reports immutable settled order amounts as a conflict', async () => {
+    mocks.bindRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'partner_settled_order_amounts_immutable' },
+    });
+    const response = await subject({ receiver });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'PARTNER_SETTLED_ORDER_AMOUNTS_IMMUTABLE',
+    });
+  });
+
+  it.each([
+    ['partner_delivery_service_changed', 'PARTNER_DELIVERY_SERVICE_CHANGED'],
+    [
+      'partner_delivery_origin_or_parcel_changed',
+      'PARTNER_DELIVERY_ORIGIN_OR_PARCEL_CHANGED',
+    ],
+    [
+      'partner_delivery_destination_changed',
+      'PARTNER_DELIVERY_DESTINATION_CHANGED',
+    ],
+  ])('holds partner delivery on %s', async (message, code) => {
+    mocks.bindRpc.mockResolvedValue({
+      data: null,
+      error: { message },
+    });
+    const response = await subject({ receiver });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code,
+    });
+  });
+
   it('maps a non-conflict binder error to 500', async () => {
     mocks.bindRpc.mockResolvedValue({
       data: null,

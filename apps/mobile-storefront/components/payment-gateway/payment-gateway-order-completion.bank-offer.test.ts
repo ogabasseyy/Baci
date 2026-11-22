@@ -1,0 +1,155 @@
+import { expect, it, jest } from '@jest/globals';
+import { router } from 'expo-router';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
+import { settleOrderCompletion } from './payment-gateway-order-completion';
+import { verifyOrderPaymentForCompletion } from './verify-order-payment';
+
+jest.mock('expo-router', () => ({ router: { replace: jest.fn() } }));
+jest.mock('@/lib/deferred-bank-offer-cart', () => ({
+  deferredBankOfferCart: {
+    capture: jest.fn(() => 'cart-identity'),
+    remember: jest.fn(async () => undefined),
+    clearIfUnchanged: jest.fn(async () => undefined),
+  },
+}));
+jest.mock('@/services/analytics', () => ({
+  trackCheckoutPaymentCompletedOnce: jest.fn(async () => undefined),
+}));
+jest.mock('./settle-redvault-funnel-completion', () => ({}));
+jest.mock('./verify-order-payment', () => ({
+  verifyOrderPaymentForCompletion: jest.fn(),
+}));
+
+it('leaves the gateway pending and preserves the cart while the order screen verifies a bank offer', async () => {
+  jest
+    .mocked(verifyOrderPaymentForCompletion)
+    .mockResolvedValueOnce({ paid: false });
+  const clearCart = jest.fn<() => void>();
+  const setPaymentStatus = jest.fn();
+  const reference = `BCO-${'a'.repeat(32)}`;
+  await settleOrderCompletion(
+    {
+      orderId: 'order-1',
+      reference,
+      clearCart,
+      clearPendingLoadTimeout: jest.fn(),
+      isMountedRef: { current: true },
+      paymentCompletionStartedRef: { current: false },
+      scheduleDelayedNavigation: (navigate) => navigate(),
+      setErrorMessage: jest.fn(),
+      setPaymentStatus,
+    },
+    undefined,
+    false
+  );
+
+  expect(setPaymentStatus).toHaveBeenLastCalledWith('pending');
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.capture).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
+  expect(router.replace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pathname: '/order-success',
+      params: expect.objectContaining({ reference }),
+    })
+  );
+});
+
+it('rejects a malformed bank offer reference before navigation or cart changes', async () => {
+  jest.clearAllMocks();
+  const clearCart = jest.fn<() => void>();
+  const setPaymentStatus = jest.fn();
+  await settleOrderCompletion(
+    {
+      orderId: 'order-1',
+      reference: `bco-${'a'.repeat(32)}`,
+      clearCart,
+      clearPendingLoadTimeout: jest.fn(),
+      isMountedRef: { current: true },
+      paymentCompletionStartedRef: { current: false },
+      scheduleDelayedNavigation: (navigate) => navigate(),
+      setErrorMessage: jest.fn(),
+      setPaymentStatus,
+    },
+    undefined,
+    false
+  );
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
+  expect(router.replace).not.toHaveBeenCalled();
+  expect(verifyOrderPaymentForCompletion).not.toHaveBeenCalled();
+  expect(setPaymentStatus).toHaveBeenLastCalledWith('error');
+});
+
+it('does not alter the saved cart snapshot when the gateway closes during verification', async () => {
+  jest.clearAllMocks();
+  const isMountedRef = { current: true };
+  jest
+    .mocked(verifyOrderPaymentForCompletion)
+    .mockImplementationOnce(async () => {
+      isMountedRef.current = false;
+      return { paid: false };
+    });
+  const reference = `BCO-${'a'.repeat(32)}`;
+  const clearCart = jest.fn<() => void>();
+  const navigate = jest.fn();
+
+  await settleOrderCompletion(
+    {
+      orderId: 'order-1',
+      reference,
+      clearCart,
+      clearPendingLoadTimeout: jest.fn(),
+      isMountedRef,
+      paymentCompletionStartedRef: { current: false },
+      scheduleDelayedNavigation: navigate,
+      setErrorMessage: jest.fn(),
+      setPaymentStatus: jest.fn(),
+    },
+    undefined,
+    false
+  );
+
+  expect(deferredBankOfferCart.capture).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.clearIfUnchanged).not.toHaveBeenCalled();
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(navigate).not.toHaveBeenCalled();
+});
+
+it('uses only the original checkout snapshot when an older bank-offer payment completes', async () => {
+  jest.clearAllMocks();
+  jest
+    .mocked(verifyOrderPaymentForCompletion)
+    .mockResolvedValueOnce({ paid: true });
+  const clearCart = jest.fn<() => void>();
+  const setPaymentStatus = jest.fn();
+  const reference = `BCO-${'a'.repeat(32)}`;
+  await settleOrderCompletion(
+    {
+      orderId: 'order-1',
+      reference,
+      clearCart,
+      clearPendingLoadTimeout: jest.fn(),
+      isMountedRef: { current: true },
+      paymentCompletionStartedRef: { current: false },
+      scheduleDelayedNavigation: (navigate) => {
+        expect(deferredBankOfferCart.clearIfUnchanged).toHaveBeenCalledWith(
+          'order-1',
+          reference,
+          expect.any(Function)
+        );
+        navigate();
+      },
+      setErrorMessage: jest.fn(),
+      setPaymentStatus,
+    },
+    undefined,
+    false
+  );
+  expect(setPaymentStatus).toHaveBeenLastCalledWith('success');
+  expect(clearCart).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.capture).not.toHaveBeenCalled();
+  expect(deferredBankOfferCart.remember).not.toHaveBeenCalled();
+});

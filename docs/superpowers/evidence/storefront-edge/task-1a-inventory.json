@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "1d0442b7fa000a0917d4e4819b4484b3f5b6135f",
+  "originMainSha": "bfefa9ae5db20f91d6034d2c470fe19e5d72f22a",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "9face1fa1c4a1cf512928f0de4cef5a2a0c4b11012663b1da829ecc10197deac",
-  "routingProxyInputSha256": "bd9bc8063c902a3d4a6fb9eee8076177ec8aa135408598155dcdbdc15e3e1bfd",
+  "routeTreeSha256": "15ce85be14ff6cc148585aae60473c4e72854a8fc4fa569bef732f88f99828df",
+  "routingProxyInputSha256": "8888cbbaed8348231103e5df3df0fedeec5f6c89cd091d23ffcc2cdc9b0d488e",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -6991,6 +6991,18 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(commerce)/gift-cards/page.tsx",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/gift-cards",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(commerce)/gift-cards/page.tsx"
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(commerce)/order-success/page.tsx",
       "methods": [
         "GET",
@@ -8394,6 +8406,22 @@
     {
       "decision": "origin_dynamic",
       "reason": "request_state_or_origin_action_required",
+      "id": "storefront:(commerce)/gift-cards/page.tsx:slug-prefixed",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "routePattern": "/{storefrontIdentifier}/gift-cards",
+      "sourceKind": "storefront_entrypoint",
+      "sourcePath": "apps/web/src/app/(storefront)/[slug]/(commerce)/gift-cards/page.tsx",
+      "hostCondition": {
+        "hostKind": "platform_root_domain",
+        "precedence": "before_path_decision"
+      }
+    },
+    {
+      "decision": "origin_dynamic",
+      "reason": "request_state_or_origin_action_required",
       "id": "storefront:(commerce)/order-success/page.tsx:slug-prefixed",
       "methods": [
         "GET",
@@ -9470,5 +9498,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "9ea1f5e61693bede73c764525e1a663dedd5a35650e5ace3457e2d84a36a7319"
+  "inventorySha256": "e307c2cb0b8c6dac9f9359b6d3b12df8052decf497a3e1b8ad2eb627d7bfdfda"
 }

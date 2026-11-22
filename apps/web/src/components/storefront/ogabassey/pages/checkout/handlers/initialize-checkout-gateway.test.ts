@@ -36,6 +36,49 @@ describe('initializeCheckoutGateway', () => {
     );
   });
 
+  it('initializes the saved bank-offer order through Paystack with CSRF', async () => {
+    const browserFetch = vi.fn().mockResolvedValue(
+      response({
+        success: true,
+        authorization_url: 'https://checkout.paystack.com/example',
+      })
+    );
+    vi.stubGlobal('document', { cookie: 'csrf-token=proof' });
+    vi.stubGlobal('fetch', browserFetch);
+    try {
+      await initializeCheckoutGateway({
+        ...options,
+        order: { ...options.order, payment_method: 'bank_card_offer' },
+        gateway: 'korapay',
+      });
+      expect(browserFetch).toHaveBeenCalledExactlyOnceWith(
+        '/api/payments/initialize',
+        expect.objectContaining({ credentials: 'include' })
+      );
+      const init = browserFetch.mock.calls[0]?.[1];
+      expect(new Headers(init.headers).get('x-csrf-token')).toBe('proof');
+      expect(JSON.parse(init.body)).toMatchObject({
+        gateway: 'paystack',
+        order_id: 'order-1',
+        payment_method: 'bank_card_offer',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it.each([
+    202, 503,
+  ])('keeps a bank-offer initialization retry on its order (%s)', async (status) => {
+    await expect(
+      initializeCheckoutGateway({
+        ...options,
+        order: { ...options.order, payment_method: 'bank_card_offer' },
+        request: vi.fn().mockResolvedValue(response({}, status)),
+      })
+    ).rejects.toThrow('Retry from the same order');
+  });
+
   it('keeps the initializer failure recoverable by surfacing its safe API message', async () => {
     await expect(
       initializeCheckoutGateway({

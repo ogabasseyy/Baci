@@ -68,7 +68,7 @@ describe('requestOrderGiglQuote', () => {
     ).toBeNull();
   });
 
-  it('keeps the legacy receiver override when the stored order is unknown', async () => {
+  it('binds from the saved address when the stored order is unavailable locally', async () => {
     await requestOrderGiglQuote({
       draft,
       orderId: 'order-1',
@@ -76,7 +76,8 @@ describe('requestOrderGiglQuote', () => {
       queryClient: new QueryClient(),
       signal,
     });
-    expect(api.getQuote).toHaveBeenCalledWith('order-1', draft, signal);
+    expect(api.getQuote).toHaveBeenCalledWith('order-1', undefined, signal);
+    expect(api.saveAddress).not.toHaveBeenCalled();
   });
 
   it('saves typed details before binding without an override', async () => {
@@ -129,7 +130,25 @@ describe('requestOrderGiglQuote', () => {
     expect(api.getQuote).toHaveBeenCalledWith('order-1', undefined, signal);
   });
 
-  it('leaves orders with a saved quote on the receiver override path', async () => {
+  it('rejects a changed receiver when an order already has a saved quote', async () => {
+    await expect(
+      requestOrderGiglQuote({
+        draft,
+        orderId: 'order-1',
+        preview: false,
+        queryClient: new QueryClient(),
+        signal,
+        storedOrder: {
+          selected_quote_id: 'quote-1',
+          shipping_address: { ...draft, city: 'Yaba', name: 'Ada' },
+        },
+      })
+    ).rejects.toThrow('This order already has a shipping quote');
+    expect(api.saveAddress).not.toHaveBeenCalled();
+    expect(api.getQuote).not.toHaveBeenCalled();
+  });
+
+  it('requests a bound quote for an unchanged saved receiver', async () => {
     await requestOrderGiglQuote({
       draft,
       orderId: 'order-1',
@@ -138,10 +157,10 @@ describe('requestOrderGiglQuote', () => {
       signal,
       storedOrder: {
         selected_quote_id: 'quote-1',
-        shipping_address: { address: '1 Allen', name: 'Ada', phone: '0801' },
+        shipping_address: { ...draft, name: 'Ada' },
       },
     });
     expect(api.saveAddress).not.toHaveBeenCalled();
-    expect(api.getQuote).toHaveBeenCalledWith('order-1', draft, signal);
+    expect(api.getQuote).toHaveBeenCalledWith('order-1', undefined, signal);
   });
 });

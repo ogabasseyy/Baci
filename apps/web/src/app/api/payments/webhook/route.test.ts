@@ -3081,6 +3081,41 @@ describe('POST /api/payments/webhook', () => {
       return { logger, reference, request, reviewInsert };
     }
 
+    it('acknowledges a verified stale capture without allocating it to the order', async () => {
+      const { reference, request, reviewInsert } =
+        await preparePaystackZeroCandidateRequest();
+      const ordinaryRpc = vi
+        .mocked(mockServiceClient.rpc)
+        .getMockImplementation();
+      if (!ordinaryRpc) throw new Error('Missing RPC fixture');
+      vi.mocked(mockServiceClient.rpc).mockImplementation(
+        (name: string, args: unknown) => {
+          if (name !== 'resolve_paid_order_checkout_capture') {
+            return ordinaryRpc(name, args);
+          }
+          const result = { data: { outcome: 'unapplied' }, error: null };
+          return Object.assign(Promise.resolve(result), {
+            single: () => Promise.resolve(result),
+          });
+        }
+      );
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        code: 'PAID_ORDER_CAPTURE_REQUIRES_REVIEW',
+      });
+      expect(mockServiceClient.rpc).toHaveBeenCalledWith(
+        'resolve_paid_order_checkout_capture',
+        expect.objectContaining({ p_reference: reference })
+      );
+      expect(mockServiceClient.rpc).not.toHaveBeenCalledWith(
+        'complete_order_gateway_payment',
+        expect.anything()
+      );
+      expect(reviewInsert).not.toHaveBeenCalled();
+    });
+
     it('does not acknowledge Paystack payments when local transaction lookup fails', async () => {
       const body = {
         event: 'charge.success',

@@ -1,10 +1,14 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import type { useNewOrderController } from '@/hooks/useNewOrderController';
 import { parseGoogleAddressDetails } from './google-address-details';
 import { NewOrderManualLocalityFields } from './NewOrderManualLocalityFields';
 import { styles } from './new-order.styles';
+import {
+  clearGeocodedFields,
+  isFormattingOnlyStreetEdit,
+} from './new-order-address-input-utils';
 
 interface NewOrderAddressInputProps {
   controller: Pick<
@@ -17,19 +21,6 @@ interface NewOrderAddressInputProps {
 const DETAILS_RECOVERY_ERROR =
   'Could not load full address details. Enter city and state to continue.';
 
-function clearGeocodedFields<T extends object>(previous: T): T {
-  return {
-    ...previous,
-    city: '',
-    state: '',
-    country: '',
-    countryCode: '',
-    postalCode: '',
-    latitude: undefined,
-    longitude: undefined,
-  };
-}
-
 export function NewOrderAddressInput({
   controller,
   googleMapsApiKey,
@@ -37,12 +28,45 @@ export function NewOrderAddressInput({
   const { colors, deliveryInfo, setDeliveryInfo } = controller;
   const hasGoogleMapsApiKey = Boolean(googleMapsApiKey);
   const selectedDescriptionRef = useRef<string | null>(null);
+  const latestStreetRef = useRef(deliveryInfo.address);
+  const latestLocalityRef = useRef({
+    city: deliveryInfo.city,
+    state: deliveryInfo.state,
+  });
   const [detailsRecovery, setDetailsRecovery] = useState(false);
+  const [manualLocality, setManualLocality] = useState(false);
 
-  const setCity = (text: string) =>
-    setDeliveryInfo((previous) => ({ ...previous, city: text }));
-  const setState = (text: string) =>
-    setDeliveryInfo((previous) => ({ ...previous, state: text }));
+  useLayoutEffect(() => {
+    latestStreetRef.current = deliveryInfo.address;
+  }, [deliveryInfo.address]);
+
+  useLayoutEffect(() => {
+    latestLocalityRef.current = {
+      city: deliveryInfo.city,
+      state: deliveryInfo.state,
+    };
+  }, [deliveryInfo.city, deliveryInfo.state]);
+
+  const setLocality = (field: 'city' | 'state', text: string) => {
+    const previousText = latestLocalityRef.current[field];
+    if (previousText.trim().toLowerCase() !== text.trim().toLowerCase()) {
+      // Keep the confirmation visible after reverting: the original pin was
+      // invalidated by the first edit and typing back cannot restore it.
+      setManualLocality(true);
+    }
+    latestLocalityRef.current[field] = text;
+    setDeliveryInfo((previous) => {
+      if (previous[field].trim().toLowerCase() === text.trim().toLowerCase()) {
+        return { ...previous, [field]: text };
+      }
+      return {
+        ...previous,
+        [field]: text,
+        latitude: undefined,
+        longitude: undefined,
+      };
+    });
+  };
 
   return (
     <View style={{ zIndex: 5 }}>
@@ -82,7 +106,10 @@ export function NewOrderAddressInput({
             }}
             onPress={(data, details = null) => {
               selectedDescriptionRef.current = data.description;
+              latestStreetRef.current = data.description;
+              setManualLocality(false);
               if (!details) {
+                latestLocalityRef.current = { city: '', state: '' };
                 setDetailsRecovery(true);
                 setDeliveryInfo((previous) => ({
                   ...clearGeocodedFields(previous),
@@ -95,6 +122,10 @@ export function NewOrderAddressInput({
               const missingLocality = !(
                 parsed.city.trim() && parsed.state.trim()
               );
+              latestLocalityRef.current = {
+                city: parsed.city,
+                state: parsed.state,
+              };
               setDetailsRecovery(missingLocality);
               setDeliveryInfo((previous) => ({
                 ...previous,
@@ -137,6 +168,9 @@ export function NewOrderAddressInput({
                 const selectedDescription = selectedDescriptionRef.current;
                 const preserveSelection =
                   selectedDescription !== null && text === selectedDescription;
+                const previousStreet =
+                  selectedDescription ?? latestStreetRef.current;
+                latestStreetRef.current = text;
                 if (preserveSelection) {
                   setDeliveryInfo((previous) => ({
                     ...previous,
@@ -146,8 +180,20 @@ export function NewOrderAddressInput({
                 }
                 selectedDescriptionRef.current = null;
                 setDetailsRecovery(false);
+                const keepsDestination = isFormattingOnlyStreetEdit(
+                  previousStreet,
+                  text
+                );
+                if (!keepsDestination) {
+                  setManualLocality(Boolean(text.trim()));
+                }
+                if (!keepsDestination) {
+                  latestLocalityRef.current = { city: '', state: '' };
+                }
                 setDeliveryInfo((previous) => ({
-                  ...clearGeocodedFields(previous),
+                  ...(keepsDestination
+                    ? previous
+                    : clearGeocodedFields(previous)),
                   address: text,
                 }));
               },
@@ -165,19 +211,30 @@ export function NewOrderAddressInput({
               value: deliveryInfo.address,
             }}
           />
-          {detailsRecovery ? (
+          {detailsRecovery ||
+          manualLocality ||
+          (deliveryInfo.address.trim() &&
+            !(deliveryInfo.city.trim() && deliveryInfo.state.trim())) ? (
             <View style={{ marginTop: 8 }}>
-              <Text
-                accessibilityRole="alert"
-                style={[styles.listSubValue, { color: colors.warning }]}
-              >
-                {DETAILS_RECOVERY_ERROR}
-              </Text>
+              {manualLocality ? (
+                <Text style={[styles.listSubValue, { color: colors.warning }]}>
+                  Confirm the city and state match the delivery address before
+                  saving.
+                </Text>
+              ) : null}
+              {detailsRecovery ? (
+                <Text
+                  accessibilityRole="alert"
+                  style={[styles.listSubValue, { color: colors.warning }]}
+                >
+                  {DETAILS_RECOVERY_ERROR}
+                </Text>
+              ) : null}
               <NewOrderManualLocalityFields
                 city={deliveryInfo.city}
                 colors={colors}
-                onCityChange={setCity}
-                onStateChange={setState}
+                onCityChange={(text) => setLocality('city', text)}
+                onStateChange={(text) => setLocality('state', text)}
                 state={deliveryInfo.state}
               />
             </View>
@@ -186,14 +243,26 @@ export function NewOrderAddressInput({
       ) : (
         <>
           <TextInput
-            onChangeText={(text) =>
+            onChangeText={(text) => {
+              const previousStreet = latestStreetRef.current;
+              latestStreetRef.current = text;
+              const keepsDestination = isFormattingOnlyStreetEdit(
+                previousStreet,
+                text
+              );
+              if (!keepsDestination) {
+                setManualLocality(Boolean(text.trim()));
+              }
+              if (!keepsDestination) {
+                latestLocalityRef.current = { city: '', state: '' };
+              }
               setDeliveryInfo((previous) => ({
-                ...previous,
+                ...(keepsDestination
+                  ? previous
+                  : clearGeocodedFields(previous)),
                 address: text,
-                latitude: undefined,
-                longitude: undefined,
-              }))
-            }
+              }));
+            }}
             placeholder="Enter delivery address"
             placeholderTextColor={colors.textMuted}
             style={[
@@ -210,8 +279,8 @@ export function NewOrderAddressInput({
           <NewOrderManualLocalityFields
             city={deliveryInfo.city}
             colors={colors}
-            onCityChange={setCity}
-            onStateChange={setState}
+            onCityChange={(text) => setLocality('city', text)}
+            onStateChange={(text) => setLocality('state', text)}
             state={deliveryInfo.state}
           />
           <Text style={[styles.listSubValue, { color: colors.warning }]}>

@@ -16,6 +16,10 @@
       "path": "components/checkout/CheckoutScreenView.tsx",
       "justification": "Reviewed Android hardware-back handling, list virtualization, and monospace font selection."
     },
+    {
+      "path": "components/oxygen-checkout/OxygenBirthDateInput.tsx",
+      "justification": "Reviewed native monospace selection to align the editable birth date with its fixed-width format guide."
+    },
     "components/quiz/QuizPrizeCheckoutSimulationScreen.tsx",
     {
       "path": "components/checkout/CheckoutScreenView.styles.ts",
@@ -332,6 +336,10 @@
     {
       "path": "components/wallet-pay/wallet-pay-purchase-keys.ts",
       "justification": "Reviewed web-only cross-tab lock (navigator.locks) so two browser tabs never mint two wallet-pay keys for one purchase; native runs one JS runtime."
+    },
+    {
+      "path": "services/oxygen/multipart.ts",
+      "justification": "Multipart transport boundary: React Native Blob rejects typed-array parts and requires a transient URI file descriptor; browser FormData requires Blob and otherwise stringifies that descriptor. iOS and Android share the same native path; both serialization contracts have focused tests."
     }
   ],
   "knownForbiddenPatterns": []

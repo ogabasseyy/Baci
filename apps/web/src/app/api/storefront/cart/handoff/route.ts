@@ -7,6 +7,7 @@ import {
   rpcHandoffMerchantId,
   rpcPreviewHandoff,
 } from '@/lib/cart/handoff';
+import { isMcpWebsiteHandoff } from '@/lib/cart/mcp-handoff-preview';
 import {
   CART_HANDOFF_PREVIEW_SCOPE,
   checkAnonymousCartQuota,
@@ -221,6 +222,7 @@ export async function GET(request: NextRequest) {
     }
 
     return cartJsonResponse({
+      ...(isMcpWebsiteHandoff(handoffToken) ? { importMcp: true } : {}),
       expiresAt: preview.expiresAt,
       merchant: preview.merchant,
       snapshot: preview.snapshot,

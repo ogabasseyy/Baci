@@ -73,7 +73,11 @@ async function flushMicrotasks(cycles = 10) {
 
 function createMockSupabase() {
   return {
-    rpc: mockRpc,
+    rpc: (...args: Parameters<typeof mockRpc>) => ({
+      order: () => ({
+        range: () => mockRpc(...args),
+      }),
+    }),
     from: (table: string) => {
       if (table === 'domains') {
         return {

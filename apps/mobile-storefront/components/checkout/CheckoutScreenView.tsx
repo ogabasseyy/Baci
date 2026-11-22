@@ -155,6 +155,7 @@ export function CheckoutScreenView({
   );
   const { handleContinue, handlePlaceOrder } = useCheckoutStepActions({
     onRedvaultOrder: openRedvaultReview,
+    invalidateShippingQuote: shipping.invalidateShippingQuote,
     accountPassword,
     appliedDiscountCode: compatibleDiscount?.code ?? null,
     availablePaymentMethods,

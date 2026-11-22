@@ -1,1 +1,3 @@
 apps/web/src/components/storefront/ogabassey/pdp/server-primary-details.tsx text diff
+# The checked-in widget bundle is generated and verified by widgets/build.mjs.
+apps/web/mcp-server/assets/ogabassey-store.html -diff linguist-generated=true

@@ -2,13 +2,25 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { useCart } from '@/hooks/cart';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
 import { resolveGuestCartTransfer } from '@/lib/resolve-guest-cart-transfer';
+import {
+  cartHandoffPairingTokenSchema,
+  cartHandoffPreviewQuerySchema,
+  cartHandoffRedeemRequestSchema,
+} from '@/schemas/cart';
 import { CartAccountLink } from '../../cart/cart-account-link';
 import { CartHandoff } from '../../cart/cart-handoff';
-import { loadActiveHandoff } from '../../cart/cart-handoff-support';
+import {
+  clearActiveHandoff,
+  loadActiveHandoff,
+  recordActiveHandoff,
+  redactHandoffFragment,
+  reloadCartHandoffDocument,
+} from '../../cart/cart-handoff-support';
 import { CartImportConflicts } from '../../cart/cart-import-conflicts';
 import { CartPage } from './cart-page';
 
@@ -31,14 +43,17 @@ interface CartPageWrapperProps {
  */
 export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, vatRate = 7.5 }: CartPageWrapperProps) {
   const searchParams = useSearchParams();
-  const { addToCart, cart, isHydrated } = useCart();
+  const { addToCart, cart, importStatus, isHydrated, sharedCartEnabled } = useCart();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   // Both server and browser render the same initial tree; read the fragment
   // after hydration and retain it when the continuation strips the URL.
   const [pairing, setPairing] = useState<ReturnType<typeof parseHandoffPairing>>(null);
   const [pairingChecked, setPairingChecked] = useState(false);
+  const capturedPairing = useRef(false);
   useEffect(() => {
+    if (capturedPairing.current) return;
+    capturedPairing.current = true;
     // After a reload the fragment is already redacted; fall back to
     // the tab-scoped locator recorded before redaction so an
     // unresolved handoff (and its persisted attempt) stays reachable.
@@ -52,8 +67,54 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
         locator.merchantSlug === merchantSlug)
         ? locator
         : null;
-    setPairing(parseHandoffPairing(window.location.hash) ?? scopedLocator);
+    const fragment = parseHandoffPairing(window.location.hash);
+    if (fragment) {
+      recordActiveHandoff(fragment.token, fragment.handoffId, merchantSlug);
+      redactHandoffFragment();
+    }
+    setPairing(fragment ?? scopedLocator);
     setPairingChecked(true);
+  }, [merchantSlug]);
+
+  useEffect(() => {
+    let reloading = false;
+    let previousHash = window.location.hash;
+    function acceptHandoffNavigation() {
+      const { hash, pathname } = window.location;
+      if (
+        reloading ||
+        hash === previousHash ||
+        !/^\/(?:[^/]+\/)?cart\/?$/.test(pathname)
+      ) return;
+      previousHash = hash;
+      const handoff = parseHandoffPairing(hash);
+      // Ignore malformed late fragments so ordinary cart work is preserved.
+      // Well-formed links still use the existing expired/invalid link UI.
+      if (
+        !handoff ||
+        !cartHandoffPairingTokenSchema.safeParse(handoff.token).success ||
+        !cartHandoffRedeemRequestSchema.shape.token.safeParse(handoff.token).success ||
+        !cartHandoffPreviewQuerySchema.safeParse({ handoff_id: handoff.handoffId }).success
+      ) return;
+
+      // The mounted cart can still have a bootstrap in flight. A reload
+      // enters through the existing handoff gate before that bootstrap starts.
+      reloading = true;
+      reloadCartHandoffDocument();
+    }
+
+    const navigation = window.navigation;
+    // History API writes can change the fragment without emitting hashchange.
+    navigation?.addEventListener('currententrychange', acceptHandoffNavigation);
+    const legacyHistoryCheck = navigation
+      ? undefined
+      : window.setInterval(acceptHandoffNavigation, 1000);
+    window.addEventListener('hashchange', acceptHandoffNavigation);
+    return () => {
+      navigation?.removeEventListener('currententrychange', acceptHandoffNavigation);
+      window.clearInterval(legacyHistoryCheck);
+      window.removeEventListener('hashchange', acceptHandoffNavigation);
+    };
   }, []);
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);
@@ -61,7 +122,7 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
   useEffect(() => {
     // A pairing owns the surface: importing link items into the local cart
     // underneath the continuation choice would corrupt the merge decision.
-    if (pairing || parseHandoffPairing(window.location.hash)) return;
+    if (!pairingChecked || pairing) return;
     const guestTransfer = resolveGuestCartTransfer(searchParams.get('guest_cart'));
     const itemIds = guestTransfer ? guestTransfer.itemIds : searchParams.get('item_id');
     const rawQuantity = searchParams.get('qty');
@@ -126,11 +187,28 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
       toast,
       setIsLoading,
     }).then((succeeded) => { if (!succeeded) processedRef.current = false; });
-  }, [searchParams, merchantId, addToCart, cart, toast, isHydrated, pairing]);
+  }, [searchParams, merchantId, addToCart, cart, toast, isHydrated, pairing, pairingChecked]);
 
-  // The pairing needs no local cart: mount the continuation immediately so
-  // the transfer screen and its third-party scripts never see the secret.
-  if (pairing) {
+  // Let the website's saved device cart finish adoption before an additive
+  // handoff. Otherwise adoption could reconcile two distinct adds as one.
+  const waitingForLocalImport =
+    !!pairing && sharedCartEnabled &&
+    (!isHydrated || importStatus === 'pending' ||
+      (importStatus === 'none' && cart.length > 0));
+  if (pairing && sharedCartEnabled && importStatus === 'failed') {
+    return (
+      <section aria-label="Cart handoff" className="mx-auto max-w-xl px-4 py-10">
+        <p role="alert">Review the items saved on this device before opening this cart link again.</p>
+        <Button type="button" onClick={() => {
+          clearActiveHandoff(pairing.handoffId);
+          window.location.replace(window.location.pathname + window.location.search);
+        }}>
+          View website cart
+        </Button>
+      </section>
+    );
+  }
+  if (pairing && !waitingForLocalImport) {
     return <CartHandoff token={pairing.token} handoffId={pairing.handoffId} />;
   }
 
@@ -138,13 +216,13 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
   // account panel bootstraps on mount) must stay unmounted: its
   // uncancellable bootstrap could land after handoff redemption and
   // overwrite the cart-bound proof with a cart-less one.
-  if (!pairingChecked || !isHydrated || isLoading) {
+  if (!pairingChecked || waitingForLocalImport || !isHydrated || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-store-background">
         <div className="text-center" role="status">
           <div className="mx-auto mb-4 size-12 animate-spin rounded-full border-4 border-store-background-text/18 border-t-(--store-primary)" />
           <p className="text-store-background-text/65">
-            {isHydrated ? 'Adding items to cart…' : 'Loading your cart…'}
+            {isHydrated && !waitingForLocalImport ? 'Adding items to cart…' : 'Loading your cart…'}
           </p>
         </div>
       </div>

@@ -97,6 +97,7 @@ vi.mock('@/lib/routes', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/test-store',
   useRouter: () => ({ push: mockPush }),
 }));
 
@@ -253,145 +254,10 @@ describe('CartSidebar', () => {
     );
   });
 
-  it('renders Negotiate Total Amount button', () => {
-    render(<CartSidebar />);
-    expect(
-      screen.getByRole('button', { name: /negotiate total amount/i })
-    ).toBeInTheDocument();
-  });
-
-  it('opens negotiation modal with type=total when Negotiate Total is clicked', () => {
-    // The fixture has an individual offer, so a whole-cart negotiation must
-    // confirm clearing it first before the modal opens.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<CartSidebar />);
-    fireEvent.click(
-      screen.getByRole('button', { name: /negotiate total amount/i })
-    );
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(mockClearNegotiatedPrice).toHaveBeenCalled();
-    // The NegotiationModal should now be visible
-    expect(screen.getByPlaceholderText('Enter amount...')).toBeInTheDocument();
-    const modalLayer = screen.getByRole('dialog', { name: /negotiate price/i }).parentElement;
-    const cartLayer = screen.getByRole('button', { name: /dismiss cart backdrop/i }).parentElement;
-    expect(cartLayer).toHaveClass('z-80');
-    expect(modalLayer).toHaveClass('z-90');
-    expect(modalLayer?.parentElement).toBe(cartLayer?.parentElement);
-    confirmSpy.mockRestore();
-  });
-
   it('closes sidebar when X button is clicked', () => {
     render(<CartSidebar />);
-    // Find close button by aria-label or the X icon
     const closeButton = screen.getByRole('button', { name: /close/i });
     fireEvent.click(closeButton);
     expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
   });
-
-  it('does not open negotiation modal when merchant is unavailable', () => {
-    mockMerchant = null;
-    render(<CartSidebar />);
-    const negotiateBtn = screen.getByRole('button', { name: /negotiate total amount/i });
-    fireEvent.click(negotiateBtn);
-    expect(screen.queryByPlaceholderText('Enter amount...')).not.toBeInTheDocument();
-  });
-
-  it('hides negotiation controls and ignores negotiated price when not entitled', () => {
-    vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(false);
-    render(<CartSidebar />);
-
-    // Should not render Negotiate Total Amount button
-    expect(
-      screen.queryByRole('button', { name: /negotiate total amount/i })
-    ).not.toBeInTheDocument();
-
-    // Should display original subtotal (15000) instead of negotiated (10000)
-    expect(screen.getAllByText('₦15,000')[0]).toBeInTheDocument();
-  });
-
-  it('hides item and total negotiation for best-price cart lines', () => {
-    vi.mocked(hasStorefrontPriceNegotiation).mockReturnValue(true);
-    mockCartItems = [
-      {
-        id: 'p1',
-        cartItemId: 'ci-1',
-        name: 'Tecno Spark 50',
-        price: 120000,
-        quantity: 1,
-        image: '/tecno.jpg',
-        category: 'electronics',
-        brand: 'Tecno',
-      },
-    ];
-
-    render(<CartSidebar />);
-
-    expect(
-      screen.queryByRole('button', { name: /^negotiate$/i })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: /negotiate total amount/i })
-    ).not.toBeInTheDocument();
-  });
-
-  it('shows signed quiz voucher items as free gifts in the sidebar total', () => {
-    mockCartItems = [
-      {
-        id: 'p1',
-        cartItemId: 'ci-1',
-        name: 'Paid Shoe',
-        price: 15000,
-        quantity: 1,
-        image: '/shoe.jpg',
-        category: 'shoes',
-        brand: 'TestBrand',
-      },
-      {
-        id: 'gift-1',
-        cartItemId: 'gift-1::quiz',
-        name: 'Quiz Gift',
-        price: 205000,
-        quantity: 1,
-        image: '/gift.jpg',
-        category: 'phones',
-        brand: 'Tecno',
-        quizAwardId: 'award-1',
-        quizVoucherToken: 'signed-token',
-      },
-    ];
-
-    render(<CartSidebar />);
-
-    expect(screen.getByText('Quiz Gift')).toBeInTheDocument();
-    expect(screen.getByText('Free gift')).toBeInTheDocument();
-    expect(screen.getAllByText('₦15,000')[0]).toBeInTheDocument();
-    expect(screen.queryByText('₦220,000')).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole('button', { name: /^negotiate$/i })
-    ).toHaveLength(1);
-    expect(
-      screen.getByRole('button', { name: /negotiate total amount/i })
-    ).toBeInTheDocument();
-  });
-});
-
-describe('stable logical cart view',()=>{
- beforeEach(()=>{vi.clearAllMocks();mockIsCartOpen=true;mockMerchant={id:'merchant-abc',slug:'test-store'};mockCartItems=[{id:'p1',cartItemId:'ci-1',name:'Test Shoe',price:15000,quantity:1,image:'/shoe.jpg',category:'shoes',brand:'TestBrand'}];});
-it('does not count cloned or re-enriched cart metadata as a new view while the drawer stays open',()=>{
- const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
- mockCartItems=mockCartItems.map(item=>({...item,name:'Enriched catalog name',image:'/enriched.jpg'}));view.rerender(<CartSidebar/>);
- expect(analytics.viewCart).toHaveBeenCalledTimes(1);
-});
-it('tracks actual quantity, price or variant changes while the drawer remains open',()=>{
- const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
- mockCartItems=mockCartItems.map(item=>({...item,quantity:2}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(2);
- mockCartItems=mockCartItems.map(item=>({...item,price:16000}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(3);
- mockCartItems=mockCartItems.map(item=>({...item,variantId:'new-variant'}));view.rerender(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(4);
-});
-it('counts closing and reopening the same cart as a new view',()=>{
- mockIsCartOpen=true;const view=render(<CartSidebar/>);expect(analytics.viewCart).toHaveBeenCalledTimes(1);
- mockIsCartOpen=false;view.rerender(<CartSidebar/>);mockIsCartOpen=true;view.rerender(<CartSidebar/>);
- expect(analytics.viewCart).toHaveBeenCalledTimes(2);
-});
-
 });

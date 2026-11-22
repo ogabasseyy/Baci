@@ -1,4 +1,7 @@
-import type { ChatAutoReply } from '@/schemas/chat-auto-reply';
+import {
+  CHAT_AUTO_REPLY_MAX_LENGTH,
+  type ChatAutoReply,
+} from '@/schemas/chat-auto-reply';
 
 /**
  * The line the old storefront chat showed under product suggestions. Kept
@@ -13,7 +16,8 @@ export const CHAT_NARROW_DOWN_NUDGE =
  * - the customer was browsing or asking for a suggestion (not adding to the
  *   cart, asking about one product, or something else);
  * - the store really had products to show;
- * - the assistant is answering itself rather than handing over.
+ * - the assistant is answering itself rather than handing over;
+ * - the answer with the line still fits the reply length limit.
  */
 export function withNarrowDownNudge(
   draft: ChatAutoReply,
@@ -24,7 +28,9 @@ export function withNarrowDownNudge(
   if (!suggestsProducts || productCount === 0) return draft;
   if (draft.needsHuman || draft.reply.length === 0) return draft;
   if (draft.reply.includes(CHAT_NARROW_DOWN_NUDGE)) return draft;
-  return { ...draft, reply: `${draft.reply}\n\n${CHAT_NARROW_DOWN_NUDGE}` };
+  const reply = `${draft.reply}\n\n${CHAT_NARROW_DOWN_NUDGE}`;
+  if (reply.length > CHAT_AUTO_REPLY_MAX_LENGTH) return draft;
+  return { ...draft, reply };
 }
 
 /**

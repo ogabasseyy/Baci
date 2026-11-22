@@ -20,6 +20,7 @@ import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { logger } from '@/lib/logger';
 import { ensurePermission } from '@/lib/merchant-server';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
+import { loadPaidOrderDocument } from '@/lib/orders/paid-order-amendment-document';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
 import { sendEmail } from '@/lib/zeptomail';
@@ -72,6 +73,7 @@ interface OrderConfirmationRecord {
     city?: string;
     state?: string;
   };
+  source?: string | null;
   order_items?: Array<{
     name?: string;
     quantity?: number;
@@ -85,6 +87,7 @@ export type {
 } from './map-jumia-dashboard-order';
 
 const ORDER_CONFIRMATION_SELECT = [
+  'source',
   'id',
   'merchant_id',
   'order_number',
@@ -594,6 +597,20 @@ export async function resendOrderConfirmation(
         error: orderError,
       });
       return { success: false, message: 'Order not found' };
+    }
+
+    if (order.source === 'online_store') {
+      const revision = await loadPaidOrderDocument(
+        supabase,
+        order.id,
+        'current'
+      );
+      if (revision.error || revision.data?.amendment) {
+        return {
+          success: false,
+          message: 'Order changes are sent with the current order update.',
+        };
+      }
     }
 
     if (!order.customer_email) {

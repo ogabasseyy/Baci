@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineChatDvaCredentialPaths } from './event-pipeline-chat-dva-credential-paths';
 import { eventPipelineChatPushCredentialPaths } from './event-pipeline-chat-push-credential-paths';
 import { eventPipelineChatwootCartCredentialPaths } from './event-pipeline-chatwoot-cart-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
@@ -14,6 +15,7 @@ import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-imm
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
 import { eventPipelineManualOrderDocumentCredentialPaths } from './event-pipeline-manual-order-document-credential-paths';
 import { onboardingEmailWorkerAuthority } from './event-pipeline-onboarding-authority-paths';
+import { eventPipelinePaidOrderAmendmentCredentialPaths } from './event-pipeline-paid-order-amendment-paths';
 import { eventPipelinePaystackRefundCredentialPaths } from './event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
@@ -278,6 +280,8 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineFeedbackCredentialPaths,
       ...onboardingEmailWorkerAuthority.credentialPaths,
       ...eventPipelineChatPushCredentialPaths,
+      ...eventPipelineChatDvaCredentialPaths,
+      ...eventPipelinePaidOrderAmendmentCredentialPaths,
       ...vpsCronWorkerAuthority.credentialPaths,
     ]);
   });

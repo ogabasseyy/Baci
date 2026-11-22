@@ -14,6 +14,8 @@ void initializeMcpApp();
 
 // Main App Component
 export function App() {
+  const catalogOnly =
+    document.documentElement.dataset.ogabasseyCatalogOnly === 'true';
   const toolOutput = useOpenAiGlobal('toolOutput') as {
     products?: Product[];
     status?: string;
@@ -119,7 +121,7 @@ export function App() {
                 Expand catalog
               </button>
             )}
-          {cart.length > 0 && (
+          {!catalogOnly && cart.length > 0 && (
             <button
               type="button"
               className="cart-badge"
@@ -144,13 +146,13 @@ export function App() {
         </div>
       </header>
 
-      {isSavingCart && <p role="status">Saving your guest cart…</p>}
-      {(cartError || hostError) && (
+      {!catalogOnly && isSavingCart && <p role="status">Saving your guest cart…</p>}
+      {(hostError || (!catalogOnly && cartError)) && (
         <p role="alert" className="cart-error">
-          {cartError || hostError}
+          {(!catalogOnly && cartError) || hostError}
         </p>
       )}
-      {cartNotice && (
+      {!catalogOnly && cartNotice && (
         <p role="status" className="coverage-notice">
           {cartNotice}
         </p>
@@ -171,6 +173,7 @@ export function App() {
               key={product.id}
               product={product}
               isSavingCart={isSavingCart}
+              catalogOnly={catalogOnly}
               isInCart={cart.some((item) => item.product.id === product.id)}
               onAddToCart={handleAddToCart}
               onViewCart={handleViewCart}
@@ -203,16 +206,16 @@ export function App() {
         </div>
       )}
 
-      <CartSummary
+      {!catalogOnly && <CartSummary
         cart={cart}
         canReview={canReviewCart}
         onViewCart={handleViewCart}
         onRemoveItem={handleRemoveItem}
         isSavingCart={isSavingCart}
-      />
+      />}
 
       {/* Mobile Sticky Footer */}
-      {canReviewCart && (
+      {!catalogOnly && canReviewCart && (
         <div className="mobile-sticky-footer">
           <button
             type="button"

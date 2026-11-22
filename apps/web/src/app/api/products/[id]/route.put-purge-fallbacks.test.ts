@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const PRODUCT_ID = 'product-456';
 
@@ -157,7 +157,13 @@ describe('PUT /api/products/[id] storefront purge fallbacks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     productSelectArgs.length = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    );
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('purges the old category listing when only the category moves', async () => {
     product = {

@@ -49,6 +49,7 @@ export async function GET(
       userId: auth.user.id,
       merchantSlug: parsedQuery.data.merchantSlug,
       orderId: parsedParams.data.id,
+      view: 'order',
     });
 
     return NextResponse.json({ order: data.order });

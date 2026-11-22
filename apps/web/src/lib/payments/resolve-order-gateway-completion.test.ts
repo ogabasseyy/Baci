@@ -78,6 +78,7 @@ describe('gateway completion routing', () => {
       completion,
       redvaultDuplicate: false,
       redvaultInventoryConfirmed: true,
+      verifiedGatewayResponse: input.gatewayResponse,
     });
     expect(mocks.complete).not.toHaveBeenCalled();
   });
@@ -186,5 +187,28 @@ describe('gateway completion routing', () => {
     });
     expect(mocks.verify).not.toHaveBeenCalled();
     expect(mocks.complete).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    `bco-${'a'.repeat(32)}`,
+    `BCO-${'A'.repeat(32)}`,
+  ])('rejects noncanonical bank-offer reference %s before ordinary completion', async (reference) => {
+    mocks.capture.mockResolvedValue({ kind: 'not_redvault' });
+    mocks.complete.mockResolvedValue({
+      ok: true,
+      completion: { order_updated: true },
+    });
+    expect(
+      await resolveOrderGatewayCompletion({ ...input, reference })
+    ).toMatchObject({
+      ok: false,
+      outcome: {
+        kind: 'completion_failed',
+        error: new Error('invalid_bank_offer_reference'),
+      },
+    });
+    expect(createStorefrontOrderRpcClient).not.toHaveBeenCalled();
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.complete).not.toHaveBeenCalled();
   });
 });

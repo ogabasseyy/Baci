@@ -76,6 +76,49 @@ describe('normalizeAddressForQuoteMatch', () => {
 
 describe('matchesQuoteDestination', () => {
   it.each([
+    'Abuja',
+    'FCT',
+    'Federal Capital Territory',
+  ])('matches the Nigerian state alias %s with the canonical quote state', (state) => {
+    expect(
+      matchesQuoteDestination(
+        makeOrderAddress({ address: '3 Example Street', city: 'Abuja', state }),
+        makeQuoteRequest({
+          receiver: {
+            address: '3 Example Street',
+            city: 'Abuja',
+            state: 'FCT - Abuja',
+          },
+        })
+      )
+    ).toBe(true);
+  });
+
+  it('keeps a different state, city or street mismatched', () => {
+    const quote = makeQuoteRequest({
+      receiver: {
+        address: '3 Example Street',
+        city: 'Abuja',
+        state: 'FCT - Abuja',
+      },
+    });
+    const order = makeOrderAddress({
+      address: '3 Example Street',
+      city: 'Abuja',
+      state: 'Abuja',
+    });
+    for (const changed of [
+      { state: 'Nasarawa' },
+      { city: 'Kubwa' },
+      { address: '4 Example Street' },
+    ]) {
+      expect(matchesQuoteDestination({ ...order, ...changed }, quote)).toBe(
+        false
+      );
+    }
+  });
+
+  it.each([
     '12 Admiralty Way',
     '12 Admiralty Way, Lagos, Lagos',
   ])('matches a domestic composed quote street against order street %s', (address) => {

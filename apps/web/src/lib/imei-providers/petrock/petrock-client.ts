@@ -106,6 +106,58 @@ export function createPetrockClient({
     }
   }
 
+  async function submit(
+    submission: Pick<
+      PetrockOrderSubmission,
+      'productId' | 'feedbackUrl' | 'referenceId'
+    >,
+    productFields: Record<string, string> = {}
+  ): Promise<PetrockClientResult<PetrockSubmittedOrder>> {
+    const result = await request('/order', {
+      body: JSON.stringify([
+        {
+          fields: [
+            {
+              ...productFields,
+              feedback_url: submission.feedbackUrl,
+              reference_id: submission.referenceId,
+              Quantity: 1,
+            },
+          ],
+          ...(/^\d+$/.test(submission.productId)
+            ? { product_id: Number(submission.productId) }
+            : { product_uuid: submission.productId }),
+        },
+      ]),
+      method: 'POST',
+      redirect: 'error',
+    });
+    if (!result.ok) return result;
+
+    const parsed = petrockSubmitOrderResponseSchema.safeParse(result.data);
+    const order = parsed.success ? parsed.data.data[0]?.[0] : undefined;
+    if (
+      !order ||
+      (order.reference_id !== undefined &&
+        order.reference_id !== submission.referenceId)
+    ) {
+      return {
+        kind: 'invalid_response',
+        message: 'Petrock submit response did not include an order UUID',
+        ok: false,
+      };
+    }
+
+    return {
+      data: {
+        orderUuid: order.order_uuid,
+        referenceId: order.reference_id,
+      },
+      ok: true,
+      rawText: result.rawText,
+    };
+  }
+
   return {
     async getAccount(): Promise<PetrockClientResult<PetrockAccount>> {
       const result = await request('/account');
@@ -122,7 +174,8 @@ export function createPetrockClient({
     },
 
     async getOrder(
-      orderUuid: string
+      orderUuid: string,
+      { requireOrderUuid = false } = {}
     ): Promise<PetrockClientResult<PetrockOrder>> {
       const result = await request(
         `/order?order_uuid=${encodeURIComponent(orderUuid)}`
@@ -132,7 +185,7 @@ export function createPetrockClient({
       const parsed = petrockOrderResponseSchema.safeParse(result.data);
       if (
         !parsed.success ||
-        (parsed.data.data.order_uuid !== undefined &&
+        ((requireOrderUuid || parsed.data.data.order_uuid !== undefined) &&
           parsed.data.data.order_uuid !== orderUuid)
       ) {
         return {
@@ -173,51 +226,19 @@ export function createPetrockClient({
       return { data: parsed.data, ok: true, rawText: result.rawText };
     },
 
-    async submitOrder(
-      submission: PetrockOrderSubmission
-    ): Promise<PetrockClientResult<PetrockSubmittedOrder>> {
-      const result = await request('/order', {
-        body: JSON.stringify([
-          {
-            fields: [
-              {
-                [submission.orderFieldName]: submission.identifier,
-                feedback_url: submission.feedbackUrl,
-                reference_id: submission.referenceId,
-                Quantity: 1,
-              },
-            ],
-            ...(/^\d+$/.test(submission.productId)
-              ? { product_id: Number(submission.productId) }
-              : { product_uuid: submission.productId }),
-          },
-        ]),
-        method: 'POST',
+    submitOrder(submission: PetrockOrderSubmission) {
+      return submit(submission, {
+        [submission.orderFieldName]: submission.identifier,
       });
-      if (!result.ok) return result;
+    },
 
-      const parsed = petrockSubmitOrderResponseSchema.safeParse(result.data);
-      const order = parsed.success ? parsed.data.data[0]?.[0] : undefined;
-      if (
-        !order ||
-        (order.reference_id !== undefined &&
-          order.reference_id !== submission.referenceId)
-      ) {
-        return {
-          kind: 'invalid_response',
-          message: 'Petrock submit response did not include an order UUID',
-          ok: false,
-        };
-      }
-
-      return {
-        data: {
-          orderUuid: order.order_uuid,
-          referenceId: order.reference_id,
-        },
-        ok: true,
-        rawText: result.rawText,
-      };
+    submitGiftCardOrder(
+      submission: Pick<
+        PetrockOrderSubmission,
+        'productId' | 'feedbackUrl' | 'referenceId'
+      >
+    ) {
+      return submit(submission);
     },
   };
 }

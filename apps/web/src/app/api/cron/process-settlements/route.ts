@@ -3,6 +3,8 @@ import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { notifyMerchant } from '@/lib/expo-push';
 import { logger } from '@/lib/logger';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
+import { drainPaidOrderAmendmentUpdates } from '@/lib/orders/paid-order-amendment-update';
+import { drainPaystackAmendmentRefunds } from '@/lib/payments/paystack-amendment-refund';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendEmail } from '@/lib/zeptomail';
 import { processSettlementsQuerySchema } from '@/schemas/process-settlements-query';
@@ -28,6 +30,42 @@ import {
  * Security: Requires Authorization: Bearer <CRON_SECRET>
  */
 export const maxDuration = 300;
+
+async function drainAmendmentWork(
+  supabase: ReturnType<typeof createServiceClient>,
+  invocationStartedAt: number
+) {
+  const amendmentDeadlineMs = invocationStartedAt + 50_000;
+  if (process.env.PAID_ORDER_AMENDMENT_REFUND_WORKER_ENABLED === 'true') {
+    try {
+      await drainPaystackAmendmentRefunds(
+        supabase,
+        invocationStartedAt + 35_000
+      );
+    } catch (error) {
+      logger.error({
+        message: 'Amendment refund worker could not complete its pass',
+        error,
+      });
+    }
+  }
+  if (
+    process.env.PAID_ORDER_AMENDMENT_UPDATES_ENABLED === 'true' &&
+    Date.now() < amendmentDeadlineMs
+  ) {
+    try {
+      await drainPaidOrderAmendmentUpdates(
+        supabase,
+        Math.min(Date.now() + 15_000, amendmentDeadlineMs)
+      );
+    } catch (error) {
+      logger.error({
+        message: 'Amendment update worker could not complete its pass',
+        error,
+      });
+    }
+  }
+}
 
 export async function POST(request: Request) {
   const invocationStartedAt = Date.now();
@@ -62,9 +100,25 @@ export async function POST(request: Request) {
 
     const supabase = createServiceClient();
     if (parsedQuery.data.cancellationsOnly === 'true') {
-      return processCancellationDrain(supabase, sendEmail, notifyMerchant);
+      // Ordinary cancellations have a short reconciliation window. Run
+      // amendment work alongside it to preserve both workers' budgets.
+      const [cancellation] = await Promise.allSettled([
+        processCancellationDrain(
+          supabase,
+          sendEmail,
+          notifyMerchant,
+          invocationStartedAt
+        ),
+        drainAmendmentWork(supabase, invocationStartedAt),
+      ]);
+      if (cancellation.status === 'rejected') throw cancellation.reason;
+      return cancellation.value;
     }
 
+    // Give due amendment refunds and wallet corrections a short head start
+    // before releasing daily settlements. The SQL hold protects only orders
+    // with open refunds, and later drains also use the original cron clock.
+    await drainAmendmentWork(supabase, invocationStartedAt);
     // 1. Process due settlements
     const { data: processResult, error: processError } = await supabase.rpc(
       'process_due_settlements'

@@ -1,8 +1,4 @@
-import type {
-  CustomerWalletPaymentAccount,
-  CustomerWalletPaymentCustomer,
-  CustomerWalletPaymentMerchant,
-} from '@/lib/customer-wallet-payment-accounts';
+import type { CustomerWalletPaymentAccount } from '@/lib/customer-wallet-payment-accounts';
 
 export type WalletFundingPaymentProvider = 'paystack';
 
@@ -67,11 +63,6 @@ export interface OrderWalletFundingOrder {
 }
 
 export interface OrderWalletFundingIntentRepository {
-  ensureWalletPaymentAccount(args: {
-    consentedAt: Date;
-    customer: CustomerWalletPaymentCustomer;
-    merchant: CustomerWalletPaymentMerchant;
-  }): Promise<CustomerWalletPaymentAccount>;
   expireStaleWalletFundingIntents(args: {
     customerId?: string;
     merchantId?: string;

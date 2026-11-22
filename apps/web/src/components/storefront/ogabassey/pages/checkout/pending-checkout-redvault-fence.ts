@@ -43,6 +43,8 @@ type FencedOrderState = {
   id?: string;
   order_number?: string;
   total?: number | string;
+  currency?: string;
+  payment_method?: string;
   payment_status?: string;
   shipping_status?: string;
 };

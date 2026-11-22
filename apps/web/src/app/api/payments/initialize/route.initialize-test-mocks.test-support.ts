@@ -112,6 +112,7 @@ vi.mock('@/lib/korapay', () => ({
 // Paystack mocks
 const mockInitializePaystack = vi.fn();
 vi.mock('@/lib/paystack', () => ({
+  isPaystackConfigured: () => true,
   initializeTransaction: (...args: unknown[]) =>
     mockInitializePaystack(...args),
   calculatePlatformFee: (amount: number) => ({

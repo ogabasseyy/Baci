@@ -123,6 +123,12 @@ describe('buildLlmsText()', () => {
     const response = createLlmsResponse(request, false);
     const body = await response.text();
 
+    expect(response.headers.get('cache-control')).toBe(
+      'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400'
+    );
+    expect(response.headers.get('vercel-cdn-cache-control')).toBe(
+      'public, s-maxage=86400, stale-while-revalidate=86400'
+    );
     expect(body).toContain('# Baci Storefront');
     expect(body).toContain('https://ogabassey.com/sitemap.xml');
     expect(body).toContain(

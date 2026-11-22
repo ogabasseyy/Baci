@@ -2,6 +2,10 @@ import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-tra
 import { isManualAllocatableRefundLeg } from './is-manual-allocatable-refund-leg';
 import { isUnverifiedManualPaystackRefund } from './is-unverified-manual-paystack-refund';
 import { normalizeRefundMoneyField } from './normalize-refund-money-field';
+import {
+  paystackCancellationCaptureAmounts,
+  paystackCancellationRefundProviderAmount,
+} from './paystack-cancellation-capture-amounts';
 
 interface CancellationRefundRow {
   amount: unknown;
@@ -59,12 +63,14 @@ export function matchCancellationRefundCoverage({
   mismatchedIds: Set<string>;
   mismatchedTransactions: GatewayPaymentTransaction[];
   refundedPaymentIds: Set<string>;
+  amendmentRemainders: Map<string, number>;
   unattributedUnlinkedCount: number;
   unverifiedLinkedLegIds: Set<string>;
 } {
   const normalizeMoneyField = normalizeRefundMoneyField;
   const legById = new Map(transactions.map((leg) => [leg.id, leg]));
   const matchedRefundKobo = new Map<string, number>();
+  const verifiedAmendmentKobo = new Map<string, number>();
   const completedLinkedLegIds = new Set<string>();
   // Non-manual terminal rows that cannot count as coverage (foreign
   // currency or cross-gateway): anomalous even beside full valid
@@ -163,10 +169,47 @@ export function matchCancellationRefundCoverage({
       unverifiedLinkedLegIds.add(paymentId);
       continue;
     }
+    const captureAmounts =
+      rowGateway === 'PAYSTACK'
+        ? paystackCancellationCaptureAmounts(leg)
+        : undefined;
+    if (
+      captureAmounts &&
+      (captureAmounts.grossMinor !== captureAmounts.principalMinor ||
+        (row.metadata as Record<string, unknown> | null)
+          ?.provider_refund_amount_minor !== undefined) &&
+      (linkedId === null ||
+        paystackCancellationRefundProviderAmount(
+          {
+            amount: Number(row.amount),
+            metadata: row.metadata as Record<string, unknown> | null,
+          },
+          captureAmounts
+        ) === null)
+    ) {
+      nonCountingCompletedLegIds.add(paymentId);
+      continue;
+    }
     const rowKobo = Math.round(Number(row.amount) * 100);
     if (!Number.isSafeInteger(rowKobo) || rowKobo <= 0) {
       if (attributed) unattributedUnlinkedCount += 1;
       continue;
+    }
+    const evidence = row.metadata as {
+      paid_order_amendment_refund_id?: unknown;
+      provider_refund_id?: unknown;
+    } | null;
+    if (
+      linkedId !== null &&
+      rowGateway === 'PAYSTACK' &&
+      typeof evidence?.paid_order_amendment_refund_id === 'string' &&
+      typeof evidence.provider_refund_id === 'string' &&
+      /^[1-9][0-9]{0,19}$/.test(evidence.provider_refund_id)
+    ) {
+      verifiedAmendmentKobo.set(
+        paymentId,
+        (verifiedAmendmentKobo.get(paymentId) ?? 0) + rowKobo
+      );
     }
     matchedRefundKobo.set(
       paymentId,
@@ -174,6 +217,7 @@ export function matchCancellationRefundCoverage({
     );
   }
   const refundedPaymentIds = new Set<string>();
+  const amendmentRemainders = new Map<string, number>();
   const manualPendingLegIds = new Set<string>();
   const mismatchedTransactions: GatewayPaymentTransaction[] = [];
   for (const leg of transactions) {
@@ -196,6 +240,17 @@ export function matchCancellationRefundCoverage({
       continue;
     }
     if (refundedPaymentIds.has(leg.id)) {
+      continue;
+    }
+    const attributedAmendment = verifiedAmendmentKobo.get(leg.id);
+    if (
+      attributedAmendment !== undefined &&
+      attributedAmendment > 0 &&
+      attributedAmendment < legKobo &&
+      attributedAmendment === matchedRefundKobo.get(leg.id) &&
+      !manualLinkedLegIds.has(leg.id)
+    ) {
+      amendmentRemainders.set(leg.id, legKobo - attributedAmendment);
       continue;
     }
     // Non-manual terminal evidence short of coverage (partial
@@ -223,6 +278,7 @@ export function matchCancellationRefundCoverage({
     mismatchedTransactions.map((transaction) => transaction.id)
   );
   return {
+    amendmentRemainders,
     manualLinkedLegIds,
     manualPendingLegIds,
     mismatchedIds,

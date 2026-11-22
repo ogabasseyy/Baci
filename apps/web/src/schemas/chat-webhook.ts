@@ -22,7 +22,15 @@ export const chatWebhookMessageCreatedSchema = z.object({
   conversation: z.object({
     id: providerId,
     status: z.string().max(40).nullish(),
-    labels: z.array(z.string().max(100)).max(50).nullish(),
+    // The provider caps neither label length nor count. Labels are optional
+    // context here, so over-long ones are dropped and the list is cut to 50
+    // rather than failing the whole event, which would lose the message.
+    labels: z
+      .array(z.string())
+      .transform((labels) =>
+        labels.filter((label) => label.length <= 100).slice(0, 50)
+      )
+      .nullish(),
   }),
   sender: z
     .object({ name: z.string().nullish(), type: z.string().max(40).nullish() })

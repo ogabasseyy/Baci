@@ -13,7 +13,10 @@ import { STOREFRONT_FEED_ROUTES } from '@/config/storefront-feed-routes';
 export type LlmsSurface = 'platform-admin' | 'merchant-storefront';
 
 const DEFAULT_ROOT_DOMAIN = 'usebaci.com';
-const CACHE_CONTROL = 'public, max-age=3600, s-maxage=3600';
+const CACHE_CONTROL =
+  'public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400';
+const VERCEL_CDN_CACHE_CONTROL =
+  'public, s-maxage=86400, stale-while-revalidate=86400';
 
 function normalizeHostname(hostname: string): string {
   return hostname
@@ -215,6 +218,7 @@ export function createLlmsResponse(
     headers: {
       'Content-Type': 'text/markdown; charset=utf-8',
       'Cache-Control': CACHE_CONTROL,
+      'Vercel-CDN-Cache-Control': VERCEL_CDN_CACHE_CONTROL,
       'X-Robots-Tag': 'noarchive',
     },
   });

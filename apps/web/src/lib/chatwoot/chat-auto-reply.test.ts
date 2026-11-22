@@ -269,6 +269,7 @@ describe('recordMerchantTakeover', () => {
   });
 
   it('only relabels a conversation that is already open', async () => {
+    mocks.snapshot.mockResolvedValueOnce({ status: 'open', labels: [] });
     await recordMerchantTakeover(binding, staff('open'));
     expect(mocks.status).not.toHaveBeenCalled();
     expect(mocks.labels).toHaveBeenCalledOnce();

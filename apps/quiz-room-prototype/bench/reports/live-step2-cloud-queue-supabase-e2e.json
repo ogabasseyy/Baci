@@ -1,0 +1,40 @@
+{
+  "eventId": "8e7ab03d-c00d-463e-b7c4-a85cea2cdbcd",
+  "playerCount": 1000,
+  "roomCount": 4,
+  "seedMs": 9582,
+  "playSec": 18.84,
+  "playersCompleted": 1000,
+  "clientErrors": 0,
+  "answersCount": 10000,
+  "answerRps": 530.7,
+  "answerLatencyMs": {
+    "p50": 158.7,
+    "p95": 298.8,
+    "p99": 953.4,
+    "under1sRatePct": 99.29
+  },
+  "cloudflareQueueDelivery": {
+    "batchesDeliveredToSupabase": 116,
+    "attemptsStagedInSupabase": 1000,
+    "queueDrainSec": 11.91
+  },
+  "supabaseFinalization": {
+    "scoreAndMaterializeMs": 2071,
+    "scoreResult": {
+      "reused": false,
+      "eventId": "8e7ab03d-c00d-463e-b7c4-a85cea2cdbcd",
+      "scoringRunId": "dcc36d77-4505-4618-8d06-2b39c509dbab",
+      "answersWritten": 0,
+      "resultsWritten": 1000,
+      "attemptsWritten": 1000,
+      "persistedCloseAt": "2026-11-20T17:24:48.554+00:00",
+      "questionsWritten": 0,
+      "tailBatchesScored": 116,
+      "tailAttemptsScored": 1000,
+      "manifestChecksumSha256": "2e23c154f44cfabbc436519ab2a6d16096a0da84492c3997cb1d7a917e69c180",
+      "canonicalAnswersBackfillDeferred": true
+    },
+    "awardsCreated": 0
+  }
+}

@@ -265,11 +265,13 @@ describe('GET /api/orders/[id]/invoice', () => {
           },
           documentNumber: original ? null : 1,
           inputs: {
+            sellerTax: { registrationStatus: 'registered', rate: 0 },
+            revisedTaxPinned: !original,
             taxSubtotals: [
               {
                 vat_category_code: 'Z',
                 vat_rate: 0,
-                taxable_amount: 300000,
+                taxable_amount: original ? 300000 : 350000,
                 tax_amount: 0,
                 exemption_reason: 'Fixture zero-rated category',
               },
@@ -301,7 +303,14 @@ describe('GET /api/orders/[id]/invoice', () => {
         error: { message: 'RLS denied live tax rows' },
       },
       order: {
-        data: { ...(orderResult.data as object), source: 'online_store' },
+        data: {
+          ...(orderResult.data as object),
+          source: 'online_store',
+          merchants: {
+            ...(orderResult.data as { merchants: object }).merchants,
+            vat_registration_status: 'not_registered',
+          },
+        },
         error: null,
       },
     });

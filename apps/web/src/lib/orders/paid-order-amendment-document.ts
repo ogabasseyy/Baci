@@ -73,6 +73,13 @@ const projectionSchema = z.object({
     order: documentOrderSchema,
     items: z.array(z.record(z.string(), z.unknown())),
     payments: z.array(z.record(z.string(), z.unknown())).optional(),
+    sellerTax: z
+      .object({
+        registrationStatus: z.string().nullable(),
+        rate: z.number().nullable(),
+      })
+      .nullish(),
+    revisedTaxPinned: z.boolean().optional(),
     taxSubtotals: z
       .array(
         z.object({

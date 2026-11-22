@@ -256,6 +256,11 @@ export async function GET(
     // The document reader validates money and strips fields outside the
     // invoice snapshot before applying historical values.
     if (projection.data) Object.assign(order, projection.data.inputs.order);
+    const sellerTax = projection.data?.inputs.sellerTax;
+    if (sellerTax) {
+      merchant.vat_registration_status = sellerTax.registrationStatus;
+      merchant.vat_rate = sellerTax.rate;
+    }
     const documentNumber = projection.data?.documentNumber ?? null;
     const itemsQuery = supabase
       .from('order_items')
@@ -449,7 +454,9 @@ export async function GET(
 
     // Build tax subtotals for invoice
     const isRevisedAmendment =
-      Boolean(projection.data?.amendment) && version.data !== 'original';
+      Boolean(projection.data?.amendment) &&
+      version.data !== 'original' &&
+      !projection.data?.inputs.revisedTaxPinned;
     const storedTaxSubtotals: TaxSubtotal[] = taxSubtotals.map((st) => ({
       vat_category_code: st.vat_category_code,
       vat_rate: st.vat_rate,

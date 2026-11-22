@@ -150,9 +150,11 @@ export async function getStorefrontAccountDocumentData({
             'id, product_id, variant_id, condition, variant_name, name, item_description, quantity, price, assurance_fee, line_extension_amount, line_id, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
           )
           .eq('order_id', orderId),
-    amendment
+    amendment && (document.data?.inputs.payments || view !== 'order')
       ? { data: document.data?.inputs.payments ?? [], error: null }
       : loadStorefrontCustomerTransactions(supabase, [orderId]),
+    // Keep the archived payment instructions out of an amended order.
+    // Existing payment evidence comes from the pinned document or live history.
     amendment
       ? { data: [], error: null }
       : loadStorefrontCustomerPaymentAccounts(supabase, [orderId]),
@@ -240,6 +242,7 @@ export async function getStorefrontAccountDocumentData({
     payments: transactionRows,
   });
 
+  const sellerTax = document.data?.inputs.sellerTax;
   const bundle = buildStorefrontAccountDocumentBundle({
     merchant: (amendment
       ? {
@@ -248,6 +251,10 @@ export async function getStorefrontAccountDocumentData({
           bank_account_number: null,
           bank_account_name: null,
           bank_name: null,
+          ...(sellerTax && {
+            vat_registration_status: sellerTax.registrationStatus,
+            vat_rate: sellerTax.rate,
+          }),
         }
       : merchant) as StorefrontAccountDocumentMerchantRow,
     customer: customer as StorefrontAccountDocumentCustomerRow,
@@ -269,7 +276,9 @@ export async function getStorefrontAccountDocumentData({
     taxRows: (taxResult.data ||
       []) as StorefrontAccountDocumentTaxSubtotalRow[],
     deriveRevisedTax: Boolean(
-      amendment && (view || (version && version !== 'original'))
+      amendment &&
+        (view || (version && version !== 'original')) &&
+        !document.data?.inputs.revisedTaxPinned
     ),
     paymentStatus,
     shippingStatus,

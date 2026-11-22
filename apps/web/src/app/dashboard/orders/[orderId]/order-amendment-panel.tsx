@@ -69,7 +69,11 @@ export function OrderAmendmentPanel({
         onHoldChange(state.customer?.holdFulfillment ?? false);
       })
       .catch(() => {
-        // The ordinary order remains available if amendment controls cannot load.
+        if (!controller.signal.aborted) {
+          setError(
+            'Unable to load item-change details. Reload the order to try again.'
+          );
+        }
       });
     return () => controller.abort();
   }, [path, onHoldChange]);
@@ -138,7 +142,9 @@ export function OrderAmendmentPanel({
     );
   }
 
-  if (!workspace?.canStart && !workspace?.summary) return null;
+  if (!workspace?.canStart && !workspace?.summary) {
+    return error ? <p role="alert">{error}</p> : null;
+  }
 
   const status = workspace.customer;
   const latestRefund = workspace.refunds[0];

@@ -29,12 +29,14 @@ DECLARE
   token text := 'synthetic-order-proof-2026';
   slug text;
 BEGIN
+  UPDATE public.merchants SET vat_registration_status = 'registered', vat_rate = 0 WHERE id = m;
   INSERT INTO public.order_tax_subtotals(order_id,vat_category_code,vat_rate,taxable_amount,tax_amount,exemption_reason)
     VALUES (o,'Z',0,300000,0,'Synthetic zero-rate snapshot');
   a := (public.confirm_paid_order_amendment(o,jsonb_build_object(
     'previewId',f->>'preview','customerAgreed',true,'reason','Synthetic swap','idempotencyKey','fixture-confirm'
   ))->>'amendmentId')::uuid;
   f := f || jsonb_build_object('amendment',a);
+  UPDATE public.merchants SET vat_registration_status = 'not_registered', vat_rate = 7.5 WHERE id = m;
   PERFORM set_config('request.jwt.claim.role','service_role',true);
   INSERT INTO auth.users(id,instance_id,aud,role,email,created_at,updated_at)
     VALUES (shopper,'00000000-0000-0000-0000-000000000000','authenticated','authenticated','fixture-buyer@example.invalid',now(),now());
@@ -71,6 +73,8 @@ BEGIN
     OR (first_doc#>>'{inputs,order,total}')::numeric <> 350000
     OR first_doc#>>'{inputs,items,0,name}' <> 'Replacement'
     OR (first_doc#>>'{inputs,order,amount_paid}')::numeric <> 300000
+    OR (first_doc#>>'{inputs,taxSubtotals,0,taxable_amount}')::numeric IS DISTINCT FROM 350000
+    OR first_doc#>>'{inputs,sellerTax,registrationStatus}' IS DISTINCT FROM 'registered'
     OR pinned IS NULL OR first_doc#>'{inputs,items,0,fulfillment_data}' IS NOT NULL THEN
     RAISE EXCEPTION 'original/revised invoice snapshot mixed line, money, or private stock fields';
   END IF;

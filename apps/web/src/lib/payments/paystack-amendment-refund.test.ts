@@ -47,6 +47,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('signed amendment refund routing', () => {
+  it('does not look up a rounded numeric provider refund ID', async () => {
+    const { rpc, database } = fixture();
+    const rounded = JSON.parse('{"id":9007199254740993}');
+    await expect(routePaystackAmendmentRefund(database, rounded)).resolves.toBe(
+      'untracked'
+    );
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('acknowledges an unknown explicit reference but retries a failed lookup', async () => {
     const { rpc, database } = fixture();
     rpc

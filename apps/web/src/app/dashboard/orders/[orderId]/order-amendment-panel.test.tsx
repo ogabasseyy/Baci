@@ -97,6 +97,15 @@ describe('Change items flow', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it('shows when item-change details could not load', async () => {
+    fetchMock.mockRejectedValueOnce(new Error('network unavailable'));
+    show();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to load item-change details.'
+    );
+    expect(screen.queryByRole('button', { name: 'Change items' })).toBeNull();
+  });
+
   it('lets staff classify an unallocated late transfer after settlement', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({

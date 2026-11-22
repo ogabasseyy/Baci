@@ -50,8 +50,12 @@ export function useInboxSearch(rawTerm: string) {
         })
     : [];
   const pages = query.data?.pages.length ?? 0;
+  // A failed page keeps its data and `hasNextPage`: stop auto-skipping there
+  // (the retry is the person's), or the same failing request would repeat.
+  const failed = query.isError || query.isFetchNextPageError;
   const skipping =
     current &&
+    !failed &&
     results.length === 0 &&
     query.hasNextPage &&
     pages <= MAX_EMPTY_PAGES_SKIPPED;
@@ -64,14 +68,20 @@ export function useInboxSearch(rawTerm: string) {
     // Typing but not searched yet, or still looking through empty pages.
     isPending:
       trimmed.length >= INBOX_SEARCH_MIN_LENGTH &&
+      !failed &&
       (!current || query.isLoading || !!skipping),
-    isError: query.isError,
+    // With results already on screen a later page failing is not an error state.
+    isError: failed && results.length === 0,
     results,
     hasMore: !!query.hasNextPage,
     isLoadingMore: query.isFetchingNextPage,
     loadMore: () => {
       if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
     },
-    refetch: query.refetch,
+    /** Tries the failed request again (first page or the page after it). */
+    retry: () => {
+      if (query.isError) query.refetch();
+      else query.fetchNextPage();
+    },
   };
 }

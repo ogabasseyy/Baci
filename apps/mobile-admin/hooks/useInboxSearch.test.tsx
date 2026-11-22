@@ -120,4 +120,37 @@ describe('useInboxSearch', () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     expect(mocks.search).not.toHaveBeenCalled();
   });
+
+  it('bugfix: stops requesting once a page fails and lets the person retry', async () => {
+    mocks.search
+      .mockResolvedValueOnce({ results: [], hasMore: true, page: 1 })
+      .mockRejectedValueOnce(new Error('down'))
+      .mockResolvedValueOnce({ results: [hit(3)], hasMore: false, page: 2 });
+    const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true), WAIT);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Page 1, then the failing page 2 once: no loop on the failing request.
+    expect(mocks.search).toHaveBeenCalledTimes(2);
+    expect(result.current.isPending).toBe(false);
+
+    act(() => result.current.retry());
+
+    await waitFor(() => expect(result.current.results).toHaveLength(1), WAIT);
+    expect(result.current.isError).toBe(false);
+  });
+
+  it('keeps showing results when a later page fails', async () => {
+    mocks.search
+      .mockResolvedValueOnce({ results: [hit(1)], hasMore: true, page: 1 })
+      .mockRejectedValueOnce(new Error('down'));
+    const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
+    await waitFor(() => expect(result.current.results).toHaveLength(1), WAIT);
+
+    act(() => result.current.loadMore());
+
+    await waitFor(() => expect(mocks.search).toHaveBeenCalledTimes(2), WAIT);
+    expect(result.current.results).toHaveLength(1);
+    expect(result.current.isError).toBe(false);
+  });
 });

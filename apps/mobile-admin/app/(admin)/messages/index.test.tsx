@@ -103,6 +103,7 @@ describe('MessagesScreen', () => {
       isLoadingMore: false,
       isPending: false,
       loadMore: vi.fn(),
+      retry: vi.fn(),
       results: [],
     });
   });
@@ -246,6 +247,7 @@ describe('MessagesScreen', () => {
       isLoadingMore: false,
       isPending: false,
       loadMore: vi.fn(),
+      retry: vi.fn(),
       results: [
         {
           conversation: conversation(8, 'Zed Test', 'store'),

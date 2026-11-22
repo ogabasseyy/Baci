@@ -133,6 +133,7 @@ export default function MessagesScreen() {
               isLoadingMore={search.isLoadingMore}
               isPending={search.isPending}
               onLoadMore={search.loadMore}
+              onRetry={search.retry}
               results={search.results}
               term={term}
             />

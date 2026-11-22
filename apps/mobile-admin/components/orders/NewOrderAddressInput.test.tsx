@@ -718,6 +718,73 @@ describe('NewOrderAddressInput', () => {
     ).toBeNull();
   });
 
+  it('does not compare rapid street edits with a stale pre-selection address', () => {
+    const initialAddress = {
+      address: 'Old address',
+      city: 'Old city',
+      name: '',
+      phone: '',
+      state: 'Old state',
+      country: 'Nigeria',
+      countryCode: 'NG',
+      latitude: 6.1,
+      longitude: 3.2,
+    };
+    const setDeliveryInfo = vi.fn();
+    render(
+      <NewOrderAddressInput
+        controller={makeController({
+          deliveryInfo: initialAddress,
+          setDeliveryInfo,
+        })}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+
+    const onPress = googlePlacesState.lastProps?.onPress as
+      | ((
+          data: { description: string },
+          details: {
+            address_components: Array<{ long_name: string; types: string[] }>;
+            geometry: { location: { lat: number; lng: number } };
+          }
+        ) => void)
+      | undefined;
+    const textInputProps = googlePlacesState.lastProps?.textInputProps as
+      | { onChangeText?: (text: string) => void }
+      | undefined;
+
+    act(() => {
+      onPress?.(
+        { description: 'New address' },
+        {
+          address_components: [
+            { long_name: 'New city', types: ['locality'] },
+            { long_name: 'New state', types: ['administrative_area_level_1'] },
+          ],
+          geometry: { location: { lat: 7.2, lng: 4.3 } },
+        }
+      );
+      textInputProps?.onChangeText?.('New address ');
+      // This returns to the initial street before React rerenders. A stale
+      // closure sees it as formatting-only and would retain the new place pin.
+      textInputProps?.onChangeText?.('Old address');
+    });
+
+    const finalAddress = setDeliveryInfo.mock.calls.reduce(
+      (previous, [update]) =>
+        typeof update === 'function' ? update(previous) : update,
+      initialAddress
+    );
+    expect(finalAddress).toMatchObject({
+      address: 'Old address',
+      city: '',
+      state: '',
+      latitude: undefined,
+      longitude: undefined,
+    });
+  });
+
   it('configures the Google Places dropdown elevation for Android stacking', () => {
     render(
       <NewOrderAddressInput

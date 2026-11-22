@@ -100,6 +100,15 @@ export function NewOrderCustomerCreateView({
   const [isAddressFocused, setIsAddressFocused] = useState(false);
   const [isAddressDetailsPending, setIsAddressDetailsPending] = useState(false);
   const isCompany = newCustomer.customerType === 'company';
+  const hasEnteredDeliveryDetails = Boolean(
+    newCustomer.city?.trim() ||
+      newCustomer.state?.trim() ||
+      newCustomer.country?.trim() ||
+      newCustomer.countryCode?.trim() ||
+      newCustomer.postalCode?.trim() ||
+      newCustomer.latitude != null ||
+      newCustomer.longitude != null
+  );
   const isSaveDisabled =
     createCustomerMutation.isPending || isAddressDetailsPending;
 
@@ -129,9 +138,10 @@ export function NewOrderCustomerCreateView({
 
       {duplicateCustomer &&
       !newCustomer.address.trim() &&
-      (newCustomer.city?.trim() || newCustomer.state?.trim()) ? (
+      hasEnteredDeliveryDetails ? (
         <Text style={{ color: colors.warning }}>
-          Add a street address to use the entered city or state for this order.
+          Add a street address to use the entered delivery details for this
+          order.
         </Text>
       ) : null}
 

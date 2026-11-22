@@ -482,8 +482,59 @@ describe('NewOrderCustomerCreateView', () => {
     });
     render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
     expect(
-      screen.getByText(/add a street address to use the entered city or state/i)
+      screen.getByText(
+        /add a street address to use the entered delivery details/i
+      )
     ).toBeInTheDocument();
+  });
+
+  it('warns when delivery details without a street would be replaced by the saved destination', () => {
+    const duplicateCustomer: SelectableCustomer = {
+      address: '12 Allen Avenue',
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({
+      duplicateCustomer,
+      newCustomer: {
+        ...createEmptyNewCustomerDraft(),
+        country: 'Nigeria',
+        postalCode: '900001',
+      },
+    });
+    render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
+    expect(
+      screen.getByText(
+        /add a street address to use the entered delivery details/i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('does not show a delivery warning for an empty draft and duplicate customer', () => {
+    const duplicateCustomer: SelectableCustomer = {
+      address: '12 Allen Avenue',
+      company_name: null,
+      customer_type: 'individual',
+      email: null,
+      first_name: 'Ada',
+      full_name: 'Ada Lovelace',
+      id: 'customer-1',
+      last_name: 'Lovelace',
+      phone: '08012345678',
+    };
+    const harness = makeController({ duplicateCustomer });
+    render(<NewOrderCustomerCreateView controller={harness.snapshot()} />);
+    expect(
+      screen.queryByText(
+        /add a street address to use the entered delivery details/i
+      )
+    ).not.toBeInTheDocument();
   });
 
   it('surfaces an existing duplicate customer and reuses it from the banner', () => {

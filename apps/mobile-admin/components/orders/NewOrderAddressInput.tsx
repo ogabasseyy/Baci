@@ -45,12 +45,17 @@ export function NewOrderAddressInput({
   const { colors, deliveryInfo, setDeliveryInfo } = controller;
   const hasGoogleMapsApiKey = Boolean(googleMapsApiKey);
   const selectedDescriptionRef = useRef<string | null>(null);
+  const latestStreetRef = useRef(deliveryInfo.address);
   const latestLocalityRef = useRef({
     city: deliveryInfo.city,
     state: deliveryInfo.state,
   });
   const [detailsRecovery, setDetailsRecovery] = useState(false);
   const [manualLocality, setManualLocality] = useState(false);
+
+  useLayoutEffect(() => {
+    latestStreetRef.current = deliveryInfo.address;
+  }, [deliveryInfo.address]);
 
   useLayoutEffect(() => {
     latestLocalityRef.current = {
@@ -118,6 +123,7 @@ export function NewOrderAddressInput({
             }}
             onPress={(data, details = null) => {
               selectedDescriptionRef.current = data.description;
+              latestStreetRef.current = data.description;
               setManualLocality(false);
               if (!details) {
                 latestLocalityRef.current = { city: '', state: '' };
@@ -179,6 +185,9 @@ export function NewOrderAddressInput({
                 const selectedDescription = selectedDescriptionRef.current;
                 const preserveSelection =
                   selectedDescription !== null && text === selectedDescription;
+                const previousStreet =
+                  selectedDescription ?? latestStreetRef.current;
+                latestStreetRef.current = text;
                 if (preserveSelection) {
                   setDeliveryInfo((previous) => ({
                     ...previous,
@@ -189,7 +198,7 @@ export function NewOrderAddressInput({
                 selectedDescriptionRef.current = null;
                 setDetailsRecovery(false);
                 const keepsDestination = isFormattingOnlyStreetEdit(
-                  selectedDescription ?? deliveryInfo.address,
+                  previousStreet,
                   text
                 );
                 setManualLocality(!keepsDestination && Boolean(text.trim()));
@@ -250,8 +259,10 @@ export function NewOrderAddressInput({
         <>
           <TextInput
             onChangeText={(text) => {
+              const previousStreet = latestStreetRef.current;
+              latestStreetRef.current = text;
               const keepsDestination = isFormattingOnlyStreetEdit(
-                deliveryInfo.address,
+                previousStreet,
                 text
               );
               setManualLocality(!keepsDestination && Boolean(text.trim()));

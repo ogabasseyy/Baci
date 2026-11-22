@@ -85,13 +85,6 @@ export async function reserveMerchantShippingCharge(
         await readInsufficientWalletDetails(supabase, orderId, quoteId)
       );
     }
-    if (error.message?.includes('platform_funding_revoked')) {
-      throw new OrderShipmentBookingError(
-        'Shipping funding changed. Please get a new quote.',
-        409,
-        'PLATFORM_FUNDING_REVOKED'
-      );
-    }
     throw new OrderShipmentBookingError(
       'Unable to reserve merchant wallet for shipping.',
       409,

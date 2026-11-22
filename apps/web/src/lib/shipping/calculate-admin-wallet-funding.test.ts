@@ -26,4 +26,8 @@ describe('calculateAdminWalletFunding', () => {
       canBook: false,
     });
   });
+
+  it('bugfix: a zero price is never bookable', () => {
+    expect(calculateAdminWalletFunding(0, 0).canBook).toBe(false);
+  });
 });

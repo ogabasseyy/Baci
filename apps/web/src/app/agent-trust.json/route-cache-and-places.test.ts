@@ -131,7 +131,7 @@ describe('GET /agent-trust.json cache headers and Places key guard', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
       expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
-        'public, s-maxage=300, stale-while-revalidate=3600'
+        'public, s-maxage=1800, stale-while-revalidate=86400'
       );
       expect(mockGetCachedGooglePlacesReviews).not.toHaveBeenCalled();
       expect(mockLoggerError).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ describe('GET /agent-trust.json cache headers and Places key guard', () => {
     expect(response.status).toBe(404);
     expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
     expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
-      'public, s-maxage=300, stale-while-revalidate=3600'
+      'public, s-maxage=1800, stale-while-revalidate=86400'
     );
   });
 

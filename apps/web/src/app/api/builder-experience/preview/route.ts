@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       throw Error('FORBIDDEN');
     if (!runtime && remote) {
       try {
-        const launch = await remote(supabase, parsed.data);
+        const launch = await remote(supabase, parsed.data, request.signal);
         if (launch === undefined) throw Error('PREVIEW_UNAVAILABLE');
         return Response.json(launch, { headers });
       } catch (failure) {

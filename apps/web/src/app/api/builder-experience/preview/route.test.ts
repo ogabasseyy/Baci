@@ -51,8 +51,14 @@ it('uses an explicitly installed remote preview only after auth, CSRF and owner 
   const remote = vi.fn(async () => ({ preview: 'synthetic' }));
   const uninstall = installRemoteOwnerPreview(remote);
   try {
-    expect((await POST(request())).status).toBe(200);
+    const previewRequest = request();
+    expect((await POST(previewRequest)).status).toBe(200);
     expect(remote).toHaveBeenCalledOnce();
+    expect(remote).toHaveBeenCalledWith(
+      expect.anything(),
+      body,
+      previewRequest.signal
+    );
     merchant.csrf = false;
     expect((await POST(request())).status).toBe(403);
     merchant.csrf = true;

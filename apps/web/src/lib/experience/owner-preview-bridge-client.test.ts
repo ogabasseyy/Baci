@@ -102,6 +102,19 @@ it('normalizes reordered preview input before signing and validates it on the br
     f.client(f.owner as never, { routeId: 'home', buildId, merchantId })
   ).resolves.toMatchObject({ bindingId, merchantId });
 });
+it('propagates caller cancellation through the bounded bridge transport', async () => {
+  const f = fixture();
+  const caller = new AbortController();
+  await f.client(
+    f.owner as never,
+    { merchantId, buildId, routeId: 'home' },
+    caller.signal
+  );
+  const transportSignal = f.fetchImpl.mock.calls[0][1]?.signal;
+  expect(transportSignal?.aborted).toBe(false);
+  caller.abort();
+  expect(transportSignal?.aborted).toBe(true);
+});
 it('does not forward a missing or invalid user session', async () => {
   const f = fixture();
   f.owner.auth.getUser.mockResolvedValue({

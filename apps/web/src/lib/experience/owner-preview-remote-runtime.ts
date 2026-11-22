@@ -9,7 +9,8 @@ export class RemoteOwnerPreviewDenied extends Error {
 
 type RemoteOwnerPreview = (
   client: SupabaseClient,
-  input: unknown
+  input: unknown,
+  signal?: AbortSignal
 ) => Promise<unknown>;
 let installed: RemoteOwnerPreview | undefined;
 
@@ -17,9 +18,9 @@ let installed: RemoteOwnerPreview | undefined;
 export function installRemoteOwnerPreview(client: RemoteOwnerPreview) {
   if (installed) throw Error('REMOTE_OWNER_PREVIEW_ALREADY_INSTALLED');
   let active = true;
-  const guarded: RemoteOwnerPreview = async (owner, input) => {
+  const guarded: RemoteOwnerPreview = async (owner, input, signal) => {
     if (!active) throw Error('REMOTE_OWNER_PREVIEW_UNAVAILABLE');
-    const result = await client(owner, input);
+    const result = await client(owner, input, signal);
     if (!active) throw Error('REMOTE_OWNER_PREVIEW_UNAVAILABLE');
     return result;
   };

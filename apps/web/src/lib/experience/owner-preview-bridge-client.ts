@@ -76,8 +76,14 @@ export function createOwnerPreviewBridgeClient(settings: {
   const key = Uint8Array.from(settings.key);
   const executionOrigin = productionOrigin(settings.executionOrigin);
   const now = settings.now ?? Date.now;
-  return async (client: SupabaseClient, input: unknown) => {
+  return async (
+    client: SupabaseClient,
+    input: unknown,
+    signal?: AbortSignal
+  ) => {
+    signal?.throwIfAborted();
     const session = await client.auth.getSession();
+    signal?.throwIfAborted();
     const token = session.data.session?.access_token;
     if (
       session.error ||
@@ -87,6 +93,7 @@ export function createOwnerPreviewBridgeClient(settings: {
     )
       throw Error('OWNER_PREVIEW_UNAVAILABLE');
     const verified = await client.auth.getUser(token);
+    signal?.throwIfAborted();
     if (verified.error || !verified.data.user)
       throw Error('OWNER_PREVIEW_UNAVAILABLE');
     const selection = experiencePreviewInput.parse(input);
@@ -100,6 +107,7 @@ export function createOwnerPreviewBridgeClient(settings: {
     const signature = createHmac('sha256', key)
       .update(`owner-preview/v1\n${body}`)
       .digest('hex');
+    const timeout = AbortSignal.timeout(OWNER_PREVIEW_CALL_TIMEOUT_MS);
     const response = await settings.fetch(
       'https://owner.baci-internal.invalid/internal/owner/preview',
       {
@@ -112,7 +120,7 @@ export function createOwnerPreviewBridgeClient(settings: {
         redirect: 'error',
         cache: 'no-store',
         credentials: 'omit',
-        signal: AbortSignal.timeout(OWNER_PREVIEW_CALL_TIMEOUT_MS),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       }
     );
     if (response.status !== 200) {

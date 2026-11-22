@@ -899,7 +899,8 @@ describe('useCheckoutSubmit', () => {
     expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
       initError,
       'klump',
-      'order-klump-1'
+      'order-klump-1',
+      expect.any(Function)
     );
     expect(params.isOrderInFlight.current).toBe(false);
   });
@@ -938,7 +939,8 @@ describe('useCheckoutSubmit', () => {
     expect(handleCheckoutSubmitError).toHaveBeenCalledWith(
       initError,
       'paystack',
-      'order-1'
+      'order-1',
+      expect.any(Function)
     );
     expect(params.isOrderInFlight.current).toBe(false);
   });

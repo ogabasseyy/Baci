@@ -14,6 +14,44 @@ describe('createPetrockClient', () => {
     fetchMock.mockReset();
   });
 
+  it('submits the US $10 PlayStation card with quantity and standard reseller metadata', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        data: [[{ order_uuid: 'order-123', reference_id: 'gift-quote-123' }]],
+      })
+    );
+    await expect(
+      client.submitGiftCardOrder({
+        productId: '2844',
+        referenceId: 'gift-quote-123',
+        feedbackUrl: 'https://example.com/petrock/feedback/token',
+      })
+    ).resolves.toMatchObject({ ok: true, data: { orderUuid: 'order-123' } });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body)).toEqual([
+      {
+        product_id: 2844,
+        fields: [
+          {
+            Quantity: 1,
+            reference_id: 'gift-quote-123',
+            feedback_url: 'https://example.com/petrock/feedback/token',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('rejects a gift-card poll without an echoed supplier order ID', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        data: { status: 'reject', reference_id: 'gift-quote-123' },
+      })
+    );
+    await expect(
+      client.getOrder('order-123', { requireOrderUuid: true })
+    ).resolves.toMatchObject({ ok: false, kind: 'invalid_response' });
+  });
+
   it('submits byte-exact dynamic field names and extracts the order UUID', async () => {
     fetchMock.mockResolvedValue(
       new Response(

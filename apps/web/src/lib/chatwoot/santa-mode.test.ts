@@ -3,7 +3,9 @@ import { isDecemberInLagos, isSantaModeActive } from './santa-mode';
 
 const MERCHANT = '11111111-1111-4111-8111-111111111111';
 const DEC = new Date('2026-12-10T12:00:00Z');
-const on = { EKAETTE_CHATWOOT_SANTA_ENABLED: 'true' } as NodeJS.ProcessEnv;
+const env = (values: Record<string, string | undefined>) =>
+  values as unknown as NodeJS.ProcessEnv;
+const on = env({ EKAETTE_CHATWOOT_SANTA_ENABLED: 'true' });
 const base = { merchantId: MERCHANT, santaTenantMerchantId: MERCHANT };
 
 describe('isSantaModeActive', () => {
@@ -12,11 +14,11 @@ describe('isSantaModeActive', () => {
   });
 
   it('is off without the flag, or with any value but true', () => {
-    expect(isSantaModeActive({ ...base, env: {}, now: DEC })).toBe(false);
+    expect(isSantaModeActive({ ...base, env: env({}), now: DEC })).toBe(false);
     expect(
       isSantaModeActive({
         ...base,
-        env: { EKAETTE_CHATWOOT_SANTA_ENABLED: '1' },
+        env: env({ EKAETTE_CHATWOOT_SANTA_ENABLED: '1' }),
         now: DEC,
       })
     ).toBe(false);

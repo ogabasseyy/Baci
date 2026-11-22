@@ -48,6 +48,9 @@ function withLookupDeadline<T>(work: Promise<T>): Promise<T> {
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
 }
 
+// The schema type depends on the mode, so the intent is compared as text.
+const isWishIntent = (intent: string | undefined) => intent === 'wish';
+
 /** A failed wish falls back to the normal answer, which never offers a deal. */
 async function answerSantaWishSafely(
   tenant: AgenticChatTenant,
@@ -162,12 +165,12 @@ export async function generateChatAutoReply(input: {
           ? 'empty reply without handover'
           : null,
     });
-    const isWish = santa && generated.intent === 'wish';
+    const isWish = santa && isWishIntent(generated.intent);
     // "wish" is a Santa-mode routing signal only; the rest of the assistant
     // keeps its normal intent set.
     const object: ChatAutoReply = {
       ...generated,
-      intent: generated.intent === 'wish' ? undefined : generated.intent,
+      intent: isWishIntent(generated.intent) ? undefined : generated.intent,
     };
     if (
       isWish &&

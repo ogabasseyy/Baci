@@ -278,7 +278,7 @@ describe('counter offer notifications', () => {
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         subject: 'You received a counter offer',
-        textContent: expect.stringContaining('220,000'),
+        textContent: expect.stringMatching(/220,000[\s\S]*submit a new offer/),
         htmlContent: expect.stringContaining('&lt;Samsung&gt;'),
       })
     );

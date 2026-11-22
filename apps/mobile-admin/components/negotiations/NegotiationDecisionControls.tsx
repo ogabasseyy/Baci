@@ -44,37 +44,46 @@ export function NegotiationDecisionControls({
     amount <= 9999999999.99;
   if (status !== 'pending') {
     return (
-      <View style={styles.statusOutcomeRow}>
-        <Text
-          style={[styles.statusOutcomeLabel, { color: colors.textSecondary }]}
-        >
-          Status
-        </Text>
-        <View
-          style={[
-            styles.statusOutcomeBadge,
-            status === 'accepted' && {
-              backgroundColor: colors.successLight,
-            },
-            status === 'rejected' && {
-              backgroundColor: colors.errorLight,
-            },
-            status === 'countered' && {
-              backgroundColor: colors.warningLight,
-            },
-          ]}
-        >
+      <View style={{ gap: 8 }}>
+        <View style={styles.statusOutcomeRow}>
           <Text
+            style={[styles.statusOutcomeLabel, { color: colors.textSecondary }]}
+          >
+            Status
+          </Text>
+          <View
             style={[
-              styles.statusOutcomeText,
-              status === 'accepted' && { color: colors.success },
-              status === 'rejected' && { color: colors.error },
-              status === 'countered' && { color: colors.warning },
+              styles.statusOutcomeBadge,
+              status === 'accepted' && {
+                backgroundColor: colors.successLight,
+              },
+              status === 'rejected' && {
+                backgroundColor: colors.errorLight,
+              },
+              status === 'countered' && {
+                backgroundColor: colors.warningLight,
+              },
             ]}
           >
-            {formatNegotiationStatus(status)}
-          </Text>
+            <Text
+              style={[
+                styles.statusOutcomeText,
+                status === 'accepted' && { color: colors.success },
+                status === 'rejected' && { color: colors.error },
+                status === 'countered' && { color: colors.warning },
+              ]}
+            >
+              {formatNegotiationStatus(status)}
+            </Text>
+          </View>
         </View>
+        {status === 'countered' ? (
+          <Text
+            style={[styles.statusOutcomeLabel, { color: colors.textSecondary }]}
+          >
+            The customer can submit a new offer to continue negotiating.
+          </Text>
+        ) : null}
       </View>
     );
   }

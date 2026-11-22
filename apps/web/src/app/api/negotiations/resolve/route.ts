@@ -139,11 +139,12 @@ export async function POST(request: NextRequest) {
   }
 
   const { negotiationId, status, counterOffer } = parsed.data;
+  // A counter closes this request. A new round starts with a new customer offer.
   const { data: negotiation, error: updateError } = await supabase
     .from('negotiation_requests')
     .update({
       status,
-      ...(status === 'countered' ? { counter_offer: counterOffer } : {}),
+      counter_offer: status === 'countered' ? counterOffer : null,
     })
     .eq('id', negotiationId)
     .eq('merchant_id', access.merchantId)
@@ -183,7 +184,7 @@ export async function POST(request: NextRequest) {
       .from('negotiation_requests')
       .update({
         status: 'pending',
-        ...(status === 'countered' ? { counter_offer: null } : {}),
+        counter_offer: null,
       })
       .eq('id', negotiationId)
       .eq('merchant_id', access.merchantId)

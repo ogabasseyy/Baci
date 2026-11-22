@@ -346,7 +346,9 @@ describe('POST /api/negotiations/resolve', () => {
       notified: true,
       channel: 'email',
     });
-    expect(updateCalls[0]).toMatchObject({ payload: { status: 'accepted' } });
+    expect(updateCalls[0]).toMatchObject({
+      payload: { status: 'accepted', counter_offer: null },
+    });
     expect(updateCalls[0]?.eq).toEqual([
       ['id', validBody.negotiationId],
       ['merchant_id', 'merchant-123'],
@@ -510,7 +512,9 @@ describe('POST /api/negotiations/resolve', () => {
       error: 'Failed to notify the customer. Please try again.',
       code: 'notification_failed',
     });
-    expect(updateCalls[1]).toMatchObject({ payload: { status: 'pending' } });
+    expect(updateCalls[1]).toMatchObject({
+      payload: { status: 'pending', counter_offer: null },
+    });
     expect(updateCalls[1]?.eq).toEqual([
       ['id', validBody.negotiationId],
       ['merchant_id', 'merchant-123'],
@@ -559,7 +563,9 @@ describe('POST /api/negotiations/resolve', () => {
         'Failed to notify the customer and restore request state. Please refresh before retrying.',
       code: 'rollback_failed',
     });
-    expect(updateCalls[1]).toMatchObject({ payload: { status: 'pending' } });
+    expect(updateCalls[1]).toMatchObject({
+      payload: { status: 'pending', counter_offer: null },
+    });
     expect(mockLoggerError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to resolve negotiation request',
@@ -597,6 +603,9 @@ describe('POST /api/negotiations/resolve', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(updateCalls[0]).toMatchObject({
+      payload: { status: 'rejected', counter_offer: null },
+    });
     expect(mockNotifyNegotiationResponse).toHaveBeenCalledWith(
       'customer-456',
       'total',

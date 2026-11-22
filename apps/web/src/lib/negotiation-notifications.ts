@@ -102,7 +102,7 @@ export function notifyNegotiationResponse(
   }
 
   if (status === 'countered') {
-    body = `You received a counter offer of ${formatCurrency(offeredPrice ?? 0)} for ${negotiationType === 'total' ? 'your cart' : (itemName ?? 'your item')}. Open the store to review it.`;
+    body = `You received a counter offer of ${formatCurrency(offeredPrice ?? 0)} for ${negotiationType === 'total' ? 'your cart' : (itemName ?? 'your item')}. Contact the store about this price or submit a new offer to keep negotiating.`;
   }
 
   return notifyCustomer(
@@ -154,13 +154,16 @@ export async function notifyGuestNegotiationResponseByEmail({
     negotiationType === 'total' || !itemName ? 'your cart offer' : itemName;
   const decisionText =
     status === 'countered'
-      ? `You received a counter offer of ${formattedPrice} for ${itemLabel}. Return to the store to review it.`
+      ? `You received a counter offer of ${formattedPrice} for ${itemLabel}.`
       : isAccepted
         ? `Your offer${formattedPrice ? ` of ${formattedPrice}` : ''} for ${itemLabel} has been accepted.`
         : `Your offer for ${itemLabel} was declined. You can return to the store to make another offer or buy at the listed price.`;
-  const actionText = isAccepted
-    ? 'Return to the store to complete your purchase.'
-    : 'Return to the store to continue shopping.';
+  const actionText =
+    status === 'countered'
+      ? 'Contact the store about this price or submit a new offer to keep negotiating.'
+      : isAccepted
+        ? 'Return to the store to complete your purchase.'
+        : 'Return to the store to continue shopping.';
   const escapedDecisionText = escapeHtmlText(decisionText);
   const escapedActionText = escapeHtmlText(actionText);
 

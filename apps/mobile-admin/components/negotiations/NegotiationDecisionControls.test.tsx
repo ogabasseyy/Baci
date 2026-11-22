@@ -147,6 +147,14 @@ describe('NegotiationDecisionControls', () => {
 
     expect(screen.getByText('Status')).toBeInTheDocument();
     expect(screen.getByText(label)).toBeInTheDocument();
+    const guidance = screen.queryByText(
+      'The customer can submit a new offer to continue negotiating.'
+    );
+    if (status === 'countered') {
+      expect(guidance).toBeInTheDocument();
+    } else {
+      expect(guidance).toBeNull();
+    }
     expect(screen.queryByRole('button', { name: 'Accept Offer' })).toBeNull();
   });
 

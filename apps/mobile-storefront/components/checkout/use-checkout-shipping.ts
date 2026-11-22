@@ -96,16 +96,13 @@ export function useCheckoutShipping({
     watchedCity,
     watchedState,
   });
-  const clearQuoteState = () => {
+  const resetQuotes = (abortPendingRequest = false) => {
+    if (abortPendingRequest) shippingQuoteAbortRef.current?.abort();
     setIsLoadingQuotes(false);
     setShippingQuotes([]);
     setSelectedQuoteId('');
     setResolvedQuoteKey('');
     setResolvedPreference('');
-  };
-  const resetQuotes = () => {
-    shippingQuoteAbortRef.current?.abort();
-    clearQuoteState();
   };
   const requestShippingQuotes = (shouldResetSelection: boolean) => {
     const deliveryPreference = getQuotePreference(deliveryMethod);
@@ -173,16 +170,14 @@ export function useCheckoutShipping({
     setShippingCities([]);
     setShippingCitiesState('');
     setIsLoadingCities(Boolean(watchedState));
-    if (!watchedState) clearQuoteState();
+    if (!watchedState) resetQuotes();
   }
   const quotesSuspendReason = watchedState && watchedCity ? null : 'address';
   const [priorSuspend, setPriorSuspend] = useState(quotesSuspendReason);
   if (priorSuspend !== quotesSuspendReason) {
     setPriorSuspend(quotesSuspendReason);
     if (quotesSuspendReason !== null && deliveryMethod !== 'airport') {
-      // The quote effect cleanup aborts in-flight requests after this render
-      // commits; render-phase state adjustment must not abort imperatively.
-      clearQuoteState();
+      resetQuotes(); // Render-phase clears defer abort to effect cleanup.
     }
   }
   useEffect(() => {
@@ -274,7 +269,7 @@ export function useCheckoutShipping({
     deliveryMethod,
     getShippingProvider: () => getProvider(deliveryMethod, selectedQuote),
     ...handlers,
-    invalidateShippingQuote: resetQuotes,
+    invalidateShippingQuote: () => resetQuotes(true),
     isLoadingCities,
     isLoadingLocations,
     isLoadingQuotes,

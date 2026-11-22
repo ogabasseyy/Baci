@@ -1,28 +1,17 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { env } from '@/env';
-import { paidOrderAmendmentStatusSchema } from '@/lib/orders/paid-order-amendment-document';
 import { escapeHtmlAttribute, escapeHtmlText } from '@/lib/sanitize';
 import { sendEmail } from '@/lib/zeptomail';
+import {
+  type AmendmentUpdateDelivery,
+  amendmentUpdateClaimSchema,
+  amendmentUpdateDeliverySchema,
+  amendmentUpdateEventIdsSchema,
+} from '@/schemas/order-amendment-document';
 
-const deliverySchema = z.object({
-  claim: z.uuid(),
-  orderId: z.uuid(),
-  merchantId: z.uuid(),
-  customerId: z.uuid().nullable(),
-  email: z.email(),
-  merchantName: z.string(),
-  merchantSlug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  orderNumber: z.string(),
-  trackingToken: z.string().nullable(),
-  eventType: z.string(),
-  status: paidOrderAmendmentStatusSchema,
-  documentId: z.uuid(),
-});
-
-function amendmentMessage(delivery: z.infer<typeof deliverySchema>) {
+function amendmentMessage(delivery: AmendmentUpdateDelivery) {
   const { status } = delivery;
   if (status.state === 'reversed') {
     return 'The item change was reversed and the original items have been restored. Visit your order for the latest details.';
@@ -35,7 +24,7 @@ function amendmentMessage(delivery: z.infer<typeof deliverySchema>) {
   return 'An update to your order is available. View your order for the latest items, payment and fulfillment details.';
 }
 
-function deliverAmendmentUpdate(delivery: z.infer<typeof deliverySchema>) {
+function deliverAmendmentUpdate(delivery: AmendmentUpdateDelivery) {
   const url = new URL(
     `https://${delivery.merchantSlug}.${env.NEXT_PUBLIC_ROOT_DOMAIN}/track-order`
   );
@@ -70,7 +59,7 @@ export async function drainPaidOrderAmendmentUpdates(
     p_limit: 10,
   });
   if (due.error) throw new Error('Unable to load amendment updates');
-  const ids = z.array(z.string().regex(/^[1-9][0-9]*$/)).parse(due.data);
+  const ids = amendmentUpdateEventIdsSchema.parse(due.data);
   for (const id of ids) {
     if (Date.now() >= deadlineMs) break;
     const claimed = await client.rpc('claim_paid_order_amendment_update', {
@@ -78,8 +67,8 @@ export async function drainPaidOrderAmendmentUpdates(
     });
     if (claimed.error) throw new Error('Unable to claim an amendment update');
     if (claimed.data === null) continue;
-    const delivery = deliverySchema.safeParse(claimed.data);
-    const token = z.object({ claim: z.uuid() }).safeParse(claimed.data);
+    const delivery = amendmentUpdateDeliverySchema.safeParse(claimed.data);
+    const token = amendmentUpdateClaimSchema.safeParse(claimed.data);
     if (!token.success) continue;
     let sent = false;
     if (delivery.success) {

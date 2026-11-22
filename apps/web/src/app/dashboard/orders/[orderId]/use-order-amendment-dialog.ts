@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import type { z } from 'zod';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import {
+  amendmentPreviewResult,
+  replacementsSchema,
+} from '@/schemas/order-amendment';
 import type { OrderDetailsItem } from '../order-items';
 import {
   AmendmentRequestError,
-  amendmentPreviewResult,
-  replacementsSchema,
   requestAmendment,
 } from './order-amendment-client';
 

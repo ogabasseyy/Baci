@@ -1,7 +1,7 @@
 import type { ReceiptOrder } from '@baci/shared';
 import type { PaymentStatus, ShippingStatus } from '@baci/shared/types';
-import type { PaidOrderAmendmentStatus } from '@/lib/orders/paid-order-amendment-document';
 import type { MerchantPickupAddress } from '@/lib/shipping/merchant-rates/types';
+import type { PaidOrderAmendmentStatus } from '@/schemas/order-amendment-document';
 
 export interface StorefrontOrderItem {
   id: string;

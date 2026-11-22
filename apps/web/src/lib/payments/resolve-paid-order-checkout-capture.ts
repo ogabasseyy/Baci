@@ -1,17 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
+import { paidOrderCheckoutCaptureDecisionSchema } from '@/schemas/order-amendment-payment';
 import { calculatePlatformFee } from './platform-fee';
-
-const captureDecision = z.object({
-  customerFeeMinor: z.number().int().nonnegative().optional(),
-  outcome: z.enum([
-    'ready',
-    'review',
-    'unapplied',
-    'awaiting_evidence',
-    'original_replay',
-  ]),
-});
 
 export async function resolvePaidOrderCheckoutCapture({
   gatewayResponse,
@@ -88,7 +77,7 @@ export async function resolvePaidOrderCheckoutCapture({
   );
   if (error) return 'unavailable';
   if (data === null) return 'untracked';
-  const parsed = captureDecision.safeParse(data);
+  const parsed = paidOrderCheckoutCaptureDecisionSchema.safeParse(data);
   if (!parsed.success) return 'unavailable';
   if (parsed.data.outcome === 'ready' && parsed.data.customerFeeMinor) {
     gatewayResponse.baci_paystack_checkout_customer_fee_minor =

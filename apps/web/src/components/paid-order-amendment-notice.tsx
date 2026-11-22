@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
-import type { PaidOrderAmendmentStatus } from '@/lib/orders/paid-order-amendment-document';
+import type { PaidOrderAmendmentStatus } from '@/schemas/order-amendment-document';
 
 export function PaidOrderAmendmentNotice({
   amendment,

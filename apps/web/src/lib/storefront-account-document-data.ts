@@ -4,10 +4,7 @@ import {
 } from '@baci/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
-import {
-  loadPaidOrderDocument,
-  type PaidOrderDocumentVersion,
-} from '@/lib/orders/paid-order-amendment-document';
+import { loadPaidOrderDocument } from '@/lib/orders/paid-order-amendment-document';
 import { buildStorefrontAccountDocumentBundle } from '@/lib/storefront-account-document-bundle';
 import type {
   StorefrontAccountDocumentCustomerRow,
@@ -28,6 +25,7 @@ import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account
 import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
 import { loadStorefrontCustomerTaxSubtotals } from '@/lib/storefront-customer-tax-subtotals';
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
+import type { PaidOrderDocumentVersion } from '@/schemas/order-amendment-document';
 
 const MERCHANT_COLUMNS =
   'id, slug, business_name, logo_url, email, phone, support_email, support_phone, rider_phone_number, business_address, cac_rc_number, tax_identification_number, legal_entity_name, brand_colors, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, registered_address';

@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
-import type { workspaceSchema } from './order-amendment-client';
+import type { workspaceSchema } from '@/schemas/order-amendment';
 
 export function OrderAmendmentSettlementControls({
   workspace,

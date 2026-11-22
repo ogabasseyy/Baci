@@ -4,7 +4,6 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { buildPdfContentDisposition } from '@/lib/download-filename';
 import { mergeReceiptItemsWithInvoiceMetadata } from '@/lib/invoice-receipt-item-metadata';
 import { logger } from '@/lib/logger';
-import { paidOrderDocumentVersionSchema } from '@/lib/orders/paid-order-amendment-document';
 import { generatePeppolInvoiceXml } from '@/lib/peppol-ubl-invoice';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import {
@@ -15,6 +14,7 @@ import {
   getStorefrontAccountDocumentData,
   StorefrontAccountDocumentError,
 } from '@/lib/storefront-account-document-data';
+import { paidOrderDocumentVersionSchema } from '@/schemas/order-amendment-document';
 import {
   storefrontAccountDocumentParamsSchema,
   storefrontAccountDocumentQuerySchema,

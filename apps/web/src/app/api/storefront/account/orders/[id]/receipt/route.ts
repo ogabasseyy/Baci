@@ -2,13 +2,13 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { buildPdfContentDisposition } from '@/lib/download-filename';
 import { logger } from '@/lib/logger';
-import { paidOrderDocumentVersionSchema } from '@/lib/orders/paid-order-amendment-document';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { generateReceiptBlob } from '@/lib/receipt-pdf-generator';
 import {
   getStorefrontAccountDocumentData,
   StorefrontAccountDocumentError,
 } from '@/lib/storefront-account-document-data';
+import { paidOrderDocumentVersionSchema } from '@/schemas/order-amendment-document';
 import {
   storefrontAccountDocumentParamsSchema,
   storefrontAccountDocumentQuerySchema,

@@ -25,10 +25,7 @@ import type {
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
-import {
-  loadPaidOrderDocument,
-  paidOrderDocumentVersionSchema,
-} from '@/lib/orders/paid-order-amendment-document';
+import { loadPaidOrderDocument } from '@/lib/orders/paid-order-amendment-document';
 import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
@@ -40,6 +37,7 @@ import {
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
 import { unamendedOrderSummarySchema } from '@/schemas/order-amendment';
+import { paidOrderDocumentVersionSchema } from '@/schemas/order-amendment-document';
 
 const paramsSchema = z.object({
   id: z.string().uuid(),

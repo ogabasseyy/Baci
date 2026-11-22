@@ -1,51 +1,19 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { listPaystackRefunds } from '@/lib/orders/list-paystack-refunds';
 import { paystackRequest } from '@/lib/paystack-request';
 import { selectPaystackRefundReference } from '@/lib/select-paystack-refund-reference';
+import {
+  amendmentRefundAttemptIdsSchema,
+  paystackAmendmentProviderIdSchema,
+  paystackAmendmentRefundClaimSchema,
+  paystackAmendmentRefundEvidenceSchema,
+} from '@/schemas/order-amendment-payment';
 import { paystackAmendmentRefundReference } from '@/schemas/paystack-refund-event';
 
 type Database = Pick<SupabaseClient, 'rpc'>;
-
-const positiveProviderId = z.string().regex(/^[1-9][0-9]{0,19}$/);
-const claimSchema = z.object({
-  submit: z.boolean(),
-  preflightReview: z.boolean().default(false),
-  reference: paystackAmendmentRefundReference,
-  captureReference: z.string().min(1),
-  captureId: positiveProviderId,
-  amountMinor: z.number().int().positive(),
-  integrationId: positiveProviderId,
-  domain: z.enum(['live', 'test']),
-});
-
-const refundSchema = z.object({
-  reference: paystackAmendmentRefundReference,
-  id: positiveProviderId,
-  transaction: z.union([
-    positiveProviderId,
-    z.object({ id: positiveProviderId }),
-  ]),
-  integration: positiveProviderId,
-  amount: z.number().int().positive(),
-  currency: z.literal('NGN'),
-  domain: z.enum(['live', 'test']),
-  status: z
-    .string()
-    .transform((value) => value.replace('-', '_'))
-    .pipe(
-      z.enum([
-        'pending',
-        'processing',
-        'needs_attention',
-        'failed',
-        'processed',
-      ])
-    ),
-});
 
 function preserveProviderIds(raw: string) {
   return raw.replace(
@@ -69,7 +37,9 @@ async function reconcileRefund(supabase: Database, reference: string) {
   ) {
     return 'retry';
   }
-  const parsed = refundSchema.safeParse(verified.data[0]);
+  const parsed = paystackAmendmentRefundEvidenceSchema.safeParse(
+    verified.data[0]
+  );
   if (
     !parsed.success ||
     parsed.data.reference.toLowerCase() !== reference.toLowerCase()
@@ -121,7 +91,7 @@ export async function routePaystackAmendmentRefund(
   const providerId =
     typeof id === 'number' && Number.isSafeInteger(id) && id > 0
       ? String(id)
-      : positiveProviderId.safeParse(id).data;
+      : paystackAmendmentProviderIdSchema.safeParse(id).data;
   if (!reference.success && !providerId && !captureReference)
     return 'untracked';
   const { data, error } = await supabase.rpc(
@@ -156,7 +126,7 @@ export async function drainPaystackAmendmentRefunds(
     p_limit: 5,
   });
   if (due.error) throw new Error('Unable to load due amendment refunds');
-  const attempts = z.array(z.uuid()).parse(due.data);
+  const attempts = amendmentRefundAttemptIdsSchema.parse(due.data);
   for (const id of attempts) {
     if (Date.now() + 24_000 >= deadlineMs) return;
     try {
@@ -179,7 +149,7 @@ async function processRefundAttempt(
   });
   if (result.error) throw new Error('Unable to claim amendment refund');
   if (result.data == null) return;
-  const claim = claimSchema.parse(result.data);
+  const claim = paystackAmendmentRefundClaimSchema.parse(result.data);
   const providerKey = process.env.PAYSTACK_SECRET_KEY ?? '';
   if (
     process.env.PAID_ORDER_AMENDMENT_PAYSTACK_INTEGRATION_ID !==

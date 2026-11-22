@@ -6,11 +6,11 @@ import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import { workspaceSchema } from '@/schemas/order-amendment';
 import type { OrderDetailsItem } from '../order-items';
 import {
   AmendmentRequestError,
   requestAmendment,
-  workspaceSchema,
 } from './order-amendment-client';
 import { OrderAmendmentDialog } from './order-amendment-dialog';
 import { OrderAmendmentSettlementControls } from './order-amendment-settlement-controls';

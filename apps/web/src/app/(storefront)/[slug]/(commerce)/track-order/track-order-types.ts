@@ -1,4 +1,4 @@
-import type { PaidOrderAmendmentStatus } from '@/lib/orders/paid-order-amendment-document';
+import type { PaidOrderAmendmentStatus } from '@/schemas/order-amendment-document';
 import type { TrackOrderItem } from './order-item-row';
 
 export interface TimelineEvent {

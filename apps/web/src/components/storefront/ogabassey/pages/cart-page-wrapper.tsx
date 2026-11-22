@@ -78,13 +78,18 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
 
   useEffect(() => {
     let reloading = false;
-    const cartPath = window.location.pathname;
     let previousHash = window.location.hash;
     function acceptHandoffNavigation() {
-      const hash = window.location.hash;
-      if (reloading || window.location.pathname !== cartPath || hash === previousHash) return;
+      const { hash, pathname } = window.location;
+      if (
+        reloading ||
+        hash === previousHash ||
+        !/^\/(?:[^/]+\/)?cart\/?$/.test(pathname)
+      ) return;
       previousHash = hash;
       const handoff = parseHandoffPairing(hash);
+      // Ignore malformed late fragments so ordinary cart work is preserved.
+      // Well-formed links still use the existing expired/invalid link UI.
       if (
         !handoff ||
         !cartHandoffPairingTokenSchema.safeParse(handoff.token).success ||

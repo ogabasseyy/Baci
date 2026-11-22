@@ -115,7 +115,7 @@ describe('CartPageWrapper handoff', () => {
       navigation.dispatchEvent(new Event('currententrychange'));
       expect(reloadCartHandoffDocument).not.toHaveBeenCalled();
 
-      window.history.pushState({}, '', `/ogabassey/cart${validFragment}`);
+      window.history.pushState({}, '', `/another-shop/cart${validFragment}`);
       navigation.dispatchEvent(new Event('currententrychange'));
       expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
 

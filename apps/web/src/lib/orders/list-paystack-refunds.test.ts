@@ -48,6 +48,59 @@ describe('listPaystackRefunds', () => {
       expect.anything()
     );
   });
+  it.each([
+    { id: 6 },
+    { amount: 999 },
+    { reference: 'other-payment' },
+    { domain: 'test' },
+    { status: 'reversed' },
+    { currency: 'USD' },
+  ])('rejects a changed saved capture before listing refunds (%j)', async (overrides) => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response({
+        id: 5,
+        reference: 'capture-1',
+        amount: 1000,
+        domain: 'live',
+        status: 'success',
+        currency: 'NGN',
+        ...overrides,
+      })
+    );
+    vi.stubGlobal('fetch', fetcher);
+    await expect(
+      listPaystackRefunds('capture-1', {
+        expectedCapture: { id: '5', domain: 'live', amountKobo: 1000 },
+      })
+    ).rejects.toThrow('Saved Paystack capture mismatch');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists only GET requests for a matching saved capture', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          id: 5,
+          reference: 'capture-1',
+          amount: 1000,
+          domain: 'live',
+          status: 'success',
+          currency: 'NGN',
+        })
+      )
+      .mockResolvedValueOnce(response([refund]));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(
+      listPaystackRefunds('capture-1', {
+        expectedCapture: { id: '5', domain: 'live', amountKobo: 1000 },
+      })
+    ).resolves.toHaveLength(1);
+    expect(
+      fetcher.mock.calls.map(([, options]) => options.method ?? 'GET')
+    ).toEqual(['GET', 'GET']);
+  });
+
   it('matches bare numeric and legacy string transaction identities', async () => {
     const fetcher = vi.fn();
     verifiedLister(fetcher);

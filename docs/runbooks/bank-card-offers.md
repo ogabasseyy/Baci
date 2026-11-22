@@ -97,7 +97,33 @@ WHERE snapshot.order_id = $1::uuid
 ORDER BY order_item_id, unit_number;
 ```
 
-Match the returned item and unit numbers to the return record and count each pair once. As a cross-check, the sum across **all** saved units must equal the quote's `productSubtotalKobo - discountKobo`. The database rejects negative unit values when saving the quote. For the refund itself, sum `net_kobo` only for units in that return that have no existing or pending refund. A zero-value unit adds zero. Reconcile any prior refunds and reversals against the original Paystack capture and confirm that the sum fits within its remaining refundable balance. Resolve unmatched or ambiguous records before sending money. Submit the exact positive kobo amount for a partial refund and link the refund record to the original payment leg. A total of zero needs no Paystack refund. Leaving the amount blank asks Paystack for a full refund. Resolve delivery, tax, and other fees separately under the return policy.
+Run the read-only checker from the repository root using a direct, TLS-verified Operations database connection in `BANK_OFFER_REFUND_READ_DATABASE_URL` and the Paystack key for the saved capture in `PAYSTACK_SECRET_KEY`. Use existing authorized database access for the private snapshot, payment attempt, cancellation status, and capture lookup. The CLI runs its database session in read-only mode.
+
+```sh
+pnpm --filter @baci/web check:bank-offer-partial-refund <order-uuid> <merchant-uuid> /path/to/return.json
+```
+
+Build the manifest from the return records using the saved order-item UUIDs and one-based unit numbers from the query above. Include every earlier Paystack refund that is processed, pending, processing, or needs attention, using its numeric refund ID as a JSON string and the units recorded for it. Use an empty `previousRefunds` array when there are none. Include zero-kobo units in the return record.
+
+```json
+{
+  "units": [
+    { "itemId": "a4fbecee-2846-4a61-beef-df54636a20de", "unitNumber": 2 }
+  ],
+  "previousRefunds": [
+    {
+      "refundId": "123456789",
+      "units": [
+        { "itemId": "a4fbecee-2846-4a61-beef-df54636a20de", "unitNumber": 1 }
+      ]
+    }
+  ]
+}
+```
+
+The checker validates the sum of all saved units against `productSubtotalKobo - discountKobo`, rejects repeated or unknown units across the manifest, and verifies the exact saved capture against Paystack. Every nonfailed Paystack refund reduces the remaining balance. The proposed amount must fit within that balance, and each prior refund must match its recorded units and amount. Resolve unmatched refunds, unresolved reversals, disputes, or ambiguous return records before continuing. Resolve delivery, tax, and other fees separately under the return policy.
+
+A successful run prints the suggested merchandise refund, remaining Paystack balance, and count of returned units. This is a point-in-time estimate. The checker cannot verify which physical unit a return record describes or detect another operator's work before Paystack lists it. Coordinate with Operations and rerun just before submitting. A total of zero needs no Paystack refund. For a positive amount, submit the exact kobo amount in Paystack and link the refund record to the original capture. Leaving the amount blank requests a full refund.
 
 When Paystack reports a reversal with a usable integer amount, the open reconciliation record stores it as `paystack_reported_reversal_amount_kobo` for Operations. The reversal status blocks automatic refunds. The reported amount is advisory and is never used as a refund amount or subtracted from the saved capture. Operations confirm the actual reversed value with Paystack before changing the order or issuing a refund.
 

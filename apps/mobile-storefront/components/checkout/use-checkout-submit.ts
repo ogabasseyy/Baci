@@ -32,6 +32,7 @@ export type { UseCheckoutSubmitParams };
 export function useCheckoutSubmit({
   accountPassword,
   onRedvaultOrder,
+  onShippingQuoteRejected,
   appliedDiscountCode,
   availablePaymentMethods,
   clearCart,
@@ -285,11 +286,10 @@ export function useCheckoutSubmit({
           itemsSnapshot,
         });
       }
-      handleCheckoutSubmitError(
-        error,
-        selectedPayment,
-        orderIdentity.createdOrderId
-      );
+      const orderId = orderIdentity.createdOrderId;
+      const onReject = () =>
+        isMountedRef.current && onShippingQuoteRejected?.();
+      handleCheckoutSubmitError(error, selectedPayment, orderId, onReject);
     } finally {
       setIsProcessing(false);
       isOrderInFlight.current = false;

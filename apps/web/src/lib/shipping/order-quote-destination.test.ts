@@ -21,6 +21,56 @@ const checkoutPhoneItem = {
 };
 
 describe('enrichShippingAddressWithQuoteDestination', () => {
+  it('persists the priced GIG destination for a new or replayed domestic order sent by an older app', async () => {
+    const receiver = {
+      name: 'Synthetic Customer',
+      phone: '',
+      address: '3 Example Street',
+      city: 'Abuja',
+      state: 'FCT - Abuja',
+      country: 'Nigeria',
+      countryCode: 'NG',
+    };
+    for (const isConfirmedReplay of [false, true]) {
+      const result = await enrichShippingAddressWithQuoteDestination(
+        createSupabaseRpcMock({
+          merchant_id: 'merchant-current',
+          price: 2500,
+          provider_rate_id: 'GIGL_1_2_3',
+          quote_request: {
+            merchantId: 'merchant-current',
+            sessionId: 'session-1',
+            shipmentType: 'domestic',
+            receiver,
+            items: [{ name: 'Phone', quantity: 1, weight: 1, value: 100_000 }],
+          },
+        }) as unknown as SupabaseClient,
+        'quote-1',
+        {
+          address: '3 Example Street, Abuja, Abuja',
+          city: 'Abuja',
+          state: 'Abuja',
+          country: undefined,
+          countryCode: undefined,
+          postalCode: undefined,
+        },
+        {
+          merchantId: 'merchant-current',
+          shippingProvider: 'GIGL',
+          shippingFee: 2500,
+          isConfirmedReplay,
+        }
+      );
+      expect(result).toMatchObject({
+        address: receiver.address,
+        city: receiver.city,
+        state: receiver.state,
+        country: receiver.country,
+        countryCode: receiver.countryCode,
+      });
+    }
+  });
+
   it('persists international destination fields from the saved quote request', async () => {
     const result = await enrichShippingAddressWithQuoteDestination(
       createSupabaseRpcMock({

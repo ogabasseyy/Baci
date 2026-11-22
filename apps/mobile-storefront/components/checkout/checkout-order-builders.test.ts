@@ -3,6 +3,7 @@ import { buildOrderPayload } from '@/services/orders.payload';
 import { CreateOrderRequestSchema } from '@/services/orders.schemas';
 import {
   buildCheckoutOrderRequest,
+  buildOrderShippingAddress,
   createCheckoutSnapshot,
 } from './checkout-order-builders';
 
@@ -17,6 +18,18 @@ const address = {
 };
 
 describe('checkout order builders', () => {
+  it('uses the quote canonical state when current casing differs', () => {
+    expect(
+      buildOrderShippingAddress({ ...address, state: 'abuja' }, 'door', {
+        id: 'quote-1',
+        displayName: 'GIGL Standard',
+        price: 2500,
+        provider: 'GIGL',
+        receiverState: { requested: 'Abuja', quoted: 'FCT - Abuja' },
+      }).state
+    ).toBe('FCT - Abuja');
+  });
+
   it('uses negotiated line prices but leaves expected_total to the API tax boundary', () => {
     const itemsSnapshot = [
       {

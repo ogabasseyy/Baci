@@ -1,17 +1,15 @@
 import { readFile } from 'node:fs/promises';
 import postgres from 'postgres';
-import { z } from 'zod';
 import { listPaystackRefunds } from '../lib/orders/list-paystack-refunds';
 import {
-  checkBankOfferPartialRefund,
+  partialRefundCliArgsSchema,
+  partialRefundDatabaseUrlSchema,
   partialRefundManifestSchema,
-} from './check-bank-offer-partial-refund';
-
-const cliArgs = z.tuple([z.uuid(), z.uuid(), z.string().min(1)]);
-const databaseUrl = z.url({ protocol: /^postgres(?:ql)?$/ });
+} from '../schemas/bank-offer-partial-refund-input';
+import { checkBankOfferPartialRefund } from './check-bank-offer-partial-refund';
 
 async function main() {
-  const args = cliArgs.safeParse(process.argv.slice(2));
+  const args = partialRefundCliArgsSchema.safeParse(process.argv.slice(2));
   if (!args.success) {
     console.error(
       'Usage: check:bank-offer-partial-refund <order UUID> <merchant UUID> <return manifest.json>'
@@ -31,7 +29,9 @@ async function main() {
     return;
   }
   const sql = postgres(
-    databaseUrl.parse(process.env.BANK_OFFER_REFUND_READ_DATABASE_URL),
+    partialRefundDatabaseUrlSchema.parse(
+      process.env.BANK_OFFER_REFUND_READ_DATABASE_URL
+    ),
     {
       ssl: 'verify-full',
       max: 1,

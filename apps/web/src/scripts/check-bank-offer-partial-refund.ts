@@ -1,42 +1,9 @@
-import { z } from 'zod';
+import type { PartialRefundManifest } from '../schemas/bank-offer-partial-refund-input';
+import {
+  type PartialRefundSnapshot,
+  partialRefundSnapshotSchema,
+} from '../schemas/bank-offer-partial-refund-snapshot';
 
-const kobo = z.number().int().nonnegative();
-const itemId = z.uuid().transform((value) => value.toLowerCase());
-const decimalId = z.string().regex(/^[1-9][0-9]{0,19}$/);
-const units = z
-  .array(
-    z.strictObject({
-      itemId,
-      unitNumber: z.number().int().positive(),
-    })
-  )
-  .min(1);
-
-export const partialRefundManifestSchema = z.strictObject({
-  units,
-  previousRefunds: z.array(z.strictObject({ refundId: decimalId, units })),
-});
-
-export const partialRefundSnapshotSchema = z.object({
-  capture: z.object({
-    reference: z.string().min(1),
-    id: decimalId,
-    domain: z.enum(['test', 'live']),
-    amountKobo: kobo.positive(),
-  }),
-  merchandiseNetKobo: kobo.positive(),
-  allocations: z
-    .array(
-      z.object({
-        itemId,
-        unitNetAmountsKobo: z.array(kobo).min(1),
-      })
-    )
-    .min(1),
-});
-
-type Manifest = z.infer<typeof partialRefundManifestSchema>;
-type Snapshot = z.infer<typeof partialRefundSnapshotSchema>;
 type ProviderRefund = {
   id: string;
   amount: number;
@@ -45,7 +12,7 @@ type ProviderRefund = {
 };
 
 function sumUnits(
-  selection: Manifest['units'],
+  selection: PartialRefundManifest['units'],
   allocations: ReadonlyMap<string, number>,
   seen: Set<string>
 ) {
@@ -64,8 +31,10 @@ function sumUnits(
 
 export async function checkBankOfferPartialRefund(
   snapshotInput: unknown,
-  manifest: Manifest,
-  listRefunds: (capture: Snapshot['capture']) => Promise<ProviderRefund[]>
+  manifest: PartialRefundManifest,
+  listRefunds: (
+    capture: PartialRefundSnapshot['capture']
+  ) => Promise<ProviderRefund[]>
 ) {
   const snapshot = partialRefundSnapshotSchema.parse(snapshotInput);
   const allocations = new Map<string, number>();

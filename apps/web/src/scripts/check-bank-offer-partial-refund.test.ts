@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  checkBankOfferPartialRefund,
-  partialRefundManifestSchema,
-} from './check-bank-offer-partial-refund';
+import { partialRefundManifestSchema } from '../schemas/bank-offer-partial-refund-input';
+import { checkBankOfferPartialRefund } from './check-bank-offer-partial-refund';
 
 const itemId = 'a0000000-0000-4000-8000-000000000001';
 const unit = (unitNumber: number) => ({ itemId, unitNumber });

@@ -78,6 +78,11 @@ try:
     "'variantId', variant.id, 'condition', " + inherited_condition,
     'AND ' + inherited_condition + ' =',
    ]),
+   '20261122045240': ('base condition source mismatch', [
+    'CASE WHEN variant.id IS NULL THEN entry.value ELSE',
+    ') resolved ON variant.id IS NOT NULL',
+    'AND discovery.canonical_product_condition(legacy_line.condition) = resolved.condition',
+   ]),
    '20261121104100': ('condition alias anchor mismatch', [
     "'variantId', CASE WHEN EXISTS (",
     ')) END ORDER BY entry.ordinality)',
@@ -103,7 +108,8 @@ try:
                '20261121103800_commerce_cart_mcp_import_inherited_variant.sql',
                '20261121103900_commerce_cart_mcp_import_legacy_destination.sql',
                '20261121104000_commerce_cart_mcp_import_condition_destination.sql',
-               '20261121104100_commerce_cart_mcp_import_condition_alias.sql']:
+               '20261121104100_commerce_cart_mcp_import_condition_alias.sql',
+               '20261122045240_commerce_cart_mcp_import_base_condition.sql']:
    migration=(root/'supabase/migrations'/name).read_text()
    if probe := drift_probes.get(name.split('_', 1)[0]):
     reason, anchors = probe
@@ -113,6 +119,7 @@ try:
   sql+="\nALTER TABLE public.product_variants DROP COLUMN is_active, DROP COLUMN status, DROP COLUMN deleted_at, DROP COLUMN archived_at, DROP COLUMN is_default;"
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_sku_cases.sql').read_text()
   sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_handoff.sql').read_text()
+  sql+='\n'+(root/'supabase/tests/commerce_cart_import_mcp_base_condition.sql').read_text()
  sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-handoff-attachment-lifetime.log','w'),stderr=subprocess.STDOUT,cwd=root)
  print('PASS' if r.returncode==0 else 'FAIL')

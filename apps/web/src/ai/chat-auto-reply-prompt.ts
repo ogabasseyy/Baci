@@ -33,16 +33,15 @@ export function formatChatAutoReplyProducts(
       // nothing about a particular option, so neither is reported.
       const soldByOption =
         product.has_variants === true || product.has_condition_offers === true;
-      const stock =
-        product.manage_stock === false
+      const stock = soldByOption
+        ? 'availability depends on the option chosen'
+        : product.manage_stock === false
           ? 'in stock'
-          : soldByOption
-            ? 'availability depends on the option chosen'
-            : product.stock === null
-              ? 'availability unknown'
-              : product.stock > 0
-                ? 'in stock'
-                : 'out of stock';
+          : product.stock === null
+            ? 'availability unknown'
+            : product.stock > 0
+              ? 'in stock'
+              : 'out of stock';
       // An option can carry its own price, so the parent's is only a base.
       const price = soldByOption
         ? `base price ${currency} ${product.price}, exact price depends on the option chosen`

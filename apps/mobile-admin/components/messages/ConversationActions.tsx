@@ -1,7 +1,10 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
-import { showChoiceSheet } from '@/components/ui/showChoiceSheet';
+import {
+  ChoiceSheetModal,
+  type ChoiceSheetOption,
+} from '@/components/ui/ChoiceSheetModal';
 import {
   RADIUS,
   SPACING,
@@ -39,6 +42,11 @@ export function ConversationActions({
   onUpdate,
 }: ConversationActionsProps) {
   const [tagsOpen, setTagsOpen] = useState(false);
+  // Which pick-one sheet is open, with its options fixed at the moment it opened.
+  const [picker, setPicker] = useState<{
+    kind: 'followUp' | 'priority';
+    options: ChoiceSheetOption<string>[];
+  } | null>(null);
   const resolved = conversation.status === 'resolved';
   const followUp = !!conversation.followUp && !resolved;
   const tags = conversation.tags ?? [];
@@ -58,33 +66,39 @@ export function ConversationActions({
     if (ok && !resolved) onDone();
   };
 
-  const chooseFollowUp = async () => {
-    const options = followUpOptions();
-    const choice = await showChoiceSheet<string>({
-      title: 'Follow up',
-      message: 'This chat comes back to the top when it is time.',
+  const openFollowUp = () => {
+    setPicker({
+      kind: 'followUp',
       options: [
-        ...options.map((o) => ({ label: o.label, value: o.iso })),
+        ...followUpOptions().map((o) => ({ label: o.label, value: o.iso })),
         ...(followUp ? [{ label: 'Clear follow-up', value: 'clear' }] : []),
       ],
     });
-    if (!choice) return;
-    await apply({ followUpAt: choice === 'clear' ? null : choice });
   };
 
-  const choosePriority = async () => {
-    const choice = await showChoiceSheet<PriorityChoice>({
-      title: 'Priority',
+  const openPriority = () => {
+    setPicker({
+      kind: 'priority',
       options: [
         { label: 'Urgent', value: 'urgent' },
         { label: 'High', value: 'high' },
         { label: 'Medium', value: 'medium' },
         { label: 'Low', value: 'low' },
         { label: 'No priority', value: 'none' },
-      ],
+      ] satisfies ChoiceSheetOption<PriorityChoice>[],
     });
-    if (!choice) return;
-    await apply({ priority: choice === 'none' ? null : choice });
+  };
+
+  const onPick = (value: string) => {
+    const kind = picker?.kind;
+    setPicker(null);
+    if (kind === 'followUp') {
+      apply({ followUpAt: value === 'clear' ? null : value });
+    } else if (kind === 'priority') {
+      apply({
+        priority: value === 'none' ? null : (value as InboxPriority),
+      });
+    }
   };
 
   const buttons = [
@@ -102,7 +116,7 @@ export function ConversationActions({
         ? formatFollowUp(conversation.snoozedUntil, isFollowUpDue(conversation))
         : 'Follow up',
       active: followUp,
-      onPress: chooseFollowUp,
+      onPress: async () => openFollowUp(),
     },
     {
       key: 'priority',
@@ -111,7 +125,7 @@ export function ConversationActions({
         ? PRIORITY_LABEL[conversation.priority]
         : 'Priority',
       active: !!conversation.priority,
-      onPress: choosePriority,
+      onPress: async () => openPriority(),
     },
     {
       key: 'tags',
@@ -166,6 +180,19 @@ export function ConversationActions({
           </Pressable>
         ))}
       </ScrollView>
+      <ChoiceSheetModal
+        colors={colors}
+        message={
+          picker?.kind === 'followUp'
+            ? 'This chat comes back to the top when it is time.'
+            : undefined
+        }
+        onClose={() => setPicker(null)}
+        onSelect={onPick}
+        options={picker?.options ?? []}
+        title={picker?.kind === 'priority' ? 'Priority' : 'Follow up'}
+        visible={picker !== null}
+      />
       <TagSheet
         busy={busy}
         colors={colors}

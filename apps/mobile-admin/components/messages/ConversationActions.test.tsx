@@ -6,10 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 
-const mocks = vi.hoisted(() => ({ choose: vi.fn() }));
-vi.mock('@/components/ui/showChoiceSheet', () => ({
-  showChoiceSheet: mocks.choose,
-}));
 vi.mock('@/components/ui/AppSheetModal', () => ({
   AppSheetModal: ({
     children,
@@ -90,20 +86,19 @@ describe('ConversationActions', () => {
   });
 
   it('sets a follow-up from the chosen time', async () => {
-    mocks.choose.mockResolvedValue('2026-11-23T08:00:00.000Z');
     const { onUpdate } = renderActions(chat());
 
     fireEvent.click(screen.getByRole('button', { name: 'Follow up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tomorrow morning' }));
 
     await waitFor(() =>
       expect(onUpdate).toHaveBeenCalledWith({
-        followUpAt: '2026-11-23T08:00:00.000Z',
+        followUpAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       })
     );
   });
 
-  it('offers to clear a follow-up that is set, and clears it', async () => {
-    mocks.choose.mockResolvedValue('clear');
+  it('bugfix: shows every follow-up choice, including the last, and Clear when set', async () => {
     const { onUpdate } = renderActions(
       chat({
         followUp: true,
@@ -114,35 +109,54 @@ describe('ConversationActions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Follow up / }));
 
+    for (const label of [
+      'In 3 hours',
+      'Tomorrow morning',
+      'In 3 days',
+      'Next week',
+      'Clear follow-up',
+    ]) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Clear follow-up' }));
     await waitFor(() =>
       expect(onUpdate).toHaveBeenCalledWith({ followUpAt: null })
     );
-    const options = mocks.choose.mock.calls[0][0].options as {
-      value: string;
-    }[];
-    expect(options.map((o) => o.value)).toContain('clear');
   });
 
-  it('does nothing when the follow-up menu is dismissed', async () => {
-    mocks.choose.mockResolvedValue(null);
+  it('does not offer Clear when no follow-up is set', () => {
+    renderActions(chat());
+    fireEvent.click(screen.getByRole('button', { name: 'Follow up' }));
+    expect(
+      screen.queryByRole('button', { name: 'Clear follow-up' })
+    ).toBeNull();
+  });
+
+  it('does nothing when the menu is dismissed', () => {
     const { onUpdate } = renderActions(chat());
 
     fireEvent.click(screen.getByRole('button', { name: 'Follow up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    await waitFor(() => expect(mocks.choose).toHaveBeenCalled());
     expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'In 3 days' })).toBeNull();
   });
 
-  it('sets a priority and clears it with No priority', async () => {
-    mocks.choose.mockResolvedValueOnce('urgent').mockResolvedValueOnce('none');
+  it('bugfix: offers all five priorities, not only the first three', async () => {
     const { onUpdate } = renderActions(chat());
 
     fireEvent.click(screen.getByRole('button', { name: 'Priority' }));
+    for (const label of ['Urgent', 'High', 'Medium', 'Low', 'No priority']) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Low' }));
     await waitFor(() =>
-      expect(onUpdate).toHaveBeenCalledWith({ priority: 'urgent' })
+      expect(onUpdate).toHaveBeenCalledWith({ priority: 'low' })
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Priority' }));
+    fireEvent.click(screen.getByRole('button', { name: 'No priority' }));
     await waitFor(() =>
       expect(onUpdate).toHaveBeenCalledWith({ priority: null })
     );

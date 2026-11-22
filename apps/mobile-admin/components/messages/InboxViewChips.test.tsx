@@ -40,4 +40,16 @@ describe('InboxViewChips', () => {
 
     expect(onChange).toHaveBeenCalledWith('done');
   });
+
+  it('bugfix: the scroller stays a compact toolbar instead of taking screen height', () => {
+    const { container } = render(
+      <InboxViewChips
+        colors={LIGHT_COLORS}
+        onChange={vi.fn()}
+        value="needs_reply"
+      />
+    );
+    // The outer scroll view must not grow (a horizontal ScrollView does by default).
+    expect(container.firstElementChild).toHaveStyle({ flexGrow: '0' });
+  });
 });

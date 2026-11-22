@@ -95,6 +95,10 @@ const REQUOTE_CODES = new Set([
   'SHIPPING_QUOTE_REQUIRED',
 ]);
 
+// A merchant mismatch signals that the quote belongs to another storefront,
+// not that this customer's address quote merely expired. Keep it on the hard
+// failure path rather than silently creating a fresh quote under this host.
+
 // A quote lookup failure is returned as a 500 and intentionally stays on the
 // generic pre-order error path. A transient server failure is not evidence that
 // the saved quote is invalid, so do not discard it and trigger another carrier

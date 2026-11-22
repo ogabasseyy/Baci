@@ -79,6 +79,7 @@ describe('handleCheckoutSubmitError', () => {
     );
     const refresh = jest.fn();
     trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
     handleCheckoutSubmitError(
       new OrderError(
         'private address',
@@ -132,6 +133,41 @@ describe('handleCheckoutSubmitError', () => {
       'checkout_failed',
       'Server error. Please try again in a few moments.',
       expect.objectContaining({ errorCode: 'SERVER_ERROR' })
+    );
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-requote a quote scoped to another merchant', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    );
+    const refresh = jest.fn();
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+    handleCheckoutSubmitError(
+      new OrderError(
+        'The delivery quote is not available for this store.',
+        'VALIDATION_ERROR',
+        'INTERNATIONAL_QUOTE_MERCHANT_MISMATCH'
+      ),
+      'credit_direct',
+      undefined,
+      refresh
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Invalid Information',
+      'The delivery quote is not available for this store.',
+      expect.any(Array)
+    );
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'The delivery quote is not available for this store.',
+      expect.objectContaining({
+        errorCode: 'VALIDATION_ERROR',
+        step: 'place_order',
+      })
     );
     expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
   });

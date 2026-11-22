@@ -118,7 +118,7 @@ describe('useCheckoutShipping', () => {
     );
   });
 
-  it('clears loading when an aborted quote has no replacement destination', async () => {
+  it('aborts the previous quote in effect cleanup when destination becomes incomplete', async () => {
     let quoteSignal: AbortSignal | undefined;
     mockFetchShippingQuotes.mockImplementationOnce(
       async ({ signal, setIsLoadingQuotes }) => {

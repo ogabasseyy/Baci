@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCart } from '@/hooks/cart';
 import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
+import { reloadCartHandoffDocument } from '../../cart/cart-handoff-support';
 import { CartPageWrapper } from './cart-page-wrapper';
 
 vi.mock('next/navigation', () => ({
@@ -29,6 +30,11 @@ vi.mock('../../cart/cart-handoff', () => ({
   ),
 }));
 
+vi.mock('../../cart/cart-handoff-support', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../cart/cart-handoff-support')>()),
+  reloadCartHandoffDocument: vi.fn(),
+}));
+
 vi.mock('@/lib/cart-link-transfer', () => ({
   fetchAndAddCartItems: vi.fn(async () => true),
 }));
@@ -50,6 +56,9 @@ function mockCartReady(): void {
 }
 
 describe('CartPageWrapper handoff', () => {
+  const validFragment =
+    '#handoff=ch1.payload.signature&hid=e9644462-bc4a-4efc-80ca-19b89fd47b84';
+
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
@@ -72,6 +81,70 @@ describe('CartPageWrapper handoff', () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText('Cart page')).not.toBeInTheDocument();
+    expect(reloadCartHandoffDocument).not.toHaveBeenCalled();
+  });
+
+  it('processes a handoff opened while the website cart is already mounted', async () => {
+    mockSearch('');
+    window.history.replaceState({}, '', '/ogabassey/cart');
+    render(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText('Cart page')).toBeInTheDocument();
+
+    window.history.pushState({}, '', '#main-content');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    window.history.pushState({}, '', '#handoff=invalid&hid=invalid');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(reloadCartHandoffDocument).not.toHaveBeenCalled();
+
+    window.history.pushState({}, '', validFragment);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe(validFragment);
+  });
+
+  it('detects programmatic history updates without reloading twice for the same navigation', async () => {
+    const navigation = new EventTarget();
+    vi.stubGlobal('navigation', navigation);
+    try {
+      mockSearch('');
+      window.history.replaceState({}, '', '/ogabassey/cart');
+      render(<CartPageWrapper merchantId="merchant-1" />);
+      expect(await screen.findByText('Cart page')).toBeInTheDocument();
+
+      window.history.pushState({}, '', `/ogabassey/checkout${validFragment}`);
+      navigation.dispatchEvent(new Event('currententrychange'));
+      expect(reloadCartHandoffDocument).not.toHaveBeenCalled();
+
+      window.history.pushState({}, '', `/another-shop/cart${validFragment}`);
+      navigation.dispatchEvent(new Event('currententrychange'));
+      expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
+
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('detects programmatic history updates on browsers without the Navigation API', () => {
+    vi.stubGlobal('navigation', undefined);
+    vi.useFakeTimers();
+    try {
+      mockSearch('');
+      window.history.replaceState({}, '', '/ogabassey/cart');
+      const { unmount } = render(<CartPageWrapper merchantId="merchant-1" />);
+      expect(screen.getByText('Cart page')).toBeInTheDocument();
+
+      window.history.replaceState({}, '', validFragment);
+      vi.advanceTimersByTime(1000);
+      expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
+
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('reconstructs the handoff from the tab locator after a reload', async () => {

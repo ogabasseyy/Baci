@@ -4,6 +4,7 @@ import { installExperienceExecutionOrigin } from '@/lib/experience/execution-ori
 import {
   buildStrictCspResponse,
   generateCSP,
+  generateStorefrontCspReportOnlyCandidate,
   shouldForwardStrictCspNonce,
 } from './csp';
 
@@ -29,6 +30,29 @@ describe('proxy CSP', () => {
     );
     expect(nonce).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(forwarded).toContain(`'nonce-${nonce}'`);
+  });
+
+  it('builds a narrower storefront script candidate without changing payment origins', () => {
+    const enforced = generateCSP('storefront', false);
+    const candidate = generateStorefrontCspReportOnlyCandidate(enforced);
+    const enforcedScript = directive(enforced, 'script-src');
+    const candidateScript = directive(candidate, 'script-src');
+
+    expect(enforcedScript).toContain("'unsafe-inline'");
+    expect(candidateScript).not.toContain("'unsafe-inline'");
+    expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
+    expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
+    expect(candidateScript).toEqual(
+      enforcedScript.filter((source) => source !== "'unsafe-inline'")
+    );
+    for (const origin of [
+      'https://checkout.creditdirect.ng',
+      'https://checkout.useklump.com',
+    ]) {
+      expect(candidate).toContain(origin);
+    }
+    expect(candidate).not.toContain('report-uri');
+    expect(candidate).not.toContain('report-to');
   });
 
   it('allows only an explicitly enabled, normalized Chatwoot platform origin on storefronts', () => {

@@ -162,6 +162,85 @@ describe('proxy response headers', () => {
   });
 });
 
+it('keeps the enforced policy intact while previewing storefront CSP locally by opt-in', () => {
+  vi.stubEnv('NODE_ENV', 'test');
+  vi.stubEnv('BACI_CSP_REPORT_ONLY_PREVIEW', 'true');
+  try {
+    const request = new NextRequest(
+      'http://localhost:3000/checkout?customer=private-value'
+    );
+    const response = applySecurityHeaders(
+      NextResponse.next(),
+      '/checkout',
+      'Mozilla',
+      'storefront',
+      true,
+      undefined,
+      request,
+      'localhost'
+    );
+    const enforced = response.headers.get('Content-Security-Policy') ?? '';
+    const candidate =
+      response.headers.get('Content-Security-Policy-Report-Only') ?? '';
+    const candidateScript = candidate
+      .split('; ')
+      .find((directive) => directive.startsWith('script-src '));
+
+    expect(enforced).toContain("script-src 'self' 'unsafe-inline'");
+    expect(candidateScript).toBeDefined();
+    expect(candidateScript).not.toContain("'unsafe-inline'");
+    expect(candidate).toContain("script-src-attr 'none'");
+    expect(candidate).toContain("form-action 'self'");
+    expect(enforced).not.toContain('form-action');
+    expect(candidate).toContain('https://checkout.creditdirect.ng');
+    expect(candidate).toContain('https://checkout.useklump.com');
+    expect(candidate).not.toContain('private-value');
+    expect(candidate).not.toContain('http://localhost:3000');
+    expect(candidate).not.toContain('report-uri');
+    expect(candidate).not.toContain('report-to');
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it('does not preview the storefront candidate outside local non-production opt-in', () => {
+  vi.stubEnv('BACI_CSP_REPORT_ONLY_PREVIEW', 'true');
+  vi.stubEnv('NODE_ENV', 'production');
+  try {
+    const production = applySecurityHeaders(
+      NextResponse.next(),
+      '/checkout',
+      'Mozilla',
+      'storefront',
+      true
+    );
+    const remote = applySecurityHeaders(
+      NextResponse.next(),
+      '/checkout',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    const api = applySecurityHeaders(
+      NextResponse.next(),
+      '/api/checkout',
+      'Mozilla',
+      'api',
+      true
+    );
+
+    expect(
+      production.headers.get('Content-Security-Policy-Report-Only')
+    ).toBeNull();
+    expect(
+      remote.headers.get('Content-Security-Policy-Report-Only')
+    ).toBeNull();
+    expect(api.headers.get('Content-Security-Policy-Report-Only')).toBeNull();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
 it('delegates only explicitly configured staging selfie camera origins on checkout', () => {
   const host = 'https://staging.d1l1k5yxed9cvn.amplifyapp.com';
   vi.stubEnv('VERCEL_ENV', 'preview');

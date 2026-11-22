@@ -107,6 +107,27 @@ export function generateCSP(
     .join('; ');
 }
 
+/**
+ * Local-only CSP migration candidate for storefront scripts and form targets.
+ * It removes inline script execution and restricts form targets to same-origin
+ * while leaving the enforced policy untouched. The preview deliberately has no
+ * reporting endpoint, so violations are observable only in local DevTools.
+ */
+export function generateStorefrontCspReportOnlyCandidate(csp: string): string {
+  const directives = csp.split('; ').filter(Boolean);
+  const scriptSource = directives.findIndex((directive) =>
+    directive.startsWith('script-src ')
+  );
+  if (scriptSource === -1) return csp;
+
+  directives[scriptSource] = directives[scriptSource]
+    .replace(/\s+'unsafe-inline'(?=\s|$)/g, '')
+    .trim();
+  directives.push("script-src-attr 'none'");
+  directives.push("form-action 'self'");
+  return directives.join('; ');
+}
+
 /** Exact HTTPS origin only; malformed environment values never widen CSP. */
 function getEnabledChatwootPlatformOrigin(
   storefrontHostname?: string

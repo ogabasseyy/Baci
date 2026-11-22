@@ -9,6 +9,8 @@ const valid = {
   resolved: 6,
   avgFirstResponseSeconds: 720,
   avgResolutionSeconds: null,
+  handledByAi: 2,
+  handledByMerchant: null,
 };
 
 describe('merchantInboxInsightsResponseSchema', () => {
@@ -32,6 +34,8 @@ describe('merchantInboxInsightsResponseSchema', () => {
     ['resolved', 0.5],
     ['avgFirstResponseSeconds', 45.6],
     ['avgResolutionSeconds', -1],
+    ['handledByAi', -1],
+    ['handledByMerchant', 1.5],
   ])('rejects %s = %s', (field, value) => {
     expect(
       merchantInboxInsightsResponseSchema.safeParse({

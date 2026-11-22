@@ -4,6 +4,7 @@ import { providerInboxSummarySchema } from '@/schemas/merchant-inbox-insights-pr
 import type { MerchantInboxInsightDays } from '@/schemas/merchant-inbox-insights-query';
 import type { MerchantInboxInsights } from '@/schemas/merchant-inbox-insights-response';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
+import { getHandledCounts } from './merchant-inbox-handled-counts';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 const SECONDS_PER_DAY = 86_400;
@@ -17,7 +18,8 @@ export async function getMerchantInboxInsights(
   binding: MerchantInboxBinding,
   input: { days: MerchantInboxInsightDays; now?: number }
 ): Promise<{ ok: true; insights: MerchantInboxInsights } | { ok: false }> {
-  const until = Math.floor((input.now ?? Date.now()) / 1000);
+  const nowMs = input.now ?? Date.now();
+  const until = Math.floor(nowMs / 1000);
   const url = new URL(
     `/api/v2/accounts/${binding.accountId}/reports/summary`,
     binding.apiOrigin
@@ -28,7 +30,7 @@ export async function getMerchantInboxInsights(
   url.searchParams.set('until', String(until));
 
   try {
-    const response = await fetch(url, {
+    const pending = fetch(url, {
       cache: 'no-store',
       headers: {
         accept: 'application/json',
@@ -39,6 +41,13 @@ export async function getMerchantInboxInsights(
       redirect: 'error',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+    // Started alongside the summary so the card waits for the slower one,
+    // not both. It never rejects: an unreadable count is null.
+    const handled = getHandledCounts(binding, {
+      days: input.days,
+      now: nowMs,
+    });
+    const response = await pending;
     if (!response.ok) {
       // Status only: never the token, URL query or response body.
       console.error('[merchant-inbox] insights request failed', {
@@ -56,6 +65,7 @@ export async function getMerchantInboxInsights(
       return { ok: false };
     }
     const summary = parsed.data;
+    const { handledByAi, handledByMerchant } = await handled;
     return {
       ok: true,
       insights: {
@@ -66,6 +76,8 @@ export async function getMerchantInboxInsights(
         resolved: summary.resolutions_count,
         avgFirstResponseSeconds: summary.avg_first_response_time,
         avgResolutionSeconds: summary.avg_resolution_time,
+        handledByAi,
+        handledByMerchant,
       },
     };
   } catch {

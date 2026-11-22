@@ -71,9 +71,10 @@ export async function initiatePaystackCancellationRefunds({
 
   for (const transaction of transactions) {
     if (refundedPaymentIds.has(transaction.id)) continue;
-    const transactionAmount = transaction.refundAmountMinor === undefined
-      ? Number(transaction.amount)
-      : transaction.refundAmountMinor / 100;
+    const transactionAmount =
+      transaction.refundAmountMinor === undefined
+        ? Number(transaction.amount)
+        : transaction.refundAmountMinor / 100;
     const isBankOffer = bankCardOfferReferenceSchema.safeParse(
       transaction.gateway_reference
     ).success;
@@ -87,7 +88,9 @@ export async function initiatePaystackCancellationRefunds({
       bankOfferLegsForReview.push(transaction);
       continue;
     }
-    let koboAmount = isBankOffer ? 0 : (transaction.refundAmountMinor ?? Math.round(transactionAmount * 100));
+    let koboAmount = isBankOffer
+      ? 0
+      : (transaction.refundAmountMinor ?? Math.round(transactionAmount * 100));
     let dispatchEvidence: BankOfferRefundEvidence | undefined;
     // Paystack defaults to a full refund when the amount is omitted.
     if (
@@ -213,11 +216,14 @@ export async function initiatePaystackCancellationRefunds({
         continue;
       }
     }
-    const capture = isBankOffer ? null : paystackCancellationCaptureAmounts(transaction);
+    const capture = isBankOffer
+      ? null
+      : paystackCancellationCaptureAmounts(transaction);
     if (
-      !isBankOffer && (!capture ||
-      (capture.grossMinor !== capture.principalMinor &&
-        koboAmount !== capture.principalMinor))
+      !isBankOffer &&
+      (!capture ||
+        (capture.grossMinor !== capture.principalMinor &&
+          koboAmount !== capture.principalMinor))
     ) {
       await quarantineRefund({
         order,

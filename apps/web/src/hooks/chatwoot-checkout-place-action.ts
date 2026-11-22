@@ -1,14 +1,10 @@
-import { z } from 'zod';
 import { getContactErrors } from '@/components/storefront/ogabassey/pages/checkout/contact-validation';
-import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import type { CartItem } from '@/hooks/cart';
 import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-checkout-client';
 import { isQuizVoucherCartItem } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { formatPhoneToE164 } from '@/lib/phone';
-import { createClient } from '@/lib/supabase/client';
 import type { ChatwootCommerceMessage } from '@/schemas/chatwoot-commerce-message';
 import { pinChatwootCheckoutAttribution } from './chatwoot-checkout-attribution';
-import { resolveChatwootCheckoutDelivery } from './chatwoot-checkout-delivery';
 import { runChatwootCheckoutSerially } from './chatwoot-checkout-in-flight';
 import { deriveChatwootCheckoutKeys } from './chatwoot-checkout-keys';
 import {
@@ -19,8 +15,12 @@ import {
 import type { ChatwootCheckoutMerchant } from './chatwoot-checkout-merchant';
 import { postChatwootCheckoutOrder } from './chatwoot-checkout-order-post';
 import { buildChatwootCheckoutOrderRequest } from './chatwoot-checkout-order-request';
-import { answerChatwootCheckoutReplay } from './chatwoot-checkout-replay-answer';
-import { decideChatwootCheckoutReplay } from './chatwoot-checkout-replay-decision';
+import {
+  postChatwootOxygenHandoff,
+  verifyChatwootOxygenCheckoutSession,
+} from './chatwoot-checkout-oxygen';
+import { resolveChatwootPlaceDelivery } from './chatwoot-checkout-place-delivery';
+import { handleChatwootRememberedOrderReplay } from './chatwoot-checkout-place-replay';
 import type {
   ChatwootCheckoutFailureCode,
   ChatwootCheckoutPlaceResult,
@@ -28,7 +28,6 @@ import type {
 import { reviewedChatwootCheckoutItems } from './chatwoot-checkout-reviewed-items';
 import { startChatwootCheckoutPayment } from './chatwoot-checkout-start-payment';
 import { isChatwootCheckoutSubtotalBasisEqual } from './chatwoot-checkout-subtotal-basis';
-import { resolveChatwootCarrierQuote } from './chatwoot-confirmed-carrier-quote';
 
 type PlaceData = Extract<
   ChatwootCommerceMessage,
@@ -76,10 +75,7 @@ async function placeOrder(input: HandleChatwootCheckoutPlaceInput) {
   if (!merchant) return fail('order_failed');
   const keys = await deriveChatwootCheckoutKeys(request.requestId, merchant.id);
   if (!keys) return fail('order_failed');
-  // One at a time per cart, then per order: a second attempt that arrives
-  // mid-flight waits and answers from the order the first one placed instead
-  // of racing it into a second payment setup. The order lock covers a copy
-  // authorized against the cart that replaced the one the order completed.
+  // One at a time per cart, then per order, so concurrent retries reuse the first order.
   return runChatwootCheckoutSerially(
     `cart:${merchant.id}:${input.authorizedCartId}`,
     () => {
@@ -111,31 +107,14 @@ async function placeForKeys(
   };
 
   const isOxygen = request.paymentMethod === 'oxygen';
-  const postOxygenHandoff = (orderId: string) => {
-    if (!z.uuid().safeParse(orderId).success) return fail('order_failed');
-    if (input.canPost()) {
-      input.postResult({
-        requestId: request.requestId,
-        status: 'secure_handoff',
-        href: `/payments/oxygen/${orderId}`,
-      });
-    }
-  };
-  if (isOxygen) {
-    if (!isOxygenStorefrontStagingEnabled()) return fail('payment_unavailable');
-    const {
-      data: { user },
-      error,
-    } = await createClient().auth.getUser();
-    if (
-      error ||
-      !user?.email ||
-      user.email.trim().toLowerCase() !==
-        request.customer.email.trim().toLowerCase()
-    ) {
-      return fail('payment_unavailable');
-    }
-  }
+  const postOxygenHandoff = (orderId: string) =>
+    postChatwootOxygenHandoff({
+      orderId,
+      requestId: request.requestId,
+      canPost: input.canPost,
+      postResult: input.postResult,
+      fail,
+    });
   const byRequest = getChatwootCheckoutRememberedOrder(keys.idempotencyKey);
   const forCart = byRequest
     ? null
@@ -150,32 +129,21 @@ async function placeForKeys(
     postResult: input.postResult,
   };
   if (remembered) {
-    const replay = decideChatwootCheckoutReplay(remembered, {
-      requestId: request.requestId,
-      conversationId: request.conversationId,
+    return handleChatwootRememberedOrderReplay({
+      remembered,
+      request,
       merchantId: merchant.id,
+      isOxygen,
+      paymentBase,
+      postOxygenHandoff,
+      fail,
     });
-    if (
-      replay.kind === 'refuse' ||
-      isOxygen !== (remembered.order.paymentMethod === 'oxygen')
-    )
-      return fail('order_failed');
-    if (isOxygen) return postOxygenHandoff(remembered.order.orderId);
-    if (replay.kind === 'answer') {
-      const answer = await answerChatwootCheckoutReplay({
-        cached: replay.result,
-        order: remembered.order,
-        storeSlug: input.storeSlug,
-        issuedAt: remembered.payment?.issuedAt ?? 0,
-      });
-      if (input.canPost()) input.postResult(answer);
-      return;
-    }
-    return startChatwootCheckoutPayment({
-      ...paymentBase,
-      order: replay.order,
-      replacesExpiredDetails: remembered.payment !== null,
-    });
+  }
+  if (
+    isOxygen &&
+    !(await verifyChatwootOxygenCheckoutSession(request.customer.email))
+  ) {
+    return fail('payment_unavailable');
   }
 
   const sameCart = () => {
@@ -227,37 +195,13 @@ async function placeForKeys(
   ) {
     return fail('cart_unsupported');
   }
-  const carrier = request.carrierQuoteId
-    ? resolveChatwootCarrierQuote({
-        id: request.carrierQuoteId,
-        cartKey: `${authorizedCartId}:${request.cartVersion}`,
-        merchantId: merchant.id,
-        conversationId: request.conversationId,
-      })
-    : null;
-  if (request.carrierQuoteId && !carrier) return fail('delivery_unavailable');
-  const delivery = carrier
-    ? {
-        ok: true as const,
-        method: 'door' as const,
-        quote: carrier.quote,
-        carrier: 'GIGL' as const,
-        merchantRateId: null,
-        address: { ...carrier.address, phone: request.customer.phone },
-      }
-    : await resolveChatwootCheckoutDelivery({
-        merchantId: merchant.id,
-        customer: request.customer,
-        address: request.address,
-        choice: request.delivery,
-        quoteItems: display.map((item) => ({
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          negotiatedPrice: item.negotiatedPrice,
-        })),
-        cartSubtotal: snapshot.itemsSubtotalMinor / 100,
-      });
+  const delivery = await resolveChatwootPlaceDelivery({
+    request,
+    authorizedCartId,
+    merchant,
+    display,
+    itemsSubtotalMinor: snapshot.itemsSubtotalMinor,
+  });
   if (!delivery.ok) return fail(delivery.code);
   // Nothing to finance or transfer: a free cart with free delivery would be finalized by
   // the order route with no payment step for the chat to offer.

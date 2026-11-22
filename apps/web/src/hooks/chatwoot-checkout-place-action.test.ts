@@ -261,3 +261,37 @@ it.each([
     code: 'payment_unavailable',
   });
 });
+
+it('refuses a cross-method replay on the same cart with order_failed', async () => {
+  stubCheckoutFetch({
+    ...happyHandlers(),
+    '/api/orders': () => ({
+      body: {
+        order: {
+          id: '60000000-0000-4000-8000-000000000001',
+          order_number: 'ORD-1002',
+        },
+        amountDueToGateway: 4650,
+      },
+    }),
+  });
+  const first = placeInput({
+    request: { ...checkoutPlaceRequest, paymentMethod: 'oxygen' },
+  });
+  await handleChatwootCheckoutPlace(first);
+  expect(lastResult(first)).toMatchObject({ status: 'secure_handoff' });
+
+  const replay = placeInput({
+    request: {
+      ...checkoutPlaceRequest,
+      requestId: 'place-request-2',
+      paymentMethod: 'bank_transfer',
+    },
+  });
+  await handleChatwootCheckoutPlace(replay);
+  expect(lastResult(replay)).toEqual({
+    requestId: 'place-request-2',
+    status: 'failed',
+    code: 'order_failed',
+  });
+});

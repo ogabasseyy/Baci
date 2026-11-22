@@ -10,16 +10,8 @@ import { sanitizePostHogExceptionText } from '@/lib/posthog/exception-text';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
 import { getPostHogTracingHeaderHostnames } from '@/lib/posthog/tracing-hostnames';
 
-// Record replay for ~5% of eligible sessions (WEIGHT-B P1, owner-approved
-// 2026-07-10): rrweb's input serializer (`maskAllInputs` masking every
-// keystroke) was the single worst field INP contributor — a 1,096ms
-// #document.oninput LoAF on checkout forms and search-as-you-type — and that
-// cost lands on every RECORDED session. 5% keeps dozens of replays/day for UX
-// debugging while removing the tax from 95% of visitors. posthog-js's
-// `session_recording.sampleRate` (0..1) takes precedence over the project's
-// remote sampling config — verified against @posthog/types
-// `SessionRecordingOptions.sampleRate` in posthog-js@1.393.5.
-const SESSION_RECORDING_SAMPLE_RATE = 0.05;
+// Checkout starts replay explicitly. The SDK keeps sampling session-stable.
+const SESSION_RECORDING_SAMPLE_RATE = 0.01;
 
 const SENSITIVE_PROPERTY_TOKENS = new Set([
   'password',
@@ -611,13 +603,13 @@ export function buildPostHogClientConfig(
     // metrics selectively without leaving extra observers active after SPA
     // transitions.
     capture_performance: false,
-    disable_session_recording: false,
+    disable_session_recording: true,
     disable_surveys: true,
     session_recording: {
       maskAllInputs: true,
       maskTextFn: () => REDACTED_VALUE,
       maskTextSelector: 'body',
-      blockSelector: '[data-ph-block], [data-session-replay-block]',
+      blockSelector: 'iframe, [data-ph-block], [data-session-replay-block]',
       sampleRate: SESSION_RECORDING_SAMPLE_RATE,
     },
     // Project credential keys are intentionally absent here:

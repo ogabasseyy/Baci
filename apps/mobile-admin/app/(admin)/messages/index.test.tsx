@@ -32,83 +32,20 @@ vi.mock('@/lib/api-client', async () => {
   const errors = await import('@/lib/api-errors');
   return { NetworkError: errors.NetworkError };
 });
-vi.mock('@shopify/flash-list', () => ({
-  FlashList: ({
-    data = [],
-    keyExtractor,
-    ListEmptyComponent,
-    ListHeaderComponent,
-    ListFooterComponent,
-    renderItem,
-  }: {
-    data?: unknown[];
-    keyExtractor?: (item: unknown, index: number) => string;
-    ListEmptyComponent?: ReactNode;
-    ListHeaderComponent?: ReactNode;
-    ListFooterComponent?: ReactNode;
-    renderItem: (input: { index: number; item: unknown }) => ReactNode;
-  }) => (
-    <div>
-      {ListHeaderComponent}
-      {data.length === 0
-        ? ListEmptyComponent
-        : data.map((item, index) => (
-            <div
-              key={
-                keyExtractor ? keyExtractor(item, index) : JSON.stringify(item)
-              }
-            >
-              {renderItem({ item, index })}
-            </div>
-          ))}
-      {ListFooterComponent}
-    </div>
-  ),
+vi.mock('@shopify/flash-list', async () => ({
+  FlashList: (await import('./index.test-support')).FlashListMock,
 }));
 
 import MessagesScreen from './index';
+import { conversation, idleSearch, readyQuery } from './index.test-support';
 
-const conversation = (
-  id: number,
-  name: string,
-  sender: 'customer' | 'store'
-) => ({
-  id,
-  status: 'open' as const,
-  unreadCount: sender === 'customer' ? 2 : 0,
-  customerName: name,
-  lastActivityAt: new Date().toISOString(),
-  lastMessage: {
-    id: id * 10,
-    sender,
-    kind: 'text' as const,
-    text: `Hello from ${name}`,
-    createdAt: new Date().toISOString(),
-  },
-});
-
-const ready = (conversations: ReturnType<typeof conversation>[]) => ({
-  data: { pages: [{ conversations, hasMore: false, page: 1 }] },
-  error: null,
-  fetchNextPage: mocks.fetchNextPage,
-  hasNextPage: false,
-  isError: false,
-  isFetchingNextPage: false,
-  isLoading: false,
-  refetch: mocks.refetch,
-});
+const ready = (conversations: ReturnType<typeof conversation>[]) =>
+  readyQuery(conversations, mocks);
 
 describe('MessagesScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.search.mockReturnValue({
-      isError: false,
-      isLoadingMore: false,
-      isPending: false,
-      loadMore: vi.fn(),
-      retry: vi.fn(),
-      results: [],
-    });
+    mocks.search.mockReturnValue(idleSearch(vi.fn(), vi.fn()));
   });
 
   it('lists conversations with preview and a needs-reply badge', () => {
@@ -241,49 +178,6 @@ describe('MessagesScreen', () => {
     expect(screen.getByText('High')).toBeInTheDocument();
   });
 
-  it('shows search results with the matching words instead of the chip list', () => {
-    mocks.query.mockReturnValue(
-      ready([conversation(1, 'Ada Test', 'customer')])
-    );
-    mocks.search.mockReturnValue({
-      isError: false,
-      isLoadingMore: false,
-      isPending: false,
-      loadMore: vi.fn(),
-      retry: vi.fn(),
-      results: [
-        {
-          conversation: conversation(8, 'Zed Test', 'store'),
-          snippet: 'where is my order 1234',
-        },
-      ],
-    });
-    render(<MessagesScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search chats'), {
-      target: { value: 'order' },
-    });
-
-    expect(mocks.search).toHaveBeenLastCalledWith('order');
-    expect(screen.getByText('where is my order 1234')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Follow-up' })).toBeNull();
-  });
-
-  it('says so when a search finds nothing, and clears back to the list', () => {
-    mocks.query.mockReturnValue(
-      ready([conversation(1, 'Ada Test', 'customer')])
-    );
-    render(<MessagesScreen />);
-
-    fireEvent.change(screen.getByLabelText('Search chats'), {
-      target: { value: 'zzz' },
-    });
-    expect(screen.getByText('No chats match "zzz"')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
-    expect(screen.getByText('Ada Test')).toBeInTheDocument();
-  });
-
   it('marks a returning customer on the row and offers a Customers view', () => {
     const linked = {
       ...conversation(6, 'Linked Test', 'customer'),
@@ -306,43 +200,5 @@ describe('MessagesScreen', () => {
     mocks.query.mockReturnValue(ready([fresh]));
     render(<MessagesScreen />);
     expect(screen.getByText('Signed in')).toBeInTheDocument();
-  });
-
-  it('bugfix: does not request the next page again after a page failed', () => {
-    mocks.query.mockReturnValue({
-      ...ready([conversation(1, 'Ada Test', 'customer')]),
-      hasNextPage: true,
-      isFetchNextPageError: true,
-    });
-    render(<MessagesScreen />);
-
-    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
-  });
-
-  it('offers an explicit retry for the failed page', () => {
-    mocks.query.mockReturnValue({
-      ...ready([conversation(1, 'Ada Test', 'customer')]),
-      hasNextPage: true,
-      isFetchNextPageError: true,
-    });
-    render(<MessagesScreen />);
-
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: 'Could not load more chats. Tap to retry.',
-      })
-    );
-
-    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps loading more pages for a ranked view when nothing failed', () => {
-    mocks.query.mockReturnValue({
-      ...ready([conversation(1, 'Ada Test', 'customer')]),
-      hasNextPage: true,
-    });
-    render(<MessagesScreen />);
-
-    expect(mocks.fetchNextPage).toHaveBeenCalled();
   });
 });

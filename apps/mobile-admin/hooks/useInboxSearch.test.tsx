@@ -1,7 +1,11 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import {
+  notifyManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
+import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ search: vi.fn(), merchant: vi.fn() }));
 
@@ -30,17 +34,42 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   </QueryClientProvider>
 );
 
-const WAIT = { timeout: 3000 };
+/** Moves the fake clock forward and lets every resulting promise settle. */
+const advance = (ms: number) =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+
+/**
+ * Moves the clock, then lets the chain of renders, effects and requests settle:
+ * each page of a multi-page search is its own render-then-effect step.
+ */
+const settle = async (ms: number) => {
+  await advance(ms);
+  for (let i = 0; i < 10; i++) await advance(0);
+};
+
+const DEBOUNCE = 350;
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  // React Query hands results to React on a timer; run it at once instead so
+  // the fake clock only has to drive the debounce.
+  notifyManager.setScheduler((callback) => callback());
   vi.clearAllMocks();
   mocks.merchant.mockReturnValue({ merchant: { id: 'm1' } });
+});
+
+afterEach(() => {
+  notifyManager.setScheduler((callback) => setTimeout(callback, 0));
+  vi.useRealTimers();
 });
 
 describe('useInboxSearch', () => {
   it('searches nothing for a term shorter than two letters', async () => {
     const { result } = renderHook(() => useInboxSearch('a'), { wrapper });
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await advance(DEBOUNCE * 3);
+
     expect(mocks.search).not.toHaveBeenCalled();
     expect(result.current.isPending).toBe(false);
     expect(result.current.results).toEqual([]);
@@ -56,11 +85,14 @@ describe('useInboxSearch', () => {
       wrapper,
     });
 
+    await advance(DEBOUNCE - 1);
     expect(mocks.search).not.toHaveBeenCalled();
     expect(result.current.isPending).toBe(true);
 
-    await waitFor(() => expect(result.current.results).toHaveLength(1), WAIT);
+    await advance(1);
+    await advance(0);
     expect(mocks.search).toHaveBeenCalledWith('order', 1);
+    expect(result.current.results).toHaveLength(1);
     expect(result.current.isPending).toBe(false);
   });
 
@@ -70,9 +102,11 @@ describe('useInboxSearch', () => {
       .mockResolvedValueOnce({ results: [hit(7)], hasMore: false, page: 2 });
     const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
 
-    await waitFor(() => expect(result.current.results).toHaveLength(1), WAIT);
+    await settle(DEBOUNCE + 100);
+
     expect(mocks.search).toHaveBeenNthCalledWith(1, 'order', 1);
     expect(mocks.search).toHaveBeenNthCalledWith(2, 'order', 2);
+    expect(result.current.results).toHaveLength(1);
     expect(result.current.isPending).toBe(false);
   });
 
@@ -85,11 +119,12 @@ describe('useInboxSearch', () => {
         page: 2,
       });
     const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
-    await waitFor(() => expect(result.current.hasMore).toBe(true), WAIT);
+    await settle(DEBOUNCE + 100);
+    expect(result.current.hasMore).toBe(true);
 
     act(() => result.current.loadMore());
+    await settle(100);
 
-    await waitFor(() => expect(result.current.results).toHaveLength(2), WAIT);
     expect(result.current.results.map((r) => r.conversation.id)).toEqual([
       1, 2,
     ]);
@@ -102,22 +137,29 @@ describe('useInboxSearch', () => {
     );
     const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
 
-    await waitFor(() => expect(result.current.isPending).toBe(false), WAIT);
+    await settle(DEBOUNCE + 2000);
+
     expect(mocks.search.mock.calls.length).toBeLessThanOrEqual(6);
+    expect(result.current.isPending).toBe(false);
     expect(result.current.results).toEqual([]);
   });
 
   it('reports an error when the search fails', async () => {
     mocks.search.mockRejectedValue(new Error('down'));
     const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
-    await waitFor(() => expect(result.current.isError).toBe(true), WAIT);
+
+    await settle(DEBOUNCE + 100);
+
+    expect(result.current.isError).toBe(true);
     expect(result.current.results).toEqual([]);
   });
 
   it('does not search until the merchant is known', async () => {
     mocks.merchant.mockReturnValue({ merchant: null });
     renderHook(() => useInboxSearch('order'), { wrapper });
-    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    await advance(DEBOUNCE * 3);
+
     expect(mocks.search).not.toHaveBeenCalled();
   });
 
@@ -128,15 +170,17 @@ describe('useInboxSearch', () => {
       .mockResolvedValueOnce({ results: [hit(3)], hasMore: false, page: 2 });
     const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
 
-    await waitFor(() => expect(result.current.isError).toBe(true), WAIT);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await settle(DEBOUNCE + 100);
+    expect(result.current.isError).toBe(true);
+    await settle(2000);
     // Page 1, then the failing page 2 once: no loop on the failing request.
     expect(mocks.search).toHaveBeenCalledTimes(2);
     expect(result.current.isPending).toBe(false);
 
     act(() => result.current.retry());
+    await settle(100);
 
-    await waitFor(() => expect(result.current.results).toHaveLength(1), WAIT);
+    expect(result.current.results).toHaveLength(1);
     expect(result.current.isError).toBe(false);
   });
 
@@ -145,11 +189,12 @@ describe('useInboxSearch', () => {
       .mockResolvedValueOnce({ results: [hit(1)], hasMore: true, page: 1 })
       .mockRejectedValueOnce(new Error('down'));
     const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
-    await waitFor(() => expect(result.current.results).toHaveLength(1), WAIT);
+    await settle(DEBOUNCE + 100);
 
     act(() => result.current.loadMore());
+    await settle(100);
 
-    await waitFor(() => expect(mocks.search).toHaveBeenCalledTimes(2), WAIT);
+    expect(mocks.search).toHaveBeenCalledTimes(2);
     expect(result.current.results).toHaveLength(1);
     expect(result.current.isError).toBe(false);
   });

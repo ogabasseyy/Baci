@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-22T06:05:50+00:00",
-  "source_revision": "71cf7aab8fcc2827e4d8c4f94e58698b970bdd30",
-  "evidence_digest": "04159edbcc4121291b4b95a5dd330a6dbe579564e26ade46353664aa7fc66cdb",
-  "claims_digest": "bdb9051bbeafa49a66c9b32aac443a4c0b32cf7cd038fc9e98fa916f7c26cbbe",
-  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order delivery preservation, locality recovery, duplicate-customer destination matching, and GIG quote binding after syncing to current main. Re-reviewed current-main customer checkout quote rejection, destination/state matching, and stale-quote recovery alongside the retained paid partner pickup and parcel-binding evidence. The previously reviewed expense evidence remains in scope. All claims remain code-evidenced only; no production capability promotion.",
+  "reviewed_at": "2026-11-22T06:38:07+00:00",
+  "source_revision": "de1316e70d385034319366f9be5a1293f310b212",
+  "evidence_digest": "b3391c0c358d4bf68e5bee81ba55d438d7eea7e9fcf7645014233c8669bc0b0b",
+  "claims_digest": "abce3c12b3152a3841793cacc78836ae918b91dfbbdbc83d753594fbf3b94088",
+  "review_scope": "Source evidence only. Re-reviewed staff-entered mobile manual-order address preservation, rapid street edits, incomplete duplicate-customer drafts, pending Places details, and GIG quote/save concurrency after syncing to current main. Re-reviewed current-main customer checkout quote rejection, destination/state matching, and stale-quote recovery alongside the retained paid partner pickup and parcel-binding evidence. The previously reviewed expense evidence remains in scope. All claims remain code-evidenced only; no production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

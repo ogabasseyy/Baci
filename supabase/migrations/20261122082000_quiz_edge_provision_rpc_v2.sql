@@ -201,4 +201,50 @@ GRANT EXECUTE ON FUNCTION public.prepare_quiz_edge_rooms_v2(
 )
   TO authenticated, service_role;
 
+-- Companion compensating RPC to revert a draft event back to `postgres` when
+-- Cloudflare Edge `init-rooms` or the subsequent launch step fails.
+CREATE OR REPLACE FUNCTION public.reset_quiz_edge_rooms_draft_v2(
+  p_event_id uuid,
+  p_merchant_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_actor_id uuid := auth.uid();
+BEGIN
+  IF v_actor_id IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated' USING ERRCODE = '28000';
+  END IF;
+
+  IF p_event_id IS NULL OR p_merchant_id IS NULL THEN
+    RAISE EXCEPTION 'quiz_event_not_found' USING ERRCODE = 'QZ003';
+  END IF;
+
+  IF NOT public.check_staff_permission(
+    v_actor_id, p_merchant_id, 'marketing', 'edit'
+  ) THEN
+    RAISE EXCEPTION 'not_authorized' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE public.quiz_events
+  SET backend_mode = 'postgres',
+      expected_room_count = NULL,
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id = p_event_id
+    AND merchant_id = p_merchant_id
+    AND contract_version = 2
+    AND status = 'draft';
+END;
+$$;
+
+ALTER FUNCTION public.reset_quiz_edge_rooms_draft_v2(uuid, uuid)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.reset_quiz_edge_rooms_draft_v2(uuid, uuid)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reset_quiz_edge_rooms_draft_v2(uuid, uuid)
+  TO authenticated, service_role;
+
 COMMIT;

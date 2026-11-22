@@ -2,6 +2,7 @@ import { expireProductBlogCache } from '@/lib/expire-product-blog-cache';
 import {
   isQuizEdgeProvisioningConfigured,
   provisionQuizEdgeRooms,
+  rollbackQuizEdgeDraftBackendMode,
 } from '@/lib/quiz/quiz-edge-provision';
 import { getQuizRulesVersion } from '@/lib/quiz/quiz-rules-version';
 import { scheduleReservationProductPurge } from '@/lib/schedule-reservation-product-purge';
@@ -37,10 +38,16 @@ async function findLaunchedMerchantQuizWithBackendV2(args: {
   eventId: string;
   merchantId: string;
   supabase: QuizSupabaseClient;
-}): Promise<(QuizDraftEvent & { backend_mode?: string }) | null> {
+}): Promise<
+  | (QuizDraftEvent & {
+      backend_mode?: string;
+      expected_room_count?: number | null;
+    })
+  | null
+> {
   const { data, error } = await args.supabase
     .from('quiz_events')
-    .select('id, slug, status, title, backend_mode')
+    .select('id, slug, status, title, backend_mode, expected_room_count')
     .eq('id', args.eventId)
     .eq('merchant_id', args.merchantId)
     .eq('contract_version', 2)
@@ -48,12 +55,19 @@ async function findLaunchedMerchantQuizWithBackendV2(args: {
     .maybeSingle();
 
   if (error || !isQuizDraftEvent(data)) return null;
+  const row = data as {
+    backend_mode?: unknown;
+    expected_room_count?: unknown;
+  };
   const backendMode =
-    typeof (data as { backend_mode?: unknown }).backend_mode === 'string'
-      ? (data as { backend_mode: string }).backend_mode
-      : undefined;
+    typeof row.backend_mode === 'string' ? row.backend_mode : undefined;
+  const expectedRoomCount =
+    typeof row.expected_room_count === 'number'
+      ? row.expected_room_count
+      : null;
   return {
     ...(backendMode ? { backend_mode: backendMode } : {}),
+    expected_room_count: expectedRoomCount,
     id: data.id,
     slug: data.slug,
     status: data.status,
@@ -196,6 +210,13 @@ export async function launchMerchantQuizDraftV2(args: {
               ok: false,
             };
           }
+          if (alreadyLaunched.expected_room_count !== expectedRoomCount) {
+            return {
+              code: 'QUIZ_EDGE_ROOM_COUNT_LOCKED',
+              message: `This quiz is already launched with ${alreadyLaunched.expected_room_count ?? 'configured'} Edge rooms and cannot be changed to ${expectedRoomCount}.`,
+              ok: false,
+            };
+          }
           return {
             event: {
               id: alreadyLaunched.id,
@@ -259,6 +280,13 @@ export async function launchMerchantQuizDraftV2(args: {
         return { event: alreadyLaunched, ok: true };
       }
     }
+    if (wantsEdgeRooms) {
+      await rollbackQuizEdgeDraftBackendMode({
+        eventId: input.eventId,
+        merchantId,
+        supabase,
+      });
+    }
     return getLiveLaunchFailure(error?.code);
   }
 
@@ -286,6 +314,13 @@ export async function launchMerchantQuizDraftV2(args: {
     .select('id, slug, status, title')
     .maybeSingle();
   if (error) {
+    if (wantsEdgeRooms) {
+      await rollbackQuizEdgeDraftBackendMode({
+        eventId: input.eventId,
+        merchantId,
+        supabase,
+      });
+    }
     return {
       code: 'QUIZ_LAUNCH_FAILED',
       message: 'The reviewed quiz could not be launched.',
@@ -299,11 +334,19 @@ export async function launchMerchantQuizDraftV2(args: {
     merchantId,
     supabase,
   });
-  return alreadyLaunched
-    ? { event: alreadyLaunched, ok: true }
-    : {
-        code: 'QUIZ_LAUNCH_FAILED',
-        message: 'The reviewed quiz could not be launched.',
-        ok: false,
-      };
+  if (alreadyLaunched) {
+    return { event: alreadyLaunched, ok: true };
+  }
+  if (wantsEdgeRooms) {
+    await rollbackQuizEdgeDraftBackendMode({
+      eventId: input.eventId,
+      merchantId,
+      supabase,
+    });
+  }
+  return {
+    code: 'QUIZ_LAUNCH_FAILED',
+    message: 'The reviewed quiz could not be launched.',
+    ok: false,
+  };
 }

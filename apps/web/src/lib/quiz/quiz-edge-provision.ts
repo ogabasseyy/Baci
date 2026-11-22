@@ -55,17 +55,7 @@ const edgeProvisionPayloadSchema = z.object({
   }),
 });
 
-interface QuizEdgeDraftRollbackFilter {
-  eq: (
-    column: string,
-    value: string
-  ) => QuizEdgeDraftRollbackFilter & PromiseLike<unknown>;
-}
-
 export interface QuizEdgeProvisionSupabase {
-  from?: (table: string) => {
-    update: (values: Record<string, unknown>) => QuizEdgeDraftRollbackFilter;
-  };
   rpc: (
     fn: string,
     args?: Record<string, unknown>
@@ -95,30 +85,44 @@ export function isQuizEdgeProvisioningConfigured(): boolean {
   return Boolean(getQuizEdgeWorkerUrl() && getQuizInternalCoordinatorSecret());
 }
 
-async function rollbackDraftBackendMode(args: {
+/**
+ * Reverts a draft event's `backend_mode` back to `'postgres'` via the
+ * `reset_quiz_edge_rooms_draft_v2` SECURITY DEFINER RPC when Edge room
+ * initialization or the subsequent launch step fails.
+ */
+export async function rollbackQuizEdgeDraftBackendMode(args: {
   eventId: string;
   merchantId: string;
   supabase: QuizEdgeProvisionSupabase;
-}): Promise<void> {
-  if (!args.supabase.from) return;
+}): Promise<boolean> {
   try {
-    await args.supabase
-      .from('quiz_events')
-      .update({
-        backend_mode: 'postgres',
-        expected_room_count: null,
-      })
-      .eq('id', args.eventId)
-      .eq('merchant_id', args.merchantId)
-      .eq('status', 'draft');
+    const { error } = await args.supabase.rpc(
+      'reset_quiz_edge_rooms_draft_v2',
+      {
+        p_event_id: args.eventId,
+        p_merchant_id: args.merchantId,
+      }
+    );
+    if (error) {
+      logger.error({
+        code: error.code,
+        event: 'quiz_edge_provision_rollback_failed',
+        eventId: args.eventId,
+        merchantId: args.merchantId,
+        message: 'reset_quiz_edge_rooms_draft_v2 RPC returned an error',
+      });
+      return false;
+    }
+    return true;
   } catch (cause) {
-    logger.warn({
+    logger.error({
       cause: cause instanceof Error ? cause.message : String(cause),
       event: 'quiz_edge_provision_rollback_failed',
       eventId: args.eventId,
       merchantId: args.merchantId,
-      message: 'Best-effort draft backend_mode rollback failed',
+      message: 'reset_quiz_edge_rooms_draft_v2 RPC threw unexpectedly',
     });
+    return false;
   }
 }
 
@@ -141,6 +145,14 @@ function mapPrepareRpcError(code?: string): QuizEdgeProvisionResult {
     return {
       code: 'QUIZ_QUESTION_POOL_INCOMPLETE',
       message: 'Quiz question pool is incomplete for Edge Rooms provisioning.',
+      ok: false,
+    };
+  }
+  if (code === '22023') {
+    return {
+      code: 'QUIZ_EDGE_CONFIG_INVALID',
+      message:
+        'Invalid Edge Rooms configuration (room count must be between 1 and 256).',
       ok: false,
     };
   }
@@ -218,7 +230,7 @@ export async function provisionQuizEdgeRooms(args: {
       merchantId: args.merchantId,
       message: 'prepare_quiz_edge_rooms_v2 returned an invalid payload',
     });
-    await rollbackDraftBackendMode(args);
+    await rollbackQuizEdgeDraftBackendMode(args);
     return {
       code: 'QUIZ_EDGE_PROVISION_INVALID_PAYLOAD',
       message: 'Quiz question pool is incomplete for Edge Rooms provisioning.',
@@ -246,7 +258,7 @@ export async function provisionQuizEdgeRooms(args: {
         message: 'Cloudflare Worker init-rooms returned non-2xx status',
         status: response.status,
       });
-      await rollbackDraftBackendMode(args);
+      await rollbackQuizEdgeDraftBackendMode(args);
       return {
         code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
         message: `Cloudflare Edge Worker rejected room provisioning (HTTP ${response.status}).`,
@@ -263,7 +275,7 @@ export async function provisionQuizEdgeRooms(args: {
       merchantId: args.merchantId,
       message: 'Cloudflare Worker init-rooms request failed',
     });
-    await rollbackDraftBackendMode(args);
+    await rollbackQuizEdgeDraftBackendMode(args);
     return {
       code: 'QUIZ_EDGE_INIT_ROOMS_FAILED',
       message:

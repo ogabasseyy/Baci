@@ -136,17 +136,14 @@ describe('provisionQuizEdgeRooms', () => {
     }
   });
 
-  it('returns QUIZ_EDGE_INIT_ROOMS_FAILED and rolls back draft backend_mode when Worker returns non-2xx', async () => {
+  it('returns QUIZ_EDGE_INIT_ROOMS_FAILED and rolls back draft via reset_quiz_edge_rooms_draft_v2 when Worker returns non-2xx', async () => {
     process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz-edge.example.com';
     process.env.QUIZ_INTERNAL_COORDINATOR_SECRET = 'coord-secret-xyz';
 
-    const rpc = vi.fn().mockResolvedValue({ data: validPayload, error: null });
-    const rollbackEq = vi.fn().mockReturnThis();
-    const rollbackBuilder = Object.assign(Promise.resolve({ error: null }), {
-      eq: rollbackEq,
-    });
-    const update = vi.fn(() => rollbackBuilder);
-    const from = vi.fn(() => ({ update }));
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ data: validPayload, error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
     const fetchMock = vi
       .fn()
       .mockResolvedValue(new Response('Unauthorized', { status: 401 }));
@@ -156,22 +153,20 @@ describe('provisionQuizEdgeRooms', () => {
       expectedRoomCount: 2,
       fetchImpl: fetchMock as unknown as typeof fetch,
       merchantId: 'merch-1',
-      supabase: { from, rpc },
+      supabase: { rpc },
     });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('QUIZ_EDGE_INIT_ROOMS_FAILED');
     }
-    expect(from).toHaveBeenCalledWith('quiz_events');
-    expect(update).toHaveBeenCalledWith({
-      backend_mode: 'postgres',
-      expected_room_count: null,
+    expect(rpc).toHaveBeenNthCalledWith(2, 'reset_quiz_edge_rooms_draft_v2', {
+      p_event_id: 'evt-1',
+      p_merchant_id: 'merch-1',
     });
-    expect(rollbackEq).toHaveBeenCalledWith('status', 'draft');
   });
 
-  it('maps QZ061 to QUIZ_EVENT_NOT_DRAFT and QZ003 to QUIZ_QUESTION_POOL_INCOMPLETE', async () => {
+  it('maps QZ061, QZ003, and 22023 RPC errors to dedicated error codes', async () => {
     process.env.QUIZ_EDGE_WORKER_URL = 'https://quiz-edge.example.com';
     process.env.QUIZ_INTERNAL_COORDINATOR_SECRET = 'coord-secret-xyz';
 
@@ -204,6 +199,22 @@ describe('provisionQuizEdgeRooms', () => {
     });
     expect(incompletePool).toMatchObject({
       code: 'QUIZ_QUESTION_POOL_INCOMPLETE',
+      ok: false,
+    });
+
+    const invalidConfig = await provisionQuizEdgeRooms({
+      eventId: 'evt-1',
+      expectedRoomCount: 999,
+      merchantId: 'merch-1',
+      supabase: {
+        rpc: vi.fn().mockResolvedValue({
+          data: null,
+          error: { code: '22023', message: 'quiz_edge_room_count_invalid' },
+        }),
+      },
+    });
+    expect(invalidConfig).toMatchObject({
+      code: 'QUIZ_EDGE_CONFIG_INVALID',
       ok: false,
     });
   });

@@ -30,6 +30,13 @@ BEGIN
   THEN
     RAISE EXCEPTION 'prepare_quiz_edge_rooms_v2 EXECUTE privileges are misconfigured';
   END IF;
+
+  IF pg_catalog.has_function_privilege('anon', 'public.reset_quiz_edge_rooms_draft_v2(uuid,uuid)', 'EXECUTE')
+    OR NOT pg_catalog.has_function_privilege('authenticated', 'public.reset_quiz_edge_rooms_draft_v2(uuid,uuid)', 'EXECUTE')
+    OR NOT pg_catalog.has_function_privilege('service_role', 'public.reset_quiz_edge_rooms_draft_v2(uuid,uuid)', 'EXECUTE')
+  THEN
+    RAISE EXCEPTION 'reset_quiz_edge_rooms_draft_v2 EXECUTE privileges are misconfigured';
+  END IF;
 END;
 $$;
 
@@ -253,6 +260,15 @@ BEGIN
     OR (v_payload->'config'->'slots'->1->'variants'->0->>'answerKeyHash') <> public.quiz_answer_key_hash('opt-a')
   THEN
     RAISE EXCEPTION 'prepare_quiz_edge_rooms_v2 returned unexpected payload: %', v_payload;
+  END IF;
+
+  -- 3g. Verify companion reset RPC reverts a draft back to postgres cleanly
+  PERFORM public.reset_quiz_edge_rooms_draft_v2(v_draft_event, v_merchant_a);
+  SELECT backend_mode, expected_room_count
+  INTO v_backend_mode, v_room_count
+  FROM public.quiz_events WHERE id = v_draft_event;
+  IF v_backend_mode <> 'postgres' OR v_room_count IS NOT NULL THEN
+    RAISE EXCEPTION 'reset_quiz_edge_rooms_draft_v2 failed to revert draft, got % / %', v_backend_mode, v_room_count;
   END IF;
 END;
 $$;

@@ -1,25 +1,9 @@
 import 'server-only';
 
-import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { createScopedClient } from '@/lib/supabase/scoped';
 import { signScopedSupabaseJwt } from '@/lib/supabase/scoped-jwt';
-
-const attemptSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('legacy') }),
-  z.object({ kind: z.literal('claimed') }),
-  z.object({ kind: z.literal('pending') }),
-  z.object({ kind: z.literal('refused') }),
-  z.object({
-    kind: z.literal('saved'),
-    reference: z.string().min(1),
-    dva: z.object({
-      account_number: z.string().min(1),
-      account_name: z.string().min(1),
-      bank_name: z.string().min(1),
-    }),
-  }),
-]);
+import { paystackDvaAttemptReceiptSchema } from '@/schemas/paystack-dva-attempt';
 
 /** Only the payment route can claim an attempt after checking order and fees. */
 export async function beginPaystackDvaAttempt(input: {
@@ -56,7 +40,7 @@ export async function beginPaystackDvaAttempt(input: {
       p_tracking_token: input.trackingToken ?? '',
     });
     if (!result.error) {
-      const parsed = attemptSchema.safeParse(result.data);
+      const parsed = paystackDvaAttemptReceiptSchema.safeParse(result.data);
       if (parsed.success) return parsed.data;
     }
     logger.error({

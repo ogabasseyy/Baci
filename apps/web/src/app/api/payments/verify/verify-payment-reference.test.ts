@@ -2,10 +2,10 @@ import { expect, it, vi } from 'vitest';
 import { verifyGatewayPayment } from './verify-gateway-payment';
 import { verifyPaymentReference } from './verify-payment-reference';
 
-vi.mock('./verify-gateway-payment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./verify-gateway-payment')>()),
-  verifyGatewayPayment: vi.fn(),
-}));
+vi.mock('./verify-gateway-payment', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, verifyGatewayPayment: vi.fn() };
+});
 
 it('rejects an empty reference before starting transaction lookup', async () => {
   const load = vi.fn();

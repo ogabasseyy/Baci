@@ -17,6 +17,17 @@ describe('getGiglWalletDetails', () => {
     ).toEqual([{ text: 'Paid by Baci' }]);
   });
 
+  it('does not claim Paid by Baci or ask for a top-up when Baci pays but booking is disabled', () => {
+    expect(
+      getGiglWalletDetails({
+        availableBalance: 0,
+        canBook: false,
+        paidByBaci: true,
+        shortfall: 0,
+      })
+    ).toEqual([]);
+  });
+
   it('says From your wallet when the balance covers the delivery', () => {
     expect(
       getGiglWalletDetails({

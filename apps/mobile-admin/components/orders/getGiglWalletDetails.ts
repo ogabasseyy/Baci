@@ -16,7 +16,9 @@ export function getGiglWalletDetails(
   wallet: GiglWalletSummary | null
 ): ShipmentOptionDetail[] {
   if (!wallet) return [];
-  if (wallet.paidByBaci) return [{ text: 'Paid by Baci' }];
+  // Baci pays: never a top-up prompt; only claim it when booking is allowed.
+  if (wallet.paidByBaci)
+    return wallet.canBook ? [{ text: 'Paid by Baci' }] : [];
   if (wallet.canBook) return [{ text: 'From your wallet' }];
   return [
     { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },

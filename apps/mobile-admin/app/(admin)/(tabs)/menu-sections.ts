@@ -196,6 +196,13 @@ export function createMenuSections({
           onPress: () => onNavigate('/discounts'),
         },
         {
+          id: 'messages',
+          icon: 'chatbox-ellipses-outline',
+          label: 'Messages',
+          description: 'Chats from shoppers on your store',
+          onPress: () => onNavigate('/(admin)/messages'),
+        },
+        {
           id: 'negotiations',
           icon: 'chatbubbles-outline',
           label: 'Negotiation Requests',

@@ -145,4 +145,17 @@ describe('handleNotificationTap', () => {
     expect(requestUpdateCheck).not.toHaveBeenCalled();
     expect(router.push).not.toHaveBeenCalled();
   });
+
+  it('routes customer message notifications to the conversation thread', () => {
+    const router = { push: vi.fn() };
+
+    navigateToNotificationTarget(router, {
+      params: { id: '4821' },
+      screen: 'message',
+    });
+    navigateToNotificationTarget(router, { screen: 'messages' });
+
+    expect(router.push).toHaveBeenNthCalledWith(1, '/(admin)/messages/4821');
+    expect(router.push).toHaveBeenNthCalledWith(2, '/(admin)/messages');
+  });
 });

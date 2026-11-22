@@ -85,6 +85,63 @@ describe('useCheckoutShipping', () => {
     mockFetchShippingQuotes.mockResolvedValue(undefined);
   });
 
+  it('discards a rejected quote and requests a replacement for the current delivery', async () => {
+    const quote = (id: string): ShippingQuote => ({
+      id,
+      displayName: 'GIGL Standard',
+      price: 2500,
+      provider: 'GIGL',
+    });
+    mockFetchShippingQuotes.mockImplementationOnce(async (args) => {
+      args.setShippingQuotes([quote('rejected')]);
+      args.setSelectedQuoteId('rejected');
+      args.setResolvedShippingQuoteContextKey(args.quoteContextKey);
+    });
+    const { result } = renderHook(() =>
+      useCheckoutShipping(createLocatedParams('FCT - Abuja', 'Abuja'))
+    );
+    await waitFor(() =>
+      expect(result.current.selectedQuoteId).toBe('rejected')
+    );
+
+    act(() => result.current.invalidateShippingQuote());
+    expect(result.current.selectedQuoteId).toBe('');
+    expect(result.current.shippingQuotes).toEqual([]);
+    expect(mockFetchShippingQuotes).toHaveBeenCalledTimes(2);
+    expect(mockFetchShippingQuotes).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        city: 'Abuja',
+        state: 'FCT - Abuja',
+        shouldResetSelection: true,
+        previousSelectedQuoteId: null,
+      })
+    );
+  });
+
+  it('aborts the previous quote in effect cleanup when destination becomes incomplete', async () => {
+    let quoteSignal: AbortSignal | undefined;
+    mockFetchShippingQuotes.mockImplementationOnce(
+      async ({ signal, setIsLoadingQuotes }) => {
+        setIsLoadingQuotes(true);
+        quoteSignal = signal;
+        await new Promise<void>((resolve) => {
+          signal?.addEventListener('abort', () => resolve(), { once: true });
+        });
+      }
+    );
+    const { result, rerender } = renderHook(
+      (params: ShippingParams) => useCheckoutShipping(params),
+      { initialProps: createLocatedParams('Rivers', 'Port Harcourt') }
+    );
+    await waitFor(() => expect(quoteSignal).toBeDefined());
+    expect(result.current.isLoadingQuotes).toBe(true);
+
+    await act(async () => rerender(createParams()));
+
+    expect(quoteSignal?.aborted).toBe(true);
+    expect(result.current.isLoadingQuotes).toBe(false);
+  });
+
   it('loads shipping states on mount and clears the loading flag', async () => {
     const { result } = renderHook(
       (props: ShippingParams) => useCheckoutShipping(props),

@@ -96,7 +96,9 @@ export function useCheckoutShipping({
     watchedCity,
     watchedState,
   });
-  const resetQuotes = () => {
+  const resetQuotes = (abortPendingRequest = false) => {
+    if (abortPendingRequest) shippingQuoteAbortRef.current?.abort();
+    setIsLoadingQuotes(false);
     setShippingQuotes([]);
     setSelectedQuoteId('');
     setResolvedQuoteKey('');
@@ -171,12 +173,11 @@ export function useCheckoutShipping({
     if (!watchedState) resetQuotes();
   }
   const quotesSuspendReason = watchedState && watchedCity ? null : 'address';
-  const [prevQuotesSuspendReason, setPrevQuotesSuspendReason] =
-    useState(quotesSuspendReason);
-  if (prevQuotesSuspendReason !== quotesSuspendReason) {
-    setPrevQuotesSuspendReason(quotesSuspendReason);
+  const [priorSuspend, setPriorSuspend] = useState(quotesSuspendReason);
+  if (priorSuspend !== quotesSuspendReason) {
+    setPriorSuspend(quotesSuspendReason);
     if (quotesSuspendReason !== null && deliveryMethod !== 'airport') {
-      resetQuotes();
+      resetQuotes(); // Render-phase clears defer abort to effect cleanup.
     }
   }
   useEffect(() => {
@@ -268,6 +269,7 @@ export function useCheckoutShipping({
     deliveryMethod,
     getShippingProvider: () => getProvider(deliveryMethod, selectedQuote),
     ...handlers,
+    invalidateShippingQuote: () => resetQuotes(true),
     isLoadingCities,
     isLoadingLocations,
     isLoadingQuotes,

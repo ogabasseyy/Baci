@@ -62,17 +62,22 @@ export function postAssistantMessage(
   );
 }
 
-/** Moves a conversation to a person's queue (`open`) or back (`pending`). */
-export function setConversationStatus(
+/**
+ * Moves a conversation to a person's queue (`open`) or back (`pending`). The
+ * bot credential goes first; when it is refused (expired or revoked) the
+ * inbox credential is tried, so a handover caused by a dead bot credential
+ * can still reach a person.
+ */
+export async function setConversationStatus(
   binding: ChatAutoReplyBinding,
   input: { conversationId: number; status: 'open' | 'pending' }
 ): Promise<boolean> {
-  return providerPost(
-    binding,
-    `/conversations/${input.conversationId}/toggle_status`,
-    binding.botApiAccessToken,
-    { status: input.status }
-  );
+  const path = `/conversations/${input.conversationId}/toggle_status`;
+  const body = { status: input.status };
+  if (await providerPost(binding, path, binding.botApiAccessToken, body)) {
+    return true;
+  }
+  return providerPost(binding, path, binding.apiAccessToken, body);
 }
 
 /** Replaces the conversation's whole label list (merge before calling). */

@@ -104,12 +104,16 @@ describe('isLatestChatMessage', () => {
     expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
   });
 
-  it('is false once the assistant has already answered after it', async () => {
+  it("is not cancelled by an older run's late assistant reply", async () => {
+    // Message 3 is the newer question; the assistant message after it is the
+    // answer to an earlier one, posted late.
     stubMessages([
+      message(2),
       message(3),
       message(4, { message_type: 1, sender: { type: 'agent_bot' } }),
     ]);
-    expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
+    expect(await isLatestChatMessage(bot, 7, 2)).toBe(false);
   });
 
   it('is false when the messages cannot be read', async () => {

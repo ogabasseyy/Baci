@@ -268,6 +268,21 @@ describe('recordMerchantTakeover', () => {
     expect(mocks.labels).toHaveBeenCalledOnce();
   });
 
+  it('does not reopen a conversation staff resolved after replying', async () => {
+    mocks.snapshot.mockResolvedValue({ status: 'resolved', labels: ['vip'] });
+    expect(await recordMerchantTakeover(binding, staff('pending'))).toBe(
+      'replied'
+    );
+    expect(mocks.status).not.toHaveBeenCalled();
+  });
+
+  it('reports failure, without moving the queue, when the live status cannot be read', async () => {
+    mocks.snapshot.mockResolvedValue(null);
+    expect(await recordMerchantTakeover(binding, staff('pending'))).toBe(
+      'failed'
+    );
+    expect(mocks.status).not.toHaveBeenCalled();
+  });
   it('only relabels a conversation that is already open', async () => {
     await recordMerchantTakeover(binding, staff('open'));
     expect(mocks.status).not.toHaveBeenCalled();

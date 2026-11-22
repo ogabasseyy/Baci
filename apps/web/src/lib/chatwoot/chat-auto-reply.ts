@@ -203,11 +203,20 @@ export async function recordMerchantTakeover(
   if (!isMerchantReply(event)) return 'skipped';
   const conversationId = event.conversation.id;
   // The status move is what stops the assistant: if it fails the takeover
-  // is not complete, even when the label lands.
-  const moved =
-    event.conversation.status === 'pending'
-      ? await setConversationStatus(binding, { conversationId, status: 'open' })
-      : true;
+  // is not complete, even when the label lands. The webhook's status can be
+  // old by now (a delayed or repeated delivery), so the live one decides:
+  // a conversation staff have since resolved or snoozed is left as it is.
+  let moved = true;
+  if (event.conversation.status === 'pending') {
+    const live = await getConversationSnapshot(binding, conversationId);
+    if (!live) moved = false;
+    else if (live.status === 'pending') {
+      moved = await setConversationStatus(binding, {
+        conversationId,
+        status: 'open',
+      });
+    }
+  }
   const done = await updateLabels(binding, conversationId, {
     add: [CHAT_LABEL_MERCHANT],
     remove: [CHAT_LABEL_AI, CHAT_LABEL_NEEDS_HUMAN],

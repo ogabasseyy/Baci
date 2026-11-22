@@ -67,6 +67,25 @@ describe('chat auto-reply provider client', () => {
     });
   });
 
+  it('moves the status with the inbox credential when the bot credential is refused', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = stubFetch((_url, init) =>
+      header(init) === 'synthetic-bot-token-bbbb'
+        ? { status: 401 }
+        : { body: {} }
+    );
+    expect(
+      await setConversationStatus(binding, {
+        conversationId: 7,
+        status: 'open',
+      })
+    ).toBe(true);
+    expect(fetchMock.mock.calls.map(([, init]) => header(init))).toEqual([
+      'synthetic-bot-token-bbbb',
+      'synthetic-agent-token-aaaa',
+    ]);
+  });
+
   it('sets labels with the agent credential', async () => {
     const fetchMock = stubFetch(() => ({ body: {} }));
     await setConversationLabels(binding, {

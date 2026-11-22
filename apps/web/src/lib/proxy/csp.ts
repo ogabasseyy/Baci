@@ -114,18 +114,36 @@ export function generateCSP(
  * reporting endpoint, so violations are observable only in local DevTools.
  */
 export function generateStorefrontCspReportOnlyCandidate(csp: string): string {
-  const directives = csp.split('; ').filter(Boolean);
-  const scriptSource = directives.findIndex((directive) =>
-    directive.startsWith('script-src ')
+  const directives = csp
+    .split(';')
+    .map((directive) => normalizeCspDirective(directive))
+    .filter(Boolean);
+  const scriptSource = directives.findIndex(
+    (directive) => getCspDirectiveName(directive) === 'script-src'
   );
   if (scriptSource === -1) return csp;
 
-  directives[scriptSource] = directives[scriptSource]
-    .replace(/\s+'unsafe-(?:inline|eval)'(?=\s|$)/g, '')
-    .trim();
+  const [name, ...sources] = directives[scriptSource].split(' ');
+  directives[scriptSource] = [
+    name,
+    ...sources.filter(
+      (source) => source !== "'unsafe-inline'" && source !== "'unsafe-eval'"
+    ),
+  ].join(' ');
   setCspDirective(directives, 'script-src-attr', "'none'");
   setCspDirective(directives, 'form-action', "'self'");
   return directives.join('; ');
+}
+
+function normalizeCspDirective(directive: string): string {
+  const tokens = directive.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return '';
+  tokens[0] = tokens[0].toLowerCase();
+  return tokens.join(' ');
+}
+
+function getCspDirectiveName(directive: string): string {
+  return directive.split(' ', 1)[0].toLowerCase();
 }
 
 function setCspDirective(
@@ -133,10 +151,10 @@ function setCspDirective(
   name: string,
   value: string
 ): void {
-  const index = directives.findIndex((directive) =>
-    directive.startsWith(`${name} `)
+  const index = directives.findIndex(
+    (directive) => getCspDirectiveName(directive) === name
   );
-  const serialized = `${name} ${value}`;
+  const serialized = `${name.toLowerCase()} ${value}`;
   if (index === -1) directives.push(serialized);
   else directives[index] = serialized;
 }

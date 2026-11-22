@@ -121,11 +121,24 @@ export function generateStorefrontCspReportOnlyCandidate(csp: string): string {
   if (scriptSource === -1) return csp;
 
   directives[scriptSource] = directives[scriptSource]
-    .replace(/\s+'unsafe-inline'(?=\s|$)/g, '')
+    .replace(/\s+'unsafe-(?:inline|eval)'(?=\s|$)/g, '')
     .trim();
-  directives.push("script-src-attr 'none'");
-  directives.push("form-action 'self'");
+  setCspDirective(directives, 'script-src-attr', "'none'");
+  setCspDirective(directives, 'form-action', "'self'");
   return directives.join('; ');
+}
+
+function setCspDirective(
+  directives: string[],
+  name: string,
+  value: string
+): void {
+  const index = directives.findIndex((directive) =>
+    directive.startsWith(`${name} `)
+  );
+  const serialized = `${name} ${value}`;
+  if (index === -1) directives.push(serialized);
+  else directives[index] = serialized;
 }
 
 /** Exact HTTPS origin only; malformed environment values never widen CSP. */

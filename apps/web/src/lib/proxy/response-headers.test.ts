@@ -241,6 +241,29 @@ it('does not preview the storefront candidate outside local non-production opt-i
   }
 });
 
+it('keeps the report-only preview off when its opt-in flag is false', () => {
+  vi.stubEnv('BACI_CSP_REPORT_ONLY_PREVIEW', 'false');
+  vi.stubEnv('NODE_ENV', 'test');
+  try {
+    const response = applySecurityHeaders(
+      NextResponse.next(),
+      '/checkout',
+      'Mozilla',
+      'storefront',
+      true
+    );
+
+    expect(
+      response.headers.get('Content-Security-Policy-Report-Only')
+    ).toBeNull();
+    expect(response.headers.get('Content-Security-Policy')).toContain(
+      "script-src 'self' 'unsafe-inline'"
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
 it('delegates only explicitly configured staging selfie camera origins on checkout', () => {
   const host = 'https://staging.d1l1k5yxed9cvn.amplifyapp.com';
   vi.stubEnv('VERCEL_ENV', 'preview');

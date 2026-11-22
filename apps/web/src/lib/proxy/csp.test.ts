@@ -55,6 +55,27 @@ describe('proxy CSP', () => {
     expect(candidate).not.toContain('report-to');
   });
 
+  it('removes the local eval exception and replaces duplicate candidate directives', () => {
+    const local = generateCSP('storefront', true);
+    const candidate = generateStorefrontCspReportOnlyCandidate(
+      `${local}; script-src-attr 'unsafe-inline'; form-action https://provider.example`
+    );
+    const script = directive(candidate, 'script-src');
+
+    expect(script).not.toContain("'unsafe-inline'");
+    expect(script).not.toContain("'unsafe-eval'");
+    expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
+    expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
+    expect(
+      candidate.split('; ').filter((part) => part.startsWith('form-action '))
+    ).toHaveLength(1);
+    expect(
+      candidate
+        .split('; ')
+        .filter((part) => part.startsWith('script-src-attr '))
+    ).toHaveLength(1);
+  });
+
   it('allows only an explicitly enabled, normalized Chatwoot platform origin on storefronts', () => {
     vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
     vi.stubEnv('EKAETTE_CHATWOOT_WIDGET_ENABLED', 'true');

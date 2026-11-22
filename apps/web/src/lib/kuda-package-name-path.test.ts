@@ -34,4 +34,14 @@ describe('isPackageNamePath', () => {
     expect(isPackageNamePath(items, 'b', 'premium - monthly')).toBe(false);
     expect(isPackageNamePath(undefined, 'b', 'monthly')).toBe(false);
   });
+
+  it('accepts the displayed path when an item is named only by its provider', () => {
+    const tagged: BillItem[] = [
+      item('GROUP', '(Kuda)', [item('C', 'Monthly (Kuda)')]),
+      item('D', '(Kuda)'),
+    ];
+
+    expect(isPackageNamePath(tagged, 'c', 'Plan / Monthly')).toBe(true);
+    expect(isPackageNamePath(tagged, 'd', 'Plan')).toBe(true);
+  });
 });

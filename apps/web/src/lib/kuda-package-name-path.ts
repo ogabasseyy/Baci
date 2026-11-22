@@ -6,18 +6,30 @@ function plain(name: string) {
   return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+/** An item name as the billers list shows it: provider tags stripped, "Plan" if nothing is left. */
+function displayName(name: string) {
+  return stripProviderNames(name) || 'Plan';
+}
+
+/**
+ * Every name path to the package with this code, both as Kuda named the
+ * items and as the billers list displays them (each segment cleaned like
+ * the billers route does), since checkouts send the displayed names.
+ */
 function namePaths(
   items: BillItem[] | undefined,
   code: string,
-  prefix: string[],
+  raw: string[],
+  shown: string[],
   found: string[]
 ): string[] {
   for (const item of items ?? []) {
-    const path = [...prefix, item.itemName];
+    const rawPath = [...raw, item.itemName];
+    const shownPath = [...shown, displayName(item.itemName)];
     if (normalizeKudaItemCode(item.itemCode) === code) {
-      found.push(path.join(' / '));
+      found.push(rawPath.join(' / '), shownPath.join(' / '));
     }
-    namePaths(item.billItems, code, path, found);
+    namePaths(item.billItems, code, rawPath, shownPath, found);
   }
   return found;
 }
@@ -25,8 +37,8 @@ function namePaths(
 /**
  * Whether `path` (the checkout's "<package path>", the selected items'
  * names joined by " / ") is the name path to the package with this
- * (normalized) code among `items`, compared ignoring case and spacing, with
- * or without provider tags.
+ * (normalized) code among `items`, compared ignoring case and spacing, as
+ * Kuda named it or as the billers list displays it.
  */
 export function isPackageNamePath(
   items: BillItem[] | undefined,
@@ -34,8 +46,7 @@ export function isPackageNamePath(
   path: string
 ): boolean {
   const sent = plain(path);
-  return namePaths(items, code, [], []).some(
-    (candidate) =>
-      plain(candidate) === sent || plain(stripProviderNames(candidate)) === sent
+  return namePaths(items, code, [], [], []).some(
+    (candidate) => plain(candidate) === sent
   );
 }

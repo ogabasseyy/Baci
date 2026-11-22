@@ -307,7 +307,8 @@ describe('NewOrderAddressInput', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('uses the latest typed locality when rapid edits are batched', () => {
+  it('keeps locality confirmation after reverting a pin-invalidating edit', () => {
+    const setDeliveryInfo = vi.fn();
     render(
       <NewOrderAddressInput
         controller={makeController({
@@ -318,6 +319,7 @@ describe('NewOrderAddressInput', () => {
             phone: '08030000000',
             state: 'Lagos',
           },
+          setDeliveryInfo,
         })}
         googleMapsApiKey="AIza-test-key"
       />
@@ -336,6 +338,20 @@ describe('NewOrderAddressInput', () => {
       });
     });
 
+    const firstUpdate = setDeliveryInfo.mock.calls[0][0] as (
+      previous: AddressInputController['deliveryInfo']
+    ) => AddressInputController['deliveryInfo'];
+    expect(
+      firstUpdate({
+        address: 'Saved street',
+        city: 'Lagos',
+        name: 'Ada',
+        phone: '08030000000',
+        state: 'Lagos',
+        latitude: 6.6,
+        longitude: 3.4,
+      })
+    ).toMatchObject({ latitude: undefined, longitude: undefined });
     expect(
       screen.getByText(
         'Confirm the city and state match the delivery address before saving.'

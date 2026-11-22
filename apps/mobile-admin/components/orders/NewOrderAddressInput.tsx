@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import type { useNewOrderController } from '@/hooks/useNewOrderController';
@@ -49,17 +49,21 @@ export function NewOrderAddressInput({
     city: deliveryInfo.city,
     state: deliveryInfo.state,
   });
-  // Keep the event-time value current even when React batches rapid keystrokes.
-  latestLocalityRef.current = {
-    city: deliveryInfo.city,
-    state: deliveryInfo.state,
-  };
   const [detailsRecovery, setDetailsRecovery] = useState(false);
   const [manualLocality, setManualLocality] = useState(false);
+
+  useLayoutEffect(() => {
+    latestLocalityRef.current = {
+      city: deliveryInfo.city,
+      state: deliveryInfo.state,
+    };
+  }, [deliveryInfo.city, deliveryInfo.state]);
 
   const setLocality = (field: 'city' | 'state', text: string) => {
     const previousText = latestLocalityRef.current[field];
     if (previousText.trim().toLowerCase() !== text.trim().toLowerCase()) {
+      // Keep the confirmation visible after reverting: the original pin was
+      // invalidated by the first edit and typing back cannot restore it.
       setManualLocality(true);
     }
     latestLocalityRef.current[field] = text;

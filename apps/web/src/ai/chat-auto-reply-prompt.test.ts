@@ -87,6 +87,18 @@ describe('formatChatAutoReplyProducts', () => {
     );
   });
 
+  it('treats a SKU-matrix product as sold by option even without the flags', () => {
+    const matrix = {
+      name: 'Demo Watch',
+      price: 80000,
+      stock: 3,
+      variant_model: 'sku_matrix',
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([matrix], 'NGN')).toBe(
+      '- Demo Watch | base price NGN 80000, exact price depends on the option chosen | availability depends on the option chosen'
+    );
+  });
+
   it('says so when nothing matched, so the model cannot invent a product', () => {
     expect(formatChatAutoReplyProducts([], 'NGN')).toBe(
       'No matching products were found.'

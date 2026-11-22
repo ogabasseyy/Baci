@@ -225,16 +225,14 @@ export async function recordMerchantTakeover(
   // is not complete, even when the label lands. The webhook's status can be
   // old by now (a delayed or repeated delivery), so the live one decides:
   // a conversation staff have since resolved or snoozed is left as it is.
-  let moved = true;
-  if (event.conversation.status === 'pending') {
-    const live = await getConversationSnapshot(binding, conversationId);
-    if (!live) moved = false;
-    else if (live.status === 'pending') {
-      moved = await setConversationStatus(binding, {
-        conversationId,
-        status: 'open',
-      });
-    }
+  // The event may carry no status at all, so the live read is unconditional.
+  const live = await getConversationSnapshot(binding, conversationId);
+  let moved = live !== null;
+  if (live?.status === 'pending') {
+    moved = await setConversationStatus(binding, {
+      conversationId,
+      status: 'open',
+    });
   }
   const done = await updateLabels(binding, conversationId, {
     add: [CHAT_LABEL_MERCHANT],

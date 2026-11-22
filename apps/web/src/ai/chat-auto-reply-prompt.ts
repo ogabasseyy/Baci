@@ -1,3 +1,4 @@
+import { requiresProductSelection } from '@baci/shared/lib';
 import type { ChatProductResult } from '@/ai/chat-product-result';
 
 export type ChatAutoReplyTurn = { role: 'user' | 'assistant'; content: string };
@@ -31,8 +32,8 @@ export function formatChatAutoReplyProducts(
       // A product sold through variants or condition offers keeps its
       // inventory on the options: the parent's count, zero or not, says
       // nothing about a particular option, so neither is reported.
-      const soldByOption =
-        product.has_variants === true || product.has_condition_offers === true;
+      // The storefront's own rule for "the shopper must pick an option".
+      const soldByOption = requiresProductSelection(product);
       const stock = soldByOption
         ? 'availability depends on the option chosen'
         : product.manage_stock === false

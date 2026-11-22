@@ -76,12 +76,13 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('invalid_request');
     }
 
-    // Only browser REDVAULT checkouts need recovery authority after a
+    // Browser checkouts can request recovery authority after a
     // lost order response. Bind that authority to the server-verified
     // customer session as well as the reviewed cart and checkout.
     let recoveryUserId: string | null | undefined;
     if (
-      parsedBody.data.recoveryForRedvault &&
+      (parsedBody.data.recoveryForRedvault ||
+        parsedBody.data.recoveryForBankTransfer) &&
       !requestUsesDeviceProof(request)
     ) {
       const auth = await authenticateApiRequest(request, {

@@ -93,4 +93,33 @@ describe('useInboxCustomer', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.data).toBeUndefined();
   });
+
+  it('bugfix: follows the shopper while the chat stays open', async () => {
+    mocks.fetch.mockResolvedValueOnce(null).mockResolvedValue(profile);
+    const { result } = renderHook(
+      () => useInboxCustomer({ conversationId: 9, merchantId: 'm1' }),
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
+
+    // The shopper signs in: a refresh (the poll, or any invalidation of the
+    // chat's queries) brings the card in without reopening the conversation.
+    await client.invalidateQueries({ queryKey: ['inbox-customer', 'm1', 9] });
+    await waitFor(() => expect(result.current.data).toEqual(profile));
+  });
+
+  it('polls on a timer so an open chat does not stay stale', () => {
+    mocks.fetch.mockResolvedValue(profile);
+    renderHook(
+      () => useInboxCustomer({ conversationId: 9, merchantId: 'm1' }),
+      { wrapper }
+    );
+    const [query] = client
+      .getQueryCache()
+      .findAll({ queryKey: ['inbox-customer', 'm1', 9] });
+    expect(
+      (query.options as { refetchInterval?: number }).refetchInterval
+    ).toBe(30_000);
+  });
 });

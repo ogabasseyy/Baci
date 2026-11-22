@@ -30,6 +30,7 @@ const json = (status: number, body: unknown = {}) => ({
 });
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
   window.localStorage.clear();
   (window as unknown as { $chatwoot: unknown }).$chatwoot = {
@@ -226,5 +227,24 @@ describe('useChatwootCustomerLink', () => {
     expect(identityListeners).toHaveLength(1);
     unmount();
     expect(identityListeners).toHaveLength(0);
+  });
+
+  it('bugfix: still removes the link on sign-out when storage is blocked', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    expect(window.localStorage.getItem(MARKER)).toBeNull();
+
+    mocks.live.mockReturnValue({
+      customerId: null,
+      merchantSlug: 'ogabassey',
+      userId: null,
+    });
+    publishIdentity();
+
+    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
   });
 });

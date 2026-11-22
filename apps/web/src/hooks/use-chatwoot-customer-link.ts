@@ -14,6 +14,13 @@ type ChatwootContactApi = {
 
 const LINK_ENDPOINT = '/api/storefront/chatwoot/customer-link';
 
+/**
+ * Stores whose chat link was set during this page's life. The persisted marker
+ * is the cross-page record, but storage can be blocked or full, so sign-out
+ * must not depend on it.
+ */
+const linkedThisSession = new Set<string>();
+
 function chatwoot(): ChatwootContactApi | undefined {
   return (window as Window & { $chatwoot?: ChatwootContactApi }).$chatwoot;
 }
@@ -56,14 +63,23 @@ export function useChatwootCustomerLink(
     // Each sync gets a number; only the newest may act on its answer.
     let generation = 0;
 
-    const clearLink = () => {
-      if (!readMarker(markerKey)) return;
+    // `force` is for a sign-out we just saw happen: remove the note even if no
+    // marker survived (blocked storage), since a note may well be attached.
+    const clearLink = (force = false) => {
+      if (
+        !force &&
+        !readMarker(markerKey) &&
+        !linkedThisSession.has(storeSlug)
+      ) {
+        return;
+      }
       try {
         chatwoot()?.deleteCustomAttribute?.(CHAT_CUSTOMER_LINK_ATTRIBUTE);
       } catch {
         // The widget may be mid-reload; the next load tries again.
         return;
       }
+      linkedThisSession.delete(storeSlug);
       writeMarker(markerKey, false);
     };
 
@@ -94,6 +110,7 @@ export function useChatwootCustomerLink(
         chatwoot()?.setCustomAttributes?.({
           [CHAT_CUSTOMER_LINK_ATTRIBUTE]: token,
         });
+        linkedThisSession.add(storeSlug);
         writeMarker(markerKey, true);
       } catch {
         // Linking is a convenience; the chat works the same without it.
@@ -106,7 +123,7 @@ export function useChatwootCustomerLink(
       if (!live.userId && !live.customerId) {
         // Signed out: drop any request in flight and remove the note now.
         generation++;
-        clearLink();
+        clearLink(true);
         return;
       }
       void sync();

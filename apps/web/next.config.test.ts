@@ -38,6 +38,10 @@ describe('next.config core options', () => {
     vi.unstubAllEnvs();
   });
 
+  it('disables the Next.js X-Powered-By header', () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
+
   it('lets proxy handle legacy Klump webhook trailing slash compatibility', () => {
     expect(nextConfig.skipTrailingSlashRedirect).toBe(true);
   });

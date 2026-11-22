@@ -126,6 +126,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
   deploymentId: NEXT_DEPLOYMENT_ID,
   env: POSTHOG_PUBLIC_BUILD_ENV,
+  poweredByHeader: false,
   typescript: BUILD_TYPESCRIPT_CONFIG,
 
   // Keep heavy server-only packages external to reduce function bundle size and peak memory.

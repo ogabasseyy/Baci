@@ -106,12 +106,14 @@ export function HomeProductGrid({
     gridRef,
     Boolean(InteractionBindings && InteractiveCard)
   );
-  // Scope activation to the grid itself so pointer/keyboard activity elsewhere
-  // on the page (hero, nav, search) never downloads the interactive-card graph.
+  // Scope activation to fine-pointer/keyboard activity inside the grid itself
+  // so touch scrolling or tapping a card on mobile web keeps the clean card
+  // without swapping in desktop overlay buttons mid-tap.
   const interactionsActivated = useDeferredActivation({
     timeoutMs: 0,
     activateOnIdle: false,
     deferInteractionActivationUntilNextPaint: true,
+    ignoreTouchInteraction: true,
     interactionTargetRef: gridRef,
   });
   useEffect(() => {

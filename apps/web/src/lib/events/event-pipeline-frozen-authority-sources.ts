@@ -126,8 +126,10 @@ export const eventPipelineFrozenRoutes = {
   // signs server-verified claims for the existing order RPC. The rollout flag
   // defaults off; this change adds no privileged-client construction, payment,
   // notification, tenant, credential, or event-dispatch authority.
+  // Native Oxygen admission checks the authenticated order client and the
+  // resolved merchant before replay. It adds no credential or event authority.
   'apps/web/src/app/api/orders/route.ts':
-    'a5589c0931eb28e0e579925aa97978be7faec6246fefada2c781a9217bd38b90',
+    '62aaf994d5539614bb061c2c9461dfbb5bfd57b8da8a61c027347704513d2e44',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

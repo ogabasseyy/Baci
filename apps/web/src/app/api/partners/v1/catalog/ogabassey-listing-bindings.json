@@ -896,7 +896,8 @@
   {
     "listingId": "08aba685-e428-40e1-b971-7c13b51735a5",
     "productId": "08aba685-e428-40e1-b971-7c13b51735a5",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "08b2ddaf-3e46-4065-b6e0-173f8096e2db",
@@ -1789,7 +1790,8 @@
   {
     "listingId": "120f26d6-d54c-4a10-8ed5-9b1af2478032",
     "productId": "120f26d6-d54c-4a10-8ed5-9b1af2478032",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "12290df6-4758-4fe9-b8e2-6bb7df583740",
@@ -4872,7 +4874,8 @@
   {
     "listingId": "2eb12db1-9256-45e8-bb52-35c67200e87e",
     "productId": "2eb12db1-9256-45e8-bb52-35c67200e87e",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "2eb2e081-e5e9-4b19-afa3-9387ba390c68",
@@ -6920,7 +6923,8 @@
   {
     "listingId": "41e0a7d9-3368-4cda-9d26-e3297d9ecb90",
     "productId": "41e0a7d9-3368-4cda-9d26-e3297d9ecb90",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "41e178aa-83ea-40c4-ab12-0dc613e85676",
@@ -8466,7 +8470,8 @@
   {
     "listingId": "5028abaa-79ba-46cf-bd66-45376f4650de",
     "productId": "5028abaa-79ba-46cf-bd66-45376f4650de",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "5034862b-a71f-4980-8fcf-409fec9c39c8",
@@ -8731,7 +8736,8 @@
   {
     "listingId": "52f8d91c-4c5e-4595-a5b8-024093ebaf45",
     "productId": "52f8d91c-4c5e-4595-a5b8-024093ebaf45",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "530783b7-2239-4700-b423-4ac97bf2463e",
@@ -9734,7 +9740,8 @@
   {
     "listingId": "5bcde4ec-6929-44f7-b09e-0636def919de",
     "productId": "5bcde4ec-6929-44f7-b09e-0636def919de",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "5be6c323-56fa-4ae6-b020-c104824205ba",
@@ -11939,7 +11946,8 @@
   {
     "listingId": "727ecd59-79a7-4a5c-b761-30d006c6ff6c",
     "productId": "727ecd59-79a7-4a5c-b761-30d006c6ff6c",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "72889b67-0004-422f-8b6b-212c11b3c53b",
@@ -13738,7 +13746,8 @@
   {
     "listingId": "841c0a60-2c79-424f-a70c-32f2481caa97",
     "productId": "841c0a60-2c79-424f-a70c-32f2481caa97",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "8441acb9-666d-446b-ace9-d0a1113fdd1e",
@@ -15773,7 +15782,8 @@
   {
     "listingId": "9731dad8-ca74-4dfd-8af0-ab2c30e23cf7",
     "productId": "9731dad8-ca74-4dfd-8af0-ab2c30e23cf7",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "97515814-260f-4f46-9af7-d9a36dd63d1f",
@@ -16173,7 +16183,8 @@
   {
     "listingId": "9b1b3858-a825-4241-89f1-87a91b6c8f59",
     "productId": "9b1b3858-a825-4241-89f1-87a91b6c8f59",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "9b4dad52-eac6-4b48-946b-1c29935192ed",
@@ -19534,7 +19545,8 @@
   {
     "listingId": "ba75a901-b05f-4a6e-99e6-855c6fd6faca",
     "productId": "ba75a901-b05f-4a6e-99e6-855c6fd6faca",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "ba7692f8-9cd5-492e-a337-92aa5d277c37",
@@ -19557,7 +19569,8 @@
   {
     "listingId": "baa1a0e8-f2a1-43fc-a2a2-235811f62f7c",
     "productId": "baa1a0e8-f2a1-43fc-a2a2-235811f62f7c",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "baa2775a-8469-4c03-8e7e-ff0879605d52",
@@ -19627,7 +19640,8 @@
   {
     "listingId": "bbd0b783-7ade-4ad5-8668-ef321d7714f2",
     "productId": "bbd0b783-7ade-4ad5-8668-ef321d7714f2",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "bbd4d3ed-d8cb-44e0-bdf3-143807d471e6",
@@ -19844,7 +19858,8 @@
   {
     "listingId": "bde386de-cda5-4d8f-93de-55fe5721fd72",
     "productId": "bde386de-cda5-4d8f-93de-55fe5721fd72",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "be313992-1126-4545-99e1-7c7533bd7ee2",
@@ -20122,7 +20137,8 @@
   {
     "listingId": "c0579bfe-8c46-4100-88ad-970f512f1f82",
     "productId": "c0579bfe-8c46-4100-88ad-970f512f1f82",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "c063c5c6-3494-4859-a62f-fbfe4fe31a17",
@@ -20490,7 +20506,8 @@
   {
     "listingId": "c3ec72c5-32aa-46bf-bdff-c9fbeace087c",
     "productId": "c3ec72c5-32aa-46bf-bdff-c9fbeace087c",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "c3f76290-a014-4302-8ed6-fd596aeaf966",
@@ -21291,7 +21308,8 @@
   {
     "listingId": "cbe3c0bf-0d28-4622-b38a-04a1599a75b0",
     "productId": "cbe3c0bf-0d28-4622-b38a-04a1599a75b0",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "cbe8dec0-fe9c-45e8-b280-323898183f6d",
@@ -23335,7 +23353,8 @@
   {
     "listingId": "de0a6935-b470-4af7-9e00-3cb9d5aeaf11",
     "productId": "de0a6935-b470-4af7-9e00-3cb9d5aeaf11",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "de1996f4-4369-40f0-a89c-f525826b4961",
@@ -23551,7 +23570,8 @@
   {
     "listingId": "e02b10a3-f8cd-41bf-ab0d-2769cc15bb7a",
     "productId": "e02b10a3-f8cd-41bf-ab0d-2769cc15bb7a",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "e02f0b2e-4b27-4157-ab7a-5415ab1e3135",
@@ -24646,7 +24666,8 @@
   {
     "listingId": "eb80e17d-a97c-4e54-b426-e041efcda902",
     "productId": "eb80e17d-a97c-4e54-b426-e041efcda902",
-    "condition": "new"
+    "condition": "new",
+    "retired": true
   },
   {
     "listingId": "eb8246bb-d85f-4b2c-b110-5e9a23d89d13",

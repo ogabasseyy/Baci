@@ -57,7 +57,10 @@ export function identityKeyOfDisplay(item: SharedCartDisplayItem): string {
  * (negotiated price in minor units, status normalized to 'none').
  */
 export function displayLineMatchesAddLane(
-  line: SharedCartDisplayItem,
+  line: Pick<
+    SharedCartDisplayItem,
+    'quizVoucherToken' | 'quizAwardId' | 'negotiatedPrice' | 'negotiationStatus'
+  >,
   lane: {
     voucherToken?: string;
     voucherAwardId?: string;

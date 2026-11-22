@@ -2,6 +2,7 @@ import type { InternationalShipmentOrderItem } from '@/lib/shipping/internationa
 
 export type BookOrderRecord = {
   id: string;
+  source?: string | null;
   customer_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;

@@ -11,6 +11,7 @@ export interface PlaceDetails {
   streetNumber: string;
   route: string;
   city: string;
+  lga?: string;
   state: string;
   zip: string;
   country: string;

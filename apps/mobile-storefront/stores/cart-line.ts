@@ -19,11 +19,11 @@ export function createCartLineId(
 }
 
 function getNormalizedVoucherIdentifier(value: string | undefined) {
-  const trimmedValue = value?.trim();
+  const trimmedValue = typeof value === 'string' ? value.trim() : '';
   return trimmedValue ? trimmedValue : null;
 }
 
-function hasVoucherIdentifier(
+export function hasVoucherIdentifier(
   item: Pick<CartItem, 'voucher_award_id' | 'voucher_token'>
 ) {
   return Boolean(

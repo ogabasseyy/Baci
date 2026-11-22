@@ -315,7 +315,8 @@ describe('useCheckoutSubmit rollback credit', () => {
         message: expect.stringMatching(/cart is unchanged/i),
       }),
       'paystack',
-      'order-1'
+      'order-1',
+      expect.any(Function)
     );
   });
 });

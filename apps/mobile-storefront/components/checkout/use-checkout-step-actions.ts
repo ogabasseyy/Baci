@@ -20,8 +20,10 @@ import {
   useCheckoutSubmit,
 } from './use-checkout-submit';
 
-interface UseCheckoutStepActionsParams extends UseCheckoutSubmitParams {
+interface UseCheckoutStepActionsParams
+  extends Omit<UseCheckoutSubmitParams, 'onShippingQuoteRejected'> {
   handleSubmit: UseFormHandleSubmit<ShippingAddressInput>;
+  invalidateShippingQuote: () => void;
   isPrizeSimulation?: boolean;
   merchantPickupLocation?: MerchantPickupLocation;
   onPrizeSimulationComplete?: () => void;
@@ -34,6 +36,7 @@ interface UseCheckoutStepActionsParams extends UseCheckoutSubmitParams {
 
 export function useCheckoutStepActions({
   handleSubmit,
+  invalidateShippingQuote,
   isPrizeSimulation = false,
   merchantPickupLocation,
   onPrizeSimulationComplete,
@@ -48,6 +51,11 @@ export function useCheckoutStepActions({
 }: UseCheckoutStepActionsParams) {
   const onCheckoutSubmit = useCheckoutSubmit({
     ...submitParams,
+    onShippingQuoteRejected: () => {
+      setIsDeliveryCollapsed(false);
+      setStep('address');
+      invalidateShippingQuote();
+    },
     selectedPayment,
     setStep,
   });

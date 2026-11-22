@@ -73,6 +73,105 @@ describe('handleCheckoutSubmitError', () => {
     jest.restoreAllMocks();
   });
 
+  it('refreshes a rejected quote and tracks the fixed error code without request details', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    );
+    const refresh = jest.fn();
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+    handleCheckoutSubmitError(
+      new OrderError(
+        'private address',
+        'VALIDATION_ERROR',
+        'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH'
+      ),
+      'credit_direct',
+      undefined,
+      refresh
+    );
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Delivery quote changed',
+      expect.stringContaining('delivery'),
+      expect.any(Array)
+    );
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_shipping_quote_rejected',
+      'Delivery quote rejected before order creation',
+      expect.objectContaining({
+        error_code: 'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
+        payment_method: 'credit_direct',
+      })
+    );
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
+  it('keeps a transient 5xx quote lookup failure on the generic pre-order path', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    );
+    const refresh = jest.fn();
+    trackCheckoutPaymentFailed.mockClear();
+    handleCheckoutSubmitError(
+      new OrderError(
+        'Server error. Please try again in a few moments.',
+        'SERVER_ERROR'
+      ),
+      'credit_direct',
+      undefined,
+      refresh
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Order Failed',
+      'Server error. Please try again in a few moments.',
+      expect.any(Array)
+    );
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'Server error. Please try again in a few moments.',
+      expect.objectContaining({ errorCode: 'SERVER_ERROR' })
+    );
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-requote a quote scoped to another merchant', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    );
+    const refresh = jest.fn();
+    trackCheckoutPaymentFailed.mockClear();
+    trackError.mockClear();
+    handleCheckoutSubmitError(
+      new OrderError(
+        'The delivery quote is not available for this store.',
+        'VALIDATION_ERROR',
+        'INTERNATIONAL_QUOTE_MERCHANT_MISMATCH'
+      ),
+      'credit_direct',
+      undefined,
+      refresh
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Invalid Information',
+      'The delivery quote is not available for this store.',
+      expect.any(Array)
+    );
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'The delivery quote is not available for this store.',
+      expect.objectContaining({
+        errorCode: 'VALIDATION_ERROR',
+        step: 'place_order',
+      })
+    );
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
   it('directs the customer to the existing order for an idempotency conflict', () => {
     handleCheckoutSubmitError(
       new OrderError(
@@ -353,12 +452,15 @@ describe('handleCheckoutSubmitError', () => {
     // createOrder committed order-9 before Paystack init rejected, but the
     // initializer emits payment_started only on success: no flow opened, so
     // the funnel failure would be unmatched. The diagnostic still fires.
+    const refreshQuote = jest.fn();
     handleCheckoutSubmitError(
       new OrderError('Failed to initialize payment', 'PAYMENT_INIT_ERROR'),
       'paystack' as Parameters<typeof handleCheckoutSubmitError>[1],
-      'order-9'
+      'order-9',
+      refreshQuote
     );
 
+    expect(refreshQuote).not.toHaveBeenCalled();
     expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
     expect(trackError).toHaveBeenCalledWith(
       'checkout_failed',

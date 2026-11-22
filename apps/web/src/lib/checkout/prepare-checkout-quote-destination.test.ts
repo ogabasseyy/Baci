@@ -8,6 +8,11 @@ const mocks = vi.hoisted(() => ({
   enrich: vi.fn(),
   replay: vi.fn(),
   convert: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+vi.mock('@/lib/logger', () => ({
+  logger: { warn: mocks.warn, error: mocks.error },
 }));
 vi.mock('@/lib/shipping/order-quote-destination', async () => ({
   ...(await vi.importActual('@/lib/shipping/order-quote-destination')),
@@ -204,6 +209,24 @@ describe('prepareCheckoutQuoteDestination', () => {
       },
     });
   });
+  it('logs safe mismatch field names without logging the address or returning diagnostics', async () => {
+    const { params } = input();
+    mocks.enrich.mockRejectedValueOnce(
+      OrderQuoteDestinationMismatchError.forFields(['state', 'coordinates'])
+    );
+    const result = await prepareCheckoutQuoteDestination(params);
+    expect(mocks.warn).toHaveBeenCalledWith({
+      message: 'Checkout shipping quote rejected',
+      code: 'INTERNATIONAL_QUOTE_DESTINATION_MISMATCH',
+      status: 400,
+      merchantId: 'merchant',
+      selectedQuoteId: 'quote',
+      mismatchFields: ['state', 'coordinates'],
+    });
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect(result).not.toHaveProperty('body.mismatchFields');
+  });
+
   it('preserves destination guard failures and lets unexpected failures propagate', async () => {
     const { params } = input();
     mocks.enrich.mockRejectedValueOnce(

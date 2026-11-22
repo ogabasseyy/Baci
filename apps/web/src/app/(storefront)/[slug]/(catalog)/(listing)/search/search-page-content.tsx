@@ -10,9 +10,12 @@ import { StorefrontPagination } from '@/components/storefront/ogabassey/componen
 import { V2ComparisonScope } from '@/components/storefront/ogabassey/providers/v2-comparison-scope';
 import { SearchQueryDraftSession } from '@/components/storefront/search-refinements/search-query-draft';
 import { SearchRefinementControls } from '@/components/storefront/search-refinements/search-refinement-controls';
-import { SearchSubmissionLink } from '@/components/storefront/search-submission-link';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getConfiguredAgenticMerchantSlug } from '@/lib/agentic/agentic-merchant-slug';
+import {
+  findGiftCardPreviewMatches,
+  isGiftCardPreviewEnabled,
+} from '@/lib/gift-cards/preview-catalog';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { asRoute } from '@/lib/routes';
 import type { StorefrontSearchProductsPage } from '@/lib/storefront-search';
@@ -28,6 +31,7 @@ import { SearchPageNoResultsPanel } from './search-page-no-results-panel';
 import { getPriceFormatter } from './search-page-price';
 import { buildSearchPageSchemas } from './search-page-schema';
 import { SearchPageStartPanel } from './search-page-start-panel';
+import { SearchPageSuggestions } from './search-page-suggestions';
 import { formatSearchSummary } from './search-page-summary';
 import { searchPageTotalPages } from './search-page-total-pages';
 
@@ -93,6 +97,14 @@ export async function SearchPageContent({
   const merchantCurrency = resolveMerchantCurrencyConfig(merchant).code;
   const priceFormatter = getPriceFormatter(merchantCurrency);
   const visibleCount = searchFailed ? 0 : effectiveResult.products.length;
+  const giftCards =
+    page === 1 &&
+    !searchFailed &&
+    !invalidFilters &&
+    !hasActiveSearchRefinements(refinements) &&
+    isGiftCardPreviewEnabled(merchant.slug)
+      ? findGiftCardPreviewMatches(query)
+      : [];
   const totalPages = searchPageTotalPages(effectiveResult, searchFailed);
   const { breadcrumbSchema, searchResultsSchema } = buildSearchPageSchemas({
     businessName: merchant.business_name,
@@ -106,14 +118,22 @@ export async function SearchPageContent({
     visibleCount,
   });
 
-  const summaryText = searchFailed
-    ? `We couldn't load results for “${query}”.`
-    : formatSearchSummary({
-        query: searchQuery,
-        totalCount: effectiveResult.count,
-        visibleCount,
-        page,
-      });
+  const giftCardResultsOnly = giftCards.length > 0 && visibleCount === 0;
+  const productSummaryText = giftCardResultsOnly
+    ? 'Gift cards matching your search'
+    : searchFailed
+      ? `We couldn't load results for “${query}”.`
+      : formatSearchSummary({
+          query: searchQuery,
+          totalCount: effectiveResult.count,
+          visibleCount,
+          page,
+        });
+
+  const summaryText =
+    giftCards.length > 0 && !giftCardResultsOnly
+      ? `${productSummaryText} Gift cards also match your search.`
+      : productSummaryText;
 
   return (
     <V2ComparisonScope storageNamespace={merchant.id}>
@@ -122,9 +142,13 @@ export async function SearchPageContent({
           <JsonLd
             data={breadcrumbSchema as unknown as WithContext<BreadcrumbList>}
           />
-          <JsonLd
-            data={searchResultsSchema as unknown as WithContext<CollectionPage>}
-          />
+          {!giftCardResultsOnly && (
+            <JsonLd
+              data={
+                searchResultsSchema as unknown as WithContext<CollectionPage>
+              }
+            />
+          )}
           <div className="min-h-screen bg-[color-mix(in_srgb,var(--store-background,#ffffff)_94%,var(--store-background-text,#111827)_6%)] pb-8 pt-6">
             <div className="mx-auto max-w-[1400px] px-4 md:px-6">
               <SearchPageBreadcrumb pathPrefix={pathPrefix} />
@@ -138,10 +162,6 @@ export async function SearchPageContent({
                 </p>
               </div>
 
-              {/* Keyed by route query so client-side navigation remounts the
-          form and draft session, resetting the controlled input and any
-          validation error for the new results. */}
-              {/* Ogabassey's template supplies the search input in its navbar. */}
               <SearchPageForm
                 key={query}
                 action={searchBasePath}
@@ -166,21 +186,11 @@ export async function SearchPageContent({
                 }
               />
 
-              {!searchFailed && effectiveResult.didYouMean && (
-                <p className="mt-4 text-sm text-store-background-text/55">
-                  Did you mean{' '}
-                  <SearchSubmissionLink
-                    pathPrefix={pathPrefix}
-                    query={effectiveResult.didYouMean}
-                    source="did-you-mean"
-                    className="font-medium text-store-primary underline-offset-4 hover:underline"
-                  >
-                    {effectiveResult.didYouMean}
-                  </SearchSubmissionLink>
-                  ?
-                </p>
-              )}
-
+              <SearchPageSuggestions
+                giftCards={giftCards}
+                didYouMean={searchFailed ? null : effectiveResult.didYouMean}
+                pathPrefix={pathPrefix}
+              />
               {query && !searchFailed && (
                 <SearchComparisonTray
                   currency={merchantCurrency}
@@ -251,7 +261,7 @@ export async function SearchPageContent({
                         Products on this page are no longer available. Try
                         another page.
                       </p>
-                    ) : (
+                    ) : giftCards.length === 0 ? (
                       <SearchPageNoResultsPanel
                         merchantSlug={merchant.slug}
                         allProductsHref={allProductsHref}
@@ -261,7 +271,7 @@ export async function SearchPageContent({
                           refinements
                         )}
                       />
-                    )
+                    ) : null
                   ) : (
                     <SearchPageStartPanel />
                   )}

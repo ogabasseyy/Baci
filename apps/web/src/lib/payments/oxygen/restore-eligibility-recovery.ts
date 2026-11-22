@@ -14,7 +14,7 @@ export async function restoreOxygenEligibilityRecovery(
     snapshot.pending ||
     snapshot.state.bookingReference ||
     snapshot.state.eligible !== undefined ||
-    snapshot.state.eligibilityStatus === 'failed' ||
+    snapshot.state.eligibilityStatus !== undefined ||
     !['eligibility_required', 'kyc_required'].includes(snapshot.stage) ||
     !oxygenEligibilityPrerequisites(snapshot.state)
   )

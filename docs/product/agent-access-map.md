@@ -1,10 +1,19 @@
 # Baci capabilities and agent access
 
 Reviewed 21 November 2026 against source revision
-`721b7e7aa91d5a92b3f8773af32d9b73ed28b429`. The expense flow was re-reviewed after the save navigation fix.
+`c2ba3c99ea390e0dab89012d842d72b659b5ce4b`. Shipment booking was re-reviewed for paid partner pickup and parcel binding. The expense flow was re-reviewed after the save navigation fix.
 The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).
+The optional Ogabassey guest-credential mode requires the canonical cart bridge and
+a cart-only server without guest OAuth. Its first add creates a guest cart and
+subsequent operations require the server-issued credential. In this mode the
+widget is a catalog, and the conversation tool is the cart writer. The website
+handoff copies catalog lines into a separate website cart without sharing grants.
+Reopening the same handoff adds nothing. Fresh links after a source edit add
+only new or increased quantities. Shoppers can edit previously copied items on
+the website. This is source evidence;
+production activation and public client credential retention are unverified.
 The mobile-admin follow-up queue no longer treats
 stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; Follow-up reads require customer-view permission, and claims and updates also require customer-edit permission. Removing staff or revoking either permission from the staff member or their role releases their open work and preserves its outcome and date. The claim RPC scopes to orders in the same store so a checkout status change can leave its follow-up actionable. Closed records are read-only. Retained follow-up cards show when an order is BNPL approved, paid, refunded, or cancelled. Follow-up rows name known payment methods and lenders. Follow-up dates are optional. Past dates represent overdue work, and closing clears the date. Agentic checkout session quotes now include
 registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow

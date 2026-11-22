@@ -457,4 +457,6 @@ patchedDependencies:
   expo-linear-gradient@58.0.3: patches/expo-linear-gradient@58.0.3.patch
   # Preserve own data properties without invoking the legacy __proto__ setter.
   deepmerge@4.3.1: patches/deepmerge@4.3.1.patch
-  zod@3.25.76: patches/zod@3.25.76.patch
+  # Share identical v3 hunks for pinned releases; frozen install and integrity tests cover both layouts.
+  zod@3.25.76: patches/zod-legacy-bounded-validation.patch
+  zod@4.6.6: patches/zod-legacy-bounded-validation.patch

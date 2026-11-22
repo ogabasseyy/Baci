@@ -33,17 +33,28 @@ $$;
 
 CREATE FUNCTION pg_temp.begin_attempt(p_order uuid, p_token text, p_ref text)
 RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  o public.orders%ROWTYPE;
+  kind text;
 BEGIN
+  -- Read what the replayed order triggers actually stored.
+  SELECT * INTO o FROM public.orders WHERE id = p_order;
   PERFORM set_config('request.jwt.claims', jsonb_build_object(
     'role', 'authenticated',
     'paystack_dva_attempt', jsonb_build_object(
       'order_id', p_order,
-      'merchant_id', '11111111-1111-4111-8111-111111111111',
-      'customer_email', 'shopper@example.com',
-      'amount_kobo', '500000',
+      'merchant_id', o.merchant_id,
+      'customer_email', lower(btrim(o.customer_email)),
+      'amount_kobo', (o.total * 100)::bigint::text,
       'reference', p_ref)
   )::text, true);
-  RETURN public.begin_chat_paystack_dva_attempt(p_token)->>'kind';
+  kind := public.begin_chat_paystack_dva_attempt(o.tracking_token)->>'kind';
+  -- Distinct SQLSTATE so a replay failure names the unexpected receipt.
+  IF kind IS NULL OR kind IN ('refused', 'legacy') THEN
+    RAISE EXCEPTION 'unexpected receipt %', coalesce(kind, 'null')
+      USING ERRCODE = 'ZK' || upper(left(coalesce(kind, 'nul'), 3));
+  END IF;
+  RETURN kind;
 END;
 $$;
 

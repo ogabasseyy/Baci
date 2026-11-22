@@ -1,8 +1,7 @@
 import 'server-only';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
-import { performancePublicBootstrap } from '@/schemas/experience-performance-worker';
+import { ownerPreviewLaunchResponse } from '@/schemas/experience-owner-preview-response';
 import { experiencePreviewInput } from '@/schemas/experience-preview';
 import { OWNER_PREVIEW_CALL_TIMEOUT_MS } from './owner-preview-deadline';
 import { RemoteOwnerPreviewDenied } from './owner-preview-remote-runtime';
@@ -11,27 +10,6 @@ import {
   productionOrigin,
 } from './production-origins';
 import { validateExperienceRoutes } from './route-ownership';
-
-const launchSchema = z.object({
-  src: z.string().max(1000),
-  bindingId: z.uuid(),
-  merchantId: z.uuid(),
-  buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  instanceId: z.uuid(),
-  nonce: z.uuid(),
-  expiresAt: z.number().int().safe(),
-  canonicalBase: z.string().max(1000),
-  routes: z
-    .array(
-      z.strictObject({
-        path: z.string().max(240),
-        view: z.enum(['home', 'collection', 'product', 'editorial']),
-      })
-    )
-    .min(1)
-    .max(64),
-  bootstrap: performancePublicBootstrap,
-});
 
 async function boundedJson(response: Response): Promise<unknown> {
   if (
@@ -128,7 +106,9 @@ export function createOwnerPreviewBridgeClient(settings: {
       if (response.status === 404) throw new RemoteOwnerPreviewDenied();
       throw Error('OWNER_PREVIEW_UNAVAILABLE');
     }
-    const launch = launchSchema.parse(await boundedJson(response));
+    const launch = ownerPreviewLaunchResponse.parse(
+      await boundedJson(response)
+    );
     const src = new URL(launch.src);
     const canonical = new URL(launch.canonicalBase);
     productionDeliveryOrigins({

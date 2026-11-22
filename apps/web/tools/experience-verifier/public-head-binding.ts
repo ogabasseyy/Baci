@@ -1,20 +1,15 @@
 import { isDeepStrictEqual } from 'node:util';
-import { z } from 'zod';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { parsePublishedExperience } from '@/lib/experience/published-manifest';
+import {
+  publicHeadApprovalId,
+  publicHeadBuildDigest,
+  publicHeadMerchant,
+  publicHeadReceipt,
+} from '@/schemas/experience-verification-records';
 import { rewriteCssAssetUrls } from '../experience-runner/rewrite-css-asset-urls';
 
-const receiptSchema = z.object({
-  approvalId: z.uuid(),
-  merchantId: z.uuid(),
-  buildId: z.uuid(),
-  receiptId: z.uuid(),
-  effectDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  publishedVersion: z.number().int().positive().safe(),
-  status: z.enum(['verifying', 'live']),
-  action: z.enum(['publish', 'rollback']),
-});
 type File = { path: string; bytes: Uint8Array; digest: string; mime: string };
 type Dependencies = {
   loadReceipt(id: string): Promise<unknown>;
@@ -27,16 +22,15 @@ type Dependencies = {
 
 /** Binds verifier input to a current owner-scoped receipt and public bytes. */
 export async function bindPublicHead(approvalId: string, deps: Dependencies) {
-  const id = z.uuid().parse(approvalId);
-  const receipt = receiptSchema.parse(await deps.loadReceipt(id));
+  const id = publicHeadApprovalId.parse(approvalId);
+  const receipt = publicHeadReceipt.parse(await deps.loadReceipt(id));
   if (receipt.approvalId !== id) throw Error('PUBLIC_BINDING_MISMATCH');
-  const merchant = z
-    .object({ slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/) })
-    .parse(await deps.loadMerchant(receipt.merchantId));
-  const digest = z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .parse(await deps.loadBuildDigest(receipt.merchantId, receipt.buildId));
+  const merchant = publicHeadMerchant.parse(
+    await deps.loadMerchant(receipt.merchantId)
+  );
+  const digest = publicHeadBuildDigest.parse(
+    await deps.loadBuildDigest(receipt.merchantId, receipt.buildId)
+  );
   const canonicalBase = productionOrigin(
     await deps.canonicalBase(merchant.slug)
   );
@@ -75,7 +69,7 @@ export async function bindPublicHead(approvalId: string, deps: Dependencies) {
     `/published/${merchant.slug}/${digest}`,
     head.assets.map((asset) => asset.assetId)
   );
-  const current = receiptSchema.parse(await deps.loadReceipt(id));
+  const current = publicHeadReceipt.parse(await deps.loadReceipt(id));
   if (
     !isDeepStrictEqual(receipt, current) ||
     !isDeepStrictEqual(

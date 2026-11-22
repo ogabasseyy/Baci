@@ -1,11 +1,6 @@
 import type { Readable } from 'node:stream';
-import { z } from 'zod';
+import { publicObservationStartFrame } from '@/schemas/experience-public-observation-payload';
 import { MAX_PUBLIC_OBSERVATION_START_BYTES } from './public-observation-resource-limit';
-
-const startFrame = z.strictObject({
-  type: z.literal('start'),
-  payload: z.unknown(),
-});
 
 /** Read one start frame without consuming subsequent host replies. */
 export function readPublicObservationStart(input: Readable): Promise<unknown> {
@@ -43,7 +38,7 @@ export function readPublicObservationStart(input: Readable): Promise<unknown> {
           !Object.hasOwn(value, 'payload')
         )
           throw Error();
-        const parsed = startFrame.parse(value);
+        const parsed = publicObservationStartFrame.parse(value);
         input.pause();
         clean();
         const rest = data.subarray(end + 1);

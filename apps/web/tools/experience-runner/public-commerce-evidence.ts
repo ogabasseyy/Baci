@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
-import { z } from 'zod';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
+
+import {
+  publicCommerceEvidenceIdentity,
+  publicCommerceEvidenceSchemas,
+} from '@/schemas/experience-public-commerce-evidence';
 
 type Request = { url: string; method: string; body?: string };
 type Reply = { status: number; body: string };
@@ -20,12 +24,8 @@ export function createPublicCommerceEvidence(settings: {
   paths: string[];
 }) {
   const origin = productionOrigin(settings.origin);
-  const merchantId = z.uuid().parse(settings.merchantId);
-  const productId = z.uuid().parse(settings.productId);
-  const variantId =
-    settings.variantId === undefined
-      ? undefined
-      : z.uuid().parse(settings.variantId);
+  const { merchantId, productId, variantId } =
+    publicCommerceEvidenceIdentity.parse(settings);
   if (
     !settings.paths.length ||
     settings.paths.length > 128 ||
@@ -33,36 +33,10 @@ export function createPublicCommerceEvidence(settings: {
   )
     throw Error('INVALID_PUBLIC_ROUTES');
   const allowed = new Set([...settings.paths, '/cart', '/checkout']);
-  const line = z.object({
-    item: z.object({
-      productId: z.literal(productId),
-      ...(variantId
-        ? { variantId: z.literal(variantId) }
-        : { variantId: z.undefined().optional() }),
-    }),
-    quantity: z.literal(1),
-  });
-  const snapshot = z.object({
-    cartId: z.uuid(),
-    merchantId: z.literal(merchantId),
-    version: z.number().int().positive(),
-    lines: z.array(line).length(1),
-  });
-  const checkoutSnapshot = z.object({
-    cartId: z.uuid(),
-    merchantId: z.literal(merchantId),
-    cartVersion: z.number().int().positive(),
-    checkoutSessionId: z.uuid(),
-    lines: z
-      .array(
-        z.object({
-          productId: z.literal(productId),
-          variantId: variantId ? z.literal(variantId) : z.null().optional(),
-          quantity: z.literal(1),
-          available: z.literal(true),
-        })
-      )
-      .length(1),
+  const { line, responseSchema } = publicCommerceEvidenceSchemas({
+    merchantId,
+    productId,
+    variantId,
   });
   const steps: Step[] = [];
   let cartId: string | undefined;
@@ -113,12 +87,7 @@ export function createPublicCommerceEvidence(settings: {
         )
           throw Error();
         const body: unknown = JSON.parse(response.body);
-        const parsed = z
-          .object({
-            cart: snapshot.optional(),
-            snapshot: checkoutSnapshot.optional(),
-          })
-          .parse(body);
+        const parsed = responseSchema.parse(body);
         const observed =
           action === 'checkout-review' ? parsed.snapshot : parsed.cart;
         const observedVersion =

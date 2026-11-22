@@ -1,21 +1,13 @@
 import type { Pool } from 'pg';
-import { z } from 'zod';
 import type { IndependentApprovalDependencies } from '@/lib/experience/independent-approval-verifier';
+import { verifierApprovalRecord } from '@/schemas/experience-verification-records';
 import { verifyVerifierDatabaseRole } from './database-role';
-
-const inputSchema = z.strictObject({
-  approvalId: z.uuid(),
-  kind: z.enum(['draft', 'lifecycle']),
-  effectDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  markerDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  expiresAt: z.iso.datetime({ offset: true }),
-});
 
 /** Verifier process only. Caller must independently establish the proof first. */
 export async function createVerifierApprovalRecorder(pool: Pool) {
   await verifyVerifierDatabaseRole(pool);
   const record: IndependentApprovalDependencies['record'] = async (input) => {
-    const value = inputSchema.parse(input);
+    const value = verifierApprovalRecord.parse(input);
     const values = [
       value.approvalId,
       value.effectDigest,

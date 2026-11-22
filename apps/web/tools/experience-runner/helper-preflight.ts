@@ -1,9 +1,5 @@
-import { z } from 'zod';
+import { runnerPreflightReceipt } from '@/schemas/experience-operator-config';
 import type { LinuxRunnerCommand } from './linux-runner';
-
-const receipt = z.strictObject({
-  toolchainDigest: z.string().regex(/^[a-f0-9]{64}$/),
-});
 
 /** The privileged helper reads the protected pin; no caller path is accepted. */
 export function createHelperPreflight(command: LinuxRunnerCommand) {
@@ -16,7 +12,7 @@ export function createHelperPreflight(command: LinuxRunnerCommand) {
     );
     try {
       if (Buffer.byteLength(text) > 65536) throw Error();
-      return receipt.parse(JSON.parse(text));
+      return runnerPreflightReceipt.parse(JSON.parse(text));
     } catch {
       throw Error('INVALID_PREFLIGHT_RECEIPT');
     }

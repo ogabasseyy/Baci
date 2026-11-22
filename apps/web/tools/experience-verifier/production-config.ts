@@ -1,43 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import {
   resolveCanonicalBase,
   validateCanonicalRootDomain,
 } from '@/lib/experience/canonical-domain';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
+import { verifierProductionConfig } from '@/schemas/experience-operator-config';
 import { runnerEndpoint } from '../experience-runner/runner-transport';
-
-const bytes32 = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]{43}$/)
-  .refine(
-    (value) =>
-      Buffer.from(value, 'base64url').length === 32 &&
-      Buffer.from(value, 'base64url').toString('base64url') === value
-  );
-const schema = z.strictObject({
-  databaseUrl: z.string().min(1).max(4096),
-  port: z.number().int().min(1).max(65535),
-  key: bytes32,
-  runner: z.strictObject({
-    endpoint: z.string().min(1).max(1000),
-    key: bytes32,
-    toolchainDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  }),
-  previewOrigin: z.string().max(1000),
-  executionOrigin: z.string().max(1000),
-  supabase: z.strictObject({
-    url: z.string().max(1000),
-    anonKey: z.string().max(8192),
-  }),
-  rootDomain: z.string().min(1).max(253),
-  publicObserver: z.literal('co-located').optional(),
-});
 
 /** Operator input only; errors never contain credentials or configuration. */
 export function parseVerifierProductionConfig(input: unknown) {
   try {
-    const config = schema.parse(input);
+    const config = verifierProductionConfig.parse(input);
     const db = new URL(config.databaseUrl);
     const login = decodeURIComponent(db.username);
     if (

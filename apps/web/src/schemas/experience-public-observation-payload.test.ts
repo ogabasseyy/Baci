@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import {
   publicObservationPayload,
   publicObservationRoute,
+  publicObservationStartFrame,
 } from './experience-public-observation-payload';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -27,6 +28,16 @@ const message = {
 
 it('parses the observation payload with a declared route and native PDP', () => {
   expect(publicObservationPayload.parse(message)).toEqual(message);
+});
+
+it('validates the observation start envelope', () => {
+  expect(
+    publicObservationStartFrame.parse({ type: 'start', payload: message })
+  ).toEqual({ type: 'start', payload: message });
+  expect(
+    publicObservationStartFrame.safeParse({ type: 'done', payload: message })
+      .success
+  ).toBe(false);
 });
 
 it('enforces the route, resource and digest bounds', () => {

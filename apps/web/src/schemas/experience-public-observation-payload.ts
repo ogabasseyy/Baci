@@ -48,3 +48,8 @@ export const publicObservationPayload = z.object({
     .min(1)
     .max(MAX_PUBLIC_OBSERVATION_RESOURCES),
 });
+
+export const publicObservationStartFrame = z.strictObject({
+  type: z.literal('start'),
+  payload: z.unknown(),
+});

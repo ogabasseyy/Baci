@@ -101,6 +101,34 @@ describe('loadNegotiationRequests', () => {
     expect(eq).toHaveBeenNthCalledWith(2, 'merchant_id', 'merchant-1');
   });
 
+  it('keeps requests and successful names if another lookup batch fails', async () => {
+    const data = Array.from({ length: 21 }, (_, index) => ({
+      id: `request-${index}`,
+      customer_id: `user-${index}`,
+    }));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      results.push(
+        { data, error: null },
+        { data: null, error: new Error('Customer lookup failed') },
+        {
+          data: [{ user_id: 'user-20', full_name: 'Chidi Okeke' }],
+          error: null,
+        }
+      );
+      const rows = await loadNegotiationRequests('merchant-1');
+      expect(rows).toHaveLength(21);
+      expect(rows[0].customer_name).toBeNull();
+      expect(rows[20].customer_name).toBe('Chidi Okeke');
+      expect(inFilter.mock.calls.map(([, batch]) => batch.length)).toEqual([
+        20, 1,
+      ]);
+      expect(warn).toHaveBeenCalledOnce();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('surfaces query errors', async () => {
     results.push({ data: null, error: new Error('Read failed') });
     await expect(loadNegotiationRequests('merchant-1')).rejects.toThrow(

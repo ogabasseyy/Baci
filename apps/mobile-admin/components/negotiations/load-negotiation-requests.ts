@@ -2,6 +2,34 @@ import { normalizeNegotiationCustomerEmail } from '@baci/shared';
 import { supabase } from '@/lib/supabase';
 import type { NegotiationCardRequest } from './NegotiationCard';
 
+// Bound encoded URLs even when guest email addresses are long.
+const CUSTOMER_LOOKUP_BATCH_SIZE = 20;
+
+async function loadCustomerBatches<T>(
+  keys: string[],
+  lookup: (batch: string[]) => PromiseLike<{ data: T[] | null; error: unknown }>
+) {
+  const batches: Promise<T[]>[] = [];
+  for (let i = 0; i < keys.length; i += CUSTOMER_LOOKUP_BATCH_SIZE) {
+    const batch = keys.slice(i, i + CUSTOMER_LOOKUP_BATCH_SIZE);
+    batches.push(
+      Promise.resolve()
+        .then(() => lookup(batch))
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return data ?? [];
+        })
+    );
+  }
+  const results = await Promise.allSettled(batches);
+  if (results.some((result) => result.status === 'rejected')) {
+    console.warn('Some negotiation customer names could not be loaded.');
+  }
+  return results.flatMap((result) =>
+    result.status === 'fulfilled' ? result.value : []
+  );
+}
+
 // Module-scope helpers keep try/throw out of the component body so React
 // Compiler can memoize the screen (try/finally + throw-in-try are bailouts).
 export async function loadNegotiationRequests(
@@ -34,25 +62,23 @@ export async function loadNegotiationRequests(
     ),
   ];
   const [profiles, guests] = await Promise.all([
-    userIds.length
-      ? supabase
-          .from('customers')
-          .select('user_id, full_name, first_name, last_name')
-          .eq('merchant_id', merchantId)
-          .in('user_id', userIds)
-      : { data: [], error: null },
-    guestEmails.length
-      ? supabase
-          .from('customers')
-          .select('email, full_name, first_name, last_name')
-          .eq('merchant_id', merchantId)
-          .in('email', guestEmails)
-      : { data: [], error: null },
+    loadCustomerBatches(userIds, (batch) =>
+      supabase
+        .from('customers')
+        .select('user_id, full_name, first_name, last_name')
+        .eq('merchant_id', merchantId)
+        .in('user_id', batch)
+    ),
+    loadCustomerBatches(guestEmails, (batch) =>
+      supabase
+        .from('customers')
+        .select('email, full_name, first_name, last_name')
+        .eq('merchant_id', merchantId)
+        .in('email', batch)
+    ),
   ]);
-  if (profiles.error) throw profiles.error;
-  if (guests.error) throw guests.error;
   const guestNames = new Map(
-    (guests.data ?? []).map((profile) => [
+    guests.map((profile) => [
       normalizeNegotiationCustomerEmail(profile.email),
       profile.full_name?.trim() ||
         [profile.first_name, profile.last_name]
@@ -62,7 +88,7 @@ export async function loadNegotiationRequests(
     ])
   );
   const names = new Map(
-    (profiles.data ?? []).map((profile) => [
+    profiles.map((profile) => [
       profile.user_id,
       profile.full_name?.trim() ||
         [profile.first_name, profile.last_name]

@@ -65,6 +65,13 @@ export async function notifyNegotiationRequest(
   );
 }
 
+function formatCounterAmount(amount: number | null | undefined) {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) {
+    throw new Error('A positive counter offer amount is required');
+  }
+  return formatCurrency(amount);
+}
+
 /**
  * Notify customer of a negotiation response (accepted/rejected).
  *
@@ -102,7 +109,7 @@ export function notifyNegotiationResponse(
   }
 
   if (status === 'countered') {
-    body = `You received a counter offer of ${formatCurrency(offeredPrice ?? 0)} for ${negotiationType === 'total' ? 'your cart' : (itemName ?? 'your item')}. Contact the store about this price or submit a new offer to keep negotiating.`;
+    body = `You received a counter offer of ${formatCounterAmount(offeredPrice)} for ${negotiationType === 'total' ? 'your cart' : (itemName ?? 'your item')}. Contact the store about this price or submit a new offer to keep negotiating.`;
   }
 
   return notifyCustomer(
@@ -154,7 +161,7 @@ export async function notifyGuestNegotiationResponseByEmail({
     negotiationType === 'total' || !itemName ? 'your cart offer' : itemName;
   const decisionText =
     status === 'countered'
-      ? `You received a counter offer of ${formattedPrice} for ${itemLabel}.`
+      ? `You received a counter offer of ${formatCounterAmount(acceptedPrice)} for ${itemLabel}.`
       : isAccepted
         ? `Your offer${formattedPrice ? ` of ${formattedPrice}` : ''} for ${itemLabel} has been accepted.`
         : `Your offer for ${itemLabel} was declined. You can return to the store to make another offer or buy at the listed price.`;

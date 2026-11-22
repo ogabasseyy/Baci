@@ -165,6 +165,18 @@ describe('POST /api/negotiations/resolve', () => {
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'accepted',
+    'rejected',
+  ])('rejects a counter amount on %s', async (status) => {
+    await setupAuth({ authenticated: true, hasAccess: true });
+    const response = await POST(
+      createRequest({ ...validBody, status, counterOffer: 5000 })
+    );
+    expect(response.status).toBe(400);
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
   it('saves a merchant-scoped counter offer and notifies the customer with its amount', async () => {
     await setupAuth({
       authenticated: true,

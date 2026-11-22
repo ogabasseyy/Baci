@@ -24,6 +24,10 @@ const bodySchema = z
   .refine((body) => body.status !== 'countered' || body.counterOffer != null, {
     message: 'A positive counter offer is required',
     path: ['counterOffer'],
+  })
+  .refine((body) => body.status === 'countered' || body.counterOffer == null, {
+    message: 'A counter offer amount is only allowed for countered requests',
+    path: ['counterOffer'],
   });
 
 const NEGOTIATION_RESPONSE_SELECT =

@@ -87,7 +87,8 @@ describe('NegotiationDecisionControls', () => {
     expect(
       screen.getByRole('button', { name: 'Send Counter Offer' })
     ).toBeDisabled();
-    fireEvent.change(input, { target: { value: '850000.50' } });
+    expect(screen.getByText(/Enter a positive amount/)).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: ' 850,000.50 ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send Counter Offer' }));
     expect(onCounterOffer).toHaveBeenCalledWith('negotiation-1', 850000.5);
   });

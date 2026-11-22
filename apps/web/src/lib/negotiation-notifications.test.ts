@@ -264,6 +264,13 @@ describe('counter offer notifications', () => {
     );
   });
 
+  it('does not send a counter push without a positive amount', () => {
+    expect(() =>
+      notifyNegotiationResponse('customer-1', 'total', 'countered', 'n1')
+    ).toThrow('A positive counter offer amount is required');
+    expect(mockNotifyCustomer).not.toHaveBeenCalled();
+  });
+
   it('sends a counter offer email with the amount and escaped item name', async () => {
     mockSendEmail.mockResolvedValueOnce({ success: true });
     await notifyGuestNegotiationResponseByEmail({

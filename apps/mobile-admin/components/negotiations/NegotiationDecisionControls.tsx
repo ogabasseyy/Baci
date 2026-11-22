@@ -37,9 +37,12 @@ export function NegotiationDecisionControls({
 }: NegotiationDecisionControlsProps) {
   const [counterAmount, setCounterAmount] = useState('');
   const [showCounter, setShowCounter] = useState(false);
-  const amount = Number(counterAmount);
+  const amountText = counterAmount.trim();
+  const amount = Number(amountText.replace(/[ ,]/g, ''));
   const validAmount =
-    /^\d+(\.\d{1,2})?$/.test(counterAmount) &&
+    /^(?:(?:\d+|\d{1,3}(?:[, ]\d{3})+)(?:\.\d{0,2})?|\.\d{1,2})$/.test(
+      amountText
+    ) &&
     amount > 0 &&
     amount <= 9999999999.99;
   if (status !== 'pending') {
@@ -120,6 +123,15 @@ export function NegotiationDecisionControls({
                   padding: 12,
                 }}
               />
+              {amountText && !validAmount ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={{ color: colors.error }}
+                >
+                  Enter a positive amount up to NGN 9,999,999,999.99 with at
+                  most two decimal places.
+                </Text>
+              ) : null}
               <Text style={{ color: colors.textSecondary }}>
                 The customer will receive a push notification or email when
                 available.

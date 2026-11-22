@@ -10,6 +10,7 @@ DECLARE
   handoff uuid := gen_random_uuid();
   result jsonb;
   imported_version integer;
+  catalog_gate text;
 BEGIN
   INSERT INTO public.products(id, merchant_id, price, status, stock, stock_quantity, condition)
   VALUES (product, merchant, 66700, 'active', 5, 5, 'new');
@@ -37,20 +38,39 @@ BEGIN
   THEN RAISE EXCEPTION 'The base condition match must respect destination assurance: %', result; END IF;
   UPDATE public.commerce_cart_lines SET has_assurance = false WHERE id = destination_line;
 
+  FOREACH catalog_gate IN ARRAY ARRAY['active-offer', 'sku-matrix'] LOOP
+    BEGIN
+      IF catalog_gate = 'active-offer' THEN
+        INSERT INTO public.product_offers(merchant_id, product_id, condition, price, stock_quantity, status)
+        VALUES (merchant, product, 'used', 50000, 1, 'active');
+      ELSE
+        UPDATE public.products SET variant_model = 'sku_matrix' WHERE id = product;
+      END IF;
+      result := public.commerce_cart_import_mcp_handoff('base-condition-link', handoff, catalog_gate, 1);
+      IF result->>'ok' IS DISTINCT FROM 'true'
+         OR (SELECT l.quantity FROM public.commerce_cart_lines l WHERE l.id = destination_line) IS DISTINCT FROM 1
+         OR NOT EXISTS (
+           SELECT 1 FROM public.commerce_cart_lines l WHERE l.cart_id = destination
+             AND l.product_id = product AND l.condition IS NULL AND l.quantity = 1
+         )
+      THEN RAISE EXCEPTION 'Catalog gate % must prevent implicit base matching: %', catalog_gate, result; END IF;
+      RAISE EXCEPTION USING ERRCODE = 'ZT001';
+    EXCEPTION WHEN SQLSTATE 'ZT001' THEN
+      NULL; -- Restore the single-condition catalog before testing the match.
+    END;
+  END LOOP;
+
+  -- The storefront labels legacy products with a null catalog condition as new.
   BEGIN
-    INSERT INTO public.product_offers(merchant_id, product_id, condition, price, stock_quantity, status)
-    VALUES (merchant, product, 'used', 50000, 1, 'active');
-    result := public.commerce_cart_import_mcp_handoff('base-condition-link', handoff, 'with-condition-offer', 1);
+    UPDATE public.products SET condition = NULL WHERE id = product;
+    result := public.commerce_cart_import_mcp_handoff('base-condition-link', handoff, 'null-catalog-condition', 1);
     IF result->>'ok' IS DISTINCT FROM 'true'
-       OR (SELECT l.quantity FROM public.commerce_cart_lines l WHERE l.id = destination_line) IS DISTINCT FROM 1
-       OR NOT EXISTS (
-         SELECT 1 FROM public.commerce_cart_lines l WHERE l.cart_id = destination
-           AND l.product_id = product AND l.condition IS NULL AND l.quantity = 1
-       )
-    THEN RAISE EXCEPTION 'Active condition offers must prevent implicit base matching: %', result; END IF;
+       OR (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = destination) <> 1
+       OR (SELECT l.quantity FROM public.commerce_cart_lines l WHERE l.id = destination_line) IS DISTINCT FROM 2
+    THEN RAISE EXCEPTION 'Missing catalog condition must match the storefront new default: %', result; END IF;
     RAISE EXCEPTION USING ERRCODE = 'ZT001';
   EXCEPTION WHEN SQLSTATE 'ZT001' THEN
-    NULL; -- Restore the single-condition catalog before testing the match.
+    NULL; -- Restore the catalog and unredeemed handoff for the explicit condition test.
   END;
 
   result := public.commerce_cart_import_mcp_handoff('base-condition-link', handoff, 'first-open', 1);

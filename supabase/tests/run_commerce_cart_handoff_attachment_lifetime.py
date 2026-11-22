@@ -78,6 +78,9 @@ try:
     "'variantId', variant.id, 'condition', " + inherited_condition,
     'AND ' + inherited_condition + ' =',
    ]),
+   '20261122045740': ('base condition catalog guard source mismatch', [
+    "    AND product.has_variants IS NOT TRUE\n    AND discovery.canonical_product_condition(product.condition) = 'new'",
+   ]),
    '20261122045240': ('base condition source mismatch', [
     'CASE WHEN variant.id IS NULL THEN entry.value ELSE',
     ') resolved ON variant.id IS NOT NULL',
@@ -90,7 +93,7 @@ try:
     "AND legacy_line.condition IS NULL AND coalesce(nullif(legacy_line.options, 'null'::jsonb), '{}'::jsonb) = '{}'::jsonb",
    ]),
   }
-  sql+="\nALTER TABLE public.products ADD COLUMN default_variant_id uuid, ADD COLUMN condition text DEFAULT 'new';"
+  sql+="\nALTER TABLE public.products ADD COLUMN default_variant_id uuid, ADD COLUMN condition text DEFAULT 'new', ADD COLUMN variant_model text DEFAULT 'legacy';"
   sql+="\nALTER TABLE public.product_variants ADD COLUMN attributes jsonb NOT NULL DEFAULT '{}', ADD COLUMN condition text;"
   for name in ['20261015160000_commerce_cart_redeem_grant_expiry.sql',
                '20261015175000_commerce_cart_variant_predicate_columns.sql',
@@ -109,7 +112,8 @@ try:
                '20261121103900_commerce_cart_mcp_import_legacy_destination.sql',
                '20261121104000_commerce_cart_mcp_import_condition_destination.sql',
                '20261121104100_commerce_cart_mcp_import_condition_alias.sql',
-               '20261122045240_commerce_cart_mcp_import_base_condition.sql']:
+               '20261122045240_commerce_cart_mcp_import_base_condition.sql',
+               '20261122045740_commerce_cart_mcp_base_condition_catalog_guard.sql']:
    migration=(root/'supabase/migrations'/name).read_text()
    if probe := drift_probes.get(name.split('_', 1)[0]):
     reason, anchors = probe

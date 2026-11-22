@@ -24,7 +24,9 @@ interface UseOrderGiglQuoteRequesterParams {
 type InitialAddressOrder = Parameters<typeof getOrderGiglInitialAddress>[0];
 
 function addressBasis(order?: OrderGiglStoredAddressSource) {
-  return JSON.stringify(order?.shipping_address ?? null);
+  // The bound quote is scoped to these semantic destination fields. Using
+  // their signature also ignores JSONB key-order changes during a refetch.
+  return addressSignature(order);
 }
 
 function addressSignature(order?: OrderGiglStoredAddressSource) {
@@ -71,6 +73,7 @@ export function useOrderGiglQuoteRequester({
     saveAddress = true
   ) => {
     const order = currentStoredOrder();
+    const startingAddressBasis = addressBasis(order);
     let signature = preview ? null : addressSignature(order);
     let addressSaved = false;
     try {
@@ -80,12 +83,26 @@ export function useOrderGiglQuoteRequester({
         onAddressSaved: (shippingAddress) => {
           addressSaved = true;
           if (signal.aborted) return;
-          signature = addressSignature({
+          const savedAddressOrder = {
             ...order,
             shipping_address: shippingAddress,
-          });
+          };
+          const savedAddressSignature = addressSignature(savedAddressOrder);
+          const currentBasis = addressBasis(storedRef.current);
+          if (
+            currentBasis !== startingAddressBasis &&
+            currentBasis !== savedAddressSignature
+          ) {
+            throw Object.assign(
+              new Error('Delivery address changed while saving.'),
+              { code: 'stale_order_quote_inputs' }
+            );
+          }
+          signature = savedAddressSignature;
           savedRef.current = {
-            basis: addressBasis(storedRef.current),
+            // The overlay only replaces the address version this save began
+            // from. A newer refetch must remain authoritative.
+            basis: startingAddressBasis,
             shippingAddress,
           };
         },

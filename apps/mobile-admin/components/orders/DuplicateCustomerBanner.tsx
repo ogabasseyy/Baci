@@ -11,6 +11,7 @@ import type { SelectableCustomer } from './new-order.types';
 interface DuplicateCustomerBannerProps {
   colors: ThemeColors;
   duplicateCustomer: SelectableCustomer;
+  disabled?: boolean;
   handleSelectCustomer: (customer: SelectableCustomer) => void;
   keepsEnteredAddress?: boolean;
   resetNewCustomerForm: () => void;
@@ -21,6 +22,7 @@ interface DuplicateCustomerBannerProps {
 export function DuplicateCustomerBanner({
   colors,
   duplicateCustomer,
+  disabled = false,
   handleSelectCustomer,
   keepsEnteredAddress = false,
   resetNewCustomerForm,
@@ -49,6 +51,8 @@ export function DuplicateCustomerBanner({
       <Pressable
         accessibilityLabel="Use existing customer"
         accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        disabled={disabled}
         onPress={() => {
           handleSelectCustomer(duplicateCustomer);
           setDuplicateCustomer(null);
@@ -61,6 +65,7 @@ export function DuplicateCustomerBanner({
           borderRadius: 8,
           flexDirection: 'row',
           gap: 12,
+          opacity: disabled ? 0.5 : 1,
           padding: 12,
         }}
       >

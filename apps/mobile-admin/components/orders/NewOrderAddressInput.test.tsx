@@ -718,6 +718,58 @@ describe('NewOrderAddressInput', () => {
     ).toBeNull();
   });
 
+  it('keeps manual locality confirmation visible after a formatting-only street edit', async () => {
+    const controller = makeController({
+      deliveryInfo: {
+        address: 'Old address',
+        city: 'Old city',
+        name: '',
+        phone: '',
+        state: 'Old state',
+      },
+    });
+    const view = render(
+      <NewOrderAddressInput
+        controller={controller}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+
+    const getTextInputProps = () =>
+      googlePlacesState.lastProps?.textInputProps as
+        | { onChangeText?: (text: string) => void }
+        | undefined;
+    await act(async () => {
+      getTextInputProps()?.onChangeText?.('New address');
+    });
+    view.rerender(
+      <NewOrderAddressInput
+        controller={{
+          ...controller,
+          deliveryInfo: {
+            ...controller.deliveryInfo,
+            address: 'New address',
+            city: 'Yaba',
+            state: 'Lagos',
+          },
+        }}
+        googleMapsApiKey="AIza-test-key"
+      />
+    );
+
+    await act(async () => {
+      getTextInputProps()?.onChangeText?.('New address,');
+    });
+
+    expect(
+      screen.getByText(
+        'Confirm the city and state match the delivery address before saving.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('City')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('State')).toBeInTheDocument();
+  });
+
   it('does not compare rapid street edits with a stale pre-selection address', () => {
     const initialAddress = {
       address: 'Old address',

@@ -201,7 +201,9 @@ export function NewOrderAddressInput({
                   previousStreet,
                   text
                 );
-                setManualLocality(!keepsDestination && Boolean(text.trim()));
+                if (!keepsDestination) {
+                  setManualLocality(Boolean(text.trim()));
+                }
                 if (!keepsDestination) {
                   latestLocalityRef.current = { city: '', state: '' };
                 }
@@ -265,7 +267,9 @@ export function NewOrderAddressInput({
                 previousStreet,
                 text
               );
-              setManualLocality(!keepsDestination && Boolean(text.trim()));
+              if (!keepsDestination) {
+                setManualLocality(Boolean(text.trim()));
+              }
               if (!keepsDestination) {
                 latestLocalityRef.current = { city: '', state: '' };
               }

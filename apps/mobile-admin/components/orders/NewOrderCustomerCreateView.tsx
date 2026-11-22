@@ -121,6 +121,7 @@ export function NewOrderCustomerCreateView({
       {duplicateCustomer ? (
         <DuplicateCustomerBanner
           colors={colors}
+          disabled={isAddressDetailsPending}
           duplicateCustomer={duplicateCustomer}
           handleSelectCustomer={(customer) => {
             if (newCustomer.address.trim()) {

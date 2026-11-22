@@ -88,16 +88,18 @@ export default function MessagesPage() {
                       {inbox.selectedConversation?.customerName ?? 'Customer'}
                     </h2>
                   </header>
-                  {/* Keyed so scroll position never carries into another chat. */}
+                  {/* Keyed so scroll position never carries into another chat.
+                      The two keys differ: siblings sharing one key are not
+                      unmounted on a switch, which stacked every opened chat. */}
                   <ConversationThread
-                    key={inbox.selectedId}
+                    key={`thread-${inbox.selectedId}`}
                     messages={inbox.messages}
                     ownReplyId={inbox.ownReplyId}
                     state={inbox.threadState}
                   />
                   {/* Keyed so a draft never carries into another conversation. */}
                   <ReplyBox
-                    key={inbox.selectedId}
+                    key={`reply-${inbox.selectedId}`}
                     error={inbox.sendError}
                     sending={inbox.sending}
                     onSend={inbox.sendReply}

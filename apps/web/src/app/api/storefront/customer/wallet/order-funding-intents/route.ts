@@ -55,7 +55,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // DVA creation stays in the dedicated funding-account endpoint. This
       // route creates only the order funding intent under the caller's RLS
       // scope through database-owned RPCs.
-      consent: undefined,
       customer: resolved.customer,
       merchant: resolved.merchant,
       orderId: parsed.data.orderId,

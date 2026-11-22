@@ -6,6 +6,7 @@ import {
 } from 'react-native-safe-area-context';
 import { CheckoutBottomAction } from '@/components/checkout/CheckoutBottomAction';
 import { CheckoutHeader } from '@/components/checkout/CheckoutHeader';
+import { CheckoutPaymentReplay } from '@/components/checkout/CheckoutPaymentReplay';
 import { CheckoutStepContent } from '@/components/checkout/CheckoutStepContent';
 import {
   type CheckoutStep,
@@ -99,13 +100,6 @@ export function CheckoutScreenView({
     requiresShippingQuote,
     selectedQuote,
   } = shipping;
-  const formContentPaddingBottom = 116 + insets.bottom;
-  const {
-    saveAsDefaultAddress,
-    selectedSavedAddressId,
-    setIsContactCollapsed,
-    setIsDeliveryCollapsed,
-  } = savedAddressState;
   const { handleBack } = useCheckoutNavigation({
     isOrderInFlight,
     isPrizeSimulation: Boolean(prizeSimulation),
@@ -148,7 +142,6 @@ export function CheckoutScreenView({
     setIsProcessing,
     total,
   });
-  const { setPendingOrder, setShowCryptoSelection } = crypto;
   const compatibleDiscount = getRedvaultCompatibleDiscount(
     selectedPayment,
     appliedDiscount
@@ -180,27 +173,33 @@ export function CheckoutScreenView({
     resolvedShippingQuoteContextKey,
     requiresShippingQuote,
     resetPaymentSelection,
-    saveAsDefaultAddress,
+    saveAsDefaultAddress: savedAddressState.saveAsDefaultAddress,
     saveDetails,
     selectedPayment,
     selectedQuote,
-    selectedSavedAddressId,
+    selectedSavedAddressId: savedAddressState.selectedSavedAddressId,
     setIsProcessing,
-    setPendingOrder,
-    setShowCryptoSelection,
+    setPendingOrder: crypto.setPendingOrder,
+    setShowCryptoSelection: crypto.setShowCryptoSelection,
     setStep,
     user,
     walletBalance,
     ...walletFundedTransferSubmitParams(paymentController),
     walletSelection,
     handleSubmit,
-    setIsContactCollapsed,
-    setIsDeliveryCollapsed,
+    setIsContactCollapsed: savedAddressState.setIsContactCollapsed,
+    setIsDeliveryCollapsed: savedAddressState.setIsDeliveryCollapsed,
     setValue,
     step,
   });
   return (
     <AddressSuggestionsProvider>
+      {process.env.EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED === 'true' &&
+        merchant?.slug === 'ogabassey' &&
+        !prizeSimulation &&
+        !isProcessing &&
+        step === 'payment' &&
+        paymentTab === 'installments' && <CheckoutPaymentReplay />}
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <PatternedBackground
           backgroundColor={colors.background}
@@ -228,7 +227,7 @@ export function CheckoutScreenView({
             addressState={addressState}
             assuranceFee={assuranceFee}
             colors={colors}
-            formContentPaddingBottom={formContentPaddingBottom}
+            formContentPaddingBottom={116 + insets.bottom}
             isAuthenticated={isAuthenticated}
             isDark={isDark}
             items={items}

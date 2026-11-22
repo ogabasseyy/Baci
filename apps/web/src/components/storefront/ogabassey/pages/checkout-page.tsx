@@ -1,5 +1,6 @@
 'use client';
 import type React from 'react';
+import { CheckoutReplay } from '@/components/analytics/checkout-replay';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -107,12 +108,6 @@ export const CheckoutPage: React.FC<
     isOrderInFlightRef,
     resumedOrder,
   } = checkoutAttempt;
-  const {
-    effectiveCheckoutCartTotal,
-    effectiveItemSubtotal,
-    hasCheckoutCartItems,
-    summaryOrder,
-  } = checkoutDisplay;
 
   // Prefer the persisted fee on resume (deep-link URLs omit giftWrappingCost).
   const giftWrappingCost =
@@ -135,22 +130,21 @@ export const CheckoutPage: React.FC<
     setCheckoutField,
     setCheckoutFields,
   });
-  const { cost: deliveryCost } = delivery;
 
   const { orderTotals, paymentSession, summaryAmounts } =
     useCheckoutFinancialSession({
       merchant,
-      effectiveItemSubtotal,
-      effectiveCheckoutCartTotal,
-      deliveryCost,
+      effectiveItemSubtotal: checkoutDisplay.effectiveItemSubtotal,
+      effectiveCheckoutCartTotal: checkoutDisplay.effectiveCheckoutCartTotal,
+      deliveryCost: delivery.cost,
       deliveryMethod: checkoutForm.deliveryMethod,
       giftWrappingCost,
-      hasCheckoutCartItems,
+      hasCheckoutCartItems: checkoutDisplay.hasCheckoutCartItems,
       recoverCart: isHydrated && sharedCartEnabled && checkoutCart.length === 0,
-      resumedOrder: summaryOrder,
+      resumedOrder: checkoutDisplay.summaryOrder,
       clearPendingCheckoutOrder,
       currencyCode,
-      discountSubtotal: effectiveCheckoutCartTotal,
+      discountSubtotal: checkoutDisplay.effectiveCheckoutCartTotal,
       hasAuthenticatedUser: Boolean(user),
       isOrderInFlightRef,
       merchantSlug: merchant?.slug ?? undefined,
@@ -166,7 +160,7 @@ export const CheckoutPage: React.FC<
     financial: { paymentSession, summaryAmounts },
     formatCurrency: formatCurrencyAuto,
     cart: checkoutCart,
-    fees: [deliveryCost, orderTotals?.taxAmount ?? 0, giftWrappingCost],
+    fees: [delivery.cost, orderTotals?.taxAmount ?? 0, giftWrappingCost],
     buyer: {
       pendingOrder: pendingCheckoutOrder,
       merchantId: merchant?.id,
@@ -218,7 +212,7 @@ export const CheckoutPage: React.FC<
       session: delivery,
       merchantCountry,
       giftWrappingCost,
-      effectiveItemSubtotal,
+      effectiveItemSubtotal: checkoutDisplay.effectiveItemSubtotal,
       taxAmount: orderTotals?.taxAmount ?? 0,
     },
     merchant,
@@ -285,6 +279,10 @@ export const CheckoutPage: React.FC<
   });
   return (
     <BankCardOfferOptionsContext.Provider value={bankCards.model}>
+      {merchant?.slug === 'ogabassey' &&
+        currentStep === 'payment' &&
+        !searchParams.has('orderId') &&
+        !searchParams.has('oxygenOrderId') && <CheckoutReplay />}
       <CheckoutCartScreen
         model={{ ...screenModel, ...oxygenSlots }}
         order={resumedOrder}

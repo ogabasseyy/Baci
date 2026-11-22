@@ -10,8 +10,8 @@ import {
 } from '@/lib/customer-wallet-payment-accounts';
 import { fetchMerchantPaystackSubaccountCode } from '@/lib/fetch-merchant-payment-secret';
 import { resolveWalletTopUpMerchant } from '@/lib/resolve-wallet-top-up-merchant';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { resolveVtuCustomer } from '@/lib/vtu-pending-transaction';
+import { createWalletDvaAccountWriter } from '@/lib/wallet-dva-provisioner';
 import {
   walletFundingAccountConsentSchema,
   walletFundingAccountQuerySchema,
@@ -256,13 +256,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Creating a DVA yields provider-verified account data that customers must
-    // not be able to persist directly or they could claim another DVA number.
+    // Provider data is persisted through the separately provisioned, exact
+    // wallet-DVA writer. The request and all identity resolution remain under
+    // the caller's RLS client; this route never constructs service_role.
+    const walletDvaWriter = createWalletDvaAccountWriter();
     const account = await ensureCustomerWalletPaymentAccount({
       consentedAt: new Date(),
       customer: resolved.customer,
       merchant: resolved.merchant,
-      supabase: createAdminClient(),
+      supabase: resolved.supabase,
+      userId: auth.user.id,
+      walletDvaWriter,
     });
 
     return NextResponse.json({

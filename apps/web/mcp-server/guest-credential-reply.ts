@@ -7,7 +7,7 @@ export function guestCredentialReply<
       ? Buffer.from(cart_token, 'hex').toString('base64url')
       : undefined;
   const recoveryText = state.cart_expired === true
-    ? 'This guest cart expired or is no longer available. Explain that the existing cart could not be opened or updated. Do not start another cart unless the shopper asks.'
+    ? 'The previous guest cart could not be opened or updated. Tell the shopper it is unavailable. Do not start another cart for a view, removal or quantity change. A new explicit add can start a fresh guest cart.'
     : state.retryable === true && credential
       ? 'Read the current cart with the returned cartCredential. If retrying an update whose outcome is unknown, retain its operationId. Do not create a second cart.'
       : undefined;

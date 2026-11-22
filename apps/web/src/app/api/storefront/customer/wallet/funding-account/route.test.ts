@@ -9,7 +9,8 @@ const mockResolveCustomerWalletPaymentAccount = vi.fn();
 const mockEnsureCustomerWalletPaymentAccount = vi.fn();
 const mockFetchPaystackSubaccountCode = vi.fn();
 const mockRpc = vi.fn();
-const mockAdminClient = { role: 'server-verified-payment-account' };
+const mockCreateWalletDvaAccountWriter = vi.fn();
+const mockWalletDvaWriter = vi.fn();
 
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: (...args: unknown[]) =>
@@ -45,13 +46,14 @@ vi.mock('@/lib/customer-wallet-payment-accounts', () => ({
     mockResolveCustomerWalletPaymentAccount(...args),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: vi.fn(() => mockAdminClient),
-}));
-
 vi.mock('@/lib/fetch-merchant-payment-secret', () => ({
   fetchMerchantPaystackSubaccountCode: (...args: unknown[]) =>
     mockFetchPaystackSubaccountCode(...args),
+}));
+
+vi.mock('@/lib/wallet-dva-provisioner', () => ({
+  createWalletDvaAccountWriter: (...args: unknown[]) =>
+    mockCreateWalletDvaAccountWriter(...args),
 }));
 
 import { CustomerWalletPaymentAccountError } from '@/lib/customer-wallet-payment-accounts';
@@ -80,6 +82,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     );
     mockResolveCustomerWalletPaymentAccount.mockResolvedValue(walletAccount);
     mockEnsureCustomerWalletPaymentAccount.mockResolvedValue(walletAccount);
+    mockCreateWalletDvaAccountWriter.mockReturnValue(mockWalletDvaWriter);
     mockRpc.mockResolvedValue({ data: true, error: null });
   });
 
@@ -121,7 +124,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     // Identity is resolved on the caller's authenticated RLS client with
     // non-secret columns, so an unpublished merchant is indistinguishable from a
     // nonexistent one (no tenant existence oracle). The revoked
-    // paystack_subaccount_code is read via admin AFTER the customer is verified.
+    // paystack_subaccount_code is read via the bounded RPC after ownership is verified.
     expect(mockResolveWalletTopUpMerchant).toHaveBeenCalledWith(
       expect.objectContaining({ authScope: 'customer' }),
       expect.anything(),
@@ -194,7 +197,9 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
       expect.objectContaining({
         customer,
         merchant,
-        supabase: mockAdminClient,
+        supabase: expect.objectContaining({ authScope: 'customer' }),
+        userId: 'user-1',
+        walletDvaWriter: mockWalletDvaWriter,
       })
     );
     expect(mockRpc).toHaveBeenCalledWith('get_customer_wallet_dva_enabled', {
@@ -250,10 +255,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     mockRpc.mockResolvedValue({ data: false, error: null });
 
     const response = await POST(
-      postRequest({
-        consent: true,
-        merchantSlug: 'ogabassey',
-      })
+      postRequest({ consent: true, merchantSlug: 'ogabassey' })
     );
 
     expect(response.status).toBe(403);
@@ -269,10 +271,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     );
 
     const response = await POST(
-      postRequest({
-        consent: true,
-        merchantSlug: 'ogabassey',
-      })
+      postRequest({ consent: true, merchantSlug: 'ogabassey' })
     );
     const body = await response.json();
 
@@ -284,10 +283,7 @@ describe('/api/storefront/customer/wallet/funding-account', () => {
     mockEnsureCustomerWalletPaymentAccount.mockRejectedValue(new Error('boom'));
 
     const response = await POST(
-      postRequest({
-        consent: true,
-        merchantSlug: 'ogabassey',
-      })
+      postRequest({ consent: true, merchantSlug: 'ogabassey' })
     );
     const body = await response.json();
 

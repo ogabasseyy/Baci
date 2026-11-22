@@ -38,7 +38,6 @@ describe('createOrderWalletFundingIntent', () => {
     expect(result.intent.expectedAmount).toBe(15_000);
     expect(result.intent.walletBalanceSnapshot).toBe(3_000);
     expect(result.account.accountNumber).toBe('1234567890');
-    expect(repository.ensureWalletPaymentAccount).not.toHaveBeenCalled();
     expect(repository.insertOrderWalletFundingIntent).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedAmount: 15_000,
@@ -65,7 +64,6 @@ describe('createOrderWalletFundingIntent', () => {
       code: 'WALLET_DVA_CONSENT_REQUIRED',
       kind: 'fallback',
     });
-    expect(repository.ensureWalletPaymentAccount).not.toHaveBeenCalled();
     expect(repository.insertOrderWalletFundingIntent).not.toHaveBeenCalled();
   });
 
@@ -121,30 +119,6 @@ describe('createOrderWalletFundingIntent', () => {
         error,
         merchantId: 'merchant-1',
         orderId: 'order-1',
-      })
-    );
-  });
-
-  it('provisions a missing wallet DVA after consent and then creates the intent', async () => {
-    const repository = createRepository({
-      resolveWalletPaymentAccount: vi.fn(async () => null),
-    });
-
-    const result = await createOrderWalletFundingIntent({
-      consent: true,
-      customer,
-      merchant,
-      orderId: 'order-1',
-      repository,
-      now: new Date('2026-05-26T12:00:00.000Z'),
-    });
-
-    expect(result.kind).toBe('intent');
-    expect(repository.ensureWalletPaymentAccount).toHaveBeenCalledWith(
-      expect.objectContaining({
-        consentedAt: new Date('2026-05-26T12:00:00.000Z'),
-        customer,
-        merchant,
       })
     );
   });
@@ -228,7 +202,6 @@ describe('createOrderWalletFundingIntent', () => {
     });
 
     expect(result).toEqual({ code: 'ORDER_NOT_PAYABLE', kind: 'fallback' });
-    expect(repository.ensureWalletPaymentAccount).not.toHaveBeenCalled();
     expect(repository.findActiveOrderIntent).not.toHaveBeenCalled();
     expect(repository.insertOrderWalletFundingIntent).not.toHaveBeenCalled();
   });
@@ -247,7 +220,6 @@ describe('createOrderWalletFundingIntent', () => {
     });
 
     expect(result).toEqual({ code: 'ORDER_NOT_FOUND', kind: 'fallback' });
-    expect(repository.ensureWalletPaymentAccount).not.toHaveBeenCalled();
     expect(repository.findActiveOrderIntent).not.toHaveBeenCalled();
     expect(repository.insertOrderWalletFundingIntent).not.toHaveBeenCalled();
   });

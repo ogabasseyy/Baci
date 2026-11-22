@@ -1,8 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from 'expo-router';
-import { usePreventRemove } from 'expo-router/react-navigation';
-import { useRef } from 'react';
+import { usePreventRemove, useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Alert } from 'react-native';
+import { parseExpenseAmount } from '@/lib/expense-amount';
 import type { ExpenseEditFormDraft } from '@/schemas/expense-form';
 import type { useExpenseFormState } from './useExpenseFormState';
 
@@ -10,25 +10,44 @@ type ExpenseFormController = ReturnType<typeof useExpenseFormState>;
 
 export type ExpenseFormHandlerForm = Pick<
   ExpenseFormController,
-  'isDirty' | 'setField' | 'setLocalReceipt'
+  'isDirty' | 'reset' | 'setField' | 'setLocalReceipt'
 > & { values: Pick<ExpenseEditFormDraft, 'groupId'> };
 
 interface UseExpenseFormHandlersInput {
   archiveGroupMutation: (groupId: string) => Promise<unknown>;
   form: ExpenseFormHandlerForm;
-  onNavigateBack: () => void;
+  initialAmountText?: string;
   originalGroupId?: string | null;
 }
 
 export function useExpenseFormHandlers({
   archiveGroupMutation,
   form,
-  onNavigateBack,
+  initialAmountText = '',
   originalGroupId = null,
 }: UseExpenseFormHandlersInput) {
-  const navigation = useNavigation();
-  const bypassNextPrevent = useRef(false);
-  type NavigationAction = Parameters<typeof navigation.dispatch>[0];
+  const router = useRouter();
+  const [amountText, setAmountText] = useState(initialAmountText);
+  const [hasSaved, setHasSaved] = useState(false);
+  const shouldPreventRemoval = form.isDirty && !hasSaved;
+
+  const changeAmount = (value: string) => {
+    setAmountText(value);
+    form.setField('amount', parseExpenseAmount(value));
+  };
+
+  const discardDraft = () => {
+    form.reset();
+    setAmountText(initialAmountText);
+  };
+
+  const navigateBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(admin)/expenses');
+    }
+  };
 
   const archiveGroup = async (groupId: string) => {
     await archiveGroupMutation(groupId);
@@ -37,50 +56,45 @@ export function useExpenseFormHandlers({
     }
   };
 
-  const close = () => {
-    if (!form.isDirty) {
-      onNavigateBack();
-      return;
-    }
+  const confirmDiscard = (onDiscard: () => void) => {
     Alert.alert('Discard changes?', 'Your unsaved changes will be lost.', [
       { style: 'cancel', text: 'Keep editing' },
-      {
-        onPress: () => {
-          bypassNextPrevent.current = true;
-          onNavigateBack();
-        },
-        style: 'destructive',
-        text: 'Discard',
-      },
-    ]);
-  };
-  const handlePreventRemove = (blockedAction?: NavigationAction) => {
-    if (bypassNextPrevent.current) {
-      bypassNextPrevent.current = false;
-      if (blockedAction) navigation.dispatch(blockedAction);
-      return;
-    }
-    const navigateBack = () => {
-      if (blockedAction) {
-        navigation.dispatch(blockedAction);
-        return;
-      }
-      onNavigateBack();
-    };
-    if (!form.isDirty) {
-      navigateBack();
-      return;
-    }
-
-    Alert.alert('Discard changes?', 'Your unsaved changes will be lost.', [
-      { style: 'cancel', text: 'Keep editing' },
-      { onPress: navigateBack, style: 'destructive', text: 'Discard' },
+      { onPress: onDiscard, style: 'destructive', text: 'Discard' },
     ]);
   };
 
-  usePreventRemove(form.isDirty, (event) =>
-    handlePreventRemove(event?.data?.action)
+  const disablePrevention: () => void = usePreventRemove(
+    shouldPreventRemoval,
+    ({ repeat }) => {
+      confirmDiscard(() => {
+        discardDraft();
+        repeat();
+      });
+    }
   );
+
+  const leave = () => {
+    disablePrevention();
+    navigateBack();
+  };
+
+  const navigateBackAfterSave = () => {
+    setHasSaved(true);
+    leave();
+  };
+
+  const close = () => {
+    if (hasSaved) {
+      router.replace('/(admin)/expenses');
+    } else if (shouldPreventRemoval) {
+      confirmDiscard(() => {
+        discardDraft();
+        leave();
+      });
+    } else {
+      navigateBack();
+    }
+  };
 
   const pickReceipt = async () => {
     try {
@@ -102,10 +116,13 @@ export function useExpenseFormHandlers({
     }
   };
 
-  const navigateBackAfterSave = () => {
-    bypassNextPrevent.current = true;
-    onNavigateBack();
+  return {
+    amountText,
+    archiveGroup,
+    changeAmount,
+    close,
+    hasSaved,
+    navigateBackAfterSave,
+    pickReceipt,
   };
-
-  return { archiveGroup, close, navigateBackAfterSave, pickReceipt };
 }

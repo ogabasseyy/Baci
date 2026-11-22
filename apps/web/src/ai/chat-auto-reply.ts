@@ -23,6 +23,21 @@ import {
 } from '@/schemas/chat-auto-reply';
 
 const OVERALL_TIMEOUT_MS = 20_000;
+// Catalog and currency lookups carry no timeout of their own. Bounding them
+// keeps the whole run well inside the webhook's time limit, so a stalled
+// lookup still leaves room for the caller to hand over to a person.
+const LOOKUP_TIMEOUT_MS = 8_000;
+
+function withLookupDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('chat auto-reply lookup timed out')),
+      LOOKUP_TIMEOUT_MS
+    );
+  });
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+}
 
 export type ChatAutoReplyResult =
   | { ok: true; reply: ChatAutoReply }
@@ -61,16 +76,18 @@ export async function generateChatAutoReply(input: {
     // The catalog search is bound to one configured store. For any other
     // store (or none) the assistant has no catalog to ground on, and "no
     // matching products" would be a false claim: hand over instead.
-    const tenant = await resolveAgenticChatTenant();
+    const tenant = await withLookupDeadline(resolveAgenticChatTenant());
     if (tenant?.merchantId !== input.merchantId) {
       return { ok: false, reason: 'unavailable' };
     }
-    // A failed search throws: an outage must never reach the model as "no
-    // matching products", so the caller hands over instead.
-    const [search, currency] = await Promise.all([
-      handleSearchProducts({ query: input.question }),
-      loadChatwootMerchantCurrency(input.merchantId),
-    ]);
+    // A failed or stalled search throws: an outage must never reach the model
+    // as "no matching products", so the caller hands over instead.
+    const [search, currency] = await withLookupDeadline(
+      Promise.all([
+        handleSearchProducts({ query: input.question }),
+        loadChatwootMerchantCurrency(input.merchantId),
+      ])
+    );
     // Prices without a currency are ambiguous: never show them.
     if (search.products.length > 0 && !currency?.currency) {
       return { ok: false, reason: 'unavailable' };

@@ -29,6 +29,76 @@ describe('formatChatAutoReplyProducts', () => {
     );
   });
 
+  it('does not call an unmanaged-inventory product out of stock', () => {
+    const unmanaged = {
+      name: 'Demo Service',
+      price: 1000,
+      stock: 0,
+      manage_stock: false,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([unmanaged], 'NGN')).toBe(
+      '- Demo Service | NGN 1000 | in stock'
+    );
+  });
+
+  it('never calls a product out of stock when its inventory lives on its options', () => {
+    const variants = {
+      name: 'Demo Phone',
+      price: 450000,
+      stock: 0,
+      has_variants: true,
+    } as unknown as ChatProductResult;
+    const offers = {
+      name: 'Demo Laptop',
+      price: 900000,
+      stock: 0,
+      has_condition_offers: true,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([variants, offers], 'NGN')).toBe(
+      [
+        '- Demo Phone | base price NGN 450000, exact price depends on the option chosen | availability depends on the option chosen',
+        '- Demo Laptop | base price NGN 900000, exact price depends on the option chosen | availability depends on the option chosen',
+      ].join('\n')
+    );
+  });
+
+  it('never presents the parent price or parent stock of an option product as exact', () => {
+    const variants = {
+      name: 'Demo Phone',
+      price: 100000,
+      stock: 4,
+      has_variants: true,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([variants], 'NGN')).toBe(
+      '- Demo Phone | base price NGN 100000, exact price depends on the option chosen | availability depends on the option chosen'
+    );
+  });
+
+  it('does not call an option product in stock just because its parent is unmanaged', () => {
+    const offers = {
+      name: 'Demo Tablet',
+      price: 200000,
+      stock: 0,
+      manage_stock: false,
+      has_condition_offers: true,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([offers], 'NGN')).toBe(
+      '- Demo Tablet | base price NGN 200000, exact price depends on the option chosen | availability depends on the option chosen'
+    );
+  });
+
+  it('treats a SKU-matrix product as sold by option even without the flags', () => {
+    const matrix = {
+      name: 'Demo Watch',
+      price: 80000,
+      stock: 3,
+      variant_model: 'sku_matrix',
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([matrix], 'NGN')).toBe(
+      '- Demo Watch | base price NGN 80000, exact price depends on the option chosen | availability depends on the option chosen'
+    );
+  });
+
   it('says so when nothing matched, so the model cannot invent a product', () => {
     expect(formatChatAutoReplyProducts([], 'NGN')).toBe(
       'No matching products were found.'

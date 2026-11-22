@@ -28,3 +28,9 @@ export const chatAutoReplySchema = z.object({
 });
 
 export type ChatAutoReply = z.infer<typeof chatAutoReplySchema>;
+
+/** The provider's conversation read: status plus labels (default none). */
+export const conversationSnapshotSchema = z.object({
+  status: z.string(),
+  labels: z.array(z.string()).max(50).default([]),
+});

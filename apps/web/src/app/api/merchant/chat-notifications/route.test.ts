@@ -25,10 +25,18 @@ vi.mock('@/lib/agentic/agentic-merchant-slug', () => ({
 const rpc = vi.fn();
 let user: { id: string } | null;
 
-const patch = (body: unknown, raw?: string) =>
+const SELECTED_MERCHANT = '223e4567-e89b-12d3-a456-426614174002';
+
+const get = (headers?: Record<string, string>) =>
+  new NextRequest('http://localhost/api/merchant/chat-notifications', {
+    headers,
+  });
+
+const patch = (body: unknown, raw?: string, headers?: Record<string, string>) =>
   new NextRequest('http://localhost/api/merchant/chat-notifications', {
     method: 'PATCH',
     body: raw ?? JSON.stringify(body),
+    headers,
   });
 
 beforeEach(() => {
@@ -55,7 +63,7 @@ describe('GET /api/merchant/chat-notifications', () => {
     'off',
   ])('returns the stored level %s for the chat tenant', async (stored) => {
     rpc.mockResolvedValue({ data: stored, error: null });
-    const response = await GET();
+    const response = await GET(get());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ level: stored });
     expect(rpc).toHaveBeenCalledWith('get_chat_message_alert_level', {
@@ -65,7 +73,7 @@ describe('GET /api/merchant/chat-notifications', () => {
 
   it('returns 401 when signed out', async () => {
     user = null;
-    expect((await GET()).status).toBe(401);
+    expect((await GET(get())).status).toBe(401);
     expect(rpc).not.toHaveBeenCalled();
   });
 
@@ -75,7 +83,7 @@ describe('GET /api/merchant/chat-notifications', () => {
       merchantSlug: 'someone-else',
       staffAccess: {},
     } as never);
-    const response = await GET();
+    const response = await GET(get());
     expect(response.status).toBe(404);
     expect((await response.json()).code).toBe('not_available');
     expect(rpc).not.toHaveBeenCalled();
@@ -83,16 +91,65 @@ describe('GET /api/merchant/chat-notifications', () => {
 
   it('returns 403 without dashboard view permission', async () => {
     vi.mocked(hasPermission).mockReturnValue(false);
-    expect((await GET()).status).toBe(403);
+    expect((await GET(get())).status).toBe(403);
   });
 
   it('returns 500 when the read fails or is not a known level', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: 'XX000' } });
-    expect((await GET()).status).toBe(500);
+    expect((await GET(get())).status).toBe(500);
     rpc.mockResolvedValue({ data: 'yes', error: null });
-    expect((await GET()).status).toBe(500);
+    expect((await GET(get())).status).toBe(500);
     rpc.mockResolvedValue({ data: true, error: null });
-    expect((await GET()).status).toBe(500);
+    expect((await GET(get())).status).toBe(500);
+  });
+});
+
+describe('bugfix: the route acts on the store the dashboard selected', () => {
+  it.each([
+    ['GET', () => GET(get({ 'x-baci-merchant-id': SELECTED_MERCHANT }))],
+    [
+      'PATCH',
+      () =>
+        PATCH(
+          patch({ level: 'all' }, undefined, {
+            'x-baci-merchant-id': SELECTED_MERCHANT,
+          })
+        ),
+    ],
+  ])('%s passes the selected store to the merchant lookup', async (_m, call) => {
+    await call();
+    expect(getMerchantForApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      { requestedMerchantId: SELECTED_MERCHANT }
+    );
+  });
+
+  it('falls back to the account default only when no store is selected', async () => {
+    await GET(get());
+    expect(getMerchantForApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      { requestedMerchantId: null }
+    );
+  });
+
+  it.each([
+    ['GET', () => GET(get({ 'x-baci-merchant-id': 'not-a-uuid' }))],
+    [
+      'PATCH',
+      () =>
+        PATCH(
+          patch({ level: 'all' }, undefined, {
+            'x-baci-merchant-id': 'not-a-uuid',
+          })
+        ),
+    ],
+  ])('%s refuses a malformed store header before any lookup', async (_m, call) => {
+    const response = await call();
+    expect(response.status).toBe(400);
+    expect(getMerchantForApiRequest).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 

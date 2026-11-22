@@ -170,7 +170,8 @@ describe('storefront CSS partitioning (dark utilities)', () => {
 
   it('marks cart and checkout thumbnails as neutral image surfaces', () => {
     const imageSurfaceSourceFiles = [
-      '../../components/storefront/ogabassey/pages/cart.tsx',
+      // cart.tsx delegates line-item cards and thumbnails to cart-page-card.tsx
+      '../../components/storefront/ogabassey/pages/cart-page-card.tsx',
       '../../components/storefront/ogabassey/components/cart-sidebar-line-item.tsx',
       // checkout-page.tsx renders its order-summary thumbnails through
       // the mobile/desktop summary renderers since the desktop summary

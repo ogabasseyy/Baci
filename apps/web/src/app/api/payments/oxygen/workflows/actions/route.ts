@@ -1,8 +1,14 @@
+import {
+  oxygenEligibilityProgressHeader,
+  oxygenRuntimeUnavailableCode,
+} from '@baci/shared/oxygen';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { OxygenActionPreflightError } from '@/lib/payments/oxygen/action-preflight-error';
 import {
+  OxygenActiveLoanPreflightError,
   oxygenActiveLoanCode,
   oxygenActiveLoanMessage,
   oxygenStatementRequiredCode,
@@ -86,7 +92,8 @@ export async function GET(request: NextRequest) {
       {
         ...oxygenSnapshotForClient(
           snapshot,
-          request.headers.get(oxygenEligibilityReasonHeader) === '1'
+          request.headers.get(oxygenEligibilityReasonHeader) === '1',
+          request.headers.get(oxygenEligibilityProgressHeader) === '1'
         ),
         pending,
         ninAttemptStatus: await readOxygenNinRetryStatus(
@@ -151,7 +158,10 @@ export async function POST(request: NextRequest) {
   const connection = connectOxygenRuntime();
   if (!connection)
     return NextResponse.json(
-      { error: 'Provider connection unavailable' },
+      {
+        code: oxygenRuntimeUnavailableCode,
+        error: 'Provider connection unavailable',
+      },
       { status: 503, headers }
     );
   const userClient = auth.supabase;
@@ -196,13 +206,26 @@ export async function POST(request: NextRequest) {
       {
         ...oxygenSnapshotForClient(
           snapshot,
-          request.headers.get(oxygenEligibilityReasonHeader) === '1'
+          request.headers.get(oxygenEligibilityReasonHeader) === '1',
+          request.headers.get(oxygenEligibilityProgressHeader) === '1'
         ),
         ninAttemptStatus: await readOxygenNinRetryStatus(userClient, snapshot),
       },
       { headers }
     );
   } catch (failure) {
+    if (
+      failure instanceof OxygenActiveLoanPreflightError ||
+      failure instanceof OxygenActionPreflightError
+    )
+      return NextResponse.json(
+        {
+          code: failure.code,
+          error: failure.message,
+          dispatchState: 'not_dispatched',
+        },
+        { status: 409, headers }
+      );
     if (failure instanceof OxygenPaymentOriginUnverifiedError)
       return NextResponse.json(
         { code: oxygenPaymentOriginCode, error: oxygenPaymentOriginMessage },

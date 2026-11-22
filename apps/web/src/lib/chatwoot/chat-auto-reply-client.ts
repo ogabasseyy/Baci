@@ -1,16 +1,17 @@
 import 'server-only';
 
-import { z } from 'zod';
+import { conversationSnapshotSchema } from '@/schemas/chat-auto-reply';
 import type { ChatAutoReplyBinding } from './chat-auto-reply-config';
 
 const REQUEST_TIMEOUT_MS = 5_000;
 
-async function providerPost(
+/** The HTTP status, or null when the request never completed. */
+async function providerPostStatus(
   binding: ChatAutoReplyBinding,
   path: string,
   token: string,
   body: Record<string, unknown>
-): Promise<boolean> {
+): Promise<number | null> {
   const url = new URL(
     `/api/v1/accounts/${binding.accountId}${path}`,
     binding.apiOrigin
@@ -35,14 +36,26 @@ async function providerPost(
         path: path.replace(/\/\d+/g, '/:id'),
       });
     }
-    return response.ok;
+    return response.status;
   } catch {
     console.error('[chat-auto-reply] provider request failed', {
       status: null,
       path: path.replace(/\/\d+/g, '/:id'),
     });
-    return false;
+    return null;
   }
+}
+
+const isOk = (status: number | null) =>
+  status !== null && status >= 200 && status < 300;
+
+async function providerPost(
+  binding: ChatAutoReplyBinding,
+  path: string,
+  token: string,
+  body: Record<string, unknown>
+): Promise<boolean> {
+  return isOk(await providerPostStatus(binding, path, token, body));
 }
 
 /** Posts as the assistant bot: a public reply, or a private staff note. */
@@ -62,17 +75,27 @@ export function postAssistantMessage(
   );
 }
 
-/** Moves a conversation to a person's queue (`open`) or back (`pending`). */
-export function setConversationStatus(
+/**
+ * Moves a conversation to a person's queue (`open`) or back (`pending`). The
+ * bot credential goes first; only when it is refused (401 or 403: expired or
+ * revoked) is the inbox credential tried, so a handover caused by a dead bot
+ * credential can still reach a person. A timeout or server error is not
+ * retried: the first request may have landed, and staff may have acted since.
+ */
+export async function setConversationStatus(
   binding: ChatAutoReplyBinding,
   input: { conversationId: number; status: 'open' | 'pending' }
 ): Promise<boolean> {
-  return providerPost(
+  const path = `/conversations/${input.conversationId}/toggle_status`;
+  const body = { status: input.status };
+  const status = await providerPostStatus(
     binding,
-    `/conversations/${input.conversationId}/toggle_status`,
+    path,
     binding.botApiAccessToken,
-    { status: input.status }
+    body
   );
+  if (status !== 401 && status !== 403) return isOk(status);
+  return providerPost(binding, path, binding.apiAccessToken, body);
 }
 
 /** Replaces the conversation's whole label list (merge before calling). */
@@ -87,11 +110,6 @@ export function setConversationLabels(
     { labels: input.labels }
   );
 }
-
-const conversationSnapshotSchema = z.object({
-  status: z.string(),
-  labels: z.array(z.string()).max(50).default([]),
-});
 
 export type ConversationSnapshot = { status: string; labels: string[] };
 

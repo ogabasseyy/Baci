@@ -88,9 +88,37 @@ describe('isLatestChatMessage', () => {
     expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
   });
 
-  it('is false when the messages cannot be read', async () => {
+  const stubMessages = (messages: ReturnType<typeof message>[]) =>
+    stubFetch((url) =>
+      url.pathname.endsWith('/messages')
+        ? { body: { payload: messages } }
+        : { body: conversation(7) }
+    );
+
+  it('still counts as newest after an automated store message or a system notice', async () => {
+    stubMessages([
+      message(3),
+      message(4, { message_type: 1 }),
+      message(5, { message_type: 3 }),
+    ]);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
+  });
+
+  it("is not cancelled by an older run's late assistant reply", async () => {
+    // Message 3 is the newer question; the assistant message after it is the
+    // answer to an earlier one, posted late.
+    stubMessages([
+      message(2),
+      message(3),
+      message(4, { message_type: 1, sender: { type: 'agent_bot' } }),
+    ]);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
+    expect(await isLatestChatMessage(bot, 7, 2)).toBe(false);
+  });
+
+  it('is null, not false, when the messages cannot be read', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     stubFetch(() => ({ status: 500 }));
-    expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBeNull();
   });
 });

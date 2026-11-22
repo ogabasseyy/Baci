@@ -2,13 +2,22 @@ import { registerCartLinkTools } from './cart-link-tool';
 import { registerConnectedCartRead } from './register-connected-cart-read';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { registerGuestCartTool } from './guest-cart-tool';
+import { registerGuestCredentialRead } from './register-guest-credential-read';
 import { privateCartContinuationEnabled } from './private-cart-continuation-config';
 
 /** The production and QA registration boundary shares one default-off policy. */
 export function registerConfiguredGuestCartTool(
   server: McpServer,
-  options: Omit<Parameters<typeof registerGuestCartTool>[1], 'enablePrivateTextContinuation'>
+  options: Omit<
+    Parameters<typeof registerGuestCartTool>[1],
+    'enablePrivateTextContinuation' | 'modelCredentialTool'
+  >
 ) {
+  if (options.guestCredentialMode) {
+    registerGuestCartTool(server, { ...options, modelCredentialTool: true });
+    registerGuestCredentialRead(server, options.store);
+    return;
+  }
   registerGuestCartTool(server, {
     ...options,
     enablePrivateTextContinuation: privateCartContinuationEnabled(),

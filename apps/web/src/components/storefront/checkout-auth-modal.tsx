@@ -23,7 +23,8 @@ export function CheckoutAuthModal({
   onOpenChange,
   onSuccess,
 }: CheckoutAuthModalProps) {
-  const slug = useMerchantSafe()?.merchant?.slug;
+  const merchant = useMerchantSafe()?.merchant;
+  const slug = merchant?.slug;
   const socialReturnTo =
     typeof window !== 'undefined' &&
     supportsCheckoutSocialSignIn(

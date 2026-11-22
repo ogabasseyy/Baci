@@ -4,7 +4,10 @@ import z from 'zod';
 import type { CachedMerchant } from '@/lib/cached-data';
 import { getMerchantByIdentifierOrAlias } from '@/lib/get-merchant-by-identifier-or-alias';
 import { createClient } from '@/lib/supabase/server';
+import { extractStorefrontOAuthCallbackNext } from '../oauth-callback-next';
+import { syncStorefrontOAuthNextCookie } from '../oauth-next-cookie';
 import { resolveTrustedStorefrontRedirectUrl } from '../oauth-redirect';
+import { resolveVerifiedMerchantDomains } from '../resolve-verified-merchant-domains';
 
 const appleAuthSchema = z.object({
   merchantSlug: z.string().min(1, 'Merchant slug is required'),
@@ -53,11 +56,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const trustedRedirectUrl = resolveTrustedStorefrontRedirectUrl(
+    let trustedRedirectUrl = resolveTrustedStorefrontRedirectUrl(
       redirectUrl,
       merchant,
       merchantSlug
     );
+    if (!trustedRedirectUrl && redirectUrl) {
+      const verifiedDomains = await resolveVerifiedMerchantDomains(
+        supabase,
+        merchant.id
+      );
+      if (verifiedDomains.length > 0) {
+        trustedRedirectUrl = resolveTrustedStorefrontRedirectUrl(
+          redirectUrl,
+          { ...merchant, verified_domains: verifiedDomains },
+          merchantSlug
+        );
+      }
+    }
     if (!trustedRedirectUrl) {
       return NextResponse.json(
         { error: 'Invalid redirectUrl', code: 'INVALID_REDIRECT_URL' },
@@ -65,12 +81,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const { redirectTo, nextTarget } = extractStorefrontOAuthCallbackNext(
+      trustedRedirectUrl,
+      merchant.slug
+    );
+    syncStorefrontOAuthNextCookie(cookieStore, nextTarget);
+
     // Initiate Apple OAuth
     // 2026 Best Practice: Using Supabase's built-in OAuth for Apple
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'apple',
       options: {
-        redirectTo: trustedRedirectUrl,
+        redirectTo,
       },
     });
 

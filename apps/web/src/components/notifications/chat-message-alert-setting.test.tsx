@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   mutate: vi.fn(),
   toast: vi.fn(),
+  merchant: vi.fn(),
+}));
+vi.mock('@/hooks/use-merchant-client', () => ({
+  useMerchantSafe: mocks.merchant,
 }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.mutate }));
 vi.mock('@/hooks/use-toast', () => ({
@@ -27,6 +31,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal('fetch', mocks.fetch);
   mocks.fetch.mockResolvedValue(reply(true, { level: 'all' }));
+  mocks.merchant.mockReturnValue(null);
 });
 
 describe('ChatMessageAlertSetting', () => {
@@ -92,6 +97,45 @@ describe('ChatMessageAlertSetting', () => {
     await waitFor(() =>
       expect(screen.getByRole('radio', { name: OFF })).toBeChecked()
     );
+  });
+
+  describe('bugfix: acts on the store the dashboard has selected', () => {
+    const SELECTED = '123e4567-e89b-12d3-a456-426614174001';
+
+    it('reads the choice for the selected store', async () => {
+      mocks.merchant.mockReturnValue({ merchant: { id: SELECTED } });
+      render(<ChatMessageAlertSetting />);
+      await choice(ALL);
+      expect(mocks.fetch).toHaveBeenCalledWith(
+        '/api/merchant/chat-notifications',
+        { headers: { 'x-baci-merchant-id': SELECTED } }
+      );
+    });
+
+    it('saves the choice for the selected store', async () => {
+      mocks.merchant.mockReturnValue({ merchant: { id: SELECTED } });
+      mocks.mutate.mockResolvedValue(reply(true, { level: 'off' }));
+      render(<ChatMessageAlertSetting />);
+      await userEvent.click(await choice(OFF));
+      expect(mocks.mutate).toHaveBeenCalledWith(
+        '/api/merchant/chat-notifications',
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/json',
+            'x-baci-merchant-id': SELECTED,
+          },
+        })
+      );
+    });
+
+    it('sends no store header when there is no merchant context', async () => {
+      render(<ChatMessageAlertSetting />);
+      await choice(ALL);
+      expect(mocks.fetch).toHaveBeenCalledWith(
+        '/api/merchant/chat-notifications',
+        { headers: undefined }
+      );
+    });
   });
 
   it('does not save again when the current choice is picked', async () => {

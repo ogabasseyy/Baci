@@ -3,6 +3,10 @@ import { vi } from 'vitest';
 import type { ExpenseFormFields } from '@/components/expenses/ExpenseFormFields';
 import type { ExpenseDetail } from '@/schemas/expense-detail';
 
+type PreventRemoveCallback = NonNullable<
+  Parameters<typeof import('expo-router').usePreventRemove>[1]
+>;
+
 export const editMerchantId = '97e7a9a4-4f82-484d-a0a5-0f2ba07f4e2e';
 export const editExpenseId = '6d89c8af-7bef-4b78-a7b5-9c2a63f691e9';
 export const editBranchId = '8b3f1444-8890-4b6a-a00f-ae80949f05b2';
@@ -52,10 +56,9 @@ const editFormMocks = vi.hoisted(() => ({
   isPending: false,
   mutate: vi.fn(),
   privateReceiptUrl: 'https://signed.example.com/receipt.jpg',
-  preventRemoveCallback: null as (() => void) | null,
+  preventRemoveCallback: null as PreventRemoveCallback | null,
   preventRemoveEnabled: false,
-  router: { back: vi.fn() },
-  dispatch: vi.fn(),
+  router: { back: vi.fn(), canGoBack: () => true },
 }));
 
 export function getExpenseEditFormMocks() {
@@ -219,14 +222,14 @@ vi.mock('expo-router', () => ({
       <>{options?.headerLeft?.()}</>
     ),
   },
-  useNavigation: () => ({ dispatch: editFormMocks.dispatch }),
-  useRouter: () => editFormMocks.router,
-}));
-vi.mock('expo-router/react-navigation', () => ({
-  usePreventRemove: (prevent: boolean, callback: () => void) => {
+  usePreventRemove: (prevent: boolean, callback: PreventRemoveCallback) => {
     editFormMocks.preventRemoveEnabled = prevent;
     editFormMocks.preventRemoveCallback = callback;
+    return () => {
+      editFormMocks.preventRemoveEnabled = false;
+    };
   },
+  useRouter: () => editFormMocks.router,
 }));
 vi.mock('@react-native-vector-icons/ionicons', () => ({ default: () => null }));
 vi.mock('react-native', () => ({

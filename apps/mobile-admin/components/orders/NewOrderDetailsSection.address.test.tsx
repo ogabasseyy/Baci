@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { useNewOrderController } from '@/hooks/useNewOrderController';
 import { NewOrderDetailsSection } from './NewOrderDetailsSection';
@@ -155,6 +155,54 @@ describe('NewOrderDetailsSection address behavior', () => {
     } else {
       process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY = originalGoogleMapsApiKey;
     }
+  });
+
+  it('offers a delivery address for a manual order to the selected customer', () => {
+    const controller = makeController({ sameAsCustomer: true });
+    controller.customer = { ...controller.customer, id: 'existing-customer' };
+    render(
+      <NewOrderDetailsSection allowOrderAddressEdit controller={controller} />
+    );
+    expect(screen.getByText('Delivery Address')).toBeInTheDocument();
+    expect(screen.getByText('google-places')).toBeInTheDocument();
+  });
+
+  it('resets Places on customer reselection but keeps the input mounted while typing', () => {
+    const controller = makeController({ sameAsCustomer: true });
+    const customer = {
+      ...controller.customer,
+      id: 'existing',
+      address: 'Saved street',
+    };
+    const { rerender } = render(
+      <NewOrderDetailsSection
+        allowOrderAddressEdit
+        controller={{ ...controller, customer, customerSelectionRevision: 1 }}
+      />
+    );
+    const originalInput = screen.getByText('google-places');
+    rerender(
+      <NewOrderDetailsSection
+        allowOrderAddressEdit
+        controller={{
+          ...controller,
+          customer: { ...customer, address: 'Typed street' },
+          customerSelectionRevision: 1,
+        }}
+      />
+    );
+    expect(screen.getByText('google-places')).toBe(originalInput);
+    rerender(
+      <NewOrderDetailsSection
+        allowOrderAddressEdit
+        controller={{
+          ...controller,
+          customer: { ...customer, address: 'Reselected street' },
+          customerSelectionRevision: 2,
+        }}
+      />
+    );
+    expect(screen.getByText('google-places')).not.toBe(originalInput);
   });
 
   it('clears stale city and state when the selected address omits those components', () => {

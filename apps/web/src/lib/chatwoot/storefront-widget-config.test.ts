@@ -62,6 +62,7 @@ describe('storefront Chatwoot widget config', () => {
       platformOrigin: 'https://support.example.com',
       storefrontOrigin: 'https://shop.example.com',
       websiteToken,
+      checkoutEnabled: false,
     });
     expect(
       getStorefrontChatwootWidgetConfig('22222222-2222-4222-8222-222222222222')
@@ -88,5 +89,40 @@ describe('storefront Chatwoot widget config', () => {
     );
 
     expect(getStorefrontChatwootWidgetConfig(merchantId)).toBeNull();
+  });
+
+  it.each([
+    ['true', true],
+    ['false', false],
+    ['1', false],
+    ['TRUE', false],
+    [undefined, false],
+  ])('maps EKAETTE_CHATWOOT_CHECKOUT_ENABLED=%s to %s', (value, expected) => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CONTEXT_ENABLED', 'true');
+    vi.stubEnv('EKAETTE_CHATWOOT_WIDGET_ENABLED', 'true');
+    vi.stubEnv(
+      'EKAETTE_CHATWOOT_CONTEXT_BINDINGS',
+      JSON.stringify([
+        {
+          merchantId,
+          origin: 'https://shop.example.com',
+          websiteToken,
+          inboxId: 42,
+        },
+      ])
+    );
+    vi.stubEnv(
+      'EKAETTE_CHATWOOT_PLATFORM_ORIGIN',
+      'https://support.example.com'
+    );
+    if (value === undefined) {
+      vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', '');
+    } else {
+      vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', value);
+    }
+
+    expect(getStorefrontChatwootWidgetConfig(merchantId)?.checkoutEnabled).toBe(
+      expected
+    );
   });
 });

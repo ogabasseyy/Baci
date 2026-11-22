@@ -18,6 +18,7 @@ import type { PaymentMethodType } from './PaymentMethodSelector';
 import type { DeliveryMethod, ShippingQuote } from './types';
 
 const PAYMENT_METHOD_LABELS: Record<PaymentMethodType, string> = {
+  oxygen: 'Oxygen',
   uba_redvault: 'Pay with UBA — review final price before payment',
   // Same words the Payment step shows; the gateway name is not shopper-facing.
   paystack: 'Pay with Card',

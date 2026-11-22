@@ -36,17 +36,26 @@ export async function loadChatAutoReplyHistory(
 }
 
 /**
- * True only when the message being answered is still the newest one in the
- * conversation. A customer who writes again while the model works gets one
- * answer, from the newer message's own run, in the right order. Unreadable
- * counts as not latest: staying quiet is safer than answering out of turn.
+ * True only when no customer message has arrived after the one being
+ * answered. A customer who writes again while the model works gets the answer
+ * from the newer message's own run. Nothing else supersedes it: an automation
+ * or campaign post starts no assistant run, and an assistant reply may belong
+ * to an older run that finished late, so counting either would leave this
+ * question unanswered. A repeat delivery of the same message is dropped at
+ * intake, and a person's reply is caught by the conversation leaving
+ * `pending`. Null means the messages could not be read: that is not the same
+ * as superseded, and the caller hands over rather than going quiet with
+ * nobody queued.
  */
 export async function isLatestChatMessage(
   binding: ChatAutoReplyBinding,
   conversationId: number,
   messageId: number
-): Promise<boolean> {
+): Promise<boolean | null> {
   const result = await listMerchantInboxMessages(binding, { conversationId });
-  if (!result.ok) return false;
-  return result.messages.at(-1)?.id === messageId;
+  if (!result.ok) return null;
+  const latestQuestion = result.messages.findLast(
+    (message) => message.sender === 'customer'
+  );
+  return latestQuestion?.id === messageId;
 }

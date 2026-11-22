@@ -114,6 +114,25 @@ describe('bugfix: a handover must alert the merchant', () => {
     expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(alerted);
   });
 
+  it('alerts the merchant when the chat could not be read and a person must take it', async () => {
+    mocks.latest.mockResolvedValue(null);
+    expect(await runChatAutoReply(binding, event())).toBe('handed_over');
+    expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(alerted);
+  });
+
+  it('alerts the merchant when the assistant takes too long', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.generate.mockReturnValue(new Promise(() => {}));
+      const run = runChatAutoReply(binding, event());
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await run).toBe('handed_over');
+      expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(alerted);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses no customer name when the customer has none', async () => {
     await runChatAutoReply(
       binding,

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
@@ -43,12 +44,21 @@ const OPTIONS: ReadonlyArray<{
  */
 export function ChatMessageAlertSetting() {
   const { toast } = useToast();
+  // The store the dashboard has selected; the API falls back to the account's
+  // latest store only when there is no merchant context.
+  const merchantId = useMerchantSafe()?.merchant?.id;
+  const contextHeaders = merchantId
+    ? { 'x-baci-merchant-id': merchantId }
+    : undefined;
   const [level, setLevel] = useState<ChatAlertLevel | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let stale = false;
-    fetch(ENDPOINT)
+    setLevel(null);
+    fetch(ENDPOINT, {
+      headers: merchantId ? { 'x-baci-merchant-id': merchantId } : undefined,
+    })
       .then(async (response) => {
         if (!response.ok) return null;
         const parsed = chatNotificationSettingsSchema.safeParse(
@@ -65,7 +75,7 @@ export function ChatMessageAlertSetting() {
     return () => {
       stale = true;
     };
-  }, []);
+  }, [merchantId]);
 
   if (level === null) return null;
 
@@ -78,7 +88,7 @@ export function ChatMessageAlertSetting() {
     try {
       const response = await fetchWithCsrf(ENDPOINT, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...contextHeaders },
         body: JSON.stringify({ level: chosen.data }),
       });
       const parsed = chatNotificationSettingsSchema.safeParse(

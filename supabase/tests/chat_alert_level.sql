@@ -92,4 +92,63 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 
+-- The push gate follows the level (anon is the chat webhook's role), whatever the older push-only boolean says.
+DO $$ BEGIN
+  UPDATE public.notification_preferences SET chat_message_notifications = 'all', chat_message_push_enabled = false WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1';
+END $$;
+SET LOCAL ROLE anon;
+DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
+  IF public.get_chat_message_push_preference(m) IS NOT TRUE THEN RAISE EXCEPTION 'push muted while the level says all'; END IF;
+  IF public.get_chat_message_push_preference('c4a72000-0000-4000-8000-0000000000ff') IS NOT TRUE THEN RAISE EXCEPTION 'unknown store must default to on'; END IF;
+END $$;
+RESET ROLE;
+UPDATE public.notification_preferences SET chat_message_notifications = 'off', chat_message_push_enabled = true WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1';
+SET LOCAL ROLE anon;
+DO $$ BEGIN
+  IF public.get_chat_message_push_preference('c4a72000-0000-4000-8000-0000000000b1') IS NOT FALSE THEN RAISE EXCEPTION 'push not muted at level off'; END IF;
+END $$;
+RESET ROLE;
+UPDATE public.notification_preferences SET chat_message_notifications = 'handover' WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1';
+SET LOCAL ROLE anon;
+DO $$ BEGIN
+  IF public.get_chat_message_push_preference('c4a72000-0000-4000-8000-0000000000b1') IS NOT TRUE THEN RAISE EXCEPTION 'handover-only level muted pushes'; END IF;
+END $$;
+RESET ROLE;
+
+-- The older push-only setter keeps the level in step instead of splitting from it.
+SELECT pg_temp.as_user('c4a72000-0000-4000-8000-0000000000a1');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
+  PERFORM public.set_chat_message_push_preference(m, false);
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT chat_message_notifications || ':' || chat_message_push_enabled FROM public.notification_preferences WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1') <> 'off:false' THEN RAISE EXCEPTION 'older setter left the level on'; END IF;
+END $$;
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
+  PERFORM public.set_chat_message_push_preference(m, true);
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT chat_message_notifications || ':' || chat_message_push_enabled FROM public.notification_preferences WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1') <> 'all:true' THEN RAISE EXCEPTION 'older setter did not restore all from off'; END IF;
+  UPDATE public.notification_preferences SET chat_message_notifications = 'handover' WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1';
+END $$;
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE m uuid := 'c4a72000-0000-4000-8000-0000000000b1'; BEGIN
+  PERFORM public.set_chat_message_push_preference(m, true);
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT chat_message_notifications FROM public.notification_preferences WHERE merchant_id = 'c4a72000-0000-4000-8000-0000000000b1') <> 'handover' THEN RAISE EXCEPTION 'older setter overwrote handover only'; END IF;
+END $$;
+SELECT pg_temp.as_user('c4a72000-0000-4000-8000-0000000000a2');
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  BEGIN PERFORM public.set_chat_message_push_preference('c4a72000-0000-4000-8000-0000000000b1', false); RAISE EXCEPTION 'an outsider could use the older setter';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+
+
 ROLLBACK;

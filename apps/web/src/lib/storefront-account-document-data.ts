@@ -4,6 +4,7 @@ import {
 } from '@baci/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
+import { loadPaidOrderDocument } from '@/lib/orders/paid-order-amendment-document';
 import { buildStorefrontAccountDocumentBundle } from '@/lib/storefront-account-document-bundle';
 import type {
   StorefrontAccountDocumentCustomerRow,
@@ -24,6 +25,7 @@ import { toOrderPaymentAccount } from '@/lib/storefront-customer-payment-account
 import { loadStorefrontCustomerPaymentAccounts } from '@/lib/storefront-customer-payment-accounts';
 import { loadStorefrontCustomerTaxSubtotals } from '@/lib/storefront-customer-tax-subtotals';
 import { loadStorefrontCustomerTransactions } from '@/lib/storefront-customer-transactions';
+import type { PaidOrderDocumentVersion } from '@/schemas/order-amendment-document';
 
 const MERCHANT_COLUMNS =
   'id, slug, business_name, logo_url, email, phone, support_email, support_phone, rider_phone_number, business_address, cac_rc_number, tax_identification_number, legal_entity_name, brand_colors, vat_registration_status, vat_rate, bank_code, bank_account_number, bank_name, bank_account_name, social_media, pages, registered_address';
@@ -35,6 +37,8 @@ interface StorefrontAccountDocumentParams {
   userId: string;
   merchantSlug: string;
   orderId: string;
+  version?: PaidOrderDocumentVersion;
+  view?: 'order' | 'fulfilled_receipt';
 }
 
 export class StorefrontAccountDocumentError extends Error {
@@ -53,6 +57,8 @@ export async function getStorefrontAccountDocumentData({
   userId,
   merchantSlug,
   orderId,
+  version,
+  view,
 }: StorefrontAccountDocumentParams) {
   const { data: merchant, error: merchantError } = await supabase
     .from('merchants')
@@ -99,6 +105,34 @@ export async function getStorefrontAccountDocumentData({
     );
   }
 
+  const document =
+    order.source === 'online_store' || version
+      ? await loadPaidOrderDocument(
+          supabase,
+          orderId,
+          view ? 'live' : (version ?? 'original')
+        )
+      : { data: null, error: null };
+  if (document.error) {
+    throw new StorefrontAccountDocumentError(
+      'Unable to load order revision',
+      document.error === 'not_found' ? 404 : 503,
+      'DOCUMENT_DATA_ERROR'
+    );
+  }
+  if (document.data) Object.assign(order, document.data.inputs.order);
+  const amendment = document.data?.amendment;
+  const documentNumber =
+    view === 'fulfilled_receipt'
+      ? amendment?.documentNumber
+      : document.data?.documentNumber;
+  if (
+    document.data &&
+    view !== 'order' &&
+    !('fulfillment_details' in document.data.inputs.order)
+  ) {
+    order.fulfillment_details = null;
+  }
   const [
     itemsResult,
     transactionsResult,
@@ -106,19 +140,31 @@ export async function getStorefrontAccountDocumentData({
     taxResult,
     canCancelResult,
   ] = await Promise.all([
-    supabase
-      .from('order_items')
-      .select(
-        'id, product_id, variant_id, condition, variant_name, name, item_description, quantity, price, assurance_fee, line_extension_amount, line_id, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
-      )
-      .eq('order_id', orderId),
-    loadStorefrontCustomerTransactions(supabase, [orderId]),
-    loadStorefrontCustomerPaymentAccounts(supabase, [orderId]),
+    document.data
+      ? { data: document.data.inputs.items, error: null }
+      : supabase
+          .from('order_items')
+          .select(
+            'id, product_id, variant_id, condition, variant_name, name, item_description, quantity, price, assurance_fee, line_extension_amount, line_id, unit_code, vat_category_code, vat_rate, vat_amount, sellers_item_id, fulfillment_data'
+          )
+          .eq('order_id', orderId),
+    amendment && (document.data?.inputs.payments || view !== 'order')
+      ? { data: document.data?.inputs.payments ?? [], error: null }
+      : loadStorefrontCustomerTransactions(supabase, [orderId]),
+    // Keep the archived payment instructions out of an amended order.
+    // Existing payment evidence comes from the pinned document or live history.
+    amendment
+      ? { data: [], error: null }
+      : loadStorefrontCustomerPaymentAccounts(supabase, [orderId]),
     // The tax table is merchant/staff-readable: a direct select returns []
     // under customer RLS, so the download gate would validate an empty set
     // and serve an invoice the sender rejects. Load the ownership-checked
     // customer projection like transactions and payment accounts.
-    loadStorefrontCustomerTaxSubtotals(supabase, [orderId]),
+    document.data?.inputs.taxSubtotals != null
+      ? { data: document.data.inputs.taxSubtotals, error: null }
+      : amendment
+        ? { data: [], error: null }
+        : loadStorefrontCustomerTaxSubtotals(supabase, [orderId]),
     // Authoritative gate for the customer "Cancel Order" CTA. The customer-scoped
     // client cannot read the merchant-only transactions table, so this server RPC
     // is the source of truth. Fail-closed: any error means "not cancellable".
@@ -148,7 +194,7 @@ export async function getStorefrontAccountDocumentData({
 
   const canCancel = canCancelResult.error
     ? false
-    : canCancelResult.data === true;
+    : canCancelResult.data === true && !amendment?.holdFulfillment;
 
   const paymentStatus = normalizePaymentStatus(order.payment_status);
   const shippingStatus = normalizeShippingStatus(order.shipping_status);
@@ -194,8 +240,21 @@ export async function getStorefrontAccountDocumentData({
     payments: transactionRows,
   });
 
-  return buildStorefrontAccountDocumentBundle({
-    merchant: merchant as StorefrontAccountDocumentMerchantRow,
+  const sellerTax = document.data?.inputs.sellerTax;
+  const bundle = buildStorefrontAccountDocumentBundle({
+    merchant: (amendment
+      ? {
+          ...merchant,
+          bank_code: null,
+          bank_account_number: null,
+          bank_account_name: null,
+          bank_name: null,
+          ...(sellerTax && {
+            vat_registration_status: sellerTax.registrationStatus,
+            vat_rate: sellerTax.rate,
+          }),
+        }
+      : merchant) as StorefrontAccountDocumentMerchantRow,
     customer: customer as StorefrontAccountDocumentCustomerRow,
     order: order as StorefrontAccountDocumentOrderRow,
     itemRows: (itemsResult.data || []) as StorefrontAccountDocumentItemRow[],
@@ -214,9 +273,25 @@ export async function getStorefrontAccountDocumentData({
     ),
     taxRows: (taxResult.data ||
       []) as StorefrontAccountDocumentTaxSubtotalRow[],
+    deriveRevisedTax: Boolean(
+      amendment &&
+        (view || (version && version !== 'original')) &&
+        !document.data?.inputs.revisedTaxPinned
+    ),
     paymentStatus,
     shippingStatus,
     currentDocumentKind,
     canCancel,
   });
+  if (documentNumber) {
+    bundle.invoiceData.invoice_number += `-R${documentNumber}`;
+    bundle.receiptOrder.order_number += `-R${documentNumber}`;
+    bundle.invoiceData.notes = `Revised invoice R${documentNumber} for order ${order.order_number}`;
+  } else if (amendment) {
+    bundle.invoiceData.notes = 'Archived copy of the original order';
+  }
+  return {
+    ...bundle,
+    order: { ...bundle.order, ...(amendment ? { amendment } : {}) },
+  };
 }

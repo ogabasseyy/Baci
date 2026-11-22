@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
+import {
+  paystackCancellationCaptureAmounts,
+  paystackCancellationRefundProviderAmount,
+} from '@/lib/orders/paystack-cancellation-capture-amounts';
 import { verifyTransaction } from '@/lib/verify-paystack-transaction';
 import { fetchRefund } from './fetch-paystack-refund';
 import { normalizeCurrencyCode } from './normalize-currency-code';
@@ -18,7 +22,7 @@ async function resolveLinkedPayment(
   const { data: payment, error } = await supabase
     .from('transactions')
     .select(
-      'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, status'
+      'id, order_id, merchant_id, gateway, gateway_reference, gateway_response, amount, currency, status'
     )
     .eq('id', paymentId)
     .eq('order_id', refund.order_id)
@@ -46,7 +50,9 @@ async function resolveSoleLegacyPayment(
   // payment when exactly one exists.
   const { data, error } = await supabase
     .from('transactions')
-    .select('id, gateway, gateway_reference, amount, currency')
+    .select(
+      'id, gateway, gateway_reference, gateway_response, amount, currency'
+    )
     .eq('order_id', refund.order_id)
     .eq('merchant_id', refund.merchant_id)
     .eq('transaction_type', 'payment')
@@ -122,6 +128,19 @@ export async function reconcilePaystackCancellationRefund(
     throw new Error('refund_payment_link_mismatch');
   }
 
+  const captureAmounts = paystackCancellationCaptureAmounts(payment);
+  const refundProviderAmount =
+    captureAmounts &&
+    paystackCancellationRefundProviderAmount(refund, captureAmounts);
+  if (
+    !captureAmounts ||
+    refundProviderAmount === null ||
+    (captureAmounts.grossMinor !== captureAmounts.principalMinor &&
+      typeof paymentId !== 'string')
+  ) {
+    throw new Error('refund_payment_link_mismatch');
+  }
+
   const [providerRefund, providerPayment] = await Promise.all([
     fetchRefund(refundId, AbortSignal.timeout(8_000)),
     verifyTransaction(payment.gateway_reference, AbortSignal.timeout(8_000), {
@@ -158,8 +177,8 @@ export async function reconcilePaystackCancellationRefund(
     current.id !== refundId ||
     current.transaction !== original.id ||
     original.reference !== payment.gateway_reference ||
-    original.amount !== Math.round(Number(payment.amount) * 100) ||
-    current.amount !== Math.round(Number(refund.amount) * 100) ||
+    original.amount !== captureAmounts.grossMinor ||
+    current.amount !== refundProviderAmount ||
     normalizeCurrencyCode(current.currency) !==
       normalizeCurrencyCode(refund.currency) ||
     normalizeCurrencyCode(original.currency) !==

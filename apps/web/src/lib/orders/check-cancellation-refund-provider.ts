@@ -4,6 +4,10 @@ import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
 import { listPaystackRefunds } from './list-paystack-refunds';
 import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 import type { CancellationOrder } from './order-cancellation-side-effect-types';
+import {
+  paystackCancellationCaptureAmounts,
+  paystackCancellationRefundProviderAmount,
+} from './paystack-cancellation-capture-amounts';
 import { quarantineRefund } from './quarantine-order-cancellation-refund';
 import { DeferredError } from './run-order-cancellation-side-effect';
 
@@ -75,9 +79,18 @@ export async function checkCancellationRefundProvider({
       supabase,
       transactions: [transaction],
     });
+  const captureAmounts = paystackCancellationCaptureAmounts(transaction);
+  if (!captureAmounts) {
+    return quarantine('Paystack refund capture amount requires review');
+  }
+  const surcharged =
+    captureAmounts.grossMinor !== captureAmounts.principalMinor;
   let rows: Awaited<ReturnType<typeof listPaystackRefunds>>;
   try {
-    rows = await listPaystackRefunds(reference, { deadlineMs });
+    rows = await listPaystackRefunds(reference, {
+      deadlineMs,
+      ...(surcharged ? { expectedAmount: captureAmounts.grossMinor } : {}),
+    });
   } catch (error) {
     // Fail closed, but log the cause: a config outage (missing
     // secret) strands every Paystack leg and needs an ops alert,
@@ -192,7 +205,9 @@ export async function checkCancellationRefundProvider({
     if (
       normalizeRefundMoneyField(row.currency) !==
         normalizeRefundMoneyField(currency) ||
-      (known && Math.round(Number(known.amount) * 100) !== row.amount)
+      (known &&
+        paystackCancellationRefundProviderAmount(known, captureAmounts) !==
+          row.amount)
     )
       return quarantine('Paystack refund amount or currency mismatch', {
         provider_refund_id: row.id,

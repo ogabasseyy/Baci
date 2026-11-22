@@ -24,6 +24,7 @@ vi.mock('@/lib/logger', () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 vi.mock('@/lib/paystack', () => ({
+  isPaystackConfigured: () => true,
   initializeTransaction: vi.fn(),
   calculatePlatformFee: (amount: number) => ({
     platformFee: Math.round(amount * 0.015),
@@ -116,13 +117,14 @@ vi.mock('@/lib/supabase/admin', () => ({
 // The proof-bound GIG fee read runs on the request-scoped client.
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn().mockResolvedValue({
-    rpc: vi.fn((name: string) =>
-      Promise.resolve(
-        name === 'get_order_paystack_split_retained_shipping_kobo'
-          ? { data: 0, error: null }
-          : { data: null, error: null }
-      )
-    ),
+    rpc: vi.fn(async (name: string) => {
+      if (name === 'claim_checkout_for_paid_order_amendment') {
+        return { data: 'untracked', error: null };
+      }
+      return name === 'get_order_paystack_split_retained_shipping_kobo'
+        ? { data: 0, error: null }
+        : { data: null, error: null };
+    }),
   }),
 }));
 

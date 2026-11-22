@@ -161,12 +161,14 @@ function createQuery<T>(result: T) {
 }
 
 function createSupabaseMock({
+  canViewOrders = false,
   items = orderItemsResult,
   order = orderResult,
   paymentAccounts = paymentAccountsResult,
   taxSubtotals = taxSubtotalsResult,
   user = { id: 'user-1' },
 }: {
+  canViewOrders?: boolean;
   items?: QueryResult;
   order?: QueryResult;
   paymentAccounts?: QueryResult;
@@ -192,6 +194,7 @@ function createSupabaseMock({
       }),
     },
     from,
+    rpc: vi.fn().mockResolvedValue({ data: canViewOrders, error: null }),
     queries: {
       paymentAccountsQuery,
     },
@@ -242,6 +245,207 @@ describe('GET /api/orders/[id]/invoice', () => {
     );
     vi.mocked(createClient).mockReturnValue(
       createSupabaseMock() as unknown as ReturnType<typeof createClient>
+    );
+  });
+
+  it('renders a pinned amendment invoice from one snapshot and leaves original links intact', async () => {
+    const version = 'a95fed79-47c8-4cae-bfd0-b61c9900d1cd';
+    const rpc = vi.fn(async (_name: string, args: { p_version: string }) => {
+      const original = args.p_version === 'original';
+      return {
+        error: null,
+        data: {
+          amendment: {
+            state: 'awaiting_payment',
+            holdFulfillment: true,
+            balanceDueMinor: 5000000,
+            refundOwedMinor: 0,
+            documentId: version,
+            documentNumber: 1,
+          },
+          documentNumber: original ? null : 1,
+          inputs: {
+            sellerTax: { registrationStatus: 'registered', rate: 0 },
+            revisedTaxPinned: !original,
+            taxSubtotals: [
+              {
+                vat_category_code: 'Z',
+                vat_rate: 0,
+                taxable_amount: original ? 300000 : 350000,
+                tax_amount: 0,
+                exemption_reason: 'Fixture zero-rated category',
+              },
+            ],
+            order: {
+              total: original ? 300000 : 350000,
+              subtotal: original ? 300000 : 350000,
+              amount_paid: 300000,
+            },
+            items: [
+              {
+                id: 'snapshot',
+                name: original ? 'Original phone' : 'Revised phone',
+                variant_name: original ? '128 GB' : '256 GB',
+                price: original ? 300000 : 350000,
+                quantity: 1,
+                vat_category_code: 'Z',
+                vat_rate: 0,
+                vat_amount: 0,
+              },
+            ],
+          },
+        },
+      };
+    });
+    const supabase = createSupabaseMock({
+      taxSubtotals: {
+        data: null,
+        error: { message: 'RLS denied live tax rows' },
+      },
+      order: {
+        data: {
+          ...(orderResult.data as object),
+          source: 'online_store',
+          merchants: {
+            ...(orderResult.data as { merchants: object }).merchants,
+            vat_registration_status: 'not_registered',
+          },
+        },
+        error: null,
+      },
+    });
+    vi.mocked(createClient).mockReturnValue({
+      ...supabase,
+      rpc,
+    } as unknown as ReturnType<typeof createClient>);
+    const context = { params: Promise.resolve({ id: ORDER_ID }) };
+    const original = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      context
+    );
+    expect(original.status).toBe(200);
+    expect(generateReceiptBlob).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        total: 300000,
+        items: expect.arrayContaining([
+          expect.objectContaining({ product_name: 'Original phone (128 GB)' }),
+        ]),
+      }),
+      expect.anything(),
+      expect.objectContaining({
+        taxSubtotals: [
+          expect.objectContaining({
+            vat_category_code: 'Z',
+            taxable_amount: 300000,
+          }),
+        ],
+      })
+    );
+    const revised = await GET(
+      new NextRequest(
+        `http://localhost/api/orders/${ORDER_ID}/invoice?revision=${version}`
+      ),
+      context
+    );
+    expect(revised.status).toBe(200);
+    expect(revised.headers.get('Content-Disposition')).toContain('ORD-1001-R1');
+    expect(generateReceiptBlob).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        total: 350000,
+        balance: 50000,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            product_name: expect.stringMatching(/Revised phone.*256 GB/),
+          }),
+        ]),
+        fulfillment_details: null,
+      }),
+      expect.anything(),
+      expect.objectContaining({
+        taxSubtotals: [
+          expect.objectContaining({
+            vat_category_code: 'Z',
+            taxable_amount: 350000,
+            tax_amount: 0,
+            exemption_reason: 'Fixture zero-rated category',
+          }),
+        ],
+      })
+    );
+    expect(rpc).toHaveBeenLastCalledWith('read_paid_order_amendment_document', {
+      p_order_id: ORDER_ID,
+      p_version: version,
+    });
+  });
+
+  it('does not issue an amended invoice from an incomplete money snapshot', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      error: null,
+      data: {
+        amendment: {
+          state: 'settled',
+          holdFulfillment: false,
+          balanceDueMinor: 0,
+          refundOwedMinor: 0,
+          documentId: null,
+          documentNumber: null,
+        },
+        documentNumber: null,
+        inputs: {
+          order: { total: null, subtotal: 300000, amount_paid: 300000 },
+          items: [],
+        },
+      },
+    });
+    vi.mocked(createClient).mockReturnValue({
+      ...createSupabaseMock(),
+      rpc,
+    } as unknown as ReturnType<typeof createClient>);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/orders/${ORDER_ID}/invoice?revision=original`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(503);
+    expect(generateReceiptBlob).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { summary: null, expectedStatus: 200 },
+    { summary: { state: 'settled' }, expectedStatus: 503 },
+  ])('falls back from a document RPC outage only after confirming the original is unamended ($expectedStatus)', async ({
+    summary,
+    expectedStatus,
+  }) => {
+    const supabase = createSupabaseMock();
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        error: { code: 'PGRST202' },
+        data: null,
+      })
+      .mockResolvedValueOnce({ error: null, data: { summary } });
+    vi.mocked(createClient).mockReturnValue({
+      ...supabase,
+      rpc,
+    } as unknown as ReturnType<typeof createClient>);
+
+    const response = await GET(
+      new NextRequest(
+        `http://localhost/api/orders/${ORDER_ID}/invoice?revision=original`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(response.status).toBe(expectedStatus);
+    expect(rpc).toHaveBeenLastCalledWith('read_paid_order_amendment', {
+      p_order_id: ORDER_ID,
+    });
+    expect(generateReceiptBlob).toHaveBeenCalledTimes(
+      expectedStatus === 200 ? 1 : 0
     );
   });
 
@@ -1117,6 +1321,36 @@ describe('GET /api/orders/[id]/invoice', () => {
 
     expect(response.status).toBe(404);
     expect(generateReceiptBlob).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    true,
+  ])('requires merchant order-view permission for a non-owner (%s)', async (canViewOrders) => {
+    const supabase = createSupabaseMock({
+      canViewOrders,
+      user: { id: 'another-user' },
+    });
+    vi.mocked(createClient).mockReturnValue(
+      supabase as unknown as ReturnType<typeof createClient>
+    );
+    const response = await GET(
+      new NextRequest(`http://localhost/api/orders/${ORDER_ID}/invoice`),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith('check_staff_permission', {
+      p_user_id: 'another-user',
+      p_merchant_id: 'merchant-1',
+      p_resource: 'orders',
+      p_action: 'view',
+    });
+    expect(response.status).toBe(canViewOrders ? 200 : 404);
+    if (!canViewOrders) {
+      await expect(response.json()).resolves.toEqual({
+        error: 'Order not found',
+      });
+      expect(generateReceiptBlob).not.toHaveBeenCalled();
+    }
   });
 
   it('returns 500 when order items cannot be loaded', async () => {

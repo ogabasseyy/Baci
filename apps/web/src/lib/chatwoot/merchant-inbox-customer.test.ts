@@ -1,10 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ verifier: vi.fn() }));
+const mocks = vi.hoisted(() => ({ verifier: vi.fn(), currency: vi.fn() }));
 
 vi.mock('server-only', () => ({}));
 vi.mock('./chat-customer-link-token', () => ({
   createChatCustomerLinkVerifier: mocks.verifier,
+}));
+vi.mock('./merchant-currency', () => ({
+  loadChatwootMerchantCurrency: mocks.currency,
 }));
 
 import {
@@ -49,6 +52,10 @@ function verifyAs(map: Record<string, string | null>) {
     map[token] ? { merchantId: MERCHANT, customerId: map[token] } : null
   );
 }
+
+beforeEach(() => {
+  mocks.currency.mockResolvedValue({ currency: 'NGN' });
+});
 
 describe('loadCustomerBadges', () => {
   it('adds order count and spend only for links that verify', async () => {
@@ -157,6 +164,7 @@ describe('loadCustomerProfile', () => {
           {
             order_number: 'ORD-1',
             total: 50000,
+            currency: null,
             payment_status: 'paid',
             shipping_status: 'shipped',
             created_at: '2026-11-20T10:00:00Z',
@@ -169,10 +177,12 @@ describe('loadCustomerProfile', () => {
       supabase: client,
       merchantId: MERCHANT,
       token: 'good',
+      includeOrders: true,
     });
 
     expect(profile).toEqual({
       name: 'Ada Obi',
+      currency: 'NGN',
       memberSince: '2025-01-02T00:00:00Z',
       orderCount: 5,
       totalSpent: 412000,
@@ -181,6 +191,7 @@ describe('loadCustomerProfile', () => {
         {
           orderNumber: 'ORD-1',
           total: 50000,
+          currency: 'NGN',
           paymentStatus: 'paid',
           shippingStatus: 'shipped',
           createdAt: '2026-11-20T10:00:00Z',
@@ -202,6 +213,7 @@ describe('loadCustomerProfile', () => {
         supabase: client,
         merchantId: MERCHANT,
         token: 'forged',
+        includeOrders: true,
       })
     ).resolves.toBeNull();
     expect(seen).toHaveLength(0);
@@ -215,6 +227,7 @@ describe('loadCustomerProfile', () => {
         supabase: client,
         merchantId: MERCHANT,
         token: 'good',
+        includeOrders: true,
       })
     ).resolves.toBeNull();
   });
@@ -236,7 +249,95 @@ describe('loadCustomerProfile', () => {
       supabase: client,
       merchantId: MERCHANT,
       token: 'good',
+      includeOrders: true,
     });
     expect(profile).toMatchObject({ name: 'Customer', recentOrders: [] });
+  });
+
+  it('bugfix: reads no order details for a caller without order access', async () => {
+    verifyAs({ good: A });
+    const { client, seen } = db({
+      customers: { data: customer },
+      orders: {
+        data: [
+          {
+            order_number: 'ORD-1',
+            total: 1,
+            currency: 'NGN',
+            payment_status: 'paid',
+            shipping_status: 'shipped',
+            created_at: null,
+          },
+        ],
+      },
+    });
+
+    const profile = await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'good',
+      includeOrders: false,
+    });
+
+    expect(profile?.recentOrders).toEqual([]);
+    expect(profile?.orderCount).toBe(5);
+    expect(seen.map((entry) => entry.table)).not.toContain('orders');
+  });
+
+  it('bugfix: shows each order in its own currency, the store currency for spend', async () => {
+    verifyAs({ good: A });
+    mocks.currency.mockResolvedValue({ currency: 'usd' });
+    const { client } = db({
+      customers: { data: customer },
+      orders: {
+        data: [
+          {
+            order_number: 'ORD-9',
+            total: 40,
+            currency: 'GBP',
+            payment_status: 'paid',
+            shipping_status: 'shipped',
+            created_at: null,
+          },
+          {
+            order_number: 'ORD-8',
+            total: 25,
+            currency: null,
+            payment_status: 'paid',
+            shipping_status: 'shipped',
+            created_at: null,
+          },
+        ],
+      },
+    });
+
+    const profile = await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'good',
+      includeOrders: true,
+    });
+
+    expect(profile?.currency).toBe('USD');
+    expect(profile?.recentOrders.map((o) => o.currency)).toEqual([
+      'GBP',
+      'USD',
+    ]);
+  });
+
+  it('falls back to naira when the store currency cannot be read', async () => {
+    verifyAs({ good: A });
+    mocks.currency.mockResolvedValue(null);
+    const { client } = db({
+      customers: { data: customer },
+      orders: { data: [] },
+    });
+    const profile = await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'good',
+      includeOrders: true,
+    });
+    expect(profile?.currency).toBe('NGN');
   });
 });

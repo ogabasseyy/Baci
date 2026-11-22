@@ -7,6 +7,7 @@ import { CustomerCard, customerSummary } from './CustomerCard';
 
 const customer: InboxCustomerProfile = {
   name: 'Ada Obi',
+  currency: 'NGN',
   memberSince: '2025-01-02T00:00:00Z',
   orderCount: 5,
   totalSpent: 412000,
@@ -15,6 +16,7 @@ const customer: InboxCustomerProfile = {
     {
       orderNumber: 'ORD-1',
       total: 50000,
+      currency: 'NGN',
       paymentStatus: 'paid',
       shippingStatus: 'shipped',
       createdAt: '2026-11-20T10:00:00Z',
@@ -22,6 +24,7 @@ const customer: InboxCustomerProfile = {
     {
       orderNumber: 'ORD-0',
       total: 12000,
+      currency: 'NGN',
       paymentStatus: 'pending',
       shippingStatus: 'processing',
       createdAt: null,
@@ -79,6 +82,40 @@ describe('CustomerCard', () => {
     expect(screen.getByRole('button', { name: /Ada Obi/ })).toBeDisabled();
     expect(
       screen.getByText('Signed-in customer · no orders yet')
+    ).toBeInTheDocument();
+  });
+
+  it('bugfix: shows amounts in the currency they were charged in, not naira', () => {
+    const dollars: InboxCustomerProfile = {
+      ...customer,
+      currency: 'USD',
+      totalSpent: 1500,
+      recentOrders: [
+        { ...customer.recentOrders[0], total: 40, currency: 'GBP' },
+        { ...customer.recentOrders[1], total: 25, currency: 'USD' },
+      ],
+    };
+    render(<CustomerCard colors={LIGHT_COLORS} customer={dollars} />);
+
+    expect(
+      screen.getByText(/Returning customer · 5 orders · \$1,500/)
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Ada Obi/ }));
+    expect(screen.getByText('£40')).toBeInTheDocument();
+    expect(screen.getByText('$25')).toBeInTheDocument();
+    expect(screen.queryByText(/₦/)).toBeNull();
+  });
+
+  it('does not offer to expand when order details are not available to this user', () => {
+    render(
+      <CustomerCard
+        colors={LIGHT_COLORS}
+        customer={{ ...customer, recentOrders: [] }}
+      />
+    );
+    expect(screen.getByRole('button', { name: /Ada Obi/ })).toBeDisabled();
+    expect(
+      screen.getByText(/Returning customer · 5 orders/)
     ).toBeInTheDocument();
   });
 });

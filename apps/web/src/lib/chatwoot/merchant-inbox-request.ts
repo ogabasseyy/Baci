@@ -45,6 +45,8 @@ export async function resolveMerchantInboxRequest(
         Awaited<ReturnType<typeof authenticateApiRequest>>['supabase']
       >;
       merchantId: string;
+      /** May this caller see order details (not just chats and customers)? */
+      canViewOrders: boolean;
     }
   | { ok: false; response: NextResponse }
 > {
@@ -91,5 +93,10 @@ export async function resolveMerchantInboxRequest(
     binding,
     supabase,
     merchantId: merchantContext.merchantId,
+    canViewOrders: hasPermission(
+      toUserAccess(merchantContext),
+      'orders',
+      'view'
+    ),
   };
 }

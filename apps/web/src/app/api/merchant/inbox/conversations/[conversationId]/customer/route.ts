@@ -49,6 +49,8 @@ export async function GET(
     supabase: resolved.supabase,
     merchantId: resolved.merchantId,
     token: owned.link,
+    // Order details need their own permission, beyond reading chats.
+    includeOrders: resolved.canViewOrders,
   });
   return merchantInboxJson({ customer });
 }

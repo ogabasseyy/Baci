@@ -1,4 +1,8 @@
 import { useEffect } from 'react';
+import {
+  getLiveCustomerIdentity,
+  subscribeCustomerIdentityChange,
+} from '@/contexts/customer-live-identity';
 import { readCustomerSessionHint } from '@/contexts/customer-session-hint';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { CHAT_CUSTOMER_LINK_ATTRIBUTE } from '@/schemas/chat-customer-link';
@@ -35,7 +39,11 @@ function writeMarker(key: string, linked: boolean): void {
  * When a signed-in shopper has the store chat open, tells the chat who they
  * are with a server-signed note, so the owner sees their orders next to the
  * conversation. Guests cost nothing: with no session hint no request is made.
- * Signing out removes the note the next time the chat loads.
+ *
+ * It follows the shopper while the page stays open: signing in adds the note,
+ * signing out removes it, switching accounts replaces it. A request still in
+ * flight when the identity changes is dropped, so an old answer can never
+ * overwrite the new state.
  */
 export function useChatwootCustomerLink(
   storeSlug: string | undefined,
@@ -45,6 +53,8 @@ export function useChatwootCustomerLink(
     if (!enabled || !storeSlug) return;
     const markerKey = `baci-chat-link:${storeSlug}`;
     let cancelled = false;
+    // Each sync gets a number; only the newest may act on its answer.
+    let generation = 0;
 
     const clearLink = () => {
       if (!readMarker(markerKey)) return;
@@ -57,18 +67,19 @@ export function useChatwootCustomerLink(
       writeMarker(markerKey, false);
     };
 
-    if (readCustomerSessionHint() !== '1') {
-      clearLink();
-      return;
-    }
-
-    (async () => {
+    const sync = async () => {
+      const mine = ++generation;
+      const stale = () => cancelled || mine !== generation;
+      if (readCustomerSessionHint() !== '1') {
+        clearLink();
+        return;
+      }
       try {
         const response = await fetchWithCsrf(LINK_ENDPOINT, {
           method: 'POST',
           body: JSON.stringify({ storeSlug }),
         });
-        if (cancelled) return;
+        if (stale()) return;
         if (response.status === 401 || response.status === 404) {
           clearLink();
           return;
@@ -79,7 +90,7 @@ export function useChatwootCustomerLink(
           body !== null && typeof body === 'object'
             ? (body as { token?: unknown }).token
             : undefined;
-        if (cancelled || typeof token !== 'string' || !token) return;
+        if (stale() || typeof token !== 'string' || !token) return;
         chatwoot()?.setCustomAttributes?.({
           [CHAT_CUSTOMER_LINK_ATTRIBUTE]: token,
         });
@@ -87,10 +98,22 @@ export function useChatwootCustomerLink(
       } catch {
         // Linking is a convenience; the chat works the same without it.
       }
-    })();
+    };
 
+    void sync();
+    const unsubscribe = subscribeCustomerIdentityChange(() => {
+      const live = getLiveCustomerIdentity();
+      if (!live.userId && !live.customerId) {
+        // Signed out: drop any request in flight and remove the note now.
+        generation++;
+        clearLink();
+        return;
+      }
+      void sync();
+    });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [enabled, storeSlug]);
 }

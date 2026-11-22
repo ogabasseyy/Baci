@@ -129,6 +129,7 @@ describe('customer context', () => {
     apiClient.mockResolvedValue({
       customer: {
         name: 'Ada Obi',
+        currency: 'NGN',
         memberSince: null,
         orderCount: 2,
         totalSpent: 100,

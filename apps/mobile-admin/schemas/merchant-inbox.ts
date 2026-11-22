@@ -68,6 +68,8 @@ export const inboxSearchResponseSchema = z.object({
 
 export const inboxCustomerProfileSchema = z.object({
   name: z.string(),
+  // The store's currency, for the spend total.
+  currency: z.string().length(3),
   memberSince: z.string().nullable(),
   orderCount: z.number().int().nonnegative(),
   totalSpent: z.number().nonnegative(),
@@ -76,6 +78,8 @@ export const inboxCustomerProfileSchema = z.object({
     z.object({
       orderNumber: z.string(),
       total: z.number(),
+      // The currency this order was placed in.
+      currency: z.string().length(3),
       paymentStatus: z.string(),
       shippingStatus: z.string(),
       createdAt: z.string().nullable(),

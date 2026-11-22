@@ -19,7 +19,7 @@ export function customerSummary(customer: InboxCustomerProfile): string {
   if (customer.orderCount === 0) return 'Signed-in customer · no orders yet';
   const orders =
     customer.orderCount === 1 ? '1 order' : `${customer.orderCount} orders`;
-  return `Returning customer · ${orders} · ${formatCurrencyNoDecimals(customer.totalSpent)}`;
+  return `Returning customer · ${orders} · ${formatCurrencyNoDecimals(customer.totalSpent, customer.currency)}`;
 }
 
 /**
@@ -95,7 +95,7 @@ export function CustomerCard({
                 </Text>
               </View>
               <Text style={[styles.orderNo, { color: colors.text }]}>
-                {formatCurrencyNoDecimals(order.total)}
+                {formatCurrencyNoDecimals(order.total, order.currency)}
               </Text>
             </View>
           ))

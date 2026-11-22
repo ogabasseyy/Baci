@@ -5,6 +5,7 @@ import type {
   MerchantInboxCustomerProfile,
 } from '@/schemas/merchant-inbox-customer';
 import { createChatCustomerLinkVerifier } from './chat-customer-link-token';
+import { loadChatwootMerchantCurrency } from './merchant-currency';
 import type { resolveMerchantInboxRequest } from './merchant-inbox-request';
 
 type Resolved = Extract<
@@ -66,11 +67,22 @@ export async function loadCustomerBadges(input: {
   return badges;
 }
 
-/** The card for one chat: who they are and what they have bought. */
+const DEFAULT_CURRENCY = 'NGN';
+const currencyCode = (value: unknown, fallback: string): string =>
+  typeof value === 'string' && /^[A-Za-z]{3}$/.test(value.trim())
+    ? value.trim().toUpperCase()
+    : fallback;
+
+/**
+ * The card for one chat: who they are and what they have bought. Recent order
+ * details are read only when `includeOrders` is true, which callers set from
+ * the caller's own order permission (customer access alone is not enough).
+ */
 export async function loadCustomerProfile(input: {
   supabase: Db;
   merchantId: string;
   token: string;
+  includeOrders: boolean;
 }): Promise<MerchantInboxCustomerProfile | null> {
   const verify = await createChatCustomerLinkVerifier(input.merchantId);
   const link = verify ? await verify(input.token) : null;
@@ -87,13 +99,25 @@ export async function loadCustomerProfile(input: {
     .maybeSingle();
   if (error || !customer) return null;
 
-  const { data: orders } = await input.supabase
-    .from('orders')
-    .select('order_number, total, payment_status, shipping_status, created_at')
-    .eq('merchant_id', input.merchantId)
-    .eq('customer_id', customer.id)
-    .order('created_at', { ascending: false })
-    .limit(5);
+  const [orders, merchantCurrency] = await Promise.all([
+    input.includeOrders
+      ? input.supabase
+          .from('orders')
+          .select(
+            'order_number, total, currency, payment_status, shipping_status, created_at'
+          )
+          .eq('merchant_id', input.merchantId)
+          .eq('customer_id', customer.id)
+          .order('created_at', { ascending: false })
+          .limit(5)
+          .then(({ data }) => data)
+      : Promise.resolve(null),
+    loadChatwootMerchantCurrency(input.merchantId),
+  ]);
+  const storeCurrency = currencyCode(
+    merchantCurrency?.currency,
+    DEFAULT_CURRENCY
+  );
 
   const name =
     customer.full_name?.trim() ||
@@ -101,6 +125,7 @@ export async function loadCustomerProfile(input: {
     'Customer';
   return {
     name: name.slice(0, 120),
+    currency: storeCurrency,
     memberSince: customer.created_at,
     orderCount: Math.trunc(toNumber(customer.total_orders)),
     totalSpent: toNumber(customer.total_spent),
@@ -108,6 +133,7 @@ export async function loadCustomerProfile(input: {
     recentOrders: (orders ?? []).map((order) => ({
       orderNumber: String(order.order_number).slice(0, 60),
       total: toNumber(order.total),
+      currency: currencyCode(order.currency, storeCurrency),
       paymentStatus: String(order.payment_status).slice(0, 40),
       shippingStatus: String(order.shipping_status).slice(0, 40),
       createdAt: order.created_at,

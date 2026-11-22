@@ -249,6 +249,7 @@ describe('ConversationThread business tools', () => {
 describe('ConversationThread customer card', () => {
   const profile = {
     name: 'Ada Obi',
+    currency: 'NGN',
     memberSince: null,
     orderCount: 5,
     totalSpent: 412000,

@@ -12,6 +12,8 @@ export type MerchantInboxCustomerBadge = z.infer<
 export const merchantInboxCustomerOrderSchema = z.object({
   orderNumber: z.string().max(60),
   total: z.number(),
+  /** ISO 4217 code the order was placed in. */
+  currency: z.string().length(3),
   paymentStatus: z.string().max(40),
   shippingStatus: z.string().max(40),
   createdAt: z.string().nullable(),
@@ -20,6 +22,8 @@ export const merchantInboxCustomerOrderSchema = z.object({
 /** The card shown above a linked conversation. No email, phone or address. */
 export const merchantInboxCustomerProfileSchema = z.object({
   name: z.string().max(120),
+  /** The store's currency, for the spend total. */
+  currency: z.string().length(3),
   memberSince: z.string().nullable(),
   orderCount: z.number().int().nonnegative(),
   totalSpent: z.number().nonnegative(),

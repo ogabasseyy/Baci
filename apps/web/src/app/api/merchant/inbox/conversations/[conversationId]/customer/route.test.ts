@@ -40,6 +40,7 @@ beforeEach(() => {
     binding,
     supabase,
     merchantId: 'merchant-1',
+    canViewOrders: true,
   });
   mocks.get.mockResolvedValue({
     ok: true,
@@ -62,7 +63,24 @@ describe('GET /api/merchant/inbox/conversations/[id]/customer', () => {
       supabase,
       merchantId: 'merchant-1',
       token: 'signed.link',
+      includeOrders: true,
     });
+  });
+
+  it('bugfix: asks for no order details when the caller cannot view orders', async () => {
+    mocks.resolve.mockResolvedValue({
+      ok: true,
+      binding,
+      supabase,
+      merchantId: 'merchant-1',
+      canViewOrders: false,
+    });
+
+    await call('7');
+
+    expect(mocks.profile).toHaveBeenCalledWith(
+      expect.objectContaining({ includeOrders: false })
+    );
   });
 
   it('returns no customer for a guest chat without reading customers', async () => {

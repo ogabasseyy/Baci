@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkError } from '@/lib/api-errors';
+import { inboxConversationsKey } from '@/lib/inbox-query-keys';
 import type { InboxMessage } from '@/schemas/merchant-inbox';
 
 const apiClient = vi.hoisted(() => vi.fn());
@@ -31,21 +32,25 @@ function setup(refreshThread = vi.fn(async (): Promise<InboxMessage[]> => [])) {
     () => useInboxReply({ conversationId: 5, merchantId: 'm1', refreshThread }),
     { wrapper }
   );
-  return { ...hook, refreshThread };
+  return { ...hook, client, refreshThread };
 }
 
 describe('useInboxReply', () => {
   beforeEach(() => sendInboxReply.mockReset());
 
-  it('clears the draft after a successful send', async () => {
+  it('clears the draft and invalidates conversations after a successful send', async () => {
     apiClient.mockResolvedValue({ message: sent });
-    const { result } = setup();
+    const { client, result } = setup();
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
     act(() => result.current.setDraft('  Hello '));
     await act(() => result.current.send(3));
     expect(sendInboxReply).toHaveBeenCalledWith(
       '/api/merchant/inbox/conversations/5/messages',
       { method: 'POST', body: JSON.stringify({ content: 'Hello' }) }
     );
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: inboxConversationsKey('m1'),
+    });
     expect(result.current.status).toBe('idle');
     expect(result.current.draft).toBe('');
   });
@@ -94,6 +99,29 @@ describe('useInboxReply', () => {
 
     apiClient.mockResolvedValueOnce({ message: sent });
     await act(() => result.current.send(3));
+    expect(sendInboxReply).toHaveBeenCalledTimes(2);
+    expect(result.current.status).toBe('idle');
+  });
+
+  it('resets unconfirmed status when the merchant edits the draft', async () => {
+    sendInboxReply.mockRejectedValueOnce(
+      new NetworkError('slow', { isTimeout: true })
+    );
+    const { result, refreshThread } = setup(
+      vi.fn(async () => [{ ...sent, id: 11, text: 'Hello!' }])
+    );
+    act(() => result.current.setDraft('Hello'));
+    await act(() => result.current.send(3));
+    expect(result.current.status).toBe('unconfirmed');
+
+    act(() => result.current.setDraft('Hello!'));
+    expect(result.current.status).toBe('idle');
+
+    apiClient.mockResolvedValueOnce({
+      message: { ...sent, id: 12, text: 'Hello!' },
+    });
+    await act(() => result.current.send(3));
+    expect(refreshThread).not.toHaveBeenCalled();
     expect(sendInboxReply).toHaveBeenCalledTimes(2);
     expect(result.current.status).toBe('idle');
   });

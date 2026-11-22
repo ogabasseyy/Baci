@@ -26,10 +26,12 @@ vi.mock('@/lib/api-client', async () => {
 vi.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data = [],
+    keyExtractor,
     ListEmptyComponent,
     renderItem,
   }: {
     data?: unknown[];
+    keyExtractor?: (item: unknown, index: number) => string;
     ListEmptyComponent?: ReactNode;
     renderItem: (input: { index: number; item: unknown }) => ReactNode;
   }) => (
@@ -37,7 +39,13 @@ vi.mock('@shopify/flash-list', () => ({
       {data.length === 0
         ? ListEmptyComponent
         : data.map((item, index) => (
-            <div key={index}>{renderItem({ item, index })}</div>
+            <div
+              key={
+                keyExtractor ? keyExtractor(item, index) : JSON.stringify(item)
+              }
+            >
+              {renderItem({ item, index })}
+            </div>
           ))}
     </div>
   ),

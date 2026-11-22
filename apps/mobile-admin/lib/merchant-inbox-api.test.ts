@@ -72,6 +72,9 @@ describe('merchant inbox api', () => {
       isDefinitelyNotSent(new NetworkError('x', { statusCode: 403 }))
     ).toBe(true);
     expect(
+      isDefinitelyNotSent(new NetworkError('x', { statusCode: 408 }))
+    ).toBe(false);
+    expect(
       isDefinitelyNotSent(new NetworkError('x', { statusCode: 502 }))
     ).toBe(false);
     expect(

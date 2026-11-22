@@ -53,6 +53,7 @@ export function isDefinitelyNotSent(error: unknown): boolean {
     error instanceof NetworkError &&
     typeof error.statusCode === 'number' &&
     error.statusCode >= 400 &&
-    error.statusCode < 500
+    error.statusCode < 500 &&
+    error.statusCode !== 408
   );
 }

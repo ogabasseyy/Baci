@@ -402,7 +402,7 @@ export default function HomeScreen() {
               badgeCount={waitingChats}
               iconColor={colors.orange}
               backgroundColor={colors.orangeLight}
-              onPress={() => router.push('/(admin)/messages' as never)}
+              onPress={() => router.push('/(admin)/messages')}
             />
             <QuickActionButton
               icon="newspaper-outline"

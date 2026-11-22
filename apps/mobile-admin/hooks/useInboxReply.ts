@@ -1,6 +1,6 @@
 import { type InfiniteData, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { inboxThreadKey } from '@/lib/inbox-query-keys';
+import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
 import { isDefinitelyNotSent, sendInboxReply } from '@/lib/merchant-inbox-api';
 import {
   INBOX_REPLY_MAX_LENGTH,
@@ -32,9 +32,16 @@ export function useInboxReply({
   refreshThread,
 }: Options) {
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState('');
+  const [draft, setDraftState] = useState('');
   const [status, setStatus] = useState<InboxReplyStatus>('idle');
   const [lastKnownId, setLastKnownId] = useState(0);
+
+  const setDraft = (next: string) => {
+    setDraftState(next);
+    if (status === 'failed' || status === 'unconfirmed') {
+      setStatus('idle');
+    }
+  };
 
   const text = draft.trim();
   const canSend =
@@ -81,6 +88,9 @@ export function useInboxReply({
             m.sender === 'store' && m.id > lastKnownId && m.text.trim() === body
         );
         if (delivered) {
+          void queryClient.invalidateQueries({
+            queryKey: inboxConversationsKey(merchantId),
+          });
           setDraft('');
           setStatus('idle');
           return;
@@ -90,6 +100,9 @@ export function useInboxReply({
       }
       const message = await sendInboxReply(conversationId, body);
       appendToThread(message);
+      void queryClient.invalidateQueries({
+        queryKey: inboxConversationsKey(merchantId),
+      });
       setDraft('');
       setStatus('idle');
     } catch (error) {

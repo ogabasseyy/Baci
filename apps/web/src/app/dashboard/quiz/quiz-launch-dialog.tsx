@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type {
   QuizAnswerKeyReview,
   QuizDraftConfiguration,
+  QuizEdgeLaunchOptions,
   QuizLaunchInput,
 } from './quiz-admin-actions';
 import { quizDatetimeLocalToIso } from './quiz-datetime-local';
@@ -44,9 +45,16 @@ export function QuizLaunchDialog({
   onCancel: () => void;
   onConfirm: (
     review: QuizAnswerKeyReview,
-    regulatoryCompliance?: QuizLaunchInput['regulatoryCompliance']
+    regulatoryCompliance?: QuizLaunchInput['regulatoryCompliance'],
+    edgeOptions?: QuizEdgeLaunchOptions
   ) => void;
 }) {
+  const [backendMode, setBackendMode] = useState<'postgres' | 'edge_rooms'>(
+    'postgres'
+  );
+  const [edgeRoomCount, setEdgeRoomCount] = useState(
+    configuration.mode === 'live' ? 16 : 4
+  );
   const [regulatoryBasis, setRegulatoryBasis] = useState<
     NonNullable<QuizLaunchInput['regulatoryCompliance']>['basis']
   >('free_skill_competition');
@@ -57,16 +65,35 @@ export function QuizLaunchDialog({
   );
 
   const confirm = () => {
+    const edgeOptions: QuizEdgeLaunchOptions | undefined =
+      backendMode === 'edge_rooms'
+        ? {
+            backendMode: 'edge_rooms',
+            edgeRoomCount: Math.min(
+              256,
+              Math.max(1, Math.round(edgeRoomCount))
+            ),
+          }
+        : undefined;
     if (configuration.mode === 'test') {
-      onConfirm(answerKeyReview);
+      if (edgeOptions) {
+        onConfirm(answerKeyReview, undefined, edgeOptions);
+      } else {
+        onConfirm(answerKeyReview);
+      }
       return;
     }
     if (!liveEvidenceComplete) return;
-    onConfirm(answerKeyReview, {
+    const compliance = {
       basis: regulatoryBasis,
       evidenceReference: evidenceReference.trim(),
       jurisdiction: jurisdiction.trim(),
-    });
+    };
+    if (edgeOptions) {
+      onConfirm(answerKeyReview, compliance, edgeOptions);
+    } else {
+      onConfirm(answerKeyReview, compliance);
+    }
   };
 
   return (
@@ -103,6 +130,45 @@ export function QuizLaunchDialog({
           <dt className="text-muted-foreground">Mode</dt>
           <dd className="capitalize">{configuration.mode}</dd>
         </dl>
+        <div className="mt-4 grid gap-3 rounded-md border bg-muted/30 p-3 text-sm">
+          <label className="grid gap-1.5 font-medium">
+            Execution engine
+            <select
+              className="h-10 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
+              onChange={(event) =>
+                setBackendMode(
+                  event.target.value === 'edge_rooms'
+                    ? 'edge_rooms'
+                    : 'postgres'
+                )
+              }
+              value={backendMode}
+            >
+              <option value="postgres">Standard Postgres</option>
+              <option value="edge_rooms">
+                Cloudflare Edge Rooms (100k+ scale)
+              </option>
+            </select>
+          </label>
+          {backendMode === 'edge_rooms' ? (
+            <label className="grid gap-1.5 font-medium">
+              Edge room count (1–256)
+              <input
+                className="h-10 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
+                max={256}
+                min={1}
+                onChange={(event) => {
+                  const parsed = Number.parseInt(event.target.value, 10);
+                  if (Number.isFinite(parsed)) {
+                    setEdgeRoomCount(parsed);
+                  }
+                }}
+                type="number"
+                value={edgeRoomCount}
+              />
+            </label>
+          ) : null}
+        </div>
         {configuration.mode === 'live' ? (
           <div className="mt-4 grid gap-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             <p>

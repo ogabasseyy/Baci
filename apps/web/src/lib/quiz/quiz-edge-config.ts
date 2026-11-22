@@ -32,3 +32,13 @@ export function getQuizTicketSecret(): string | undefined {
   const raw = process.env.QUIZ_TICKET_SECRET?.trim();
   return raw ? raw : undefined;
 }
+
+/**
+ * Returns the shared bearer secret used by `apps/web` to invoke internal
+ * coordinator/admin endpoints (`/api/quiz/admin/init-rooms`, `/heartbeat`)
+ * on the Cloudflare Quiz Edge Worker, or `undefined` when unset/blank.
+ */
+export function getQuizInternalCoordinatorSecret(): string | undefined {
+  const raw = process.env.QUIZ_INTERNAL_COORDINATOR_SECRET?.trim();
+  return raw ? raw : undefined;
+}

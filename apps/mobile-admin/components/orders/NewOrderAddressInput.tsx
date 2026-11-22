@@ -2,10 +2,13 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
 import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 import type { useNewOrderController } from '@/hooks/useNewOrderController';
-import { normalizeStreetAddressForComparison } from '@/lib/normalize-street-address';
 import { parseGoogleAddressDetails } from './google-address-details';
 import { NewOrderManualLocalityFields } from './NewOrderManualLocalityFields';
 import { styles } from './new-order.styles';
+import {
+  clearGeocodedFields,
+  isFormattingOnlyStreetEdit,
+} from './new-order-address-input-utils';
 
 interface NewOrderAddressInputProps {
   controller: Pick<
@@ -17,26 +20,6 @@ interface NewOrderAddressInputProps {
 
 const DETAILS_RECOVERY_ERROR =
   'Could not load full address details. Enter city and state to continue.';
-
-function clearGeocodedFields<T extends object>(previous: T): T {
-  return {
-    ...previous,
-    city: '',
-    state: '',
-    country: '',
-    countryCode: '',
-    postalCode: '',
-    latitude: undefined,
-    longitude: undefined,
-  };
-}
-
-function isFormattingOnlyStreetEdit(previous: string, next: string): boolean {
-  return (
-    normalizeStreetAddressForComparison(previous) ===
-    normalizeStreetAddressForComparison(next)
-  );
-}
 
 export function NewOrderAddressInput({
   controller,

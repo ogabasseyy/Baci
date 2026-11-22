@@ -63,10 +63,14 @@ BEGIN
     ('86110000-0000-4000-8000-000000000013', '86110000-0000-4000-8000-000000000001', 'wallet-owner-4@example.test', '86110000-0000-4000-8000-000000000104'),
     ('86110000-0000-4000-8000-000000000021', '86110000-0000-4000-8000-000000000002', 'wallet-owner-3@example.test', '86110000-0000-4000-8000-000000000103');
 
+  -- trigger_create_merchant_feature_settings already created a default row
+  -- for each merchant inserted above, so enable the wallet flag by upsert.
   INSERT INTO public.merchant_feature_settings (merchant_id, wallet_paystack_dva_enabled)
   VALUES
     ('86110000-0000-4000-8000-000000000001', true),
-    ('86110000-0000-4000-8000-000000000002', true);
+    ('86110000-0000-4000-8000-000000000002', true)
+  ON CONFLICT (merchant_id) DO UPDATE
+    SET wallet_paystack_dva_enabled = EXCLUDED.wallet_paystack_dva_enabled;
 
   INSERT INTO public.checkout_sessions (
     id, session_id, merchant_id, payment_provider, status,

@@ -93,6 +93,15 @@ describe('MessagesScreen', () => {
     expect(screen.getAllByText(/needs reply/i)).toHaveLength(1);
   });
 
+  it('bugfix: shows only the unread count, not needs reply, when the store answered last', () => {
+    const answered = { ...conversation(3, 'Cy Test', 'store'), unreadCount: 1 };
+    mocks.query.mockReturnValue(ready([answered]));
+    render(<MessagesScreen />);
+
+    expect(screen.getByText('1 new')).toBeInTheDocument();
+    expect(screen.queryByText(/needs reply/i)).toBeNull();
+  });
+
   it('opens the thread for the tapped conversation', () => {
     mocks.query.mockReturnValue(
       ready([conversation(42, 'Ada Test', 'customer')])

@@ -89,7 +89,7 @@ describe('ConversationThread', () => {
 
     expect(screen.getByText('Is the phone in stock?')).toBeInTheDocument();
     expect(screen.getByText('Assistant (automatic reply)')).toBeInTheDocument();
-    expect(screen.getByText('You')).toBeInTheDocument();
+    expect(screen.getByText(/^You · /)).toBeInTheDocument();
   });
 
   it('shows an error with retry when the thread cannot load', () => {

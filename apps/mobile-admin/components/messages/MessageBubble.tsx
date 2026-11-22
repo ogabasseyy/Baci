@@ -1,10 +1,12 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { StyleSheet, Text, View } from 'react-native';
-import { SPACING, type ThemeColors, TYPOGRAPHY } from '@/constants/theme';
 import {
-  formatInboxTime,
-  inboxMessageText,
-  inboxSenderLabel,
-} from '@/lib/merchant-inbox-format';
+  RADIUS,
+  SPACING,
+  type ThemeColors,
+  TYPOGRAPHY,
+} from '@/constants/theme';
+import { formatInboxTime, inboxMessageText } from '@/lib/merchant-inbox-format';
 import type { InboxMessage } from '@/schemas/merchant-inbox';
 
 interface MessageBubbleProps {
@@ -12,7 +14,7 @@ interface MessageBubbleProps {
   message: InboxMessage;
 }
 
-/** Shopper on the left; store and assistant on the right, told apart by label and colour. */
+/** Shopper on the left; store (blue) and the automatic assistant (gold) on the right. */
 export function MessageBubble({ colors, message }: MessageBubbleProps) {
   if (message.sender === 'system') {
     return (
@@ -24,17 +26,10 @@ export function MessageBubble({ colors, message }: MessageBubbleProps) {
 
   const isCustomer = message.sender === 'customer';
   const isAssistant = message.sender === 'assistant';
-  const background = isCustomer
-    ? colors.card
-    : isAssistant
-      ? colors.goldLight
-      : colors.primary;
-  const textColor = isCustomer
-    ? colors.text
-    : isAssistant
-      ? colors.text
-      : colors.textOnPrimary;
-  const label = inboxSenderLabel(message.sender);
+  const textColor =
+    isCustomer || isAssistant ? colors.text : colors.textOnPrimary;
+  const metaColor =
+    isCustomer || isAssistant ? colors.textMuted : colors.textOnPrimary;
 
   return (
     <View
@@ -44,19 +39,35 @@ export function MessageBubble({ colors, message }: MessageBubbleProps) {
       <View
         style={[
           styles.bubble,
-          { backgroundColor: background, borderColor: colors.border },
-          isCustomer && styles.bordered,
+          isCustomer && [
+            styles.customerCorner,
+            { backgroundColor: colors.card, borderColor: colors.border },
+            styles.bordered,
+          ],
+          isAssistant && [
+            styles.ownCorner,
+            { backgroundColor: colors.goldLight, borderColor: colors.gold },
+            styles.bordered,
+          ],
+          message.sender === 'store' && [
+            styles.ownCorner,
+            { backgroundColor: colors.primary },
+          ],
         ]}
       >
-        {label ? (
-          <Text style={[styles.label, { color: textColor }]}>
-            {isAssistant ? 'Assistant (automatic reply)' : label}
-          </Text>
+        {isAssistant ? (
+          <View style={styles.label}>
+            <Ionicons color={colors.gold} name="sparkles" size={12} />
+            <Text style={[styles.labelText, { color: colors.gold }]}>
+              Assistant (automatic reply)
+            </Text>
+          </View>
         ) : null}
         <Text style={[styles.body, { color: textColor }]}>
           {inboxMessageText(message)}
         </Text>
-        <Text style={[styles.time, { color: textColor }]}>
+        <Text style={[styles.time, { color: metaColor }]}>
+          {message.sender === 'store' ? 'You · ' : ''}
           {formatInboxTime(message.createdAt)}
         </Text>
       </View>
@@ -66,20 +77,26 @@ export function MessageBubble({ colors, message }: MessageBubbleProps) {
 
 const styles = StyleSheet.create({
   bordered: { borderWidth: StyleSheet.hairlineWidth },
-  body: { fontSize: TYPOGRAPHY.size.md },
+  body: { fontSize: TYPOGRAPHY.size.lg, lineHeight: 22 },
   bubble: {
-    borderRadius: 16,
-    maxWidth: '82%',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.xl,
+    maxWidth: '84%',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
   },
+  customerCorner: { borderBottomLeftRadius: 6 },
   label: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    marginBottom: 4,
+  },
+  labelText: {
     fontFamily: TYPOGRAPHY.fontFamily.semiBold,
     fontSize: TYPOGRAPHY.size.sm,
-    marginBottom: 2,
-    opacity: 0.8,
   },
-  row: { flexDirection: 'row', marginVertical: SPACING.xs },
+  ownCorner: { borderBottomRightRadius: 6 },
+  row: { flexDirection: 'row', marginVertical: 3 },
   rowEnd: { justifyContent: 'flex-end' },
   rowStart: { justifyContent: 'flex-start' },
   system: {
@@ -88,9 +105,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   time: {
-    fontSize: TYPOGRAPHY.size.xs,
-    marginTop: 2,
-    opacity: 0.7,
+    fontSize: TYPOGRAPHY.size.xs + 1,
+    marginTop: 4,
+    opacity: 0.75,
     textAlign: 'right',
   },
 });

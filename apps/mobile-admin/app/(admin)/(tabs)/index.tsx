@@ -395,11 +395,11 @@ export default function HomeScreen() {
               onPress={() => router.push('/(admin)/negotiations')}
             />
             <QuickActionButton
-              icon="cube-outline"
-              label="Add Product"
+              icon="chatbox-ellipses-outline"
+              label="Messages"
               iconColor={colors.orange}
               backgroundColor={colors.orangeLight}
-              onPress={() => router.push('/(admin)/product/new')}
+              onPress={() => router.push('/(admin)/messages' as never)}
             />
             <QuickActionButton
               icon="newspaper-outline"

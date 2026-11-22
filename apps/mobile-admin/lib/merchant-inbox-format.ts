@@ -42,3 +42,33 @@ export function sortInboxMessages(messages: InboxMessage[]): InboxMessage[] {
       a.id - b.id
   );
 }
+
+/** Up to two capital letters for an avatar: "small-meadow-890" -> "SM". */
+export function inboxInitials(name: string): string {
+  const words = name
+    .replace(/\(.*?\)/g, ' ')
+    .split(/[^A-Za-z]+/)
+    .filter(Boolean);
+  const letters = words.slice(0, 2).map((word) => word[0]?.toUpperCase() ?? '');
+  return letters.join('') || '?';
+}
+
+/** "Today", "Yesterday" or a short date, for the day dividers in a thread. */
+export function formatInboxDay(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const startOf = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOf(now) - startOf(date)) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'long',
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
+}
+
+export function isSameInboxDay(a: string, b: string): boolean {
+  return new Date(a).toDateString() === new Date(b).toDateString();
+}

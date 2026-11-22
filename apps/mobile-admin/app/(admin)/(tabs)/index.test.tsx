@@ -84,4 +84,13 @@ describe('HomeScreen', () => {
 
     expect(router.push).toHaveBeenCalledWith('/(admin)/negotiations');
   });
+
+  it('opens Messages from the Messages quick action in place of Add Product', () => {
+    render(<HomeScreen />);
+
+    expect(screen.queryByRole('button', { name: 'Add Product' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Messages' }));
+
+    expect(router.push).toHaveBeenCalledWith('/(admin)/messages');
+  });
 });

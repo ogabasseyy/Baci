@@ -14,6 +14,7 @@ import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useInboxReply } from '@/hooks/useInboxReply';
 import { useInboxThread } from '@/hooks/useInboxThread';
 import { useTheme } from '@/hooks/useTheme';
+import { buildThreadRows } from '@/lib/merchant-inbox-rows';
 
 export function ConversationThread({
   conversationId,
@@ -34,7 +35,7 @@ export function ConversationThread({
   });
   const latestId = messages.reduce((max, m) => Math.max(max, m.id), 0);
   // Newest first: the list is inverted so it opens at the latest message.
-  const inverted = [...messages].reverse();
+  const rows = buildThreadRows(messages).reverse();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -64,10 +65,10 @@ export function ConversationThread({
         <AppKeyboardContainer align="start" scrollEnabled={false}>
           <FlatList
             contentContainerStyle={styles.list}
-            data={inverted}
+            data={rows}
             inverted
             keyboardShouldPersistTaps="handled"
-            keyExtractor={(item) => String(item.id)}
+            keyExtractor={(item) => item.key}
             ListFooterComponent={
               thread.hasNextPage ? (
                 <Pressable
@@ -86,9 +87,25 @@ export function ConversationThread({
                 </Pressable>
               ) : undefined
             }
-            renderItem={({ item }) => (
-              <MessageBubble colors={colors} message={item} />
-            )}
+            renderItem={({ item }) =>
+              item.kind === 'day' ? (
+                <View style={styles.dayWrap}>
+                  <Text
+                    style={[
+                      styles.day,
+                      {
+                        backgroundColor: colors.card,
+                        color: colors.textSecondary,
+                      },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              ) : (
+                <MessageBubble colors={colors} message={item.message} />
+              )
+            }
             style={styles.flex}
           />
           <ReplyBox
@@ -115,6 +132,15 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
   },
   container: { flex: 1 },
+  day: {
+    borderRadius: 12,
+    fontFamily: TYPOGRAPHY.fontFamily.medium,
+    fontSize: TYPOGRAPHY.size.sm,
+    overflow: 'hidden',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+  },
+  dayWrap: { alignItems: 'center', marginVertical: SPACING.md },
   flex: { flex: 1 },
   list: { padding: SPACING.lg },
   retry: {

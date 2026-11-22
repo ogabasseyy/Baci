@@ -1,3 +1,4 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -9,7 +10,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { ConversationListItem } from '@/components/messages/ConversationListItem';
+import {
+  ConversationListItem,
+  needsReply,
+} from '@/components/messages/ConversationListItem';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useTheme } from '@/hooks/useTheme';
@@ -30,6 +34,8 @@ export default function MessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const query = useInboxConversations();
   const conversations = query.data?.pages.flatMap((p) => p.conversations) ?? [];
+
+  const waiting = conversations.filter(needsReply).length;
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -60,11 +66,22 @@ export default function MessagesScreen() {
         </View>
       ) : (
         <FlashList
-          contentContainerStyle={styles.list}
           data={conversations}
           keyExtractor={(item) => String(item.id)}
           ListEmptyComponent={
             <View style={styles.centered}>
+              <View
+                style={[
+                  styles.emptyIcon,
+                  { backgroundColor: colors.primaryLight },
+                ]}
+              >
+                <Ionicons
+                  color={colors.primary}
+                  name="chatbubbles-outline"
+                  size={36}
+                />
+              </View>
               <Text style={[styles.title, { color: colors.text }]}>
                 No messages yet
               </Text>
@@ -74,6 +91,15 @@ export default function MessagesScreen() {
                 When a shopper writes to your store, the chat appears here.
               </Text>
             </View>
+          }
+          ListHeaderComponent={
+            waiting > 0 ? (
+              <Text style={[styles.summary, { color: colors.textSecondary }]}>
+                {waiting === 1
+                  ? '1 chat is waiting for your reply'
+                  : `${waiting} chats are waiting for your reply`}
+              </Text>
+            ) : null
           }
           ListFooterComponent={
             query.isFetchingNextPage ? (
@@ -110,7 +136,20 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
   },
   container: { flex: 1 },
-  list: { padding: SPACING.lg },
+  emptyIcon: {
+    alignItems: 'center',
+    borderRadius: 40,
+    height: 80,
+    justifyContent: 'center',
+    marginBottom: SPACING.sm,
+    width: 80,
+  },
+  summary: {
+    fontFamily: TYPOGRAPHY.fontFamily.medium,
+    fontSize: TYPOGRAPHY.size.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+  },
   retry: {
     alignItems: 'center',
     justifyContent: 'center',

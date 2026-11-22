@@ -1,3 +1,4 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import {
   ActivityIndicator,
   Pressable,
@@ -6,7 +7,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SPACING, type ThemeColors, TYPOGRAPHY } from '@/constants/theme';
+import {
+  RADIUS,
+  SPACING,
+  type ThemeColors,
+  TYPOGRAPHY,
+} from '@/constants/theme';
 import type { InboxReplyStatus } from '@/hooks/useInboxReply';
 import { INBOX_REPLY_MAX_LENGTH } from '@/schemas/merchant-inbox';
 
@@ -36,16 +42,25 @@ export function ReplyBox({
   const sending = status === 'sending';
   const failure = FAILURE_TEXT[status];
   const retrying = status === 'failed' || status === 'unconfirmed';
+  const nearLimit = draft.length > INBOX_REPLY_MAX_LENGTH - 200;
 
   return (
-    <View style={[styles.wrap, { borderColor: colors.border }]}>
+    <View
+      style={[
+        styles.wrap,
+        { backgroundColor: colors.card, borderTopColor: colors.border },
+      ]}
+    >
       {failure ? (
-        <Text
-          accessibilityRole="alert"
-          style={[styles.error, { color: colors.error }]}
-        >
-          {failure}
-        </Text>
+        <View style={[styles.error, { backgroundColor: colors.errorLight }]}>
+          <Ionicons color={colors.error} name="alert-circle" size={16} />
+          <Text
+            accessibilityRole="alert"
+            style={[styles.errorText, { color: colors.error }]}
+          >
+            {failure}
+          </Text>
+        </View>
       ) : null}
       <View style={styles.row}>
         <TextInput
@@ -69,46 +84,70 @@ export function ReplyBox({
           disabled={!canSend}
           onPress={onSend}
           style={[
-            styles.send,
+            retrying ? styles.retry : styles.send,
             { backgroundColor: canSend ? colors.primary : colors.border },
           ]}
         >
           {sending ? (
             <ActivityIndicator color={colors.textOnPrimary} />
-          ) : (
-            <Text style={[styles.sendText, { color: colors.textOnPrimary }]}>
-              {retrying ? 'Retry' : 'Send'}
+          ) : retrying ? (
+            <Text style={[styles.retryText, { color: colors.textOnPrimary }]}>
+              Retry
             </Text>
+          ) : (
+            <Ionicons color={colors.textOnPrimary} name="arrow-up" size={22} />
           )}
         </Pressable>
       </View>
+      {nearLimit ? (
+        <Text style={[styles.counter, { color: colors.textMuted }]}>
+          {draft.length}/{INBOX_REPLY_MAX_LENGTH}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  error: { fontSize: TYPOGRAPHY.size.sm, marginBottom: SPACING.sm },
+  counter: { fontSize: TYPOGRAPHY.size.xs, marginTop: 4, textAlign: 'right' },
+  error: {
+    alignItems: 'center',
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: SPACING.sm,
+    padding: SPACING.sm + 2,
+  },
+  errorText: { flex: 1, fontSize: TYPOGRAPHY.size.sm },
   input: {
-    borderRadius: 18,
+    borderRadius: RADIUS.xl,
     flex: 1,
-    fontSize: TYPOGRAPHY.size.md,
+    fontSize: TYPOGRAPHY.size.lg,
     maxHeight: 120,
     minHeight: SPACING.touchTarget,
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md + 2,
+    paddingBottom: SPACING.md,
   },
+  retry: {
+    alignItems: 'center',
+    borderRadius: RADIUS.full,
+    height: SPACING.touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+  },
+  retryText: { fontFamily: TYPOGRAPHY.fontFamily.semiBold },
   row: { alignItems: 'flex-end', flexDirection: 'row', gap: SPACING.sm },
   send: {
     alignItems: 'center',
-    borderRadius: 24,
+    borderRadius: RADIUS.full,
+    height: SPACING.touchTarget,
     justifyContent: 'center',
-    minHeight: SPACING.touchTarget,
-    minWidth: 72,
-    paddingHorizontal: SPACING.lg,
+    width: SPACING.touchTarget,
   },
-  sendText: { fontFamily: TYPOGRAPHY.fontFamily.semiBold },
   wrap: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm + 2,
   },
 });

@@ -11,3 +11,15 @@ export const MAX_PUBLIC_OBSERVATION_START_BYTES = 128 * 1024 ** 2;
 
 // A terminal result can include 128 routes with titles, paths and canonical URLs.
 export const MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES = 768 * 1024;
+
+export const MAX_PUBLIC_OBSERVATION_ROUTES = 128;
+export const MAX_PUBLIC_FRAMEWORK_REQUESTS = 32;
+export const PUBLIC_CART_JOURNEY_REQUESTS = 32;
+export const MAX_PUBLIC_CART_SESSION_REQUESTS =
+  MAX_PUBLIC_OBSERVATION_ROUTES + PUBLIC_CART_JOURNEY_REQUESTS;
+
+// Each route can fetch state, refresh the launch, and load catalog data.
+export const MAX_PUBLIC_OBSERVATION_REQUESTS =
+  3 * MAX_PUBLIC_OBSERVATION_ROUTES +
+  MAX_PUBLIC_FRAMEWORK_REQUESTS +
+  PUBLIC_CART_JOURNEY_REQUESTS;

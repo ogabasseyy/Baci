@@ -1,6 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { request } from 'node:http';
-import { z } from 'zod';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import {
   type ExperienceContext,
@@ -8,17 +7,9 @@ import {
 } from '@/lib/experience/authorization';
 import type { VerifierReceipt } from '@/lib/experience/local-build-supervisor-types';
 import { hasExactVerifierEvidence } from '@/lib/experience/verifier-evidence-replay';
+import { experienceBuildVerifierReceipt } from '@/schemas/experience-build-verifier';
 import { BUILD_VERIFIER_CALL_TIMEOUT_MS } from './build-deadline';
 import { retryVerifierBusy } from './verifier-backpressure';
-
-const receiptSchema = z.strictObject({
-  merchantId: z.uuid(),
-  jobId: z.uuid(),
-  attemptNonce: z.uuid(),
-  buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  receiptDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  hostOrigin: z.string().max(1000),
-});
 
 /** Trusted MCP host only; the verifier target is fixed to loopback. */
 export function createVerifierBuildClient(settings: {
@@ -36,7 +27,7 @@ export function createVerifierBuildClient(settings: {
   const key = Uint8Array.from(settings.key);
   return async (receipt: VerifierReceipt, ctx: ExperienceContext) => {
     ctx.signal?.throwIfAborted();
-    const value = receiptSchema.parse(receipt);
+    const value = experienceBuildVerifierReceipt.parse(receipt);
     if (!ctx.identity || value.merchantId !== ctx.merchantId)
       throw Error('VERIFIER_UNAVAILABLE');
     await requireExperienceOwner(ctx);

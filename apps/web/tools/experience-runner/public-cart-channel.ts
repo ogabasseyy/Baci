@@ -1,6 +1,9 @@
 import type { Readable, Writable } from 'node:stream';
 import { z } from 'zod';
-import { MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES } from './public-observation-resource-limit';
+import {
+  MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES,
+  MAX_PUBLIC_OBSERVATION_REQUESTS,
+} from './public-observation-resource-limit';
 
 const MAX_REQUEST_FRAME_BYTES = 16 * 1024;
 const request = z.strictObject({
@@ -11,7 +14,7 @@ const request = z.strictObject({
 const frame = z.discriminatedUnion('type', [
   z.strictObject({
     type: z.literal('request'),
-    id: z.number().int().min(1).max(64),
+    id: z.number().int().min(1).max(MAX_PUBLIC_OBSERVATION_REQUESTS),
     request,
   }),
   z.strictObject({ type: z.literal('done'), observation: z.unknown() }),

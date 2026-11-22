@@ -1,4 +1,5 @@
 import type { BrowserContext } from 'playwright-core';
+import { MAX_PUBLIC_OBSERVATION_ROUTES } from './public-observation-resource-limit';
 
 /** Call only in a network-disabled browser with the host-validated routes installed. */
 export async function inspectPublicRoutes(settings: {
@@ -15,7 +16,7 @@ export async function inspectPublicRoutes(settings: {
   if (
     !/^[a-f0-9]{64}$/.test(settings.buildDigest) ||
     !settings.routes.length ||
-    settings.routes.length > 128
+    settings.routes.length > MAX_PUBLIC_OBSERVATION_ROUTES
   )
     throw Error('PUBLIC_ROUTES_INVALID');
   const page = await settings.context.newPage();

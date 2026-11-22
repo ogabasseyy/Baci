@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { cartSessionCookieName } from '@/lib/cart/principal';
+import {
+  MAX_PUBLIC_CART_SESSION_REQUESTS,
+  PUBLIC_CART_JOURNEY_REQUESTS,
+} from '../experience-runner/public-observation-resource-limit';
 import { createPublicCartPolicy } from './public-cart-policy';
 
 type Request = { url: string; method: string; body?: string };
@@ -30,8 +34,11 @@ export function createPublicCartSession(settings: {
     .number()
     .int()
     .min(1)
-    .max(64)
-    .parse(settings.maxRequests ?? 32);
+    .max(MAX_PUBLIC_CART_SESSION_REQUESTS)
+    .parse(
+      settings.maxRequests ??
+        PUBLIC_CART_JOURNEY_REQUESTS + (settings.launch?.paths.length ?? 0)
+    );
   const cookies = new Map<string, string>();
   let requests = 0;
   let inFlight = false;

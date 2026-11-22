@@ -22,7 +22,10 @@ it('revalidates owner access and sends only identifiers to the fixed verifier po
     auth: {
       getUser: vi.fn(async () => ({ data: { user: { id } }, error: null })),
     },
-    rpc: vi.fn(async () => ({ data: true, error: null })),
+    rpc: vi.fn(() => {
+      const result = Promise.resolve({ data: true, error: null });
+      return Object.assign(result, { abortSignal: () => result });
+    }),
   };
   const verify = vi.fn<
     Parameters<typeof createVerifierBuildHandler>[0]['verify']
@@ -84,7 +87,7 @@ it('revalidates owner access and sends only identifiers to the fixed verifier po
     });
     const pending = client(receipt, { ...ctx, signal: controller.signal });
     const denied = expect(pending).rejects.toThrow('VERIFIER_UNAVAILABLE');
-    await entered;
+    await Promise.race([entered, pending]);
     controller.abort();
     await denied;
     await disconnected;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
+import { MAX_PUBLIC_OBSERVATION_ROUTES } from '../experience-runner/public-observation-resource-limit';
 
 /** Request validation only: the relay must independently isolate the browser,
  * pin DNS, bound traffic, and hold its own anonymous session and CSRF state. */
@@ -64,7 +65,10 @@ export function createPublicCartPolicy(settings: {
         .string()
         .regex(/^[a-f0-9]{64}$/)
         .parse(settings.launch.buildDigest);
-      if (!settings.launch.paths.length || settings.launch.paths.length > 128)
+      if (
+        !settings.launch.paths.length ||
+        settings.launch.paths.length > MAX_PUBLIC_OBSERVATION_ROUTES
+      )
         throw Error('INVALID_PUBLIC_ROUTES');
       const urls = new Map<string, string>();
       for (const path of settings.launch.paths) {

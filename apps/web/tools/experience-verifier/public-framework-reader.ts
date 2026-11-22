@@ -1,3 +1,4 @@
+import { MAX_PUBLIC_FRAMEWORK_REQUESTS } from '../experience-runner/public-observation-resource-limit';
 import { createBoundPublicFetcher } from './public-fetch';
 import { publicFrameworkRequest } from './public-framework-request';
 
@@ -15,7 +16,8 @@ export function createPublicFrameworkReader(
   return async (request: Request) => {
     signal?.throwIfAborted();
     const kind = publicFrameworkRequest(origin, request);
-    if (!kind || ++count > 32) throw Error('PUBLIC_FRAMEWORK_DENIED');
+    if (!kind || ++count > MAX_PUBLIC_FRAMEWORK_REQUESTS)
+      throw Error('PUBLIC_FRAMEWORK_DENIED');
     const fetch =
       fetchAsset ??
       createBoundPublicFetcher({

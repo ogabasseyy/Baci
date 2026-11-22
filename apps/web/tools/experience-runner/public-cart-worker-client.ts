@@ -1,6 +1,9 @@
 import type { Readable, Writable } from 'node:stream';
 import { z } from 'zod';
-import { MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES } from './public-observation-resource-limit';
+import {
+  MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES,
+  MAX_PUBLIC_OBSERVATION_REQUESTS,
+} from './public-observation-resource-limit';
 
 const requestSchema = z.strictObject({
   url: z.string().max(2048),
@@ -9,7 +12,7 @@ const requestSchema = z.strictObject({
 });
 const responseSchema = z.strictObject({
   type: z.literal('response'),
-  id: z.number().int().min(1).max(64),
+  id: z.number().int().min(1).max(MAX_PUBLIC_OBSERVATION_REQUESTS),
   status: z.number().int().min(200).max(299),
   body: z.string(),
 });
@@ -55,7 +58,7 @@ export function createPublicCartWorkerClient(settings: {
   };
   return {
     async request(input: z.infer<typeof requestSchema>) {
-      if (closed || pending || nextId > 64)
+      if (closed || pending || nextId > MAX_PUBLIC_OBSERVATION_REQUESTS)
         throw Error('PUBLIC_CART_CLIENT_UNAVAILABLE');
       const validated = requestSchema.parse(input);
       const id = nextId++;

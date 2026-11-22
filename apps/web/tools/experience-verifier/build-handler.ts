@@ -1,27 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
+import { experienceBuildVerifierMessage } from '@/schemas/experience-build-verifier';
 import { RunnerCapacityError } from '../experience-runner/runner-transport';
 import type { createIndependentBuildVerifier } from './build-verifier';
 import type { OwnerVerificationKind } from './owner-verification-slots';
-
-const message = z.strictObject({
-  version: z.literal(1),
-  nonce: z.string().regex(/^[a-f0-9]{64}$/),
-  expiresAt: z.number().int().safe(),
-  accessToken: z
-    .string()
-    .min(1)
-    .max(8192)
-    .regex(/^[A-Za-z0-9_.-]+$/),
-  merchantId: z.uuid(),
-  jobId: z.uuid(),
-  attemptNonce: z.uuid(),
-  buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  receiptDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  hostOrigin: z.string().max(1000),
-});
 
 /** Separate verifier only; callers provide identifiers, never source or proof bytes. */
 export function createVerifierBuildHandler(settings: {
@@ -53,7 +36,9 @@ export function createVerifierBuildHandler(settings: {
         return reply(404);
       const body = await readBoundedJsonBody(request, 16384);
       request.signal.throwIfAborted();
-      const parsed = body.ok ? message.safeParse(body.body) : null;
+      const parsed = body.ok
+        ? experienceBuildVerifierMessage.safeParse(body.body)
+        : null;
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
       const expected = createHmac('sha256', key)

@@ -1,21 +1,12 @@
 import { JSDOM } from 'jsdom';
-import { z } from 'zod';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
+import { publicFrameBinding } from '@/schemas/experience-public-output-binding';
 import {
   deliveryDocumentSandbox,
   publishedDeliveryPolicy,
 } from '../experience-runner/delivery-document-policy';
 import { createBoundPublicFetcher } from './public-fetch';
-
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const bindingSchema = z.object({
-  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
-  buildDigest: digest,
-  canonicalBase: z.string(),
-  scriptDigest: digest,
-  styleDigest: digest,
-});
 
 /** Fetch route-bound frame documents as inert data; the browser must still render them. */
 export async function fetchPublicFrames(
@@ -27,7 +18,7 @@ export async function fetchPublicFrames(
     'resolve' | 'network' | 'signal'
   > = {}
 ) {
-  const binding = bindingSchema.parse(input);
+  const binding = publicFrameBinding.parse(input);
   const origins = productionDeliveryOrigins({
     executionOrigin,
     hostOrigins: [binding.canonicalBase],

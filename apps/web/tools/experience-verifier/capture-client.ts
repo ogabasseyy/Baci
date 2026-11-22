@@ -1,25 +1,16 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { request } from 'node:http';
-import { z } from 'zod';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import {
   type OwnerRequestContext,
   requireExperienceOwner,
 } from '@/lib/experience/authorization';
 import { productionOrigin } from '@/lib/experience/production-origins';
+import {
+  experienceCaptureVerifierOutput,
+  experienceCaptureVerifierSelection,
+} from '@/schemas/experience-capture-verifier';
 import { retryVerifierBusy } from './verifier-backpressure';
-
-const selection = z.strictObject({
-  buildId: z.uuid(),
-  routeId: z.string().min(1).max(240),
-  idempotencyKey: z.uuid(),
-});
-const output = z.strictObject({
-  evidenceId: z.uuid(),
-  buildId: z.uuid(),
-  buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  previewUrl: z.string().max(2000),
-});
 
 /** Trusted builder process only; verifier destination is fixed to loopback. */
 export function createVerifierCaptureClient(settings: {
@@ -39,7 +30,7 @@ export function createVerifierCaptureClient(settings: {
   const previewOrigin = productionOrigin(settings.previewOrigin);
   return async (inputCtx: OwnerRequestContext, input: unknown) => {
     inputCtx.signal?.throwIfAborted();
-    const selected = selection.parse(input);
+    const selected = experienceCaptureVerifierSelection.parse(input);
     const ctx = await requireExperienceOwner(inputCtx);
     if (!ctx.identity) throw Error('VERIFIER_UNAVAILABLE');
     const token = await settings.resolveLinkedAccessToken(ctx.identity);
@@ -107,7 +98,7 @@ export function createVerifierCaptureClient(settings: {
     };
     const result = await retryVerifierBusy(send, busy, signal);
     if (result === busy) throw Error('VERIFIER_UNAVAILABLE');
-    const parsed = output.parse(result);
+    const parsed = experienceCaptureVerifierOutput.parse(result);
     const url = new URL(parsed.previewUrl);
     if (
       parsed.buildId !== selected.buildId ||

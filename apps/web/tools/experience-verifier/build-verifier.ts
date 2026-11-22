@@ -3,7 +3,6 @@ import {
   type PublicBootstrap,
   sourceDigest,
 } from '@baci/shared/experience';
-import { z } from 'zod';
 import { loadOfflineAssets } from '@/lib/experience/asset-service';
 import {
   type OwnerRequestContext,
@@ -19,19 +18,12 @@ import {
 import { qualifyBuildRender } from '@/lib/experience/qualify-build-render';
 import { createExperienceRepository } from '@/lib/experience/repository';
 import { hasExactVerifierEvidence } from '@/lib/experience/verifier-evidence-replay';
+import { experienceBuildVerifierRequest } from '@/schemas/experience-build-verifier';
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
 import type { runLocalQualification } from '../experience-runner/local-oci-executor';
 import { unpackPrerenderBuild } from '../experience-runner/prerender-artifacts';
 import { packPrivateBuild } from '../experience-runner/private-build-payload';
 import type { createRunnerExecutor } from '../experience-runner/runner-transport';
-
-const request = z.strictObject({
-  jobId: z.uuid(),
-  attemptNonce: z.uuid(),
-  buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  receiptDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  hostOrigin: z.string().max(1000),
-});
 
 /** Separately trusted verifier: re-reads source and independently runs qualification. */
 export function createIndependentBuildVerifier(settings: {
@@ -65,7 +57,7 @@ export function createIndependentBuildVerifier(settings: {
       signal?.throwIfAborted();
       return result;
     };
-    const input = request.parse(value);
+    const input = experienceBuildVerifierRequest.parse(value);
     const hostOrigin = productionOrigin(input.hostOrigin);
     productionDeliveryOrigins({
       executionOrigin: settings.executionOrigin,

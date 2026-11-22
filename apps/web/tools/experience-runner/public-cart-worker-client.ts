@@ -1,21 +1,13 @@
 import type { Readable, Writable } from 'node:stream';
-import { z } from 'zod';
+import {
+  type PublicCartChannelRequest,
+  publicCartChannelRequest,
+  publicCartHostResponse,
+} from '@/schemas/experience-public-cart-channel';
 import {
   MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES,
   MAX_PUBLIC_OBSERVATION_REQUESTS,
 } from './public-observation-resource-limit';
-
-const requestSchema = z.strictObject({
-  url: z.string().max(2048),
-  method: z.enum(['GET', 'POST']),
-  body: z.string().max(8192).optional(),
-});
-const responseSchema = z.strictObject({
-  type: z.literal('response'),
-  id: z.number().int().min(1).max(MAX_PUBLIC_OBSERVATION_REQUESTS),
-  status: z.number().int().min(200).max(299),
-  body: z.string(),
-});
 
 /** Sandbox worker side of the fixed host channel. No cookies or host keys enter it. */
 export function createPublicCartWorkerClient(settings: {
@@ -41,7 +33,7 @@ export function createPublicCartWorkerClient(settings: {
         if (end > 2097216) throw Error();
         const line = buffered.subarray(0, end);
         buffered = buffered.subarray(end + 1);
-        return responseSchema.parse(
+        return publicCartHostResponse.parse(
           JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(line))
         );
       }
@@ -57,10 +49,10 @@ export function createPublicCartWorkerClient(settings: {
     }
   };
   return {
-    async request(input: z.infer<typeof requestSchema>) {
+    async request(input: PublicCartChannelRequest) {
       if (closed || pending || nextId > MAX_PUBLIC_OBSERVATION_REQUESTS)
         throw Error('PUBLIC_CART_CLIENT_UNAVAILABLE');
-      const validated = requestSchema.parse(input);
+      const validated = publicCartChannelRequest.parse(input);
       const id = nextId++;
       pending = true;
       const timer = setTimeout(

@@ -1,34 +1,17 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import {
   type OwnerRequestContext,
   requireExperienceOwner,
 } from '@/lib/experience/authorization';
+import {
+  experienceCaptureVerifierMessage,
+  experienceCaptureVerifierOutput,
+} from '@/schemas/experience-capture-verifier';
 import { RunnerCapacityError } from '../experience-runner/runner-transport';
 import type { createVerifierCaptureWorker } from './capture-worker';
 
-const message = z.strictObject({
-  version: z.literal(1),
-  nonce: z.string().regex(/^[a-f0-9]{64}$/),
-  expiresAt: z.number().int().safe(),
-  accessToken: z
-    .string()
-    .min(1)
-    .max(8192)
-    .regex(/^[A-Za-z0-9_.-]+$/),
-  merchantId: z.uuid(),
-  buildId: z.uuid(),
-  routeId: z.string().min(1).max(240),
-  idempotencyKey: z.uuid(),
-});
-const output = z.strictObject({
-  evidenceId: z.uuid(),
-  buildId: z.uuid(),
-  buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  previewUrl: z.string().max(2000),
-});
 type Worker = Awaited<ReturnType<typeof createVerifierCaptureWorker>>;
 
 export function createVerifierCaptureHandler(settings: {
@@ -56,7 +39,9 @@ export function createVerifierCaptureHandler(settings: {
         return reply(404);
       const body = await readBoundedJsonBody(request, 16384);
       request.signal.throwIfAborted();
-      const parsed = body.ok ? message.safeParse(body.body) : null;
+      const parsed = body.ok
+        ? experienceCaptureVerifierMessage.safeParse(body.body)
+        : null;
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
       const expected = createHmac('sha256', key)
@@ -90,7 +75,7 @@ export function createVerifierCaptureHandler(settings: {
       };
       const worker = await settings.resolveWorker(ctx, parsed.data.buildId);
       request.signal.throwIfAborted();
-      const result = output.parse(
+      const result = experienceCaptureVerifierOutput.parse(
         await worker(ctx, {
           buildId: parsed.data.buildId,
           routeId: parsed.data.routeId,

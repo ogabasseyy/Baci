@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import {
   experienceBuildVerifierMessage,
   experienceBuildVerifierReceipt,
+  experienceBuildVerifierRequest,
 } from './experience-build-verifier';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -51,4 +52,12 @@ it('rejects invalid verifier envelope fields', () => {
       experienceBuildVerifierMessage.safeParse({ ...message, ...patch }).success
     ).toBe(false);
   }
+});
+
+it('uses the receipt fields without repeating the merchant locator in verifier input', () => {
+  const { merchantId, ...input } = receipt;
+  expect(experienceBuildVerifierRequest.parse(input)).toEqual(input);
+  expect(
+    experienceBuildVerifierRequest.safeParse({ ...input, merchantId }).success
+  ).toBe(false);
 });

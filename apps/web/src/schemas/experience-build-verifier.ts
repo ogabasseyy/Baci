@@ -21,3 +21,8 @@ export const experienceBuildVerifierMessage = z.strictObject({
     .regex(/^[A-Za-z0-9_.-]+$/),
   ...experienceBuildVerifierReceipt.shape,
 });
+
+export const experienceBuildVerifierRequest =
+  experienceBuildVerifierReceipt.omit({
+    merchantId: true,
+  });

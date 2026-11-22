@@ -1,20 +1,10 @@
-import { z } from 'zod';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { productionDeliveryOrigins } from '@/lib/experience/production-origins';
-
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const bindingSchema = z.object({
-  slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
-  buildDigest: digest,
-  canonicalBase: z.string(),
-  scriptDigest: digest,
-  styleDigest: digest,
-  assets: z.record(z.string().regex(/^[a-z0-9-]{1,80}$/), digest),
-});
+import { publicOutputBinding } from '@/schemas/experience-public-output-binding';
 
 /** Derive every permitted output URL from the bound public head. */
 export function describePublicOutput(input: unknown, executionOrigin: string) {
-  const binding = bindingSchema.parse(input);
+  const binding = publicOutputBinding.parse(input);
   const origin = productionDeliveryOrigins({
     executionOrigin,
     hostOrigins: [binding.canonicalBase],

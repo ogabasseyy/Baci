@@ -1,32 +1,18 @@
 import type { Readable, Writable } from 'node:stream';
-import { z } from 'zod';
 import {
-  MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES,
-  MAX_PUBLIC_OBSERVATION_REQUESTS,
-} from './public-observation-resource-limit';
+  type PublicCartChannelRequest,
+  publicCartWorkerFrame,
+} from '@/schemas/experience-public-cart-channel';
+import { MAX_PUBLIC_OBSERVATION_OUTPUT_BYTES } from './public-observation-resource-limit';
 
 const MAX_REQUEST_FRAME_BYTES = 16 * 1024;
-const request = z.strictObject({
-  url: z.string().max(2048),
-  method: z.enum(['GET', 'POST']),
-  body: z.string().max(8192).optional(),
-});
-const frame = z.discriminatedUnion('type', [
-  z.strictObject({
-    type: z.literal('request'),
-    id: z.number().int().min(1).max(MAX_PUBLIC_OBSERVATION_REQUESTS),
-    request,
-  }),
-  z.strictObject({ type: z.literal('done'), observation: z.unknown() }),
-]);
-
 /** Host-side framing only; it does not start a sandbox or grant network access. */
 export async function runPublicCartChannel(settings: {
   input: Readable;
   output: Writable;
   timeoutMs?: number;
   session(
-    input: z.infer<typeof request>
+    input: PublicCartChannelRequest
   ): Promise<{ status: number; body: string }>;
 }) {
   let buffered = Buffer.alloc(0);
@@ -53,7 +39,7 @@ export async function runPublicCartChannel(settings: {
           throw Error();
         const raw = buffered.subarray(0, newline);
         buffered = buffered.subarray(newline + 1);
-        const message = frame.parse(
+        const message = publicCartWorkerFrame.parse(
           JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw))
         );
         if (message.type === 'done') {

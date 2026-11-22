@@ -14,7 +14,10 @@ it('returns owner-bound capture metadata through the signed loopback boundary', 
     auth: {
       getUser: vi.fn(async () => ({ data: { user: { id } }, error: null })),
     },
-    rpc: vi.fn(async () => ({ data: true, error: null })),
+    rpc: vi.fn(() => {
+      const result = Promise.resolve({ data: true, error: null });
+      return Object.assign(result, { abortSignal: () => result });
+    }),
   };
   const resolveUserClient = vi.fn(async () => user as never);
   const worker = vi.fn(async () => ({

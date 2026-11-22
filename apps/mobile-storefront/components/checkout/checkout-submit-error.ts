@@ -95,6 +95,11 @@ const REQUOTE_CODES = new Set([
   'SHIPPING_QUOTE_REQUIRED',
 ]);
 
+// A quote lookup failure is returned as a 500 and intentionally stays on the
+// generic pre-order error path. A transient server failure is not evidence that
+// the saved quote is invalid, so do not discard it and trigger another carrier
+// request automatically.
+
 export function handleCheckoutSubmitError(
   error: unknown,
   selectedPayment: PaymentMethodType,

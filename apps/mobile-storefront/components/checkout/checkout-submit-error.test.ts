@@ -106,6 +106,36 @@ describe('handleCheckoutSubmitError', () => {
     expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
   });
 
+  it('keeps a transient 5xx quote lookup failure on the generic pre-order path', () => {
+    const { trackCheckoutPaymentFailed, trackError } = jest.requireMock(
+      '@/services/analytics'
+    );
+    const refresh = jest.fn();
+    trackCheckoutPaymentFailed.mockClear();
+    handleCheckoutSubmitError(
+      new OrderError(
+        'Server error. Please try again in a few moments.',
+        'SERVER_ERROR'
+      ),
+      'credit_direct',
+      undefined,
+      refresh
+    );
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Order Failed',
+      'Server error. Please try again in a few moments.',
+      expect.any(Array)
+    );
+    expect(trackError).toHaveBeenCalledWith(
+      'checkout_failed',
+      'Server error. Please try again in a few moments.',
+      expect.objectContaining({ errorCode: 'SERVER_ERROR' })
+    );
+    expect(trackCheckoutPaymentFailed).not.toHaveBeenCalled();
+  });
+
   it('directs the customer to the existing order for an idempotency conflict', () => {
     handleCheckoutSubmitError(
       new OrderError(

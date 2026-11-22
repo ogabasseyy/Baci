@@ -34,7 +34,9 @@ describe('proxy CSP', () => {
 
   it('builds a narrower storefront script candidate without changing payment origins', () => {
     const enforced = generateCSP('storefront', false);
-    const candidate = generateStorefrontCspReportOnlyCandidate(enforced);
+    const candidate = requireCandidate(
+      generateStorefrontCspReportOnlyCandidate(enforced)
+    );
     const enforcedScript = directive(enforced, 'script-src');
     const candidateScript = directive(candidate, 'script-src');
 
@@ -61,10 +63,28 @@ describe('proxy CSP', () => {
     ).toBeNull();
   });
 
+  it('removes reporting directives and unsafe sources from script-src-elem', () => {
+    const candidate = requireCandidate(
+      generateStorefrontCspReportOnlyCandidate(
+        "script-src 'self' 'unsafe-inline'; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://scripts.example; report-uri https://reports.example/csp?tenant=private; report-to private-endpoint"
+      )
+    );
+
+    expect(directive(candidate, 'script-src-elem')).toEqual([
+      "'self'",
+      'https://scripts.example',
+    ]);
+    expect(candidate).not.toMatch(
+      /report-uri|report-to|reports\.example|private-endpoint|tenant=private/
+    );
+  });
+
   it('removes the local eval exception and replaces duplicate candidate directives', () => {
     const local = generateCSP('storefront', true);
-    const candidate = generateStorefrontCspReportOnlyCandidate(
-      `${local}; script-src-attr 'unsafe-inline'; form-action https://provider.example`
+    const candidate = requireCandidate(
+      generateStorefrontCspReportOnlyCandidate(
+        `${local}; script-src-attr 'unsafe-inline'; form-action https://provider.example`
+      )
     );
     const script = directive(candidate, 'script-src');
 
@@ -83,8 +103,10 @@ describe('proxy CSP', () => {
   });
 
   it('parses candidate directives across semicolon and whitespace variations', () => {
-    const candidate = generateStorefrontCspReportOnlyCandidate(
-      "  SCRIPT-SRC\t'self'   'unsafe-inline'\n'unsafe-eval' https://cdn.example ;\n script-src-attr\t'unsafe-inline' ; FORM-ACTION  https://provider.example ; "
+    const candidate = requireCandidate(
+      generateStorefrontCspReportOnlyCandidate(
+        "  SCRIPT-SRC\t'self'   'unsafe-inline'\n'unsafe-eval' https://cdn.example ;\n script-src-attr\t'unsafe-inline' ; FORM-ACTION  https://provider.example ; "
+      )
     );
 
     expect(directive(candidate, 'script-src')).toEqual([
@@ -218,6 +240,11 @@ function directive(policy: string, name: string): string[] {
       ?.split(' ')
       .slice(1) ?? []
   );
+}
+function requireCandidate(candidate: string | null): string {
+  expect(candidate).not.toBeNull();
+  if (!candidate) throw new Error('Expected a report-only CSP candidate');
+  return candidate;
 }
 it.each([
   true,

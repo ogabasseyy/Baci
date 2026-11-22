@@ -119,7 +119,11 @@ export function generateStorefrontCspReportOnlyCandidate(
   const directives = csp
     .split(';')
     .map((directive) => normalizeCspDirective(directive))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((directive) => {
+      const name = getCspDirectiveName(directive);
+      return name !== 'report-uri' && name !== 'report-to';
+    });
   const scriptSource = directives.findIndex(
     (directive) => getCspDirectiveName(directive) === 'script-src'
   );
@@ -127,13 +131,18 @@ export function generateStorefrontCspReportOnlyCandidate(
   // tighten. Do not emit an enforced-equivalent Report-Only header.
   if (scriptSource === -1) return null;
 
-  const [name, ...sources] = directives[scriptSource].split(' ');
-  directives[scriptSource] = [
-    name,
-    ...sources.filter(
-      (source) => source !== "'unsafe-inline'" && source !== "'unsafe-eval'"
-    ),
-  ].join(' ');
+  for (let index = 0; index < directives.length; index += 1) {
+    const directive = directives[index];
+    const name = getCspDirectiveName(directive);
+    if (name !== 'script-src' && name !== 'script-src-elem') continue;
+    const [, ...sources] = directive.split(' ');
+    directives[index] = [
+      name,
+      ...sources.filter(
+        (source) => source !== "'unsafe-inline'" && source !== "'unsafe-eval'"
+      ),
+    ].join(' ');
+  }
   setCspDirective(directives, 'script-src-attr', "'none'");
   setCspDirective(directives, 'form-action', "'self'");
   return directives.join('; ');

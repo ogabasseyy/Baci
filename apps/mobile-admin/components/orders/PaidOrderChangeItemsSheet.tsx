@@ -13,6 +13,7 @@ import {
 } from '@/lib/paid-order-amendment-api';
 import { generateUUID } from '@/utils/uuid';
 import type { OrderDetailsItem } from './order-details.types';
+import { PaidOrderChangePreview } from './PaidOrderChangePreview';
 
 interface Props {
   orderId: string;
@@ -42,12 +43,9 @@ export function PaidOrderChangeItemsSheet({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const inFlight = useRef(false);
-  const money = (minor: number) => formatPrice(minor / 100);
   const { pending } = amendment;
-  const requiresEvidence = Boolean(
-    preview?.bankEvidence && preview.adjustmentMinor > 0
-  );
-
+  const requiresEvidence =
+    preview?.bankEvidence !== undefined && preview.adjustmentMinor > 0;
   const canRecordStaffTopUp = preview?.canRecordStaffTopUp === true;
   const staffTopUp = staffTopUpSchema.safeParse(
     staffMethod === 'pos'
@@ -235,96 +233,22 @@ export function PaidOrderChangeItemsSheet({
             ))}
             {preview && (
               <>
-                {[preview.beforeLine, preview.afterLine].map((line, index) => (
-                  <Text
-                    key={index === 0 ? 'original' : 'revised'}
-                    style={{ color: colors.text }}
-                  >
-                    {index === 0 ? 'Original' : 'Revised'} ·{' '}
-                    {formatOrderItemDisplayName({
-                      baseName: line.name,
-                      variantName: line.variantName,
-                      condition: line.condition,
-                    })}{' '}
-                    × {line.quantity} ·{' '}
-                    {money(
-                      index === 0
-                        ? preview.beforeTotalMinor
-                        : preview.afterTotalMinor
-                    )}
-                  </Text>
-                ))}
-                <Text style={{ color: colors.text }}>
-                  {preview.adjustmentMinor === 0
-                    ? 'Same price'
-                    : preview.adjustmentMinor > 0
-                      ? `Extra payment ${money(preview.adjustmentMinor)}`
-                      : `Refund owed ${money(-preview.adjustmentMinor)}`}
-                </Text>
-                {canRecordStaffTopUp && (
-                  <>
-                    <Text style={{ color: colors.text }}>Record payment</Text>
-                    {action(
-                      'Cash',
-                      () => setStaffMethod('cash'),
-                      false,
-                      staffMethod === 'cash'
-                    )}
-                    {action(
-                      'POS',
-                      () => setStaffMethod('pos'),
-                      false,
-                      staffMethod === 'pos'
-                    )}
-                    {staffMethod === 'pos' && (
-                      <TextInput
-                        accessibilityLabel="POS receipt reference"
-                        placeholder="POS receipt reference"
-                        placeholderTextColor={colors.textMuted}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                        maxLength={100}
-                        editable={!busy}
-                        value={receiptReference}
-                        onChangeText={setReceiptReference}
-                        style={inputStyle}
-                      />
-                    )}
-                  </>
-                )}
-                {requiresEvidence && !canRecordStaffTopUp && (
-                  <>
-                    <Text style={{ color: colors.text }}>
-                      {preview.bankEvidence?.length
-                        ? 'Select the verified top-up.'
-                        : 'No matching payment has been verified.'}
-                    </Text>
-                    {preview.bankEvidence?.map((entry) => (
-                      <View key={entry.id}>
-                        {action(
-                          `${entry.method === 'cash' ? 'Cash' : entry.method === 'pos' ? 'POS' : 'Bank transfer'} · ${money(entry.amountMinor)} · ${entry.id.slice(0, 8)}`,
-                          () => setEvidenceId(entry.id),
-                          false,
-                          evidenceId === entry.id
-                        )}
-                      </View>
-                    ))}
-                  </>
-                )}
-                {preview.adjustmentMinor < 0 && !amendment.canRefund && (
-                  <Text style={{ color: colors.textSecondary }}>
-                    A staff member with refund permission must confirm.
-                  </Text>
-                )}
-                <TextInput
-                  accessibilityLabel="Reason for the change"
-                  placeholder="Reason for the change"
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={500}
-                  editable={!busy}
-                  value={reason}
-                  onChangeText={setReason}
-                  style={inputStyle}
+                <PaidOrderChangePreview
+                  preview={preview}
+                  formatPrice={formatPrice}
+                  action={action}
+                  inputStyle={inputStyle}
+                  busy={busy}
+                  canRefund={amendment.canRefund}
+                  evidence={{ id: evidenceId, select: setEvidenceId }}
+                  staffPayment={{
+                    method: staffMethod,
+                    selectMethod: setStaffMethod,
+                    receiptReference,
+                    setReceiptReference,
+                  }}
+                  reason={reason}
+                  setReason={setReason}
                 />
                 {action(
                   agreed ? 'Customer agreed ✓' : 'Customer agreed',

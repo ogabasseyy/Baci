@@ -1,0 +1,167 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PaidOrderAmendmentError } from '@/lib/paid-order-amendment-api';
+import { usePaidOrderAmendment } from './usePaidOrderAmendment';
+
+const mocks = vi.hoisted(() => ({
+  workspace: vi.fn(),
+  confirm: vi.fn(),
+  get: vi.fn(),
+  set: vi.fn(),
+  remove: vi.fn(),
+}));
+
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { id: 'operator' } }),
+}));
+vi.mock('@/lib/api-base-url', () => ({ BASE_URL: 'https://test.invalid' }));
+vi.mock('./authenticated-fetch', () => ({
+  AuthenticatedFetchPreflightError: class extends Error {},
+}));
+vi.mock('@/lib/paid-order-amendment-api', async (load) => ({
+  ...(await load<typeof import('@/lib/paid-order-amendment-api')>()),
+  paidOrderAmendment: { workspace: mocks.workspace, confirm: mocks.confirm },
+}));
+vi.mock('@/lib/storage', () => ({
+  asyncStorage: {
+    getItem: mocks.get,
+    setItem: mocks.set,
+    removeItem: mocks.remove,
+  },
+}));
+
+const order = 'order';
+const merchant = 'merchant';
+const storageKey = 'paid-order-amendment:operator:merchant:order';
+const confirmation = {
+  previewId: '42778a83-0ed7-4fa5-9e1d-4ea7a085b217',
+  idempotencyKey: 'f58ed34e-0761-4ffe-83f4-a4cb4bdcce14',
+  customerAgreed: true as const,
+  reason: 'Customer upgrade',
+  staffTopUp: { method: 'pos' as const, receiptReference: 'POS-123456' },
+};
+const emptyWorkspace = {
+  canStart: true,
+  canRefund: false,
+  summary: null,
+  customer: null,
+};
+const amendedWorkspace = {
+  ...emptyWorkspace,
+  canStart: false,
+  summary: { amendmentId: confirmation.previewId },
+  confirmationKey: confirmation.idempotencyKey,
+};
+
+async function openHook() {
+  const client = new QueryClient();
+  const hook = renderHook(() => usePaidOrderAmendment(order, merchant), {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+  await waitFor(() => expect(hook.result.current.pending).not.toBeUndefined());
+  await waitFor(() => expect(hook.result.current.canStart).toBe(true));
+  return hook;
+}
+
+describe('usePaidOrderAmendment', () => {
+  let persisted: string | null;
+  beforeEach(() => {
+    vi.resetAllMocks();
+    persisted = null;
+    mocks.get.mockImplementation(async () => persisted);
+    mocks.set.mockImplementation(async (_key, value) => {
+      persisted = value;
+    });
+    mocks.remove.mockImplementation(async () => {
+      persisted = null;
+    });
+    mocks.workspace.mockResolvedValue(emptyWorkspace);
+    mocks.confirm.mockResolvedValue({ amendmentId: confirmation.previewId });
+  });
+
+  it('persists the exact command before dispatch and clears it on success', async () => {
+    const { result } = await openHook();
+    mocks.confirm.mockImplementationOnce(async () => {
+      expect(persisted).toBe(JSON.stringify(confirmation));
+    });
+    await act(async () => {
+      await expect(result.current.confirm(confirmation)).resolves.toBe(
+        'confirmed'
+      );
+    });
+    expect(mocks.set).toHaveBeenCalledExactlyOnceWith(
+      storageKey,
+      JSON.stringify(confirmation)
+    );
+    expect(mocks.confirm).toHaveBeenCalledExactlyOnceWith(order, confirmation);
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(storageKey);
+    await waitFor(() => expect(result.current.pending).toBeNull());
+  });
+
+  it.each([
+    [confirmation.idempotencyKey, 'confirmed'],
+    ['other-confirmation', 'competing'],
+  ])('matches a possibly committed confirmation to the server key %s', async (key, outcome) => {
+    const { result } = await openHook();
+    mocks.confirm.mockRejectedValueOnce(new Error('Response lost'));
+    mocks.workspace.mockResolvedValue({
+      ...amendedWorkspace,
+      confirmationKey: key,
+    });
+    await act(async () => {
+      await expect(result.current.confirm(confirmation)).resolves.toBe(outcome);
+    });
+    await waitFor(() => expect(result.current.pending).toBeNull());
+    expect(persisted).toBeNull();
+    expect(mocks.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores an unknown confirmation on restart and retries the same POS payload', async () => {
+    const first = await openHook();
+    mocks.confirm.mockRejectedValueOnce(new Error('Connection lost'));
+    await act(async () => {
+      await expect(first.result.current.confirm(confirmation)).resolves.toBe(
+        'unknown'
+      );
+    });
+    await waitFor(() =>
+      expect(first.result.current.pending).toEqual(confirmation)
+    );
+    first.unmount();
+
+    const restarted = await openHook();
+    const restored = restarted.result.current.pending;
+    expect(restored).toEqual(confirmation);
+    if (!restored) throw new Error('Missing restored confirmation');
+    await act(async () => {
+      await expect(restarted.result.current.confirm(restored)).resolves.toBe(
+        'confirmed'
+      );
+    });
+    expect(mocks.confirm.mock.calls).toEqual([
+      [order, confirmation],
+      [order, confirmation],
+    ]);
+    expect(persisted).toBeNull();
+    await waitFor(() => expect(restarted.result.current.pending).toBeNull());
+  });
+
+  it('clears a new command after an authoritative rejection', async () => {
+    const { result } = await openHook();
+    const rejected = new PaidOrderAmendmentError(
+      'Order changed',
+      409,
+      'preview_stale'
+    );
+    mocks.confirm.mockRejectedValueOnce(rejected);
+    await act(async () => {
+      await expect(result.current.confirm(confirmation)).rejects.toBe(rejected);
+    });
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(storageKey);
+    await waitFor(() => expect(result.current.pending).toBeNull());
+  });
+});

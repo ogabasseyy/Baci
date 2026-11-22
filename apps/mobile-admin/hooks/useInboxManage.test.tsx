@@ -35,12 +35,16 @@ describe('useInboxManage', () => {
     await act(() => result.current.update({ status: 'resolved' }));
 
     expect(mocks.update).toHaveBeenCalledWith(9, { status: 'resolved' });
-    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: ['inbox-conversations', 'm1'],
     });
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: ['inbox-thread', 'm1', 9],
+    });
+    // bugfix: search results showed the old status/priority/tags after a change
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ['inbox-search', 'm1'],
     });
   });
 

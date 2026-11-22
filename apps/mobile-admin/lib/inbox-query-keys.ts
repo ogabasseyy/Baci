@@ -5,6 +5,10 @@ export const inboxConversationsKey = (merchantId: string | undefined) =>
 export const inboxViewKey = (merchantId: string | undefined, view: string) =>
   ['inbox-conversations', merchantId, view] as const;
 
+/** Prefix of every cached search, so a change can refresh them all. */
+export const inboxSearchPrefix = (merchantId: string | undefined) =>
+  ['inbox-search', merchantId] as const;
+
 export const inboxSearchKey = (merchantId: string | undefined, term: string) =>
   ['inbox-search', merchantId, term] as const;
 

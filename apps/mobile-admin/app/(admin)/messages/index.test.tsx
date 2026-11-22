@@ -38,12 +38,14 @@ vi.mock('@shopify/flash-list', () => ({
     keyExtractor,
     ListEmptyComponent,
     ListHeaderComponent,
+    ListFooterComponent,
     renderItem,
   }: {
     data?: unknown[];
     keyExtractor?: (item: unknown, index: number) => string;
     ListEmptyComponent?: ReactNode;
     ListHeaderComponent?: ReactNode;
+    ListFooterComponent?: ReactNode;
     renderItem: (input: { index: number; item: unknown }) => ReactNode;
   }) => (
     <div>
@@ -59,6 +61,7 @@ vi.mock('@shopify/flash-list', () => ({
               {renderItem({ item, index })}
             </div>
           ))}
+      {ListFooterComponent}
     </div>
   ),
 }));
@@ -303,5 +306,43 @@ describe('MessagesScreen', () => {
     mocks.query.mockReturnValue(ready([fresh]));
     render(<MessagesScreen />);
     expect(screen.getByText('Signed in')).toBeInTheDocument();
+  });
+
+  it('bugfix: does not request the next page again after a page failed', () => {
+    mocks.query.mockReturnValue({
+      ...ready([conversation(1, 'Ada Test', 'customer')]),
+      hasNextPage: true,
+      isFetchNextPageError: true,
+    });
+    render(<MessagesScreen />);
+
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it('offers an explicit retry for the failed page', () => {
+    mocks.query.mockReturnValue({
+      ...ready([conversation(1, 'Ada Test', 'customer')]),
+      hasNextPage: true,
+      isFetchNextPageError: true,
+    });
+    render(<MessagesScreen />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Could not load more chats. Tap to retry.',
+      })
+    );
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps loading more pages for a ranked view when nothing failed', () => {
+    mocks.query.mockReturnValue({
+      ...ready([conversation(1, 'Ada Test', 'customer')]),
+      hasNextPage: true,
+    });
+    render(<MessagesScreen />);
+
+    expect(mocks.fetchNextPage).toHaveBeenCalled();
   });
 });

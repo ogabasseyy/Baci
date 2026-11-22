@@ -87,8 +87,12 @@ export default function MessagesScreen() {
 
   // Ranked views load several pages so the top of the list is truly the most
   // important; the others only keep loading while a narrowed view is short.
+  // A failed page keeps its data and hasNextPage: never auto-retry it (that
+  // would hammer the API during an outage); the footer offers the retry.
+  const pageFailed = query.isError || query.isFetchNextPageError;
   useEffect(() => {
     if (
+      !pageFailed &&
       query.hasNextPage &&
       !query.isFetchingNextPage &&
       pages < MAX_AUTO_PAGES &&
@@ -103,6 +107,7 @@ export default function MessagesScreen() {
     query.fetchNextPage,
     conversations.length,
     pages,
+    pageFailed,
     view,
   ]);
 
@@ -209,10 +214,26 @@ export default function MessagesScreen() {
               ListFooterComponent={
                 query.isFetchingNextPage ? (
                   <ActivityIndicator color={colors.primary} />
+                ) : query.isFetchNextPageError ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      query.fetchNextPage();
+                    }}
+                    style={styles.retry}
+                  >
+                    <Text style={{ color: colors.primary }}>
+                      Could not load more chats. Tap to retry.
+                    </Text>
+                  </Pressable>
                 ) : null
               }
               onEndReached={() => {
-                if (query.hasNextPage && !query.isFetchingNextPage) {
+                if (
+                  !pageFailed &&
+                  query.hasNextPage &&
+                  !query.isFetchingNextPage
+                ) {
                   query.fetchNextPage();
                 }
               }}

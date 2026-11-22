@@ -19,8 +19,14 @@ vi.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   router: { back: mocks.back },
 }));
-vi.mock('@/components/ui/showChoiceSheet', () => ({
-  showChoiceSheet: mocks.choose,
+vi.mock('@/components/ui/AppSheetModal', () => ({
+  AppSheetModal: ({
+    children,
+    visible,
+  }: {
+    children: ReactNode;
+    visible: boolean;
+  }) => (visible ? <div>{children}</div> : null),
 }));
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: LIGHT_COLORS }),
@@ -213,7 +219,6 @@ describe('ConversationThread business tools', () => {
   });
 
   it('sends the chosen follow-up time', async () => {
-    mocks.choose.mockResolvedValue('2026-11-23T08:00:00.000Z');
     mocks.api.mockResolvedValue({
       conversation: {
         id: 9,
@@ -227,10 +232,11 @@ describe('ConversationThread business tools', () => {
     renderThread();
 
     fireEvent.click(screen.getByRole('button', { name: 'Follow up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'In 3 days' }));
 
     await waitFor(() => expect(mocks.api).toHaveBeenCalledTimes(1));
     expect(JSON.parse(mocks.api.mock.calls[0][1].body)).toEqual({
-      followUpAt: '2026-11-23T08:00:00.000Z',
+      followUpAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
     expect(mocks.back).not.toHaveBeenCalled();
   });

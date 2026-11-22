@@ -24,6 +24,8 @@ export function InboxViewChips({
       contentContainerStyle={styles.row}
       horizontal
       showsHorizontalScrollIndicator={false}
+      // A horizontal ScrollView grows by default and would take screen height.
+      style={styles.scroller}
     >
       {INBOX_VIEWS.map((view) => {
         const selected = view.value === value;
@@ -70,6 +72,7 @@ const styles = StyleSheet.create({
     fontFamily: TYPOGRAPHY.fontFamily.semiBold,
     fontSize: TYPOGRAPHY.size.md,
   },
+  scroller: { flexGrow: 0 },
   row: {
     gap: SPACING.sm,
     paddingHorizontal: SPACING.lg,

@@ -10,6 +10,8 @@ BEGIN
   END IF;
   IF has_table_privilege('authenticated', 'private.paid_order_amendments', 'INSERT')
     OR has_table_privilege('authenticated', 'private.paid_order_amendment_config', 'UPDATE')
+    OR has_table_privilege('authenticated', 'private.paid_order_offer_amendment_writes', 'INSERT')
+    OR has_table_privilege('service_role', 'private.paid_order_offer_amendment_writes', 'INSERT')
     OR has_function_privilege('anon', 'public.confirm_paid_order_amendment(uuid,jsonb)', 'EXECUTE') THEN
     RAISE EXCEPTION 'amendment admission can be bypassed';
   END IF;
@@ -236,8 +238,14 @@ DECLARE
   new_product uuid := gen_random_uuid();
   old_offer uuid := gen_random_uuid();
   new_offer uuid := gen_random_uuid();
+  deleted_offer uuid := gen_random_uuid();
+  deleted_order uuid := gen_random_uuid();
+  deleted_line uuid := gen_random_uuid();
+  equal_order uuid := gen_random_uuid();
+  equal_line uuid := gen_random_uuid();
   preview jsonb;
   result jsonb;
+  snapshot jsonb;
 BEGIN
   PERFORM set_config('request.jwt.claim.role','service_role',true);
   INSERT INTO auth.users(id,instance_id,aud,role,email,created_at,updated_at)
@@ -246,28 +254,57 @@ BEGIN
   INSERT INTO public.merchants(id,user_id,email,business_name,slug)
     VALUES (m,actor,'fixture-offer@example.invalid','Amendment Offer Fixture','fixture-amendment-offer');
   INSERT INTO private.paid_order_amendment_config(merchant_id,version,enabled,scenarios)
-    VALUES (m,1,true,ARRAY['paystack_integration_wallet:condition_offer:downgrade']);
+    VALUES (m,1,true,ARRAY['paystack_integration_wallet:condition_offer:downgrade',
+      'paystack_integration_wallet:product_scalar:downgrade']);
   INSERT INTO public.orders(id,merchant_id,order_number,source,currency,payment_method,
     payment_status,shipping_status,total,subtotal,amount_paid)
-  VALUES (o,m,'FIXTURE-OFFER','online_store','NGN','card','paid','pending',300000,300000,300000);
+  VALUES (o,m,'FIXTURE-OFFER','online_store','NGN','card','paid','pending',300000,300000,300000),
+    (deleted_order,m,'FIXTURE-DELETED-OFFER','online_store','NGN','card','paid','pending',300000,300000,300000);
   INSERT INTO public.products(id,merchant_id,name,price,status,taxable,vat_rate,stock_quantity,
     inventory_tracking_policy,manage_stock)
   VALUES (old_product,m,'Fixture original',300000,'active',false,0,8,'off',true),
     (new_product,m,'Fixture replacement',250000,'active',false,0,7,'off',true);
-  INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity)
-  VALUES (old_offer,old_product,m,'used',300000,0),(new_offer,new_product,m,'used',250000,1);
-  INSERT INTO public.order_items(id,order_id,product_id,product_offer_id,condition,name,price,quantity,vat_rate,vat_amount)
-    VALUES (item,o,old_product,old_offer,'used','Fixture original',300000,1,0,0);
+  INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity,grade,condition_notes)
+  VALUES (old_offer,old_product,m,'used',300000,0,'B','Original marks'),
+    (new_offer,new_product,m,'used',250000,1,'A','Replacement case'),
+    (deleted_offer,old_product,m,'new',300000,0,NULL,NULL);
+  INSERT INTO public.order_items(id,order_id,product_id,product_offer_id,offer_id,condition,name,price,quantity,
+    vat_rate,vat_amount,offer_grade,offer_condition_notes,offer_labels_snapshotted)
+  VALUES (item,o,old_product,old_offer,old_offer,'used','Fixture original',300000,1,0,0,'B','Original marks',true),
+    (deleted_line,deleted_order,old_product,deleted_offer,deleted_offer,'new','Deleted offer',300000,1,0,0,NULL,NULL,true);
+  DELETE FROM public.product_offers WHERE id = deleted_offer;
+  IF NOT EXISTS (SELECT 1 FROM public.order_items WHERE id = deleted_line
+    AND offer_line AND offer_id IS NULL AND product_offer_id IS NULL AND offer_id_snapshot = deleted_offer)
+  THEN RAISE EXCEPTION 'deleted offer fixture lost its original inventory discriminator'; END IF;
   INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway,
     gateway_reference,gateway_response)
-  VALUES (m,o,'payment',300000,'NGN','completed','paystack','fixture-amendment-offer','{"channel":"card"}');
+  VALUES (m,o,'payment',300000,'NGN','completed','paystack','fixture-amendment-offer','{"channel":"card"}'),
+    (m,deleted_order,'payment',300000,'NGN','completed','paystack','fixture-deleted-offer','{"channel":"card"}');
   INSERT INTO public.merchant_settlements(merchant_id,source_type,source_id,gateway,gateway_reference,
     gross_amount,net_amount,expected_settlement_date,metadata)
   VALUES (m,'order',o,'paystack','fixture-amendment-offer',300000,299000,current_date,
-    '{"paystack_collection":"integration"}');
+    '{"paystack_collection":"integration"}'),
+    (m,'order',deleted_order,'paystack','fixture-deleted-offer',300000,299000,current_date,
+      '{"paystack_collection":"integration"}');
 
   PERFORM set_config('request.jwt.claim.role','authenticated',true);
   PERFORM set_config('request.jwt.claim.sub',actor::text,true);
+  IF public.search_paid_order_amendment_replacements(deleted_order,deleted_line,'replacement')
+    IS DISTINCT FROM '[]'::jsonb
+  THEN RAISE EXCEPTION 'deleted offer advertised a replacement from parent stock'; END IF;
+  BEGIN
+    PERFORM public.preview_paid_order_amendment(deleted_order,jsonb_build_object(
+      'lineId',deleted_line,'replacement',jsonb_build_object('kind','product','id',new_product)));
+    RAISE EXCEPTION 'deleted offer was treated as parent stock';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amendment_ineligible' THEN RAISE; END IF;
+  END;
+  BEGIN
+    UPDATE public.order_items SET offer_grade = 'A' WHERE id = item;
+    RAISE EXCEPTION 'ordinary write changed guarded offer labels';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM NOT LIKE 'order_items.offer_grade is immutable%' THEN RAISE; END IF;
+  END;
   preview := public.preview_paid_order_amendment(o,jsonb_build_object(
     'lineId',item,'replacement',jsonb_build_object('kind','condition_offer','id',new_offer)));
   result := public.confirm_paid_order_amendment(o,jsonb_build_object(
@@ -276,13 +313,64 @@ BEGIN
   IF result->>'state' IS DISTINCT FROM 'awaiting_refund'
     OR (result->>'refundOwedMinor')::bigint IS DISTINCT FROM 5000000::bigint
     OR (SELECT amount_paid FROM public.orders WHERE id = o) IS DISTINCT FROM 300000::numeric
-    OR (SELECT product_offer_id FROM public.order_items WHERE id = item) IS DISTINCT FROM new_offer
+    OR NOT EXISTS (SELECT 1 FROM public.order_items WHERE id = item AND product_offer_id = new_offer
+      AND offer_id = new_offer AND offer_id_snapshot = new_offer AND offer_line AND offer_labels_snapshotted
+      AND offer_grade = 'A' AND offer_condition_notes = 'Replacement case')
     OR (SELECT stock_quantity FROM public.product_offers WHERE id = old_offer) IS DISTINCT FROM 1
     OR (SELECT stock_quantity FROM public.product_offers WHERE id = new_offer) IS DISTINCT FROM 0
     OR (SELECT stock_quantity FROM public.products WHERE id = old_product) IS DISTINCT FROM 8
     OR (SELECT stock_quantity FROM public.products WHERE id = new_product) IS DISTINCT FROM 7 THEN
     RAISE EXCEPTION 'condition-offer downgrade changed unexpected stock or money';
   END IF;
+  SELECT original_document_inputs INTO STRICT snapshot FROM private.paid_order_amendment_revisions
+    WHERE amendment_id = (result->>'amendmentId')::uuid AND revision = 1;
+  IF snapshot#>>'{items,0,offer_id_snapshot}' IS DISTINCT FROM old_offer::text
+    OR snapshot#>>'{items,0,offer_condition_notes}' IS DISTINCT FROM 'Original marks'
+  THEN RAISE EXCEPTION 'the original offer evidence was changed'; END IF;
+  SELECT revised_order_inputs INTO STRICT snapshot FROM private.paid_order_amendment_revisions
+    WHERE amendment_id = (result->>'amendmentId')::uuid AND revision = 1;
+  IF snapshot#>>'{items,0,offer_id_snapshot}' IS DISTINCT FROM new_offer::text
+    OR snapshot#>>'{items,0,offer_condition_notes}' IS DISTINCT FROM 'Replacement case'
+  THEN RAISE EXCEPTION 'the revised offer evidence was not pinned'; END IF;
+  PERFORM public.run_paid_order_amendment_action(o,(result->>'amendmentId')::uuid,
+    '{"action":"reverse","idempotencyKey":"fixture-offer-reversal","reason":"Fixture reversal"}');
+  IF NOT EXISTS (SELECT 1 FROM public.order_items WHERE id = item AND product_offer_id = old_offer
+      AND offer_id = old_offer AND offer_id_snapshot = old_offer AND offer_line AND offer_labels_snapshotted
+      AND offer_grade = 'B' AND offer_condition_notes = 'Original marks')
+    OR (SELECT stock_quantity FROM public.product_offers WHERE id = old_offer) IS DISTINCT FROM 0
+    OR (SELECT stock_quantity FROM public.product_offers WHERE id = new_offer) IS DISTINCT FROM 1
+    OR EXISTS (SELECT 1 FROM private.paid_order_offer_amendment_writes)
+  THEN RAISE EXCEPTION 'reversal failed to restore the original offer'; END IF;
+
+  -- The ordinary cancellation path must restock the current offer exactly
+  -- once. A settled equal swap leaves no amendment refund to block it.
+  UPDATE private.paid_order_amendment_config SET scenarios = ARRAY['paystack_integration_wallet:condition_offer:equal']
+    WHERE merchant_id = m;
+  UPDATE public.product_offers SET price = 300000 WHERE id = new_offer;
+  INSERT INTO public.orders(id,merchant_id,order_number,source,currency,payment_method,
+    payment_status,shipping_status,total,subtotal,amount_paid)
+  VALUES (equal_order,m,'FIXTURE-EQUAL-OFFER','online_store','NGN','card','paid','pending',300000,300000,300000);
+  INSERT INTO public.order_items(id,order_id,product_id,product_offer_id,offer_id,condition,name,price,quantity,vat_rate,vat_amount)
+  VALUES (equal_line,equal_order,old_product,old_offer,old_offer,'used','Equal fixture original',300000,1,0,0);
+  INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway,
+    gateway_reference,gateway_response)
+  VALUES (m,equal_order,'payment',300000,'NGN','completed','paystack','fixture-equal-offer','{"channel":"card"}');
+  INSERT INTO public.merchant_settlements(merchant_id,source_type,source_id,gateway,gateway_reference,
+    gross_amount,net_amount,expected_settlement_date,metadata)
+  VALUES (m,'order',equal_order,'paystack','fixture-equal-offer',300000,299000,current_date,
+    '{"paystack_collection":"integration"}');
+  preview := public.preview_paid_order_amendment(equal_order,jsonb_build_object(
+    'lineId',equal_line,'replacement',jsonb_build_object('kind','condition_offer','id',new_offer)));
+  result := public.confirm_paid_order_amendment(equal_order,jsonb_build_object(
+    'previewId',preview->>'previewId','customerAgreed',true,'reason','Fixture equal swap',
+    'idempotencyKey','fixture-equal-offer-confirmation'));
+  IF result->>'state' IS DISTINCT FROM 'settled' THEN RAISE EXCEPTION 'expected settled equal swap'; END IF;
+  PERFORM public.cancel_order_as_merchant(equal_order,'Fixture ordinary cancellation','automatic');
+  IF (SELECT stock_quantity FROM public.product_offers WHERE id = old_offer) IS DISTINCT FROM 1
+    OR (SELECT stock_quantity FROM public.product_offers WHERE id = new_offer) IS DISTINCT FROM 1
+    OR (SELECT stock_quantity FROM public.products WHERE id = old_product) IS DISTINCT FROM 8
+    OR (SELECT stock_quantity FROM public.products WHERE id = new_product) IS DISTINCT FROM 7
+  THEN RAISE EXCEPTION 'ordinary cancellation restored the wrong stock pool'; END IF;
 END;
 $$;
 ROLLBACK;

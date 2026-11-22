@@ -69,13 +69,19 @@ export async function POST(request: NextRequest) {
         return cartErrorResponse('temporarily_unavailable');
 
       // Payment or cancellation can commit after the cart RPC releases its locks.
-      const snapshot = await (auth.supabase ?? createAnonClient()).rpc(
-        'get_order_payment_snapshot',
-        {
-          p_order_id: receipt.data.order.id,
-          p_email: input.customerEmail,
-        }
-      );
+      // Guests have no session client and anon cannot execute the snapshot RPC,
+      // so read it through the server-signed storefront order context.
+      const snapshotClient = createStorefrontOrderRpcClient({
+        fallbackClient: auth.supabase ?? createAnonClient(),
+        hasCanonicalDeliveryMetadata: false,
+        merchantId: merchant.merchant.id,
+        userId,
+        redvaultCustomerEmail: input.customerEmail,
+      });
+      const snapshot = await snapshotClient.rpc('get_order_payment_snapshot', {
+        p_order_id: receipt.data.order.id,
+        p_email: input.customerEmail,
+      });
       const order = snapshot.data?.[0];
       if (
         snapshot.error ||

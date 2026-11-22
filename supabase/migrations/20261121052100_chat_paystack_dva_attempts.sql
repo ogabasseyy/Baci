@@ -60,10 +60,16 @@ BEGIN
   SELECT a.* INTO attempt FROM private.chat_paystack_dva_attempts a
   WHERE a.order_id = order_row.id;
   SELECT a.* INTO account FROM public.order_payment_accounts a
-  WHERE a.order_id = order_row.id AND a.provider = 'paystack';
+  WHERE a.order_id = order_row.id AND a.provider = 'paystack'
+  ORDER BY a.assigned_at DESC NULLS LAST, a.created_at DESC NULLS LAST, a.id DESC
+  LIMIT 1;
 
-  IF account.order_id IS NOT NULL AND
-    least(account.expires_at, account.assigned_at + interval '90 minutes') > clock_timestamp() THEN
+  -- LEAST ignores a NULL expires_at. A row with no assigned_at may be a legacy
+  -- live account, so it is fenced rather than treated as expired.
+  IF account.order_id IS NOT NULL AND (
+    account.assigned_at IS NULL OR
+    least(account.expires_at, account.assigned_at + interval '90 minutes') > clock_timestamp()
+  ) THEN
     IF account.assigned_at IS NULL
       OR account.assigned_at + interval '60 minutes' <= clock_timestamp()
       OR account.assignment_customer_email IS DISTINCT FROM claims->>'customer_email'

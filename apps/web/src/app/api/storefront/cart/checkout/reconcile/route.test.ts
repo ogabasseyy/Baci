@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   summary: vi.fn(),
   paymentSnapshot: vi.fn(),
+  orderClient: vi.fn(),
 }));
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.csrf,
@@ -35,7 +36,7 @@ vi.mock('@/lib/cart/checkout-reconciliation-client', () => ({
   createCheckoutReconciliationClient: () => ({ rpc: mocks.rpc }),
 }));
 vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
-  createStorefrontOrderRpcClient: vi.fn(() => ({})),
+  createStorefrontOrderRpcClient: mocks.orderClient,
 }));
 vi.mock('@/lib/checkout/get-redvault-checkout-summary', () => ({
   getRedvaultCheckoutSummary: mocks.summary,
@@ -65,6 +66,7 @@ function request(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.orderClient.mockImplementation(() => ({ rpc: mocks.paymentSnapshot }));
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.auth.mockResolvedValue({
     user: { id: userId },
@@ -275,4 +277,34 @@ it.each([
   const response = await POST(request({ paymentMethod: 'bank_transfer' }));
   expect(response.status).toBe(503);
   expect(await response.text()).not.toContain('shopper-token');
+});
+
+it('reads the bank transfer snapshot through the signed storefront context for guests', async () => {
+  mocks.auth.mockResolvedValue({ user: null, error: null, supabase: null });
+  mocks.rpc.mockResolvedValueOnce({
+    data: {
+      kind: 'submitted',
+      order: {
+        id: '66666666-6666-4666-8666-666666666666',
+        order_number: 'BACI-123',
+        tracking_token: 'shopper-token',
+        currency: 'NGN',
+      },
+      amountDueToGateway: 12500,
+    },
+    error: null,
+  });
+  const response = await POST(request({ paymentMethod: 'bank_transfer' }));
+  expect(response.status).toBe(200);
+  expect(mocks.orderClient).toHaveBeenCalledWith(
+    expect.objectContaining({
+      merchantId,
+      userId: null,
+      redvaultCustomerEmail: 'ada@example.test',
+    })
+  );
+  expect(mocks.paymentSnapshot).toHaveBeenCalledWith(
+    'get_order_payment_snapshot',
+    expect.objectContaining({ p_email: 'ada@example.test' })
+  );
 });

@@ -66,6 +66,7 @@ vi.mock('@/components/ui/ReceiptPreviewModal', () => ({
 vi.mock('@/components/ui/SuccessModal', () => ({
   SuccessModal: () => null,
 }));
+vi.mock('./PaidOrderChangeItems', () => ({ PaidOrderChangeItems: () => null }));
 vi.mock('./OrderDetailsFooterBar', () => ({
   OrderDetailsFooterBar: () => null,
 }));

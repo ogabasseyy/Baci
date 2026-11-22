@@ -38,6 +38,9 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
     setReason,
     customerAgreed,
     setCustomerAgreed,
+    bankEvidenceId,
+    setBankEvidenceId,
+    requiresBankEvidence,
     pending,
     uncertain,
     error,
@@ -176,12 +179,45 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
                 </div>
               </dl>
               <p className="text-sm">
-                {preview.adjustmentMinor > 0
-                  ? `Balance due ${money(preview.adjustmentMinor)}. Fulfillment will be held.`
-                  : preview.adjustmentMinor < 0
-                    ? `Refund owed ${money(-preview.adjustmentMinor)}. Fulfillment will be held.`
-                    : 'The order total is unchanged.'}
+                {requiresBankEvidence
+                  ? `Select the verified payment of ${money(preview.adjustmentMinor)} to confirm.`
+                  : preview.adjustmentMinor > 0
+                    ? `Balance due ${money(preview.adjustmentMinor)}. Fulfillment will be held.`
+                    : preview.adjustmentMinor < 0
+                      ? `Refund owed ${money(-preview.adjustmentMinor)}. Fulfillment will be held.`
+                      : 'The order total is unchanged.'}
               </p>
+              {requiresBankEvidence && (
+                <div className="grid gap-1.5">
+                  <Label htmlFor="amendment-bank-evidence">
+                    Verified top-up
+                  </Label>
+                  <select
+                    id="amendment-bank-evidence"
+                    className={selectStyle}
+                    value={bankEvidenceId}
+                    onChange={(event) => setBankEvidenceId(event.target.value)}
+                  >
+                    <option value="">
+                      {preview.bankEvidence?.length
+                        ? 'Select the payment'
+                        : 'No matching payment verified'}
+                    </option>
+                    {preview.bankEvidence?.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.method === 'cash'
+                          ? 'Cash'
+                          : entry.method === 'pos'
+                            ? 'POS'
+                            : 'Bank transfer'}{' '}
+                        · {money(entry.amountMinor)} ·{' '}
+                        {new Date(entry.occurredAt).toLocaleString()} ·{' '}
+                        {entry.id.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {preview.adjustmentMinor < 0 && !canRefund && (
                 <p role="status" className="text-sm">
                   A staff member with refund permission must confirm this
@@ -254,6 +290,7 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
                     pending ||
                     !customerAgreed ||
                     !reason.trim() ||
+                    (requiresBankEvidence && !bankEvidenceId) ||
                     (preview.adjustmentMinor < 0 && !canRefund)
                   }
                   onClick={confirm}

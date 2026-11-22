@@ -11,6 +11,34 @@ const confirmBody = {
 };
 
 describe('paid order amendment routes', () => {
+  it('passes the POS receipt through to the authenticated confirmation RPC', async () => {
+    const staffTopUp = { method: 'pos', receiptReference: ' POS-123456 ' };
+    expect(
+      (await POST(request({ ...confirmBody, staffTopUp }), context)).status
+    ).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith(
+      'confirm_paid_order_amendment',
+      {
+        p_order_id: id,
+        p_payload: {
+          ...confirmBody,
+          staffTopUp: { method: 'pos', receiptReference: 'POS-123456' },
+        },
+      }
+    );
+  });
+
+  it.each([
+    { staffTopUp: { method: 'pos' } },
+    { staffTopUp: { method: 'cash', amountMinor: 1 } },
+    { staffTopUp: { method: 'cash' }, bankEvidenceId: id },
+  ])('rejects invalid staff tender input %j before posting', async (input) => {
+    expect(
+      (await POST(request({ ...confirmBody, ...input }), context)).status
+    ).toBe(400);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
   it('logs the database code without exposing unexpected RPC messages', async () => {
     mocks.rpc.mockResolvedValueOnce({
       data: null,

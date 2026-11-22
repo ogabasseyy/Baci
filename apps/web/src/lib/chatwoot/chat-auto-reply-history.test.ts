@@ -88,6 +88,30 @@ describe('isLatestChatMessage', () => {
     expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
   });
 
+  const stubMessages = (messages: ReturnType<typeof message>[]) =>
+    stubFetch((url) =>
+      url.pathname.endsWith('/messages')
+        ? { body: { payload: messages } }
+        : { body: conversation(7) }
+    );
+
+  it('still counts as newest after an automated store message or a system notice', async () => {
+    stubMessages([
+      message(3),
+      message(4, { message_type: 1 }),
+      message(5, { message_type: 3 }),
+    ]);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
+  });
+
+  it('is false once the assistant has already answered after it', async () => {
+    stubMessages([
+      message(3),
+      message(4, { message_type: 1, sender: { type: 'agent_bot' } }),
+    ]);
+    expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
+  });
+
   it('is false when the messages cannot be read', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     stubFetch(() => ({ status: 500 }));

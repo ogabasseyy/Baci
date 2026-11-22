@@ -36,10 +36,14 @@ export async function loadChatAutoReplyHistory(
 }
 
 /**
- * True only when the message being answered is still the newest one in the
- * conversation. A customer who writes again while the model works gets one
- * answer, from the newer message's own run, in the right order. Unreadable
- * counts as not latest: staying quiet is safer than answering out of turn.
+ * True only when no customer or assistant message has arrived after the one
+ * being answered. A customer who writes again while the model works gets one
+ * answer, from the newer message's own run, in the right order. Other
+ * outgoing messages (an automation or campaign post, a system notice) do not
+ * count: their webhooks start no assistant run, so treating them as newer
+ * would leave the customer with no answer. A person's reply is caught
+ * separately, by the conversation leaving `pending`. Unreadable counts as not
+ * latest: staying quiet is safer than answering out of turn.
  */
 export async function isLatestChatMessage(
   binding: ChatAutoReplyBinding,
@@ -48,5 +52,8 @@ export async function isLatestChatMessage(
 ): Promise<boolean> {
   const result = await listMerchantInboxMessages(binding, { conversationId });
   if (!result.ok) return false;
-  return result.messages.at(-1)?.id === messageId;
+  const latestTurn = result.messages.findLast(
+    (message) => message.sender === 'customer' || message.sender === 'assistant'
+  );
+  return latestTurn?.id === messageId;
 }

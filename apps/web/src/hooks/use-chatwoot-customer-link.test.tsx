@@ -442,4 +442,99 @@ describe('useChatwootCustomerLink', () => {
     unmount();
     expect(crossTabListeners).toHaveLength(0);
   });
+
+  it('bugfix: removes the previous account link before asking for the new one', async () => {
+    mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+
+    let finishB: (value: unknown) => void = () => {};
+    mocks.fetch.mockReturnValueOnce(
+      new Promise((resolve) => (finishB = resolve))
+    );
+    mocks.live.mockReturnValue({
+      customerId: 'c2',
+      merchantSlug: 'ogabassey',
+      userId: 'u2',
+    });
+    publishIdentity();
+
+    // Account A's note is already gone while B's request is still pending.
+    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    finishB(json(200, { token: 'account.b' }));
+    await waitFor(() =>
+      expect(setCustomAttributes).toHaveBeenLastCalledWith({
+        baci_customer_link: 'account.b',
+      })
+    );
+  });
+
+  it.each([
+    ['a server error', () => json(503)],
+    ['an answer with no token', () => json(200, {})],
+  ])('bugfix: leaves no link on the old account after %s on a switch', async (_name, answer) => {
+    mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+
+    mocks.fetch.mockResolvedValueOnce(answer());
+    mocks.live.mockReturnValue({
+      customerId: 'c2',
+      merchantSlug: 'ogabassey',
+      userId: 'u2',
+    });
+    publishIdentity();
+
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(setCustomAttributes).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(MARKER)).toBeNull();
+  });
+
+  it('bugfix: leaves no link on the old account when the switch request fails to connect', async () => {
+    mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+
+    mocks.fetch.mockRejectedValueOnce(new Error('offline'));
+    mocks.live.mockReturnValue({
+      customerId: 'c2',
+      merchantSlug: 'ogabassey',
+      userId: 'u2',
+    });
+    publishIdentity();
+
+    await waitFor(() =>
+      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+    );
+    expect(setCustomAttributes).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the link when a recheck cannot confirm the shopper', async () => {
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(7_000_000);
+    mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+
+    // A focus or cross-tab notice well after the last sync, hint unchanged.
+    now.mockReturnValue(7_060_000);
+    mocks.fetch.mockResolvedValueOnce(json(503));
+    notifyOtherTab();
+
+    await waitFor(() =>
+      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+    );
+  });
+
+  it('keeps the link when only the first check on page load fails', async () => {
+    window.localStorage.setItem(MARKER, '1');
+    mocks.fetch.mockResolvedValueOnce(json(503));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    expect(deleteCustomAttribute).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(MARKER)).toBe('1');
+  });
 });

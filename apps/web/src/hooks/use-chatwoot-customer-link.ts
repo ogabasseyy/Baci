@@ -93,7 +93,14 @@ export function useChatwootCustomerLink(
       writeMarker(markerKey, false);
     };
 
-    const sync = async () => {
+    /**
+     * `initial`: the chat just loaded; a failure keeps whatever link is there.
+     * `identity-change`: we know the account changed, so the previous account's
+     * note is removed before the new one is requested, never left in place.
+     * `recheck`: we cannot tell if the account changed (a focus or cross-tab
+     * notice), so a failed check removes the note rather than trust it.
+     */
+    const sync = async (mode: 'initial' | 'identity-change' | 'recheck') => {
       const mine = ++generation;
       lastSyncAt = Date.now();
       const stale = () => cancelled || mine !== generation;
@@ -101,6 +108,10 @@ export function useChatwootCustomerLink(
         clearLink();
         return;
       }
+      if (mode === 'identity-change') clearLink(true);
+      const failClosed = () => {
+        if (mode !== 'initial' && !stale()) clearLink(true);
+      };
       try {
         const response = await fetchWithCsrf(LINK_ENDPOINT, {
           method: 'POST',
@@ -111,13 +122,20 @@ export function useChatwootCustomerLink(
           clearLink();
           return;
         }
-        if (!response.ok) return;
+        if (!response.ok) {
+          failClosed();
+          return;
+        }
         const body: unknown = await response.json();
         const token =
           body !== null && typeof body === 'object'
             ? (body as { token?: unknown }).token
             : undefined;
-        if (stale() || typeof token !== 'string' || !token) return;
+        if (stale()) return;
+        if (typeof token !== 'string' || !token) {
+          failClosed();
+          return;
+        }
         chatwoot()?.setCustomAttributes?.({
           [CHAT_CUSTOMER_LINK_ATTRIBUTE]: token,
         });
@@ -125,10 +143,11 @@ export function useChatwootCustomerLink(
         writeMarker(markerKey, true);
       } catch {
         // Linking is a convenience; the chat works the same without it.
+        failClosed();
       }
     };
 
-    void sync();
+    void sync('initial');
     const unsubscribe = subscribeCustomerIdentityChange(() => {
       const live = getLiveCustomerIdentity();
       if (!live.userId && !live.customerId) {
@@ -137,7 +156,7 @@ export function useChatwootCustomerLink(
         clearLink(true);
         return;
       }
-      void sync();
+      void sync('identity-change');
     });
     // Another tab signed out or switched account: the cookies are shared, so
     // the session hint and the server session already show the new state.
@@ -154,7 +173,7 @@ export function useChatwootCustomerLink(
       const wait = RESYNC_MIN_MS - (Date.now() - lastSyncAt);
       if (changed || wait <= 0) {
         cancelTrailing();
-        void sync();
+        void sync(changed ? 'identity-change' : 'recheck');
         return;
       }
       // Too soon to ask again, but the notice may be a real account switch
@@ -164,7 +183,7 @@ export function useChatwootCustomerLink(
       if (trailing === undefined) {
         trailing = setTimeout(() => {
           trailing = undefined;
-          void sync();
+          void sync('recheck');
         }, wait);
       }
     });

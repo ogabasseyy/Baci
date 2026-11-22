@@ -153,6 +153,45 @@ describe('projectMerchantInboxConversation', () => {
         text: 'Do you have the Demo Phone X?',
         createdAt: CREATED_ISO,
       },
+      tags: [],
+      priority: null,
+      followUp: false,
+      snoozedUntil: null,
+    });
+  });
+
+  it('projects tags, priority and follow-up without leaking system labels', () => {
+    const result = projectMerchantInboxConversation(
+      {
+        ...conversation,
+        status: 'snoozed',
+        labels: ['handled-by-ai', 'tag-payment', 'follow-up'],
+        priority: 'high',
+        snoozed_until: CREATED + 3600,
+      },
+      2
+    );
+    expect(result).toMatchObject({
+      tags: ['payment'],
+      priority: 'high',
+      followUp: true,
+      snoozedUntil: new Date((CREATED + 3600) * 1000).toISOString(),
+    });
+  });
+
+  it('reads an ISO snooze time and ignores an unknown priority', () => {
+    const result = projectMerchantInboxConversation(
+      {
+        ...conversation,
+        status: 'snoozed',
+        priority: 'someday',
+        snoozed_until: '2026-11-23T08:00:00.000Z',
+      },
+      2
+    );
+    expect(result).toMatchObject({
+      priority: null,
+      snoozedUntil: '2026-11-23T08:00:00.000Z',
     });
   });
 
@@ -187,6 +226,10 @@ describe('projectMerchantInboxConversation', () => {
       customerName: 'Customer',
       lastActivityAt: null,
       lastMessage: null,
+      tags: [],
+      priority: null,
+      followUp: false,
+      snoozedUntil: null,
     });
   });
 

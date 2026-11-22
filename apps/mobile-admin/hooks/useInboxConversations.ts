@@ -1,11 +1,14 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
-import { inboxConversationsKey } from '@/lib/inbox-query-keys';
+import { inboxViewKey } from '@/lib/inbox-query-keys';
 import { fetchInboxConversations } from '@/lib/merchant-inbox-api';
-import type { InboxConversationsPage } from '@/schemas/merchant-inbox';
+import type {
+  InboxConversationsPage,
+  InboxView,
+} from '@/schemas/merchant-inbox';
 
-/** Shopper conversations, newest activity first, paged by the web API. */
-export function useInboxConversations() {
+/** Shopper chats for one view, paged by the web API. */
+export function useInboxConversations(view: InboxView = 'needs_reply') {
   const { merchant } = useMerchant();
 
   return useInfiniteQuery({
@@ -14,8 +17,8 @@ export function useInboxConversations() {
     getNextPageParam: (lastPage: InboxConversationsPage) =>
       lastPage.hasMore ? lastPage.page + 1 : undefined,
     queryFn: ({ pageParam }: { pageParam: number }) =>
-      fetchInboxConversations(pageParam),
-    queryKey: inboxConversationsKey(merchant?.id),
+      fetchInboxConversations(pageParam, view),
+    queryKey: inboxViewKey(merchant?.id, view),
     refetchInterval: 30_000,
     staleTime: 10_000,
   });

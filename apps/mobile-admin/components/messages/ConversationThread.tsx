@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
@@ -7,10 +7,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import { ConversationActions } from '@/components/messages/ConversationActions';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { ReplyBox } from '@/components/messages/ReplyBox';
 import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useInboxManage } from '@/hooks/useInboxManage';
 import { useInboxReply } from '@/hooks/useInboxReply';
 import { useInboxThread } from '@/hooks/useInboxThread';
 import { useTheme } from '@/hooks/useTheme';
@@ -24,6 +26,10 @@ export function ConversationThread({
   const { colors } = useTheme();
   const thread = useInboxThread(conversationId);
   const { messages, conversation, refetch } = thread;
+  const manage = useInboxManage({
+    conversationId,
+    merchantId: thread.merchantId,
+  });
   const reply = useInboxReply({
     conversationId,
     merchantId: thread.merchantId,
@@ -63,6 +69,15 @@ export function ConversationThread({
         </View>
       ) : (
         <AppKeyboardContainer align="start" scrollEnabled={false}>
+          {conversation ? (
+            <ConversationActions
+              busy={manage.isUpdating}
+              colors={colors}
+              conversation={conversation}
+              onDone={() => router.back()}
+              onUpdate={manage.update}
+            />
+          ) : null}
           <FlatList
             contentContainerStyle={styles.list}
             data={rows}

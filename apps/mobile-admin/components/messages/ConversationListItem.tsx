@@ -11,16 +11,22 @@ import {
   inboxMessageText,
 } from '@/lib/merchant-inbox-format';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
+import { ConversationMeta } from './ConversationMeta';
 
 interface ConversationListItemProps {
   colors: ThemeColors;
   conversation: InboxConversation;
   onPress: (id: number) => void;
+  /** Search results show the matching words instead of the last message. */
+  snippet?: string | null;
 }
 
 /** Only a shopper's message waiting at the end of the chat needs an answer. */
 export function needsReply(conversation: InboxConversation): boolean {
-  return conversation.lastMessage?.sender === 'customer';
+  return (
+    conversation.lastMessage?.sender === 'customer' &&
+    (conversation.status === 'open' || conversation.status === 'pending')
+  );
 }
 
 export function badgeText(conversation: InboxConversation): string | null {
@@ -49,6 +55,7 @@ export function ConversationListItem({
   colors,
   conversation,
   onPress,
+  snippet,
 }: ConversationListItemProps) {
   const waiting = needsReply(conversation);
   const badge = badgeText(conversation);
@@ -108,8 +115,9 @@ export function ConversationListItem({
             { color: waiting ? colors.text : colors.textSecondary },
           ]}
         >
-          {previewText(conversation)}
+          {snippet || previewText(conversation)}
         </Text>
+        <ConversationMeta colors={colors} conversation={conversation} />
         {badge ? (
           <View style={[styles.badge, { backgroundColor: colors.goldLight }]}>
             <View style={[styles.dot, { backgroundColor: colors.gold }]} />

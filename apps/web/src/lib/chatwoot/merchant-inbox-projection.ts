@@ -5,6 +5,9 @@ import {
   providerInboxConversationSchema,
   providerInboxMessageSchema,
 } from '@/schemas/merchant-inbox';
+import { INBOX_PRIORITIES } from '@/schemas/merchant-inbox-manage';
+
+import { hasFollowUpLabel, tagsFromLabels } from './merchant-inbox-labels';
 
 const MAX_TEXT_LENGTH = 4_000;
 const MAX_NAME_LENGTH = 80;
@@ -12,11 +15,19 @@ const INCOMING = 0;
 const OUTGOING = 1;
 const TEMPLATE = 3;
 const STATUSES = new Set(['open', 'resolved', 'pending', 'snoozed']);
+const PRIORITIES = new Set<string>(INBOX_PRIORITIES);
 
 function toIso(seconds: number | null | undefined): string | null {
   if (typeof seconds !== 'number') return null;
   const date = new Date(seconds * 1000);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function snoozeToIso(value: number | string | null | undefined): string | null {
+  if (typeof value === 'number') return toIso(value);
+  if (typeof value !== 'string' || !value) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
 /** Truncates without splitting a surrogate pair at the boundary. */
@@ -126,5 +137,15 @@ export function projectMerchantInboxConversation(
     lastMessage: conversation.last_non_activity_message
       ? projectMerchantInboxMessage(conversation.last_non_activity_message)
       : null,
+    tags: tagsFromLabels(conversation.labels ?? []),
+    priority:
+      conversation.priority && PRIORITIES.has(conversation.priority)
+        ? (conversation.priority as (typeof INBOX_PRIORITIES)[number])
+        : null,
+    followUp: hasFollowUpLabel(conversation.labels ?? []),
+    snoozedUntil:
+      conversation.status === 'snoozed'
+        ? snoozeToIso(conversation.snoozed_until)
+        : null,
   };
 }

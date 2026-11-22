@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INBOX_PRIORITIES } from './merchant-inbox-manage';
 
 const providerId = z.number().int().positive().safe();
 const unixSeconds = z.number().int().nonnegative().safe();
@@ -24,6 +25,10 @@ export const providerInboxConversationSchema = z.object({
   inbox_id: providerId,
   status: z.string(),
   unread_count: z.number().int().nonnegative().nullish(),
+  labels: z.array(z.string()).max(100).nullish(),
+  priority: z.string().nullish(),
+  // Seconds or an ISO string, depending on the provider build.
+  snoozed_until: z.union([unixSeconds, z.string()]).nullish(),
   last_activity_at: unixSeconds.nullish(),
   created_at: unixSeconds.nullish(),
   meta: z
@@ -60,6 +65,10 @@ export const merchantInboxListQuerySchema = z.object({
   status: z
     .enum(['open', 'resolved', 'pending', 'snoozed', 'all'])
     .default('all'),
+  /** A smart view; when present it decides the status filter itself. */
+  view: z
+    .enum(['all', 'needs_reply', 'unread', 'follow_up', 'done'])
+    .optional(),
 });
 
 export const merchantInboxMessagesQuerySchema = z.object({
@@ -95,6 +104,12 @@ export type MerchantInboxConversation = {
   customerName: string;
   lastActivityAt: string | null;
   lastMessage: MerchantInboxMessage | null;
+  /** Merchant tags (slugs). Optional so older fixtures and clients still type-check. */
+  tags?: string[];
+  priority?: (typeof INBOX_PRIORITIES)[number] | null;
+  /** Marked "follow up": snoozed, or reopened and due. */
+  followUp?: boolean;
+  snoozedUntil?: string | null;
 };
 
 /** Baci's own inbox responses, validated again in the browser. */
@@ -113,6 +128,10 @@ export const merchantInboxConversationSchema = z.object({
   customerName: z.string().min(1).max(80),
   lastActivityAt: z.string().min(1).max(40).nullable(),
   lastMessage: merchantInboxMessageSchema.nullable(),
+  tags: z.array(z.string().max(30)).max(10).optional(),
+  priority: z.enum(INBOX_PRIORITIES).nullable().optional(),
+  followUp: z.boolean().optional(),
+  snoozedUntil: z.string().min(1).max(40).nullable().optional(),
 }) satisfies z.ZodType<MerchantInboxConversation>;
 
 export const merchantInboxConversationsResponseSchema = z.object({

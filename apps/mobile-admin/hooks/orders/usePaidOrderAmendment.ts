@@ -89,9 +89,12 @@ export function usePaidOrderAmendment(orderId: string, merchantId: string) {
         (): ConfirmationOutcome => 'unknown'
       );
       if (recovered !== 'unknown') return recovered;
+      // The confirmation RPC checks for an existing commit before validating
+      // the preview or reserving its POS reference.
       if (
         error instanceof PaidOrderAmendmentError &&
-        error.code === 'preview_stale'
+        (error.code === 'preview_stale' ||
+          error.code === 'staff_pos_receipt_used')
       ) {
         await clearPending();
         refreshOrder();

@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { OrderAmendmentEvidenceSelect } from './order-amendment-evidence-select';
 import {
   type AmendmentDialogProps,
   useOrderAmendmentDialog,
@@ -188,35 +189,12 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
                       : 'The order total is unchanged.'}
               </p>
               {requiresBankEvidence && (
-                <div className="grid gap-1.5">
-                  <Label htmlFor="amendment-bank-evidence">
-                    Verified top-up
-                  </Label>
-                  <select
-                    id="amendment-bank-evidence"
-                    className={selectStyle}
-                    value={bankEvidenceId}
-                    onChange={(event) => setBankEvidenceId(event.target.value)}
-                  >
-                    <option value="">
-                      {preview.bankEvidence?.length
-                        ? 'Select the payment'
-                        : 'No matching payment verified'}
-                    </option>
-                    {preview.bankEvidence?.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.method === 'cash'
-                          ? 'Cash'
-                          : entry.method === 'pos'
-                            ? 'POS'
-                            : 'Bank transfer'}{' '}
-                        · {money(entry.amountMinor)} ·{' '}
-                        {new Date(entry.occurredAt).toLocaleString()} ·{' '}
-                        {entry.id.slice(0, 8)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <OrderAmendmentEvidenceSelect
+                  entries={preview.bankEvidence}
+                  value={bankEvidenceId}
+                  onChange={setBankEvidenceId}
+                  money={money}
+                />
               )}
               {preview.adjustmentMinor < 0 && !canRefund && (
                 <p role="status" className="text-sm">

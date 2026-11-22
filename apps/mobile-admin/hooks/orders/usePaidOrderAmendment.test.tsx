@@ -171,4 +171,21 @@ describe('usePaidOrderAmendment', () => {
     expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(storageKey);
     await waitFor(() => expect(result.current.pending).toBeNull());
   });
+
+  it('clears a recovered confirmation when the POS receipt is already used', async () => {
+    persisted = JSON.stringify(confirmation);
+    const { result } = await openHook();
+    const rejected = new PaidOrderAmendmentError(
+      'This POS receipt reference has already been recorded.',
+      409,
+      'staff_pos_receipt_used'
+    );
+    mocks.confirm.mockRejectedValueOnce(rejected);
+    expect(result.current.pending).toEqual(confirmation);
+    await act(async () => {
+      await expect(result.current.confirm(confirmation)).rejects.toBe(rejected);
+    });
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(storageKey);
+    await waitFor(() => expect(result.current.pending).toBeNull());
+  });
 });

@@ -21,6 +21,11 @@ INSERT INTO public.merchants (id, email, user_id, country)
 VALUES ('11111111-1111-4111-8111-111111111111', 'dva-fence@example.com',
   '22222222-2222-4222-8222-222222222222', 'NG');
 
+CREATE FUNCTION pg_temp.as_service() RETURNS void LANGUAGE sql AS $$
+  -- The Paystack alias guards only skip their timestamp rules for service writes.
+  SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
+$$;
+
 CREATE FUNCTION pg_temp.make_order(p_id uuid, p_number text) RETURNS void
 LANGUAGE sql AS $$
   INSERT INTO public.orders (id, merchant_id, order_number, total, currency,
@@ -64,6 +69,7 @@ $$;
 
 -- 1. An account row with no assigned_at may be a legacy live account: fence it.
 SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000001', 'FENCE-1');
+SELECT pg_temp.as_service();
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
   account_name, provider, assigned_at, expires_at)
 VALUES ('a0000000-0000-4000-8000-000000000001', '0000000001', 'Test Bank',
@@ -81,6 +87,7 @@ END $$;
 
 -- 2. NULL expires_at falls back to the 90 minute ceiling.
 SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000002', 'FENCE-2');
+SELECT pg_temp.as_service();
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
   account_name, provider, assigned_at, expires_at, assignment_customer_email,
   payable_amount)
@@ -96,6 +103,7 @@ END $$;
 
 -- 3. An older expired alias must not hide the newer live one.
 SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000003', 'FENCE-3');
+SELECT pg_temp.as_service();
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
   account_name, provider, assigned_at, expires_at, assignment_customer_email,
   payable_amount)
@@ -143,6 +151,7 @@ END $$;
 
 -- 6. Older expired aliases must not block releasing a stuck claim.
 SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000006', 'FENCE-6');
+SELECT pg_temp.as_service();
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
   account_name, provider, assigned_at, expires_at, assignment_customer_email,
   payable_amount)
@@ -169,6 +178,7 @@ END $$;
 
 -- 7. A legacy row with no assigned_at fences the order even beside a dated expired alias.
 SELECT pg_temp.make_order('a0000000-0000-4000-8000-000000000007', 'FENCE-7');
+SELECT pg_temp.as_service();
 INSERT INTO public.order_payment_accounts (order_id, account_number, bank_name,
   account_name, provider, assigned_at, expires_at)
 VALUES

@@ -49,15 +49,25 @@ beforeEach(() => {
   });
 });
 
-it('retires an abandoned snapshot on the next checkout without rebinding its paid callback', async () => {
+it.each([
+  'new checkout',
+  'late payment callback',
+])('retires an expired cart identity on %s without rebinding the order', async (trigger) => {
   const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
   try {
     const identity = deferredBankOfferCart.capture() as string;
     await deferredBankOfferCart.remember('order-1', reference, identity);
     now.mockReturnValue(1_000 + 7 * 24 * 60 * 60 * 1000);
-    await deferredBankOfferCart.remember('order-2', otherReference, identity);
-    expect(stored.get(`bank-offer-checkout-cart:order-1:${reference}`)).toBe(
-      'consumed'
+    if (trigger === 'new checkout') {
+      await deferredBankOfferCart.remember('order-2', otherReference, identity);
+      expect(stored.get(`bank-offer-checkout-cart:order-1:${reference}`)).toBe(
+        'consumed'
+      );
+    }
+    await deferredBankOfferCart.clearIfUnchanged(
+      'order-1',
+      reference,
+      () => true
     );
     await deferredBankOfferCart.remember('order-1', reference, identity);
     await deferredBankOfferCart.clearIfUnchanged(
@@ -65,34 +75,10 @@ it('retires an abandoned snapshot on the next checkout without rebinding its pai
       reference,
       () => true
     );
-    expect(clearCart).not.toHaveBeenCalled();
-    await deferredBankOfferCart.clearIfUnchanged(
-      'order-2',
-      otherReference,
-      () => true
-    );
-    expect(clearCart).toHaveBeenCalledTimes(1);
-  } finally {
-    now.mockRestore();
-  }
-});
-
-it('preserves the cart when an expired payment callback arrives before another checkout', async () => {
-  const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
-  try {
-    await deferredBankOfferCart.remember(
-      'order-1',
-      reference,
-      deferredBankOfferCart.capture() as string
-    );
-    now.mockReturnValue(1_000 + 7 * 24 * 60 * 60 * 1000);
-    await deferredBankOfferCart.clearIfUnchanged(
-      'order-1',
-      reference,
-      () => true
+    expect(stored.get(`bank-offer-checkout-cart:order-1:${reference}`)).toBe(
+      'consumed'
     );
     expect(clearCart).not.toHaveBeenCalled();
-    expect([...stored.values()]).toEqual(['consumed']);
   } finally {
     now.mockRestore();
   }

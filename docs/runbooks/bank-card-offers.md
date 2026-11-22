@@ -8,6 +8,8 @@ The configurable bank-code allowlist is Wema (`035`) and Sterling (`232`). UBA (
 
 Activation for Wema or Sterling uses the server offer configuration. Adding an issuer outside that pair requires a reviewed database allowlist change and matching Paystack issuer validation as well as configuration.
 
+The server checks that the offer is enabled and has started before signing the quote. The checkout RPC also rejects an expired quote against the database clock before creating a new order, and the Paystack attempt claim checks the saved expiry again. An idempotent replay returns the saved order without creating a new quote. Capture verification and refunds use the saved terms after the offer closes.
+
 Before enabling a bank offer, the payments team records the bank approval, confirms the exact issuer label and refund behavior with Paystack, and assigns a duty owner for capture and terminal reviews. With the offer still disabled, confirm that both review types reach the team's alerting and agree on a response target. Review-gated checkout directs buyers to order history or support while that owner reconciles the original payment reference.
 
 Bank offers require a signed-in shopper whose account email matches the checkout email. The saved order must belong to that customer before a payment attempt can be claimed. Guest shoppers can still use standard checkout. A fresh bank-offer order requires Paystack to be enabled and a valid subaccount before inventory is reserved.
@@ -20,7 +22,7 @@ A bank-offer order requires one verified Paystack capture at the saved discounte
 
 The database generates the bank-offer reference from a UUID. The checkout initializer parses the claim with the canonical reference schema before building the Paystack request. Issuer matching uses the bank code from the required saved policy. REDVAULT uses the shared evidence verifier with its configured issuer label.
 
-The canonical reference is `BCO-` followed by 32 lowercase hexadecimal characters. The web and app reserve every casing of the prefix so a malformed reference cannot fall through to standard payment verification. Authenticated verification and the app’s order screen reject incorrect casing and use the exact reference issued by checkout.
+The canonical reference is `BCO-` followed by 32 lowercase hexadecimal characters. The web and app reserve every casing of the prefix so a malformed reference cannot fall through to standard payment verification. Authenticated verification and the app’s order screen reject incorrect casing and use the exact reference issued by checkout. Only canonical references can create or look up mobile cart snapshots.
 
 A signed-in customer can replay an already-created order with the same idempotency key and checkout request after an offer is disabled. This recovers the saved order and its post-creation work. Cache invalidation may safely repeat. The analytics recorder reuses the `platform_purchase:<orderId>` key, which deduplicates both the platform event and its delivery enqueue. The replay hash uses the validated checkout body with stable key ordering. A changed value under the same key is a conflict, including changing payment methods. Start a new checkout with a new key if the shopper switches methods. The database rejects reuse before creating another order and both checkout paths return `CHECKOUT_IDEMPOTENCY_CONFLICT`. Fresh orders still require an enabled offer, and payment attempts remain subject to the saved deadline.
 

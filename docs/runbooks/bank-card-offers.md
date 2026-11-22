@@ -70,6 +70,8 @@ Native checkout captures the submitted cart before creating the order and saves 
 
 For each verified bank-offer order, the app keeps a small consumed marker keyed to the order and reference. This also covers verification that finishes before the initial snapshot is stored. It prevents a delayed initializer from writing cleanup state after payment is confirmed.
 
+New cart snapshots can clear a matching cart for up to seven days after checkout starts. Later verification preserves the cart and replaces the expired snapshot with the consumed marker. A fresh bank-offer checkout also retires expired or undated snapshots for other orders. This leaves payment confirmation and reconciliation available after the cart snapshot expires.
+
 The snapshot identifies the submitted basket through its generation, shared-cart identity, and item details. Changing only delivery, tax, wrapping, or another checkout fee does not change the basket identity. The saved order and Paystack verification enforce the final payable separately.
 
 Snapshot storage failures report the operation and failure stage through existing app analytics. These events carry no order ID, payment reference, cart contents, or raw error. A failed cleanup keeps the snapshot available for a later verified visit.

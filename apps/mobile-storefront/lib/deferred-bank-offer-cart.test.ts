@@ -8,6 +8,7 @@ import { deferredBankOfferCart } from './deferred-bank-offer-cart';
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
   setItem: jest.fn(),
+  getAllKeys: jest.fn(),
 }));
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: {
@@ -36,6 +37,9 @@ function cart(quantity = 1) {
 beforeEach(() => {
   jest.clearAllMocks();
   stored.clear();
+  jest
+    .mocked(AsyncStorage.getAllKeys)
+    .mockImplementation(async () => [...stored.keys()]);
   cart();
   jest
     .mocked(AsyncStorage.getItem)
@@ -43,6 +47,55 @@ beforeEach(() => {
   jest.mocked(AsyncStorage.setItem).mockImplementation(async (key, value) => {
     stored.set(key, value);
   });
+});
+
+it('retires an abandoned snapshot on the next checkout without rebinding its paid callback', async () => {
+  const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+  try {
+    const identity = deferredBankOfferCart.capture() as string;
+    await deferredBankOfferCart.remember('order-1', reference, identity);
+    now.mockReturnValue(1_000 + 7 * 24 * 60 * 60 * 1000);
+    await deferredBankOfferCart.remember('order-2', otherReference, identity);
+    expect(stored.get(`bank-offer-checkout-cart:order-1:${reference}`)).toBe(
+      'consumed'
+    );
+    await deferredBankOfferCart.remember('order-1', reference, identity);
+    await deferredBankOfferCart.clearIfUnchanged(
+      'order-1',
+      reference,
+      () => true
+    );
+    expect(clearCart).not.toHaveBeenCalled();
+    await deferredBankOfferCart.clearIfUnchanged(
+      'order-2',
+      otherReference,
+      () => true
+    );
+    expect(clearCart).toHaveBeenCalledTimes(1);
+  } finally {
+    now.mockRestore();
+  }
+});
+
+it('preserves the cart when an expired payment callback arrives before another checkout', async () => {
+  const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+  try {
+    await deferredBankOfferCart.remember(
+      'order-1',
+      reference,
+      deferredBankOfferCart.capture() as string
+    );
+    now.mockReturnValue(1_000 + 7 * 24 * 60 * 60 * 1000);
+    await deferredBankOfferCart.clearIfUnchanged(
+      'order-1',
+      reference,
+      () => true
+    );
+    expect(clearCart).not.toHaveBeenCalled();
+    expect([...stored.values()]).toEqual(['consumed']);
+  } finally {
+    now.mockRestore();
+  }
 });
 
 it('does not snapshot a cart before storage hydration', () => {
@@ -157,7 +210,8 @@ it('retains the first snapshot when two callbacks save concurrently', async () =
     deferredBankOfferCart.remember('order-1', reference, first),
     deferredBankOfferCart.remember('order-1', reference, edited),
   ]);
-  expect([...stored.values()]).toEqual([first]);
+  expect([...stored.values()]).toEqual([expect.stringMatching(/^\d+\n/)]);
+  expect([...stored.values()][0]?.split('\n')[1]).toBe(first);
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
     reference,
@@ -200,7 +254,7 @@ it('preserves the original marker for retry when clearing fails', async () => {
       { operation: 'cleanup', stage: 'clear_cart' },
     ],
   ]);
-  expect([...stored.values()]).toEqual([identity]);
+  expect([...stored.values()][0]?.split('\n')[1]).toBe(identity);
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
     reference,

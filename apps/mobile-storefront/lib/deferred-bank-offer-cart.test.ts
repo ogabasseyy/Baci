@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { expect, it, jest } from '@jest/globals';
 import {
   AsyncStorage,
@@ -103,6 +104,8 @@ it('clears only the unchanged cart for the matching verified order and reference
     reference,
     identity as string
   );
+  expect([...stored.values()][0]).toMatch(/^\d+\nsha256:[a-f0-9]{64}$/);
+  expect([...stored.values()][0]).not.toContain('product-1');
   await deferredBankOfferCart.clearIfUnchanged(
     'order-2',
     reference,
@@ -185,7 +188,9 @@ it('retains the first snapshot when two callbacks save concurrently', async () =
     deferredBankOfferCart.remember('order-1', reference, edited),
   ]);
   expect([...stored.values()]).toEqual([expect.stringMatching(/^\d+\n/)]);
-  expect([...stored.values()][0]?.split('\n')[1]).toBe(first);
+  expect([...stored.values()][0]?.split('\n')[1]).toBe(
+    `sha256:${createHash('sha256').update(first).digest('hex')}`
+  );
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
     reference,
@@ -217,6 +222,7 @@ it('does not attach a later cart to a paid order that had no snapshot', async ()
 it('preserves the original marker for retry when clearing fails', async () => {
   const identity = deferredBankOfferCart.capture() as string;
   await deferredBankOfferCart.remember('order-1', reference, identity);
+  const saved = [...stored.values()];
   clearCart.mockRejectedValueOnce(new Error('retryable cart write'));
   await expect(
     deferredBankOfferCart.clearIfUnchanged('order-1', reference, () => true)
@@ -228,7 +234,7 @@ it('preserves the original marker for retry when clearing fails', async () => {
       { operation: 'cleanup', stage: 'clear_cart' },
     ],
   ]);
-  expect([...stored.values()][0]?.split('\n')[1]).toBe(identity);
+  expect([...stored.values()]).toEqual(saved);
   await deferredBankOfferCart.clearIfUnchanged(
     'order-1',
     reference,

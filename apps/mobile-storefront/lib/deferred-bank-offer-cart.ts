@@ -1,10 +1,12 @@
 import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
 import { logger } from '@/lib/logger';
 import { useCartStore } from '@/stores/cart-store';
 
 const CONSUMED_MARKER = 'consumed';
 const SNAPSHOT_PREFIX = 'bank-offer-checkout-cart:';
+const DIGEST_PREFIX = 'sha256:';
 const SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const pendingCartOperations = new Map<string, Promise<void>>();
 
@@ -15,7 +17,8 @@ async function runCartStep<T>(
     | 'read_snapshot'
     | 'write_snapshot'
     | 'clear_cart'
-    | 'mark_consumed',
+    | 'mark_consumed'
+    | 'digest_snapshot',
   run: () => Promise<T>
 ): Promise<T> {
   try {
@@ -93,6 +96,10 @@ function readSnapshot(value: string) {
   };
 }
 
+async function digestCartIdentity(identity: string) {
+  return `${DIGEST_PREFIX}${await digestStringAsync(CryptoDigestAlgorithm.SHA256, identity)}`;
+}
+
 async function expireAbandonedSnapshots(currentKey: string, now: number) {
   const keys = await runCartStep('expire', 'list_snapshots', () =>
     AsyncStorage.getAllKeys()
@@ -133,8 +140,11 @@ export const deferredBankOfferCart = {
         AsyncStorage.getItem(key)
       );
       if (!existing) {
+        const digest = await runCartStep('save', 'digest_snapshot', () =>
+          digestCartIdentity(identity)
+        );
         await runCartStep('save', 'write_snapshot', () =>
-          AsyncStorage.setItem(key, `${now + SNAPSHOT_MAX_AGE_MS}\n${identity}`)
+          AsyncStorage.setItem(key, `${now + SNAPSHOT_MAX_AGE_MS}\n${digest}`)
         );
         saved = true;
       }
@@ -162,7 +172,20 @@ export const deferredBankOfferCart = {
         (snapshot.expiresAt === undefined || snapshot.expiresAt > Date.now())
       ) {
         if (!useCartStore.persist?.hasHydrated()) return;
-        if (cartIdentity() === snapshot.identity) {
+        const identity = cartIdentity();
+        const digest =
+          identity && snapshot.identity.startsWith(DIGEST_PREFIX)
+            ? await runCartStep('cleanup', 'digest_snapshot', () =>
+                digestCartIdentity(identity)
+              )
+            : identity;
+        // A cart edit or navigation can arrive while the native hash is pending.
+        if (!isActive()) return;
+        if (
+          digest === snapshot.identity &&
+          cartIdentity() === identity &&
+          (snapshot.expiresAt === undefined || snapshot.expiresAt > Date.now())
+        ) {
           await runCartStep('cleanup', 'clear_cart', () =>
             useCartStore.getState().clearCart()
           );

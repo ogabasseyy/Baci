@@ -201,11 +201,11 @@ export function fetchJson(url: string, init?: RequestInit): Promise<Response> {
   return fetch(url, { referrerPolicy: 'no-referrer', ...init });
 }
 
-/** Remove pairing secrets while preserving the shopper's path and query. */
 export function reloadCartHandoffDocument(): void {
   window.location.reload();
 }
 
+/** Remove pairing secrets while preserving the shopper's path and query. */
 export function redactHandoffFragment() {
   window.history.replaceState(
     null,

@@ -7,6 +7,11 @@ import { useCart } from '@/hooks/cart';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
 import { resolveGuestCartTransfer } from '@/lib/resolve-guest-cart-transfer';
+import {
+  cartHandoffPairingTokenSchema,
+  cartHandoffPreviewQuerySchema,
+  cartHandoffRedeemRequestSchema,
+} from '@/schemas/cart';
 import { CartAccountLink } from '../../cart/cart-account-link';
 import { CartHandoff } from '../../cart/cart-handoff';
 import {
@@ -72,16 +77,31 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
   }, [merchantSlug]);
 
   useEffect(() => {
+    let reloading = false;
     function acceptHandoffNavigation() {
-      if (parseHandoffPairing(window.location.hash)) {
-        // Enter through the cold-load handoff gate. The mounted cart can
-        // still have a bootstrap in flight that could overwrite its proof.
-        reloadCartHandoffDocument();
-      }
+      const handoff = parseHandoffPairing(window.location.hash);
+      if (
+        reloading ||
+        !handoff ||
+        !cartHandoffPairingTokenSchema.safeParse(handoff.token).success ||
+        !cartHandoffRedeemRequestSchema.shape.token.safeParse(handoff.token).success ||
+        !cartHandoffPreviewQuerySchema.safeParse({ handoff_id: handoff.handoffId }).success
+      ) return;
+
+      // The mounted cart can still have a bootstrap in flight. A reload
+      // enters through the existing handoff gate before that bootstrap starts.
+      reloading = true;
+      reloadCartHandoffDocument();
     }
 
+    const navigation = window.navigation;
+    // History API writes can change the fragment without emitting hashchange.
+    navigation?.addEventListener('currententrychange', acceptHandoffNavigation);
     window.addEventListener('hashchange', acceptHandoffNavigation);
-    return () => window.removeEventListener('hashchange', acceptHandoffNavigation);
+    return () => {
+      navigation?.removeEventListener('currententrychange', acceptHandoffNavigation);
+      window.removeEventListener('hashchange', acceptHandoffNavigation);
+    };
   }, []);
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);

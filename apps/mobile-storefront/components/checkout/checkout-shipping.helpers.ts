@@ -166,6 +166,8 @@ export const fetchShippingQuotes = async ({
   try {
     const merchantId = getQuoteMerchantId();
     const response = await fetch(`${apiUrl}/api/shipping/quotes`, {
+      // Mobile checkout always requests fresh POST quotes; the cached GET
+      // continuation is not used to restore this checkout's selected quote.
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

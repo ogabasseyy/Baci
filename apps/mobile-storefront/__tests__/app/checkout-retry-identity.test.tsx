@@ -57,7 +57,11 @@ describe('checkout retry identity', () => {
   it('replaces a rejected GIG quote before launching Credit Direct', async () => {
     enableBnplPaymentSettings();
     const fallbackFetch = global.fetch;
-    const quoteRequests: Array<{ quoteId: string; address: string }> = [];
+    const quoteRequests: Array<{
+      method: string | undefined;
+      quoteId: string;
+      address: string;
+    }> = [];
     global.fetch = jest.fn(async (input, init) => {
       if (!String(input).endsWith('/api/shipping/quotes')) {
         return fallbackFetch(input, init);
@@ -66,7 +70,11 @@ describe('checkout retry identity', () => {
       const quoteId = quoteRequests.length
         ? '7a9db688-8c3b-41c4-8f16-7fc24a045c13'
         : '5ec1bd0e-7838-4379-a9e6-d47167f1d0c9';
-      quoteRequests.push({ quoteId, address: receiver.address });
+      quoteRequests.push({
+        method: init?.method,
+        quoteId,
+        address: receiver.address,
+      });
       return {
         ok: true,
         json: async () => ({
@@ -132,6 +140,7 @@ describe('checkout retry identity', () => {
       );
       expect(quoteRequests).toHaveLength(2);
     });
+    expect(quoteRequests.map(({ method }) => method)).toEqual(['POST', 'POST']);
     expect(mockRouterPush).not.toHaveBeenCalled();
     expect(mockTrackError).toHaveBeenCalledWith(
       'checkout_shipping_quote_rejected',

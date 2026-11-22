@@ -203,46 +203,48 @@ it('keeps the enforced policy intact while previewing storefront CSP locally by 
   }
 });
 
-it('does not preview the storefront candidate outside local non-production opt-in', () => {
+it.each([
+  {
+    gate: 'production',
+    nodeEnv: 'production',
+    routeType: 'storefront',
+    isLocal: true,
+  },
+  {
+    gate: 'remote host',
+    nodeEnv: 'test',
+    routeType: 'storefront',
+    isLocal: false,
+  },
+  { gate: 'API route', nodeEnv: 'test', routeType: 'api', isLocal: true },
+] as const)('keeps the report-only preview off for $gate', ({
+  nodeEnv,
+  routeType,
+  isLocal,
+}) => {
   vi.stubEnv('BACI_CSP_REPORT_ONLY_PREVIEW', 'true');
-  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('NODE_ENV', nodeEnv);
   try {
-    const production = applySecurityHeaders(
+    const response = applySecurityHeaders(
       NextResponse.next(),
-      '/checkout',
+      routeType === 'api' ? '/api/checkout' : '/checkout',
       'Mozilla',
-      'storefront',
-      true
+      routeType,
+      isLocal
     );
-    const remote = applySecurityHeaders(
-      NextResponse.next(),
-      '/checkout',
-      'Mozilla',
-      'storefront',
-      false
-    );
-    const api = applySecurityHeaders(
-      NextResponse.next(),
-      '/api/checkout',
-      'Mozilla',
-      'api',
-      true
-    );
-
     expect(
-      production.headers.get('Content-Security-Policy-Report-Only')
+      response.headers.get('Content-Security-Policy-Report-Only')
     ).toBeNull();
-    expect(
-      remote.headers.get('Content-Security-Policy-Report-Only')
-    ).toBeNull();
-    expect(api.headers.get('Content-Security-Policy-Report-Only')).toBeNull();
   } finally {
     vi.unstubAllEnvs();
   }
 });
 
-it('keeps the report-only preview off when its opt-in flag is false', () => {
-  vi.stubEnv('BACI_CSP_REPORT_ONLY_PREVIEW', 'false');
+it.each([
+  undefined,
+  'false',
+])('keeps the report-only preview off for opt-in value %s', (flag) => {
+  vi.stubEnv('BACI_CSP_REPORT_ONLY_PREVIEW', flag);
   vi.stubEnv('NODE_ENV', 'test');
   try {
     const response = applySecurityHeaders(

@@ -6,12 +6,16 @@ const mocks = vi.hoisted(() => ({
   hint: vi.fn(),
   subscribe: vi.fn(),
   live: vi.fn(),
+  crossTab: vi.fn(),
 }));
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
 vi.mock('@/contexts/customer-live-identity', () => ({
   subscribeCustomerIdentityChange: mocks.subscribe,
   getLiveCustomerIdentity: mocks.live,
+}));
+vi.mock('@/contexts/customer-identity-invalidation', () => ({
+  subscribeCustomerIdentityInvalidation: mocks.crossTab,
 }));
 vi.mock('@/contexts/customer-session-hint', () => ({
   readCustomerSessionHint: mocks.hint,
@@ -44,6 +48,16 @@ beforeEach(() => {
     userId: 'u1',
   });
   identityListeners.length = 0;
+  crossTabListeners.length = 0;
+  mocks.crossTab.mockImplementation((listener: () => void) => {
+    crossTabListeners.push(listener);
+    return {
+      available: true,
+      unsubscribe: () => {
+        crossTabListeners.splice(crossTabListeners.indexOf(listener), 1);
+      },
+    };
+  });
   mocks.subscribe.mockImplementation((listener: () => void) => {
     identityListeners.push(listener);
     return () => {
@@ -51,6 +65,12 @@ beforeEach(() => {
     };
   });
 });
+
+/** Simulates a notice from another tab (or a focus/visibility event). */
+const crossTabListeners: Array<() => void> = [];
+const notifyOtherTab = () => {
+  for (const listener of [...crossTabListeners]) listener();
+};
 
 /** Simulates the auth context publishing an identity change. */
 const identityListeners: Array<() => void> = [];
@@ -246,5 +266,89 @@ describe('useChatwootCustomerLink', () => {
     publishIdentity();
 
     expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+  });
+
+  it('bugfix: removes the link when the shopper signs out in another tab', () => {
+    window.localStorage.setItem(MARKER, '1');
+    mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+
+    // The other tab signed out: the shared session-hint cookie now says so.
+    mocks.hint.mockReturnValue('0');
+    notifyOtherTab();
+
+    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(window.localStorage.getItem(MARKER)).toBeNull();
+  });
+
+  it('bugfix: still removes it when storage is blocked and no marker survived', () => {
+    mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+
+    mocks.hint.mockReturnValue(null);
+    notifyOtherTab();
+
+    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+  });
+
+  it('bugfix: replaces the link when another tab switched to a different account', async () => {
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    mocks.fetch
+      .mockResolvedValueOnce(json(200, { token: 'account.a' }))
+      .mockResolvedValueOnce(json(200, { token: 'account.b' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() =>
+      expect(setCustomAttributes).toHaveBeenCalledWith({
+        baci_customer_link: 'account.a',
+      })
+    );
+
+    // Long enough after the last sync that a notice is worth a fresh check.
+    now.mockReturnValue(1_060_000);
+    notifyOtherTab();
+
+    await waitFor(() =>
+      expect(setCustomAttributes).toHaveBeenLastCalledWith({
+        baci_customer_link: 'account.b',
+      })
+    );
+  });
+
+  it('does not ask the server again for a burst of focus notices', async () => {
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(2_000_000);
+    mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+
+    now.mockReturnValue(2_001_000);
+    notifyOtherTab();
+    notifyOtherTab();
+
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops an answer that arrives after another tab signed out', async () => {
+    let finish: (value: unknown) => void = () => {};
+    mocks.fetch.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+
+    mocks.hint.mockReturnValue('0');
+    notifyOtherTab();
+    finish(json(200, { token: 'old.account.token' }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(setCustomAttributes).not.toHaveBeenCalled();
+  });
+
+  it('stops listening to other tabs when the chat goes away', () => {
+    const { unmount } = renderHook(() =>
+      useChatwootCustomerLink('ogabassey', true)
+    );
+    expect(crossTabListeners).toHaveLength(1);
+    unmount();
+    expect(crossTabListeners).toHaveLength(0);
   });
 });

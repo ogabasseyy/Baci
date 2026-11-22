@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { subscribeCustomerIdentityInvalidation } from '@/contexts/customer-identity-invalidation';
 import {
   getLiveCustomerIdentity,
   subscribeCustomerIdentityChange,
@@ -13,6 +14,8 @@ type ChatwootContactApi = {
 };
 
 const LINK_ENDPOINT = '/api/storefront/chatwoot/customer-link';
+/** Focus and cross-tab notices come in bursts; resync at most this often. */
+const RESYNC_MIN_MS = 10_000;
 
 /**
  * Stores whose chat link was set during this page's life. The persisted marker
@@ -50,7 +53,7 @@ function writeMarker(key: string, linked: boolean): void {
  * It follows the shopper while the page stays open: signing in adds the note,
  * signing out removes it, switching accounts replaces it. A request still in
  * flight when the identity changes is dropped, so an old answer can never
- * overwrite the new state.
+ * overwrite the new state. Changes made in another tab are followed too.
  */
 export function useChatwootCustomerLink(
   storeSlug: string | undefined,
@@ -62,6 +65,8 @@ export function useChatwootCustomerLink(
     let cancelled = false;
     // Each sync gets a number; only the newest may act on its answer.
     let generation = 0;
+    let lastSyncAt = 0;
+    let lastHint = readCustomerSessionHint();
 
     // `force` is for a sign-out we just saw happen: remove the note even if no
     // marker survived (blocked storage), since a note may well be attached.
@@ -85,6 +90,7 @@ export function useChatwootCustomerLink(
 
     const sync = async () => {
       const mine = ++generation;
+      lastSyncAt = Date.now();
       const stale = () => cancelled || mine !== generation;
       if (readCustomerSessionHint() !== '1') {
         clearLink();
@@ -128,9 +134,23 @@ export function useChatwootCustomerLink(
       }
       void sync();
     });
+    // Another tab signed out or switched account: the cookies are shared, so
+    // the session hint and the server session already show the new state.
+    const crossTab = subscribeCustomerIdentityInvalidation(() => {
+      const hint = readCustomerSessionHint();
+      const changed = hint !== lastHint;
+      lastHint = hint;
+      if (hint !== '1') {
+        generation++;
+        clearLink(true);
+        return;
+      }
+      if (changed || Date.now() - lastSyncAt >= RESYNC_MIN_MS) void sync();
+    });
     return () => {
       cancelled = true;
       unsubscribe();
+      crossTab.unsubscribe();
     };
   }, [enabled, storeSlug]);
 }

@@ -61,7 +61,7 @@ export function InboxSearchResults({
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => String(item.conversation.id)}
       ListFooterComponent={
-        isLoadingMore ? <ActivityIndicator color={colors.primary} /> : null
+        isLoadingMore ? <ActivityIndicator color={colors.primary} /> : undefined
       }
       onEndReached={onLoadMore}
       ListEmptyComponent={

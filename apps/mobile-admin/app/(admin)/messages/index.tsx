@@ -34,7 +34,6 @@ const RANKED_VIEWS: readonly InboxView[] = [
   'needs_reply',
   'unread',
   'follow_up',
-  'returning',
 ];
 
 const EMPTY: Record<InboxView, { title: string; body: string }> = {

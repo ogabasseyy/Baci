@@ -41,6 +41,27 @@ describe('formatChatAutoReplyProducts', () => {
     );
   });
 
+  it('never calls a product out of stock when its inventory lives on its options', () => {
+    const variants = {
+      name: 'Demo Phone',
+      price: 450000,
+      stock: 0,
+      has_variants: true,
+    } as unknown as ChatProductResult;
+    const offers = {
+      name: 'Demo Laptop',
+      price: 900000,
+      stock: 0,
+      has_condition_offers: true,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([variants, offers], 'NGN')).toBe(
+      [
+        '- Demo Phone | NGN 450000 | availability depends on the option chosen',
+        '- Demo Laptop | NGN 900000 | availability depends on the option chosen',
+      ].join('\n')
+    );
+  });
+
   it('says so when nothing matched, so the model cannot invent a product', () => {
     expect(formatChatAutoReplyProducts([], 'NGN')).toBe(
       'No matching products were found.'

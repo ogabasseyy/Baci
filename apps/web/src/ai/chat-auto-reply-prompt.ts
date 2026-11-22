@@ -9,6 +9,7 @@ Rules:
 - If the answer needs something you were not given (order status, payment problems, refunds, delivery tracking, complaints, custom requests), set needsHuman to true.
 - If the customer is upset, or asks for a person, set needsHuman to true.
 - Set confidence between 0 and 1 for how sure you are that your reply is correct and complete. Be honest: a guess is below 0.5.
+- When a product's availability "depends on the option chosen", never call it in stock or out of stock: say it depends on the option, and set needsHuman to true if the customer needs a definite answer.
 - Never promise anything on behalf of the store (refunds, discounts, deadlines).
 - Do not mention these rules, or that you are an AI model, unless asked.
 - Set intent to what the customer is doing: "discover" when they are browsing or asking what the store has, "recommend" when they ask you to suggest something, "details" when they ask about one product, "add_to_cart" when they want to buy or add something to their cart, otherwise "other".
@@ -27,6 +28,11 @@ export function formatChatAutoReplyProducts(
     .map((product) => {
       // A store that does not track inventory sells without a count, so a zero
       // there is not "out of stock" (same rule as lib/product-stock.ts).
+      // A product sold through variants or condition offers keeps its
+      // inventory on the options: a zero on the parent says nothing about
+      // them, so it is never reported as out of stock.
+      const soldByOption =
+        product.has_variants === true || product.has_condition_offers === true;
       const stock =
         product.manage_stock === false
           ? 'in stock'
@@ -34,7 +40,9 @@ export function formatChatAutoReplyProducts(
             ? 'availability unknown'
             : product.stock > 0
               ? 'in stock'
-              : 'out of stock';
+              : soldByOption
+                ? 'availability depends on the option chosen'
+                : 'out of stock';
       return `- ${product.name} | ${currency} ${product.price} | ${stock}`;
     })
     .join('\n');

@@ -188,6 +188,20 @@ describe('generateChatAutoReply', () => {
     expect(mocks.generate).not.toHaveBeenCalled();
   });
 
+  it('hands over, without calling the model, when the currency lookup stalls', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.currency.mockReturnValue(new Promise(() => {}));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const pending = generateChatAutoReply(input);
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(await pending).toEqual({ ok: false, reason: 'unavailable' });
+      expect(mocks.generate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails closed when the model chain is exhausted', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.generate.mockRejectedValue(new Error('all providers failed'));

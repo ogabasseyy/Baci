@@ -13,8 +13,28 @@ BEGIN
 END;
 $roles$;
 
-ALTER ROLE baci_wallet_dva_writer
-  NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION;
+-- Only NOLOGIN is converged here: the migration owner may not alter
+-- superuser-class attributes (42501), and an ALTER ROLE that merely names
+-- SUPERUSER/BYPASSRLS/REPLICATION is refused even when it changes nothing.
+-- CREATE ROLE above sets every attribute off, and the guard below fails the
+-- migration closed if a pre-existing role has any elevated attribute.
+ALTER ROLE baci_wallet_dva_writer NOLOGIN CONNECTION LIMIT -1 PASSWORD NULL;
+
+DO $role_guard$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles
+    WHERE rolname = 'baci_wallet_dva_writer'
+      AND (
+        rolcanlogin OR rolsuper OR rolbypassrls
+        OR rolcreaterole OR rolcreatedb OR rolreplication
+      )
+  ) THEN
+    RAISE EXCEPTION 'baci_wallet_dva_writer must remain a non-login least-privilege role'
+      USING ERRCODE = '42501';
+  END IF;
+END;
+$role_guard$;
 
 CREATE SCHEMA IF NOT EXISTS wallet_dva_private;
 REVOKE ALL ON SCHEMA wallet_dva_private FROM PUBLIC, anon, authenticated, service_role;

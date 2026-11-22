@@ -135,4 +135,18 @@ describe('wallet DVA provisioner executor', () => {
     ).rejects.toThrow('Wallet DVA writer unavailable');
     expect(mockConnect).not.toHaveBeenCalled();
   });
+
+  it.each([
+    '',
+    '   ',
+    'bad\u0007slug',
+  ])('rejects an empty or control-character bank slug (%j) before connecting', async (bankSlug) => {
+    await expect(
+      createWalletDvaProvisionerExecutor(configuration)({
+        ...input,
+        bankSlug,
+      })
+    ).rejects.toThrow('Wallet DVA writer unavailable');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
 });

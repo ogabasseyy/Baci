@@ -153,4 +153,47 @@ describe('customer wallet payment account provider proof', () => {
     ).rejects.toMatchObject({ code: 'PAYSTACK_DVA_ERROR' });
     expect(walletDvaWriter).not.toHaveBeenCalled();
   });
+
+  it('normalizes an empty provider bank slug to null before restricted persistence', async () => {
+    vi.mocked(createOrGetCustomer).mockResolvedValue({
+      success: true,
+      data: {
+        customer_code: 'CUS_existing',
+        email: 'jane@example.com',
+        first_name: 'Jane',
+        id: 100,
+        last_name: 'Doe',
+        phone: '+2348012345678',
+      },
+    });
+    vi.mocked(getDedicatedAccounts).mockResolvedValue({
+      success: true,
+      data: [
+        {
+          ...providerAccount({ subaccount: 'ACCT_merchant123' }),
+          bank: { id: 1, name: 'Titan Paystack', slug: '   ' },
+        } as never,
+      ],
+    });
+
+    const walletDvaWriter = createWalletDvaTestWriter();
+    const supabase = {
+      from: vi.fn(() => createMaybeSingleQuery(null)),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      ensureCustomerWalletPaymentAccount({
+        consentedAt: new Date('2026-05-21T10:00:00.000Z'),
+        customer,
+        merchant,
+        supabase,
+        userId: customer.user_id,
+        walletDvaWriter,
+      })
+    ).resolves.toMatchObject({ bankSlug: null });
+
+    expect(walletDvaWriter).toHaveBeenCalledWith(
+      expect.objectContaining({ bankSlug: null })
+    );
+  });
 });

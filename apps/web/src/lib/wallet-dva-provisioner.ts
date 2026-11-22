@@ -88,13 +88,17 @@ export function createWalletDvaAccountWriter() {
     if (
       !parsed.success ||
       parsed.data.customer_id !== input.customerId ||
-      parsed.data.merchant_id !== input.merchantId
+      parsed.data.merchant_id !== input.merchantId ||
+      parsed.data.provider_customer_code !== input.providerCustomerCode ||
+      parsed.data.provider_subaccount_code !== input.providerSubaccountCode
     ) {
-      // Never return or log an executor row outside the authenticated owner
-      // slot, even if a misconfigured test double or database response does.
+      // Never return an executor row outside the authenticated owner slot or
+      // the provider customer/subaccount just verified upstream. Account
+      // number and provider ID may differ when SQL converges a concurrent
+      // retry onto the already-persisted owner slot.
       throw new CustomerWalletPaymentAccountError(
         'WALLET_DVA_STORAGE_ERROR',
-        'Wallet funding account storage returned an invalid owner binding'
+        'Wallet funding account storage returned an invalid owner or provider binding'
       );
     }
 

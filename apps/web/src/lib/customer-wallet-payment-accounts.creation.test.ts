@@ -83,6 +83,27 @@ describe('customer wallet payment account creation', () => {
     expect(getDedicatedAccounts).not.toHaveBeenCalled();
   });
 
+  it('rejects a customer row that is not bound to the authenticated user before Paystack calls', async () => {
+    const supabase = {
+      from: vi.fn(() => createMaybeSingleQuery(null)),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      ensureCustomerWalletPaymentAccount({
+        consentedAt: new Date('2026-05-21T10:00:00.000Z'),
+        customer: { ...customer, user_id: 'another-user' },
+        merchant,
+        supabase,
+        userId: customer.user_id,
+        walletDvaWriter: createWalletDvaTestWriter(),
+      })
+    ).rejects.toMatchObject({ code: 'WALLET_DVA_STORAGE_ERROR' });
+
+    expect(createOrGetCustomer).not.toHaveBeenCalled();
+    expect(createDedicatedAccountForWallet).not.toHaveBeenCalled();
+    expect(getDedicatedAccounts).not.toHaveBeenCalled();
+  });
+
   it('fails closed when the merchant has no Paystack subaccount', async () => {
     const accountQuery = createMaybeSingleQuery(null);
     const supabase = {
@@ -147,7 +168,7 @@ describe('customer wallet payment account creation', () => {
         accountName: 'Ogabassey/Jane Doe',
         accountNumber: '2222222222',
         bankName: 'Test Bank',
-        bankSlug: 'test-bank',
+        bankSlug: '   ',
         currency: 'NGN',
         providerAccountId: '98',
         providerCustomerCode: 'CUS_new',
@@ -200,6 +221,7 @@ describe('customer wallet payment account creation', () => {
       expect.objectContaining({
         accountNumber: '2222222222',
         customerId: 'customer-1',
+        bankSlug: null,
         merchantId: 'merchant-1',
         providerSubaccountCode: 'ACCT_merchant123',
         userId: customer.user_id,

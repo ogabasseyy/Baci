@@ -77,7 +77,7 @@ describe('wallet DVA account writer result boundary', () => {
     await expect(writer?.(input)).rejects.toMatchObject({
       code: 'WALLET_DVA_STORAGE_ERROR',
       message:
-        'Wallet funding account storage returned an invalid owner binding',
+        'Wallet funding account storage returned an invalid owner or provider binding',
     });
   });
 
@@ -90,6 +90,20 @@ describe('wallet DVA account writer result boundary', () => {
 
     await expect(writer?.(input)).rejects.toMatchObject({
       code: 'WALLET_DVA_STORAGE_ERROR',
+    });
+  });
+
+  it.each([
+    ['provider customer', { provider_customer_code: 'CUS_other' }],
+    ['provider subaccount', { provider_subaccount_code: 'ACCT_other' }],
+  ])('rejects an owner-slot result with a different %s', async (_label, change) => {
+    mockExecute.mockResolvedValue({ ...row, ...change });
+    const writer = createWalletDvaAccountWriter();
+
+    await expect(writer?.(input)).rejects.toMatchObject({
+      code: 'WALLET_DVA_STORAGE_ERROR',
+      message:
+        'Wallet funding account storage returned an invalid owner or provider binding',
     });
   });
 

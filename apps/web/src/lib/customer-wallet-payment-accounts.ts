@@ -137,7 +137,7 @@ function normalizePaystackWalletDedicatedAccount({
     accountName: account.account_name,
     accountNumber: account.account_number,
     bankName: account.bank.name,
-    bankSlug: account.bank.slug ?? null,
+    bankSlug: account.bank.slug?.trim() || null,
     currency: 'NGN',
     providerAccountId:
       account.id === undefined || account.id === null
@@ -192,6 +192,13 @@ export async function ensureCustomerWalletPaymentAccount({
   userId: string;
   walletDvaWriter: WalletDvaAccountWriter | null;
 }): Promise<CustomerWalletPaymentAccount> {
+  if (!userId || userId.trim().length === 0 || customer.user_id !== userId) {
+    throw new CustomerWalletPaymentAccountError(
+      'WALLET_DVA_STORAGE_ERROR',
+      'Wallet customer ownership could not be verified'
+    );
+  }
+
   const merchantSubaccount = getMerchantPaystackSubaccount(merchant);
 
   const existingAccount = await resolveCustomerWalletPaymentAccount({

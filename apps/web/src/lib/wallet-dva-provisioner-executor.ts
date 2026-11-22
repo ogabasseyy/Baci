@@ -89,8 +89,7 @@ export function createWalletDvaProvisionerExecutor(
       !/^\d{10}$/.test(input.accountNumber) ||
       !isBoundedText(input.accountName, 160) ||
       !isBoundedText(input.bankName, 120) ||
-      (input.bankSlug !== null &&
-        (input.bankSlug.length > 120 || /\p{Cc}/u.test(input.bankSlug))) ||
+      (input.bankSlug !== null && !isBoundedText(input.bankSlug, 120)) ||
       input.currency !== 'NGN' ||
       !Number.isFinite(Date.parse(input.consentedAt))
     ) {

@@ -79,14 +79,18 @@ describe('customer wallet DVA restricted persistence', () => {
     expect(supabase.from).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a writer result that does not preserve the requested owner binding', async () => {
+  it('rejects a writer result that changes provider identity within the owner slot', async () => {
     const supabase = {
       from: vi.fn(() => createMaybeSingleQuery(null)),
     } as unknown as SupabaseClient;
     const writer = vi.fn().mockResolvedValue({
       ...existingAccountRow,
-      customerId: 'another-customer',
+      customerId: customer.id,
       merchantId: merchant.id,
+      provider: 'paystack',
+      providerCustomerCode: 'CUS_wrong',
+      providerSubaccountCode: 'ACCT_merchant123',
+      status: 'active',
     });
 
     await expect(

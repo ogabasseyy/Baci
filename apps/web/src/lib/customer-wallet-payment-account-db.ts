@@ -100,7 +100,7 @@ export async function persistWalletPaymentAccount({
     accountName: account.accountName,
     accountNumber: account.accountNumber,
     bankName: account.bankName,
-    bankSlug: account.bankSlug,
+    bankSlug: account.bankSlug?.trim() || null,
     consentedAt: consentedAt.toISOString(),
     currency: account.currency,
     customerId,
@@ -114,6 +114,8 @@ export async function persistWalletPaymentAccount({
     written.customerId !== customerId ||
     written.merchantId !== merchantId ||
     written.provider !== 'paystack' ||
+    written.providerCustomerCode !== account.providerCustomerCode ||
+    written.providerSubaccountCode !== account.providerSubaccountCode ||
     written.status !== 'active'
   ) {
     throw new CustomerWalletPaymentAccountError(

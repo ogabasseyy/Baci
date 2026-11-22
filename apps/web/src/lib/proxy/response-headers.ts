@@ -7,10 +7,7 @@ import { selectStorefrontDocumentCacheKind } from '@/config/storefront-document-
 import { STOREFRONT_METADATA_CACHE_BUCKET_HEADER } from '@/config/storefront-metadata-cache-bots';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { applyBlogQueryNoindexHeader } from '@/lib/proxy/blog-query-noindex-header';
-import {
-  generateCSP,
-  generateStorefrontCspReportOnlyCandidate,
-} from '@/lib/proxy/csp';
+import { generateCSP } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
 import {
   isOxygenPaymentSurface,
@@ -34,6 +31,7 @@ import {
   IMAGE_FILES_REGEX,
 } from '@/lib/proxy/routing-constants';
 import { isStorefrontNestedListingPath } from '@/lib/proxy/routing-policy';
+import { applyStorefrontCspReportOnlyPreviewHeader } from '@/lib/proxy/storefront-csp-report-only-preview';
 
 export function applyStorefrontDocumentCacheHeaders(
   response: NextResponse,
@@ -84,20 +82,7 @@ export function applySecurityHeaders(
     routeType === 'storefront' ? hostname : undefined
   );
   response.headers.set('Content-Security-Policy', csp);
-  // Preview the next storefront script policy only in an explicitly opted-in
-  // local, non-production run. No report-uri/report-to is configured, so
-  // browser violations stay in local DevTools and cannot leak request URLs.
-  if (
-    routeType === 'storefront' &&
-    isLocal &&
-    process.env.NODE_ENV !== 'production' &&
-    process.env.BACI_CSP_REPORT_ONLY_PREVIEW === 'true'
-  ) {
-    const candidate = generateStorefrontCspReportOnlyCandidate(csp);
-    if (candidate) {
-      response.headers.set('Content-Security-Policy-Report-Only', candidate);
-    }
-  }
+  applyStorefrontCspReportOnlyPreviewHeader(response, csp, routeType, isLocal);
 
   // Add missing security headers
   response.headers.set('X-Content-Type-Options', 'nosniff');

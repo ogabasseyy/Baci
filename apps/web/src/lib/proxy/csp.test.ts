@@ -4,7 +4,6 @@ import { installExperienceExecutionOrigin } from '@/lib/experience/execution-ori
 import {
   buildStrictCspResponse,
   generateCSP,
-  generateStorefrontCspReportOnlyCandidate,
   shouldForwardStrictCspNonce,
 } from './csp';
 
@@ -30,101 +29,6 @@ describe('proxy CSP', () => {
     );
     expect(nonce).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(forwarded).toContain(`'nonce-${nonce}'`);
-  });
-
-  it('builds a narrower storefront script candidate without changing payment origins', () => {
-    const enforced = generateCSP('storefront', false);
-    const candidate = requireCandidate(
-      generateStorefrontCspReportOnlyCandidate(enforced)
-    );
-    const enforcedScript = directive(enforced, 'script-src');
-    const candidateScript = directive(candidate, 'script-src');
-
-    expect(enforcedScript).toContain("'unsafe-inline'");
-    expect(candidateScript).not.toContain("'unsafe-inline'");
-    expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
-    expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
-    expect(candidateScript).toEqual(
-      enforcedScript.filter((source) => source !== "'unsafe-inline'")
-    );
-    for (const origin of [
-      'https://checkout.creditdirect.ng',
-      'https://checkout.useklump.com',
-    ]) {
-      expect(candidate).toContain(origin);
-    }
-    expect(candidate).not.toContain('report-uri');
-    expect(candidate).not.toContain('report-to');
-  });
-
-  it('does not produce a report-only candidate without an input script-src', () => {
-    expect(
-      generateStorefrontCspReportOnlyCandidate("default-src 'self'")
-    ).toBeNull();
-  });
-
-  it('removes reporting directives and unsafe sources from script-src-elem', () => {
-    const candidate = requireCandidate(
-      generateStorefrontCspReportOnlyCandidate(
-        "script-src 'self' 'unsafe-inline'; script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://scripts.example; report-uri https://reports.example/csp?tenant=private; report-to private-endpoint"
-      )
-    );
-
-    expect(directive(candidate, 'script-src-elem')).toEqual([
-      "'self'",
-      'https://scripts.example',
-    ]);
-    expect(candidate).not.toMatch(
-      /report-uri|report-to|reports\.example|private-endpoint|tenant=private/
-    );
-  });
-
-  it('removes the local eval exception and replaces duplicate candidate directives', () => {
-    const local = generateCSP('storefront', true);
-    const candidate = requireCandidate(
-      generateStorefrontCspReportOnlyCandidate(
-        `${local}; script-src-attr 'unsafe-inline'; form-action https://provider.example`
-      )
-    );
-    const script = directive(candidate, 'script-src');
-
-    expect(script).not.toContain("'unsafe-inline'");
-    expect(script).not.toContain("'unsafe-eval'");
-    expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
-    expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
-    expect(
-      candidate.split('; ').filter((part) => part.startsWith('form-action '))
-    ).toHaveLength(1);
-    expect(
-      candidate
-        .split('; ')
-        .filter((part) => part.startsWith('script-src-attr '))
-    ).toHaveLength(1);
-  });
-
-  it('parses candidate directives across semicolon and whitespace variations', () => {
-    const candidate = requireCandidate(
-      generateStorefrontCspReportOnlyCandidate(
-        "  SCRIPT-SRC\t'self'   'unsafe-inline'\n'unsafe-eval' https://cdn.example ;\n script-src-attr\t'unsafe-inline' ; FORM-ACTION  https://provider.example ; "
-      )
-    );
-
-    expect(directive(candidate, 'script-src')).toEqual([
-      "'self'",
-      'https://cdn.example',
-    ]);
-    expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
-    expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
-    expect(
-      candidate
-        .split(';')
-        .filter((part) => part.trim().startsWith('script-src-attr '))
-    ).toHaveLength(1);
-    expect(
-      candidate
-        .split(';')
-        .filter((part) => part.trim().startsWith('form-action '))
-    ).toHaveLength(1);
   });
 
   it('allows only an explicitly enabled, normalized Chatwoot platform origin on storefronts', () => {
@@ -240,11 +144,6 @@ function directive(policy: string, name: string): string[] {
       ?.split(' ')
       .slice(1) ?? []
   );
-}
-function requireCandidate(candidate: string | null): string {
-  expect(candidate).not.toBeNull();
-  if (!candidate) throw new Error('Expected a report-only CSP candidate');
-  return candidate;
 }
 it.each([
   true,

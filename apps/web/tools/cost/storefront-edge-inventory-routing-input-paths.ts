@@ -45,6 +45,7 @@ export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
   'apps/web/src/lib/proxy/request-classification.ts',
   'apps/web/src/lib/proxy/request-headers.ts',
   'apps/web/src/lib/proxy/response-headers.ts',
+  'apps/web/src/lib/proxy/storefront-csp-report-only-preview.ts',
   'apps/web/src/lib/proxy/retired-slug.ts',
   'apps/web/src/lib/proxy/routing-constants.ts',
   'apps/web/src/lib/proxy/routing-policy.ts',

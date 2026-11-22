@@ -52,7 +52,7 @@ export function TagSheet({
 
   const addCustom = () => {
     const name = custom.trim();
-    if (!name || full) return;
+    if (!name || full || busy) return;
     onAdd(name);
     setCustom('');
   };
@@ -108,7 +108,7 @@ export function TagSheet({
       <View style={styles.inputRow}>
         <TextInput
           accessibilityLabel="New tag"
-          editable={!full}
+          editable={!full && !busy}
           maxLength={30}
           onChangeText={setCustom}
           onSubmitEditing={addCustom}

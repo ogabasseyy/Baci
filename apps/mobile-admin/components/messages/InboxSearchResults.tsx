@@ -13,7 +13,9 @@ import { ConversationListItem } from './ConversationListItem';
 interface InboxSearchResultsProps {
   colors: ThemeColors;
   isError: boolean;
+  isLoadingMore: boolean;
   isPending: boolean;
+  onLoadMore: () => void;
   results: { conversation: InboxConversation; snippet: string | null }[];
   term: string;
 }
@@ -22,7 +24,9 @@ interface InboxSearchResultsProps {
 export function InboxSearchResults({
   colors,
   isError,
+  isLoadingMore,
   isPending,
+  onLoadMore,
   results,
   term,
 }: InboxSearchResultsProps) {
@@ -56,6 +60,10 @@ export function InboxSearchResults({
       data={results}
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => String(item.conversation.id)}
+      ListFooterComponent={
+        isLoadingMore ? <ActivityIndicator color={colors.primary} /> : null
+      }
+      onEndReached={onLoadMore}
       ListEmptyComponent={
         <View style={styles.centered}>
           <Text style={[styles.title, { color: colors.text }]}>

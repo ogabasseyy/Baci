@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCart } from '@/hooks/cart';
 import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
+import { reloadCartHandoffDocument } from '../../cart/cart-handoff-support';
 import { CartPageWrapper } from './cart-page-wrapper';
 
 vi.mock('next/navigation', () => ({
@@ -27,6 +28,11 @@ vi.mock('../../cart/cart-handoff', () => ({
       Handoff continuation for {props.handoffId} with {props.token}
     </div>
   ),
+}));
+
+vi.mock('../../cart/cart-handoff-support', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../cart/cart-handoff-support')>()),
+  reloadCartHandoffDocument: vi.fn(),
 }));
 
 vi.mock('@/lib/cart-link-transfer', () => ({
@@ -72,6 +78,23 @@ describe('CartPageWrapper handoff', () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText('Cart page')).not.toBeInTheDocument();
+    expect(reloadCartHandoffDocument).not.toHaveBeenCalled();
+  });
+
+  it('processes a handoff opened while the website cart is already mounted', async () => {
+    mockSearch('');
+    window.history.replaceState({}, '', '/ogabassey/cart');
+    render(<CartPageWrapper merchantId="merchant-1" />);
+    expect(await screen.findByText('Cart page')).toBeInTheDocument();
+
+    window.history.pushState({}, '', '#main-content');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(reloadCartHandoffDocument).not.toHaveBeenCalled();
+
+    window.history.pushState({}, '', '#handoff=ch1.later&hid=later-link');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(reloadCartHandoffDocument).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe('#handoff=ch1.later&hid=later-link');
   });
 
   it('reconstructs the handoff from the tab locator after a reload', async () => {

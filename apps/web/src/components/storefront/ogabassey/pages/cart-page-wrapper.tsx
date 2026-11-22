@@ -14,6 +14,7 @@ import {
   loadActiveHandoff,
   recordActiveHandoff,
   redactHandoffFragment,
+  reloadCartHandoffDocument,
 } from '../../cart/cart-handoff-support';
 import { CartImportConflicts } from '../../cart/cart-import-conflicts';
 import { CartPage } from './cart-page';
@@ -69,6 +70,19 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
     setPairing(fragment ?? scopedLocator);
     setPairingChecked(true);
   }, [merchantSlug]);
+
+  useEffect(() => {
+    function acceptHandoffNavigation() {
+      if (parseHandoffPairing(window.location.hash)) {
+        // Enter through the cold-load handoff gate. The mounted cart can
+        // still have a bootstrap in flight that could overwrite its proof.
+        reloadCartHandoffDocument();
+      }
+    }
+
+    window.addEventListener('hashchange', acceptHandoffNavigation);
+    return () => window.removeEventListener('hashchange', acceptHandoffNavigation);
+  }, []);
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);
 

@@ -449,6 +449,27 @@ describe('POST /api/payments/initialize', () => {
     expect(mockInitializePaystack).not.toHaveBeenCalled();
   });
 
+  it('passes paystack_bank_transfer to the amendment claim and blocks claimed checkouts', async () => {
+    amendmentCheckoutClaimResult = { data: 'claimed', error: null };
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        payment_type: 'bank_transfer',
+        tracking_token: 'track-token-123',
+      })
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+    });
+    expect(rpcCalls).toContainEqual({
+      name: 'claim_checkout_for_paid_order_amendment',
+      args: expect.objectContaining({ p_gateway: 'paystack_bank_transfer' }),
+    });
+    expect(mockInitializePaystack).not.toHaveBeenCalled();
+  });
+
   it('holds the checkout claim through provider acceptance and a failed local write', async () => {
     amendmentCheckoutClaimResult = { data: 'claimed', error: null };
     rpcTransactionResult = {

@@ -1707,7 +1707,11 @@ export async function POST(request: NextRequest) {
     let preparedPaystack:
       | Awaited<ReturnType<typeof preparePaystackPayment>>
       | undefined;
-    if (gateway === 'paystack' && data.payment_type !== 'dva') {
+    if (
+      gateway === 'paystack' &&
+      data.payment_type !== 'dva' &&
+      data.payment_type !== 'bank_transfer'
+    ) {
       try {
         preparedPaystack = await preparePaystackPayment(
           paymentData,
@@ -1734,9 +1738,11 @@ export async function POST(request: NextRequest) {
             ? gateway
             : data.payment_type === 'dva'
               ? 'paystack_dva'
-              : merchantWithPaystack.paystack_subaccount_code
-                ? 'paystack'
-                : 'paystack_no_subaccount',
+              : data.payment_type === 'bank_transfer'
+                ? 'paystack_bank_transfer'
+                : merchantWithPaystack.paystack_subaccount_code
+                  ? 'paystack'
+                  : 'paystack_no_subaccount',
         p_reference: reference,
         p_currency: chargeCurrency,
         p_expected_amount_minor: Math.round(payableAmount * 100),
@@ -1965,6 +1971,13 @@ export async function POST(request: NextRequest) {
               merchantAmount: fees.merchantAmount / 100,
             };
           } else if (data.payment_type === 'bank_transfer') {
+            if (amendmentClaim !== 'untracked') {
+              return createErrorResponse(
+                'This order cannot start a bank transfer checkout payment',
+                'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+                409
+              );
+            }
             const { initializePaystackBankTransfer } = await import(
               './paystack-bank-transfer'
             );

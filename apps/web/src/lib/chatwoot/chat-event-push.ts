@@ -62,6 +62,13 @@ function pushContent(input: ChatEventPushInput) {
  * alerts off. Best effort and at most once: the
  * database hands out a single claim per event, so a redelivered webhook
  * never pushes twice, and a failed push is not retried here.
+ *
+ * Contract: call this only for an event the database just recorded as
+ * `notified` (and not as a duplicate). The alert level is applied there: an
+ * ordinary message is not recorded as notified at "handover only", and a
+ * handover is notified at "all" and "handover only". The gate below honours
+ * "off" only, so it must never be the sole thing deciding whether an
+ * ordinary message pushes.
  */
 export async function sendChatEventPush(
   input: ChatEventPushInput,

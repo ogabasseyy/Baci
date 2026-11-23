@@ -73,12 +73,15 @@ export function ChatwootInlineCartBridge({
           const length = toCm(dims?.length, unit);
           const width = toCm(dims?.width, unit);
           const height = toCm(dims?.height, unit);
+          const rawCode = (item as { commodity_code?: unknown }).commodity_code;
+          const hsCode = typeof rawCode === 'string' ? rawCode.trim() : '';
           return {
             name: item.name,
             quantity: item.quantity,
             weight: productWeightToKg(item.weight_value, item.weight_unit) ?? 1,
             value: item.negotiatedPrice ?? item.price,
             ...(length && width && height ? { length, width, height } : {}),
+            ...(hsCode ? { hsCode } : {}),
           };
         }),
       };

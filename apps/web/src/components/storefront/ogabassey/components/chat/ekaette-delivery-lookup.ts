@@ -40,6 +40,7 @@ type Cart = {
     length?: number;
     width?: number;
     height?: number;
+    hsCode?: string;
   }[];
 };
 

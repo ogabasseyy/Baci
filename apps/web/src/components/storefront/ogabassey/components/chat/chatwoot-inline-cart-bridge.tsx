@@ -6,6 +6,7 @@ import { useCartSafe } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
 import { useChatwootInlineCartBridge } from '@/hooks/use-chatwoot-inline-cart-bridge';
 import { joinRouteBasePath } from '@/lib/routes';
+import { productWeightToKg } from '@/lib/shipping/product-weight-to-kg';
 import { ChatwootOrdersPanel } from './chatwoot-orders-panel';
 import { ChatwootOxygenCard } from './chatwoot-oxygen-card';
 import { ChatwootSignInPanel } from './chatwoot-sign-in-panel';
@@ -54,16 +55,32 @@ export function ChatwootInlineCartBridge({
       const ref = current?.sharedCartRef;
       if (!merchantId || !current || current.merchantSlug !== storeSlug || !ref || !current.cart.length)
         return null;
+      const toCm = (value: unknown, unit?: string) => {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+          return undefined;
+        if (unit === 'mm') return value / 10;
+        if (unit === 'in') return value * 2.54;
+        return value;
+      };
       return {
         key: `${ref.cartId}:${ref.version}`,
         merchantId,
         subtotal: current.subtotal,
-        items: current.cart.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          weight: 1,
-          value: item.negotiatedPrice ?? item.price,
-        })),
+        phone: merchant?.merchant?.phone || undefined,
+        items: current.cart.map((item) => {
+          const dims = item.dimensions;
+          const unit = dims?.unit;
+          const length = toCm(dims?.length, unit);
+          const width = toCm(dims?.width, unit);
+          const height = toCm(dims?.height, unit);
+          return {
+            name: item.name,
+            quantity: item.quantity,
+            weight: productWeightToKg(item.weight_value, item.weight_unit) ?? 1,
+            value: item.negotiatedPrice ?? item.price,
+            ...(length && width && height ? { length, width, height } : {}),
+          };
+        }),
       };
     }, storeSlug);
     const bank = createEkaetteBankLookup(storeSlug);

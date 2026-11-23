@@ -31,7 +31,16 @@ type Cart = {
   key: string;
   merchantId: string;
   subtotal: number;
-  items: { name: string; quantity: number; weight: number; value: number }[];
+  phone?: string;
+  items: {
+    name: string;
+    quantity: number;
+    weight: number;
+    value: number;
+    length?: number;
+    width?: number;
+    height?: number;
+  }[];
 };
 
 type Match = z.infer<typeof predictionSchema> & {
@@ -145,6 +154,10 @@ export function createEkaetteDeliveryLookup(getCart: () => Cart | null, storeSlu
             deliveryPreference: 'door',
             receiver: {
               name: 'Storefront shopper',
+              phone:
+                cart.phone && cart.phone.trim().length >= 10
+                  ? cart.phone.trim()
+                  : '08000000000',
               address: line1,
               city: address.city,
               state: address.state,

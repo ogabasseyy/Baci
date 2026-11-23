@@ -19,12 +19,22 @@ export async function observeNativeCheckout(
     variantId: product.variantId ?? '',
     quantity: 1,
   };
-  const existing = await page.evaluate(
-    (key) => localStorage.getItem(key),
-    storageKey
+  // The native provider persists its initial cart after hydration. An SSR
+  // button can be visible while React still has no active click handler.
+  await page.waitForFunction(
+    (key) => localStorage.getItem(key) === '[]',
+    storageKey,
+    {
+      timeout: actionTimeout,
+    }
   );
-  if (existing !== null && existing !== '[]')
-    throw Error('PUBLIC_NATIVE_CART_NOT_EMPTY');
+  const add = page
+    .locator(
+      '[data-baci-pdp-cart-ready="true"], [data-ogabassey-pdp-commerce-primary-action]'
+    )
+    .and(page.getByRole('button', { name: /^add to cart$/i }))
+    .filter({ visible: true });
+  await add.waitFor({ state: 'visible', timeout: actionTimeout });
 
   if (checkout.variantLabel) {
     for (const label of checkout.variantLabel.split(' / ')) {
@@ -36,11 +46,7 @@ export async function observeNativeCheckout(
       await options.click({ timeout: actionTimeout });
     }
   }
-  await page
-    .getByRole('button', { name: /^add to cart$/i })
-    .filter({ visible: true })
-    .first()
-    .click({ timeout: actionTimeout });
+  await add.click({ timeout: actionTimeout });
   await page.waitForFunction(
     ({ key, expected }) => {
       const items = JSON.parse(localStorage.getItem(key) ?? '[]');

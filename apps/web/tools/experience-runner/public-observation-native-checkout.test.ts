@@ -17,7 +17,18 @@ it('observes native guest checkout through the isolated browser without Shared C
   const body = {
     [product.path]: `<title>Native device</title><link rel="canonical" href="${origin}${product.path}">
       <button data-ogabassey-pdp-commerce-variant-option onclick="this.dataset.selected = 'true'">Blue</button>
-      <button onclick='if (document.querySelector("[data-selected]")) localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: "${variantId}", quantity: 1 }]))'>Add to cart</button>`,
+      <button id="add">Add to cart</button>
+      <script>
+        localStorage.setItem("${storageKey}", "[]");
+        setTimeout(() => {
+          const add = document.querySelector("#add");
+          add.onclick = () => {
+            if (document.querySelector("[data-selected]"))
+              localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: "${variantId}", quantity: 1 }]));
+          };
+          add.dataset.baciPdpCartReady = "true";
+        }, 200);
+      </script>`,
     '/checkout': `<title>Checkout</title><input name="firstName"><script>
       const [line] = JSON.parse(localStorage.getItem('${storageKey}') ?? '[]');
       if (line) {

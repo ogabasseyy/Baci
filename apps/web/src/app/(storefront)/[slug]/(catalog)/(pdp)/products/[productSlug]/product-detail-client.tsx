@@ -32,7 +32,7 @@ export default function ProductDetailClient({
   const { merchant, basePath } = useMerchant();
   const getHref = (path: string) =>
     path.startsWith('http') ? path : `${basePath || ''}${path}`;
-  const { cart, updateQuantity } = useCart();
+  const { cart, isHydrated, updateQuantity } = useCart();
   const { formatCurrency, currencyCode } = useCurrency();
   const { addToRecentlyViewed } = useRecentlyViewed();
   const [quantity, setQuantity] = useState(product.minimum_order_quantity || 1);
@@ -217,6 +217,7 @@ export default function ProductDetailClient({
                 routeVariantMissing={routeVariantMissing}
                 hasCurrentVariantSelection={Boolean(currentVariantSelection)}
                 onAddToCart={handleAddToCart}
+                cartReady={isHydrated}
               />
             </div>
           </div>

@@ -119,6 +119,21 @@ export const verifiedSettlementActionSchema = z.discriminatedUnion('action', [
 export type VerifiedSettlementAction = z.infer<
   typeof verifiedSettlementActionSchema
 >;
+const claimResultSchema = z.object({
+  claimId: z.uuid(),
+  amountMinor: moneyMinor,
+  currency: z.literal('NGN'),
+});
+const verifiedReturnResultSchema = z.object({
+  claimId: z.uuid(),
+  outcome: z.literal('verified'),
+  transactionId: z.uuid().nullable(),
+});
+const amendmentResultSchema = z.object({ amendmentId: z.uuid() });
+type FinanceActionResult =
+  | z.infer<typeof claimResultSchema>
+  | z.infer<typeof verifiedReturnResultSchema>
+  | z.infer<typeof amendmentResultSchema>;
 export type AmendmentConfirmation = z.infer<typeof amendmentConfirmationSchema>;
 export type AmendmentPreview = z.infer<typeof previewSchema>;
 export type AmendmentWorkspace = z.infer<typeof workspaceSchema>;
@@ -188,10 +203,16 @@ export const paidOrderAmendment = {
     amendmentId: string,
     payload: VerifiedSettlementAction
   ) {
+    const responseSchema =
+      payload.action === 'claim_offline_disbursement'
+        ? claimResultSchema
+        : payload.action === 'record_offline_refund'
+          ? verifiedReturnResultSchema
+          : amendmentResultSchema;
     return request(
       orderId,
       `/${encodeURIComponent(amendmentId)}/actions`,
-      z.object({ amendmentId: z.uuid() }),
+      responseSchema as z.ZodType<FinanceActionResult>,
       payload
     );
   },

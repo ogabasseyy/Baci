@@ -46,7 +46,41 @@ it('offers only bank transfers for repayment from a verified cancellation', () =
   );
   expect(
     screen.getAllByRole('button', { name: /Prepare bank repayment/ })
-  ).toHaveLength(2);
+  ).toHaveLength(1);
+});
+
+it('offers an allocated top-up only through the ordinary cancelled-order flow', () => {
+  const workspace = workspaceSchema.parse({
+    canStart: false,
+    canEdit: true,
+    canRefund: true,
+    isVerifiedFunding: false,
+    customer: null,
+    summary: null,
+    events: [],
+    refunds: [],
+    bankEvidence: [
+      {
+        id: 'a6bc20fe-fae1-4439-a228-e7317a31a1cb',
+        amountMinor: 500_000,
+        occurredAt: '2026-11-23T06:00:00Z',
+        status: 'top_up',
+        transactionId: '9d165858-13b4-47d7-a4eb-38f97bb6c182',
+        method: 'bank_transfer',
+      },
+    ],
+  });
+  render(
+    <OrderAmendmentBankRepayment
+      workspace={workspace}
+      currency="NGN"
+      cancelled
+      submit={vi.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('button', { name: /Prepare bank repayment/ })
+  ).toBeInTheDocument();
 });
 
 it('requires a UUID before submitting outgoing refund evidence', () => {

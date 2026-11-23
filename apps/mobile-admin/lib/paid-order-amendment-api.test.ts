@@ -73,6 +73,8 @@ describe('paid order amendment API', () => {
       canStart: true,
       canRefund: false,
       summary: null,
+      events: [],
+      bankEvidence: [],
       customer: null,
     };
     respond(data);
@@ -84,6 +86,38 @@ describe('paid order amendment API', () => {
       { method: 'GET', signal },
       15_000
     );
+  });
+
+  it('validates the action-specific bank repayment result', async () => {
+    const action = {
+      action: 'claim_offline_disbursement' as const,
+      sourceKind: 'unapplied' as const,
+      sourceId: amendmentId,
+      idempotencyKey: amendmentId,
+    };
+    const result = { claimId: amendmentId, amountMinor: 1200, currency: 'NGN' };
+    respond(result);
+    await expect(
+      paidOrderAmendment.finance('order/42', amendmentId, action)
+    ).resolves.toEqual(result);
+  });
+
+  it('validates the bank repayment verification result', async () => {
+    const action = {
+      action: 'record_offline_refund' as const,
+      claimId: amendmentId,
+      evidenceId: amendmentId,
+      idempotencyKey: amendmentId,
+    };
+    const result = {
+      claimId: amendmentId,
+      outcome: 'verified' as const,
+      transactionId: null,
+    };
+    respond(result);
+    await expect(
+      paidOrderAmendment.finance('order/42', amendmentId, action)
+    ).resolves.toEqual(result);
   });
 
   it('propagates the original transport failure for confirmation recovery', async () => {

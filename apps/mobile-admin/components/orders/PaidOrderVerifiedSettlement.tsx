@@ -23,7 +23,6 @@ interface Props {
   colors: ThemeColors;
   refreshOrder: () => Promise<boolean>;
 }
-
 export function PaidOrderVerifiedSettlement({
   orderId,
   amendmentId,

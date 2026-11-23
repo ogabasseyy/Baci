@@ -112,9 +112,7 @@ export function PaidOrderVerifiedBankReturn({
         .filter(
           (entry) =>
             entry.method === 'bank_transfer' &&
-            (entry.status === null ||
-              entry.status === 'unapplied' ||
-              (entry.status === 'top_up' && entry.transactionId !== null))
+            (entry.status === null || entry.status === 'unapplied')
         )
         .map((entry) => (
           <View key={entry.id}>
@@ -126,14 +124,8 @@ export function PaidOrderVerifiedBankReturn({
               () => {
                 onSubmit({
                   action: 'claim_offline_disbursement',
-                  sourceKind:
-                    entry.status === 'top_up'
-                      ? 'cancellation_leg'
-                      : 'unapplied',
-                  sourceId:
-                    entry.status === 'top_up'
-                      ? (entry.transactionId ?? entry.id)
-                      : entry.id,
+                  sourceKind: 'unapplied',
+                  sourceId: entry.id,
                   idempotencyKey: generateUUID(),
                 });
               }

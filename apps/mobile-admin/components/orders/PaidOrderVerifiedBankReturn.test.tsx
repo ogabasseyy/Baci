@@ -113,7 +113,7 @@ it('claims an eligible verified bank return for repayment', () => {
   });
 });
 
-it('claims a cancellation-leg bank transfer for repayment', () => {
+it('does not offer allocated top-ups in the verified cancellation repayment flow', () => {
   const onSubmit = vi.fn();
   const transactionId = '1f7e5171-f2e3-4e8e-9202-6bc7a39f2bb6';
   render(
@@ -135,15 +135,10 @@ it('claims a cancellation-leg bank transfer for repayment', () => {
     />
   );
 
-  fireEvent.click(
-    screen.getByRole('button', { name: /Prepare bank repayment/ })
-  );
-  expect(onSubmit).toHaveBeenCalledWith({
-    action: 'claim_offline_disbursement',
-    sourceKind: 'cancellation_leg',
-    sourceId: transactionId,
-    idempotencyKey: id,
-  });
+  expect(
+    screen.queryByRole('button', { name: /Prepare bank repayment/ })
+  ).not.toBeInTheDocument();
+  expect(onSubmit).not.toHaveBeenCalled();
 });
 
 it('records outgoing evidence against the outstanding bank-return claim', () => {

@@ -181,7 +181,7 @@ describe('approved tender exports', () => {
     const fetchRpc = vi.fn(async () => Response.json([evidence]));
     for (const reconciliationReference of [
       'A'.repeat(8),
-      'reconciliation reference with punctuation !'.repeat(2),
+      'reconciliation/reference:with.allowed-punctuation_01',
       'R'.repeat(120),
     ]) {
       await expect(
@@ -195,6 +195,22 @@ describe('approved tender exports', () => {
       ).resolves.toEqual([evidence]);
     }
     expect(fetchRpc).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects reconciliation characters outside the database contract', async () => {
+    const fetchRpc = vi.fn();
+    await expect(
+      invoke(
+        signed({
+          ...manifest,
+          receipts: [
+            { ...receipt, reconciliationReference: 'reference with spaces' },
+          ],
+        }),
+        { fetchRpc }
+      )
+    ).rejects.toThrow();
+    expect(fetchRpc).not.toHaveBeenCalled();
   });
 
   it('rejects reconciliation references above the batch SQL limit', async () => {

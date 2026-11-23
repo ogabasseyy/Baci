@@ -50,10 +50,9 @@ export function OrderAmendmentBankRepayment({
             (workspace.isVerifiedFunding && entry.status === null)
               ? entry.id
               : entry.status === 'top_up' &&
+                  !workspace.isVerifiedFunding &&
                   entry.transactionId !== null &&
-                  ((workspace.isVerifiedFunding &&
-                    workspace.verifiedCancellationPending === true) ||
-                    cancelled)
+                  cancelled
                 ? entry.transactionId
                 : null;
           if (!sourceId) return null;

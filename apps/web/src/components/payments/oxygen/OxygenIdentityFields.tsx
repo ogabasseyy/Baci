@@ -15,7 +15,7 @@ export function OxygenIdentityFields({
   conversational: boolean;
   chatTurn: number;
   prefill: OxygenCustomerPrefill;
-  defaults: OxygenFormDraft;
+  defaults: OxygenFormDraft['fields'];
   onCapture: () => void;
 }) {
   return (

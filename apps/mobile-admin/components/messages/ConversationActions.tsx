@@ -92,6 +92,12 @@ export function ConversationActions({
     const kind = picker?.kind;
     setPicker(null);
     if (kind === 'followUp') {
+      // The times were worked out when the sheet opened; one left open too
+      // long may have passed since, which the server would refuse.
+      if (value !== 'clear' && Date.parse(value) <= Date.now()) {
+        Alert.alert('That time has passed', 'Choose a new follow-up time.');
+        return;
+      }
       await apply({ followUpAt: value === 'clear' ? null : value });
     } else if (kind === 'priority') {
       // Looked up in the typed list, so only a real priority is ever sent.

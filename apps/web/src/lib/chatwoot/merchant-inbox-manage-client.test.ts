@@ -167,18 +167,40 @@ describe('updateMerchantInboxConversation', () => {
   });
 });
 
-/** A chat whose labels really change, with one write that can be made to fail. */
-function chatWithLabels(initial: string[], failing?: string) {
+/**
+ * A chat whose labels and snooze really change, with one write that can be made
+ * to fail. `lostReply`: the engine applies it but the answer never arrives.
+ * `readsDownAfterFailure`: the engine cannot be asked afterwards what happened.
+ */
+function chatWithLabels(
+  initial: string[],
+  failing?: string,
+  options: { lostReply?: boolean; readsDownAfterFailure?: boolean } = {}
+) {
   let labels = initial;
+  let snooze: { status: string; snoozed_until?: number } = { status: 'open' };
+  let readsDown = false;
   const calls: Call[] = [];
   stubFetch((url, init) => {
     const path = url.pathname.replace('/api/v1/accounts/2', '');
-    if (init?.method !== 'POST')
-      return { body: { ...conversation(7), labels } };
+    if (init?.method !== 'POST') {
+      return readsDown
+        ? { status: 503 }
+        : { body: { ...conversation(7), labels, ...snooze } };
+    }
     const body = JSON.parse(String(init.body));
     calls.push({ method: 'POST', path, body });
-    if (failing && path.endsWith(failing)) return { status: 500 };
+    if (failing && path.endsWith(failing)) {
+      if (options.lostReply && path.endsWith('/toggle_status')) {
+        snooze = { status: body.status, snoozed_until: body.snoozed_until };
+      }
+      readsDown = options.readsDownAfterFailure === true;
+      return { status: 500 };
+    }
     if (path.endsWith('/labels')) labels = body.labels;
+    if (path.endsWith('/toggle_status')) {
+      snooze = { status: body.status, snoozed_until: body.snoozed_until };
+    }
     return { body: {} };
   });
   return { calls, labels: () => labels };
@@ -240,6 +262,49 @@ describe('bugfix: a follow-up never ends up half applied', () => {
     // The earlier snooze is still in place, so its label must stay too.
     expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
     expect(labels()).toContain('follow-up');
+  });
+
+  it('keeps the label when the snooze was applied but its reply got lost', async () => {
+    const { calls, labels } = chatWithLabels(
+      ['handled-by-ai'],
+      '/toggle_status',
+      {
+        lostReply: true,
+      }
+    );
+
+    const result = await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update,
+      now: NOW,
+    });
+
+    // The chat is snoozed, so the label must stay or it would vanish from view.
+    expect(result.ok).toBe(true);
+    expect(labels()).toContain('follow-up');
+    expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
+  });
+
+  it('keeps the label when the engine cannot be asked what happened', async () => {
+    const { calls, labels } = chatWithLabels(
+      ['handled-by-ai'],
+      '/toggle_status',
+      {
+        readsDownAfterFailure: true,
+      }
+    );
+
+    await expect(
+      updateMerchantInboxConversation(binding, {
+        conversationId: 7,
+        update,
+        now: NOW,
+      })
+    ).resolves.toEqual({ ok: false, code: 'unavailable' });
+
+    // Unknown is not "not snoozed": a visible follow-up beats a vanished one.
+    expect(labels()).toContain('follow-up');
+    expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
   });
 
   it('applies tags sent with the follow-up in the same label write', async () => {

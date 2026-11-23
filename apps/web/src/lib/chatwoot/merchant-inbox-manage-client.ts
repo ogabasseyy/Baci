@@ -79,6 +79,23 @@ async function writeLabels(
     : unavailable;
 }
 
+/** After a snooze whose answer did not arrive: did the engine apply it anyway? */
+async function snoozeOutcome(
+  binding: MerchantInboxBinding,
+  conversationId: number,
+  atMs: number
+): Promise<'applied' | 'not_applied' | 'unknown'> {
+  const check = await getMerchantInboxConversation(binding, conversationId);
+  if (!check.ok) return 'unknown';
+  const until = check.conversation.snoozedUntil
+    ? Date.parse(check.conversation.snoozedUntil)
+    : Number.NaN;
+  return check.conversation.status === 'snoozed' &&
+    until === Math.floor(atMs / 1000) * 1000
+    ? 'applied'
+    : 'not_applied';
+}
+
 /**
  * Applies one change to a conversation of the bound inbox: Done / reopen,
  * follow-up (snooze), priority and tags. The conversation is read first, so
@@ -138,12 +155,19 @@ export async function updateMerchantInboxConversation(
         snoozed_until: Math.floor(at / 1000),
       }))
     ) {
-      // Nothing was snoozed: take the label off again, unless the chat already
-      // had a follow-up (its earlier snooze and label still agree).
-      if (!owned.conversation.followUp) {
-        await writeLabels(binding, base, { followUp: false });
+      // No answer is not the same as "not snoozed": the engine may have
+      // applied it and the reply got lost. Look before undoing anything.
+      const outcome = await snoozeOutcome(binding, conversationId, at);
+      if (outcome !== 'applied') {
+        // Only a snooze that is clearly absent takes the label back off, and
+        // not when the chat already had a follow-up (its earlier snooze and
+        // label still agree). If we cannot tell, the label stays: a chat that
+        // shows in the Follow-up view is better than one that vanished.
+        if (outcome === 'not_applied' && !owned.conversation.followUp) {
+          await writeLabels(binding, base, { followUp: false });
+        }
+        return unavailable;
       }
-      return unavailable;
     }
   } else if (update.status === 'open' || followUpAt === null) {
     if (

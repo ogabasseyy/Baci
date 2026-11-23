@@ -208,6 +208,28 @@ describe('ConversationActions', () => {
     );
   });
 
+  it('bugfix: asks for a new time when the chosen follow-up has passed while the sheet was open', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { onUpdate } = renderActions(chat());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Follow up' }));
+      // The sheet stays open past every time it offered.
+      vi.setSystemTime(Date.now() + 10 * 24 * 60 * 60 * 1000);
+      fireEvent.click(screen.getByRole('button', { name: 'In 3 days' }));
+
+      await waitFor(() =>
+        expect(Alert.alert).toHaveBeenCalledWith(
+          'That time has passed',
+          'Choose a new follow-up time.'
+        )
+      );
+      expect(onUpdate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('disables the buttons while a change is being saved', () => {
     renderActions(chat(), { busy: true });
     expect(screen.getByRole('button', { name: 'Done' })).toBeDisabled();

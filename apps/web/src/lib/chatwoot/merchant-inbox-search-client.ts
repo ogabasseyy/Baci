@@ -192,11 +192,10 @@ export async function searchMerchantInboxConversations(
 
   const hits = [...merged.values()];
   const { results, unavailable } = await readInChunks(binding, hits);
-  // A read failed, or every match failed to load: the engine is unwell, not
-  // "no results", and the same page can be asked for again.
-  if (unavailable || (hits.length > 0 && results.length === 0)) {
-    return { ok: false, code: 'unavailable' };
-  }
+  // A read failed: the engine is unwell, and the same page can be asked for
+  // again. Chats that are gone or belong to another inbox are not a failure:
+  // a page made only of those is an empty page, so paging can move past it.
+  if (unavailable) return { ok: false, code: 'unavailable' };
   results.sort(
     (a, b) =>
       (b.conversation.lastActivityAt

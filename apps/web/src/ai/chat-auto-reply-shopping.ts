@@ -125,8 +125,8 @@ export async function buildShoppingAutoReplyOutcome(input: {
   merchantSlug: string;
   currency?: string;
   history: readonly ChatAutoReplyTurn[];
-  isStaging: boolean;
-  stagingCheckoutEnabled: boolean;
+  shoppingEnabled: boolean;
+  checkoutEnabled: boolean;
   canGuidePaySmallSmall: boolean;
 }): Promise<{
   ok: true;
@@ -145,19 +145,19 @@ export async function buildShoppingAutoReplyOutcome(input: {
     merchantSlug,
     currency,
     history,
-    isStaging,
-    stagingCheckoutEnabled,
+    shoppingEnabled,
+    checkoutEnabled,
     canGuidePaySmallSmall,
   } = input;
 
-  if (stagingCheckoutEnabled && object.checkoutHelp && !object.needsHuman) {
+  if (checkoutEnabled && object.checkoutHelp && !object.needsHuman) {
     return {
       ok: true,
       reply: { ...object, reply: 'I can help you check out here.' },
       suggestions: ['review_checkout'],
     };
   }
-  if (stagingCheckoutEnabled && object.orderHelp && !object.needsHuman) {
+  if (checkoutEnabled && object.orderHelp && !object.needsHuman) {
     return {
       ok: true,
       reply: {
@@ -168,7 +168,7 @@ export async function buildShoppingAutoReplyOutcome(input: {
     };
   }
   if (
-    stagingCheckoutEnabled &&
+    checkoutEnabled &&
     object.intent === 'add_to_cart' &&
     !object.needsHuman &&
     object.confidence >= CHAT_AUTO_REPLY_MIN_CONFIDENCE
@@ -210,14 +210,14 @@ export async function buildShoppingAutoReplyOutcome(input: {
   }
 
   const canShowCards =
-    isStaging &&
+    shoppingEnabled &&
     !object.needsHuman &&
     object.intent &&
     object.intent !== 'other';
   const recommended =
     object.intent === 'discover' || object.intent === 'recommend';
   const catalog =
-    isStaging &&
+    shoppingEnabled &&
     recommended &&
     object.catalogCategory &&
     !search.products.some(
@@ -263,7 +263,7 @@ export async function buildShoppingAutoReplyOutcome(input: {
   const shopping = recommended || cards.length > 0;
   const recentCard = history.slice(-4).findLast((turn) => turn.productCard);
   const suggestions =
-    isStaging && !object.needsHuman
+    shoppingEnabled && !object.needsHuman
       ? [...new Set(object.suggestions)].filter((suggestion) => {
           switch (suggestion) {
             case 'browse_phones':
@@ -274,7 +274,7 @@ export async function buildShoppingAutoReplyOutcome(input: {
               return canGuidePaySmallSmall && shopping;
             case 'add_to_cart':
               return (
-                stagingCheckoutEnabled &&
+                checkoutEnabled &&
                 cards.length === 0 &&
                 !!recentCard &&
                 new Set(recentCard.content.split('\n').filter(Boolean)).size ===
@@ -283,7 +283,7 @@ export async function buildShoppingAutoReplyOutcome(input: {
             case 'orders':
               return false;
             case 'repair_quote':
-              return stagingCheckoutEnabled;
+              return checkoutEnabled;
             default:
               return false;
           }

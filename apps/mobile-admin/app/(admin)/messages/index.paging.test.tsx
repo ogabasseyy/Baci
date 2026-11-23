@@ -11,6 +11,14 @@ const mocks = vi.hoisted(() => ({
   search: vi.fn(),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }),
+}));
+vi.mock('@/components/ui/KeyboardInsetView', () => ({
+  KeyboardInsetView: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
 vi.mock('expo-router', () => ({ router: { push: vi.fn() } }));
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: LIGHT_COLORS }),
@@ -21,8 +29,8 @@ vi.mock('@/hooks/useInboxConversations', () => ({
 vi.mock('@/hooks/useInboxSearch', () => ({
   useInboxSearch: (term: string) => mocks.search(term),
 }));
-vi.mock('@/components/ui/AppKeyboardContainer', () => ({
-  AppKeyboardContainer: ({ children }: { children: ReactNode }) => (
+vi.mock('@/components/ui/AppHeaderKeyboardContainer', () => ({
+  AppHeaderKeyboardContainer: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
 }));

@@ -12,7 +12,7 @@ import { CustomerCard } from '@/components/messages/CustomerCard';
 import { CustomerUnavailable } from '@/components/messages/CustomerUnavailable';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { ReplyBox } from '@/components/messages/ReplyBox';
-import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
+import { AppHeaderKeyboardContainer } from '@/components/ui/AppHeaderKeyboardContainer';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useInboxCustomer } from '@/hooks/useInboxCustomer';
 import { useInboxManage } from '@/hooks/useInboxManage';
@@ -76,7 +76,7 @@ export function ConversationThread({
           </Pressable>
         </View>
       ) : (
-        <AppKeyboardContainer align="start" scrollEnabled={false}>
+        <AppHeaderKeyboardContainer>
           {conversation ? (
             <ConversationActions
               busy={manage.isUpdating}
@@ -155,7 +155,7 @@ export function ConversationThread({
             }}
             status={reply.status}
           />
-        </AppKeyboardContainer>
+        </AppHeaderKeyboardContainer>
       )}
     </View>
   );

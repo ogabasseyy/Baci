@@ -7,6 +7,12 @@ import {
   TYPOGRAPHY,
 } from '@/constants/theme';
 
+/**
+ * Room the list leaves at its bottom so the last rows can scroll clear of the
+ * floating pill (pill height plus its spacing).
+ */
+export const FLOATING_SEARCH_CLEARANCE = 80;
+
 interface FloatingSearchBarProps {
   colors: ThemeColors;
   onChangeText: (text: string) => void;
@@ -14,8 +20,10 @@ interface FloatingSearchBarProps {
 }
 
 /**
- * Rounded search pill that sits at the bottom of the screen, where a thumb
- * reaches. Searches names, contacts and message text.
+ * Rounded search pill that floats over the bottom of the list, where a thumb
+ * reaches. The field itself is solid, so what is typed is easy to read; there is
+ * no bar or strip behind it, so the chats show around it and scroll underneath.
+ * Searches names, contacts and message text.
  */
 export function FloatingSearchBar({
   colors,
@@ -69,7 +77,7 @@ const styles = StyleSheet.create({
   pill: {
     alignItems: 'center',
     borderRadius: RADIUS.full,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth * 2,
     elevation: 6,
     flexDirection: 'row',
     gap: SPACING.sm,
@@ -80,6 +88,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   wrap: {
+    paddingBottom: SPACING.xs,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
   },

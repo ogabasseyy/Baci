@@ -7,6 +7,7 @@ import {
   CHAT_AUTO_REPLY_MIN_CONFIDENCE,
   type ChatAutoReply,
 } from '@/schemas/chat-auto-reply';
+import { CHAT_SANTA_OFFERS_KEY } from '@/schemas/chat-santa-offer';
 import type { ChatWebhookMessageCreated } from '@/schemas/chat-webhook';
 import {
   getConversationSnapshot,
@@ -159,7 +160,9 @@ export async function runChatAutoReply(
   event: ChatWebhookMessageCreated
 ): Promise<ChatAutoReplyOutcome> {
   const decision = decideChatAutoReply(event, {
-    semanticHandoff: isOxygenStorefrontStagingEnabled(),
+    semanticHandoff:
+      isOxygenStorefrontStagingEnabled() ||
+      process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED === 'true',
   });
   if (decision.action === 'skip') return 'skipped';
   const conversationId = event.conversation.id;
@@ -220,6 +223,9 @@ export async function runChatAutoReply(
   const sent = await postAssistantMessage(binding, {
     conversationId,
     content: result.reply.reply,
+    ...(result.santaOffers?.length
+      ? { contentAttributes: { [CHAT_SANTA_OFFERS_KEY]: result.santaOffers } }
+      : {}),
     ...(result.checkoutName
       ? { checkoutName: { for_message_id: event.id, ...result.checkoutName } }
       : {}),
@@ -275,11 +281,8 @@ export async function recordMerchantTakeover(
 ): Promise<ChatAutoReplyOutcome> {
   if (!isMerchantReply(event)) return 'skipped';
   const conversationId = event.conversation.id;
-  // The status move is what stops the assistant: if it fails the takeover
-  // is not complete, even when the label lands. The webhook's status can be
-  // old by now (a delayed or repeated delivery), so the live one decides:
-  // a conversation staff have since resolved or snoozed is left as it is.
-  // The event may carry no status at all, so the live read is unconditional.
+  // The status move stops the assistant. Recheck live status so stale
+  // webhooks do not overwrite staff-resolved or snoozed conversations.
   const live = await getConversationSnapshot(binding, conversationId);
   let moved = live !== null;
   if (live?.status === 'pending') {

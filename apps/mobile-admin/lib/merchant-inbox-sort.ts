@@ -21,7 +21,8 @@ export function isFollowUpDue(c: InboxConversation): boolean {
  * Most important first. Priority always leads, then returning customers
  * (people who have already bought), then, per view: "Needs reply"
  * puts the chat that has waited longest first; "Follow-up" puts due ones
- * first, then the soonest to come back; the rest stay newest first.
+ * first, then the soonest to come back; Done and All stay newest first (their
+ * pages are not ranked across, see below).
  */
 export function sortInbox(
   conversations: readonly InboxConversation[],
@@ -46,6 +47,12 @@ export function sortInbox(
     }
     return newestFirst(a, b);
   };
+  // Done and All do not load several pages up front, so a priority ranking
+  // would only be true for the page on screen: they stay newest first, which is
+  // the order the chat engine pages in and so is right across pages.
+  if (view === 'done' || view === 'all') {
+    return [...conversations].sort((a, b) => newestFirst(a, b) || a.id - b.id);
+  }
   return [...conversations].sort(
     (a, b) =>
       rank(b) - rank(a) ||

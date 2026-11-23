@@ -71,6 +71,25 @@ describe('sortInbox', () => {
   });
 });
 
+describe('sortInbox for views that are not ranked across pages', () => {
+  it('bugfix: keeps Done and All newest first and ignores priority', () => {
+    const list = [
+      chat(1, { priority: 'urgent' }),
+      chat(3),
+      chat(2, { priority: 'high' }),
+    ];
+    expect(ids(sortInbox(list, 'all'))).toEqual([3, 2, 1]);
+    expect(ids(sortInbox(list, 'done'))).toEqual([3, 2, 1]);
+  });
+
+  it('still ranks by priority on the views that load several pages', () => {
+    const list = [chat(1, { priority: 'urgent' }), chat(3), chat(2)];
+    for (const view of ['needs_reply', 'unread', 'follow_up'] as const) {
+      expect(ids(sortInbox(list, view))[0]).toBe(1);
+    }
+  });
+});
+
 describe('isFollowUpDue', () => {
   it('is true only for a marked chat that is back in the open queue', () => {
     expect(isFollowUpDue(chat(1, { followUp: true }))).toBe(true);

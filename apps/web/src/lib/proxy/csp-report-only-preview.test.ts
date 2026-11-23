@@ -14,7 +14,9 @@ it('builds a narrower storefront script candidate without changing payment origi
   expect(enforcedScript).toContain("'unsafe-inline'");
   expect(candidateScript).not.toContain("'unsafe-inline'");
   expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
-  expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
+  expect(directive(candidate, 'form-action')).toEqual(
+    directive(enforced, 'form-action')
+  );
   expect(candidateScript).toEqual(
     enforcedScript.filter((source) => source !== "'unsafe-inline'")
   );
@@ -34,6 +36,16 @@ it('does not produce a report-only candidate without an input script-src', () =>
   ).toBeNull();
 });
 
+it('does not add form-action without checkout evidence', () => {
+  const candidate = requireCandidate(
+    generateStorefrontCspReportOnlyCandidate(
+      "script-src 'self' 'unsafe-inline'"
+    )
+  );
+
+  expect(candidate).not.toContain('form-action');
+});
+
 it('removes reporting directives and unsafe sources from script-src-elem', () => {
   const candidate = requireCandidate(
     generateStorefrontCspReportOnlyCandidate(
@@ -50,7 +62,18 @@ it('removes reporting directives and unsafe sources from script-src-elem', () =>
   );
 });
 
-it('removes the local eval exception and replaces duplicate candidate directives', () => {
+it('uses none when unsafe sources were the only script execution sources', () => {
+  const candidate = requireCandidate(
+    generateStorefrontCspReportOnlyCandidate(
+      "script-src 'unsafe-inline' 'unsafe-eval'; script-src-elem 'unsafe-inline' 'unsafe-eval'"
+    )
+  );
+
+  expect(directive(candidate, 'script-src')).toEqual(["'none'"]);
+  expect(directive(candidate, 'script-src-elem')).toEqual(["'none'"]);
+});
+
+it('removes the local eval exception and preserves existing form-action', () => {
   const local = generateCSP('storefront', true);
   const candidate = requireCandidate(
     generateStorefrontCspReportOnlyCandidate(
@@ -62,10 +85,10 @@ it('removes the local eval exception and replaces duplicate candidate directives
   expect(script).not.toContain("'unsafe-inline'");
   expect(script).not.toContain("'unsafe-eval'");
   expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
-  expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
-  expect(
-    candidate.split('; ').filter((part) => part.startsWith('form-action '))
-  ).toHaveLength(1);
+  expect(directive(candidate, 'form-action')).toEqual([
+    'https://provider.example',
+  ]);
+  expect(directive(candidate, 'form-action')).toHaveLength(1);
   expect(
     candidate.split('; ').filter((part) => part.startsWith('script-src-attr '))
   ).toHaveLength(1);
@@ -83,17 +106,15 @@ it('parses candidate directives across semicolon and whitespace variations', () 
     'https://cdn.example',
   ]);
   expect(directive(candidate, 'script-src-attr')).toEqual(["'none'"]);
-  expect(directive(candidate, 'form-action')).toEqual(["'self'"]);
+  expect(directive(candidate, 'form-action')).toEqual([
+    'https://provider.example',
+  ]);
   expect(
     candidate
       .split(';')
       .filter((part) => part.trim().startsWith('script-src-attr '))
   ).toHaveLength(1);
-  expect(
-    candidate
-      .split(';')
-      .filter((part) => part.trim().startsWith('form-action '))
-  ).toHaveLength(1);
+  expect(directive(candidate, 'form-action')).toHaveLength(1);
 });
 
 it('keeps the enforced policy intact while previewing storefront CSP locally by opt-in', () => {
@@ -124,7 +145,7 @@ it('keeps the enforced policy intact while previewing storefront CSP locally by 
     expect(candidateScript).toBeDefined();
     expect(candidateScript).not.toContain("'unsafe-inline'");
     expect(candidate).toContain("script-src-attr 'none'");
-    expect(candidate).toContain("form-action 'self'");
+    expect(candidate).not.toContain('form-action');
     expect(enforced).not.toContain('form-action');
     expect(candidate).toContain('https://checkout.creditdirect.ng');
     expect(candidate).toContain('https://checkout.useklump.com');

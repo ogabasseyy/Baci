@@ -108,8 +108,8 @@ export function generateCSP(
 }
 
 /**
- * Local-only CSP migration candidate for storefront scripts and form targets.
- * It removes inline script execution and restricts form targets to same-origin
+ * Local-only CSP migration candidate for storefront scripts.
+ * It removes unsafe inline script sources and preserves existing form targets
  * while leaving the enforced policy untouched. The preview deliberately has no
  * reporting endpoint, so violations are observable only in local DevTools.
  */
@@ -136,15 +136,15 @@ export function generateStorefrontCspReportOnlyCandidate(
     const name = getCspDirectiveName(directive);
     if (name !== 'script-src' && name !== 'script-src-elem') continue;
     const [, ...sources] = directive.split(' ');
+    const safeSources = sources.filter(
+      (source) => source !== "'unsafe-inline'" && source !== "'unsafe-eval'"
+    );
     directives[index] = [
       name,
-      ...sources.filter(
-        (source) => source !== "'unsafe-inline'" && source !== "'unsafe-eval'"
-      ),
+      ...(safeSources.length > 0 ? safeSources : ["'none'"]),
     ].join(' ');
   }
   setCspDirective(directives, 'script-src-attr', "'none'");
-  setCspDirective(directives, 'form-action', "'self'");
   return directives.join('; ');
 }
 

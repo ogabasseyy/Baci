@@ -29,6 +29,17 @@ export async function submitPreparedCheckout(
     prepared = { ...prepared, identity: { ...prepared.identity,
       checkoutFingerprint: `${prepared.identity.checkoutFingerprint}:oxygen-test:${localAttempt.attempt}` } };
   }
+  const bankCardOffer = payment.bankCardOffer;
+  const savedOfferPrefix = payment.recoverSavedOffer
+    ? /^bank-card-offer:[^:]+:[0-9]+:/.exec(order.pending?.checkoutFingerprint ?? '')?.[0]
+    : undefined;
+  if (savedOfferPrefix) {
+    prepared = { ...prepared, identity: { ...prepared.identity,
+      checkoutFingerprint: `${savedOfferPrefix}${prepared.identity.checkoutFingerprint}` } };
+  } else if (bankCardOffer) {
+    prepared = { ...prepared, identity: { ...prepared.identity,
+      checkoutFingerprint: `bank-card-offer:${bankCardOffer.id}:${bankCardOffer.payableKobo}:${prepared.identity.checkoutFingerprint}` } };
+  }
   const { items: orderItems, checkoutFingerprint } = prepared.identity;
   const { firstName, lastName, customerEmail, customerPhone, newsletterOptIn } = contact;
   const customerName = `${firstName} ${lastName}`.trim();
@@ -79,7 +90,9 @@ export async function submitPreparedCheckout(
         },
         newsletterOptIn,
         paymentMethod,
-        total,
+        bankCardOffer,
+        recoverSavedOffer: payment.recoverSavedOffer,
+        total: bankCardOffer ? bankCardOffer.payableKobo / 100 : total,
         orderRequestSubtotal: cart.checkoutCartTotal,
         subtotal: delivery.effectiveItemSubtotal,
         shipping: delivery.session.cost,

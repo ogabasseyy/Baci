@@ -259,6 +259,7 @@ describe('checkout success page', () => {
       ok: true,
       json: async () => ({
         finalizationOutcome: 'order_cancelled',
+        orderId: 'order-1',
         orderNumber: 'ORD-2001',
         status: 'success',
         success: true,

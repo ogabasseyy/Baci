@@ -1,6 +1,8 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import { router } from 'expo-router';
 import type { PaymentMethodType } from '@/components/checkout/PaymentMethodSelector';
 import type { WalletTransferFallback } from '@/components/checkout/wallet-transfer-fallback';
+import { deferredBankOfferCart } from '@/lib/deferred-bank-offer-cart';
 import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError, type OrderResponse } from '@/services/orders';
 import {
@@ -19,6 +21,7 @@ function trimmedOrEmpty(value: unknown): string {
 }
 
 export interface InitializeGatewayAndRouteParams {
+  checkoutCartIdentity?: string | null;
   customerEmail: string;
   customerName: string;
   customerPhone: string;
@@ -36,6 +39,7 @@ export interface InitializeGatewayAndRouteParams {
 // and routes to the payment surface. payment_started is recorded only once
 // the provider initializes — never speculatively before this runs.
 export async function initializeGatewayAndRoute({
+  checkoutCartIdentity,
   customerEmail,
   customerName,
   customerPhone,
@@ -147,6 +151,20 @@ export async function initializeGatewayAndRoute({
       'Payment initialization response is missing the authorization URL',
       'PAYMENT_INIT_ERROR'
     );
+  }
+
+  // A replay can reuse an older order whose cart snapshot is missing.
+  // Only a fresh checkout can bind its submitted cart to the reference.
+  if (
+    selectedPayment === 'paystack' &&
+    !orderResponse.idempotency?.replayed &&
+    checkoutCartIdentity &&
+    BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)
+  ) {
+    // The helper reports the storage failure and keeps gateway navigation available.
+    await deferredBankOfferCart
+      .remember(orderId, reference, checkoutCartIdentity)
+      .catch(() => undefined);
   }
 
   // The provider initialized: record the start now, never speculatively.

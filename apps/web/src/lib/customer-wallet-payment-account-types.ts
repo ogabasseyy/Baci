@@ -15,7 +15,9 @@ export type CustomerWalletPaymentAccountErrorCode =
   | 'WALLET_DVA_PENDING_REVIEW_CONFLICT'
   | 'WALLET_DVA_RECEIVER_CONFLICT'
   | 'WALLET_DVA_SUBACCOUNT_CONFLICT'
-  | 'WALLET_DVA_STORAGE_ERROR';
+  | 'WALLET_DVA_PROVIDER_CUSTOMER_CONFLICT'
+  | 'WALLET_DVA_STORAGE_ERROR'
+  | 'WALLET_DVA_WRITER_UNAVAILABLE';
 
 export class CustomerWalletPaymentAccountError extends Error {
   code: CustomerWalletPaymentAccountErrorCode;
@@ -39,6 +41,8 @@ export interface CustomerWalletPaymentCustomer {
   id: string;
   last_name?: string | null;
   phone?: string | null;
+  /** Set only by the verified RLS customer resolver. */
+  user_id?: string | null;
 }
 
 export interface CustomerWalletPaymentAccount {

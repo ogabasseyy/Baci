@@ -9,9 +9,7 @@ jest.mock('./OxygenApplicationSteps', () => ({
     return <Text>Identity details</Text>;
   },
 }));
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }), {
-  virtual: true,
-});
+jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
 jest.mock('expo-file-system', () => ({ File: jest.fn() }));
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => 'dark',

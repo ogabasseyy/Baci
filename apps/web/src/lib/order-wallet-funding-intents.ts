@@ -18,7 +18,6 @@ import {
 } from '@/lib/order-wallet-funding-utils';
 
 interface CreateOrderWalletFundingIntentArgs {
-  consent?: boolean;
   customer: CustomerWalletPaymentCustomer;
   merchant: CustomerWalletPaymentMerchant;
   now?: Date;
@@ -60,26 +59,6 @@ export {
   isWalletOrderAutoDebitEnabled,
   markWalletFundingIntentReviewRequired,
 } from '@/lib/order-wallet-funding-repository-access';
-
-async function resolveWalletAccount(args: {
-  consent?: boolean;
-  customer: CustomerWalletPaymentCustomer;
-  merchant: CustomerWalletPaymentMerchant;
-  now: Date;
-  repository: OrderWalletFundingIntentRepository;
-}): Promise<CustomerWalletPaymentAccount | null> {
-  const account = await args.repository.resolveWalletPaymentAccount({
-    customerId: args.customer.id,
-    merchantId: args.merchant.id,
-  });
-  if (account || !args.consent) return account;
-
-  return args.repository.ensureWalletPaymentAccount({
-    consentedAt: args.now,
-    customer: args.customer,
-    merchant: args.merchant,
-  });
-}
 
 function computeIntentAmounts({
   orderTotal,
@@ -244,7 +223,10 @@ export async function createOrderWalletFundingIntent(
 
   let account: CustomerWalletPaymentAccount | null;
   try {
-    account = await resolveWalletAccount({ ...args, now, repository });
+    account = await repository.resolveWalletPaymentAccount({
+      customerId: args.customer.id,
+      merchantId: args.merchant.id,
+    });
   } catch (error) {
     if (
       error instanceof CustomerWalletPaymentAccountError &&

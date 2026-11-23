@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { paystackTextIdPaymentIdentitySchema } from '@/schemas/paystack-text-id-payment-identity';
 import { logger } from './logger';
 import {
   type PaymentVerificationResponse,
@@ -12,28 +12,6 @@ export type TextIdPaymentVerificationResponse = Omit<
   PaymentVerificationResponse,
   'id'
 > & { id: string };
-
-// Lazily derived, never top-level: paystack.ts re-exports this
-// module, so deriving at import time reads PaymentVerificationSchema
-// while the cycle is still uninitialized and crashes every importer
-// that reaches paystack.ts first (all six CI shards). By first call
-// the cycle has resolved. Text-mode validation skips the nested
-// customer object: the wire quoter quotes every "id" key (member
-// order is not contractual, so a top-level-only rewrite is fragile),
-// which would trip the customer.id numeric check with a warning on
-// every call. The reconcile consumer only reads the top-level id,
-// reference, amount, and currency.
-let cachedTextIdSchema: z.ZodTypeAny | null = null;
-function textIdPaymentVerificationSchema(): z.ZodTypeAny {
-  if (cachedTextIdSchema === null) {
-    cachedTextIdSchema = PaymentVerificationSchema.omit({
-      customer: true,
-    }).extend({
-      id: z.string().regex(/^[1-9][0-9]*$/),
-    });
-  }
-  return cachedTextIdSchema;
-}
 
 /**
  * Verify a Paystack transaction
@@ -88,10 +66,11 @@ export async function verifyTransaction(
     return result;
   }
 
-  // Validate response
+  // Text-ID consumers validate the remaining fields for each outcome.
+  // Keep the legacy response warning for callers using numeric IDs.
   const parsed = (
     options.textIds
-      ? textIdPaymentVerificationSchema()
+      ? paystackTextIdPaymentIdentitySchema
       : PaymentVerificationSchema
   ).safeParse(result.data);
   if (!parsed.success) {
@@ -99,6 +78,13 @@ export async function verifyTransaction(
       message: 'Payment verification response validation warning',
       issues: parsed.error.issues,
     });
+    if (options.textIds) {
+      return {
+        success: false,
+        error: 'Invalid Paystack transaction identity',
+        code: 'INVALID_VERIFICATION_RESPONSE',
+      };
+    }
   }
 
   return { success: true, data: result.data };

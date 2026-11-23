@@ -21,6 +21,7 @@ import { settleCancellationRefundInitiation } from '@/lib/orders/settle-cancella
 import { soleCompletedCancellationLeg } from '@/lib/orders/sole-completed-cancellation-leg';
 
 export async function executeOrderCancellationSideEffect({
+  claimToken,
   deadlineMs,
   isLastAttempt,
   merchant,
@@ -30,6 +31,7 @@ export async function executeOrderCancellationSideEffect({
   step,
   supabase,
 }: {
+  claimToken?: string;
   deadlineMs?: number;
   isLastAttempt?: boolean;
   merchant: CancellationMerchant;
@@ -57,7 +59,9 @@ export async function executeOrderCancellationSideEffect({
   // order with no payment evidence at all.
   const { data: transactionRows, error: transactionError } = await supabase
     .from('transactions')
-    .select('id, amount, currency, gateway, gateway_reference, status')
+    .select(
+      'id, amount, currency, gateway, gateway_reference, gateway_response, status'
+    )
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'payment')
@@ -121,6 +125,7 @@ export async function executeOrderCancellationSideEffect({
   // non-terminal rows, in-flight legs). May throw DeferredError when
   // every remaining leg awaits provider completion.
   const {
+    amendmentRemainders,
     linkedPaymentId,
     manualLinkedLegIds,
     manualPendingLegIds,
@@ -159,12 +164,18 @@ export async function executeOrderCancellationSideEffect({
     refundedPaymentIds,
     refundRows,
     supabase,
-    transactions,
+    transactions: transactions.map((transaction) => {
+      const remaining = amendmentRemainders.get(transaction.id);
+      return remaining === undefined
+        ? transaction
+        : { ...transaction, refundAmountMinor: remaining };
+    }),
   });
   return settleCancellationRefundInitiation({
     auditBlockedTransactions,
     budgetDeferred,
     budgetSkippedManualLegIds,
+    claimToken,
     deadlineMs,
     initiationTransactions,
     isLastAttempt,

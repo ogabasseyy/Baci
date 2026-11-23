@@ -41,6 +41,7 @@ export const mockMaybeShowPostOrderInterstitial = jest.fn<
 
 export function mockExpoRouterModule(): unknown {
   return {
+    Stack: { Screen: () => null },
     router: {
       replace: jest.fn(),
     },

@@ -101,7 +101,7 @@ export function initAnalytics(): void {
         ...properties,
         ...getAnalyticsSuperProperties(),
       }),
-      enableSessionReplay: true,
+      enableSessionReplay: false,
       sessionReplayConfig: {
         maskAllTextInputs: true,
         maskAllImages: true,

@@ -46,10 +46,10 @@ BEGIN
     'Sessionless Snapshot Regression',
     'sessionless-snapshot-regression'
   );
-  INSERT INTO public.customers (id, user_id)
+  INSERT INTO public.customers (id, merchant_id, user_id)
   VALUES
-    (v_mine_customer_id, '9f000000-0000-4000-8000-000000000649'),
-    (v_theirs_customer_id, '9f000000-0000-4000-8000-000000000648');
+    (v_mine_customer_id, v_merchant_id, '9f000000-0000-4000-8000-000000000649'),
+    (v_theirs_customer_id, v_merchant_id, '9f000000-0000-4000-8000-000000000648');
   -- One serialized_strict product with a durably-held unit on the
   -- caller's order, so the snapshot carries inventory_confirmed=true.
   INSERT INTO public.products (id, merchant_id, name, price, status, inventory_tracking_policy)

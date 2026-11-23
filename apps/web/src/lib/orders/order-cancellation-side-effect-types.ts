@@ -6,6 +6,7 @@ export type CancellationOrder = Parameters<
   currency: string | null;
   merchant_id: string;
   payment_status: string;
+  payment_method?: string | null;
 };
 
 export type CancellationMerchant = Parameters<

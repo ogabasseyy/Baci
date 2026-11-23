@@ -6,6 +6,7 @@ import {
   getCachedProductWithDetails,
   getMerchantByIdentifier,
 } from '@/lib/cached-data';
+import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { generateSlug } from '@/lib/seo-utils';
@@ -587,16 +588,12 @@ async function getCachedComparePageModel(
   // same RemoteCacheHandler failures.
   'use cache';
   try {
-    // 'products' (revalidate 1800), NOT 'categories' (3600): now that this is a
-    // LOCAL entry, tag revalidation only evicts the instance that handled the
-    // mutation — other instances serve the prior snapshot until their window
-    // lapses. This model embeds mutable product price/stock (via
-    // getCachedProductWithDetails, itself local 'use cache' on the same
-    // 'products' window), so match that window to bound cross-instance staleness
-    // of the embedded data to ~30min and cap how long each per-slug entry
-    // lingers in a lambda's local cache.
-    cacheLife('products');
-    cacheTag('category-page-data', 'products', 'categories', 'blog-posts');
+    // 'categories' (revalidate 3600): as a LOCAL entry, tag revalidation only
+    // evicts the instance that handled the mutation — other instances serve the
+    // prior snapshot until their window lapses. Extending this from 'products'
+    // (1800) to 'categories' (3600) cuts cold-fill CPU churn on compare pages
+    // while bounding cross-instance staleness to 1 hour.
+    cacheLife('categories');
   } catch {
     // Unit tests do not run with Next cacheComponents enabled.
   }
@@ -618,16 +615,16 @@ async function getCachedComparePageModel(
 
   try {
     cacheTag(
+      getCategoryPageDataCacheTag(merchant.id),
       `products-${merchant.id}`,
       `categories-${merchant.id}`,
       `features-${merchant.id}`,
       // Nested `use cache` entries have INDEPENDENT tags — an inner entry's tag
       // does not bubble up to this outer model. This model EMBEDS merchant
       // profile / branding / currency copy and precomputed storeUrl + titles,
-      // so it must carry the merchant tags revalidateMerchant() fires or a
-      // settings / slug / branding change serves stale compare pages until the
-      // 'categories' window: `merchants`, `merchant-id-${id}`, `merchant-${slug}`.
-      'merchants',
+      // so it must carry the tenant-scoped merchant tags revalidateMerchant()
+      // fires or a settings / slug / branding change serves stale compare pages
+      // until the 'categories' window: `merchant-id-${id}`, `merchant-${slug}`.
       `merchant-id-${merchant.id}`,
       `merchant-${merchant.slug}`
     );

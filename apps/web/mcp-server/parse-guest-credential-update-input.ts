@@ -5,7 +5,7 @@ import { decodeGuestCartCredential } from './decode-guest-cart-credential';
 export function parseGuestCredentialUpdateInput(input: unknown) {
   const parsed = mcpGuestCredentialUpdateInputSchema.safeParse(input);
   if (!parsed.success) return parsed;
-  const { cartCredential, ...update } = parsed.data;
+  const { cartCredential, startFreshIfUnavailable: _, ...update } = parsed.data;
   // The internal schema also enforces exactly 64 lowercase hex digits.
   return mcpGuestCartInputSchema.safeParse({
     ...update,

@@ -23,7 +23,12 @@ import {
 export { CHAT_CUSTOMER_LINK_ATTRIBUTE };
 export const CHAT_CUSTOMER_LINK_AUDIENCE = 'baci-chat-customer-link';
 const CHAT_CUSTOMER_LINK_SCOPE = 'chat-customer-link';
-const CHAT_CUSTOMER_LINK_TTL_SECONDS = 90 * 24 * 60 * 60;
+/**
+ * Shorter is safer (a copied note stops working sooner) and the storefront
+ * issues a fresh one every time a signed-in shopper opens the chat; the cost is
+ * that a chat left alone for longer than this stops showing its customer card.
+ */
+const CHAT_CUSTOMER_LINK_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 export type VerifiedChatCustomerLink = {
   merchantId: string;

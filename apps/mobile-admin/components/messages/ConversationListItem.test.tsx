@@ -159,4 +159,29 @@ describe('ConversationListItem', () => {
     expect(screen.getByText('Follow up due')).toBeInTheDocument();
     expect(screen.getByText('Order issue')).toBeInTheDocument();
   });
+
+  it('marks a returning customer with their order count', () => {
+    renderItem(chat({ customer: { orderCount: 3, totalSpent: 150000 } }));
+    expect(screen.getByText('Returning · 3 orders')).toBeInTheDocument();
+  });
+
+  it('says one order in the singular, and Signed in for a customer with none yet', () => {
+    const { unmount } = render(
+      <ConversationListItem
+        colors={LIGHT_COLORS}
+        conversation={chat({ customer: { orderCount: 1, totalSpent: 100 } })}
+        onPress={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Returning · 1 order')).toBeInTheDocument();
+    unmount();
+
+    renderItem(chat({ customer: { orderCount: 0, totalSpent: 0 } }));
+    expect(screen.getByText('Signed in')).toBeInTheDocument();
+  });
+
+  it('shows no customer pill for a guest', () => {
+    renderItem(chat({ customer: null }));
+    expect(screen.queryByText(/Returning|Signed in/)).toBeNull();
+  });
 });

@@ -7,6 +7,7 @@ import {
 import { readCustomerSessionHint } from '@/contexts/customer-session-hint';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { CHAT_CUSTOMER_LINK_ATTRIBUTE } from '@/schemas/chat-customer-link';
+import { readLinkMarker, writeLinkMarker } from './chat-link-marker';
 
 type ChatwootContactApi = {
   setCustomAttributes?: (attributes: Record<string, string>) => void;
@@ -28,23 +29,6 @@ function chatwoot(): ChatwootContactApi | undefined {
   return (window as Window & { $chatwoot?: ChatwootContactApi }).$chatwoot;
 }
 
-function readMarker(key: string): boolean {
-  try {
-    return window.localStorage.getItem(key) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function writeMarker(key: string, linked: boolean): void {
-  try {
-    if (linked) window.localStorage.setItem(key, '1');
-    else window.localStorage.removeItem(key);
-  } catch {
-    // Private mode or blocked storage: the link still works for this visit.
-  }
-}
-
 /**
  * When a signed-in shopper has the store chat open, tells the chat who they
  * are with a server-signed note, so the owner sees their orders next to the
@@ -61,7 +45,6 @@ export function useChatwootCustomerLink(
 ): void {
   useEffect(() => {
     if (!enabled || !storeSlug) return;
-    const markerKey = `baci-chat-link:${storeSlug}`;
     let cancelled = false;
     // Each sync gets a number; only the newest may act on its answer.
     let generation = 0;
@@ -78,7 +61,7 @@ export function useChatwootCustomerLink(
     const clearLink = (force = false) => {
       if (
         !force &&
-        !readMarker(markerKey) &&
+        !readLinkMarker(storeSlug) &&
         !linkedThisSession.has(storeSlug)
       ) {
         return;
@@ -90,7 +73,7 @@ export function useChatwootCustomerLink(
         return;
       }
       linkedThisSession.delete(storeSlug);
-      writeMarker(markerKey, false);
+      writeLinkMarker(storeSlug, false);
     };
 
     /**
@@ -140,7 +123,7 @@ export function useChatwootCustomerLink(
           [CHAT_CUSTOMER_LINK_ATTRIBUTE]: token,
         });
         linkedThisSession.add(storeSlug);
-        writeMarker(markerKey, true);
+        writeLinkMarker(storeSlug, true);
       } catch {
         // Linking is a convenience; the chat works the same without it.
         failClosed();

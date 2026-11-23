@@ -40,6 +40,8 @@ export function installHarness(mocks: Mocks): void {
   vi.restoreAllMocks();
   vi.clearAllMocks();
   window.localStorage.clear();
+  // biome-ignore lint/suspicious/noDocumentCookie: test cleanup of the marker cookie
+  document.cookie = 'baci_chat_link_ogabassey=; Path=/; Max-Age=0';
   (window as unknown as { $chatwoot: unknown }).$chatwoot = {
     setCustomAttributes,
     deleteCustomAttribute,

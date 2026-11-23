@@ -1,5 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { SignJWT } from 'jose';
+import { decodeJwt, SignJWT } from 'jose';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -23,6 +23,40 @@ function env(): NodeJS.ProcessEnv {
     EKAETTE_CHATWOOT_CHALLENGE_ISSUER: 'https://app.example.test',
   };
 }
+
+describe('chat customer link token lifetime', () => {
+  it('bugfix: expires after 30 days, not 90, so a copied note stops working sooner', async () => {
+    const token = await issueChatCustomerLinkToken(
+      { merchantId: MERCHANT, customerId: CUSTOMER },
+      { env: env(), now: new Date('2026-01-01T00:00:00Z') }
+    );
+    const claims = decodeJwt(token as string);
+    expect((claims.exp as number) - (claims.iat as number)).toBe(
+      30 * 24 * 60 * 60
+    );
+  });
+
+  it('verifies on day 29 and refuses on day 31', async () => {
+    const e = env();
+    const issuedAt = new Date('2026-01-01T00:00:00Z');
+    const token = await issueChatCustomerLinkToken(
+      { merchantId: MERCHANT, customerId: CUSTOMER },
+      { env: e, now: issuedAt }
+    );
+    const at = (days: number) =>
+      new Date(issuedAt.getTime() + days * 86_400_000);
+    const day29 = await createChatCustomerLinkVerifier(MERCHANT, {
+      env: e,
+      now: at(29),
+    });
+    const day31 = await createChatCustomerLinkVerifier(MERCHANT, {
+      env: e,
+      now: at(31),
+    });
+    await expect(day29?.(token)).resolves.not.toBeNull();
+    await expect(day31?.(token)).resolves.toBeNull();
+  });
+});
 
 describe('chat customer link token', () => {
   it('verifies a token it issued for the same store', async () => {

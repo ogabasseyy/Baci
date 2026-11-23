@@ -78,7 +78,9 @@ export function useChatwootCustomerLink(
     };
 
     /**
-     * `initial`: the chat just loaded; a failure keeps whatever link is there.
+     * `initial`: the chat just loaded and we cannot tell whether the account
+     * changed since the note was set, so a failed check removes a recorded note
+     * rather than trust it (a visitor who was never linked costs nothing).
      * `identity-change`: we know the account changed, so the previous account's
      * note is removed before the new one is requested, never left in place.
      * `recheck`: we cannot tell if the account changed (a focus or cross-tab
@@ -103,8 +105,10 @@ export function useChatwootCustomerLink(
         return;
       }
       if (mode === 'identity-change') clearLink(true);
+      // A note that cannot be confirmed may belong to a previous account, so it
+      // is removed. After the first check only a recorded link is touched.
       const failClosed = () => {
-        if (mode !== 'initial' && !stale()) clearLink(true);
+        if (!stale()) clearLink(mode !== 'initial');
       };
       try {
         const response = await fetchWithCsrf(LINK_ENDPOINT, {

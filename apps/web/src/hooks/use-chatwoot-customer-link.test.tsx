@@ -117,15 +117,26 @@ describe('useChatwootCustomerLink', () => {
     expect(setCustomAttributes).not.toHaveBeenCalled();
   });
 
-  it('keeps the link when only the first check on page load fails', async () => {
+  it('bugfix: removes a recorded link when the first check on page load cannot be confirmed', async () => {
+    // The note may belong to an account that has since signed out and been
+    // replaced; a failed check must not leave it for the merchant to trust.
     window.localStorage.setItem(MARKER, '1');
+    mocks.fetch.mockResolvedValueOnce(json(503));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+
+    await waitFor(() =>
+      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+    );
+    expect(window.localStorage.getItem(MARKER)).toBeNull();
+  });
+
+  it('does not touch the chat when the first check fails for a visitor who was never linked', async () => {
     mocks.fetch.mockResolvedValueOnce(json(503));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
 
     await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
     await Promise.resolve();
     expect(deleteCustomAttribute).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem(MARKER)).toBe('1');
   });
 
   it('bugfix: a guest hint removes a leftover link even with no marker, once per page load', () => {

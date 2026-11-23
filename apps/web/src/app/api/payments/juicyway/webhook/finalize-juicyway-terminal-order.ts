@@ -40,7 +40,7 @@ export async function finalizeJuicywayTerminalOrder({
 
   if (
     !isOrderClampedAsCancelled(terminalOrder) &&
-    terminalOrder.payment_status !== 'cancelled'
+    !['cancelled', 'canceled'].includes(terminalOrder.payment_status)
   ) {
     return { kind: 'not_cancelled', order: terminalOrder };
   }

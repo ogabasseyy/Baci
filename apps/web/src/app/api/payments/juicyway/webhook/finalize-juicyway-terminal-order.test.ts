@@ -62,6 +62,33 @@ describe('finalizeJuicywayTerminalOrder', () => {
     );
   });
 
+  it('attempts reinstatement for the alternate canceled spelling', async () => {
+    vi.mocked(finalizeOrderGatewayPayment).mockResolvedValue({
+      kind: 'completed',
+      orderNumber: 'ORD-1',
+      healed: false,
+    });
+    const supabase = mockSupabase({
+      id: 'order',
+      order_number: 'ORD-1',
+      payment_status: 'canceled',
+      shipping_status: 'pending',
+      cancelled_at: null,
+    });
+
+    await expect(
+      finalizeJuicywayTerminalOrder({
+        gatewayResponse: { status: 'success' },
+        orderId: 'order',
+        reference: 'reference',
+        scheduleAfter: vi.fn(),
+        supabase: supabase as unknown as SupabaseClient,
+        transaction,
+      })
+    ).resolves.toEqual({ kind: 'completed' });
+    expect(finalizeOrderGatewayPayment).toHaveBeenCalledOnce();
+  });
+
   it('returns the non-cancelled row for the existing terminal review flow', async () => {
     const order = {
       id: 'order',

@@ -128,6 +128,23 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- Historical US-spelling cancellation rows with timeout provenance follow
+  -- the same verified recovery path as current British-spelling rows.
+  test_order_id := gen_random_uuid();
+  capture_id := gen_random_uuid();
+  INSERT INTO public.orders (id, merchant_id, payment_method, payment_status)
+  VALUES (test_order_id, merchant_id, 'paystack', 'canceled');
+  INSERT INTO public.order_items VALUES (test_order_id, product_id, NULL);
+  INSERT INTO private.order_payment_timeouts (order_id, timed_out_at)
+  VALUES (test_order_id, now() - interval '4 days');
+  INSERT INTO public.transactions (id, order_id, merchant_id, gateway, gateway_reference)
+  VALUES (capture_id, test_order_id, merchant_id, 'paystack', capture_id::text);
+  PERFORM set_config('baci.test_inventory_unlimited', 'on', true);
+  IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'reinstated_inventory_reclaimed' THEN
+    RAISE EXCEPTION 'Alternate canceled spelling with timeout provenance did not recover';
+  END IF;
+  PERFORM set_config('baci.test_inventory_unlimited', '', true);
+
   -- Older Credit Direct orders used the resolution row as their timeout
   -- audit. Verify it can recover the original captured transaction.
   test_order_id := gen_random_uuid();

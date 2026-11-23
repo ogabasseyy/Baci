@@ -55,6 +55,15 @@ describe('recoverCreditDirectTimeoutOrder', () => {
     expect(input.resume).not.toHaveBeenCalled();
   });
 
+  it('requests reconciliation when reinstatement throws after capture was recorded', async () => {
+    reinstate.mockRejectedValue(new Error('RPC unavailable'));
+    const { input, query } = mockRecovery('{}');
+    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
+      kind: 'review_required',
+    });
+    expect(query.single).not.toHaveBeenCalled();
+  });
+
   it('returns without an RPC when the transaction ID is missing', async () => {
     reinstate.mockClear();
     const { input } = mockRecovery('{}');
@@ -68,7 +77,7 @@ describe('recoverCreditDirectTimeoutOrder', () => {
     reinstate.mockResolvedValue('already_reinstated');
     const { input } = mockRecovery('{}', { message: 'Unavailable' });
     await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
-      kind: 'committed_unread',
+      kind: 'review_required',
     });
     expect(input.resume).not.toHaveBeenCalled();
   });

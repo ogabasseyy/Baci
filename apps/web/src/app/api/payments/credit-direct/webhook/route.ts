@@ -704,7 +704,7 @@ export async function POST(request: NextRequest) {
                 }),
             });
             if (recovered.kind === 'recovered') return recovered.response;
-            if (recovered.kind === 'committed_unread') {
+            if (recovered.kind === 'review_required') {
               const reviewFiled = await handlePaymentForCancelledOrder({
                 gatewayReference: payload.checkoutTransactionId,
                 issueType: 'gateway_payment_wedge_requires_review',
@@ -825,7 +825,7 @@ export async function POST(request: NextRequest) {
               }),
           });
           if (recovered.kind === 'recovered') return recovered.response;
-          if (recovered.kind === 'committed_unread') {
+          if (recovered.kind === 'review_required') {
             const reviewFiled = await handlePaymentForCancelledOrder({
               gatewayReference: payload.checkoutTransactionId,
               issueType: 'gateway_payment_wedge_requires_review',

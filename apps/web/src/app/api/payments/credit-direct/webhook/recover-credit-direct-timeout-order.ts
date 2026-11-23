@@ -3,7 +3,7 @@ import { reinstateTimeoutOrderPayment } from '@/lib/payments/reinstate-timeout-o
 
 export type CreditDirectTimeoutRecoveryResult<T> =
   | { kind: 'blocked' }
-  | { kind: 'committed_unread' }
+  | { kind: 'review_required' }
   | { kind: 'recovered'; response: T };
 
 export async function recoverCreditDirectTimeoutOrder<T>({
@@ -19,17 +19,22 @@ export async function recoverCreditDirectTimeoutOrder<T>({
   supabase: SupabaseClient;
   transactionId: string | null;
 }): Promise<CreditDirectTimeoutRecoveryResult<T>> {
-  if (
-    !transactionId ||
-    (await reinstateTimeoutOrderPayment(
+  if (!transactionId) {
+    return { kind: 'blocked' };
+  }
+
+  let reinstatement: Awaited<ReturnType<typeof reinstateTimeoutOrderPayment>>;
+  try {
+    reinstatement = await reinstateTimeoutOrderPayment(
       supabase,
       orderId,
       transactionId,
       merchantId
-    )) === 'blocked'
-  ) {
-    return { kind: 'blocked' };
+    );
+  } catch {
+    return { kind: 'review_required' };
   }
+  if (reinstatement === 'blocked') return { kind: 'blocked' };
 
   const { data, error } = await supabase
     .from('orders')
@@ -41,7 +46,7 @@ export async function recoverCreditDirectTimeoutOrder<T>({
   if (error || !data) {
     // The RPC has already committed. Let the caller file its reconciliation
     // review instead of returning a retryable webhook error.
-    return { kind: 'committed_unread' };
+    return { kind: 'review_required' };
   }
 
   let notes: Record<string, unknown> = {};

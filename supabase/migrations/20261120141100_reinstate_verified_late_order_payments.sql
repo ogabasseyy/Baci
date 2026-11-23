@@ -184,7 +184,7 @@ BEGIN
     RETURN 'already_reinstated';
   END IF;
 
-  IF v_order.payment_status IS DISTINCT FROM 'cancelled'
+  IF NOT coalesce(v_order.payment_status IN ('cancelled', 'canceled'), false)
     OR NOT coalesce(v_order.shipping_status IN ('pending', 'cancelled'), false)
     OR v_order.cancelled_by IS NOT NULL OR v_order.cancellation_reason IS NOT NULL
     OR v_order.cancellation_refund_mode IS NOT NULL

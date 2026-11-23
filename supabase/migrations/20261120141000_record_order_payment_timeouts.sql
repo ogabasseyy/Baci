@@ -48,6 +48,7 @@ BEGIN
         AND o.payment_method IN ('credit_direct', 'klump')
         AND o.updated_at < (now() - (hours_threshold * interval '1 hour'))
       )
+    ORDER BY o.id
   LOOP
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended('baci_order_payment:' || v_order_id::text, 0)

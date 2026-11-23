@@ -13,3 +13,15 @@ it('offers Oxygen only for explicit local staging with a loopback backend', () =
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://production.supabase.co');
   expect(isOxygenStorefrontStagingEnabled()).toBe(false);
 });
+
+it('allows the trusted HTTPS loopback backend for the isolated chat walkthrough', () => {
+  vi.stubEnv('NODE_ENV', 'development');
+  vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
+  vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://localhost/qa-backend');
+  expect(isOxygenStorefrontStagingEnabled()).toBe(true);
+  vi.stubEnv(
+    'NEXT_PUBLIC_SUPABASE_URL',
+    'https://localhost.example.test/qa-backend'
+  );
+  expect(isOxygenStorefrontStagingEnabled()).toBe(false);
+});

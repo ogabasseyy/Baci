@@ -21,6 +21,7 @@ export async function readChatwootCheckoutPaymentStatus(input: {
   trackingToken: string | null;
   merchantSlug: string;
   issuedAt: number;
+  expiresAt?: number;
 }): Promise<ChatwootCheckoutStatusResult> {
   const { requestId } = input;
   const unavailable = { requestId, status: 'unavailable' as const };
@@ -52,7 +53,11 @@ export async function readChatwootCheckoutPaymentStatus(input: {
       // it the American way.
       order.shipping_status === 'cancelled' ||
       order.shipping_status === 'canceled' ||
-      !isChatwootCheckoutPaymentWindowOpen(input.issuedAt)
+      !isChatwootCheckoutPaymentWindowOpen(
+        input.issuedAt,
+        Date.now(),
+        input.expiresAt
+      )
     ) {
       return unavailable;
     }

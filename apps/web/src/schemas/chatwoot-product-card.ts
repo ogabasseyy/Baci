@@ -6,16 +6,20 @@ const productSlug = chatwootProductSlugSchema;
 const availability = z.enum(['in_stock', 'out_of_stock']);
 const productCondition = z.enum(['new', 'used', 'open_box']);
 
+const productImage = z
+  .url()
+  .max(2_048)
+  .refine((value) => {
+    const url = URL.parse(value);
+    return url?.protocol === 'https:' && !url.username && !url.password;
+  });
+
 export const chatwootProductCardSchema = z
   .object({
     availability,
     condition: productCondition.optional(),
     currency: z.string().regex(/^[A-Z]{3}$/),
-    image: z
-      .url()
-      .max(2_048)
-      .refine((value) => new URL(value).protocol === 'https:')
-      .optional(),
+    image: productImage.optional(),
     name: z.string().min(1).max(120),
     price: z.number().finite().nonnegative(),
     slug: productSlug,
@@ -27,6 +31,7 @@ export const chatwootProductCardSchema = z
             availability,
             condition: productCondition.optional(),
             id: postgresUuidSchema,
+            image: productImage.optional(),
             price: z.number().finite().nonnegative(),
           })
           .strict()

@@ -26,3 +26,21 @@ it('quotes synthetic merchant rates through the normal session/RLS client withou
   expect(mockCreateServerClient).toHaveBeenCalled();
   expect(mockCreateAdminClient).not.toHaveBeenCalled();
 });
+
+it('does not widen the merchant carrier allowlist for an Ekaette GIG request', async () => {
+  vi.clearAllMocks();
+  mockGetMerchantForApiRequest.mockResolvedValue({ merchantId: 'merchant-1' });
+  mockGetQuotes.mockResolvedValue({
+    quotes: { featured: [], all: [] },
+    sessionId: 'synthetic',
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  const { response } = await postQuotes(
+    NG_MERCHANT,
+    { ...lagosRatesPayload, shipping_providers: ['TOPSHIP'] },
+    { carrier: 'GIGL' }
+  );
+  expect(response.status).toBe(200);
+  expect(mockGetQuotes).toHaveBeenCalledWith(expect.anything(), []);
+  expect(mockCreateAdminClient).not.toHaveBeenCalled();
+});

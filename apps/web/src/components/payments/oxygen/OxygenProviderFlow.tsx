@@ -36,6 +36,7 @@ function OxygenProviderSession({
   products,
   currency,
   prefill,
+  conversational,
   active = true,
   onProgress,
 }: OxygenProviderFlowProps) {
@@ -250,6 +251,7 @@ function OxygenProviderSession({
             products,
             currency,
             prefill,
+            conversational,
             active,
             onProgress,
           }}

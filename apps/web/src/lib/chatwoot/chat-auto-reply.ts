@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { generateChatAutoReply } from '@/ai/chat-auto-reply';
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import {
   CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH,
   CHAT_AUTO_REPLY_MIN_CONFIDENCE,
@@ -29,6 +30,8 @@ import {
   mergeChatLabels,
 } from './chat-auto-reply-labels';
 
+import { prepareChatwootProductCards } from './prepare-product-cards';
+
 const HANDOVER_MESSAGE =
   "Thanks for your message. I'm passing this to our team, and someone will reply here shortly.";
 
@@ -39,13 +42,6 @@ export type ChatAutoReplyOutcome =
   | 'failed';
 
 const HISTORY_DEADLINE_MS = 6_000;
-// One limit for everything before the decision to reply or hand over: the
-// history read, the model and the latest-message check together. The route
-// may run for 60 seconds. After this limit a reply still needs a live status
-// read and the send (up to 5 seconds each), and a handover that follows a
-// refused send needs another status read and the queue move with its
-// credential fallback (up to 15): 30 + 10 + 15 stays inside the route's time,
-// so the platform never cuts the run off with nobody queued.
 const WORK_DEADLINE_MS = 30_000;
 
 /** Labels are merged against the live list, never the webhook's old copy. */
@@ -140,7 +136,9 @@ export async function runChatAutoReply(
   binding: ChatAutoReplyBinding,
   event: ChatWebhookMessageCreated
 ): Promise<ChatAutoReplyOutcome> {
-  const decision = decideChatAutoReply(event);
+  const decision = decideChatAutoReply(event, {
+    semanticHandoff: isOxygenStorefrontStagingEnabled(),
+  });
   if (decision.action === 'skip') return 'skipped';
   const conversationId = event.conversation.id;
   if (decision.action === 'handover') {
@@ -156,53 +154,87 @@ export async function runChatAutoReply(
   const question = (event.content ?? '')
     .trim()
     .slice(0, CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH);
-  const work = (async () => {
-    const history = await withDeadline(
-      loadChatAutoReplyHistory(binding, conversationId, event.id),
-      HISTORY_DEADLINE_MS,
-      []
-    );
-    const generated = await generateChatAutoReply({
-      merchantId: binding.merchantId,
+  const work = await withDeadline(
+    (async () => {
+      const history = await withDeadline(
+        loadChatAutoReplyHistory(binding, conversationId, event.id),
+        HISTORY_DEADLINE_MS,
+        []
+      );
+      const generated = await generateChatAutoReply({
+        merchantId: binding.merchantId,
+        conversationId,
+        question,
+        history,
+      });
+      const latest = await isLatestChatMessage(
+        binding,
+        conversationId,
+        event.id
+      );
+      return { generated, latest };
+    })(),
+    WORK_DEADLINE_MS,
+    null
+  );
+  if (!work) {
+    if (!(await isStillPending(binding, conversationId))) return 'skipped';
+    return handOver(binding, conversationId, 'the assistant timed out');
+  }
+  const { generated: result, latest } = work;
+  if (latest === false) return 'skipped';
+  if (!(await isStillPending(binding, conversationId))) return 'skipped';
+  if (latest === null) {
+    return handOver(
+      binding,
       conversationId,
-      question,
-      history,
-    });
-    const latest = await isLatestChatMessage(binding, conversationId, event.id);
-    return { generated, latest };
-  })().catch(() => null);
-  const done = await withDeadline(work, WORK_DEADLINE_MS, null);
-  if (!done) {
-    return handOver(binding, conversationId, 'the assistant took too long');
+      'the message history could not be checked'
+    );
   }
-  // Generation can take a while. A later customer message has its own run,
-  // so this one stays out of it: no answer and no handover for a question
-  // that has been superseded.
-  if (done.latest === false) return 'skipped';
-  // The messages could not be read, so nothing says this was superseded:
-  // a person takes it rather than the customer waiting with nobody queued.
-  if (done.latest === null) {
-    return handOver(binding, conversationId, 'the chat could not be read');
-  }
-  const result = done.generated;
   if (!result.ok) {
     return handOver(binding, conversationId, 'the assistant was unavailable');
   }
   const reason = needsHandover(result.reply);
   if (reason) return handOver(binding, conversationId, reason);
-
-  // Read last, right before sending: a person may have replied meanwhile.
-  // The send itself carries no status condition, so a takeover in the moment
-  // between this read and the send can still be followed by one reply.
-  if (!(await isStillPending(binding, conversationId))) return 'skipped';
   const sent = await postAssistantMessage(binding, {
     conversationId,
     content: result.reply.reply,
+    ...(result.checkoutName
+      ? { checkoutName: { for_message_id: event.id, ...result.checkoutName } }
+      : {}),
+    ...(result.suggestions?.length
+      ? {
+          followUps: { for_message_id: event.id, actions: result.suggestions },
+        }
+      : {}),
   });
   // A rejected reply (an expired bot credential, say) must not leave the
   // customer pending with nobody queued: a person takes it from here.
   if (!sent) {
     return handOver(binding, conversationId, 'the reply could not be sent');
+  }
+  if (result.cards?.length) {
+    const cards = await prepareChatwootProductCards(
+      binding.merchantId,
+      result.cards
+    );
+    if (await isStillPending(binding, conversationId)) {
+      const cardSent = await postAssistantMessage(binding, {
+        conversationId,
+        content: cards.map((card) => card.name).join(', '),
+        cards,
+        ...(result.cartAction
+          ? { cartAction: { for_message_id: event.id, ...result.cartAction } }
+          : {}),
+      });
+      if (!cardSent) {
+        return handOver(
+          binding,
+          conversationId,
+          'the product cards could not be sent'
+        );
+      }
+    }
   }
   await updateLabels(
     binding,

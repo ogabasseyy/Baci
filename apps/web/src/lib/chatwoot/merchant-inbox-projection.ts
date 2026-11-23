@@ -91,12 +91,22 @@ export function projectMerchantInboxMessage(
         : 'other';
   if (!text && kind !== 'other') return null;
 
+  const followUps = message.content_attributes as
+    | { ekaette_follow_ups?: { actions?: unknown } }
+    | undefined;
+  const actions = followUps?.ekaette_follow_ups?.actions;
   return {
     id: message.id,
     sender,
     kind,
     text: truncateByCodePoint(text, MAX_TEXT_LENGTH),
     createdAt,
+    ...(sender === 'assistant' &&
+    Array.isArray(actions) &&
+    actions.includes('review_checkout') &&
+    /name\s+and\s+surname/i.test(text)
+      ? { checkoutNameRequested: true as const }
+      : {}),
   };
 }
 

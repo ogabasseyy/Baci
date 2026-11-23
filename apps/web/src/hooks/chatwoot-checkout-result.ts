@@ -1,7 +1,8 @@
 /**
  * Bounded result vocabulary for the in-chat checkout bridge. The widget only
  * ever receives these fixed codes, the order number and the payment
- * reference: never server error text, tokens or internal ids.
+ * reference, or an authenticated storefront application path. No provider
+ * errors, tokens or provider links are sent to the widget.
  */
 export const CHATWOOT_CHECKOUT_PLACE_PREFIX = 'baci-checkout-place-result:';
 export const CHATWOOT_CHECKOUT_STATUS_PREFIX = 'baci-checkout-payment-status:';
@@ -25,6 +26,7 @@ export interface ChatwootCheckoutCreatedOrder {
   trackingToken: string | null;
   amountDueMajor: number;
   currency: string | null;
+  paymentMethod?: 'oxygen';
 }
 
 export type ChatwootCheckoutPlaceResult =
@@ -36,6 +38,11 @@ export type ChatwootCheckoutPlaceResult =
       currency: 'NGN';
       bank: { bankName: string; accountNumber: string; accountName: string };
       reference: string;
+    }
+  | {
+      requestId: string;
+      status: 'secure_handoff';
+      href: string;
     }
   | {
       /** A repeat found the order already paid; no bank details are issued. */

@@ -37,7 +37,7 @@ server-certificate verification only for its disposable local Caddy CA.
 
 Before any deployment, independently review and qualify the exact Caddy binary,
 hostnames, certificate lifecycle, source allowlists, firewall and rollback.
-Current Contabo inspection found Caddy absent, only SSH allowed through UFW, and
+An earlier Contabo inspection found Caddy absent, only SSH allowed through UFW, and
 the Ubuntu repository offering Caddy 2.6.2; the local smoke used Caddy 2.11.4.
 Do not assume the older package supports this configuration. Confirm automatic
 TLS issuance without interfering with existing services.
@@ -53,6 +53,13 @@ and the smoke script SHA-256 was
 The temporary directory and processes were removed after testing. No public
 port, firewall rule, DNS record, persistent installation or production service
 was changed. This is not live OAuth or deployment qualification.
+
+On 23 November 2026, the Linux AMD64 Caddy 2.11.9 candidate passed the
+paired Worker and Caddy tests and the combined HTTPS and owner mTLS rehearsal
+on Contabo. The tests used synthetic requests and temporary loopback listeners.
+They exercised access-log suppression, request redaction, and client-certificate
+admission. The existing Caddy service remained active. Public DNS, production
+certificates, and the hosted OAuth callback still require qualification.
 
 The candidate web clients can use a fixed, mutually authenticated owner HTTPS
 transport configured by `BACI_OWNER_MTLS_ORIGIN`, `BACI_OWNER_MTLS_CERT` and

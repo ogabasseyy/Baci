@@ -37,6 +37,14 @@ if existing builder grants cannot be identified or safely reauthorized, keep
 the builder integration disabled. The issuer change is not a transparent
 dual-issuer migration.
 
+The consent page limits the upstream response to the dedicated broker callback.
+The broker binds the callback to the browser's saved transaction, and its
+upstream adapter checks state, exchanges the code with the original PKCE
+verifier and dedicated client credentials, and checks the returned nonce.
+The [upstream integration test](../tools/builder-auth/upstream-integration.node.test.ts)
+rejects corrupted state, nonce, and verifier values against disposable GoTrue.
+The live callback and issuer still require qualification before activation.
+
 The owner-preview v1 signature covers the schema-normalized message, not raw
 wire JSON. The caller parses its nested input before serializing; the bridge
 parses the complete message using the matching ordered schema before verifying.
@@ -67,6 +75,11 @@ Busy verifier requests receive 429. Build verification retries admission for
 up to 75 seconds; a linked build can be reclaimed after its lease expires if
 the verifier stays busy. Slots stay reserved until work settles, even on
 disconnect. Verify remaining capacity and deadlines on the deployed topology.
+Owner draft and publication preparation requests use slices of at most 100
+seconds and reuse completed route evidence. The attestation relay retains its
+600-second outer deadline. Verify that disconnected work settles and frees its
+slot under concurrent requests, and that the durable nonce check rejects
+replays across restarts and replicas before enabling the owner bridge.
 
 `owner-internal-node.ts` provides a separate loopback-only owner listener.
 The production composition requires a distinct configured owner port and does

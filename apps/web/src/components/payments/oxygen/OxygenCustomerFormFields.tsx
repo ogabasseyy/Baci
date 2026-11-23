@@ -218,15 +218,11 @@ export function CustomerFormFields({
     >
       <fieldset disabled={busy} className="grid min-w-0 gap-5">
         <legend className="sr-only">Customer verification</legend>
+        {!conversational && <OxygenFormProgress step={step} />}
         {!conversational && (
-          <>
-            <OxygenFormProgress step={step} />
-            <OxygenStepHeading
-              step={
-                (['identity', 'bank', 'income'] as const)[step] ?? 'identity'
-              }
-            />
-          </>
+          <OxygenStepHeading
+            step={(['identity', 'bank', 'income'] as const)[step] ?? 'identity'}
+          />
         )}
         <OxygenFormError id={formErrorId} error={formError} />
         <div

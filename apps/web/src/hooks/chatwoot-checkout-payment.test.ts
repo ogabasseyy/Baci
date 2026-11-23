@@ -36,7 +36,7 @@ describe('initializeChatwootCheckoutBankTransfer', () => {
     });
     expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
       gateway: 'paystack',
-      payment_type: 'dva',
+      payment_type: 'bank_transfer',
       order_id: 'order-1',
       tracking_token: 'track-1',
       billing_address: { country: 'NG', line1: '12 Admiralty Way' },

@@ -190,12 +190,21 @@ BEGIN
     AND title = 'A customer needs a person' AND body = 'The assistant handed this chat to your team. Open it to reply.') THEN
     RAISE EXCEPTION 'handover push log wording missing';
   END IF;
+  -- The logged payload carries a structured marker so later queries can tell the two kinds apart.
+  IF NOT EXISTS (SELECT 1 FROM public.push_notification_attempts WHERE merchant_id = m AND payload ->> 'event_key' = 'evt-hand-0001'
+    AND payload ->> 'handover' = 'true') THEN
+    RAISE EXCEPTION 'handover push log payload lacks the handover marker';
+  END IF;
   -- An ordinary message still logs the original wording, and a muted handover cannot be claimed.
   IF NOT public.chat_event_claim_push(pg_temp.push_proof('evt-hand-msg01', claim, 'claim'), at, m, 'evt-hand-msg01', claim) THEN RAISE EXCEPTION 'message push claim refused'; END IF;
   IF NOT public.chat_event_record_push_attempt(pg_temp.push_proof('evt-hand-msg01', claim, 'attempt'), at, m, 'evt-hand-msg01', claim, '{"status":"sent"}'::jsonb) THEN RAISE EXCEPTION 'message push attempt refused'; END IF;
   -- Statements run one after another here: the lookup below must see the row written above.
   IF NOT EXISTS (SELECT 1 FROM public.push_notification_attempts WHERE payload ->> 'event_key' = 'evt-hand-msg01' AND title = 'New customer message') THEN
     RAISE EXCEPTION 'message push wording changed';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.push_notification_attempts WHERE payload ->> 'event_key' = 'evt-hand-msg01'
+    AND payload ->> 'handover' = 'false') THEN
+    RAISE EXCEPTION 'message push log payload should carry handover=false';
   END IF;
   IF public.chat_event_claim_push(pg_temp.push_proof('evt-hand-0005', claim, 'claim'), at, m, 'evt-hand-0005', claim) THEN RAISE EXCEPTION 'a muted handover was claimable for push'; END IF;
 END $$;

@@ -148,6 +148,12 @@ describe('bugfix: the route acts on the store the dashboard selected', () => {
   ])('%s refuses a malformed store header before any lookup', async (_m, call) => {
     const response = await call();
     expect(response.status).toBe(400);
+    // Same { error, code } shape as every other error body on this route.
+    expect(await response.json()).toEqual({
+      error: 'Invalid merchant context',
+      code: 'invalid_request',
+    });
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(getMerchantForApiRequest).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
   });

@@ -226,7 +226,9 @@ BEGIN
     CASE WHEN COALESCE(v_handover, false)
       THEN 'The assistant handed this chat to your team. Open it to reply.'
       ELSE 'A customer sent a message to your store.' END,
-    pg_catalog.jsonb_build_object('type', 'customer_message', 'event_key', p_event_key),
+    pg_catalog.jsonb_build_object(
+      'type', 'customer_message', 'event_key', p_event_key, 'handover', COALESCE(v_handover, false)
+    ),
     GREATEST(COALESCE((p_attempt ->> 'token_count')::integer, 0), 0),
     GREATEST(COALESCE((p_attempt ->> 'sent_count')::integer, 0), 0),
     GREATEST(COALESCE((p_attempt ->> 'failed_count')::integer, 0), 0),

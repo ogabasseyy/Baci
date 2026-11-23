@@ -49,7 +49,16 @@ async function resolveRequest(request: Request): Promise<Resolved> {
     };
   }
   const requested = parseRequestedMerchantId(request);
-  if (requested.response) return { ok: false, response: requested.response };
+  if (requested.response) {
+    // Keep this route's { error, code } shape for a malformed store header.
+    return {
+      ok: false,
+      response: respond(400, {
+        error: 'Invalid merchant context',
+        code: 'invalid_request',
+      }),
+    };
+  }
   const merchant = await getMerchantForApiRequest(supabase, user.id, {
     requestedMerchantId: requested.merchantId,
   });

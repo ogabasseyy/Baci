@@ -279,4 +279,44 @@ describe('useInboxSearch', () => {
     await settle(100);
     expect(result.current.results.map((r) => r.conversation.id)).toEqual([5]);
   });
+
+  it('bugfix: scrolling to the end during a refresh of cached results does not cancel the refresh', async () => {
+    // Stale cached results with a next page, refreshing in the background.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(
+      inboxSearchKey('m1', 'order'),
+      {
+        pages: [{ results: [hit(1)], hasMore: true, page: 1 }],
+        pageParams: [1],
+      },
+      { updatedAt: 0 }
+    );
+    let finish: (value: unknown) => void = () => {};
+    mocks.search.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    const shared = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useInboxSearch('order'), {
+      wrapper: shared,
+    });
+    await settle(DEBOUNCE + 100);
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.loadMore());
+    await settle(100);
+
+    // Page 2 was not asked for, so the refresh of page 1 was left to finish.
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      finish({ results: [hit(9)], hasMore: false, page: 1 });
+    });
+    await settle(100);
+    expect(result.current.results.map((r) => r.conversation.id)).toEqual([9]);
+  });
 });

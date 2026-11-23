@@ -82,9 +82,11 @@ export function useInboxSearch(rawTerm: string) {
     // retry instead of asking again on every scroll to the end.
     loadMoreFailed: query.isFetchNextPageError && results.length > 0,
     loadMore: () => {
+      // Not while any fetch runs: asking for the next page cancels a refresh of
+      // the cached pages and keeps their outdated snapshot.
       if (
         query.hasNextPage &&
-        !query.isFetchingNextPage &&
+        !query.isFetching &&
         !query.isFetchNextPageError
       ) {
         query.fetchNextPage();

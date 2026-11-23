@@ -113,7 +113,7 @@ export function PaidOrderChangePreview({
           <Text style={{ color: colors.text }}>
             {preview.bankEvidence?.length
               ? 'Select the verified top-up.'
-              : 'No matching payment has been verified.'}
+              : 'No matching payment has been verified. Finance must verify the incoming payment before this change can be confirmed.'}
           </Text>
           {preview.bankEvidence?.map((entry) => (
             <View key={entry.id}>

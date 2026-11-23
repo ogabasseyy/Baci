@@ -59,4 +59,19 @@ it('shows the quoted increase and keeps receipt entry tied to the POS choice', (
   expect(
     screen.getByRole('textbox', { name: 'POS receipt reference' })
   ).toBeTruthy();
+  rerender(
+    <PaidOrderChangePreview
+      {...props}
+      preview={{
+        ...props.preview,
+        canRecordStaffTopUp: false,
+        bankEvidence: [],
+      }}
+    />
+  );
+  expect(
+    screen.getByText(
+      'No matching payment has been verified. Finance must verify the incoming payment before this change can be confirmed.'
+    )
+  ).toBeTruthy();
 });

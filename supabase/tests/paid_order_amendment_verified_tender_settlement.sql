@@ -48,6 +48,24 @@ BEGIN
     IF method IN ('cash','pos') THEN
       DELETE FROM private.paid_order_bank_evidence WHERE id = receipt;
       PERFORM set_config('request.jwt.claim.role','service_role',true);
+      IF method = 'pos' THEN
+        FOREACH paid_reference IN ARRAY ARRAY['SHORT7','ABCDEFG','-POS-12345'] LOOP
+          BEGIN
+            PERFORM public.register_paid_order_tender_receipt(
+              o,method,paid_reference,'AUDITED-REGISTER-' || o,2000000,now());
+            RAISE EXCEPTION 'An invalid POS receipt reference was accepted';
+          EXCEPTION WHEN raise_exception THEN
+            IF SQLERRM <> 'tender_evidence_required' THEN RAISE; END IF;
+          END;
+        END LOOP;
+        BEGIN
+          PERFORM public.register_paid_order_tender_receipt(
+            o,method,'POS12345','AUDITED-REGISTER-' || o,2000000,now());
+          RAISE EXCEPTION 'accepted eight-character POS reference';
+        EXCEPTION WHEN raise_exception THEN
+          IF SQLERRM <> 'accepted eight-character POS reference' THEN RAISE; END IF;
+        END;
+      END IF;
       receipt := public.register_paid_order_tender_receipt(o,method,'FIXTURE-' || o,'AUDITED-REGISTER-' || o,2000000,now());
       IF public.register_paid_order_tender_receipt(o,method,'fixture-' || o,'AUDITED-REGISTER-' || o,2000000,now()) <> receipt THEN
         RAISE EXCEPTION 'Verified receipt ingestion was not idempotent';

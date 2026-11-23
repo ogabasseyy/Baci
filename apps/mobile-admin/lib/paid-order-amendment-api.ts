@@ -23,6 +23,22 @@ const workspaceSchema = z.object({
   verifiedCancellationReady: z.boolean().nullish(),
   confirmationKey: z.string().nullish(),
   summary: z.object({ amendmentId: z.uuid() }).nullable(),
+  events: z.array(
+    z.object({
+      type: z.string(),
+      details: z.record(z.string(), z.unknown()),
+    })
+  ),
+  bankEvidence: z.array(
+    z.object({
+      id: z.uuid(),
+      amountMinor: moneyMinor,
+      status: z.string().nullable(),
+      transactionId: z.uuid().nullable(),
+      occurredAt: z.iso.datetime({ offset: true }),
+      method: z.string().optional(),
+    })
+  ),
   customer: z
     .object({
       state,
@@ -78,6 +94,18 @@ export const verifiedSettlementActionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('record_verified_lender_refund'),
     idempotencyKey: z.uuid(),
+  }),
+  z.object({
+    action: z.literal('claim_offline_disbursement'),
+    idempotencyKey: z.uuid(),
+    sourceKind: z.literal('unapplied'),
+    sourceId: z.uuid(),
+  }),
+  z.object({
+    action: z.literal('record_offline_refund'),
+    idempotencyKey: z.uuid(),
+    claimId: z.uuid(),
+    evidenceId: z.uuid(),
   }),
   z.object({
     action: z.literal([

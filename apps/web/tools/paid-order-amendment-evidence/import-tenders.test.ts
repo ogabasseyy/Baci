@@ -137,6 +137,29 @@ describe('approved tender exports', () => {
     expect(fetchRpc).not.toHaveBeenCalled();
   });
 
+  it('requires the shared POS receipt-reference format before posting', async () => {
+    const fetchRpc = vi.fn();
+    for (const receiptReference of ['SHORT7', '-POS-12345']) {
+      await expect(
+        invoke(
+          signed({
+            ...manifest,
+            receipts: [
+              {
+                ...receipt,
+                method: 'pos',
+                status: 'settled_pos',
+                receiptReference,
+              },
+            ],
+          }),
+          { fetchRpc }
+        )
+      ).rejects.toThrow();
+    }
+    expect(fetchRpc).not.toHaveBeenCalled();
+  });
+
   it('reports a malformed database origin without posting a receipt', async () => {
     const fetchRpc = vi.fn();
     await expect(

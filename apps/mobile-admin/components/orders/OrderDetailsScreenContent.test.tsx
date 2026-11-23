@@ -111,6 +111,7 @@ describe('OrderDetailsScreenContent', () => {
     ['paid', 100, 'pending', false],
     ['refunded', 0, 'pending', false],
     ['unpaid', 0, 'cancelled', false],
+    ['unpaid', null, 'pending', true],
   ] as const)('defers the amendment read for %s with amount %s and shipping %s = %s', (paymentStatus, amountPaid, shippingStatus, deferWorkspace) => {
     const controller = createController();
     if (!controller.order) throw new Error('Order fixture missing');

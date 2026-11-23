@@ -146,7 +146,7 @@ export function OrderDetailsScreenContent({
               deferWorkspace={
                 (order.payment_status === 'unpaid' ||
                   order.payment_status === 'pending') &&
-                order.amount_paid === 0 &&
+                (order.amount_paid ?? 0) === 0 &&
                 order.shipping_status === 'pending' &&
                 !order.cancelled_at
               }

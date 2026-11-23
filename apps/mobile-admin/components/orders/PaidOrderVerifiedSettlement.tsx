@@ -13,6 +13,7 @@ import {
 } from '@/lib/paid-order-amendment-api';
 import { asyncStorage } from '@/lib/storage';
 import { generateUUID } from '@/utils/uuid';
+import { PaidOrderVerifiedBankReturn } from './PaidOrderVerifiedBankReturn';
 
 interface Props {
   orderId: string;
@@ -20,8 +21,11 @@ interface Props {
   operatorId: string;
   verification: AmendmentWorkspace;
   colors: ThemeColors;
-  refreshOrder: () => void;
+  refreshOrder: () => Promise<boolean>;
 }
+
+const unreadableSettlementMessage =
+  'A saved settlement request could not be read. Reload the order status before starting another settlement action.';
 
 export function PaidOrderVerifiedSettlement({
   orderId,
@@ -39,22 +43,66 @@ export function PaidOrderVerifiedSettlement({
     amendmentId,
   ];
   const storageKey = key.join(':');
+  const unreadableKey = `${storageKey}:unreadable`;
+  const [unreadableMessage, setUnreadableMessage] = useState(false);
+  const [refreshRequired, setRefreshRequired] = useState(false);
+  const [message, setMessage] = useState('');
   const pending = useQuery({
     queryKey: key,
     queryFn: async () => {
+      if ((await asyncStorage.getItem(unreadableKey)) === '1') {
+        setUnreadableMessage(true);
+        setMessage(unreadableSettlementMessage);
+        return { unreadable: true as const };
+      }
       const saved = await asyncStorage.getItem(storageKey);
-      return saved
-        ? verifiedSettlementActionSchema.parse(JSON.parse(saved))
-        : null;
+      if (!saved) return null;
+      let decoded: unknown;
+      try {
+        decoded = JSON.parse(saved);
+      } catch {
+        decoded = undefined;
+      }
+      const parsed = verifiedSettlementActionSchema.safeParse(decoded);
+      if (parsed.success) return parsed.data;
+      try {
+        await asyncStorage.setItem(unreadableKey, '1');
+      } catch {
+        setUnreadableMessage(true);
+        setMessage(unreadableSettlementMessage);
+        return { unreadable: true as const };
+      }
+      try {
+        await asyncStorage.removeItem(storageKey);
+      } catch {
+        // The durable marker keeps the recovery action available to retry.
+      }
+      setUnreadableMessage(true);
+      setMessage(unreadableSettlementMessage);
+      return { unreadable: true as const };
     },
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
+  const isVerifiedAction = (
+    value: typeof pending.data
+  ): value is VerifiedSettlementAction =>
+    Boolean(value && !('unreadable' in value));
+  const unreadableSavedAction =
+    (pending.data !== undefined &&
+      pending.data !== null &&
+      !isVerifiedAction(pending.data)) ||
+    unreadableMessage;
+  const recoveryRequired = unreadableSavedAction || refreshRequired;
+  const savedAction = isVerifiedAction(pending.data) ? pending.data : null;
   const [cancellation, setCancellation] = useState<
     'open_verified_cancellation' | 'cancel_with_verified_refunds' | null
   >(null);
   const [reason, setReason] = useState('');
-  const [message, setMessage] = useState('');
+  const [outgoingEvidence, setOutgoingEvidence] = useState<{
+    claimId: string | null;
+    value: string;
+  }>({ claimId: null, value: '' });
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const canCancel =
@@ -63,7 +111,10 @@ export function PaidOrderVerifiedSettlement({
   const closing = cancellation === 'cancel_with_verified_refunds';
   const visible =
     cancellation ||
-    pending.data ||
+    savedAction ||
+    unreadableSavedAction ||
+    refreshRequired ||
+    pending.isError ||
     canCancel ||
     verification.verifiedCreditDirectRefund ||
     verification.verifiedCancellationPending;
@@ -93,9 +144,9 @@ export function PaidOrderVerifiedSettlement({
     );
   }
 
-  async function submit(payload: VerifiedSettlementAction) {
-    if (inFlight.current) return;
-    const wasPending = Boolean(pending.data);
+  async function submit(payload: VerifiedSettlementAction, retrySaved = false) {
+    if (inFlight.current || (recoveryRequired && !retrySaved)) return;
+    const wasPending = Boolean(savedAction);
     inFlight.current = true;
     setBusy(true);
     setMessage('');
@@ -135,15 +186,52 @@ export function PaidOrderVerifiedSettlement({
       }
       await clear();
       setReason('');
+      setOutgoingEvidence({ claimId: null, value: '' });
       setCancellation(null);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Unable to update settlement.'
       );
     } finally {
-      refreshOrder();
+      const refreshed = await refreshOrder().catch(() => false);
+      if (!refreshed) {
+        setRefreshRequired(true);
+        setMessage(
+          'Reload order status before starting another settlement action.'
+        );
+      }
       setBusy(false);
       inFlight.current = false;
+    }
+  }
+
+  function retrySavedAction(payload: VerifiedSettlementAction) {
+    return action('Retry the same settlement request', () => {
+      void submit(payload, true);
+    });
+  }
+
+  async function reloadOrderStatus() {
+    setBusy(true);
+    setMessage('Refreshing order status…');
+    try {
+      const refreshed = await refreshOrder();
+      if (!refreshed) {
+        setMessage('Unable to refresh order status. Try again.');
+        return;
+      }
+      if (unreadableSavedAction) {
+        await asyncStorage.removeItem(storageKey);
+        await asyncStorage.removeItem(unreadableKey);
+        client.setQueryData(key, null);
+        setUnreadableMessage(false);
+      }
+      setRefreshRequired(false);
+      setMessage('Order status refreshed.');
+    } catch {
+      setMessage('Unable to refresh order status. Try again.');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -156,11 +244,24 @@ export function PaidOrderVerifiedSettlement({
             : 'Fulfillment is on hold while Finance verifies each refund.'}
         </Text>
       )}
-      {pending.data ? (
+      {pending.isError && (
+        <>
+          <Text style={{ color: colors.text }}>
+            Unable to read the saved settlement request. Retry before
+            continuing.
+          </Text>
+          {action(
+            'Retry saved settlement check',
+            () => void pending.refetch(),
+            busy
+          )}
+        </>
+      )}
+      {recoveryRequired &&
         !cancellation &&
-        action('Retry the same settlement request', () => {
-          if (pending.data) void submit(pending.data);
-        })
+        action('Reload order status', () => void reloadOrderStatus(), busy)}
+      {savedAction ? (
+        !cancellation && retrySavedAction(savedAction)
       ) : (
         <>
           {verification.verifiedCreditDirectRefund &&
@@ -171,7 +272,7 @@ export function PaidOrderVerifiedSettlement({
                   action: 'record_verified_lender_refund',
                   idempotencyKey: generateUUID(),
                 }),
-              !pending.isSuccess
+              !pending.isSuccess || recoveryRequired
             )}
           {canCancel &&
             action(
@@ -186,7 +287,7 @@ export function PaidOrderVerifiedSettlement({
                 );
                 setMessage('');
               },
-              !pending.isSuccess
+              !pending.isSuccess || recoveryRequired
             )}
         </>
       )}
@@ -195,6 +296,18 @@ export function PaidOrderVerifiedSettlement({
           {message}
         </Text>
       )}
+      {!cancellation &&
+        verification.verifiedCancellationPending &&
+        !savedAction && (
+          <PaidOrderVerifiedBankReturn
+            verification={verification}
+            colors={colors}
+            disabled={busy || !pending.isSuccess || recoveryRequired}
+            outgoingEvidence={outgoingEvidence}
+            setOutgoingEvidence={setOutgoingEvidence}
+            onSubmit={(payload) => void submit(payload)}
+          />
+        )}
       {cancellation && (
         <AppSheetModal
           visible
@@ -228,10 +341,8 @@ export function PaidOrderVerifiedSettlement({
               padding: 12,
             }}
           />
-          {pending.data
-            ? action('Retry the same settlement request', () => {
-                if (pending.data) void submit(pending.data);
-              })
+          {savedAction
+            ? retrySavedAction(savedAction)
             : action(
                 'Confirm',
                 () =>
@@ -241,11 +352,14 @@ export function PaidOrderVerifiedSettlement({
                     reason: reason.trim(),
                   }),
                 !reason.trim() ||
+                  recoveryRequired ||
                   !pending.isSuccess ||
                   !(closing
                     ? verification.verifiedCancellationReady
                     : verification.canOpenVerifiedCancellation)
               )}
+          {recoveryRequired &&
+            action('Reload order status', () => void reloadOrderStatus(), busy)}
           {message && (
             <Text
               accessibilityLiveRegion="polite"

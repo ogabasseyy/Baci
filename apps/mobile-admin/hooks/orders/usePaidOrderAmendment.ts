@@ -1,4 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type AmendmentConfirmation,
@@ -31,6 +32,13 @@ export function usePaidOrderAmendment(
 ) {
   const { user } = useAuth();
   const client = useQueryClient();
+  const refreshGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      refreshGeneration.current += 1;
+    },
+    []
+  );
   const workspaceKey = ['paid-order-amendment', user?.id, merchantId, orderId];
   const pendingKey = [...workspaceKey, 'pending'];
   const storageKey = workspaceKey.join(':');
@@ -67,13 +75,35 @@ export function usePaidOrderAmendment(
     client.setQueryData(pendingKey, null);
   }
 
-  function refreshOrder() {
+  async function refreshOrder(): Promise<boolean> {
+    const generation = ++refreshGeneration.current;
     void client.invalidateQueries({ queryKey: ['order', orderId, merchantId] });
     void client.invalidateQueries({ queryKey: ['orders', merchantId] });
     void client.invalidateQueries({
       queryKey: ['order-audit-events', orderId, merchantId],
     });
-    void client.invalidateQueries({ queryKey: workspaceKey, exact: true });
+    await client.cancelQueries({ queryKey: workspaceKey, exact: true });
+    if (generation !== refreshGeneration.current) return false;
+    let unsubscribe: () => void = () => {
+      // No listener is active before the subscription is assigned.
+    };
+    const offline = new Promise<boolean>((resolve) => {
+      unsubscribe = onlineManager.subscribe((online) => {
+        if (!online) resolve(false);
+      });
+      if (!onlineManager.isOnline()) resolve(false);
+    });
+    const refresh = workspace
+      .refetch({ throwOnError: true })
+      .then((result) => result.isSuccess && !result.isPaused)
+      .catch(() => false);
+    const succeeded = await Promise.race([refresh, offline]);
+    unsubscribe();
+    if (!succeeded) return false;
+    if (generation === refreshGeneration.current) {
+      return true;
+    }
+    return false;
   }
 
   async function checkConfirmation(
@@ -83,7 +113,7 @@ export function usePaidOrderAmendment(
     client.setQueryData(workspaceKey, current);
     if (!current.summary) return 'unknown';
     await clearPending();
-    refreshOrder();
+    void refreshOrder().catch(() => undefined);
     return current.confirmationKey === payload.idempotencyKey
       ? 'confirmed'
       : 'competing';
@@ -108,7 +138,7 @@ export function usePaidOrderAmendment(
             error.status !== 408))
       ) {
         await clearPending();
-        refreshOrder();
+        void refreshOrder().catch(() => undefined);
         throw error;
       }
       const recovered = await checkConfirmation(payload).catch(
@@ -124,13 +154,13 @@ export function usePaidOrderAmendment(
         definitiveReplayConflicts.has(error.code)
       ) {
         await clearPending();
-        refreshOrder();
+        void refreshOrder().catch(() => undefined);
         throw error;
       }
       return 'unknown';
     }
     await clearPending();
-    refreshOrder();
+    void refreshOrder().catch(() => undefined);
     return 'confirmed';
   }
 

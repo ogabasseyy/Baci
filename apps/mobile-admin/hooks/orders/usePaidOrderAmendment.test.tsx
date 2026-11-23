@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,8 +78,8 @@ function renderAmendmentHook(
   });
 }
 
-async function openHook() {
-  const hook = renderAmendmentHook();
+async function openHook(client = new QueryClient()) {
+  const hook = renderAmendmentHook(false, client);
   await waitFor(() => expect(hook.result.current.pending).not.toBeUndefined());
   await waitFor(() => expect(hook.result.current.canStart).toBe(true));
   return hook;
@@ -140,6 +144,88 @@ describe('usePaidOrderAmendment', () => {
     const { result } = renderAmendmentHook(true, client);
     await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
     expect(result.current.verification).toEqual(recovery);
+  });
+
+  it('keeps the newest workspace when an older refresh finishes last', async () => {
+    const client = new QueryClient();
+    const { result } = await openHook(client);
+    const older = { ...amendedWorkspace, summary: { amendmentId: 'older' } };
+    const newer = { ...amendedWorkspace, summary: { amendmentId: 'newer' } };
+    let resolveOlder: (value: typeof older) => void = () => undefined;
+    let resolveNewer: (value: typeof newer) => void = () => undefined;
+    mocks.workspace.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveOlder = resolve))
+    );
+    let olderRefresh: Promise<boolean> | undefined;
+    await act(async () => {
+      olderRefresh = result.current.refreshOrder();
+      await waitFor(() => expect(mocks.workspace).toHaveBeenCalledTimes(2));
+    });
+    mocks.workspace.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveNewer = resolve))
+    );
+    let newerRefresh: Promise<boolean> | undefined;
+    await act(async () => {
+      newerRefresh = result.current.refreshOrder();
+      await waitFor(() => expect(mocks.workspace).toHaveBeenCalledTimes(3));
+    });
+    if (!olderRefresh || !newerRefresh)
+      throw new Error('Refresh did not start');
+    await act(async () => resolveNewer(newer));
+    await expect(newerRefresh).resolves.toBe(true);
+    await act(async () => resolveOlder(older));
+    await expect(olderRefresh).resolves.toBe(false);
+    expect(
+      client.getQueryData(['paid-order-amendment', 'operator', merchant, order])
+    ).toEqual(newer);
+  });
+
+  it('returns promptly when a workspace refresh starts offline', async () => {
+    const { result } = await openHook();
+    onlineManager.setOnline(false);
+    try {
+      await expect(result.current.refreshOrder()).resolves.toBe(false);
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
+  it('ignores an outstanding refresh after its hook unmounts', async () => {
+    const client = new QueryClient();
+    const old = await openHook(client);
+    const stale = { ...amendedWorkspace, summary: { amendmentId: 'stale' } };
+    const fresh = { ...amendedWorkspace, summary: { amendmentId: 'fresh' } };
+    let resolveStale: (value: typeof stale) => void = () => undefined;
+    mocks.workspace.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveStale = resolve))
+    );
+    let oldRefresh: Promise<boolean> | undefined;
+    await act(async () => {
+      oldRefresh = old.result.current.refreshOrder();
+      await waitFor(() => expect(mocks.workspace).toHaveBeenCalledTimes(2));
+    });
+    if (!oldRefresh) throw new Error('Refresh did not start');
+    old.unmount();
+
+    mocks.workspace.mockResolvedValue(fresh);
+    const replacement = renderAmendmentHook(false, client);
+    await waitFor(() => expect(mocks.workspace).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(
+        client.getQueryData([
+          'paid-order-amendment',
+          'operator',
+          merchant,
+          order,
+        ])
+      ).toEqual(fresh)
+    );
+    await act(async () => resolveStale(stale));
+    await expect(oldRefresh).resolves.toBe(false);
+    expect(
+      client.getQueryData(['paid-order-amendment', 'operator', merchant, order])
+    ).toEqual(fresh);
+    replacement.unmount();
   });
 
   it('persists the exact command before dispatch and clears it on success', async () => {

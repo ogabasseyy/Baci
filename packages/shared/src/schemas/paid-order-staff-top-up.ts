@@ -9,6 +9,6 @@ export const staffTopUpSchema = z.discriminatedUnion('method', [
     receiptReference: z
       .string()
       .trim()
-      .regex(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/),
+      .regex(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{7,99}$/),
   }),
 ]);

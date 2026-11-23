@@ -57,6 +57,26 @@ BEGIN
       EXCEPTION WHEN invalid_parameter_value THEN
         IF SQLERRM <> 'invalid_amendment_confirmation' THEN RAISE; END IF;
       END;
+      FOREACH payload IN ARRAY ARRAY[
+        jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('SHORT7'::text)),
+        jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('ABCDEFG'::text)),
+        jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('-POS-12345'::text))
+      ] LOOP
+        BEGIN
+          PERFORM public.confirm_paid_order_amendment(o,payload);
+          RAISE EXCEPTION 'POS confirmed with an invalid receipt reference';
+        EXCEPTION WHEN invalid_parameter_value THEN
+          IF SQLERRM <> 'invalid_amendment_confirmation' THEN RAISE; END IF;
+        END;
+      END LOOP;
+      payload := jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('POS12345'::text));
+      BEGIN
+        PERFORM public.confirm_paid_order_amendment(o,payload);
+        RAISE EXCEPTION 'accepted eight-character POS reference';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'accepted eight-character POS reference' THEN RAISE; END IF;
+      END;
+      payload := jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('  pos-fixture-' || o || '  '));
       prior_order := gen_random_uuid();
       INSERT INTO public.orders(id,merchant_id,order_number,source,currency,payment_status,shipping_status,total,subtotal)
       VALUES (prior_order,m,'PRIOR-POS-' || prior_order,'mobile_app','NGN','unpaid','pending',10000,10000);
@@ -68,7 +88,6 @@ BEGIN
         'incoming',1000000,'NGN',now(),'Existing POS receipt fixture',prior_order,'pos'
       FROM private.paid_order_amendment_config WHERE merchant_id = m
       RETURNING id INTO existing_receipt;
-      payload := jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('  pos-fixture-' || o || '  '));
       BEGIN
         PERFORM public.confirm_paid_order_amendment(o,payload);
         RAISE EXCEPTION 'A previously recorded POS receipt was reused';

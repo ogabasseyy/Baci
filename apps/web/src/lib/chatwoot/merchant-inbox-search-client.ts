@@ -12,6 +12,7 @@ import {
   providerGet,
 } from './merchant-inbox-client';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
+import { truncateByCodePoint } from './merchant-inbox-projection';
 
 export type MerchantInboxSearchResult = {
   conversation: MerchantInboxConversation;
@@ -96,7 +97,11 @@ function shopperSnippet(
   }
   const needle = q.toLowerCase();
   const best = words.find((text) => text.toLowerCase().includes(needle));
-  return (best ?? words[0] ?? null)?.slice(0, INBOX_SNIPPET_MAX_LENGTH) ?? null;
+  const text = best ?? words[0];
+  // Cut on a character boundary: slice could leave half of an emoji behind.
+  return text === undefined
+    ? null
+    : truncateByCodePoint(text, INBOX_SNIPPET_MAX_LENGTH);
 }
 
 /** Message-text matches: `/conversations/search`, limited to the bound inbox. */

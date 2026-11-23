@@ -31,7 +31,7 @@ function snoozeToIso(value: number | string | null | undefined): string | null {
 }
 
 /** Truncates without splitting a surrogate pair at the boundary. */
-function truncateByCodePoint(value: string, maxLength: number): string {
+export function truncateByCodePoint(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   const cut = value.slice(0, maxLength);
   const last = cut.charCodeAt(cut.length - 1);

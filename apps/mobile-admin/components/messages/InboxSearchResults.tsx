@@ -76,7 +76,10 @@ export function InboxSearchResults({
       ListFooterComponent={
         isLoadingMore ? <ActivityIndicator color={colors.primary} /> : undefined
       }
-      onEndReached={onLoadMore}
+      onEndReached={() => {
+        // The hook guards too; this keeps pending and exhausted lists quiet.
+        if (hasMore && !isLoadingMore) onLoadMore();
+      }}
       ListEmptyComponent={
         <View style={styles.centered}>
           <Text style={[styles.title, { color: colors.text }]}>

@@ -90,8 +90,10 @@ describe('loadCustomerBadges', () => {
       includeOrderData: true,
     });
     expect(seen).toHaveLength(1);
-    expect(badges[1]).toEqual(badges[2]);
-    expect(badges[3]).toEqual({ orderCount: 0, totalSpent: 0 });
+    expect(badges).not.toBeNull();
+    expect(badges?.[1]).toBeDefined();
+    expect(badges?.[1]).toEqual(badges?.[2]);
+    expect(badges?.[3]).toEqual({ orderCount: 0, totalSpent: 0 });
   });
 
   it('leaves badges off when signing is not configured, and reports an unreadable store as null', async () => {

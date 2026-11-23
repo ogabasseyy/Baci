@@ -59,7 +59,8 @@ interface ImportOptions {
 }
 
 function targetOrigin(value: string) {
-  const url = new URL(value);
+  const url = URL.parse(value);
+  if (!url) throw new Error('Invalid receipt import target origin.');
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   if (
     (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) ||

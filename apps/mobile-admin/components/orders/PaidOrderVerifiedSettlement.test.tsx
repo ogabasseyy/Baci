@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { expect, it, vi } from 'vitest';
 import type { ThemeColors } from '@/constants/theme';
+import { PaidOrderAmendmentError } from '@/lib/paid-order-amendment-api';
 import { PaidOrderVerifiedSettlement } from './PaidOrderVerifiedSettlement';
 
 const mocks = vi.hoisted(() => ({
@@ -71,7 +72,58 @@ vi.mock('react-native', () => ({
   ),
 }));
 
+it.each([
+  false,
+  true,
+])('preserves a missing settlement only if an earlier request is pending (%s)', async (replay) => {
+  vi.clearAllMocks();
+  const payload = {
+    action: 'record_verified_lender_refund',
+    idempotencyKey: id,
+  };
+  mocks.get.mockResolvedValue(replay ? JSON.stringify(payload) : null);
+  mocks.set.mockResolvedValue(undefined);
+  mocks.remove.mockResolvedValue(undefined);
+  mocks.finance.mockRejectedValueOnce(
+    new PaidOrderAmendmentError('Order not found', 404)
+  );
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <PaidOrderVerifiedSettlement
+        orderId={id}
+        amendmentId={id}
+        operatorId={id}
+        colors={{} as ThemeColors}
+        refreshOrder={vi.fn()}
+        verification={{
+          canStart: false,
+          canRefund: true,
+          summary: { amendmentId: id },
+          customer: null,
+          isVerifiedFunding: true,
+          verifiedCreditDirectRefund: true,
+        }}
+      />
+    </QueryClientProvider>
+  );
+  const action = await screen.findByRole('button', {
+    name: replay
+      ? 'Retry the same settlement request'
+      : 'Record verified Credit Direct refund',
+  });
+  await waitFor(() => expect(action).toBeEnabled());
+  fireEvent.click(action);
+  expect(await screen.findByText(/Order not found/)).toBeVisible();
+  expect(mocks.remove).toHaveBeenCalledTimes(replay ? 0 : 1);
+  expect(
+    screen.queryByRole('button', {
+      name: 'Retry the same settlement request',
+    }) !== null
+  ).toBe(replay);
+});
+
 it('retries the exact verified cancellation command after an ambiguous response', async () => {
+  vi.clearAllMocks();
   const client = new QueryClient();
   mocks.get.mockResolvedValue(null);
   mocks.set.mockResolvedValue(undefined);

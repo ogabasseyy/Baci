@@ -17,7 +17,10 @@ import { PaidOrderChangePreview } from './PaidOrderChangePreview';
 
 interface Props {
   orderId: string;
-  items: Pick<OrderDetailsItem, 'id' | 'name' | 'variant_name'>[];
+  items: Pick<
+    OrderDetailsItem,
+    'id' | 'name' | 'variant_name' | 'condition' | 'display_condition'
+  >[];
   formatPrice: (amount: number) => string;
   amendment: ReturnType<typeof usePaidOrderAmendment>;
   onClose: () => void;
@@ -100,11 +103,12 @@ export function PaidOrderChangeItemsSheet({
     label: string,
     press: () => void,
     disabled = false,
-    selected?: boolean
+    selected?: boolean,
+    key = label
   ) {
     return (
       <Pressable
-        key={label}
+        key={key}
         accessibilityRole="button"
         accessibilityState={{ disabled: disabled || busy, selected }}
         disabled={disabled || busy}
@@ -173,6 +177,7 @@ export function PaidOrderChangeItemsSheet({
                   formatOrderItemDisplayName({
                     baseName: item.name,
                     variantName: item.variant_name,
+                    condition: item.display_condition ?? item.condition,
                   }),
                   () => {
                     setLineId(item.id);
@@ -180,7 +185,8 @@ export function PaidOrderChangeItemsSheet({
                     resetPreview();
                   },
                   false,
-                  lineId === item.id
+                  lineId === item.id,
+                  item.id
                 )
               )}
             <TextInput

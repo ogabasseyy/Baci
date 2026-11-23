@@ -106,3 +106,75 @@ it.each([
   fireEvent.click(button);
   expect(submit).toHaveBeenCalledWith({ action, reason: 'Customer request' });
 });
+
+it('lets Finance prepare and verify a late bank repayment during the cancellation hold', () => {
+  const submit = vi.fn();
+  const evidenceId = 'd806f297-76d6-4a84-9ae5-477902cc9eaf';
+  const claimId = '41ee7d0c-4ed9-4c51-9aea-9868b3ebfb9f';
+  const outgoingId = 'c5ace27d-16c1-40e3-8af3-f9671e3148bd';
+  const pendingCancellation = {
+    ...workspace,
+    canRefund: true,
+    isVerifiedFunding: true,
+    verifiedCancellationPending: true,
+    bankEvidence: [
+      {
+        id: evidenceId,
+        amountMinor: 500_000,
+        method: 'bank_transfer',
+        occurredAt: '2026-11-23T06:00:00Z',
+        status: null,
+        transactionId: null,
+      },
+    ],
+  };
+  const props = { currency: 'NGN', cancelled: false, disabled: false, submit };
+  const { rerender } = render(
+    <OrderAmendmentSettlementControls
+      {...props}
+      workspace={pendingCancellation}
+    />
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: /Prepare bank repayment/ })
+  );
+  expect(submit).toHaveBeenCalledWith({
+    action: 'claim_offline_disbursement',
+    sourceId: evidenceId,
+    sourceKind: 'unapplied',
+  });
+  expect(
+    screen.queryByRole('button', { name: 'Cancel with verified refunds' })
+  ).toBeNull();
+
+  rerender(
+    <OrderAmendmentSettlementControls
+      {...props}
+      workspace={{
+        ...pendingCancellation,
+        events: [
+          {
+            id: 1,
+            type: 'offline_disbursement_claimed',
+            details: { claimId },
+            createdAt: '2026-11-23T06:02:00Z',
+          },
+        ],
+      }}
+    />
+  );
+  fireEvent.change(
+    screen.getByLabelText('Verified outgoing bank evidence ID'),
+    {
+      target: { value: outgoingId },
+    }
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Verify bank repayment' })
+  );
+  expect(submit).toHaveBeenLastCalledWith({
+    action: 'record_offline_refund',
+    claimId,
+    evidenceId: outgoingId,
+  });
+});

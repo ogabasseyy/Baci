@@ -136,4 +136,12 @@ describe('approved tender exports', () => {
     }
     expect(fetchRpc).not.toHaveBeenCalled();
   });
+
+  it('reports a malformed database origin without posting a receipt', async () => {
+    const fetchRpc = vi.fn();
+    await expect(
+      invoke(signed(manifest), { url: 'not a URL', fetchRpc })
+    ).rejects.toThrow('Invalid receipt import target origin.');
+    expect(fetchRpc).not.toHaveBeenCalled();
+  });
 });

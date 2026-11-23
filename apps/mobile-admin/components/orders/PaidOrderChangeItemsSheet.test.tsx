@@ -13,6 +13,7 @@ vi.mock('@/components/ui/AppSheetModal', () => ({
   ),
 }));
 vi.mock('react-native', () => ({
+  TextInput: () => <input />,
   Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Pressable: ({
@@ -27,6 +28,37 @@ vi.mock('react-native', () => ({
     </button>
   ),
 }));
+
+it('distinguishes lines with the same name and different conditions', () => {
+  render(
+    <PaidOrderChangeItemsSheet
+      orderId="order"
+      items={[
+        { id: 'new', name: 'Tecno Pop 20', condition: 'new' },
+        { id: 'used', name: 'Tecno Pop 20', display_condition: 'used' },
+      ]}
+      formatPrice={String}
+      amendment={{
+        canStart: true,
+        canRefund: false,
+        summary: null,
+        verification: null,
+        operatorId: 'operator',
+        refreshOrder: vi.fn(),
+        pending: null,
+        confirm: vi.fn(),
+        checkConfirmation: vi.fn(),
+      }}
+      onClose={vi.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('button', { name: /Tecno Pop 20.*new/i })
+  ).toBeDefined();
+  expect(
+    screen.getByRole('button', { name: /Tecno Pop 20.*used/i })
+  ).toBeDefined();
+});
 
 it('retries a pending confirmation without starting a fresh preview', async () => {
   const pending = {

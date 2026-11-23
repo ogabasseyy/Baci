@@ -55,15 +55,91 @@ export function OrderAmendmentSettlementControls({
       ? latestClaim.details.claimId
       : null;
 
+  const bankRepayment = (
+    <>
+      {!claimId &&
+        workspace.bankEvidence.map((entry) => {
+          if (workspace.isVerifiedFunding && entry.method !== 'bank_transfer')
+            return null;
+          const sourceId =
+            entry.status === 'unapplied' ||
+            (workspace.isVerifiedFunding && entry.status === null)
+              ? entry.id
+              : !workspace.isVerifiedFunding &&
+                  cancelled &&
+                  entry.status === 'top_up'
+                ? entry.transactionId
+                : null;
+          if (!sourceId) return null;
+          return (
+            <Button
+              key={entry.id}
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={() =>
+                submit({
+                  action: 'claim_offline_disbursement',
+                  sourceId,
+                  sourceKind:
+                    entry.status !== 'top_up'
+                      ? 'unapplied'
+                      : 'cancellation_leg',
+                })
+              }
+            >
+              Prepare bank repayment of {money(entry.amountMinor)}
+            </Button>
+          );
+        })}
+      {claimId && (
+        <div className="grid gap-1.5">
+          <Label htmlFor="outgoing-evidence-id">
+            Verified outgoing bank evidence ID
+          </Label>
+          <Input
+            id="outgoing-evidence-id"
+            value={outgoingId}
+            maxLength={36}
+            onChange={(event) => setOutgoingId(event.target.value)}
+          />
+          <Button
+            size="sm"
+            type="button"
+            variant="outline"
+            className="justify-self-start"
+            disabled={!outgoingId.trim()}
+            onClick={() =>
+              submit({
+                action: 'record_offline_refund',
+                claimId,
+                evidenceId: outgoingId.trim(),
+              })
+            }
+          >
+            Verify bank repayment
+          </Button>
+        </div>
+      )}
+    </>
+  );
+
   if (workspace.isVerifiedFunding) {
     return (
-      <OrderAmendmentVerifiedSettlement
-        workspace={workspace}
-        disabled={disabled}
-        reason={reason}
-        setReason={setReason}
-        submit={submit}
-      />
+      <>
+        <OrderAmendmentVerifiedSettlement
+          workspace={workspace}
+          disabled={disabled}
+          reason={reason}
+          setReason={setReason}
+          submit={submit}
+        />
+        {workspace.canRefund && workspace.verifiedCancellationPending && (
+          <fieldset disabled={disabled} className="space-y-3">
+            {bankRepayment}
+          </fieldset>
+        )}
+      </>
     );
   }
 
@@ -224,65 +300,7 @@ export function OrderAmendmentSettlementControls({
                 </div>
               </div>
             )}
-            {!claimId &&
-              workspace.bankEvidence.map((entry) => {
-                const sourceId =
-                  entry.status === 'unapplied'
-                    ? entry.id
-                    : cancelled && entry.status === 'top_up'
-                      ? entry.transactionId
-                      : null;
-                if (!sourceId) return null;
-                return (
-                  <Button
-                    key={entry.id}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      submit({
-                        action: 'claim_offline_disbursement',
-                        sourceId,
-                        sourceKind:
-                          entry.status === 'unapplied'
-                            ? 'unapplied'
-                            : 'cancellation_leg',
-                      })
-                    }
-                  >
-                    Prepare bank repayment of {money(entry.amountMinor)}
-                  </Button>
-                );
-              })}
-            {claimId && (
-              <div className="grid gap-1.5">
-                <Label htmlFor="outgoing-evidence-id">
-                  Verified outgoing bank evidence ID
-                </Label>
-                <Input
-                  id="outgoing-evidence-id"
-                  value={outgoingId}
-                  maxLength={36}
-                  onChange={(event) => setOutgoingId(event.target.value)}
-                />
-                <Button
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                  className="justify-self-start"
-                  disabled={!outgoingId.trim()}
-                  onClick={() =>
-                    submit({
-                      action: 'record_offline_refund',
-                      claimId,
-                      evidenceId: outgoingId.trim(),
-                    })
-                  }
-                >
-                  Verify bank repayment
-                </Button>
-              </div>
-            )}
+            {bankRepayment}
           </>
         )}
       </fieldset>

@@ -11,6 +11,19 @@ import { AuthenticatedFetchPreflightError } from './authenticated-fetch';
 
 type ConfirmationOutcome = 'confirmed' | 'competing' | 'unknown';
 
+const definitiveReplayConflicts = new Set([
+  'already_amended',
+  'amendment_ineligible',
+  'bank_evidence_conflict',
+  'bank_evidence_required',
+  'idempotency_conflict',
+  'preview_stale',
+  'replacement_unavailable',
+  'scenario_disabled',
+  'staff_pos_receipt_used',
+  'tender_evidence_required',
+]);
+
 export function usePaidOrderAmendment(orderId: string, merchantId: string) {
   const { user } = useAuth();
   const client = useQueryClient();
@@ -89,12 +102,13 @@ export function usePaidOrderAmendment(orderId: string, merchantId: string) {
         (): ConfirmationOutcome => 'unknown'
       );
       if (recovered !== 'unknown') return recovered;
-      // The confirmation RPC checks for an existing commit before validating
-      // the preview or reserving its POS reference.
+      // These RPC conflicts follow the idempotency lookup. Losing access
+      // and transient errors cannot establish the outcome of an earlier send.
       if (
         error instanceof PaidOrderAmendmentError &&
-        (error.code === 'preview_stale' ||
-          error.code === 'staff_pos_receipt_used')
+        error.status === 409 &&
+        error.code !== undefined &&
+        definitiveReplayConflicts.has(error.code)
       ) {
         await clearPending();
         refreshOrder();

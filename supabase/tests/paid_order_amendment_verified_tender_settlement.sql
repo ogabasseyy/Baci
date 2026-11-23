@@ -13,6 +13,11 @@ DECLARE
   paid_leg uuid;
   paid_reference text;
   receipt uuid;
+  late_transfer uuid;
+  outgoing uuid;
+  bank_account uuid;
+  claim jsonb;
+  return_payload jsonb;
   amendment uuid;
   quote jsonb;
   payload jsonb;
@@ -119,6 +124,14 @@ BEGIN
     EXCEPTION WHEN raise_exception THEN
       IF SQLERRM <> ALL (ARRAY['verified_funding_refund_review_required','paid_order_ledger_inconsistent']) THEN RAISE; END IF;
     END;
+    UPDATE public.orders SET tracking_number = 'TRACKED-' || o WHERE id = o;
+    IF public.read_paid_order_amendment_workspace(o)->>'canOpenVerifiedCancellation' IS DISTINCT FROM 'false' THEN
+      RAISE EXCEPTION 'Cancellation offered after a tracking number was set';
+    END IF;
+    UPDATE public.orders SET tracking_number = NULL WHERE id = o;
+    IF public.read_paid_order_amendment_workspace(o)->>'canOpenVerifiedCancellation' IS DISTINCT FROM 'true' THEN
+      RAISE EXCEPTION 'Cancellation missing for an eligible order';
+    END IF;
     result := public.run_paid_order_amendment_action(o,amendment,draft_cancel);
     IF result->>'holdFulfillment' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Missing cancellation hold'; END IF;
     BEGIN
@@ -148,6 +161,46 @@ BEGIN
     END IF;
     PERFORM set_config('request.jwt.claim.role','authenticated',true);
     PERFORM set_config('request.jwt.claim.sub',f->>'actor',true);
+    IF public.read_paid_order_amendment_workspace(o)->>'verifiedCancellationReady' IS DISTINCT FROM 'true' THEN
+      RAISE EXCEPTION 'Complete refund evidence did not unlock cancellation';
+    END IF;
+    IF method = 'bank_transfer' THEN
+      SELECT bank_account_id INTO STRICT bank_account
+      FROM private.paid_order_amendment_config WHERE merchant_id = m;
+      PERFORM set_config('request.jwt.claim.role','service_role',true);
+      late_transfer := public.register_paid_order_bank_evidence(
+        bank_account,'LATE-TRANSFER-' || o,'incoming',500000,now(),'Late bank transfer fixture',NULL,o);
+      outgoing := public.register_paid_order_bank_evidence(
+        bank_account,'LATE-RETURN-' || o,'outgoing',500000,now(),'Verified outgoing return fixture',late_transfer);
+      PERFORM set_config('request.jwt.claim.role','authenticated',true);
+      IF public.read_paid_order_amendment_workspace(o)->>'verifiedCancellationReady' IS DISTINCT FROM 'false' THEN
+        RAISE EXCEPTION 'Cancellation offered with an unresolved incoming transfer';
+      END IF;
+      BEGIN
+        PERFORM public.run_paid_order_amendment_action(o,amendment,confirm_cancel);
+        RAISE EXCEPTION 'Cancellation finalized before late transfer was returned';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'refund_evidence_required' THEN RAISE; END IF;
+      END;
+      payload := jsonb_build_object('action','claim_offline_disbursement',
+        'sourceKind','unapplied','sourceId',late_transfer,'idempotencyKey','claim-late-bank-return');
+      claim := public.run_paid_order_amendment_action(o,amendment,payload);
+      IF claim->>'amountMinor' IS DISTINCT FROM '500000'
+        OR public.run_paid_order_amendment_action(o,amendment,payload) IS DISTINCT FROM claim THEN
+        RAISE EXCEPTION 'Late bank return claim did not replay exactly';
+      END IF;
+      return_payload := jsonb_build_object('action','record_offline_refund',
+        'claimId',claim->>'claimId','evidenceId',outgoing,'idempotencyKey','verify-late-bank-return');
+      result := public.run_paid_order_amendment_action(o,amendment,return_payload);
+      IF result->>'outcome' IS DISTINCT FROM 'verified'
+        OR public.run_paid_order_amendment_action(o,amendment,return_payload) IS DISTINCT FROM result
+        OR (SELECT count(*) FROM private.paid_order_bank_evidence WHERE id IN (late_transfer,outgoing)
+          AND allocation = 'returned' AND transaction_id IS NULL) <> 2
+        OR (SELECT count(*) FROM public.transactions WHERE order_id = o AND transaction_type = 'refund') <> 0
+        OR public.read_paid_order_amendment_workspace(o)->>'verifiedCancellationReady' IS DISTINCT FROM 'true' THEN
+        RAISE EXCEPTION 'Late transfer did not return exactly once outside the order ledger';
+      END IF;
+    END IF;
     result := public.run_paid_order_amendment_action(o,amendment,confirm_cancel);
     IF result->>'state' IS DISTINCT FROM 'cancelled_for_recovery'
       OR public.run_paid_order_amendment_action(o,amendment,confirm_cancel) IS DISTINCT FROM result

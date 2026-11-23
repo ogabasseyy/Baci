@@ -172,13 +172,17 @@ describe('usePaidOrderAmendment', () => {
     await waitFor(() => expect(result.current.pending).toBeNull());
   });
 
-  it('clears a recovered confirmation when the POS receipt is already used', async () => {
+  it.each([
+    'staff_pos_receipt_used',
+    'scenario_disabled',
+    'bank_evidence_required',
+  ])('clears a recovered confirmation on a definitive %s conflict', async (code) => {
     persisted = JSON.stringify(confirmation);
     const { result } = await openHook();
     const rejected = new PaidOrderAmendmentError(
-      'This POS receipt reference has already been recorded.',
+      'This confirmation cannot be applied.',
       409,
-      'staff_pos_receipt_used'
+      code
     );
     mocks.confirm.mockRejectedValueOnce(rejected);
     expect(result.current.pending).toEqual(confirmation);
@@ -187,5 +191,23 @@ describe('usePaidOrderAmendment', () => {
     });
     expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(storageKey);
     await waitFor(() => expect(result.current.pending).toBeNull());
+  });
+
+  it('retains a recovered confirmation if access to the order is lost', async () => {
+    persisted = JSON.stringify(confirmation);
+    const { result } = await openHook();
+    mocks.confirm.mockRejectedValueOnce(
+      new PaidOrderAmendmentError('Order not found', 404)
+    );
+    mocks.workspace.mockRejectedValue(
+      new PaidOrderAmendmentError('Order not found', 404)
+    );
+    await act(async () => {
+      await expect(result.current.confirm(confirmation)).resolves.toBe(
+        'unknown'
+      );
+    });
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(persisted).toBe(JSON.stringify(confirmation));
   });
 });

@@ -128,6 +128,7 @@ export const workspaceSchema = z.object({
       status: z.string().nullable(),
       transactionId: z.uuid().nullable(),
       occurredAt: z.string(),
+      method: z.string().optional(),
     })
   ),
 });

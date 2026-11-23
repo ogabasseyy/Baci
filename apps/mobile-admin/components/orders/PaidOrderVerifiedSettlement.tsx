@@ -95,6 +95,7 @@ export function PaidOrderVerifiedSettlement({
 
   async function submit(payload: VerifiedSettlementAction) {
     if (inFlight.current) return;
+    const wasPending = Boolean(pending.data);
     inFlight.current = true;
     setBusy(true);
     setMessage('');
@@ -110,20 +111,25 @@ export function PaidOrderVerifiedSettlement({
       } catch (error) {
         // A transport failure may follow a server commit. Keep the exact
         // command until a confirmed result or an authoritative rejection.
-        const outcomeKnown =
-          error instanceof PaidOrderAmendmentError &&
-          error.status >= 400 &&
-          error.status < 500 &&
-          ![401, 403, 408, 429].includes(error.status);
-        if (
-          outcomeKnown ||
-          (!pending.data && error instanceof AuthenticatedFetchPreflightError)
-        ) {
+        const rejected = error instanceof PaidOrderAmendmentError;
+        const definitiveRejection = wasPending
+          ? rejected &&
+            error.status === 409 &&
+            Boolean(error.code) &&
+            error.code !== 'amendment_busy'
+          : error instanceof AuthenticatedFetchPreflightError ||
+            (rejected &&
+              error.status >= 400 &&
+              error.status < 500 &&
+              error.status !== 408);
+        if (definitiveRejection) {
           await clear();
           throw error;
         }
         setMessage(
-          'Unable to verify the outcome. Retry the same request to check it.'
+          rejected && [401, 403, 404, 429].includes(error.status)
+            ? `${error.message} The earlier request is still saved for retry.`
+            : 'Unable to verify the outcome. Retry the same request to check it.'
         );
         return;
       }

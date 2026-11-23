@@ -14,6 +14,7 @@ DECLARE
   top_up jsonb;
   amendment uuid;
   existing_receipt uuid;
+  prior_order uuid;
 BEGIN
   FOREACH method IN ARRAY ARRAY['cash','pos'] LOOP
     PERFORM set_config('request.jwt.claim.role','service_role',true);
@@ -28,6 +29,19 @@ BEGIN
     IF quote ? 'canRecordStaffTopUp' THEN RAISE EXCEPTION 'Staff tender unexpectedly enabled by default'; END IF;
     UPDATE private.paid_order_amendment_config SET staff_tender_enabled = true,version = version + 1
     WHERE merchant_id = m;
+    INSERT INTO private.paid_order_bank_evidence(
+      merchant_id,account_id,bank_transaction_id,direction,amount_minor,currency,
+      occurred_at,statement_entry,bound_order_id,collection_method
+    )
+    SELECT m,bank_account_id,'tender:pos:PENDING-' || o,
+      'incoming',2000000,'NGN',now(),'Hidden POS receipt fixture',o,'pos'
+    FROM private.paid_order_amendment_config WHERE merchant_id = m
+    RETURNING id INTO existing_receipt;
+    quote := public.preview_paid_order_amendment(o,selection);
+    IF quote ? 'canRecordStaffTopUp' OR quote->'bankEvidence' IS DISTINCT FROM '[]'::jsonb THEN
+      RAISE EXCEPTION 'A disabled receipt may not be replaced by a new staff payment';
+    END IF;
+    DELETE FROM private.paid_order_bank_evidence WHERE id = existing_receipt;
     quote := public.preview_paid_order_amendment(o,selection);
     IF quote->'canRecordStaffTopUp' IS DISTINCT FROM 'true'::jsonb
       OR quote->>'adjustmentMinor' IS DISTINCT FROM '2000000' THEN
@@ -43,12 +57,15 @@ BEGIN
       EXCEPTION WHEN invalid_parameter_value THEN
         IF SQLERRM <> 'invalid_amendment_confirmation' THEN RAISE; END IF;
       END;
+      prior_order := gen_random_uuid();
+      INSERT INTO public.orders(id,merchant_id,order_number,source,currency,payment_status,shipping_status,total,subtotal)
+      VALUES (prior_order,m,'PRIOR-POS-' || prior_order,'mobile_app','NGN','unpaid','pending',10000,10000);
       INSERT INTO private.paid_order_bank_evidence(
         merchant_id,account_id,bank_transaction_id,direction,amount_minor,currency,
         occurred_at,statement_entry,bound_order_id,collection_method
       )
       SELECT m,bank_account_id,'tender:pos:' || upper('pos-fixture-' || o),
-        'incoming',1000000,'NGN',now(),'Existing POS receipt fixture',o,'pos'
+        'incoming',1000000,'NGN',now(),'Existing POS receipt fixture',prior_order,'pos'
       FROM private.paid_order_amendment_config WHERE merchant_id = m
       RETURNING id INTO existing_receipt;
       payload := jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('  pos-fixture-' || o || '  '));

@@ -175,7 +175,12 @@ describe('updateMerchantInboxConversation', () => {
 function chatWithLabels(
   initial: string[],
   failing?: string,
-  options: { lostReply?: boolean; readsDownAfterFailure?: boolean } = {}
+  options: {
+    lostReply?: boolean;
+    readsDownAfterFailure?: boolean;
+    /** Status of the failing write; 4xx means the engine refused it. */
+    failStatus?: number;
+  } = {}
 ) {
   let labels = initial;
   let snooze: { status: string; snoozed_until?: number } = { status: 'open' };
@@ -195,7 +200,7 @@ function chatWithLabels(
         snooze = { status: body.status, snoozed_until: body.snoozed_until };
       }
       readsDown = options.readsDownAfterFailure === true;
-      return { status: 500 };
+      return { status: options.failStatus ?? 500 };
     }
     if (path.endsWith('/labels')) labels = body.labels;
     if (path.endsWith('/toggle_status')) {
@@ -225,7 +230,32 @@ describe('bugfix: a follow-up never ends up half applied', () => {
     expect(labels()).toEqual(['handled-by-ai']);
   });
 
-  it('takes the label off again when the snooze fails', async () => {
+  it('takes the label off again when the engine refuses the snooze', async () => {
+    const { calls, labels } = chatWithLabels(
+      ['handled-by-ai'],
+      '/toggle_status',
+      { failStatus: 422 }
+    );
+
+    await expect(
+      updateMerchantInboxConversation(binding, {
+        conversationId: 7,
+        update,
+        now: NOW,
+      })
+    ).resolves.toEqual({ ok: false, code: 'unavailable' });
+
+    // A refusal is a clear "not snoozed", so the label goes back off.
+    expect(calls.map((c) => c.path)).toEqual([
+      '/conversations/7/labels',
+      '/conversations/7/toggle_status',
+      '/conversations/7/labels',
+    ]);
+    expect(labels()).toEqual(['handled-by-ai']);
+  });
+
+  it('bugfix: never takes the label off after a snooze with no clear answer, even if the engine still shows the old state', async () => {
+    // A server error or timeout: the snooze may land after any check made now.
     const { calls, labels } = chatWithLabels(
       ['handled-by-ai'],
       '/toggle_status'
@@ -239,12 +269,8 @@ describe('bugfix: a follow-up never ends up half applied', () => {
       })
     ).resolves.toEqual({ ok: false, code: 'unavailable' });
 
-    expect(calls.map((c) => c.path)).toEqual([
-      '/conversations/7/labels',
-      '/conversations/7/toggle_status',
-      '/conversations/7/labels',
-    ]);
-    expect(labels()).toEqual(['handled-by-ai']);
+    expect(labels()).toContain('follow-up');
+    expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
   });
 
   it('keeps the label of an existing follow-up when changing its time fails', async () => {

@@ -12,11 +12,13 @@ const mocks = vi.hoisted(() => ({
   back: vi.fn(),
   choose: vi.fn(),
   customer: vi.fn(),
+  isFocused: vi.fn(),
 }));
 
 vi.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   router: { back: mocks.back },
+  useNavigation: () => ({ isFocused: mocks.isFocused }),
 }));
 vi.mock('@/components/ui/AppSheetModal', () => ({
   AppSheetModal: ({
@@ -51,6 +53,7 @@ import { messages, renderThread } from './ConversationThread.test-support';
 describe('ConversationThread business tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isFocused.mockReturnValue(true);
     mocks.customer.mockReturnValue({ data: null });
     mocks.refetch.mockResolvedValue({
       isError: false,
@@ -189,5 +192,26 @@ describe('ConversationThread customer card', () => {
     renderThread();
     expect(screen.queryByText(/Returning customer/)).toBeNull();
     expect(screen.queryByText(/Signed-in customer/)).toBeNull();
+  });
+
+  it('bugfix: does not pop another screen when Done finishes after the owner left the chat', async () => {
+    mocks.api.mockResolvedValue({
+      conversation: {
+        id: 9,
+        status: 'resolved',
+        unreadCount: 0,
+        customerName: 'Ada Test',
+        lastActivityAt: null,
+        lastMessage: null,
+      },
+    });
+    renderThread();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    // The owner went back (button or swipe) while the save was still running.
+    mocks.isFocused.mockReturnValue(false);
+
+    await waitFor(() => expect(mocks.isFocused).toHaveBeenCalled());
+    expect(mocks.back).not.toHaveBeenCalled();
   });
 });

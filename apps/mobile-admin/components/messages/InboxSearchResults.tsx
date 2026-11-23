@@ -13,9 +13,13 @@ import { ConversationListItem } from './ConversationListItem';
 
 interface InboxSearchResultsProps {
   colors: ThemeColors;
+  /** More pages exist; shown as a button when the pages so far had no match. */
+  hasMore: boolean;
   isError: boolean;
   isLoadingMore: boolean;
   isPending: boolean;
+  /** The page after the results on screen failed to load. */
+  loadMoreFailed: boolean;
   onLoadMore: () => void;
   onRetry: () => void;
   results: { conversation: InboxConversation; snippet: string | null }[];
@@ -25,9 +29,11 @@ interface InboxSearchResultsProps {
 /** What the list shows while the search box has text. */
 export function InboxSearchResults({
   colors,
+  hasMore,
   isError,
   isLoadingMore,
   isPending,
+  loadMoreFailed,
   onLoadMore,
   onRetry,
   results,
@@ -71,14 +77,40 @@ export function InboxSearchResults({
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => String(item.conversation.id)}
       ListFooterComponent={
-        isLoadingMore ? <ActivityIndicator color={colors.primary} /> : undefined
+        isLoadingMore ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : loadMoreFailed ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onRetry}
+            style={styles.retry}
+          >
+            <Text style={{ color: colors.primary }}>
+              Could not load more chats. Tap to retry.
+            </Text>
+          </Pressable>
+        ) : undefined
       }
-      onEndReached={onLoadMore}
+      onEndReached={() => {
+        // The hook guards too; this keeps pending, failed and exhausted lists
+        // quiet instead of repeating a failing request on every scroll.
+        if (hasMore && !isLoadingMore && !loadMoreFailed) onLoadMore();
+      }}
       ListEmptyComponent={
         <View style={styles.centered}>
           <Text style={[styles.title, { color: colors.text }]}>
             No chats match "{term.trim()}"
           </Text>
+          {/* An empty list may never fire onEndReached, so older chats get a button. */}
+          {hasMore && !isLoadingMore ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onLoadMore}
+              style={styles.retry}
+            >
+              <Text style={{ color: colors.primary }}>Look further back</Text>
+            </Pressable>
+          ) : null}
         </View>
       }
       renderItem={({ item }) => (

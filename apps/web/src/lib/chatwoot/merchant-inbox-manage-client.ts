@@ -58,10 +58,37 @@ async function providerPost(
 const unavailable: MerchantInboxFailure = { ok: false, code: 'unavailable' };
 
 /**
+ * Reads the live labels, applies the change and writes the whole list back
+ * (the provider replaces it). The engine has no conditional update, so two
+ * writers changing one chat's labels in the same instant can overwrite each
+ * other; the app always shows the labels the engine returns afterwards.
+ * Returns the failure, or null when the labels were saved.
+ */
+async function writeLabels(
+  binding: MerchantInboxBinding,
+  base: string,
+  change: Parameters<typeof applyInboxLabelChange>[1]
+): Promise<MerchantInboxFailure | null> {
+  const live = await providerGet(binding, base);
+  if (!live.ok) return failure(live);
+  const parsed = providerInboxConversationSchema.safeParse(live.body);
+  if (!parsed.success) return unavailable;
+  const labels = applyInboxLabelChange(parsed.data.labels ?? [], change);
+  return (await providerPost(binding, `${base}/labels`, { labels }))
+    ? null
+    : unavailable;
+}
+
+/**
  * Applies one change to a conversation of the bound inbox: Done / reopen,
  * follow-up (snooze), priority and tags. The conversation is read first, so
  * an id from another store's inbox is a plain "not found", and the label list
  * is merged from the live labels (the provider replaces the whole list).
+ *
+ * A follow-up is two writes, the label and the snooze. The label goes first:
+ * a chat snoozed without it would vanish from the Follow-up view, while a
+ * label without the snooze still shows, and is taken off again if the snooze
+ * fails.
  */
 export async function updateMerchantInboxConversation(
   binding: MerchantInboxBinding,
@@ -81,7 +108,9 @@ export async function updateMerchantInboxConversation(
 
   const base = `/conversations/${conversationId}`;
   const followUpAt = update.followUpAt;
+  const tagChange = { addTags: update.addTags, removeTags: update.removeTags };
   let followUp: boolean | undefined;
+  let labelsSaved = false;
 
   if (update.status === 'resolved') {
     if (
@@ -97,15 +126,25 @@ export async function updateMerchantInboxConversation(
     if (Number.isNaN(at) || at <= nowMs || at - nowMs > 90 * 86_400_000) {
       return { ok: false, code: 'invalid_follow_up' };
     }
+    const labelled = await writeLabels(binding, base, {
+      ...tagChange,
+      followUp: true,
+    });
+    if (labelled) return labelled;
+    labelsSaved = true;
     if (
       !(await providerPost(binding, `${base}/toggle_status`, {
         status: 'snoozed',
         snoozed_until: Math.floor(at / 1000),
       }))
     ) {
+      // Nothing was snoozed: take the label off again, unless the chat already
+      // had a follow-up (its earlier snooze and label still agree).
+      if (!owned.conversation.followUp) {
+        await writeLabels(binding, base, { followUp: false });
+      }
       return unavailable;
     }
-    followUp = true;
   } else if (update.status === 'open' || followUpAt === null) {
     if (
       owned.conversation.status !== 'open' &&
@@ -129,19 +168,9 @@ export async function updateMerchantInboxConversation(
 
   const tagsChange =
     (update.addTags?.length ?? 0) > 0 || (update.removeTags?.length ?? 0) > 0;
-  if (tagsChange || followUp !== undefined) {
-    const live = await providerGet(binding, base);
-    if (!live.ok) return failure(live);
-    const parsed = providerInboxConversationSchema.safeParse(live.body);
-    if (!parsed.success) return unavailable;
-    const labels = applyInboxLabelChange(parsed.data.labels ?? [], {
-      addTags: update.addTags,
-      removeTags: update.removeTags,
-      followUp,
-    });
-    if (!(await providerPost(binding, `${base}/labels`, { labels }))) {
-      return unavailable;
-    }
+  if (!labelsSaved && (tagsChange || followUp !== undefined)) {
+    const failed = await writeLabels(binding, base, { ...tagChange, followUp });
+    if (failed) return failed;
   }
 
   const fresh = await getMerchantInboxConversation(binding, conversationId);

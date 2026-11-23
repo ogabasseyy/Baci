@@ -31,7 +31,7 @@ function snoozeToIso(value: number | string | null | undefined): string | null {
 }
 
 /** Truncates without splitting a surrogate pair at the boundary. */
-function truncateByCodePoint(value: string, maxLength: number): string {
+export function truncateByCodePoint(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   const cut = value.slice(0, maxLength);
   const last = cut.charCodeAt(cut.length - 1);
@@ -102,12 +102,22 @@ export function projectMerchantInboxMessage(
         : 'other';
   if (!text && kind !== 'other') return null;
 
+  const followUps = message.content_attributes as
+    | { ekaette_follow_ups?: { actions?: unknown } }
+    | undefined;
+  const actions = followUps?.ekaette_follow_ups?.actions;
   return {
     id: message.id,
     sender,
     kind,
     text: truncateByCodePoint(text, MAX_TEXT_LENGTH),
     createdAt,
+    ...(sender === 'assistant' &&
+    Array.isArray(actions) &&
+    actions.includes('review_checkout') &&
+    /name\s+and\s+surname/i.test(text)
+      ? { checkoutNameRequested: true as const }
+      : {}),
   };
 }
 

@@ -12,11 +12,13 @@ const mocks = vi.hoisted(() => ({
   back: vi.fn(),
   choose: vi.fn(),
   customer: vi.fn(),
+  isFocused: vi.fn(),
 }));
 
 vi.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   router: { back: mocks.back },
+  useNavigation: () => ({ isFocused: mocks.isFocused }),
 }));
 vi.mock('@/components/ui/AppSheetModal', () => ({
   AppSheetModal: ({
@@ -52,6 +54,7 @@ describe('ConversationThread', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.customer.mockReturnValue({ data: null });
+    mocks.isFocused.mockReturnValue(true);
     mocks.refetch.mockResolvedValue({
       isError: false,
       data: { pages: [{ messages }] },

@@ -150,6 +150,7 @@ export const QuoteRequestSchema = z
     sessionId: z.string().optional(),
     shipmentType: z.enum(['domestic', 'international']).default('domestic'),
     deliveryPreference: z.enum(['door', 'pickup_station']).optional(),
+    carrier: z.literal('GIGL').optional(),
     /**
      * Advisory cart subtotal (merchant-currency major units), used only to
      * evaluate merchant-configured rate conditions at quote time. Client

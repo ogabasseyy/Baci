@@ -1,4 +1,4 @@
-import { router, Stack } from 'expo-router';
+import { router, Stack, useNavigation } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
@@ -26,6 +26,7 @@ export function ConversationThread({
   conversationId: number;
 }) {
   const { colors } = useTheme();
+  const navigation = useNavigation();
   const thread = useInboxThread(conversationId);
   const { messages, conversation, refetch } = thread;
   const customer = useInboxCustomer({
@@ -80,7 +81,11 @@ export function ConversationThread({
               busy={manage.isUpdating}
               colors={colors}
               conversation={conversation}
-              onDone={() => router.back()}
+              onDone={() => {
+                // Done can finish after the owner already left this chat
+                // (back button or swipe): never pop whichever screen is open.
+                if (navigation.isFocused()) router.back();
+              }}
               onUpdate={manage.update}
             />
           ) : null}

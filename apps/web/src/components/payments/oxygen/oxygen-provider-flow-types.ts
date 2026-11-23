@@ -10,5 +10,6 @@ export type OxygenProviderFlowProps = {
   currency?: string;
   active?: boolean;
   prefill?: OxygenCustomerPrefill;
+  conversational?: boolean;
   onProgress?: (stage: OxygenJourneyStage) => void;
 };

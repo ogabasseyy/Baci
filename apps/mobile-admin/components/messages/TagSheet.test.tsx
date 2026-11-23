@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
@@ -16,8 +16,8 @@ vi.mock('@/components/ui/AppSheetModal', () => ({
 
 import { TagSheet } from './TagSheet';
 
-function renderSheet(selected: string[] = [], busy = false) {
-  const onAdd = vi.fn();
+function renderSheet(selected: string[] = [], busy = false, saved = true) {
+  const onAdd = vi.fn().mockResolvedValue(saved);
   const onRemove = vi.fn();
   render(
     <TagSheet
@@ -56,17 +56,17 @@ describe('TagSheet', () => {
     expect(onRemove).toHaveBeenCalledWith('vip-buyer');
   });
 
-  it('adds a typed tag and ignores blank input', () => {
+  it('adds a typed tag, clears the box once saved and ignores blank input', async () => {
     const { onAdd } = renderSheet();
     const add = screen.getByRole('button', { name: 'Add tag' });
+    const input = screen.getByLabelText('New tag');
     expect(add).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText('New tag'), {
-      target: { value: '  Wholesale ' },
-    });
+    fireEvent.change(input, { target: { value: '  Wholesale ' } });
     fireEvent.click(add);
 
     expect(onAdd).toHaveBeenCalledWith('Wholesale');
+    await waitFor(() => expect(input).toHaveValue(''));
   });
 
   it('stops offering more tags once the chat has five', () => {
@@ -88,5 +88,21 @@ describe('TagSheet', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
 
     expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: keeps the typed tag when saving fails so it can be tried again', async () => {
+    const { onAdd } = renderSheet([], false, false);
+    const input = screen.getByLabelText('New tag');
+    const add = screen.getByRole('button', { name: 'Add tag' });
+
+    fireEvent.change(input, { target: { value: 'Wholesale' } });
+    fireEvent.click(add);
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
+
+    // Nothing was saved: the text is still there, one tap retries it as is.
+    expect(input).toHaveValue('Wholesale');
+    fireEvent.click(add);
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(2));
+    expect(onAdd).toHaveBeenLastCalledWith('Wholesale');
   });
 });

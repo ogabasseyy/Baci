@@ -74,9 +74,12 @@ export default function MessagesScreen() {
     pages < MAX_AUTO_PAGES &&
     (RANKED_VIEWS.includes(view) ||
       conversations.length < MIN_ROWS_BEFORE_PAUSE);
+  // Wait for any fetch to finish, not only a next-page one: fetchNextPage
+  // cancels a refresh of the cached pages that is still running, which would
+  // throw the refreshed first page away.
   useEffect(() => {
-    if (autoLoading && !query.isFetchingNextPage) query.fetchNextPage();
-  }, [autoLoading, query.isFetchingNextPage, query.fetchNextPage, pages]);
+    if (autoLoading && !query.isFetching) query.fetchNextPage();
+  }, [autoLoading, query.isFetching, query.fetchNextPage, pages]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -101,9 +104,11 @@ export default function MessagesScreen() {
           {searching ? (
             <InboxSearchResults
               colors={colors}
+              hasMore={search.hasMore}
               isError={search.isError}
               isLoadingMore={search.isLoadingMore}
               isPending={search.isPending}
+              loadMoreFailed={search.loadMoreFailed}
               onLoadMore={search.loadMore}
               onRetry={search.retry}
               results={search.results}

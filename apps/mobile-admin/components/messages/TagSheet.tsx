@@ -17,7 +17,8 @@ interface TagSheetProps {
   colors: ThemeColors;
   /** Tag slugs already on the chat, as the server returns them. */
   selected: string[];
-  onAdd: (name: string) => void;
+  /** Resolves true once the tag is saved, false when saving failed. */
+  onAdd: (name: string) => Promise<boolean>;
   onClose: () => void;
   onRemove: (slug: string) => void;
   visible: boolean;
@@ -50,11 +51,13 @@ export function TagSheet({
     ...extra.map((slug) => ({ name: formatInboxTag(slug), slug })),
   ];
 
-  const addCustom = () => {
+  const addCustom = async () => {
     const name = custom.trim();
     if (!name || full || busy) return;
-    onAdd(name);
-    setCustom('');
+    const saved = await onAdd(name);
+    // A failed save keeps what was typed, so it can be tried again as it is;
+    // text typed since the tap is never wiped.
+    if (saved) setCustom((now) => (now.trim() === name ? '' : now));
   };
 
   return (
@@ -82,7 +85,10 @@ export function TagSheet({
               }}
               disabled={busy || (!on && full)}
               key={name}
-              onPress={() => (on ? onRemove(slug) : onAdd(name))}
+              onPress={() => {
+                if (on) onRemove(slug);
+                else onAdd(name);
+              }}
               style={[
                 styles.chip,
                 {
@@ -111,7 +117,9 @@ export function TagSheet({
           editable={!full && !busy}
           maxLength={30}
           onChangeText={setCustom}
-          onSubmitEditing={addCustom}
+          onSubmitEditing={() => {
+            addCustom();
+          }}
           placeholder="Add your own tag"
           placeholderTextColor={colors.textMuted}
           returnKeyType="done"
@@ -129,7 +137,9 @@ export function TagSheet({
           accessibilityLabel="Add tag"
           accessibilityRole="button"
           disabled={busy || full || custom.trim().length === 0}
-          onPress={addCustom}
+          onPress={() => {
+            addCustom();
+          }}
           style={[
             styles.add,
             {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { INBOX_SNIPPET_MAX_LENGTH } from '@/schemas/merchant-inbox-manage';
 import { binding } from './merchant-inbox-client.test-support';
 import { searchMerchantInboxConversations } from './merchant-inbox-search-client';
 import {
@@ -192,5 +193,32 @@ describe('searchMerchantInboxConversations', () => {
     await expect(
       searchMerchantInboxConversations(binding, { q: 'a', page: 1 })
     ).resolves.toEqual({ ok: false, code: 'unavailable' });
+  });
+});
+
+describe('bugfix: a snippet is cut on a character boundary', () => {
+  it('never ends on half of an emoji', async () => {
+    // The emoji is two UTF-16 units and straddles the cut at the limit.
+    const kept = 'a'.repeat(INBOX_SNIPPET_MAX_LENGTH - 1);
+    stub({
+      message: {
+        meta: {},
+        payload: [
+          messageRow(7, 20, [
+            { content: `${kept}\u{1F600} and more`, message_type: 0 },
+          ]),
+        ],
+      },
+      reads: { 7: named(7, 'Flo') },
+    });
+
+    const result = await searchMerchantInboxConversations(binding, {
+      q: 'zzz',
+      page: 1,
+    });
+
+    const snippet = result.ok ? result.results[0].snippet : null;
+    expect(snippet).toBe(kept);
+    expect(snippet).not.toMatch(/[\ud800-\udbff]$/);
   });
 });

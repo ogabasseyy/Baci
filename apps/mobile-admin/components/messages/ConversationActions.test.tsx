@@ -192,6 +192,22 @@ describe('ConversationActions', () => {
     );
   });
 
+  it('warns when removing a tag could not be saved', async () => {
+    renderActions(chat({ tags: ['payment'] }), {
+      onUpdate: () => Promise.reject(new Error('down')),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tags (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Payment, selected' }));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Could not save',
+        expect.any(String)
+      )
+    );
+  });
+
   it('disables the buttons while a change is being saved', () => {
     renderActions(chat(), { busy: true });
     expect(screen.getByRole('button', { name: 'Done' })).toBeDisabled();

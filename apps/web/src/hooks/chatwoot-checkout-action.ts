@@ -76,6 +76,7 @@ export async function handleChatwootCheckoutAction({
     trackingToken: entry.order.trackingToken,
     merchantSlug: place.storeSlug,
     issuedAt: entry.payment.issuedAt,
+    expiresAt: entry.payment.expiresAt,
   });
   if (place.canPost()) post(CHATWOOT_CHECKOUT_STATUS_PREFIX, result);
 }

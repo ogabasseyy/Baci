@@ -198,4 +198,44 @@ describe('useInboxSearch', () => {
     expect(result.current.results).toHaveLength(1);
     expect(result.current.isError).toBe(false);
   });
+
+  it('bugfix: retrying a failed next page asks for that page, not the first again', async () => {
+    mocks.search
+      .mockResolvedValueOnce({ results: [hit(1)], hasMore: true, page: 1 })
+      .mockRejectedValueOnce(new Error('down'))
+      .mockResolvedValueOnce({ results: [hit(2)], hasMore: false, page: 2 });
+    const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
+    await settle(DEBOUNCE + 100);
+    act(() => result.current.loadMore());
+    await settle(100);
+    expect(mocks.search).toHaveBeenCalledTimes(2);
+
+    act(() => result.current.retry());
+    await settle(100);
+
+    // Reloading from the first page would leave page 2 never fetched.
+    expect(mocks.search).toHaveBeenCalledTimes(3);
+    expect(mocks.search).toHaveBeenLastCalledWith('order', 2);
+    expect(result.current.results.map((r) => r.conversation.id)).toEqual([
+      1, 2,
+    ]);
+  });
+
+  it('bugfix: does not ask for the failed page again on every scroll to the end', async () => {
+    mocks.search
+      .mockResolvedValueOnce({ results: [hit(1)], hasMore: true, page: 1 })
+      .mockRejectedValueOnce(new Error('down'));
+    const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
+    await settle(DEBOUNCE + 100);
+    act(() => result.current.loadMore());
+    await settle(100);
+    expect(result.current.loadMoreFailed).toBe(true);
+
+    act(() => result.current.loadMore());
+    act(() => result.current.loadMore());
+    await settle(100);
+
+    // Only the owner's tap on retry asks again.
+    expect(mocks.search).toHaveBeenCalledTimes(2);
+  });
 });

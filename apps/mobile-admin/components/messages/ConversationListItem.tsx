@@ -12,6 +12,7 @@ import {
 } from '@/lib/merchant-inbox-format';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 import { ConversationMeta } from './ConversationMeta';
+import { conversationA11yLabel } from './conversationA11yLabel';
 
 interface ConversationListItemProps {
   colors: ThemeColors;
@@ -59,10 +60,14 @@ export function ConversationListItem({
 }: ConversationListItemProps) {
   const waiting = needsReply(conversation);
   const badge = badgeText(conversation);
+  const preview = snippet || previewText(conversation);
 
   return (
     <Pressable
-      accessibilityLabel={`Conversation with ${conversation.customerName}${waiting ? ', needs reply' : ''}`}
+      accessibilityLabel={conversationA11yLabel(conversation, {
+        preview,
+        waiting,
+      })}
       accessibilityRole="button"
       android_ripple={{ color: colors.cardHover }}
       onPress={() => onPress(conversation.id)}
@@ -115,7 +120,7 @@ export function ConversationListItem({
             { color: waiting ? colors.text : colors.textSecondary },
           ]}
         >
-          {snippet || previewText(conversation)}
+          {preview}
         </Text>
         <ConversationMeta colors={colors} conversation={conversation} />
         {badge ? (

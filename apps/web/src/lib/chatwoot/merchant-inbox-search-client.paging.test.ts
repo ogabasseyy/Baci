@@ -126,3 +126,60 @@ describe('searchMerchantInboxConversations paging and volume', () => {
     expect(result.ok && result.results).toHaveLength(40);
   });
 });
+
+describe('bugfix: a page must not silently lose a match', () => {
+  const rows = [contactRow(1, 20), contactRow(2, 20)];
+
+  it('reports unavailable when one match could not be read, so the page can be asked for again', async () => {
+    stub({
+      contact: { payload: { conversations: rows } },
+      reads: { 1: named(1, 'Ada') },
+      readStatus: { 2: 503 },
+    });
+
+    await expect(
+      searchMerchantInboxConversations(binding, { q: 'a', page: 1 })
+    ).resolves.toEqual({ ok: false, code: 'unavailable' });
+  });
+
+  it('still leaves out a chat that is gone while keeping the others', async () => {
+    // Chat 2 was deleted or moved: a plain 404, not an engine problem.
+    stub({
+      contact: { payload: { conversations: rows } },
+      reads: { 1: named(1, 'Ada') },
+    });
+
+    const result = await searchMerchantInboxConversations(binding, {
+      q: 'a',
+      page: 1,
+    });
+
+    expect(result.ok && result.results.map((r) => r.conversation.id)).toEqual([
+      1,
+    ]);
+  });
+});
+
+describe('bugfix: no next page past the last one the API accepts', () => {
+  const answer = {
+    contact: { payload: { conversations: [contactRow(1, 20)] } },
+  };
+
+  it('offers another page below the limit', async () => {
+    stub({ ...answer, reads: { 1: named(1, 'Ada') } });
+    const result = await searchMerchantInboxConversations(binding, {
+      q: 'a',
+      page: 49,
+    });
+    expect(result.ok && result.hasMore).toBe(true);
+  });
+
+  it('stops at page 50 even though the provider page was not empty', async () => {
+    stub({ ...answer, reads: { 1: named(1, 'Ada') } });
+    const result = await searchMerchantInboxConversations(binding, {
+      q: 'a',
+      page: 50,
+    });
+    expect(result.ok && result.hasMore).toBe(false);
+  });
+});

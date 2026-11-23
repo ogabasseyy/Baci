@@ -16,6 +16,7 @@ vi.mock('@/hooks/cart', () => ({
   useCart: vi.fn(() => ({
     isCartOpen: false,
   })),
+  useCartSafe: vi.fn(() => null),
 }));
 
 vi.mock('../../providers/v2-theme-context', () => ({

@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { PUBLIC_VERIFICATION_WORK_TIMEOUT_MS } from '@/lib/experience/public-verification-deadline';
 import { BUILD_VERIFIER_WORK_TIMEOUT_MS } from './build-deadline';
 
 async function readBody(
@@ -87,7 +88,11 @@ export async function startVerifierListener(
     active.add(controller);
     const workTimeout =
       deadlineMs ??
-      (req.url === '/v1/build' ? BUILD_VERIFIER_WORK_TIMEOUT_MS : 550000);
+      (req.url === '/v1/build'
+        ? BUILD_VERIFIER_WORK_TIMEOUT_MS
+        : req.url === '/v1/public'
+          ? PUBLIC_VERIFICATION_WORK_TIMEOUT_MS
+          : 550000);
     const deadline = setTimeout(() => {
       controller.abort(Error('VERIFIER_DEADLINE'));
       reply(503);

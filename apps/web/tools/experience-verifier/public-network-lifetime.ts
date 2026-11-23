@@ -1,5 +1,6 @@
 import { Resolver } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { PUBLIC_VERIFICATION_DNS_TIMEOUT_MS } from '@/lib/experience/public-verification-deadline';
 import { isPublicPublicationAddress } from '../builder-auth/publication-fetch';
 
 type Address = { address: string; family: number };
@@ -43,7 +44,10 @@ export async function resolvePublicAddress(
   request?: AbortSignal,
   resolve: PublicDnsLookup = resolvePublicDns
 ) {
-  const signal = publicNetworkSignal(5000, request);
+  const signal = publicNetworkSignal(
+    PUBLIC_VERIFICATION_DNS_TIMEOUT_MS,
+    request
+  );
   signal.throwIfAborted();
   const addresses = await resolve(host, signal);
   signal.throwIfAborted();

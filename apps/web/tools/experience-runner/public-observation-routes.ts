@@ -1,4 +1,5 @@
 import type { BrowserContext } from 'playwright-core';
+import { PUBLIC_ROUTE_TIMEOUT_MS } from './public-observation-deadline';
 import { MAX_PUBLIC_OBSERVATION_ROUTES } from './public-observation-resource-limit';
 
 /** Call only in a network-disabled browser with the host-validated routes installed. */
@@ -21,9 +22,17 @@ export async function inspectPublicRoutes(settings: {
     throw Error('PUBLIC_ROUTES_INVALID');
   const page = await settings.context.newPage();
   const observed = [];
-  const timeout = settings.timeoutMs ?? 20000;
+  const timeout = settings.timeoutMs ?? PUBLIC_ROUTE_TIMEOUT_MS;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
     for (const route of settings.routes) {
+      // Close the page when the shared route window expires, even if a later
+      // locator operation has its own Playwright timeout.
+      let expired = false;
+      deadline = setTimeout(() => {
+        expired = true;
+        void page.close().catch(() => undefined);
+      }, timeout);
       const response = await page.goto(route.canonical, {
         waitUntil: 'domcontentloaded',
         timeout,
@@ -64,8 +73,10 @@ export async function inspectPublicRoutes(settings: {
       )
         throw Error('PUBLIC_FRAME_MISMATCH');
       const actualFrame = await (await frame.elementHandle())?.contentFrame();
+      if (expired) throw Error('PUBLIC_ROUTE_TIMEOUT');
       if (!actualFrame || actualFrame.url() !== route.frameUrl)
         throw Error('PUBLIC_FRAME_MISMATCH');
+      clearTimeout(deadline);
       observed.push({
         path: route.path,
         canonical: route.canonical,
@@ -75,6 +86,7 @@ export async function inspectPublicRoutes(settings: {
     }
     return observed;
   } finally {
+    clearTimeout(deadline);
     await page.close();
   }
 }

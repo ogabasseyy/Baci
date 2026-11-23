@@ -31,6 +31,7 @@ type Payload = {
 };
 type Run = (input: {
   payload: Payload;
+  routeCount: number;
   session: Args[4];
   signal?: AbortSignal;
 }) => Promise<{ output: Record<string, unknown> }>;
@@ -117,6 +118,13 @@ export function createPublicObservationAdapter(
         headers: item.headers,
       })),
     };
-    return (await run({ payload, session: relay, signal })).output;
+    return (
+      await run({
+        payload,
+        routeCount: expected.routes.length,
+        session: relay,
+        signal,
+      })
+    ).output;
   };
 }

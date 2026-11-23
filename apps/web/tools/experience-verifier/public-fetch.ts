@@ -1,5 +1,6 @@
 import { Agent } from 'undici';
 import { productionOrigin } from '@/lib/experience/production-origins';
+import { PUBLIC_VERIFICATION_FETCH_TIMEOUT_MS } from '@/lib/experience/public-verification-deadline';
 import {
   MAX_PUBLIC_FETCH_BYTES,
   MAX_PUBLIC_RESOURCE_BYTES,
@@ -108,7 +109,10 @@ export function createBoundPublicFetcher(settings: {
         settings.signal,
         settings.resolve
       );
-      const signal = publicNetworkSignal(10000, settings.signal);
+      const signal = publicNetworkSignal(
+        PUBLIC_VERIFICATION_FETCH_TIMEOUT_MS,
+        settings.signal
+      );
       signal.throwIfAborted();
       resource = await (settings.network ?? defaultNetwork)(
         url,

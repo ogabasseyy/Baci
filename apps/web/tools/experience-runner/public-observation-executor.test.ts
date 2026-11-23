@@ -5,10 +5,45 @@ import { join } from 'node:path';
 import { build } from 'esbuild';
 import { expect, it, vi } from 'vitest';
 import {
+  PUBLIC_ROUTE_TIMEOUT_MS,
+  publicObservationTimeoutMs,
+} from './public-observation-deadline';
+import {
   createPublicObservationExecutor,
   runPublicObservationJob,
 } from './public-observation-executor';
 import { MAX_PUBLIC_OBSERVATION_START_BYTES } from './public-observation-resource-limit';
+
+it('gives the subprocess and cart channel the same budget for the full route matrix', async () => {
+  const timer = vi.spyOn(globalThis, 'setTimeout');
+  const routeCount = 128;
+  const start = () =>
+    spawn(
+      process.execPath,
+      [
+        '-e',
+        `process.stdin.once('data', () => { process.stdout.end(JSON.stringify({type:'done', observation:{status:'synthetic'}})+'\\n'); process.stdin.destroy(); });`,
+      ],
+      { stdio: 'pipe' }
+    );
+  try {
+    await runPublicObservationJob(
+      {
+        payload: {},
+        routeCount,
+        session: async () => ({ status: 200, body: '{}' }),
+      },
+      { command: async () => '', start }
+    );
+    const budget = publicObservationTimeoutMs(routeCount);
+    expect(budget - publicObservationTimeoutMs(1)).toBe(
+      (routeCount - 1) * PUBLIC_ROUTE_TIMEOUT_MS
+    );
+    expect(timer.mock.calls.filter(([, ms]) => ms === budget)).toHaveLength(2);
+  } finally {
+    timer.mockRestore();
+  }
+});
 
 it('uses one fixed helper job and accepts output only after successful process exit and cleanup', async () => {
   const command = vi.fn(async (_program: string, _args: string[]) => '');

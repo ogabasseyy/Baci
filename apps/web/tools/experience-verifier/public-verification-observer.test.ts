@@ -163,7 +163,9 @@ it('admits all 32 performance-sized PNG assets alongside pages and framework fil
 });
 
 it('admits 64 pages and frames with 34 delivery files and 95 framework assets', async () => {
-  const run = vi.fn(async () => ({ output: { synthetic: true } }));
+  const run = vi.fn(async (_input: { routeCount: number }) => ({
+    output: { synthetic: true },
+  }));
   const observe = createPublicObservationAdapter(
     'https://project.supabase.co',
     run
@@ -179,7 +181,14 @@ it('admits 64 pages and frames with 34 delivery files and 95 framework assets', 
         ...pages[0],
         canonical: `https://shop.example/page-${index}`,
       })) as never,
-      expected as never,
+      {
+        ...expected,
+        routes: Array.from({ length: 64 }, (_, index) => ({
+          ...expected.routes[0],
+          path: `/page-${index}`,
+          canonical: `https://shop.example/page-${index}`,
+        })),
+      } as never,
       vi.fn() as never,
       Array.from({ length: 95 }, (_, index) => ({
         ...framework[0],
@@ -191,4 +200,5 @@ it('admits 64 pages and frames with 34 delivery files and 95 framework assets', 
       }))
     )
   ).resolves.toEqual({ synthetic: true });
+  expect(run.mock.calls[0][0].routeCount).toBe(64);
 });

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { OWNER_PREVIEW_WORK_TIMEOUT_MS } from '../src/lib/experience/owner-preview-deadline';
+import { PUBLIC_VERIFICATION_BRIDGE_TIMEOUT_MS } from '../src/lib/experience/public-verification-deadline';
 import type { OwnerAdmission } from './owner-admission';
 
 /** Fixed, bounded transport for the signed server-to-server owner preview route. */
@@ -49,7 +50,7 @@ export function createOwnerPublicVerificationHttpHandler(
     path: '/internal/owner/public',
     target: 'https://verifier.baci-internal.invalid/v1/public',
     signature: 'x-baci-verifier-signature',
-    timeoutMs: 600000,
+    timeoutMs: PUBLIC_VERIFICATION_BRIDGE_TIMEOUT_MS,
     admit,
     ownerSlots,
   });

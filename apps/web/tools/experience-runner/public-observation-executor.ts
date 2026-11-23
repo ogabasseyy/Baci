@@ -2,6 +2,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { type LinuxRunnerCommand, runCommand } from './linux-runner';
 import { runPublicCartChannel } from './public-cart-channel';
+import { publicObservationTimeoutMs } from './public-observation-deadline';
 import { MAX_PUBLIC_OBSERVATION_START_BYTES } from './public-observation-resource-limit';
 
 const helper = '/usr/local/libexec/baci-experience-helper';
@@ -18,6 +19,7 @@ const start: Start = (jobId) =>
   });
 type ObserverInput = {
   payload: unknown;
+  routeCount?: number;
   signal?: AbortSignal;
   session(request: Request): Promise<{ status: number; body: string }>;
 };
@@ -31,6 +33,7 @@ export async function runPublicObservationJob(
   onCleanupFailure?: () => void
 ) {
   input.signal?.throwIfAborted();
+  const timeoutMs = publicObservationTimeoutMs(input.routeCount ?? 1);
   const encoded = JSON.stringify({ type: 'start', payload: input.payload });
   if (
     typeof encoded !== 'string' ||
@@ -86,7 +89,7 @@ export async function runPublicObservationJob(
       child.stderr.destroy();
     };
     input.signal?.addEventListener('abort', stop, { once: true });
-    const deadline = setTimeout(stop, 75000);
+    const deadline = setTimeout(stop, timeoutMs);
     try {
       await new Promise<void>((resolve, reject) =>
         child.stdin.write(`${encoded}\n`, (error) =>
@@ -96,6 +99,7 @@ export async function runPublicObservationJob(
       const observed = await runPublicCartChannel({
         input: child.stdout,
         output: child.stdin,
+        timeoutMs,
         session: (request) => {
           input.signal?.throwIfAborted();
           return input.session(request);

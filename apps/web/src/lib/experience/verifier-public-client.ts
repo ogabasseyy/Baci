@@ -2,6 +2,7 @@ import 'server-only';
 import { createHmac, randomBytes } from 'node:crypto';
 import { experienceApprovalId } from '@/schemas/experience-publication';
 import type { OwnerLifecycleVerification } from './owner-lifecycle-runtime';
+import { PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS } from './public-verification-deadline';
 
 /** Sends no caller-selected merchant or receipt data to the independent verifier. */
 export function createVerifierPublicClient(settings: {
@@ -38,7 +39,7 @@ export function createVerifierPublicClient(settings: {
       .update(`verifier-public/v1\n${body}`)
       .digest('hex');
     signal?.throwIfAborted();
-    const deadline = AbortSignal.timeout(600000);
+    const deadline = AbortSignal.timeout(PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS);
     const response = await settings.fetch(
       'https://owner.baci-internal.invalid/internal/owner/public',
       {

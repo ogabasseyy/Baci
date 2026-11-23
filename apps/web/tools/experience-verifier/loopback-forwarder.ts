@@ -1,5 +1,6 @@
 import { request as httpRequest } from 'node:http';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
+import { PUBLIC_VERIFICATION_LOOPBACK_TIMEOUT_MS } from '@/lib/experience/public-verification-deadline';
 
 /** Trusted MCP process only; the configured target cannot be selected by a request. */
 export function createVerifierLoopbackForwarder(
@@ -40,7 +41,12 @@ export function createVerifierLoopbackForwarder(
           }
         );
         req.once('error', reject);
-        req.setTimeout(600000, () => req.destroy(Error('VERIFIER_TIMEOUT')));
+        req.setTimeout(
+          operation === 'public'
+            ? PUBLIC_VERIFICATION_LOOPBACK_TIMEOUT_MS
+            : 600000,
+          () => req.destroy(Error('VERIFIER_TIMEOUT'))
+        );
         req.end(JSON.stringify(parsed.body));
       });
       return new Response(null, {

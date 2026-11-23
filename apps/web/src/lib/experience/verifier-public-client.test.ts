@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
+import { PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS } from './public-verification-deadline';
 import { createVerifierPublicClient } from './verifier-public-client';
 
 const key = Buffer.alloc(32, 7);
@@ -93,4 +94,19 @@ it('cancels public verification when the owner disconnects after committing', as
   abort.abort();
   expect(signal.aborted).toBe(true);
   await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+});
+
+it('uses the full public verification deadline rather than the approval deadline', async () => {
+  const timer = vi.spyOn(AbortSignal, 'timeout');
+  try {
+    const verify = createVerifierPublicClient({
+      key,
+      fetch: async () => new Response(null, { status: 204 }),
+    });
+    await verify(client as never, { approvalId });
+    expect(timer).toHaveBeenCalledWith(PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS);
+    expect(PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS).toBeGreaterThan(600_000);
+  } finally {
+    timer.mockRestore();
+  }
 });

@@ -1,6 +1,7 @@
 import 'server-only';
 import { request } from 'node:https';
 import { createSecureContext } from 'node:tls';
+import { PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS } from './public-verification-deadline';
 
 const paths = new Map([
   [
@@ -130,7 +131,12 @@ export function createOwnerMtlsFetch(settings: {
         }
       );
       req.once('error', reject);
-      req.setTimeout(600000, () => req.destroy(Error('OWNER_MTLS_TIMEOUT')));
+      req.setTimeout(
+        path === '/internal/owner/public'
+          ? PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS
+          : 600000,
+        () => req.destroy(Error('OWNER_MTLS_TIMEOUT'))
+      );
       req.end(init.body as string);
     });
   };

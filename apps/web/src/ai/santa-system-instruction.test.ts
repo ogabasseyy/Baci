@@ -19,6 +19,7 @@ const tenant = {
   businessName: 'Ogabassey',
   currencyCode: 'NGN',
   priceNegotiationEnabled: true,
+  agenticCheckoutEnabled: true,
 } as const;
 
 describe('generateSantaPrompt', () => {

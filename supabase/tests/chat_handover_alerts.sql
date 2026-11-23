@@ -39,6 +39,20 @@ $$;
 DELETE FROM private.chat_event_server_secrets;
 INSERT INTO private.chat_event_server_secrets(secret_name, secret) VALUES ('current', 'synthetic-chat-event-secret-0123456789abcdef');
 
+-- An ordinary message must be recorded as a message by its own statement, not by the
+-- column default: with the default flipped, it still lands in the message budget.
+ALTER TABLE public.chat_message_events ALTER COLUMN kind SET DEFAULT 'handover';
+SELECT pg_temp.message('evt-hand-explicit', 91);
+DO $$
+BEGIN
+  IF (SELECT kind FROM public.chat_message_events WHERE event_key = 'evt-hand-explicit') IS DISTINCT FROM 'message' THEN
+    RAISE EXCEPTION 'message insert relies on the kind column default';
+  END IF;
+END $$;
+ALTER TABLE public.chat_message_events ALTER COLUMN kind SET DEFAULT 'message';
+DELETE FROM public.merchant_notifications WHERE notification_id IN (SELECT notification_id FROM public.chat_message_events WHERE event_key = 'evt-hand-explicit');
+DELETE FROM public.chat_message_events WHERE event_key = 'evt-hand-explicit';
+
 DO $$
 DECLARE v jsonb; v_n public.notifications; v_r public.merchant_notifications;
 BEGIN

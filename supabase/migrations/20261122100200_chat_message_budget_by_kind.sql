@@ -136,8 +136,10 @@ BEGIN
     v_outcome := 'notified';
   END IF;
 
-  INSERT INTO public.chat_message_events(event_key, merchant_id, conversation_id, outcome, notification_id)
-  VALUES (p_event_key, p_merchant_id, p_conversation_id, v_outcome, v_notification);
+  -- The kind is stated, never left to the column default: the cap above counts
+  -- messages by it.
+  INSERT INTO public.chat_message_events(event_key, merchant_id, conversation_id, outcome, notification_id, kind)
+  VALUES (p_event_key, p_merchant_id, p_conversation_id, v_outcome, v_notification, 'message');
 
   -- Bounded housekeeping: the duplicate guard only needs recent rows. A
   -- provider message redelivered after 30 days would be treated as new.

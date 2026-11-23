@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { experiencePreviewInput } from './experience-preview';
 
+export const experienceOwnerSubject = z.uuid();
+
 const envelope = {
   version: z.literal(1),
   nonce: z.string().regex(/^[a-f0-9]{64}$/),

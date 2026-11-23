@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { experienceOwnerWireSchemas } from './experience-owner-wire';
+import {
+  experienceOwnerSubject,
+  experienceOwnerWireSchemas,
+} from './experience-owner-wire';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const envelope = {
@@ -92,4 +95,10 @@ it('accepts only the fields for each signed operation', () => {
   expect(
     verify.safeParse({ ...envelope, approvalId: id, kind: 'draft' }).success
   ).toBe(false);
+});
+
+it('requires a UUID subject for owner quota accounting', () => {
+  expect(experienceOwnerSubject.parse(id)).toBe(id);
+  for (const subject of [undefined, '', 'merchant-slug'])
+    expect(experienceOwnerSubject.safeParse(subject).success).toBe(false);
 });

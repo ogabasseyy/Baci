@@ -1,15 +1,15 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { decodeJwt } from 'jose';
-import { z } from 'zod';
-import { experienceOwnerWireSchemas } from '../src/schemas/experience-owner-wire';
+import {
+  experienceOwnerSubject,
+  experienceOwnerWireSchemas,
+} from '../src/schemas/experience-owner-wire';
 
 export type OwnerAdmission = (
   body: Uint8Array,
   signature: string,
   reserveOwner?: (ownerId: string) => boolean
 ) => boolean | 'busy';
-
-const subject = z.uuid();
 
 /** Validate the signed operation with the same schema used by the downstream handler. */
 export function createOwnerAdmission(
@@ -44,7 +44,9 @@ export function createOwnerAdmission(
       if (reserveOwner) {
         // The trusted relay signs the entire token after verifying the user.
         // The subject is only a quota key; downstream still authenticates.
-        const owner = subject.safeParse(decodeJwt(parsed.data.accessToken).sub);
+        const owner = experienceOwnerSubject.safeParse(
+          decodeJwt(parsed.data.accessToken).sub
+        );
         if (!owner.success) return false;
         if (!reserveOwner(owner.data.toLowerCase())) return 'busy';
       }

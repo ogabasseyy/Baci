@@ -60,6 +60,23 @@ describe('CustomerCard', () => {
     expect(screen.queryByText('ORD-0')).toBeNull();
   });
 
+  it('bugfix: shows a provider status in sentence case whatever its case', () => {
+    render(
+      <CustomerCard
+        colors={LIGHT_COLORS}
+        customer={{
+          ...customer,
+          recentOrders: [
+            { ...customer.recentOrders[0], shippingStatus: 'IN_TRANSIT' },
+          ],
+        }}
+      />
+    );
+    expect(
+      screen.getByText('Last order ORD-1 · In transit')
+    ).toBeInTheDocument();
+  });
+
   it('opens to list the recent orders and closes again', () => {
     render(<CustomerCard colors={LIGHT_COLORS} customer={customer} />);
     const header = screen.getByRole('button', { name: /Ada Obi/ });

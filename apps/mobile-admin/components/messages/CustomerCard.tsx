@@ -11,8 +11,12 @@ import { formatInboxTime } from '@/lib/merchant-inbox-format';
 import { formatCurrencyNoDecimals } from '@/lib/utils';
 import type { InboxCustomerProfile } from '@/schemas/merchant-inbox';
 
+/** "IN_TRANSIT", "in-transit" and "In_Transit" all read "In transit". */
 const titleCase = (value: string) =>
-  value ? value[0].toUpperCase() + value.slice(1).replace(/[_-]+/g, ' ') : '';
+  value
+    ? value[0].toUpperCase() +
+      value.slice(1).toLowerCase().replace(/[_-]+/g, ' ')
+    : '';
 
 /** "Returning customer · 5 orders · ₦412,000", or a plain signed-in line. */
 export function customerSummary(customer: InboxCustomerProfile): string {

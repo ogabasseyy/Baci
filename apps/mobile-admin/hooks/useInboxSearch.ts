@@ -60,9 +60,12 @@ export function useInboxSearch(rawTerm: string) {
     query.hasNextPage &&
     pages <= MAX_EMPTY_PAGES_SKIPPED;
 
+  // Wait for any fetch, not only a next-page one: fetchNextPage cancels a
+  // refresh of cached pages that is still running, which would throw the
+  // refreshed first page away and keep skipping through the old empty ones.
   useEffect(() => {
-    if (skipping && !query.isFetchingNextPage) query.fetchNextPage();
-  }, [skipping, pages, query.isFetchingNextPage, query.fetchNextPage]);
+    if (skipping && !query.isFetching) query.fetchNextPage();
+  }, [skipping, pages, query.isFetching, query.fetchNextPage]);
 
   return {
     // Typing but not searched yet, or still looking through empty pages.

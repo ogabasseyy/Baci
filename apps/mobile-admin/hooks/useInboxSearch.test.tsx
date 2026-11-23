@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({ search: vi.fn(), merchant: vi.fn() }));
 vi.mock('@/hooks/useMerchant', () => ({ useMerchant: () => mocks.merchant() }));
 vi.mock('@/lib/merchant-inbox-api', () => ({ searchInbox: mocks.search }));
 
+import { inboxSearchKey } from '@/lib/inbox-query-keys';
 import { useInboxSearch } from './useInboxSearch';
 
 const hit = (id: number, snippet: string | null = 'order') => ({
@@ -237,5 +238,45 @@ describe('useInboxSearch', () => {
 
     // Only the owner's tap on retry asks again.
     expect(mocks.search).toHaveBeenCalledTimes(2);
+  });
+
+  it('bugfix: waits for a refresh of cached empty pages instead of cancelling it', async () => {
+    // A stale cached search whose pages had no match, with more still to come.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(
+      inboxSearchKey('m1', 'order'),
+      {
+        pages: [{ results: [], hasMore: true, page: 1 }],
+        pageParams: [1],
+      },
+      { updatedAt: 0 }
+    );
+    let finish: (value: unknown) => void = () => {};
+    mocks.search.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    const shared = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useInboxSearch('order'), {
+      wrapper: shared,
+    });
+
+    await settle(DEBOUNCE + 100);
+
+    // Only the refresh of page 1 is running: skipping on to page 2 would
+    // cancel it and keep the stale empty page.
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+    expect(mocks.search).toHaveBeenCalledWith('order', 1);
+
+    await act(async () => {
+      finish({ results: [hit(5)], hasMore: false, page: 1 });
+    });
+    await settle(100);
+    expect(result.current.results.map((r) => r.conversation.id)).toEqual([5]);
   });
 });

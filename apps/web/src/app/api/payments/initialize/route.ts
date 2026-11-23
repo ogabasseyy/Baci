@@ -1965,79 +1965,31 @@ export async function POST(request: NextRequest) {
               merchantAmount: fees.merchantAmount / 100,
             };
           } else if (data.payment_type === 'bank_transfer') {
-            if (
-              !isNigerianPaystackCustomer(
+            const { initializePaystackBankTransfer } = await import(
+              './paystack-bank-transfer'
+            );
+            const bankTransferOutcome = await initializePaystackBankTransfer({
+              isNigerianCustomer: isNigerianPaystackCustomer(
                 data,
                 formatPhoneToE164(paymentData.customer_phone)
-              )
-            ) {
-              return createErrorResponse(
-                'Bank transfer is only available for Nigerian checkout details. Please choose card payment or another available method.',
-                'PAYMENT_METHOD_COUNTRY_UNSUPPORTED',
-                400
-              );
-            }
-
-            const amountInKobo = Math.round(paymentData.amount * 100);
-            const fees = calculatePaystackFee(amountInKobo);
-            const { transactionChargeKobo, retainedShippingKobo } =
-              await resolvePaystackSplitTransactionCharge({
-                client: await createServerSupabaseClient(),
-                customerEmail: paymentData.customer_email,
-                orderId: paymentData.order_id,
-                merchantId,
-                amountKobo: amountInKobo,
-                platformFeeKobo: fees.platformFee,
-              });
-
-            const {
-              createPaystackBankTransferCharge,
-              isValidPaystackSubaccountCode,
-            } = await import('@/lib/agentic/paystack');
-            const subaccountCode =
-              merchantWithPaystack.paystack_subaccount_code;
-            if (
-              !subaccountCode ||
-              !isValidPaystackSubaccountCode(subaccountCode)
-            ) {
-              return createErrorResponse(
-                'Bank transfer is not configured for this store. Please choose another payment method.',
-                'PAYSTACK_SUBACCOUNT_MISSING',
-                503
-              );
-            }
-            const chargeResult = await createPaystackBankTransferCharge({
-              email: paymentData.customer_email,
-              amountKobo: amountInKobo,
+              ),
+              merchantId,
+              subaccountCode: merchantWithPaystack.paystack_subaccount_code,
               reference,
-              subaccount: subaccountCode,
-              transactionChargeKobo,
-              metadata: {
-                merchant_id: merchantId,
-                order_id: paymentData.order_id,
-                customer_name: paymentData.customer_name,
-                gateway: 'paystack',
-                payment_type: 'bank_transfer',
-                platform_fee_kobo: fees.platformFee,
-                retained_shipping_kobo: retainedShippingKobo,
-              },
+              orderId: paymentData.order_id,
+              amount: paymentData.amount,
+              customerEmail: paymentData.customer_email,
+              customerName: paymentData.customer_name,
+              customerPhone: paymentData.customer_phone,
             });
-
-            paymentResult = {
-              authorization_url: '',
-              dva: {
-                bank_name: chargeResult.bank_name,
-                account_number: chargeResult.account_number,
-                account_name: chargeResult.account_name,
-                ...(chargeResult.account_expires_at
-                  ? { account_expires_at: chargeResult.account_expires_at }
-                  : {}),
-              },
-              reference: chargeResult.reference,
-              platformFee: fees.platformFee / 100,
-              merchantAmount:
-                (fees.merchantAmount - retainedShippingKobo) / 100,
-            };
+            if (!bankTransferOutcome.ok) {
+              return createErrorResponse(
+                bankTransferOutcome.message,
+                bankTransferOutcome.code,
+                bankTransferOutcome.status
+              );
+            }
+            paymentResult = bankTransferOutcome.paymentResult;
           } else {
             if (!preparedPaystack)
               throw new Error('Prepared Paystack checkout is missing');

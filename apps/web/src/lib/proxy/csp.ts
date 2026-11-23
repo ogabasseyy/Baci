@@ -107,6 +107,73 @@ export function generateCSP(
     .join('; ');
 }
 
+/**
+ * Local-only CSP migration candidate for storefront scripts.
+ * It removes unsafe inline script sources and preserves existing form targets
+ * while leaving the enforced policy untouched. The preview deliberately has no
+ * reporting endpoint, so violations are observable only in local DevTools.
+ */
+export function generateStorefrontCspReportOnlyCandidate(
+  csp: string
+): string | null {
+  const directives = csp
+    .split(';')
+    .map((directive) => normalizeCspDirective(directive))
+    .filter(Boolean)
+    .filter((directive) => {
+      const name = getCspDirectiveName(directive);
+      return name !== 'report-uri' && name !== 'report-to';
+    });
+  const scriptSource = directives.findIndex(
+    (directive) => getCspDirectiveName(directive) === 'script-src'
+  );
+  // Without a script-src directive there is no defined script policy to
+  // tighten. Do not emit an enforced-equivalent Report-Only header.
+  if (scriptSource === -1) return null;
+
+  for (let index = 0; index < directives.length; index += 1) {
+    const directive = directives[index];
+    const name = getCspDirectiveName(directive);
+    if (name !== 'script-src' && name !== 'script-src-elem') continue;
+    const [, ...sources] = directive.split(' ');
+    const safeSources = sources.filter(
+      (source) =>
+        source.toLowerCase() !== "'unsafe-inline'" &&
+        source.toLowerCase() !== "'unsafe-eval'"
+    );
+    directives[index] = [
+      name,
+      ...(safeSources.length > 0 ? safeSources : ["'none'"]),
+    ].join(' ');
+  }
+  setCspDirective(directives, 'script-src-attr', "'none'");
+  return directives.join('; ');
+}
+
+function normalizeCspDirective(directive: string): string {
+  const tokens = directive.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return '';
+  tokens[0] = tokens[0].toLowerCase();
+  return tokens.join(' ');
+}
+
+function getCspDirectiveName(directive: string): string {
+  return directive.split(' ', 1)[0].toLowerCase();
+}
+
+function setCspDirective(
+  directives: string[],
+  name: string,
+  value: string
+): void {
+  const index = directives.findIndex(
+    (directive) => getCspDirectiveName(directive) === name
+  );
+  const serialized = `${name.toLowerCase()} ${value}`;
+  if (index === -1) directives.push(serialized);
+  else directives[index] = serialized;
+}
+
 /** Exact HTTPS origin only; malformed environment values never widen CSP. */
 function getEnabledChatwootPlatformOrigin(
   storefrontHostname?: string

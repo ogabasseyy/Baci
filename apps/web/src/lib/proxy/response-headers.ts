@@ -31,6 +31,7 @@ import {
   IMAGE_FILES_REGEX,
 } from '@/lib/proxy/routing-constants';
 import { isStorefrontNestedListingPath } from '@/lib/proxy/routing-policy';
+import { applyStorefrontCspReportOnlyPreviewHeader } from '@/lib/proxy/storefront-csp-report-only-preview';
 
 export function applyStorefrontDocumentCacheHeaders(
   response: NextResponse,
@@ -81,6 +82,7 @@ export function applySecurityHeaders(
     routeType === 'storefront' ? hostname : undefined
   );
   response.headers.set('Content-Security-Policy', csp);
+  applyStorefrontCspReportOnlyPreviewHeader(response, csp, routeType, isLocal);
 
   // Add missing security headers
   response.headers.set('X-Content-Type-Options', 'nosniff');

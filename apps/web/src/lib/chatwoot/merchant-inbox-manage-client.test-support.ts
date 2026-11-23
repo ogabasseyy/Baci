@@ -38,6 +38,8 @@ export function chatWithLabels(
     readsDownAfterFailure?: boolean;
     /** Status of the failing write; 4xx means the engine refused it. */
     failStatus?: number;
+    /** With `lostReply`: the engine stores the snooze this many seconds off. */
+    snoozeDriftSeconds?: number;
   } = {}
 ) {
   let labels = initial;
@@ -55,7 +57,10 @@ export function chatWithLabels(
     calls.push({ method: 'POST', path, body });
     if (failing && path.endsWith(failing)) {
       if (options.lostReply && path.endsWith('/toggle_status')) {
-        snooze = { status: body.status, snoozed_until: body.snoozed_until };
+        snooze = {
+          status: body.status,
+          snoozed_until: body.snoozed_until + (options.snoozeDriftSeconds ?? 0),
+        };
       }
       readsDown = options.readsDownAfterFailure === true;
       return { status: options.failStatus ?? 500 };

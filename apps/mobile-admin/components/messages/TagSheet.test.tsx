@@ -48,6 +48,22 @@ describe('TagSheet', () => {
     expect(onRemove).toHaveBeenCalledWith('order-issue');
   });
 
+  it('bugfix: shows a quick tag as selected when the stored label differs only in case, punctuation or separators', () => {
+    renderSheet(['Order_Issue', 'payment!']);
+
+    expect(
+      screen.getByRole('button', { name: 'Order issue, selected' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Payment, selected' })
+    ).toBeInTheDocument();
+    // Neither is listed a second time as a custom tag.
+    expect(screen.getAllByRole('button', { name: /^Payment/ })).toHaveLength(1);
+    expect(
+      screen.getAllByRole('button', { name: /^Order issue/ })
+    ).toHaveLength(1);
+  });
+
   it('lists a custom tag already on the chat and lets it be removed', () => {
     const { onRemove } = renderSheet(['vip-buyer']);
     fireEvent.click(

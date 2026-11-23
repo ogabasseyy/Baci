@@ -106,7 +106,9 @@ export function InboxSearchResults({
       ListEmptyComponent={
         <View style={styles.centered}>
           <Text style={[styles.title, { color: colors.text }]}>
-            No chats match "{term.trim()}"
+            {hasMore
+              ? `No match for "${term.trim()}" in the chats checked so far`
+              : `No chats match "${term.trim()}"`}
           </Text>
           {/* An empty list may never fire onEndReached, so older chats get a button. */}
           {hasMore && !isLoadingMore ? (

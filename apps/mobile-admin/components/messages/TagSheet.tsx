@@ -24,8 +24,16 @@ interface TagSheetProps {
   visible: boolean;
 }
 
+/** Same words whatever the case, punctuation or separators, as the server slugs them. */
+const tagWords = (value: string) =>
+  value
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
 const sameTag = (slug: string, name: string) =>
-  formatInboxTag(slug).toLowerCase() === name.trim().toLowerCase();
+  tagWords(slug) === tagWords(name);
 
 /** Pick from a few quick tags or type your own; up to five per chat. */
 export function TagSheet({

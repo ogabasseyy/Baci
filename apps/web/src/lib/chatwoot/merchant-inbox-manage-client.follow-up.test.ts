@@ -111,6 +111,26 @@ describe('bugfix: a follow-up never ends up half applied', () => {
     expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
   });
 
+  it.each([
+    ['a few seconds off', 30, true],
+    ['an hour off (another snooze)', 3600, false],
+  ])('bugfix: after a lost reply, a snooze %s is judged by how close it is to the one asked for', async (_name, drift, applied) => {
+    const { labels } = chatWithLabels(['handled-by-ai'], '/toggle_status', {
+      lostReply: true,
+      snoozeDriftSeconds: drift,
+    });
+
+    const result = await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update,
+      now: NOW,
+    });
+
+    expect(result.ok).toBe(applied);
+    // Either way the follow-up label stays: the chat is snoozed.
+    expect(labels()).toContain('follow-up');
+  });
+
   it('keeps the label when the engine cannot be asked what happened', async () => {
     const { calls, labels } = chatWithLabels(
       ['handled-by-ai'],

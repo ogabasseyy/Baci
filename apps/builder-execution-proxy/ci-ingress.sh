@@ -5,7 +5,7 @@ version=2.11.4
 release="https://github.com/caddyserver/caddy/releases/download/v$version"
 asset="caddy_${version}_linux_amd64"
 archive="$asset.tar.gz"
-work=$(mktemp -d "$RUNNER_TEMP/baci-caddy.XXXXXXXX")
+work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/baci-caddy.XXXXXXXX")
 
 for file in "$archive" "$archive.sig" "$asset.pem"; do
   curl --fail --silent --show-error --location --proto '=https' \

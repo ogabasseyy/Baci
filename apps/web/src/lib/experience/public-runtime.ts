@@ -6,6 +6,7 @@ import {
   merchantHasFeature,
 } from '@/lib/merchant-has-feature';
 import { createPublicClient } from '@/lib/supabase/public';
+import { EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE } from '@/schemas/experience-catalog';
 import {
   type ExperienceCatalogMerchant,
   loadExperienceCatalog,
@@ -91,7 +92,8 @@ export function createPublicExperienceRuntime(
     handle?: string,
     productSlug?: string,
     productId?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    offset = 0
   ): Promise<PublicCatalog | null> => {
     let categoryId: string | undefined;
     if (handle && handle !== 'all') {
@@ -113,7 +115,8 @@ export function createPublicExperienceRuntime(
       client,
       m,
       {
-        limit: 100,
+        offset,
+        limit: EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE,
         ...(categoryId ? { categoryId } : {}),
         ...(productSlug ? { productSlug } : {}),
         ...(productId ? { productId } : {}),
@@ -158,16 +161,18 @@ export function createPublicExperienceRuntime(
         }
       );
     },
-    async catalog(merchant, selection) {
-      const head = await manifest(merchant);
+    async catalog(merchant, selection, signal) {
+      const head = await manifest(merchant, signal);
       if (!head) return null;
-      const m = await loadMerchant(merchant.id);
+      const m = await loadMerchant(merchant.id, signal);
       return m
         ? catalog(
             m,
             selection.handle,
             selection.productSlug,
-            selection.productId
+            selection.productId,
+            signal,
+            selection.offset
           )
         : null;
     },

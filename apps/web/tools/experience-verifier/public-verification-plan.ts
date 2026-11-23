@@ -1,9 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { PublicCatalog } from '@baci/shared/experience';
+import type { PublicCatalog, PublicProduct } from '@baci/shared/experience';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import type { PublishedManifest } from '@/lib/experience/published-manifest';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
 import type { ExperienceBoundaryData } from '@/lib/experience/storefront-runtime';
+import {
+  EXPERIENCE_CATALOG_MAX_OFFSET,
+  EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE,
+} from '@/schemas/experience-catalog';
 
 type Merchant = { id: string; slug: string };
 type Binding = {
@@ -24,7 +28,8 @@ export async function derivePublicVerificationPlan(
   runtime: {
     catalog(
       merchant: Merchant,
-      selection: Record<string, never>
+      selection: { offset: number },
+      signal?: AbortSignal
     ): Promise<PublicCatalog | null>;
     resolveBoundary(
       merchant: Merchant,
@@ -47,16 +52,26 @@ export async function derivePublicVerificationPlan(
   )
     throw Error('PUBLIC_BINDING_MISMATCH');
   const merchant = { id: binding.merchantId, slug: binding.slug };
-  signal?.throwIfAborted();
-  const catalog = await runtime.catalog(merchant, {});
-  const product = [...(catalog?.products ?? [])]
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .find(
-      (item) =>
-        item.available &&
-        (!item.requiresVariant ||
-          item.variants.some((variant) => variant.available))
-    );
+  let product: PublicProduct | undefined;
+  for (
+    let offset = 0;
+    offset <= EXPERIENCE_CATALOG_MAX_OFFSET;
+    offset += EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE
+  ) {
+    signal?.throwIfAborted();
+    const catalog = await runtime.catalog(merchant, { offset }, signal);
+    signal?.throwIfAborted();
+    const products = catalog?.products ?? [];
+    product = [...products]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .find(
+        (item) =>
+          item.available &&
+          (!item.requiresVariant ||
+            item.variants.some((variant) => variant.available))
+      );
+    if (product || products.length < EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE) break;
+  }
   if (!product) throw Error('PUBLIC_JOURNEY_NOT_READY');
   const variant = product.requiresVariant
     ? product.variants.find((item) => item.available)

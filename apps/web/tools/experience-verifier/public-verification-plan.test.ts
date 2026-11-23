@@ -167,3 +167,38 @@ it.each([
   expect(plan.journeySteps[0]).toEqual({ action: 'navigate', path });
   expect(deps.resolveBoundary).toHaveBeenCalledTimes(1);
 });
+
+it('finds a purchasable product past a full page of unavailable products', async () => {
+  const deps = fixture();
+  const unavailable = Array.from({ length: 100 }, (_, index) => ({
+    ...product,
+    id: `unavailable-${index}`,
+    requiresVariant: true,
+    variants: product.variants.map((variant) => ({
+      ...variant,
+      available: false,
+    })),
+  }));
+  deps.catalog
+    .mockResolvedValueOnce({ products: unavailable, revision: 'first' })
+    .mockResolvedValueOnce({ products: [product], revision: 'second' });
+  const signal = new AbortController().signal;
+  const result = await derivePublicVerificationPlan(binding, deps, signal);
+  expect(result.product).toMatchObject({
+    id: product.id,
+    variantId: 'variant-1',
+  });
+  expect(deps.catalog).toHaveBeenNthCalledWith(
+    1,
+    { id: head.merchantId, slug: binding.slug },
+    { offset: 0 },
+    signal
+  );
+  expect(deps.catalog).toHaveBeenNthCalledWith(
+    2,
+    { id: head.merchantId, slug: binding.slug },
+    { offset: 100 },
+    signal
+  );
+  expect(deps.catalog).toHaveBeenCalledTimes(2);
+});

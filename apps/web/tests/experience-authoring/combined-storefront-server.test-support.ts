@@ -107,9 +107,7 @@ export async function startCombinedStorefrontServer(
           // so the application's five-second verification deadline measures
           // the handler rather than development compilation on this host.
           for (const path of [
-            '/api/csrf',
             '/api/storefront/experience/state',
-            '/api/storefront/experience/launch',
             '/api/storefront/experience/catalog',
             '/api/storefront/cart',
             '/api/storefront/cart/bootstrap',
@@ -125,8 +123,36 @@ export async function startCombinedStorefrontServer(
               redirect: 'manual',
             });
           }
+          const origin = `http://127.0.0.1:${port}`;
+          const csrf = await fetch(`${origin}/api/csrf`, {
+            signal: AbortSignal.timeout(90_000),
+            redirect: 'manual',
+          });
+          const token = (await csrf.json()).token;
+          if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token))
+            throw Error('LOCAL_CSRF_UNAVAILABLE');
+          // Exercise the actual POST route handler without creating a launch.
+          // A GET can return 405 while leaving the dev POST path cold.
+          const launch = await fetch(
+            `${origin}/api/storefront/experience/launch`,
+            {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                'x-csrf-token': token,
+                cookie: `csrf-token=${token}`,
+                origin,
+                referer: `${origin}/synthetic`,
+              },
+              body: '{}',
+              signal: AbortSignal.timeout(90_000),
+              redirect: 'manual',
+            }
+          );
+          if (launch.status !== 400)
+            throw Error(`LOCAL_LAUNCH_WARMUP_STATUS_${launch.status}`);
           return {
-            origin: `http://127.0.0.1:${port}`,
+            origin,
             close,
             output: () => output,
           };

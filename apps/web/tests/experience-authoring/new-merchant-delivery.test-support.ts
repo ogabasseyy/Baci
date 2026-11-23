@@ -196,6 +196,19 @@ export async function checkNewMerchantDelivery({
               dataKey: commerceApi.anonKey,
             });
             process.stderr.write('SYNTHETIC_STAGE public_browser_finished\n');
+          } catch (error) {
+            const summary = storefront
+              .output()
+              .split('\n')
+              .filter((line) =>
+                /\/api\/storefront\/experience\/(state|launch)|Compil|Ready/.test(
+                  line
+                )
+              )
+              .slice(-16)
+              .join('\n');
+            process.stderr.write(`Synthetic storefront timing:\n${summary}\n`);
+            throw error;
           } finally {
             await storefront.close();
           }

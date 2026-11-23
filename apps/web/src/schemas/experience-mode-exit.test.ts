@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { experienceModeExitInput } from './experience-mode-exit';
+import {
+  experienceLegacyEffectSchema,
+  experienceModeExitInput,
+} from './experience-mode-exit';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const base = {
@@ -38,4 +41,30 @@ it('rejects invalid versions, legacy revision, effects, retry keys and extra aut
     { ...base, approved: true },
   ])
     expect(experienceModeExitInput.safeParse(invalid).success).toBe(false);
+});
+
+const legacy = {
+  namespace: 'baci.full-code.lifecycle.v1',
+  action: 'draft-only',
+  merchant: id,
+  payload: {
+    expectedDraftVersion: 1,
+    expectedPublishedVersion: 0,
+    targetLegacyRevision: id,
+  },
+  website: id,
+  draft: 1,
+  published: 0,
+  template: 'puck',
+  legacy: { config: null },
+};
+it('accepts an exact legacy intent and rejects a publication or absent target', () => {
+  expect(experienceLegacyEffectSchema.parse(legacy)).toEqual(legacy);
+  expect(
+    experienceLegacyEffectSchema.safeParse({ ...legacy, action: 'publish' })
+      .success
+  ).toBe(false);
+  expect(
+    experienceLegacyEffectSchema.safeParse({ ...legacy, website: null }).success
+  ).toBe(false);
 });

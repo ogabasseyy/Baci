@@ -1,4 +1,7 @@
 import { z } from 'zod';
+
+export const EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE = 100;
+export const EXPERIENCE_CATALOG_MAX_OFFSET = 10_000;
 export const experienceCatalogRowSchema = z.object({
   id: z.string(),
   merchant_id: z.string(),
@@ -55,8 +58,13 @@ export const experienceCatalogRowSchema = z.object({
     .default([]),
 });
 export const experienceCatalogSelectionSchema = z.strictObject({
-  offset: z.number().int().min(0).max(10000).default(0),
-  limit: z.number().int().min(1).max(100).default(40),
+  offset: z.number().int().min(0).max(EXPERIENCE_CATALOG_MAX_OFFSET).default(0),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE)
+    .default(40),
   categoryId: z.uuid().optional(),
   productId: z.uuid().optional(),
   productSlug: z

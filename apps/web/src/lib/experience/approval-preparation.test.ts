@@ -62,3 +62,80 @@ it('does not return a ready result after the owner disconnects', async () => {
     error
   );
 });
+
+it('spans an expired review window while holding confirmation until all simulated routes finish', async () => {
+  const start = Date.UTC(2026, 10, 23);
+  let now = start;
+  const date = vi.spyOn(Date, 'now').mockImplementation(() => now);
+  let timeout: AbortController;
+  let slice = 0;
+  const clock = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    slice = ms;
+    timeout = new AbortController();
+    return timeout.signal;
+  });
+  const routes = Array.from({ length: 8 }, (_, i) => `/pages/route-${i}`);
+  const completed = new Set<string>();
+  const sessions: string[] = [];
+  const rpc = vi.fn((_name: string, { p_intent }: { p_intent: string }) => {
+    const renewed = p_intent === freshId || now >= start + 585_000;
+    return Promise.resolve({
+      data: {
+        approvalId: renewed ? freshId : expiredId,
+        status: 'confirmation-required',
+        effectDigest: 'a'.repeat(64),
+        expiresAt: new Date(
+          start + (renewed ? 1_185_000 : 600_000)
+        ).toISOString(),
+      },
+      error: null,
+    });
+  });
+  const client = { rpc } as unknown as Parameters<
+    ReturnType<typeof createApprovalPreparation>
+  >[0];
+  const prepare = createApprovalPreparation(
+    (_client, approvalId, _kind, signal) => {
+      sessions.push(approvalId);
+      const end = now + slice;
+      for (const route of routes) {
+        if (completed.has(route)) continue;
+        if (now + 80_000 >= end) {
+          now = end;
+          timeout.abort(new DOMException('Slice exhausted', 'TimeoutError'));
+          signal?.throwIfAborted();
+        }
+        now += 80_000;
+        completed.add(route);
+      }
+      return Promise.resolve();
+    },
+    'draft'
+  );
+
+  try {
+    let approvalId = expiredId;
+    let ready = false;
+    for (let i = 0; i < 10; i++) {
+      const result = await prepare(client, approvalId);
+      approvalId = result.approvalId;
+      if (result.status === 'ready') {
+        expect(approvalId).toBe(freshId);
+        ready = true;
+        break;
+      }
+      expect(result.status).toBe('preparing');
+    }
+    expect(ready).toBe(true);
+    expect(now - start).toBeGreaterThan(600_000);
+    expect([...completed]).toEqual(routes);
+    expect(sessions).toContain(expiredId);
+    expect(sessions).toContain(freshId);
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual(
+      Array(rpc.mock.calls.length).fill('experience_prepare_approval')
+    );
+  } finally {
+    date.mockRestore();
+    clock.mockRestore();
+  }
+});

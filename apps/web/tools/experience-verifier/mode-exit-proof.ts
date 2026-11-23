@@ -1,26 +1,8 @@
-import { z } from 'zod';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { createPortablePublishedSnapshot } from '@/lib/portable-published-snapshot';
 import { stableStringify } from '@/lib/stable-stringify';
 import { hasSafeBuilderPreviewAssets } from '@/schemas/builder-preview-assets';
-import { experienceModeExitInput } from '@/schemas/experience-mode-exit';
-
-const revision = z.number().int().nonnegative();
-const legacyEffect = z.object({
-  namespace: z.literal('baci.full-code.lifecycle.v1'),
-  action: experienceModeExitInput.shape.effect,
-  merchant: z.uuid(),
-  payload: z.object({
-    expectedDraftVersion: revision,
-    expectedPublishedVersion: revision,
-    targetLegacyRevision: z.uuid(),
-  }),
-  website: z.uuid(),
-  draft: revision,
-  published: revision,
-  template: z.string().nullable(),
-  legacy: z.object({ config: z.json(), published: z.boolean().optional() }),
-});
+import { experienceLegacyEffectSchema } from '@/schemas/experience-mode-exit';
 
 /** The authenticated SQL load rederives the exact legacy target from current
  * revisions. Validate its supported presentation independently of the runner. */
@@ -30,7 +12,7 @@ export async function createModeExitProof(approval: {
   merchantId: string;
   effectDigest: string;
 }) {
-  const target = legacyEffect.parse(approval.summary);
+  const target = experienceLegacyEffectSchema.parse(approval.summary);
   if (
     target.action !== approval.action ||
     target.merchant !== approval.merchantId ||

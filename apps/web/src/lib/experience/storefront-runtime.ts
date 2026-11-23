@@ -25,7 +25,13 @@ export interface ExperienceStorefrontRuntime {
   ): Promise<ExperienceBoundaryData | null>;
   catalog(
     merchant: { id: string; slug?: string | null },
-    selection: { handle?: string; productSlug?: string; productId?: string }
+    selection: {
+      handle?: string;
+      productSlug?: string;
+      productId?: string;
+      offset?: number;
+    },
+    signal?: AbortSignal
   ): Promise<PublicCatalog | null>;
   state(
     merchant: { id: string; slug: string },

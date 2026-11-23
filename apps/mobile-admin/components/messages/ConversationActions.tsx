@@ -89,13 +89,13 @@ export function ConversationActions({
     });
   };
 
-  const onPick = (value: string) => {
+  const onPick = async (value: string) => {
     const kind = picker?.kind;
     setPicker(null);
     if (kind === 'followUp') {
-      apply({ followUpAt: value === 'clear' ? null : value });
+      await apply({ followUpAt: value === 'clear' ? null : value });
     } else if (kind === 'priority') {
-      apply({
+      await apply({
         priority: value === 'none' ? null : (value as InboxPriority),
       });
     }
@@ -188,7 +188,9 @@ export function ConversationActions({
             : undefined
         }
         onClose={() => setPicker(null)}
-        onSelect={onPick}
+        onSelect={(value) => {
+          onPick(value);
+        }}
         options={picker?.options ?? []}
         title={picker?.kind === 'priority' ? 'Priority' : 'Follow up'}
         visible={picker !== null}

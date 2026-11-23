@@ -19,6 +19,12 @@ describe('slugifyInboxTag', () => {
     expect(slugifyInboxTag('  !!! ')).toBeNull();
   });
 
+  it('bugfix: treats underscores like hyphens so look-alike tags are one tag', () => {
+    expect(slugifyInboxTag('order_issue')).toBe('order-issue');
+    expect(slugifyInboxTag('Order_Issue')).toBe('order-issue');
+    expect(slugifyInboxTag('a_b c')).toBe('a-b-c');
+  });
+
   it('caps the length without leaving a trailing hyphen', () => {
     const slug = slugifyInboxTag(`${'a'.repeat(29)} bbbb`);
     expect(slug).toBe('a'.repeat(29));
@@ -63,5 +69,32 @@ describe('applyInboxLabelChange', () => {
     expect(
       applyInboxLabelChange(['tag-payment'], { addTags: ['payment'] })
     ).toEqual(['tag-payment']);
+  });
+});
+
+describe('bugfix: look-alike tags are the same tag', () => {
+  it('does not add a second tag that reads the same as one already there', () => {
+    // "order_issue" was created elsewhere; the app adds "Order issue".
+    expect(
+      applyInboxLabelChange(['tag-order_issue', 'handled-by-ai'], {
+        addTags: ['order-issue'],
+      })
+    ).toEqual(['tag-order_issue', 'handled-by-ai']);
+  });
+
+  it('removes a tag created elsewhere with an underscore', () => {
+    expect(
+      applyInboxLabelChange(['tag-vip_buyer', 'needs-human'], {
+        removeTags: ['vip-buyer'],
+      })
+    ).toEqual(['needs-human']);
+  });
+
+  it('removes every spelling of the tag at once', () => {
+    expect(
+      applyInboxLabelChange(['tag-order-issue', 'tag-order_issue'], {
+        removeTags: ['order-issue'],
+      })
+    ).toEqual([]);
   });
 });

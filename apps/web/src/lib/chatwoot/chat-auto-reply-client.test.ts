@@ -41,6 +41,19 @@ describe('chat auto-reply provider client', () => {
     });
   });
 
+  it('carries content attributes when given', async () => {
+    const fetchMock = stubFetch(() => ({ body: {} }));
+    await postAssistantMessage(binding, {
+      conversationId: 7,
+      content: 'Hello',
+      contentAttributes: { k: [1] },
+    });
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({
+      content_attributes: { k: [1] },
+    });
+  });
+
   it('binds assistant suggestions to the customer message being answered', async () => {
     const fetchMock = stubFetch(() => ({ body: {} }));
     await postAssistantMessage(binding, {

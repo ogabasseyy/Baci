@@ -15,6 +15,12 @@ export const CHAT_AUTO_REPLY_INTENTS = [
   'other',
 ] as const;
 
+/** Santa mode only: the same intents plus a Santa wish. */
+export const CHAT_AUTO_REPLY_SANTA_INTENTS = [
+  ...CHAT_AUTO_REPLY_INTENTS,
+  'wish',
+] as const;
+
 export const ekaetteSpecTopics = [
   'MagSafe support',
   'SIM and eSIM support',
@@ -38,7 +44,6 @@ export const chatSuggestionSchema = z.enum([
   'review_checkout',
 ]);
 export type ChatSuggestion = z.infer<typeof chatSuggestionSchema>;
-
 /**
  * What the model must return; anything else counts as a failed attempt. The
  * intent is advisory: a missing or unknown one is dropped (the store then just
@@ -85,6 +90,15 @@ export const chatAutoReplySchema = z.object({
     .optional()
     .catch(undefined),
   productSlugs: z.array(z.string().max(160)).max(3).optional().catch(undefined),
+});
+
+/**
+ * The reply shape in Santa mode. Kept apart from the normal schema so a store
+ * with Santa mode off never offers the model a "wish" intent. A wish is only
+ * ever a claim by the model: the store still verifies every price.
+ */
+export const chatAutoReplySantaSchema = chatAutoReplySchema.extend({
+  intent: z.enum(CHAT_AUTO_REPLY_SANTA_INTENTS).optional().catch(undefined),
 });
 
 export type ChatAutoReply = z.infer<typeof chatAutoReplySchema>;

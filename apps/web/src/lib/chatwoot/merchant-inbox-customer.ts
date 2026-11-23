@@ -139,7 +139,8 @@ export async function loadCustomerProfile(input: {
   return {
     name: name.slice(0, 120),
     currency: storeCurrency,
-    memberSince: customer.created_at,
+    // Account age is customer data the order permission also covers.
+    memberSince: input.includeOrders ? customer.created_at : null,
     // Counts and spend are order data, gated like the order list itself.
     orderCount: input.includeOrders
       ? Math.trunc(toNumber(customer.total_orders))
@@ -150,13 +151,23 @@ export async function loadCustomerProfile(input: {
     loyaltyPoints: input.includeOrders
       ? Math.trunc(toNumber(customer.loyalty_points))
       : 0,
-    recentOrders: (orders ?? []).map((order) => ({
-      orderNumber: String(order.order_number).slice(0, 60),
-      total: toNumber(order.total),
-      currency: currencyCode(order.currency, storeCurrency),
-      paymentStatus: String(order.payment_status).slice(0, 40),
-      shippingStatus: String(order.shipping_status).slice(0, 40),
-      createdAt: order.created_at,
-    })),
+    // An order with no number has nothing to show or look up, so it is left out
+    // instead of appearing as the text "null".
+    recentOrders: (orders ?? []).flatMap((order) => {
+      const orderNumber = String(order.order_number ?? '')
+        .trim()
+        .slice(0, 60);
+      if (!orderNumber) return [];
+      return [
+        {
+          orderNumber,
+          total: toNumber(order.total),
+          currency: currencyCode(order.currency, storeCurrency),
+          paymentStatus: String(order.payment_status).slice(0, 40),
+          shippingStatus: String(order.shipping_status).slice(0, 40),
+          createdAt: order.created_at,
+        },
+      ];
+    }),
   };
 }

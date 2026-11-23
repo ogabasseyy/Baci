@@ -1,5 +1,6 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { z } from 'zod';
+import { formatPrice } from '@/components/orders-screen/format-price';
 import type { ThemeColors } from '@/constants/theme';
 import type {
   AmendmentWorkspace,
@@ -117,10 +118,7 @@ export function PaidOrderVerifiedBankReturn({
         .map((entry) => (
           <View key={entry.id}>
             {action(
-              `Prepare bank repayment (${new Intl.NumberFormat('en-NG', {
-                style: 'currency',
-                currency: 'NGN',
-              }).format(entry.amountMinor / 100)})`,
+              `Prepare bank repayment (${formatPrice(entry.amountMinor / 100)})`,
               () => {
                 onSubmit({
                   action: 'claim_offline_disbursement',

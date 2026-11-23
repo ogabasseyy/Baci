@@ -170,7 +170,15 @@ async function request<T>(
     },
     15_000
   );
-  const data: unknown = JSON.parse(text);
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new PaidOrderAmendmentError(
+      'Unable to load the order change.',
+      response.status
+    );
+  }
   if (!response.ok) {
     const error = z
       .object({ error: z.string(), code: z.string().optional() })

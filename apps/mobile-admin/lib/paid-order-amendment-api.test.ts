@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 import type { AmendmentConfirmation } from './paid-order-amendment-api';
-import { paidOrderAmendment } from './paid-order-amendment-api';
+import {
+  PaidOrderAmendmentError,
+  paidOrderAmendment,
+} from './paid-order-amendment-api';
 
 const transport = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/orders/authenticated-fetch', () => ({
@@ -57,6 +60,22 @@ describe('paid order amendment API', () => {
       message: 'Preview the replacement again',
       status: 409,
       code: 'preview_stale',
+    });
+  });
+
+  it('maps an empty or non-JSON gateway response to the typed HTTP error', async () => {
+    transport.mockResolvedValueOnce({
+      response: new Response(null, { status: 502 }),
+      text: '<html>Bad Gateway</html>',
+    });
+    const error = await paidOrderAmendment
+      .confirm('order/42', payload)
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(PaidOrderAmendmentError);
+    expect(error).toMatchObject({
+      message: 'Unable to load the order change.',
+      status: 502,
+      code: undefined,
     });
   });
 

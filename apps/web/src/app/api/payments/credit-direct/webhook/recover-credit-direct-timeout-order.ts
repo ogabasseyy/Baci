@@ -34,9 +34,9 @@ export async function recoverCreditDirectTimeoutOrder<T>({
     .single();
 
   if (error || !data) {
-    throw new Error('Unable to load reinstated Credit Direct order', {
-      cause: error,
-    });
+    // The RPC has already committed. Let the caller file its reconciliation
+    // review instead of returning a retryable webhook error.
+    return null;
   }
 
   let notes: Record<string, unknown> = {};

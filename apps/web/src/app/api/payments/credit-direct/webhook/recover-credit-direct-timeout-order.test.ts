@@ -61,12 +61,10 @@ describe('recoverCreditDirectTimeoutOrder', () => {
     expect(reinstate).not.toHaveBeenCalled();
   });
 
-  it('throws for redelivery when the reinstated order cannot be read', async () => {
+  it('files the existing reconciliation path when the reinstated order cannot be read', async () => {
     reinstate.mockResolvedValue('already_reinstated');
     const { input } = mockRecovery('{}', { message: 'Unavailable' });
-    await expect(recoverCreditDirectTimeoutOrder(input)).rejects.toThrow(
-      'Unable to load reinstated Credit Direct order'
-    );
+    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toBeNull();
     expect(input.resume).not.toHaveBeenCalled();
   });
 });

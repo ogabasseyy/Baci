@@ -33,6 +33,81 @@ BEGIN
 END;
 $$;
 
+-- Storefront creation already takes these identity locks before inserting an
+-- order. Add the same fence to direct order inserts and late-payment recovery
+-- so a replacement cannot appear between recovery's scan and paid transition.
+CREATE OR REPLACE FUNCTION private.lock_order_replacement_identity(
+  p_merchant_id uuid,
+  p_customer_id uuid,
+  p_customer_email text,
+  p_customer_phone text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_user_id uuid;
+  v_email text := nullif(lower(btrim(p_customer_email)), '');
+  v_phone text := nullif(btrim(p_customer_phone), '');
+BEGIN
+  IF v_phone IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtext(p_merchant_id::text),
+      pg_catalog.hashtext(v_phone)
+    );
+  END IF;
+
+  IF p_customer_id IS NOT NULL THEN
+    SELECT c.user_id INTO v_user_id
+    FROM public.customers c
+    WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id;
+  END IF;
+  IF v_user_id IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(p_merchant_id::text || ':' || v_user_id::text, 0)
+    );
+  END IF;
+
+  IF v_email IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(p_merchant_id::text || ':' || v_email, 1)
+    );
+  END IF;
+END;
+$$;
+
+ALTER FUNCTION private.lock_order_replacement_identity(uuid, uuid, text, text)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.lock_order_replacement_identity(uuid, uuid, text, text)
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION private.lock_order_replacement_identity_before_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM private.lock_order_replacement_identity(
+    NEW.merchant_id, NEW.customer_id, NEW.customer_email, NEW.customer_phone
+  );
+  RETURN NEW;
+END;
+$$;
+
+ALTER FUNCTION private.lock_order_replacement_identity_before_insert()
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.lock_order_replacement_identity_before_insert()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS lock_order_replacement_identity_before_insert ON public.orders;
+CREATE TRIGGER lock_order_replacement_identity_before_insert
+  BEFORE INSERT ON public.orders
+  FOR EACH ROW
+  EXECUTE FUNCTION private.lock_order_replacement_identity_before_insert();
+
 CREATE FUNCTION public.reinstate_timeout_order_payment(
   p_order_id uuid,
   p_transaction_id uuid
@@ -44,6 +119,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_order public.orders%ROWTYPE;
+  v_order_identity record;
   v_payment public.transactions%ROWTYPE;
   v_timeout_at timestamptz;
   v_replacement_ids uuid[];
@@ -60,6 +136,20 @@ BEGIN
 
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text, 0)
+  );
+
+  SELECT o.merchant_id, o.customer_id, o.customer_email, o.customer_phone
+  INTO v_order_identity
+  FROM public.orders o WHERE o.id = p_order_id;
+  IF NOT FOUND THEN
+    RETURN 'blocked';
+  END IF;
+
+  PERFORM private.lock_order_replacement_identity(
+    v_order_identity.merchant_id,
+    v_order_identity.customer_id,
+    v_order_identity.customer_email,
+    v_order_identity.customer_phone
   );
 
   SELECT * INTO v_payment FROM public.transactions WHERE id = p_transaction_id FOR UPDATE;

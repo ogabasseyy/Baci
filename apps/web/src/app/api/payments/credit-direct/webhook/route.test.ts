@@ -2185,6 +2185,16 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           });
           return txInsertChain;
         }
+        if (fromCallCount === 5) {
+          const racedTxChain = { ...mockChain };
+          racedTxChain.select = vi.fn().mockReturnValue(racedTxChain);
+          racedTxChain.eq = vi.fn().mockReturnValue(racedTxChain);
+          racedTxChain.single = vi.fn().mockResolvedValue({
+            data: { id: 'txn_123456789' },
+            error: null,
+          });
+          return racedTxChain;
+        }
         return mockChain;
       });
 

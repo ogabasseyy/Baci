@@ -38,6 +38,14 @@ BEGIN
     OR has_function_privilege('anon', 'public.reinstate_timeout_order_payment(uuid,uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Reinstatement is callable from an untrusted role';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_trigger t
+    WHERE t.tgrelid = 'public.orders'::regclass
+      AND t.tgname = 'lock_order_replacement_identity_before_insert'
+      AND NOT t.tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'Order creation does not share the replacement identity lock';
+  END IF;
   INSERT INTO public.products VALUES (product_id, merchant_id);
 
   FOREACH provider IN ARRAY ARRAY['credit_direct', 'klump', 'paystack', 'korapay', 'juicyway'] LOOP

@@ -15,7 +15,6 @@ import { logger } from '@/lib/logger';
 import { enqueueJuicywayOrderConversion } from '@/lib/payments/enqueue-juicyway-order-conversion';
 import { ensurePaidOrderInventoryConfirmed } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
-import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import {
   handlePaymentForCancelledOrder,
   isOrderClampedAsCancelled,
@@ -31,6 +30,7 @@ import {
   triggerPurchaseConversion,
 } from '@/lib/trigger-purchase-conversion';
 import { sendEmail } from '@/lib/zeptomail';
+import { finalizeJuicywayTerminalOrder } from './finalize-juicyway-terminal-order';
 
 // Juicyway webhook IP whitelist (from docs)
 const JUICYWAY_IPS = [
@@ -558,57 +558,44 @@ export async function POST(request: NextRequest) {
         )
         .maybeSingle();
 
-      const terminalLookup =
+      const terminalResolution =
         !response.error && !response.data
-          ? await supabase
-              .from('orders')
-              .select(
-                'id, payment_status, shipping_status, cancelled_at, order_number'
-              )
-              .eq('id', transaction.order_id)
-              .maybeSingle()
+          ? await finalizeJuicywayTerminalOrder({
+              gatewayResponse: data as unknown as Record<string, unknown>,
+              orderId: transaction.order_id,
+              reference,
+              scheduleAfter: (task) => after(task),
+              supabase,
+              transaction: { ...transaction, gateway_reference: reference },
+            })
           : null;
-      if (terminalLookup && (terminalLookup.error || !terminalLookup.data)) {
+      if (terminalResolution?.kind === 'failed') {
         return NextResponse.json(
-          { error: 'Order state lookup failed' },
+          {
+            error:
+              terminalResolution.stage === 'lookup'
+                ? 'Order state lookup failed'
+                : 'Order payment completion failed',
+          },
           { status: 500 }
         );
       }
-      const terminalOrder = terminalLookup?.data;
-      const terminalOrderCancelled =
-        isOrderClampedAsCancelled(terminalOrder) ||
-        terminalOrder?.payment_status === 'cancelled';
-      if (terminalOrderCancelled) {
-        // Let the shared finalizer observe and own the paid transition so
-        // settlement and notifications run on the winning delivery.
-        const finalization = await finalizeOrderGatewayPayment({
-          actor: 'juicyway:late_payment',
-          gateway: 'juicyway',
-          gatewayResponse: data as unknown as Record<string, unknown>,
-          orderId: transaction.order_id,
-          reference,
-          scheduleAfter: (task) => after(task),
-          supabase,
-          transaction: { ...transaction, gateway_reference: reference },
-          wonTransactionFlip: false,
-        });
-        if (finalization.kind === 'order_cancelled') {
-          return NextResponse.json({
-            message: 'Payment recorded; terminal order filed for review',
-            success: true,
-          });
-        }
-        if (finalization.kind !== 'completed') {
-          return NextResponse.json(
-            { error: 'Order payment completion failed' },
-            { status: 500 }
-          );
-        }
+      if (terminalResolution?.kind === 'completed') {
         return NextResponse.json({
           success: true,
           message: 'Payment processed',
         });
       }
+      if (terminalResolution?.kind === 'order_cancelled') {
+        return NextResponse.json({
+          message: 'Payment recorded; terminal order filed for review',
+          success: true,
+        });
+      }
+      const terminalOrder =
+        terminalResolution?.kind === 'not_cancelled'
+          ? terminalResolution.order
+          : null;
 
       if (terminalOrder) {
         const terminalIssueType =

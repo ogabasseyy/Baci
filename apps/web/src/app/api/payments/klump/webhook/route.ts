@@ -1,9 +1,6 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { getKlumpSecretKey } from '@/env';
-import {
-  type KlumpPaidOrder,
-  notifyKlumpPaidOrder,
-} from '@/lib/klump-payment-notifications';
+import { notifyKlumpPaidOrder } from '@/lib/klump-payment-notifications';
 import {
   getKlumpExpectedPaymentAmount,
   verifyKlumpWebhookTransaction,
@@ -25,16 +22,17 @@ import {
   rollbackOrderStatusAfterInventoryConfirmationFailure,
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
-import {
-  handlePaymentForCancelledOrder,
-  isOrderClampedAsCancelled,
-} from '@/lib/payments/handle-payment-for-cancelled-order';
+import { isOrderClampedAsCancelled } from '@/lib/payments/handle-payment-for-cancelled-order';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
-import { reinstateTimeoutOrderPayment } from '@/lib/payments/reinstate-timeout-order-payment';
 import { resolveOrderGiglSettlementRpc } from '@/lib/payments/resolve-order-gigl-settlement-rpc';
 import { calculatePlatformFee } from '@/lib/paystack';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { referenceSchema } from '@/schemas/payments';
+import {
+  KLUMP_PAYMENT_ORDER_SELECT,
+  type KlumpUpdatedOrder,
+  recoverKlumpTimeoutOrderPayment,
+} from './recover-klump-timeout-order-payment';
 
 interface TransactionRecord {
   amount: number | string | null;
@@ -95,18 +93,6 @@ export function GET() {
 export function HEAD() {
   return new Response(null, { status: 200 });
 }
-
-type KlumpUpdatedOrder = KlumpPaidOrder & {
-  cancelled_at?: string | null;
-  payment_status?: string | null;
-  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
-  shipping_platform_retained_amount?: number | string | null;
-  shipping_provider?: string | null;
-  shipping_status?: string | null;
-};
-
-const KLUMP_PAYMENT_ORDER_SELECT =
-  'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount';
 
 function updateKlumpOrder({
   orderId,
@@ -371,74 +357,38 @@ export async function POST(request: NextRequest) {
         order.payment_status === 'canceled' ||
         isOrderClampedAsCancelled(order))
     ) {
-      let reinstatement: Awaited<
-        ReturnType<typeof reinstateTimeoutOrderPayment>
-      >;
-      try {
-        reinstatement = await reinstateTimeoutOrderPayment(
-          supabase,
-          order.id,
-          transaction.id,
-          transaction.merchant_id
-        );
-      } catch (error) {
-        logger.error({
-          error,
-          message: 'Klump late payment reinstatement failed',
-        });
-        return errorResponse('Late payment reinstatement unavailable', 500);
+      const recovery = await recoverKlumpTimeoutOrderPayment({
+        order,
+        reference: referenceResult.data,
+        supabase,
+        transaction: {
+          id: transaction.id,
+          merchant_id: transaction.merchant_id,
+        },
+      });
+      if (recovery.kind === 'failed') {
+        return recovery.stage === 'reinstate'
+          ? errorResponse('Late payment reinstatement unavailable', 500)
+          : errorResponse('Failed to load reinstated order', 500);
       }
-      if (reinstatement === 'blocked') {
-        const reviewFiled = await handlePaymentForCancelledOrder({
-          gatewayReference: referenceResult.data,
-          order,
-          reason:
-            'Klump payment captured for an order cancelled before finalization',
-          transactionId: transaction.id,
-        });
-        if (!reviewFiled) {
-          return errorResponse(
-            'Payment reconciliation review unavailable',
-            500
-          );
-        }
-        return NextResponse.json({
-          message:
-            'Klump payment recorded; order was cancelled, filed for review',
-          success: true,
-        });
+      if (recovery.kind === 'blocked') {
+        return recovery.reviewFiled
+          ? NextResponse.json({
+              message:
+                'Klump payment recorded; order was cancelled, filed for review',
+              success: true,
+            })
+          : errorResponse('Payment reconciliation review unavailable', 500);
       }
-      const { data: reopenedOrder, error: reopenedOrderError } = await supabase
-        .from('orders')
-        .select(KLUMP_PAYMENT_ORDER_SELECT)
-        .eq('id', transaction.order_id)
-        .eq('merchant_id', transaction.merchant_id)
-        .maybeSingle<KlumpUpdatedOrder>();
-      if (reopenedOrderError || !reopenedOrder) {
-        return errorResponse('Failed to load reinstated order', 500);
-      }
-      if (
-        reopenedOrder.payment_status !== 'paid' ||
-        isOrderClampedAsCancelled(reopenedOrder)
-      ) {
-        const filed = await handlePaymentForCancelledOrder({
-          gatewayReference: referenceResult.data,
-          issueType:
-            reopenedOrder.payment_status === 'refunded'
-              ? 'payment_received_after_refund'
-              : undefined,
-          order: reopenedOrder,
-          reason: 'Klump order left the paid state before settlement',
-          transactionId: transaction.id,
-        });
-        return filed
+      if (recovery.kind === 'reviewed') {
+        return recovery.reviewFiled
           ? NextResponse.json({
               success: true,
               message: 'Payment recorded; order filed for review',
             })
           : errorResponse('Payment reconciliation review unavailable', 500);
       }
-      order = reopenedOrder;
+      order = recovery.order;
       inventoryAlreadyConfirmed = true;
     }
 

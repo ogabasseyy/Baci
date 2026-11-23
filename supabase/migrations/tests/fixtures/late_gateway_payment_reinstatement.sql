@@ -9,9 +9,10 @@ CREATE ROLE service_role;
 CREATE SCHEMA private;
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT current_setting('request.jwt.claim.role', true) $$;
+CREATE TABLE public.customers(id uuid PRIMARY KEY, merchant_id uuid, user_id uuid);
 CREATE TABLE public.orders(
  id uuid PRIMARY KEY, merchant_id uuid, customer_id uuid,
- customer_email text DEFAULT (gen_random_uuid()::text || '@example.test'),
+ customer_email text DEFAULT (gen_random_uuid()::text || '@example.test'), customer_phone text,
  source text DEFAULT 'mobile_app', recorded_by_user_id uuid, total numeric DEFAULT 150,
  currency text DEFAULT 'NGN', payment_method text DEFAULT 'credit_direct',
  payment_status text DEFAULT 'bnpl_pending', shipping_status text DEFAULT 'pending',

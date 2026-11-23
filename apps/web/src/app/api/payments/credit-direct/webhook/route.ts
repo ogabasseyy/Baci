@@ -24,6 +24,7 @@ import { resolveCreditDirectConfirmationReview } from '@/lib/payments/resolve-cr
 import { escapeHtmlText } from '@/lib/sanitize';
 import { createServiceClient } from '@/lib/supabase/service';
 import { respondCustomerInventoryFailure } from './customer-inventory-failure';
+import { recordCreditDirectTransaction } from './record-credit-direct-transaction';
 import { recoverCreditDirectTimeoutOrder } from './recover-credit-direct-timeout-order';
 
 function readNoteString(value: unknown) {
@@ -76,112 +77,8 @@ function formatCreditDirectProductAmount(value: unknown) {
   return escapeHtmlText(amount.toLocaleString());
 }
 
-const POSTGRES_UNIQUE_VIOLATION = '23505';
-const SUPABASE_NO_ROWS_RETURNED = 'PGRST116';
 const CREDIT_DIRECT_VERIFIED_WEBHOOK_WRITE_KEY =
   'creditDirectVerifiedWebhookWrite';
-
-type RecordCreditDirectTransactionResult =
-  | { kind: 'error' }
-  | { kind: 'recorded'; transactionId: string | null; created: boolean };
-
-/**
- * Looks up the transaction row for a Credit Direct gateway reference and
- * inserts it if missing. Idempotent: a pre-existing row (found either by the
- * lookup or via a 23505 unique-violation race with a concurrent delivery) is
- * treated as success without a duplicate write. Shared by the merchant
- * payment handler and the already-paid replay self-heal path so both record
- * the disbursed money the same way.
- */
-async function recordCreditDirectTransaction({
-  amount,
-  gatewayReference,
-  gatewayResponse,
-  merchantId,
-  merchantAmount,
-  orderId,
-  platformFee,
-  supabase,
-}: {
-  amount: number;
-  gatewayReference: string;
-  gatewayResponse: CreditDirectWebhookPayload;
-  merchantId: string;
-  merchantAmount: number;
-  orderId: string;
-  platformFee: number;
-  supabase: SupabaseClient;
-}): Promise<RecordCreditDirectTransactionResult> {
-  const { data: existingTx, error: existingTxError } = await supabase
-    .from('transactions')
-    .select('id')
-    .eq('gateway_reference', gatewayReference)
-    .eq('gateway', 'credit_direct')
-    .single();
-
-  if (existingTxError && existingTxError.code !== SUPABASE_NO_ROWS_RETURNED) {
-    logger.error({
-      message: 'Failed to look up existing Credit Direct transaction',
-      error: existingTxError,
-      orderId,
-      transactionId: gatewayReference,
-    });
-    return { kind: 'error' };
-  }
-
-  if (existingTx) {
-    logger.info({
-      message: 'Credit Direct transaction already processed (idempotent)',
-      transactionId: gatewayReference,
-      existingTxId: existingTx.id,
-    });
-    return { created: false, kind: 'recorded', transactionId: existingTx.id };
-  }
-
-  const { data: insertedTx, error: txError } = await supabase
-    .from('transactions')
-    .insert({
-      merchant_id: merchantId,
-      order_id: orderId,
-      transaction_type: 'payment',
-      amount,
-      currency: 'NGN',
-      status: 'completed',
-      gateway: 'credit_direct',
-      gateway_reference: gatewayReference,
-      gateway_response: gatewayResponse,
-      platform_fee: platformFee,
-      merchant_amount: merchantAmount,
-    })
-    .select('id')
-    .single();
-
-  if (txError) {
-    if (txError.code === POSTGRES_UNIQUE_VIOLATION) {
-      logger.info({
-        message:
-          'Credit Direct transaction insert raced a concurrent delivery (unique violation)',
-        orderId,
-        transactionId: gatewayReference,
-      });
-      return { created: false, kind: 'recorded', transactionId: null };
-    }
-
-    logger.error({
-      message: 'Failed to create transaction record',
-      error: txError,
-      orderId,
-      transactionId: gatewayReference,
-    });
-    return { kind: 'error' };
-  }
-
-  return {
-    created: true,
-    kind: 'recorded',
-    transactionId: insertedTx?.id ?? null,
-  };
-}
 
 /**
  * POST /api/payments/credit-direct/webhook

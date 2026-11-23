@@ -35,15 +35,19 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  -- Preserve the existing RedVault lock before its cancellation trigger
-  -- touches the payment ledger. Ordinary orders use row-level exclusion
-  -- against reinstatement, including the replacement-order lock.
+  -- Use the same advisory lock as reinstatement for every order the cleanup
+  -- may cancel, before taking any order row locks.
   FOR v_order_id IN
     SELECT o.id
     FROM public.orders o
-    WHERE o.payment_status = 'unpaid'
-      AND o.created_at < (now() - (hours_threshold * interval '1 hour'))
-      AND o.payment_method = 'uba_redvault'
+    WHERE (
+        o.payment_status = 'unpaid'
+        AND o.created_at < (now() - (hours_threshold * interval '1 hour'))
+      ) OR (
+        o.payment_status IN ('pending', 'bnpl_pending')
+        AND o.payment_method IN ('credit_direct', 'klump')
+        AND o.updated_at < (now() - (hours_threshold * interval '1 hour'))
+      )
   LOOP
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended('baci_order_payment:' || v_order_id::text, 0)
@@ -53,6 +57,30 @@ BEGIN
   WITH loyalty_orders AS MATERIALIZED (
     SELECT used_on_order_id FROM public.reward_redemptions
     WHERE used_on_order_id IS NOT NULL
+  ), eligible_orders AS MATERIALIZED (
+    SELECT o.id, o.payment_method, o.source, o.shipping_status,
+      o.cancelled_at, o.cancelled_by, o.cancellation_reason
+    FROM public.orders o
+    WHERE (
+        (o.payment_status = 'unpaid'
+          AND o.created_at < (now() - (hours_threshold * interval '1 hour')))
+        OR (o.payment_status IN ('pending', 'bnpl_pending')
+          AND o.payment_method IN ('credit_direct', 'klump')
+          AND o.updated_at < (now() - (hours_threshold * interval '1 hour')))
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM public.oxygen_workflows ow WHERE ow.order_id = o.id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM public.reconciliation_review rr
+        WHERE o.payment_method = 'credit_direct'
+          AND rr.order_id = o.id
+          AND rr.issue_type = 'credit_direct_confirmation_missing'
+          AND rr.resolved_at IS NULL
+          AND rr.metadata->>'source' = 'credit_direct_sdk_on_success'
+          AND (rr.metadata->>'client_completed_at')::timestamptz
+            > (clock_timestamp() - interval '14 days')
+      )
   ), cancelled_orders AS (
     UPDATE public.orders o
     SET
@@ -70,7 +98,9 @@ BEGIN
         ELSE o.cancelled_at
       END,
       updated_at = now()
-    WHERE (
+    FROM eligible_orders eligible
+    WHERE o.id = eligible.id
+      AND ((
         (
           o.payment_status = 'unpaid'
           AND o.created_at < (now() - (hours_threshold * interval '1 hour'))
@@ -80,7 +110,7 @@ BEGIN
           AND o.payment_method IN ('credit_direct', 'klump')
           AND o.updated_at < (now() - (hours_threshold * interval '1 hour'))
         )
-      )
+      ))
       AND NOT EXISTS (
         SELECT 1 FROM public.oxygen_workflows ow WHERE ow.order_id = o.id
       )
@@ -100,13 +130,13 @@ BEGIN
   ), recorded_timeouts AS (
     INSERT INTO private.order_payment_timeouts (order_id, timed_out_at)
     SELECT c.id, c.updated_at FROM cancelled_orders c
-    JOIN public.orders before_cleanup ON before_cleanup.id = c.id
+    JOIN eligible_orders before_cleanup ON before_cleanup.id = c.id
     WHERE c.payment_method IS DISTINCT FROM 'uba_redvault'
-      AND c.cancelled_by IS NULL AND c.cancellation_reason IS NULL
+      AND before_cleanup.cancelled_by IS NULL
+      AND before_cleanup.cancellation_reason IS NULL
       AND before_cleanup.source IN ('online_store', 'mobile_app')
       AND before_cleanup.shipping_status = 'pending'
       AND before_cleanup.cancelled_at IS NULL
-      AND (c.cancelled_at IS NULL OR c.cancelled_at = c.updated_at)
       AND NOT EXISTS (SELECT 1 FROM loyalty_orders l WHERE l.used_on_order_id = c.id)
     ON CONFLICT (order_id) DO NOTHING
   )

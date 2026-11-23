@@ -37,8 +37,11 @@ export const merchantInboxUpdateSchema = z
   .refine((value) => Object.keys(value).length > 0, {
     message: 'Nothing to change',
   })
-  .refine((value) => !(value.status === 'resolved' && value.followUpAt), {
-    message: 'A finished chat cannot have a follow-up',
+  // A follow-up snoozes the chat, so it cannot be combined with Done or Reopen
+  // in one change (one of them would be silently ignored). Clearing a
+  // follow-up (null) together with a status is fine.
+  .refine((value) => !(value.status && typeof value.followUpAt === 'string'), {
+    message: 'Set a follow-up and a status in separate changes',
   });
 
 export type MerchantInboxUpdate = z.infer<typeof merchantInboxUpdateSchema>;

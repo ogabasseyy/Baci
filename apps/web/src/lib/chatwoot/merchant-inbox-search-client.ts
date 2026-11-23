@@ -17,12 +17,14 @@ export type MerchantInboxSearchResult = {
 };
 
 /**
- * Every match of a provider page is read in full (a few at a time), so none is
- * lost when the app moves on to the next provider page. The provider's own
- * pages are 25 (message search) and 15 (contact search); this bound is only a
- * guard against an unexpectedly large page.
+ * Chatwoot's search pages are fixed: 25 rows for message text and 15 for
+ * contacts (v4.19.1), so a page never has more than 40 matches. Each source is
+ * read only up to its own page size: every match of a page is read in full (a
+ * few at a time) and none is lost when the app moves to the next provider page,
+ * while an unexpectedly large answer can never fan out into more than 40 reads.
  */
-const MAX_ROWS_PER_PROVIDER_PAGE = 100;
+const MESSAGE_SEARCH_PAGE_SIZE = 25;
+const CONTACT_SEARCH_PAGE_SIZE = 15;
 const HYDRATE_CONCURRENCY = 5;
 const INCOMING = 0;
 
@@ -62,7 +64,7 @@ async function searchByContact(
   if (!Array.isArray(rows)) return { ok: false, code: 'unavailable' };
 
   const hits: Hit[] = [];
-  for (const row of rows.slice(0, MAX_ROWS_PER_PROVIDER_PAGE)) {
+  for (const row of rows.slice(0, CONTACT_SEARCH_PAGE_SIZE)) {
     if (!isRecord(row)) continue;
     const id = positiveId(row.id);
     // The search spans every inbox of the account: keep only this store's.
@@ -109,7 +111,7 @@ async function searchByMessage(
   if (!Array.isArray(rows)) return { ok: false, code: 'unavailable' };
 
   const hits: Hit[] = [];
-  for (const row of rows.slice(0, MAX_ROWS_PER_PROVIDER_PAGE)) {
+  for (const row of rows.slice(0, MESSAGE_SEARCH_PAGE_SIZE)) {
     if (!isRecord(row)) continue;
     const id = positiveId(row.id);
     // The request is already limited to this inbox; the row must agree.

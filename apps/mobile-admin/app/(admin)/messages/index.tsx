@@ -1,4 +1,3 @@
-import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { ConversationListItem } from '@/components/messages/ConversationListItem';
 import { FloatingSearchBar } from '@/components/messages/FloatingSearchBar';
+import { InboxEmptyState } from '@/components/messages/InboxEmptyState';
 import { InboxSearchResults } from '@/components/messages/InboxSearchResults';
 import { InboxViewChips } from '@/components/messages/InboxViewChips';
 import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
@@ -35,26 +35,6 @@ const RANKED_VIEWS: readonly InboxView[] = [
   'unread',
   'follow_up',
 ];
-
-const EMPTY: Record<InboxView, { title: string; body: string }> = {
-  needs_reply: {
-    title: 'You are all caught up',
-    body: 'Chats waiting for your reply show up here.',
-  },
-  unread: { title: 'No unread chats', body: 'New messages show up here.' },
-  follow_up: {
-    title: 'No follow-ups',
-    body: 'Use Follow up inside a chat to bring it back at the right time.',
-  },
-  done: {
-    title: 'No finished chats yet',
-    body: 'Chats you mark Done are kept here.',
-  },
-  all: {
-    title: 'No messages yet',
-    body: 'When a shopper writes to your store, the chat appears here.',
-  },
-};
 
 function errorText(error: unknown): string {
   if (error instanceof NetworkError && error.statusCode === 403) {
@@ -85,26 +65,17 @@ export default function MessagesScreen() {
   // A failed page keeps its data and hasNextPage: never auto-retry it (that
   // would hammer the API during an outage); the footer offers the retry.
   const pageFailed = query.isError || query.isFetchNextPageError;
+  // Pages still being loaded by themselves; false once the cap is reached, so
+  // an empty narrowed view ends in its empty message instead of a spinner.
+  const autoLoading =
+    !pageFailed &&
+    !!query.hasNextPage &&
+    pages < MAX_AUTO_PAGES &&
+    (RANKED_VIEWS.includes(view) ||
+      conversations.length < MIN_ROWS_BEFORE_PAUSE);
   useEffect(() => {
-    if (
-      !pageFailed &&
-      query.hasNextPage &&
-      !query.isFetchingNextPage &&
-      pages < MAX_AUTO_PAGES &&
-      (RANKED_VIEWS.includes(view) ||
-        conversations.length < MIN_ROWS_BEFORE_PAUSE)
-    ) {
-      query.fetchNextPage();
-    }
-  }, [
-    query.hasNextPage,
-    query.isFetchingNextPage,
-    query.fetchNextPage,
-    conversations.length,
-    pages,
-    pageFailed,
-    view,
-  ]);
+    if (autoLoading && !query.isFetchingNextPage) query.fetchNextPage();
+  }, [autoLoading, query.isFetchingNextPage, query.fetchNextPage, pages]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -161,41 +132,15 @@ export default function MessagesScreen() {
               data={conversations}
               keyExtractor={(item) => String(item.id)}
               ListEmptyComponent={
-                query.isFetchingNextPage || query.hasNextPage ? (
-                  <View style={styles.centered}>
-                    <ActivityIndicator color={colors.primary} />
-                  </View>
-                ) : (
-                  <View style={styles.centered}>
-                    <View
-                      style={[
-                        styles.emptyIcon,
-                        { backgroundColor: colors.primaryLight },
-                      ]}
-                    >
-                      <Ionicons
-                        color={colors.primary}
-                        name={
-                          view === 'needs_reply'
-                            ? 'checkmark-done-outline'
-                            : 'chatbubbles-outline'
-                        }
-                        size={36}
-                      />
-                    </View>
-                    <Text style={[styles.title, { color: colors.text }]}>
-                      {EMPTY[view].title}
-                    </Text>
-                    <Text
-                      style={{
-                        color: colors.textSecondary,
-                        textAlign: 'center',
-                      }}
-                    >
-                      {EMPTY[view].body}
-                    </Text>
-                  </View>
-                )
+                <InboxEmptyState
+                  canLoadMore={!!query.hasNextPage && !query.isFetchingNextPage}
+                  colors={colors}
+                  loading={autoLoading || query.isFetchingNextPage}
+                  onLoadMore={() => {
+                    query.fetchNextPage();
+                  }}
+                  view={view}
+                />
               }
               ListHeaderComponent={
                 summary ? (
@@ -266,14 +211,6 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
   },
   container: { flex: 1 },
-  emptyIcon: {
-    alignItems: 'center',
-    borderRadius: 40,
-    height: 80,
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
-    width: 80,
-  },
   flex: { flex: 1 },
   retry: {
     alignItems: 'center',

@@ -40,6 +40,22 @@ describe('QuickActionButton badge', () => {
     expect(screen.getByText('99+')).toBeInTheDocument();
   });
 
+  it('bugfix: reads as a lower bound when more waiting chats are still to load', () => {
+    render(
+      <QuickActionButton
+        badgeAtLeast
+        badgeCount={25}
+        icon="chatbox-ellipses-outline"
+        label="Messages"
+        onPress={() => {}}
+      />
+    );
+    expect(screen.getByText('25+')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Messages, at least 25 waiting' })
+    ).toBeInTheDocument();
+  });
+
   it('shows no badge at zero', () => {
     render(
       <QuickActionButton

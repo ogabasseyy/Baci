@@ -26,21 +26,27 @@ describe('useWaitingChatCount', () => {
 
     const { result } = renderHook(() => useWaitingChatCount());
 
-    expect(result.current).toBe(3);
+    expect(result.current).toEqual({ count: 3, hasMore: false });
     expect(mocks.conversations).toHaveBeenCalledWith('needs_reply');
   });
 
   it('is zero while loading, on error and for an empty view', () => {
     mocks.conversations.mockReturnValue({ data: undefined });
-    expect(renderHook(() => useWaitingChatCount()).result.current).toBe(0);
+    expect(renderHook(() => useWaitingChatCount()).result.current.count).toBe(
+      0
+    );
 
     mocks.conversations.mockReturnValue({ data: { pages: [] } });
-    expect(renderHook(() => useWaitingChatCount()).result.current).toBe(0);
+    expect(renderHook(() => useWaitingChatCount()).result.current.count).toBe(
+      0
+    );
 
     mocks.conversations.mockReturnValue({
       data: { pages: [{ conversations: [] }] },
     });
-    expect(renderHook(() => useWaitingChatCount()).result.current).toBe(0);
+    expect(renderHook(() => useWaitingChatCount()).result.current.count).toBe(
+      0
+    );
   });
 
   it('bugfix: relies on the server view, so a finished or answered chat is not counted', () => {
@@ -49,6 +55,20 @@ describe('useWaitingChatCount', () => {
     mocks.conversations.mockReturnValue({
       data: { pages: [{ conversations: [chat(1)] }] },
     });
-    expect(renderHook(() => useWaitingChatCount()).result.current).toBe(1);
+    expect(renderHook(() => useWaitingChatCount()).result.current.count).toBe(
+      1
+    );
+  });
+
+  it('bugfix: says the count may be higher while more pages are still to load', () => {
+    mocks.conversations.mockReturnValue({
+      data: { pages: [{ conversations: [chat(1), chat(2)] }] },
+      hasNextPage: true,
+    });
+
+    expect(renderHook(() => useWaitingChatCount()).result.current).toEqual({
+      count: 2,
+      hasMore: true,
+    });
   });
 });

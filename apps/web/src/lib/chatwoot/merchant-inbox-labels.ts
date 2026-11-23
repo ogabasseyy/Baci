@@ -10,20 +10,26 @@ const MAX_TAG_LENGTH = 30;
 
 /**
  * Turns what a person typed ("Order issue") into a label-safe slug
- * ("order-issue"): letters, numbers, hyphen and underscore only. Null when
- * nothing usable remains.
+ * ("order-issue"): letters, numbers and hyphens only. Spaces, underscores and
+ * punctuation all become one hyphen, so "order_issue" and "Order issue" are the
+ * same tag instead of two that look alike. Null when nothing usable remains.
  */
 export function slugifyInboxTag(name: string): string | null {
   const slug = name
     .normalize('NFKC')
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}_-]+/gu, '-')
-    .replace(/-{2,}/g, '-')
-    .replace(/^[-_]+|[-_]+$/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+/g, '')
     .slice(0, MAX_TAG_LENGTH)
-    .replace(/[-_]+$/g, '');
+    .replace(/-+$/g, '');
   return slug.length > 0 ? slug : null;
 }
+
+/**
+ * Hyphen and underscore are one separator to a person, so tags are compared in
+ * this form: a tag created elsewhere as "order_issue" is still "order-issue".
+ */
+const tagKey = (tag: string) => tag.replace(/_/g, '-');
 
 /** The merchant tags among a conversation's labels, without the prefix. */
 export function tagsFromLabels(labels: readonly string[]): string[] {
@@ -55,19 +61,28 @@ export function applyInboxLabelChange(
   existing: readonly string[],
   change: InboxLabelChange
 ): string[] {
-  const remove = (change.removeTags ?? []).map(
-    (tag) => `${INBOX_TAG_PREFIX}${tag}`
+  const tagOf = (label: string) =>
+    label.startsWith(INBOX_TAG_PREFIX)
+      ? tagKey(label.slice(INBOX_TAG_PREFIX.length))
+      : null;
+  const removeKeys = new Set((change.removeTags ?? []).map(tagKey));
+  const kept = existing.filter((label) => {
+    const key = tagOf(label);
+    return key === null || !removeKeys.has(key);
+  });
+  const known = new Set(
+    kept.map(tagOf).filter((key): key is string => key !== null)
   );
   const add: string[] = [];
-  const kept = existing.filter((label) => !remove.includes(label));
   const room = Math.max(
     0,
     INBOX_MAX_TAGS - kept.filter((l) => l.startsWith(INBOX_TAG_PREFIX)).length
   );
   for (const tag of change.addTags ?? []) {
-    const label = `${INBOX_TAG_PREFIX}${tag}`;
-    if (!kept.includes(label) && !add.includes(label) && add.length < room) {
-      add.push(label);
+    const key = tagKey(tag);
+    if (!known.has(key) && add.length < room) {
+      add.push(`${INBOX_TAG_PREFIX}${tag}`);
+      known.add(key);
     }
   }
   return mergeChatLabels(kept, {

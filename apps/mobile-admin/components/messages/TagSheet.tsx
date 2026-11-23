@@ -84,7 +84,7 @@ export function TagSheet({
                 disabled: busy || (!on && full),
               }}
               disabled={busy || (!on && full)}
-              key={name}
+              key={slug ?? name}
               onPress={() => {
                 if (on) onRemove(slug);
                 else onAdd(name);

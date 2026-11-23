@@ -9,6 +9,24 @@ export interface OwnerRequestContext {
 export interface ExperienceContext extends OwnerRequestContext {
   actorUserId: string;
 }
+async function getOwnerUser(client: SupabaseClient, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  if (!signal) return client.auth.getUser();
+
+  // Auth's getUser API has no per-call AbortSignal. Release this caller
+  // immediately while observing the eventual transport result.
+  const pending =
+    Promise.withResolvers<Awaited<ReturnType<typeof client.auth.getUser>>>();
+  const abort = () => pending.reject(signal.reason);
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    client.auth.getUser().then(pending.resolve, pending.reject);
+    return await pending.promise;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
 /** Early rejection. Every write RPC repeats authorization under the grant lock. */
 export async function requireExperienceOwner(
   ctx: BuilderContext | OwnerRequestContext,
@@ -18,8 +36,7 @@ export async function requireExperienceOwner(
     | 'storefront.publish' = 'storefront.write'
 ): Promise<ExperienceContext> {
   const signal = 'signal' in ctx ? ctx.signal : undefined;
-  signal?.throwIfAborted();
-  const { data, error } = await ctx.supabase.auth.getUser();
+  const { data, error } = await getOwnerUser(ctx.supabase, signal);
   signal?.throwIfAborted();
   if (
     error ||

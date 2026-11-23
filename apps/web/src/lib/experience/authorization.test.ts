@@ -98,3 +98,23 @@ it('binds cancellation to the owner authorization RPC and rejects a late result'
   ).rejects.toMatchObject({ name: 'AbortError' });
   expect(c.supabase.auth.getUser).toHaveBeenCalledOnce();
 });
+
+it('releases a disconnected owner handler before a stalled auth read resolves', async () => {
+  const controller = new AbortController();
+  const c = context();
+  const pending =
+    Promise.withResolvers<
+      Awaited<ReturnType<typeof c.supabase.auth.getUser>>
+    >();
+  c.supabase.auth.getUser.mockReturnValueOnce(pending.promise);
+  const reason = Error('owner disconnected');
+  const rejected = expect(
+    requireExperienceOwner({ ...c, signal: controller.signal } as never)
+  ).rejects.toBe(reason);
+  controller.abort(reason);
+  await rejected;
+  expect(c.supabase.rpc).not.toHaveBeenCalled();
+  pending.resolve({ data: { user: { id: 'owner' } }, error: null });
+  await pending.promise;
+  expect(c.supabase.rpc).not.toHaveBeenCalled();
+});

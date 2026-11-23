@@ -240,5 +240,7 @@ describe('wallet DVA provisioner executor', () => {
     expect(repairSql).toContain('ON public.customer_wallet_payment_accounts');
     expect(writerSql).toContain("p_provider_account_id !~ '^[0-9]{1,20}$'");
     expect(writerSql).toContain("pg_catalog.btrim(p_bank_slug) = ''");
+    expect(writerSql).not.toMatch(/\bALTER\s+ROLE\s+baci_wallet_dva_writer\b/i);
+    expect(writerSql).toContain('FROM pg_catalog.pg_roles');
   });
 });

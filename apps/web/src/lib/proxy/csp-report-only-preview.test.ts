@@ -65,7 +65,7 @@ it('removes reporting directives and unsafe sources from script-src-elem', () =>
 it('uses none when unsafe sources were the only script execution sources', () => {
   const candidate = requireCandidate(
     generateStorefrontCspReportOnlyCandidate(
-      "script-src 'unsafe-inline' 'unsafe-eval'; script-src-elem 'unsafe-inline' 'unsafe-eval'"
+      "script-src 'UNSAFE-INLINE' 'UNSAFE-EVAL'; script-src-elem 'unsafe-inline' 'unsafe-eval'"
     )
   );
 

@@ -137,7 +137,9 @@ export function generateStorefrontCspReportOnlyCandidate(
     if (name !== 'script-src' && name !== 'script-src-elem') continue;
     const [, ...sources] = directive.split(' ');
     const safeSources = sources.filter(
-      (source) => source !== "'unsafe-inline'" && source !== "'unsafe-eval'"
+      (source) =>
+        source.toLowerCase() !== "'unsafe-inline'" &&
+        source.toLowerCase() !== "'unsafe-eval'"
     );
     directives[index] = [
       name,

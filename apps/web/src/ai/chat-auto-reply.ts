@@ -16,6 +16,7 @@ import {
   withLookupDeadline,
 } from '@/ai/chat-auto-reply-shopping';
 import { handleSearchProducts } from '@/ai/chat-catalog-handlers';
+import { searchChatCatalogWithFallback } from '@/ai/chat-catalog-query';
 import {
   findNamedEkaetteProduct,
   researchEkaetteProduct,
@@ -138,10 +139,11 @@ export async function generateChatAutoReply(input: {
       return { ok: false, reason: 'unavailable' };
     }
     const isStaging = isOxygenStorefrontStagingEnabled();
-    const stagingCheckoutEnabled =
-      isStaging && process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED === 'true';
+    const checkoutEnabled =
+      process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED === 'true';
+    const shoppingEnabled = isStaging || checkoutEnabled;
     const awaitingCheckoutName =
-      stagingCheckoutEnabled &&
+      checkoutEnabled &&
       input.history.findLast((turn) => turn.role === 'assistant')
         ?.checkoutNameRequested === true;
     const openAIProvider = getOgabasseyPreferredProviders().find((provider) =>
@@ -160,26 +162,14 @@ export async function generateChatAutoReply(input: {
     // A failed or stalled search throws: an outage must never reach the model
     // as "no matching products", so the caller hands over instead.
     const [search, currency] = await withLookupDeadline(
-      (async () => {
-        let [found, merchantCurrency] = await Promise.all([
-          handleSearchProducts({ query: input.question }),
-          loadChatwootMerchantCurrency(input.merchantId),
-        ]);
-        if (found.products.length === 0) {
-          const previousUserTurn = input.history.findLast(
-            (turn) =>
-              turn.role === 'user' &&
-              turn.content.trim().length > 0 &&
-              turn.content.trim() !== input.question.trim()
-          );
-          if (previousUserTurn) {
-            found = await handleSearchProducts({
-              query: previousUserTurn.content,
-            });
-          }
-        }
-        return [found, merchantCurrency] as const;
-      })()
+      Promise.all([
+        searchChatCatalogWithFallback({
+          question: input.question,
+          history: input.history,
+          search: (query) => handleSearchProducts({ query }),
+        }),
+        loadChatwootMerchantCurrency(input.merchantId),
+      ])
     );
     // Prices without a currency are ambiguous: never show them.
     if (search.products.length > 0 && !currency?.currency) {
@@ -188,7 +178,7 @@ export async function generateChatAutoReply(input: {
     const products = formatChatAutoReplyProducts(
       search.products,
       currency?.currency ?? '',
-      isStaging
+      shoppingEnabled
     ).trim();
     const question = sanitizePromptInput(
       input.question,
@@ -199,11 +189,11 @@ export async function generateChatAutoReply(input: {
       merchantId: input.merchantId,
       santaTenantMerchantId: tenant.merchantId,
     });
-    const namedProduct = isStaging
+    const namedProduct = shoppingEnabled
       ? findNamedEkaetteProduct(question, search.products)
       : undefined;
     const canGuidePaySmallSmall =
-      currency?.currency === 'NGN' && stagingCheckoutEnabled;
+      currency?.currency === 'NGN' && isStaging && checkoutEnabled;
     const { object: generated } = await generateObjectWithChain({
       chain: [openAIProvider],
       providerOptions: { openai: OGABASSEY_MODEL_PROVIDER_OPTIONS.openai },
@@ -211,8 +201,8 @@ export async function generateChatAutoReply(input: {
       system: [
         CHAT_AUTO_REPLY_SYSTEM_PROMPT,
         ...(santa ? [CHAT_AUTO_REPLY_SANTA_ADDENDUM.trim()] : []),
-        ...(isStaging ? [WIDGET_SHOPPING_GUIDANCE] : []),
-        ...(stagingCheckoutEnabled ? [WIDGET_CART_GUIDANCE] : []),
+        ...(shoppingEnabled ? [WIDGET_SHOPPING_GUIDANCE] : []),
+        ...(checkoutEnabled ? [WIDGET_CART_GUIDANCE] : []),
         ...(canGuidePaySmallSmall ? [CHAT_PAY_SMALL_SMALL_GUIDANCE] : []),
       ].join('\n\n'),
       messages: [
@@ -262,7 +252,7 @@ export async function generateChatAutoReply(input: {
       }
     }
     if (
-      isStaging &&
+      shoppingEnabled &&
       namedProduct &&
       object.intent === 'details' &&
       !object.needsHuman &&
@@ -282,8 +272,8 @@ export async function generateChatAutoReply(input: {
       merchantSlug: tenant.merchantSlug ?? '',
       currency: currency?.currency,
       history: input.history,
-      isStaging,
-      stagingCheckoutEnabled,
+      shoppingEnabled,
+      checkoutEnabled,
       canGuidePaySmallSmall,
     });
   } catch {

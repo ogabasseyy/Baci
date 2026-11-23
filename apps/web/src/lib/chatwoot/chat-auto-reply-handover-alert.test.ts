@@ -133,6 +133,20 @@ describe('bugfix: a handover must alert the merchant', () => {
     }
   });
 
+  it('does not hold the webhook run when the alert never finishes', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.alert.mockReturnValue(new Promise(() => {}));
+      const run = runChatAutoReply(binding, event({ content: 'agent please' }));
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await run).toBe('handed_over');
+      expect(mocks.post).toHaveBeenCalledTimes(2);
+      expect(mocks.labels).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses no customer name when the customer has none', async () => {
     await runChatAutoReply(
       binding,

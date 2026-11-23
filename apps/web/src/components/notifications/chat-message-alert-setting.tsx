@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -36,11 +37,43 @@ const OPTIONS: ReadonlyArray<{
   },
 ];
 
+type Load =
+  | { state: 'loading' }
+  | { state: 'unavailable' }
+  | { state: 'error' }
+  | { state: 'ready'; level: ChatAlertLevel };
+
+// Signed out, not allowed to view it, or chat is not on for this store: the
+// control is simply not for this person. Anything else is a failed load.
+const NOT_AVAILABLE_STATUSES = new Set([401, 403, 404]);
+
+async function loadLevel(merchantId: string | undefined): Promise<Load> {
+  try {
+    const response = await fetch(ENDPOINT, {
+      headers: merchantId ? { 'x-baci-merchant-id': merchantId } : undefined,
+    });
+    if (NOT_AVAILABLE_STATUSES.has(response.status)) {
+      return { state: 'unavailable' };
+    }
+    if (!response.ok) return { state: 'error' };
+    const parsed = chatNotificationSettingsSchema.safeParse(
+      await response.json()
+    );
+    return parsed.success
+      ? { state: 'ready', level: parsed.data.level }
+      : { state: 'error' };
+  } catch {
+    return { state: 'error' };
+  }
+}
+
 /**
  * Choice of which customer-chat events alert the merchant, in the
  * notifications bell and as a push to the merchant app. It loads its own
- * state and renders nothing unless the server says chat is available for this
- * store, so other merchants never see it.
+ * state and renders nothing when chat is not available for this store, so
+ * other merchants never see it. A failed load shows a retry instead of
+ * removing the control, and switching stores keeps the current choice on
+ * screen, locked, until the other store's answer arrives.
  */
 export function ChatMessageAlertSetting() {
   const { toast } = useToast();
@@ -50,40 +83,55 @@ export function ChatMessageAlertSetting() {
   const contextHeaders = merchantId
     ? { 'x-baci-merchant-id': merchantId }
     : undefined;
-  const [level, setLevel] = useState<ChatAlertLevel | null>(null);
+  const [load, setLoad] = useState<Load>({ state: 'loading' });
+  const [fetching, setFetching] = useState(true);
+  const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
 
+  // `attempt` is not read inside: bumping it is how "Try again" reloads.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
     let stale = false;
-    setLevel(null);
-    fetch(ENDPOINT, {
-      headers: merchantId ? { 'x-baci-merchant-id': merchantId } : undefined,
-    })
-      .then(async (response) => {
-        if (!response.ok) return null;
-        const parsed = chatNotificationSettingsSchema.safeParse(
-          await response.json()
-        );
-        return parsed.success ? parsed.data.level : null;
-      })
-      .then((value) => {
-        if (!stale) setLevel(value);
-      })
-      .catch(() => {
-        if (!stale) setLevel(null);
-      });
+    setFetching(true);
+    loadLevel(merchantId).then((next) => {
+      if (stale) return;
+      setLoad(next);
+      setFetching(false);
+    });
     return () => {
       stale = true;
     };
-  }, [merchantId]);
+  }, [merchantId, attempt]);
 
-  if (level === null) return null;
+  if (load.state === 'loading' || load.state === 'unavailable') return null;
+
+  if (load.state === 'error') {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Customer Chat Alerts</p>
+        <p className="text-sm text-muted-foreground">
+          We could not load this setting.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={fetching}
+          onClick={() => setAttempt((count) => count + 1)}
+        >
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  const level = load.level;
 
   const change = async (next: string) => {
     const chosen = chatAlertLevelSchema.safeParse(next);
     if (!chosen.success || chosen.data === level) return;
     const previous = level;
-    setLevel(chosen.data);
+    setLoad({ state: 'ready', level: chosen.data });
     setSaving(true);
     try {
       const response = await fetchWithCsrf(ENDPOINT, {
@@ -95,9 +143,9 @@ export function ChatMessageAlertSetting() {
         response.ok ? await response.json() : null
       );
       if (!parsed.success) throw new Error('save failed');
-      setLevel(parsed.data.level);
+      setLoad({ state: 'ready', level: parsed.data.level });
     } catch {
-      setLevel(previous);
+      setLoad({ state: 'ready', level: previous });
       toast({
         title: 'Could not save',
         description: 'Your chat alert setting was not changed. Try again.',
@@ -122,7 +170,7 @@ export function ChatMessageAlertSetting() {
       <RadioGroup
         value={level}
         onValueChange={change}
-        disabled={saving}
+        disabled={saving || fetching}
         aria-labelledby="chat_message_alerts_label"
       >
         {OPTIONS.map((option) => (

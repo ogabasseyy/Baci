@@ -52,6 +52,10 @@ const HISTORY_DEADLINE_MS = 6_000;
 // credential fallback (up to 15): 30 + 10 + 15 stays inside the route's time,
 // so the platform never cuts the run off with nobody queued.
 const WORK_DEADLINE_MS = 30_000;
+// The merchant alert starts at the queue move and runs alongside the customer
+// message and the labels, so this only bounds what is left of it afterwards: a
+// hung alert must not hold the webhook run (and invite a redelivery).
+const HANDOVER_ALERT_DEADLINE_MS = 5_000;
 
 /** Labels are merged against the live list, never the webhook's old copy. */
 async function updateLabels(
@@ -123,7 +127,7 @@ async function handOver(
     add: [CHAT_LABEL_NEEDS_HUMAN],
     remove: [CHAT_LABEL_AI],
   });
-  await alert;
+  await withDeadline(alert, HANDOVER_ALERT_DEADLINE_MS, undefined);
   return 'handed_over';
 }
 

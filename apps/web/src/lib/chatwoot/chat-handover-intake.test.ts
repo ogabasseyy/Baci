@@ -84,6 +84,23 @@ describe('recordChatHandover', () => {
     );
   });
 
+  it('bugfix: signs and sends the same normalized name, whatever whitespace the caller passes', async () => {
+    // Messy whitespace must not make the proof disagree with what the
+    // database hashes (it trims the name it receives).
+    await recordChatHandover(
+      { ...handover, customerName: '  Ada \n  Obi\t ' },
+      env
+    );
+    const [, args] = mocks.rpc.mock.calls[0];
+    expect(args.p_customer_name).toBe('Ada Obi');
+    expect(args.p_proof).toBe(
+      buildChatHandoverProof(SECRET, args.p_issued_at, {
+        ...handover,
+        customerName: 'Ada Obi',
+      })
+    );
+  });
+
   it('reports a duplicate delivery', async () => {
     mocks.rpc.mockResolvedValue({
       data: { outcome: 'notified', duplicate: true },

@@ -71,6 +71,7 @@ export const readyQuery = (
 
 /** A search with nothing typed: the default for every screen test. */
 export const idleSearch = (loadMore: () => unknown, retry: () => unknown) => ({
+  hasMore: false,
   isError: false,
   isLoadingMore: false,
   isPending: false,

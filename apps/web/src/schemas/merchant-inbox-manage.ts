@@ -46,9 +46,12 @@ export const merchantInboxUpdateSchema = z
 
 export type MerchantInboxUpdate = z.infer<typeof merchantInboxUpdateSchema>;
 
+/** The last search page the API accepts; the search never offers a later one. */
+export const INBOX_SEARCH_MAX_PAGE = 50;
+
 export const merchantInboxSearchQuerySchema = z.object({
   q: z.string().trim().min(2).max(100),
-  page: z.coerce.number().int().min(1).max(50).default(1),
+  page: z.coerce.number().int().min(1).max(INBOX_SEARCH_MAX_PAGE).default(1),
 });
 
 export const INBOX_SNIPPET_MAX_LENGTH = 140;

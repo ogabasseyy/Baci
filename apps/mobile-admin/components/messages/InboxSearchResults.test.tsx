@@ -26,6 +26,7 @@ function renderResults(
   render(
     <InboxSearchResults
       colors={LIGHT_COLORS}
+      hasMore={false}
       isError={false}
       isLoadingMore={false}
       isPending={false}
@@ -86,5 +87,28 @@ describe('InboxSearchResults', () => {
 
     expect(mocks.push).toHaveBeenCalledWith('/(admin)/messages/8');
     expect(screen.getByText('Yan Test')).toBeInTheDocument();
+  });
+
+  it('bugfix: lets the owner keep looking when the pages so far had no match', () => {
+    const { onLoadMore } = renderResults({ hasMore: true, term: 'zebra' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Look further back' }));
+
+    expect(screen.getByText('No chats match "zebra"')).toBeInTheDocument();
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no way back when there is nothing more to search, or one is loading', () => {
+    renderResults({ hasMore: false });
+    expect(
+      screen.queryByRole('button', { name: 'Look further back' })
+    ).toBeNull();
+  });
+
+  it('hides the button while the next page is loading', () => {
+    renderResults({ hasMore: true, isLoadingMore: true });
+    expect(
+      screen.queryByRole('button', { name: 'Look further back' })
+    ).toBeNull();
   });
 });

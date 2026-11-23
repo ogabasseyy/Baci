@@ -33,6 +33,14 @@ interface ConversationActionsProps {
 
 type PriorityChoice = InboxPriority | 'none';
 
+const PRIORITY_CHOICES: ChoiceSheetOption<PriorityChoice>[] = [
+  { label: 'Urgent', value: 'urgent' },
+  { label: 'High', value: 'high' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'Low', value: 'low' },
+  { label: 'No priority', value: 'none' },
+];
+
 /** Done, Follow up, Priority and Tags: the few things a busy owner needs. */
 export function ConversationActions({
   busy,
@@ -77,16 +85,7 @@ export function ConversationActions({
   };
 
   const openPriority = () => {
-    setPicker({
-      kind: 'priority',
-      options: [
-        { label: 'Urgent', value: 'urgent' },
-        { label: 'High', value: 'high' },
-        { label: 'Medium', value: 'medium' },
-        { label: 'Low', value: 'low' },
-        { label: 'No priority', value: 'none' },
-      ] satisfies ChoiceSheetOption<PriorityChoice>[],
-    });
+    setPicker({ kind: 'priority', options: PRIORITY_CHOICES });
   };
 
   const onPick = async (value: string) => {
@@ -95,9 +94,10 @@ export function ConversationActions({
     if (kind === 'followUp') {
       await apply({ followUpAt: value === 'clear' ? null : value });
     } else if (kind === 'priority') {
-      await apply({
-        priority: value === 'none' ? null : (value as InboxPriority),
-      });
+      // Looked up in the typed list, so only a real priority is ever sent.
+      const choice = PRIORITY_CHOICES.find((option) => option.value === value);
+      if (!choice) return;
+      await apply({ priority: choice.value === 'none' ? null : choice.value });
     }
   };
 
@@ -198,9 +198,7 @@ export function ConversationActions({
       <TagSheet
         busy={busy}
         colors={colors}
-        onAdd={(name) => {
-          apply({ addTags: [name] });
-        }}
+        onAdd={(name) => apply({ addTags: [name] })}
         onClose={() => setTagsOpen(false)}
         onRemove={(slug) => {
           apply({ removeTags: [slug] });

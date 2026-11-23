@@ -13,6 +13,8 @@ import { ConversationListItem } from './ConversationListItem';
 
 interface InboxSearchResultsProps {
   colors: ThemeColors;
+  /** More pages exist; shown as a button when the pages so far had no match. */
+  hasMore: boolean;
   isError: boolean;
   isLoadingMore: boolean;
   isPending: boolean;
@@ -25,6 +27,7 @@ interface InboxSearchResultsProps {
 /** What the list shows while the search box has text. */
 export function InboxSearchResults({
   colors,
+  hasMore,
   isError,
   isLoadingMore,
   isPending,
@@ -79,6 +82,16 @@ export function InboxSearchResults({
           <Text style={[styles.title, { color: colors.text }]}>
             No chats match "{term.trim()}"
           </Text>
+          {/* An empty list may never fire onEndReached, so older chats get a button. */}
+          {hasMore && !isLoadingMore ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onLoadMore}
+              style={styles.retry}
+            >
+              <Text style={{ color: colors.primary }}>Look further back</Text>
+            </Pressable>
+          ) : null}
         </View>
       }
       renderItem={({ item }) => (

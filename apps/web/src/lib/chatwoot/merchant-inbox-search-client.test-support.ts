@@ -34,6 +34,8 @@ export type Routes = {
   messageStatus?: number;
   /** Full conversation reads, by id. */
   reads?: Record<number, unknown>;
+  /** A read that fails with this status instead of answering, by id. */
+  readStatus?: Record<number, number>;
 };
 
 export function stub(routes: Routes) {
@@ -52,6 +54,8 @@ export function stub(routes: Routes) {
         : { body: routes.message ?? { meta: {}, payload: [] } };
     }
     const id = Number(path.split('/')[2]);
+    const failing = routes.readStatus?.[id];
+    if (failing) return { status: failing };
     const read = routes.reads?.[id];
     return read ? { body: read } : { status: 404 };
   });

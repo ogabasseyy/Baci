@@ -1,7 +1,10 @@
 import 'server-only';
 
 import type { MerchantInboxConversation } from '@/schemas/merchant-inbox';
-import { INBOX_SNIPPET_MAX_LENGTH } from '@/schemas/merchant-inbox-manage';
+import {
+  INBOX_SEARCH_MAX_PAGE,
+  INBOX_SNIPPET_MAX_LENGTH,
+} from '@/schemas/merchant-inbox-manage';
 import {
   failure,
   getMerchantInboxConversation,
@@ -122,16 +125,25 @@ async function searchByMessage(
   return { ok: true, rows: rows.length, hits };
 }
 
+/**
+ * Reads every match in full. A chat that is gone or belongs to another inbox
+ * (`not_found`) is simply left out; a read that failed for any other reason is
+ * reported, because dropping it would show a page that silently lacks a match
+ * and paging forward never goes back for it.
+ */
 async function readInChunks(
   binding: MerchantInboxBinding,
   hits: Hit[]
-): Promise<MerchantInboxSearchResult[]> {
+): Promise<{ results: MerchantInboxSearchResult[]; unavailable: boolean }> {
   const results: MerchantInboxSearchResult[] = [];
   for (let start = 0; start < hits.length; start += HYDRATE_CONCURRENCY) {
     const chunk = hits.slice(start, start + HYDRATE_CONCURRENCY);
     const owned = await Promise.all(
       chunk.map((hit) => getMerchantInboxConversation(binding, hit.id))
     );
+    if (owned.some((read) => !read.ok && read.code === 'unavailable')) {
+      return { results, unavailable: true };
+    }
     owned.forEach((read, index) => {
       if (read.ok) {
         results.push({
@@ -141,7 +153,7 @@ async function readInChunks(
       }
     });
   }
-  return results;
+  return { results, unavailable: false };
 }
 
 /**
@@ -174,9 +186,10 @@ export async function searchMerchantInboxConversations(
   }
 
   const hits = [...merged.values()];
-  const results = await readInChunks(binding, hits);
-  // Every match failed to load: the engine is unwell, not "no results".
-  if (hits.length > 0 && results.length === 0) {
+  const { results, unavailable } = await readInChunks(binding, hits);
+  // A read failed, or every match failed to load: the engine is unwell, not
+  // "no results", and the same page can be asked for again.
+  if (unavailable || (hits.length > 0 && results.length === 0)) {
     return { ok: false, code: 'unavailable' };
   }
   results.sort(
@@ -190,7 +203,12 @@ export async function searchMerchantInboxConversations(
   );
   // As with the list: any non-empty provider page may have a successor, so a
   // page of other stores' chats (no hits here) never ends the search early.
+  // The last page the API accepts has none: asking for one more would be a 400.
   const rows =
     (byContact.ok ? byContact.rows : 0) + (byMessage.ok ? byMessage.rows : 0);
-  return { ok: true, results, hasMore: rows > 0 };
+  return {
+    ok: true,
+    results,
+    hasMore: rows > 0 && input.page < INBOX_SEARCH_MAX_PAGE,
+  };
 }

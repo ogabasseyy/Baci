@@ -78,9 +78,13 @@ export function useInboxSearch(rawTerm: string) {
     loadMore: () => {
       if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
     },
-    /** Tries the failed request again (first page or the page after it). */
+    /**
+     * Tries the failed request again. A failed next page also reports
+     * `isError`, but refetching would reload the pages already shown and never
+     * ask for the one that failed, so that case is checked first.
+     */
     retry: () => {
-      if (query.isError) query.refetch();
+      if (query.isError && !query.isFetchNextPageError) query.refetch();
       else query.fetchNextPage();
     },
   };

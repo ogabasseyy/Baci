@@ -103,7 +103,8 @@ export function projectMerchantInboxMessage(
     createdAt,
     ...(sender === 'assistant' &&
     Array.isArray(actions) &&
-    actions.includes('review_checkout')
+    actions.includes('review_checkout') &&
+    /name\s+and\s+surname/i.test(text)
       ? { checkoutNameRequested: true as const }
       : {}),
   };

@@ -29,6 +29,7 @@ export const chatwootCheckoutRememberedOrderSchema = z
           .strict(),
         reference: text(200),
         issuedAt: z.number().int().nonnegative().safe(),
+        expiresAt: z.number().int().positive().safe().optional(),
       })
       .strict()
       .nullable(),

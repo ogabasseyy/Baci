@@ -23,7 +23,7 @@ const HEADERS = {
 };
 
 const SENSITIVE_PATTERN =
-  /(?:\b\d{10}\b|\b(?:0|\+?234)[789]\d{9}\b|[^\s@]+@[^\s@]+\.[^\s@]+)/;
+  /(?:(?<!\d)\d(?:[\s-]?\d){9}(?!\d)|(?<!\d)(?:0|\+?234)[\s-]?[789](?:[\s-]?\d){9}(?!\d)|[^\s@]+@[^\s@]+\.[^\s@]+)/;
 
 function fail(status: number, error: string) {
   return NextResponse.json({ error }, { status, headers: HEADERS });
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
   );
   if (!parsed.success) return fail(400, 'Invalid checkout turn request');
 
-  if (SENSITIVE_PATTERN.test(parsed.data.answer.replace(/[\s-]/g, ''))) {
+  if (SENSITIVE_PATTERN.test(parsed.data.answer)) {
     return fail(400, 'Sensitive input must not be sent to the AI assistant');
   }
 

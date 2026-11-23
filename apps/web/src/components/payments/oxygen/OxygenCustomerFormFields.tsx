@@ -3,15 +3,12 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { OxygenCustomerPrefill } from '@/schemas/oxygen-customer-prefill';
 import type { OxygenFormDraft } from '@/schemas/oxygen-form-draft';
 import { OxygenBankFields } from './OxygenBankFields';
-import { OxygenBirthDateField } from './OxygenBirthDateField';
-import { OxygenChatQuestion, oxygenIdentityTurns } from './OxygenChatQuestion';
-import { OxygenContactFields } from './OxygenContactFields';
 import styles from './OxygenCustomerFormFields.module.css';
 import { OxygenCustomerFormNavigation } from './OxygenCustomerFormNavigation';
 import { OxygenEmploymentAndAddress } from './OxygenEmploymentAndAddress';
 import { OxygenFormError } from './OxygenFormError';
 import { OxygenFormProgress } from './OxygenFormProgress';
-import { OxygenIdentityField } from './OxygenIdentityField';
+import { OxygenIdentityFields } from './OxygenIdentityFields';
 import { OxygenStepHeading } from './OxygenStepHeading';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { OxygenVerificationTrust } from './OxygenVerificationTrust';
@@ -21,9 +18,8 @@ import { getOxygenFormCorrection } from './oxygen-form-correction';
 import {
   clearOxygenControlError,
   clearOxygenFormErrors,
-  firstInvalidOxygenControl,
   highlightOxygenControl,
-  oxygenInvalidControlMessage,
+  validateOxygenSection,
 } from './oxygen-form-invalid-field';
 import {
   type ResidentialProof,
@@ -105,29 +101,18 @@ export function CustomerFormFields({
   }
   function validateSection(form: HTMLFormElement): boolean {
     focusInvalidField.current = false;
-    const invalid = firstInvalidOxygenControl(form, step, turn);
-    if (invalid) {
-      highlightField(invalid);
-      setFormError(oxygenInvalidControlMessage(invalid));
-      return false;
-    }
-    if (bankSelection && !new FormData(form).get('bank_name')) {
-      setFormError('Choose your bank to continue.');
-      return false;
-    }
-    if (
-      checkingAccount &&
-      (!bankVerified || !new FormData(form).get('account_name'))
-    ) {
-      setFormError('Verify your bank account before continuing.');
-      return false;
-    }
-    if (turns.addressQuestion && !residentialFile) {
-      const upload = form.querySelector<HTMLInputElement>(
-        'input[type="file"][aria-label="Proof of address"]'
-      );
-      if (upload) highlightField(upload);
-      setFormError('Attach a utility bill or proof of your home address.');
+    const result = validateOxygenSection({
+      form,
+      step,
+      turn,
+      bankSelection,
+      checkingAccount,
+      bankVerified,
+      requiresResidentialFile: turns.addressQuestion && !residentialFile,
+    });
+    if (!result.ok) {
+      if (result.field) highlightField(result.field);
+      setFormError(result.error);
       return false;
     }
     setFormError('');
@@ -249,50 +234,13 @@ export function CustomerFormFields({
           hidden={step !== 0}
           className={step === 0 ? styles.enter : undefined}
         >
-          <OxygenContactFields
+          <OxygenIdentityFields
+            conversational={conversational}
+            chatTurn={chatTurn}
             prefill={prefill}
             defaults={defaults}
-            fromConversation={conversational}
+            onCapture={() => requestAnimationFrame(() => capture())}
           />
-          <div
-            className={
-              conversational ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'
-            }
-          >
-            <OxygenChatQuestion
-              current={conversational ? chatTurn : undefined}
-              turn={oxygenIdentityTurns.bvn}
-              prompt="Please enter your 11-digit BVN privately below. It goes straight to Oxygen X and is never saved in chat."
-            >
-              <OxygenIdentityField
-                name="bvn"
-                label="BVN"
-                defaultValue={defaults.bvn}
-              />
-            </OxygenChatQuestion>
-            <OxygenChatQuestion
-              current={conversational ? chatTurn : undefined}
-              turn={oxygenIdentityTurns.nin}
-              prompt="Thanks for providing your BVN! Next, please enter your 11-digit NIN privately below."
-            >
-              <OxygenIdentityField
-                name="nin"
-                label="NIN"
-                defaultValue={defaults.nin}
-              />
-            </OxygenChatQuestion>
-            <OxygenChatQuestion
-              current={conversational ? chatTurn : undefined}
-              turn={oxygenIdentityTurns.dob}
-              prompt="Got your NIN — thank you! Lastly, what is your date of birth?"
-            >
-              <OxygenBirthDateField
-                defaultValue={defaults.date_of_birth ?? prefill.date_of_birth}
-                defaultEntry={defaults.birth_date_entry}
-                onValueChange={() => requestAnimationFrame(() => capture())}
-              />
-            </OxygenChatQuestion>
-          </div>
         </div>
         <div
           data-step="1"

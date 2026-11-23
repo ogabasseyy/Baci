@@ -33,7 +33,14 @@ export function decideChatwootCheckoutReplay(
     return { kind: 'refuse' };
   }
   const { order, payment } = remembered;
-  if (payment && isChatwootCheckoutPaymentWindowOpen(payment.issuedAt, now)) {
+  if (
+    payment &&
+    isChatwootCheckoutPaymentWindowOpen(
+      payment.issuedAt,
+      now,
+      payment.expiresAt
+    )
+  ) {
     return {
       kind: 'answer',
       result: {

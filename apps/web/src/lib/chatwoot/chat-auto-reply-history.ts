@@ -54,8 +54,8 @@ export async function isLatestChatMessage(
 ): Promise<boolean | null> {
   const result = await listMerchantInboxMessages(binding, { conversationId });
   if (!result.ok) return null;
-  return (
-    result.messages.findLast((message) => message.sender !== 'system')?.id ===
-    messageId
+  const latestQuestion = result.messages.findLast(
+    (message) => message.sender === 'customer'
   );
+  return latestQuestion?.id === messageId;
 }

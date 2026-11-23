@@ -25,7 +25,11 @@ export async function initializeChatwootCheckoutBankTransfer(input: {
     phone: string;
   };
   address: { line1: string; city: string; state: string };
-}): Promise<{ bank: ChatwootCheckoutBank; reference: string } | null> {
+}): Promise<{
+  bank: ChatwootCheckoutBank;
+  reference: string;
+  expiresAt?: number;
+} | null> {
   try {
     const { dva, reference } = await requestDvaInitialization({
       merchantId: input.merchantId,
@@ -52,6 +56,14 @@ export async function initializeChatwootCheckoutBankTransfer(input: {
     ) {
       return null;
     }
+    const rawExpiry =
+      'account_expires_at' in dva && typeof dva.account_expires_at === 'string'
+        ? Date.parse(dva.account_expires_at)
+        : Number.NaN;
+    const expiresAt =
+      Number.isFinite(rawExpiry) && rawExpiry > 0
+        ? Math.floor(rawExpiry)
+        : undefined;
     return {
       bank: {
         bankName: dva.bank_name,
@@ -59,6 +71,7 @@ export async function initializeChatwootCheckoutBankTransfer(input: {
         accountName: dva.account_name,
       },
       reference,
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
     };
   } catch {
     return null;

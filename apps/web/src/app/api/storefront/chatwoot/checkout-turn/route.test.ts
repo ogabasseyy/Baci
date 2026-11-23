@@ -120,14 +120,19 @@ describe('POST /api/storefront/chatwoot/checkout-turn', () => {
     });
   });
 
-  it('rejects raw 10-digit account numbers before they can ever reach the LLM', async () => {
+  it.each([
+    '0123456789',
+    'my account number is 0123456789',
+    '0123456789 please',
+    'my phone is 08012345678',
+  ])('rejects sensitive reply %s before it can reach the LLM', async (answer) => {
     const res = await POST(
       makeRequest({
         conversationId: 42,
         sessionToken: 'session-tok',
         step: 'account_number',
         question: 'What is your 10-digit account number?',
-        answer: '0123456789',
+        answer,
       })
     );
     expect(res.status).toBe(400);

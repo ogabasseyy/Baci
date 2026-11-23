@@ -107,6 +107,7 @@ export default function MessagesScreen() {
               isError={search.isError}
               isLoadingMore={search.isLoadingMore}
               isPending={search.isPending}
+              loadMoreFailed={search.loadMoreFailed}
               onLoadMore={search.loadMore}
               onRetry={search.retry}
               results={search.results}

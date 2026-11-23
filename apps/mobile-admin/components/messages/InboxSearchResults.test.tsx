@@ -30,6 +30,7 @@ function renderResults(
       isError={false}
       isLoadingMore={false}
       isPending={false}
+      loadMoreFailed={false}
       onLoadMore={onLoadMore}
       onRetry={onRetry}
       results={[]}
@@ -110,5 +111,21 @@ describe('InboxSearchResults', () => {
     expect(
       screen.queryByRole('button', { name: 'Look further back' })
     ).toBeNull();
+  });
+
+  it('bugfix: offers a retry under the results when the next page failed', () => {
+    const { onRetry } = renderResults({
+      loadMoreFailed: true,
+      results: [{ conversation: chat(8, 'Zed Test'), snippet: null }],
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Could not load more chats. Tap to retry.',
+      })
+    );
+
+    expect(screen.getByText('Zed Test')).toBeInTheDocument();
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

@@ -220,4 +220,22 @@ describe('useInboxSearch', () => {
       1, 2,
     ]);
   });
+
+  it('bugfix: does not ask for the failed page again on every scroll to the end', async () => {
+    mocks.search
+      .mockResolvedValueOnce({ results: [hit(1)], hasMore: true, page: 1 })
+      .mockRejectedValueOnce(new Error('down'));
+    const { result } = renderHook(() => useInboxSearch('order'), { wrapper });
+    await settle(DEBOUNCE + 100);
+    act(() => result.current.loadMore());
+    await settle(100);
+    expect(result.current.loadMoreFailed).toBe(true);
+
+    act(() => result.current.loadMore());
+    act(() => result.current.loadMore());
+    await settle(100);
+
+    // Only the owner's tap on retry asks again.
+    expect(mocks.search).toHaveBeenCalledTimes(2);
+  });
 });

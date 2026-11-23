@@ -18,6 +18,8 @@ interface InboxSearchResultsProps {
   isError: boolean;
   isLoadingMore: boolean;
   isPending: boolean;
+  /** The page after the results on screen failed to load. */
+  loadMoreFailed: boolean;
   onLoadMore: () => void;
   onRetry: () => void;
   results: { conversation: InboxConversation; snippet: string | null }[];
@@ -31,6 +33,7 @@ export function InboxSearchResults({
   isError,
   isLoadingMore,
   isPending,
+  loadMoreFailed,
   onLoadMore,
   onRetry,
   results,
@@ -74,11 +77,24 @@ export function InboxSearchResults({
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => String(item.conversation.id)}
       ListFooterComponent={
-        isLoadingMore ? <ActivityIndicator color={colors.primary} /> : undefined
+        isLoadingMore ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : loadMoreFailed ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onRetry}
+            style={styles.retry}
+          >
+            <Text style={{ color: colors.primary }}>
+              Could not load more chats. Tap to retry.
+            </Text>
+          </Pressable>
+        ) : undefined
       }
       onEndReached={() => {
-        // The hook guards too; this keeps pending and exhausted lists quiet.
-        if (hasMore && !isLoadingMore) onLoadMore();
+        // The hook guards too; this keeps pending, failed and exhausted lists
+        // quiet instead of repeating a failing request on every scroll.
+        if (hasMore && !isLoadingMore && !loadMoreFailed) onLoadMore();
       }}
       ListEmptyComponent={
         <View style={styles.centered}>

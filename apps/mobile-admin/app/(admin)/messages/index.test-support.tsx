@@ -76,6 +76,7 @@ export const idleSearch = (loadMore: () => unknown, retry: () => unknown) => ({
   isLoadingMore: false,
   isPending: false,
   loadMore,
+  loadMoreFailed: false,
   retry,
   results: [],
 });

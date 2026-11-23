@@ -33,6 +33,12 @@ export const publicObservationPayload = z.object({
       id: z.uuid(),
       path: z.string().max(240),
       native: z.literal(true).optional(),
+      nativeCheckout: z
+        .strictObject({
+          merchantSlug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
+          variantLabel: z.string().min(1).max(500).optional(),
+        })
+        .optional(),
       variantId: z.uuid().optional(),
     }),
   }),

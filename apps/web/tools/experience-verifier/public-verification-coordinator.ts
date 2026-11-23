@@ -102,6 +102,16 @@ export async function createPublicVerificationCoordinator(settings: {
                 canonical: `${binding.canonicalBase}${expected.product.path}`,
                 native: true,
               },
+              ...(expected.product.nativeCheckout
+                ? [
+                    {
+                      path: '/checkout',
+                      canonical: `${binding.canonicalBase}/checkout`,
+                      native: true as const,
+                      checkout: true as const,
+                    },
+                  ]
+                : []),
             ]
           : expected.routes,
         network
@@ -128,6 +138,7 @@ export async function createPublicVerificationCoordinator(settings: {
         createPublicVerificationRelay({
           binding,
           product: expected.product,
+          allowSharedCart: !expected.product.nativeCheckout,
           paths: expected.routes.map((route) => route.path),
           supabase: settings.supabase,
           signal,

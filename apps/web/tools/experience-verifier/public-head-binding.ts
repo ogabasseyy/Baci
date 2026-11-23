@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { parsePublishedExperience } from '@/lib/experience/published-manifest';
+import { merchantHasFeature } from '@/lib/merchant-has-feature';
 import {
   publicHeadApprovalId,
   publicHeadBuildDigest,
@@ -82,6 +83,7 @@ export async function bindPublicHead(approvalId: string, deps: Dependencies) {
   return {
     ...receipt,
     slug: merchant.slug,
+    sharedCartEnabled: merchantHasFeature(merchant, 'shared_cart'),
     buildDigest: digest,
     publicationRevision: receipt.publishedVersion,
     scriptDigest: js.digest,

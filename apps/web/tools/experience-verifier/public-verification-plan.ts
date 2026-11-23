@@ -13,6 +13,7 @@ type Merchant = { id: string; slug: string };
 type Binding = {
   merchantId: string;
   slug: string;
+  sharedCartEnabled: boolean;
   buildDigest: string;
   publicationRevision: number;
   canonicalBase: string;
@@ -82,6 +83,7 @@ export async function derivePublicVerificationPlan(
   const nativeProduct = !binding.head.routes.some(
     (route) => route.view === 'product'
   );
+  const nativeCheckout = nativeProduct && !binding.sharedCartEnabled;
   const routes = [];
   for (const route of binding.head.routes) {
     signal?.throwIfAborted();
@@ -119,6 +121,14 @@ export async function derivePublicVerificationPlan(
       slug: product.slug,
       ...(variant ? { variantId: variant.id } : {}),
       ...(nativeProduct ? { native: true as const } : {}),
+      ...(nativeCheckout
+        ? {
+            nativeCheckout: {
+              merchantSlug: binding.slug,
+              ...(variant ? { variantLabel: variant.label } : {}),
+            },
+          }
+        : {}),
       path: productPath,
     },
     journeySteps: [
@@ -131,11 +141,15 @@ export async function derivePublicVerificationPlan(
       { action: 'cart-add' as const, path: productPath },
       {
         action: 'cart-read' as const,
-        path: nativeProduct ? productPath : '/cart',
+        path: nativeCheckout
+          ? '/checkout'
+          : nativeProduct
+            ? productPath
+            : '/cart',
       },
       {
         action: 'checkout-review' as const,
-        path: nativeProduct ? productPath : '/checkout',
+        path: nativeProduct && !nativeCheckout ? productPath : '/checkout',
       },
     ],
   };

@@ -20,6 +20,7 @@ const head = {
 const binding = {
   merchantId: head.merchantId,
   slug: 'synthetic',
+  sharedCartEnabled: true,
   buildDigest: digest,
   publicationRevision: 1,
   canonicalBase: 'https://shop.example',
@@ -201,4 +202,27 @@ it('finds a purchasable product past a full page of unavailable products', async
     signal
   );
   expect(deps.catalog).toHaveBeenCalledTimes(2);
+});
+
+it('verifies the native checkout route for an unenrolled storefront', async () => {
+  const partial = { ...head, routes: [head.routes[0]] };
+  const deps = fixture();
+  deps.resolveBoundary.mockResolvedValueOnce({
+    manifest: partial,
+    title: 'Synthetic page',
+    canonicalUrl: 'https://shop.example/',
+    bootstrap: { route: { routeId: 'home' } },
+  });
+  const plan = await derivePublicVerificationPlan(
+    { ...binding, head: partial, sharedCartEnabled: false },
+    deps
+  );
+  expect(plan.product).toMatchObject({
+    native: true,
+    nativeCheckout: { merchantSlug: 'synthetic', variantLabel: 'Blue' },
+  });
+  expect(plan.journeySteps.slice(-2)).toEqual([
+    { action: 'cart-read', path: '/checkout' },
+    { action: 'checkout-review', path: '/checkout' },
+  ]);
 });

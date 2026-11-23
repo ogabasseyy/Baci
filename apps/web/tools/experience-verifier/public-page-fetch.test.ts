@@ -143,3 +143,41 @@ it('bounds markup complexity before building a DOM', async () => {
     fetchPublicPages(origin, [routes[0]], { resolve, network })
   ).rejects.toThrow('PUBLIC_PAGE_MISMATCH');
 });
+
+it('allows missing canonical metadata only on the bound native checkout', async () => {
+  const network = async () => ({
+    response: new Response('<title>Checkout</title>', {
+      headers: { 'content-type': 'text/html' },
+    }),
+    close: async () => {},
+  });
+  const checkout = {
+    path: '/checkout',
+    canonical: `${origin}/checkout`,
+    native: true,
+    checkout: true,
+  } as const;
+  await expect(
+    fetchPublicPages(origin, [checkout], { resolve, network })
+  ).resolves.toMatchObject([{ status: 200, title: 'Checkout' }]);
+  await expect(
+    fetchPublicPages(
+      origin,
+      [{ ...routes[1], native: true, title: undefined }],
+      {
+        resolve,
+        network,
+      }
+    )
+  ).rejects.toThrow('PUBLIC_PAGE_MISMATCH');
+  await expect(
+    fetchPublicPages(
+      origin,
+      [{ ...checkout, path: '/cart', canonical: `${origin}/cart` }],
+      {
+        resolve,
+        network,
+      }
+    )
+  ).rejects.toThrow('INVALID_PUBLIC_ROUTES');
+});

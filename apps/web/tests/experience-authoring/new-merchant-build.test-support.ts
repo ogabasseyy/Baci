@@ -11,7 +11,12 @@ export async function queueNewMerchantBuild(
   call: NewMerchantMcpCall,
   storefrontId: string
 ) {
-  const content = syntheticInteractiveSource;
+  const nativeCheckout = process.env.BACI_LOCAL_NATIVE_CHECKOUT_TEST === '1';
+  const content = nativeCheckout
+    ? `export default function App({catalog}) {
+        return <main><h1>New synthetic store</h1><p>{catalog.products[0]?.name}</p></main>;
+      }`
+    : syntheticInteractiveSource;
   const upload = await call('begin_experience_upload', {
     storefrontId,
     manifest: {
@@ -26,10 +31,14 @@ export async function queueNewMerchantBuild(
       capabilities: [
         'navigation',
         'catalog.read',
-        'cart.read-public',
-        'cart.mutate',
-        'checkout.prepare',
-        'checkout.open',
+        ...(nativeCheckout
+          ? []
+          : [
+              'cart.read-public',
+              'cart.mutate',
+              'checkout.prepare',
+              'checkout.open',
+            ]),
       ],
     },
     files: {

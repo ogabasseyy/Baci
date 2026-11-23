@@ -220,13 +220,14 @@ it('links a new synthetic user and creates a private merchant through MCP under 
       commerceApi,
       dir,
     });
-    await checkNewMerchantCheckout(
-      f,
-      commerceApi,
-      storefrontId,
-      ownerProduct.data.id,
-      currency
-    );
+    if (process.env.BACI_LOCAL_NATIVE_CHECKOUT_TEST !== '1')
+      await checkNewMerchantCheckout(
+        f,
+        commerceApi,
+        storefrontId,
+        ownerProduct.data.id,
+        currency
+      );
     const otherRead = await f.owner.supabase
       .from('merchants')
       .select('id')

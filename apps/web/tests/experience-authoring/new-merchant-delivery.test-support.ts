@@ -137,10 +137,13 @@ export async function checkNewMerchantDelivery({
     }
     if (process.env.BACI_LOCAL_PUBLIC_READ_TEST === '1') {
       // This is a synthetic read projection in the disposable DB, not a publication operation.
-      await f.db.pool.query(
-        `UPDATE merchants SET premium_features='["shared_cart"]' WHERE id=$1`,
-        [storefrontId]
-      );
+      const nativeCheckout =
+        process.env.BACI_LOCAL_NATIVE_CHECKOUT_TEST === '1';
+      if (!nativeCheckout)
+        await f.db.pool.query(
+          `UPDATE merchants SET premium_features='["shared_cart"]' WHERE id=$1`,
+          [storefrontId]
+        );
       const publicHead = await seedSyntheticPublicRead(
         f,
         storefrontId,
@@ -194,6 +197,7 @@ export async function checkNewMerchantDelivery({
               gatewayOrigin: gateway.origin,
               dataOrigin: commerceApi.url,
               dataKey: commerceApi.anonKey,
+              ...(nativeCheckout ? { nativeProductId: productId } : {}),
             });
             process.stderr.write('SYNTHETIC_STAGE public_browser_finished\n');
           } catch (error) {

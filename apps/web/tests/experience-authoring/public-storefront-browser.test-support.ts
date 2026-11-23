@@ -1,5 +1,7 @@
 import { chromium } from 'playwright-core';
 import { expect } from 'vitest';
+import { observeNativeCheckout } from '../../tools/experience-runner/public-observation-native-checkout';
+import { fillSyntheticStorefrontCheckout } from './synthetic-checkout-form.test-support';
 
 /** Runs Baci's real local storefront while blocking all order and external traffic. */
 export async function checkPublicStorefrontBrowser(input: {
@@ -8,6 +10,7 @@ export async function checkPublicStorefrontBrowser(input: {
   dataOrigin: string;
   dataKey?: string;
   stopAfterFrame?: boolean;
+  nativeProductId?: string;
 }) {
   // The synthetic HTTPS origin reaches a loopback-only Data API in this test.
   // Production uses HTTPS services and must be qualified separately.
@@ -96,6 +99,13 @@ export async function checkPublicStorefrontBrowser(input: {
         return route.fulfill({ response });
       }
       if (url.origin === 'https://synthetic.synthetic.test') {
+        if (
+          input.nativeProductId &&
+          url.pathname.startsWith('/api/storefront/cart')
+        ) {
+          errors.push('UNEXPECTED_SHARED_CART_REQUEST');
+          return route.abort('blockedbyclient');
+        }
         if (
           request.method() !== 'GET' &&
           !(request.method() === 'POST' && writes.has(url.pathname))
@@ -197,37 +207,33 @@ export async function checkPublicStorefrontBrowser(input: {
     await frame
       .getByText('Synthetic New Merchant Device')
       .waitFor({ timeout: 30000 });
-    await frame.getByRole('button', { name: 'Add to cart' }).click();
-    await frame.getByText('Added to cart').waitFor({ timeout: 45000 });
-    await frame.getByRole('button', { name: 'Review checkout' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Continue to checkout' });
-    await dialog.waitFor({ timeout: 45000 });
-    await dialog.getByRole('button', { name: 'Continue to checkout' }).click();
-    await page.waitForURL(/\/synthetic\/checkout(?:\?|$)/, { timeout: 120000 });
-    await page.locator('input[name="firstName"]').waitFor({ timeout: 120000 });
-    const necessaryOnly = page.getByRole('button', { name: 'Necessary Only' });
-    if (await necessaryOnly.isVisible()) await necessaryOnly.click();
-    await page.locator('input[name="firstName"]').fill('Synthetic');
-    await page.locator('input[name="lastName"]').fill('Buyer');
-    await page
-      .locator('input[name="customerEmail"]')
-      .fill('buyer@example.invalid');
-    await page.locator('input[name="customerPhone"]').fill('08012345678');
-    await page.getByRole('button', { name: 'Continue to Delivery' }).click();
-    await page.locator('#checkout-delivery-address').fill('123 Test Street');
-    await page.locator('#checkout-delivery-city').fill('Los Angeles');
-    const state = page.locator('#checkout-delivery-state');
-    if ((await state.evaluate((element) => element.tagName)) === 'SELECT')
-      await state.selectOption({ label: 'California' });
-    else await state.fill('California');
-    await page.getByText('Synthetic delivery').waitFor({ timeout: 90000 });
-    await page.getByText('Synthetic delivery').click();
-    await page.getByRole('button', { name: 'Continue to Payment' }).click();
-    await page
-      .getByRole('button', { name: /Place Order/i })
-      .first()
-      .waitFor({ timeout: 90000 });
-    expect(paths).toContain('POST /api/storefront/cart/checkout');
+    if (input.nativeProductId) {
+      const path = '/synthetic/products/synthetic-new-device';
+      const response = await page.goto(new URL(path, page.url()).href, {
+        waitUntil: 'domcontentloaded',
+        timeout: 90000,
+      });
+      expect(response?.status()).toBe(200);
+      await observeNativeCheckout(
+        page,
+        { id: input.nativeProductId, path },
+        { merchantSlug: 'synthetic' },
+        new URL('/synthetic/checkout', page.url()).href
+      );
+    } else {
+      await frame.getByRole('button', { name: 'Add to cart' }).click();
+      await frame.getByText('Added to cart').waitFor({ timeout: 45000 });
+      await frame.getByRole('button', { name: 'Review checkout' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Continue to checkout' });
+      await dialog.waitFor({ timeout: 45000 });
+      await dialog
+        .getByRole('button', { name: 'Continue to checkout' })
+        .click();
+    }
+    await fillSyntheticStorefrontCheckout(page);
+    if (input.nativeProductId)
+      expect(errors).not.toContain('UNEXPECTED_SHARED_CART_REQUEST');
+    else expect(paths).toContain('POST /api/storefront/cart/checkout');
     expect(paths).toContain('POST /api/shipping/quotes');
     expect(paths.some((path) => /order|payment/i.test(path))).toBe(false);
     return { checkoutUrl: page.url(), paths };

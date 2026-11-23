@@ -17,6 +17,7 @@ type Resource = {
 export async function installPublicCartBrowserRoutes(settings: {
   context: BrowserContext;
   origin: string;
+  allowSharedCart?: boolean;
   resources: Resource[];
   cart(request: CartRequest): Promise<{ status: number; body: string }>;
   observeCommerce?(
@@ -200,6 +201,8 @@ export async function installPublicCartBrowserRoutes(settings: {
     if (
       url.origin === origin &&
       allowedPaths.includes(url.pathname) &&
+      (settings.allowSharedCart !== false ||
+        !url.pathname.startsWith('/api/storefront/cart')) &&
       (req.method() === 'GET' || req.method() === 'POST')
     ) {
       try {

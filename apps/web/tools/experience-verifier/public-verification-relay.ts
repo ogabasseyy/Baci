@@ -23,6 +23,7 @@ export function createPublicVerificationRelay(
     product: { id: string; slug: string; variantId?: string };
     supabase: { url: string; anonKey: string };
     paths: string[];
+    allowSharedCart?: boolean;
     signal?: AbortSignal;
   },
   deps: {
@@ -96,6 +97,12 @@ export function createPublicVerificationRelay(
   return async (request: Parameters<typeof commerce>[0]) => {
     signal?.throwIfAborted();
     const path = new URL(request.url).pathname;
+    if (
+      input.allowSharedCart === false &&
+      (path === '/api/storefront/cart' ||
+        path.startsWith('/api/storefront/cart/'))
+    )
+      throw Error('PUBLIC_CART_REQUEST_DENIED');
     if (publicFrameworkRequest(origin, request)) return readFramework(request);
     if (path === '/api/storefront/experience/state') return readState(request);
     if (path === '/api/storefront/experience/catalog')

@@ -116,7 +116,13 @@ export function DesktopOrderSummary({
                 ? getCartItemCheckoutUnitPrice(item)
                 : item.price;
             return (
-              <div key={itemKey} className="flex gap-3">
+              <div
+                key={itemKey}
+                className="flex gap-3"
+                data-baci-checkout-product={item.kind === 'cart' ? item.id : undefined}
+                data-baci-checkout-variant={item.kind === 'cart' ? item.variantId ?? '' : undefined}
+                data-baci-checkout-quantity={item.kind === 'cart' ? item.quantity : undefined}
+              >
                 <div className="ogabassey-product-card-image-surface relative size-12 bg-gray-50 rounded-lg border border-gray-100 p-1 shrink-0">
                   <CdnFormatImage
                     src={itemImage}

@@ -8,6 +8,7 @@ import { publicObservationPayload } from '@/schemas/experience-public-observatio
 import { installPublicCartBrowserRoutes } from './public-cart-browser-route';
 import { createPublicCommerceEvidence } from './public-commerce-evidence';
 import { observePublicCommerce } from './public-observation-commerce';
+import { observeNativeCheckout } from './public-observation-native-checkout';
 import { observeNativePublicCommerce } from './public-observation-native-commerce';
 import {
   MAX_PUBLIC_OBSERVATION_BYTES,
@@ -92,6 +93,10 @@ export async function observePublicBrowser(
   const entry = routes.find((route) => route.path === '/') ?? routes[0];
   const productPath = expected.product.path;
   const productCanonical = `${origin}${productPath}`;
+  const nativeCheckout = expected.product.nativeCheckout;
+  const checkoutUrl = `${origin}/checkout`;
+  if (nativeCheckout && (!expected.product.native || !unique.has(checkoutUrl)))
+    throw Error('PUBLIC_ROUTE_MISMATCH');
   const productFrame = routes.find((route) => route.path === productPath);
   if (
     expected.product.native
@@ -123,6 +128,7 @@ export async function observePublicBrowser(
         productId: payload.product.productId,
       },
       cart: relay,
+      allowSharedCart: !nativeCheckout,
       observeResource: (url) => served.add(url),
       observeCommerce: (request, reply, pageUrl) => {
         if (armed) evidence.observe(request, reply, pageUrl);
@@ -174,10 +180,18 @@ export async function observePublicBrowser(
         )
           throw Error('PUBLIC_ROUTE_MISMATCH');
       }
-      armed = true;
-      const commerce = productFrame
-        ? await observePublicCommerce(page, evidence)
-        : await observeNativePublicCommerce(page, expected.product, evidence);
+      const productTitle = await page.title();
+      armed = !nativeCheckout;
+      const commerce = nativeCheckout
+        ? await observeNativeCheckout(
+            page,
+            expected.product,
+            nativeCheckout,
+            checkoutUrl
+          )
+        : productFrame
+          ? await observePublicCommerce(page, evidence)
+          : await observeNativePublicCommerce(page, expected.product, evidence);
       if (!served.has(script[0].url) || !served.has(style.url) || forbidden)
         throw Error('PUBLIC_OBSERVATION_INCOMPLETE');
       const findRoute = (path: string) => {
@@ -199,7 +213,7 @@ export async function observePublicBrowser(
             : hash(
                 JSON.stringify({
                   path: productPath,
-                  title: await page.title(),
+                  title: productTitle,
                   status: 200,
                 })
               ),

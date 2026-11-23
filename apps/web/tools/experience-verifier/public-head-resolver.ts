@@ -21,7 +21,7 @@ export function createPublicHeadResolver(
       async loadMerchant(id) {
         const result = await owner
           .from('merchants')
-          .select('slug')
+          .select('slug,premium_features')
           .eq('id', id)
           .maybeSingle();
         if (result.error || !result.data)

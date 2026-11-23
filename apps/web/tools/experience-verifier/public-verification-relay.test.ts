@@ -172,3 +172,24 @@ it('renews only the bound launch with host-owned CSRF and rejects stale renewal 
   policyRevision = 'stale';
   await expect(relay(request)).rejects.toThrow('PUBLIC_LAUNCH_MISMATCH');
 });
+
+it('refuses Shared Cart requests before relaying for a native checkout', async () => {
+  const network = vi.fn();
+  const relay = createPublicVerificationRelay(
+    { binding, product, supabase, paths: ['/'], allowSharedCart: false },
+    {
+      makeCartNetwork: () => network,
+      makeProductNetwork: () => async () => ({ status: 200, body: '[]' }),
+      makeStateReader: () => async () => ({ status: 200, body: '{}' }),
+      makeCatalogReader: () => async () => ({ status: 200, body: '{}' }),
+    }
+  );
+  await expect(
+    relay({
+      url: `${binding.canonicalBase}/api/storefront/cart/bootstrap`,
+      method: 'POST',
+      body: '{}',
+    })
+  ).rejects.toThrow('PUBLIC_CART_REQUEST_DENIED');
+  expect(network).not.toHaveBeenCalled();
+});

@@ -14,6 +14,7 @@ export const publicHeadReceipt = z.object({
 export const publicHeadApprovalId = z.uuid();
 export const publicHeadBuildDigest = z.string().regex(/^[a-f0-9]{64}$/);
 export const publicHeadMerchant = z.object({
+  premium_features: z.unknown().optional(),
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
 });
 

@@ -6,7 +6,7 @@ import { createBoundPublicFetcher } from './public-fetch';
 
 type Route = { path: string; canonical: string } & (
   | { title: string; native?: never }
-  | { native: true; title?: never }
+  | { native: true; title?: never; checkout?: true }
 );
 
 /** Read the bound public documents without executing merchant scripts or following redirects. */
@@ -27,6 +27,7 @@ export async function fetchPublicPages(
     if (
       path !== route.path ||
       (!route.native && (!route.title || route.title.length > 500)) ||
+      (route.native && route.checkout && path !== '/checkout') ||
       seen.has(path)
     )
       throw Error('INVALID_PUBLIC_ROUTES');
@@ -83,8 +84,10 @@ export async function fetchPublicPages(
         !title ||
         title.length > 500 ||
         (!route.native && title !== route.title) ||
-        links.length !== 1 ||
-        links[0].getAttribute('href') !== route.canonical ||
+        (links.length === 0
+          ? !route.native || !route.checkout
+          : links.length !== 1 ||
+            links[0].getAttribute('href') !== route.canonical) ||
         refresh ||
         document.window.document.querySelector('base')
       )

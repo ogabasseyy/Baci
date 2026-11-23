@@ -58,7 +58,18 @@ it('binds a verifying receipt to its exact public head, bytes and canonical orig
     scriptDigest: hash(js),
     styleDigest: hash(css),
     canonicalBase: 'https://synthetic.example.com',
+    sharedCartEnabled: false,
   });
+});
+it('binds Shared Cart enrollment from the owner-scoped merchant row', async () => {
+  const result = await bindPublicHead(id, {
+    ...fixture(),
+    loadMerchant: async () => ({
+      slug: 'synthetic',
+      premium_features: ['shared_cart'],
+    }),
+  });
+  expect(result.sharedCartEnabled).toBe(true);
 });
 it('uses the delivered CSS digest after Baci rewrites a known asset URL', async () => {
   const authoredCss = Buffer.from("a{background:url('/assets/logo')}");

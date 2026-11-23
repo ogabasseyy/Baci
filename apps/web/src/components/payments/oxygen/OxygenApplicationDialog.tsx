@@ -112,27 +112,10 @@ export function OxygenApplicationDialog({
       <dialog
         ref={dialog}
         open={embedded ? open : undefined}
-        style={
-          embedded
-            ? {
-                position: 'absolute',
-                inset: 0,
-                width: '100%',
-                height: '100%',
-                maxWidth: 'none',
-                maxHeight: '100%',
-                margin: 0,
-                padding: 0,
-                borderWidth: 0,
-                overflow: 'hidden',
-                display: open ? 'flex' : 'none',
-                flexDirection: 'column',
-              }
-            : undefined
-        }
+        style={embedded ? { display: open ? 'flex' : 'none' } : undefined}
         aria-labelledby="oxygen-application-title"
         aria-describedby="oxygen-application-description"
-        className={`${styles.dialog} bg-white ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''} ${embedded ? styles.inlineDialog : ''}`}
+        className={`${styles.dialog} bg-white ${selfieUrl ? styles.selfieDialog : paymentUrl ? styles.paymentDialog : ''} ${embedded ? `${styles.inlineDialog} absolute inset-0 m-0 size-full max-h-full max-w-none flex-col overflow-hidden border-0 p-0` : ''}`}
         onCancel={(event) => {
           event.preventDefault();
           if (selfieUrl) {
@@ -212,7 +195,16 @@ export function OxygenApplicationDialog({
                 <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
                   <OxygenCheckoutCloseContext.Provider value={close}>
                     <OxygenPaymentSurfaceContext.Provider
-                      value={embedded ? null : setPaymentUrl}
+                      value={
+                        embedded
+                          ? (url) => {
+                              if (url && typeof window !== 'undefined')
+                                window.location.assign(
+                                  `/payments/oxygen/${encodeURIComponent(orderId)}`
+                                );
+                            }
+                          : setPaymentUrl
+                      }
                     >
                       <OxygenHostedOriginsContext.Provider
                         value={hostedOrigins}

@@ -26,6 +26,7 @@ export function ChatwootOxygenCard({
 }) {
   const [open, setOpen] = useState(true);
   const [contact, setContact] = useState<OxygenCustomerPrefill>();
+  const [orderTotal, setOrderTotal] = useState<number>();
   const [contactUnavailable, setContactUnavailable] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [portalTarget, setPortalTarget] = useState<{
@@ -70,7 +71,16 @@ export function ChatwootOxygenCard({
             !parsed.success || !parsed.data.email) {
           throw new Error('Order contact unavailable');
         }
-        if (!controller.signal.aborted) setContact(parsed.data);
+        const total =
+          typeof order?.total === 'number' &&
+          Number.isFinite(order.total) &&
+          order.total > 0
+            ? order.total
+            : undefined;
+        if (!controller.signal.aborted) {
+          setOrderTotal(total);
+          setContact(parsed.data);
+        }
       } catch {
         if (!controller.signal.aborted) setContactUnavailable(true);
       }
@@ -122,6 +132,7 @@ export function ChatwootOxygenCard({
                 orderId={orderId}
                 merchantSlug={storeSlug}
                 prefill={contact}
+                productAmount={orderTotal}
                 hostedOrigins={hostedOrigins}
               />
             </Suspense>

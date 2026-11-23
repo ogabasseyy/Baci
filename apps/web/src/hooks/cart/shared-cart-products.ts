@@ -6,7 +6,7 @@ import {
 import type { Product } from '@/lib/products';
 
 export const HYDRATION_SELECT =
-  'id, name, description, status, price, manage_stock, stock, stock_quantity, has_variants, has_condition_offers, brand, gtin, mpn, merchant_id, images, imageHint:image_hint';
+  'id, name, description, status, price, manage_stock, stock, stock_quantity, has_variants, has_condition_offers, brand, gtin, mpn, merchant_id, images, imageHint:image_hint, weight_value, weight_unit, dimensions';
 
 /**
  * Hydrates catalog shells for confirmed lines the client has never seen

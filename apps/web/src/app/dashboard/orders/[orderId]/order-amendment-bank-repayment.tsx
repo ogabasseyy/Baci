@@ -21,16 +21,18 @@ export function OrderAmendmentBankRepayment({
 }) {
   const [outgoingId, setOutgoingId] = useState('');
   const money = (minor: number) => formatDisplayCurrency(minor / 100, currency);
-  const latestClaim = workspace.events.findLast(
-    (event) =>
-      event.type === 'offline_disbursement_claimed' &&
-      typeof event.details.claimId === 'string' &&
-      !workspace.events.some(
-        (verified) =>
-          verified.type === 'offline_disbursement_verified' &&
-          verified.details.claimId === event.details.claimId
-      )
-  );
+  const latestClaim = [...workspace.events]
+    .reverse()
+    .find(
+      (event) =>
+        event.type === 'offline_disbursement_claimed' &&
+        typeof event.details.claimId === 'string' &&
+        !workspace.events.some(
+          (verified) =>
+            verified.type === 'offline_disbursement_verified' &&
+            verified.details.claimId === event.details.claimId
+        )
+    );
   const claimId =
     typeof latestClaim?.details.claimId === 'string'
       ? latestClaim.details.claimId

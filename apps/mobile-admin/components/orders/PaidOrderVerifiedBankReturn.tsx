@@ -1,4 +1,5 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { z } from 'zod';
 import type { ThemeColors } from '@/constants/theme';
 import type {
   AmendmentWorkspace,
@@ -26,16 +27,18 @@ export function PaidOrderVerifiedBankReturn({
   setOutgoingEvidence,
   onSubmit,
 }: Props) {
-  const latestClaim = verification.events.findLast(
-    (event) =>
-      event.type === 'offline_disbursement_claimed' &&
-      typeof event.details.claimId === 'string' &&
-      !verification.events.some(
-        (verified) =>
-          verified.type === 'offline_disbursement_verified' &&
-          verified.details.claimId === event.details.claimId
-      )
-  );
+  const latestClaim = [...verification.events]
+    .reverse()
+    .find(
+      (event) =>
+        event.type === 'offline_disbursement_claimed' &&
+        typeof event.details.claimId === 'string' &&
+        !verification.events.some(
+          (verified) =>
+            verified.type === 'offline_disbursement_verified' &&
+            verified.details.claimId === event.details.claimId
+        )
+    );
   const claimId =
     typeof latestClaim?.details.claimId === 'string'
       ? latestClaim.details.claimId
@@ -66,6 +69,7 @@ export function PaidOrderVerifiedBankReturn({
   if (claimId) {
     const value =
       outgoingEvidence.claimId === claimId ? outgoingEvidence.value : '';
+    const evidenceIdIsValid = z.uuid().safeParse(value.trim()).success;
     return (
       <View>
         <TextInput
@@ -93,8 +97,11 @@ export function PaidOrderVerifiedBankReturn({
               idempotencyKey: generateUUID(),
             });
           },
-          !value.trim()
+          !value.trim() || !evidenceIdIsValid
         )}
+        <Text style={{ color: colors.textMuted }}>
+          Enter a valid evidence UUID from the verified bank transfer.
+        </Text>
       </View>
     );
   }
@@ -105,7 +112,9 @@ export function PaidOrderVerifiedBankReturn({
         .filter(
           (entry) =>
             entry.method === 'bank_transfer' &&
-            (entry.status === null || entry.status === 'unapplied')
+            (entry.status === null ||
+              entry.status === 'unapplied' ||
+              (entry.status === 'top_up' && entry.transactionId !== null))
         )
         .map((entry) => (
           <View key={entry.id}>
@@ -117,8 +126,14 @@ export function PaidOrderVerifiedBankReturn({
               () => {
                 onSubmit({
                   action: 'claim_offline_disbursement',
-                  sourceKind: 'unapplied',
-                  sourceId: entry.id,
+                  sourceKind:
+                    entry.status === 'top_up'
+                      ? 'cancellation_leg'
+                      : 'unapplied',
+                  sourceId:
+                    entry.status === 'top_up'
+                      ? (entry.transactionId ?? entry.id)
+                      : entry.id,
                   idempotencyKey: generateUUID(),
                 });
               }

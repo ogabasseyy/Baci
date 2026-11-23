@@ -82,6 +82,7 @@ const verifiedCancellation = {
 
 it('claims an eligible verified bank return for repayment', () => {
   const onSubmit = vi.fn();
+  const transactionId = '1f7e5171-f2e3-4e8e-9202-6bc7a39f2bb6';
   render(
     <Harness
       verification={{
@@ -91,7 +92,7 @@ it('claims an eligible verified bank return for repayment', () => {
             id,
             amountMinor: 120_000,
             status: 'unapplied',
-            transactionId: null,
+            transactionId,
             occurredAt: '2026-11-22T13:55:00Z',
             method: 'bank_transfer',
           },
@@ -108,6 +109,39 @@ it('claims an eligible verified bank return for repayment', () => {
     action: 'claim_offline_disbursement',
     sourceKind: 'unapplied',
     sourceId: id,
+    idempotencyKey: id,
+  });
+});
+
+it('claims a cancellation-leg bank transfer for repayment', () => {
+  const onSubmit = vi.fn();
+  const transactionId = '1f7e5171-f2e3-4e8e-9202-6bc7a39f2bb6';
+  render(
+    <Harness
+      verification={{
+        ...verifiedCancellation,
+        bankEvidence: [
+          {
+            id,
+            amountMinor: 120_000,
+            status: 'top_up',
+            transactionId,
+            occurredAt: '2026-11-22T13:55:00Z',
+            method: 'bank_transfer',
+          },
+        ],
+      }}
+      onSubmit={onSubmit}
+    />
+  );
+
+  fireEvent.click(
+    screen.getByRole('button', { name: /Prepare bank repayment/ })
+  );
+  expect(onSubmit).toHaveBeenCalledWith({
+    action: 'claim_offline_disbursement',
+    sourceKind: 'cancellation_leg',
+    sourceId: transactionId,
     idempotencyKey: id,
   });
 });
@@ -142,4 +176,29 @@ it('records outgoing evidence against the outstanding bank-return claim', () => 
     evidenceId: id,
     idempotencyKey: id,
   });
+});
+
+it('keeps repayment verification disabled for a malformed evidence ID', () => {
+  render(
+    <Harness
+      verification={{
+        ...verifiedCancellation,
+        events: [
+          {
+            type: 'offline_disbursement_claimed',
+            details: { claimId: id },
+          },
+        ],
+      }}
+      onSubmit={vi.fn()}
+    />
+  );
+
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Verified outgoing bank evidence ID' }),
+    { target: { value: 'not-a-uuid' } }
+  );
+  expect(
+    screen.getByRole('button', { name: 'Verify bank repayment' })
+  ).toBeDisabled();
 });

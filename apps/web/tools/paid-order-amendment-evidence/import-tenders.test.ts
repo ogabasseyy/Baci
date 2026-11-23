@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { importTenderManifest } from './import-tenders';
+import { importTenderManifest, tenderManifestMaxAgeMs } from './import-tenders';
 
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const target = 'https://synthetic-supabase.example.invalid';
@@ -137,6 +137,23 @@ describe('approved tender exports', () => {
     expect(fetchRpc).not.toHaveBeenCalled();
   });
 
+  it('rejects manifests older than the replay window before posting', async () => {
+    const fetchRpc = vi.fn();
+    const expired = new Date(now.getTime() - tenderManifestMaxAgeMs - 1);
+    const issuedAt = expired.toISOString();
+    await expect(
+      invoke(
+        signed({
+          ...manifest,
+          issuedAt,
+          receipts: [{ ...receipt, occurredAt: '2026-11-21T13:59:00Z' }],
+        }),
+        { fetchRpc }
+      )
+    ).rejects.toThrow('timestamps are invalid');
+    expect(fetchRpc).not.toHaveBeenCalled();
+  });
+
   it('requires the shared POS receipt-reference format before posting', async () => {
     const fetchRpc = vi.fn();
     for (const receiptReference of ['SHORT7', '-POS-12345']) {
@@ -158,6 +175,26 @@ describe('approved tender exports', () => {
       ).rejects.toThrow();
     }
     expect(fetchRpc).not.toHaveBeenCalled();
+  });
+
+  it('accepts reconciliation references across the database 8 to 160 range', async () => {
+    const fetchRpc = vi.fn(async () => Response.json([evidence]));
+    for (const reconciliationReference of [
+      'A'.repeat(8),
+      'reconciliation reference with punctuation !'.repeat(3),
+      'R'.repeat(160),
+    ]) {
+      await expect(
+        invoke(
+          signed({
+            ...manifest,
+            receipts: [{ ...receipt, reconciliationReference }],
+          }),
+          { fetchRpc }
+        )
+      ).resolves.toEqual([evidence]);
+    }
+    expect(fetchRpc).toHaveBeenCalledTimes(3);
   });
 
   it('reports a malformed database origin without posting a receipt', async () => {

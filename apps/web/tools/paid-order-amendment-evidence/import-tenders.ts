@@ -2,6 +2,7 @@ import { createPublicKey, verify } from 'node:crypto';
 import { z } from 'zod';
 
 export const tenderManifestLimit = 64 * 1024;
+export const tenderManifestMaxAgeMs = 24 * 60 * 60 * 1000;
 const sourceId = z.string().regex(/^[a-z0-9_-]{3,32}$/);
 const method = z.enum(['cash', 'pos']);
 const instant = z.iso.datetime({ offset: true });
@@ -9,7 +10,7 @@ const receiptFields = {
   orderId: z.uuid(),
   amountMinor: z.number().int().min(1).max(9_999_999_999),
   receiptReference: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{7,99}$/),
-  reconciliationReference: z.string().regex(/^[A-Za-z0-9_.:/-]{8,120}$/),
+  reconciliationReference: z.string().min(8).max(160),
   occurredAt: instant,
 };
 const receiptSchema = z.discriminatedUnion('method', [
@@ -120,6 +121,7 @@ export async function importTenderManifest({
   if (
     !Number.isFinite(age) ||
     age < 0 ||
+    age > tenderManifestMaxAgeMs ||
     manifest.receipts.some((receipt) => Date.parse(receipt.occurredAt) > issued)
   ) {
     throw new Error('Receipt manifest timestamps are invalid.');

@@ -27,13 +27,21 @@ export async function answerSantaWish(input: {
   conversationId: number;
   question: string;
   history: readonly ChatAutoReplyTurn[];
+  deadlineMs?: number;
 }): Promise<{ reply: string; offers: ChatSantaOffer[] }> {
   const clean = (text: string) =>
     sanitizePromptInput(text, CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH).value;
-  const system = await generateSantaPrompt(
-    input.tenant,
-    SANTA_CATALOG_TIMEOUT_MS
+  const deadline = input.deadlineMs ?? Date.now() + WISH_TIMEOUT_MS;
+  const catalogBudget = Math.min(
+    SANTA_CATALOG_TIMEOUT_MS,
+    Math.max(1_000, deadline - Date.now())
   );
+  const system = await generateSantaPrompt(input.tenant, catalogBudget);
+  const remaining = deadline - Date.now();
+  if (remaining < 1_000) {
+    throw new Error('Santa wish deadline exceeded');
+  }
+  const overallTimeoutMs = Math.min(WISH_TIMEOUT_MS, remaining);
   const { text } = await generateTextWithChain({
     system,
     messages: [
@@ -45,8 +53,8 @@ export async function answerSantaWish(input: {
     ],
     temperature: 0.5,
     maxOutputTokens: 600,
-    perProviderTimeoutMs: 10_000,
-    overallTimeoutMs: WISH_TIMEOUT_MS,
+    perProviderTimeoutMs: Math.min(10_000, overallTimeoutMs),
+    overallTimeoutMs,
   });
   const verified = await verifySantaAnswer({
     text,
@@ -56,19 +64,23 @@ export async function answerSantaWish(input: {
   });
   const reply = verified.reply.slice(0, CHAT_AUTO_REPLY_MAX_LENGTH);
 
-  // The analytics module reads the outcome from the text: a verified offer is
-  // recorded through its directive, a refusal through its refusal wording.
-  const [first] = verified.offers;
-  const recorded = first
-    ? `${reply}\nACTION:ADD_TO_CART|PRODUCT:${first.name}|PRICE:${first.grantedPrice}`
-    : reply;
-  void logSantaInteraction({
-    clientIp: `chat-${input.conversationId}`,
-    response: recorded,
-    tenant: input.tenant,
-    userMessage: input.question,
-  }).catch(() => {
-    console.error('[chat-auto-reply] santa analytics failed');
-  });
+  // Record one analytics event per verified offer so multi-offer grants are not undercounted.
+  const analyticsPayloads =
+    verified.offers.length > 0
+      ? verified.offers.map(
+          (offer) =>
+            `${reply}\nACTION:ADD_TO_CART|PRODUCT:${offer.name}|PRICE:${offer.grantedPrice}`
+        )
+      : [reply];
+  for (const recorded of analyticsPayloads) {
+    void logSantaInteraction({
+      clientIp: `chat-${input.conversationId}`,
+      response: recorded,
+      tenant: input.tenant,
+      userMessage: input.question,
+    }).catch(() => {
+      console.error('[chat-auto-reply] santa analytics failed');
+    });
+  }
   return { reply, offers: verified.offers };
 }

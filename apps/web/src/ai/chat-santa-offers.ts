@@ -1,6 +1,7 @@
 import {
   isSantaGrantedPriceWithinCeiling,
   parseSantaActions,
+  requiresProductSelection,
   stripSantaActions,
 } from '@baci/shared/lib';
 import { getCachedSantaProductList } from '@/ai/santa-data';
@@ -43,14 +44,18 @@ async function verifyOne(input: {
   const supabase = createPublicClient({ clientInfo: 'baci-santa-chat-offer' });
   const { data: product, error } = await supabase
     .from('products')
-    .select('id, name, slug, price, has_variants')
+    .select(
+      'id, name, slug, price, has_variants, has_condition_offers, variant_model, available_conditions'
+    )
     .eq('merchant_id', input.merchantId)
     .eq('name', entry.name)
     .eq('status', 'active')
     .maybeSingle();
   if (error || !product) return null;
-  // A variant product needs an option a chat wish cannot express.
-  if (product.has_variants) return null;
+  // A product requiring variant or condition selection cannot be expressed by a chat wish.
+  if (requiresProductSelection(product)) return null;
+  const slug = product.slug?.trim() ?? '';
+  if (!slug) return null;
   const livePrice = Number(product.price);
   if (!(livePrice > 0) || input.grantedPrice > livePrice) return null;
   if (
@@ -64,7 +69,7 @@ async function verifyOne(input: {
   }
   return {
     productId: product.id,
-    slug: product.slug ?? '',
+    slug,
     name: product.name,
     catalogPrice: livePrice,
     grantedPrice: input.grantedPrice,
@@ -72,11 +77,13 @@ async function verifyOne(input: {
   };
 }
 
+const UNPARSED_ACTION_RE = /\bACTION\s*:/i;
+
 /**
  * Turns Santa's raw text into what the customer may see. Every ACTION line is
  * checked here against the catalog and the product's maximum discount; if any
- * line fails, none is honoured and Santa's own words (which may promise the
- * deal) are replaced by a fixed refusal. No directive: plain chat.
+ * line fails or any malformed ACTION marker remains, none is honoured and
+ * Santa's own words are replaced by a fixed refusal. No directive: plain chat.
  */
 export async function verifySantaAnswer(input: {
   text: string;
@@ -86,14 +93,15 @@ export async function verifySantaAnswer(input: {
 }): Promise<SantaVerifiedAnswer> {
   const actions = parseSantaActions(input.text);
   const visible = stripSantaActions(input.text);
-  if (actions.length === 0) {
-    return { reply: visible, offers: [], dropped: false };
-  }
   const refused: SantaVerifiedAnswer = {
     reply: SANTA_NO_DEAL_REPLY,
     offers: [],
     dropped: true,
   };
+  if (UNPARSED_ACTION_RE.test(visible)) return refused;
+  if (actions.length === 0) {
+    return { reply: visible, offers: [], dropped: false };
+  }
   if (actions.length > CHAT_SANTA_MAX_OFFERS) return refused;
   try {
     const checked = await Promise.all(

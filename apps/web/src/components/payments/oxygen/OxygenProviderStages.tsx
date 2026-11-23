@@ -36,6 +36,7 @@ type Props = {
     products?: OxygenCheckoutProduct[];
     currency?: string;
     prefill?: OxygenCustomerPrefill;
+    conversational?: boolean;
     active: boolean;
     onProgress?: (stage: OxygenJourneyStage) => void;
   };
@@ -79,6 +80,7 @@ export function OxygenProviderStages({
     products,
     currency,
     prefill,
+    conversational,
     active,
     onProgress,
   } = flow;
@@ -115,6 +117,7 @@ export function OxygenProviderStages({
           <OxygenCustomerForm
             workflowId={snapshot.workflowId}
             prefill={prefill}
+            conversational={conversational}
             checkoutAddress={residentialContext.address}
             onResidentialReady={(proof) =>
               residential.prepare(snapshot.workflowId, proof)

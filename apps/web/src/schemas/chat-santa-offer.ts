@@ -10,7 +10,7 @@ export const CHAT_SANTA_MAX_OFFERS = 3;
  */
 export const chatSantaOfferSchema = z.object({
   productId: z.string().min(1),
-  slug: z.string(),
+  slug: z.string().min(1),
   name: z.string().min(1).max(200),
   catalogPrice: z.number().positive(),
   grantedPrice: z.number().nonnegative(),

@@ -247,6 +247,8 @@ SELECT * FROM (VALUES
   ('public.chat_event_deactivate_push_tokens(text,bigint,uuid,text,uuid,text,text[])',
    'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
   ('public.chat_event_record_push_attempt(text,bigint,uuid,text,uuid,jsonb)',
-   'signed chat push flow; action-bound HMAC proof verified in the body, no service role')
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
+  ('public.record_chat_handover(text,bigint,uuid,text,bigint,text)',
+   'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

@@ -240,5 +240,18 @@ describe('wallet DVA provisioner executor', () => {
     expect(repairSql).toContain('ON public.customer_wallet_payment_accounts');
     expect(writerSql).toContain("p_provider_account_id !~ '^[0-9]{1,20}$'");
     expect(writerSql).toContain("pg_catalog.btrim(p_bank_slug) = ''");
+    expect(writerSql).not.toMatch(/\bALTER\s+ROLE\s+baci_wallet_dva_writer\b/i);
+    const assertRoleBlock = writerSql.match(
+      /DO \$assert_role\$[\s\S]*?\$assert_role\$;/
+    )?.[0];
+    expect(assertRoleBlock).toBeDefined();
+    expect(assertRoleBlock).toContain('FROM pg_catalog.pg_roles');
+    expect(assertRoleBlock).toContain('NOT rolcanlogin');
+    expect(assertRoleBlock).toContain('NOT rolsuper');
+    expect(assertRoleBlock).toContain('NOT rolbypassrls');
+    expect(assertRoleBlock).toContain('NOT rolcreaterole');
+    expect(assertRoleBlock).toContain('NOT rolcreatedb');
+    expect(assertRoleBlock).toContain('NOT rolreplication');
+    expect(assertRoleBlock).toContain("USING ERRCODE = '42501'");
   });
 });

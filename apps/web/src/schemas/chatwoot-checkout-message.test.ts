@@ -42,6 +42,19 @@ describe('baci-checkout-place-request schema', () => {
     expect(place(placeData).success).toBe(true);
   });
 
+  it('accepts omitted and supported paymentMethod values and rejects unsupported ones', () => {
+    expect(place({ ...placeData, paymentMethod: undefined }).success).toBe(
+      true
+    );
+    expect(
+      place({ ...placeData, paymentMethod: 'bank_transfer' }).success
+    ).toBe(true);
+    expect(place({ ...placeData, paymentMethod: 'oxygen' }).success).toBe(true);
+    expect(place({ ...placeData, paymentMethod: 'crypto' }).success).toBe(
+      false
+    );
+  });
+
   it('accepts a pickup choice at a zero price', () => {
     expect(
       place({

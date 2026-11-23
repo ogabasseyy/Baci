@@ -31,6 +31,12 @@ vi.mock('@/lib/chatwoot/merchant-currency', () => ({
 vi.mock('@/ai/chat-auto-reply-santa', () => ({
   answerSantaWish: mocks.wish,
 }));
+vi.mock('@/app/api/chat/ogabassey-model-providers', () => ({
+  getOgabasseyPreferredProviders: () => [
+    { name: 'openai:gpt-5.4-mini', model: {} },
+  ],
+  OGABASSEY_MODEL_PROVIDER_OPTIONS: { openai: {} },
+}));
 
 import { generateChatAutoReply } from './chat-auto-reply';
 import { CHAT_AUTO_REPLY_SYSTEM_PROMPT } from './chat-auto-reply-prompt';

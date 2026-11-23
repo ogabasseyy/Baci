@@ -9,7 +9,11 @@ const DVA_PAYMENT_WINDOW_MS = 90 * 60 * 1000;
 /** True while bank details issued at `issuedAt` can still pay their order. */
 export function isChatwootCheckoutPaymentWindowOpen(
   issuedAt: number,
-  now: number = Date.now()
+  now: number = Date.now(),
+  expiresAt?: number
 ): boolean {
+  if (typeof expiresAt === 'number' && Number.isFinite(expiresAt)) {
+    return now <= expiresAt;
+  }
   return now - issuedAt <= DVA_PAYMENT_WINDOW_MS;
 }

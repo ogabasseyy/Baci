@@ -10,7 +10,11 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { evaluateChatwootActionCartFreshness } from './chatwoot-action-cart-freshness';
 import { createChatwootActionGenerations } from './chatwoot-action-generations';
 import { toChatwootCheckoutMerchant } from './chatwoot-checkout-merchant';
-import { isChatwootCheckoutEvent } from './chatwoot-checkout-result';
+import {
+  CHATWOOT_CHECKOUT_PLACE_PREFIX,
+  type ChatwootCheckoutPlaceResult,
+  isChatwootCheckoutEvent,
+} from './chatwoot-checkout-result';
 import { isChatwootInlineActionEvent } from './chatwoot-inline-action-event';
 import { dispatchChatwootAuthorizedAction } from './chatwoot-inline-authorized-action';
 import { postChatwootInlineCartActionFailure } from './chatwoot-inline-cart-action-failure';
@@ -23,7 +27,8 @@ type ActiveCartState = ReturnType<typeof useCart>;
 export function useChatwootInlineCartBridge(
   storeSlug: string,
   widgetOrigin: string,
-  checkoutEnabled = false
+  checkoutEnabled = false,
+  openSecureApplication?: (path: string) => void
 ) {
   const cartState = useCart();
   const merchant = useMerchantSafe()?.merchant ?? null;
@@ -242,7 +247,26 @@ export function useChatwootInlineCartBridge(
         requestedCartRef,
         requestedMerchantSlug,
         lineTokens,
-        post: postToTarget,
+        post: (prefix, value) => {
+          postToTarget(prefix, value);
+          if (
+            openSecureApplication &&
+            message.event === 'baci-checkout-place-request' &&
+            message.data.paymentMethod === 'oxygen' &&
+            prefix === CHATWOOT_CHECKOUT_PLACE_PREFIX &&
+            action.isCurrent() &&
+            isCurrentTarget(frame, target, conversationId)
+          ) {
+            const result = value as ChatwootCheckoutPlaceResult;
+            if (
+              result.status === 'secure_handoff' &&
+              result.requestId === requestId &&
+              /^\/payments\/oxygen\/[0-9a-f-]{36}$/i.test(result.href)
+            ) {
+              openSecureApplication(result.href);
+            }
+          }
+        },
         postRawPayload: (payload) => target.postMessage(payload, widgetOrigin),
         getCartState: () => latestState.current,
         getMerchant: () => toChatwootCheckoutMerchant(latestMerchant.current),
@@ -268,5 +292,5 @@ export function useChatwootInlineCartBridge(
       lineTokens.clear();
       window.removeEventListener('message', onMessage);
     };
-  }, [storeSlug, widgetOrigin, checkoutEnabled]);
+  }, [storeSlug, widgetOrigin, checkoutEnabled, openSecureApplication]);
 }

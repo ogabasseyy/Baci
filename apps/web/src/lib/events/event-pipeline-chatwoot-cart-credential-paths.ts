@@ -68,6 +68,29 @@ export const eventPipelineChatwootCartCredentialPaths = [
     signingMaterial,
     environment,
   ],
+  [
+    // Conversational checkout helpers verify the Chatwoot session through the
+    // shared proof-bound cart context helper (never a service-role client).
+    'apps/web/src/app/api/storefront/chatwoot/bank-verification/route.ts',
+    cartContext,
+    cartClient,
+    signingMaterial,
+    environment,
+  ],
+  [
+    'apps/web/src/app/api/storefront/chatwoot/checkout-turn/route.ts',
+    cartContext,
+    cartClient,
+    signingMaterial,
+    environment,
+  ],
+  [
+    'apps/web/src/app/api/storefront/chatwoot/delivery-confirmation/route.ts',
+    cartContext,
+    cartClient,
+    signingMaterial,
+    environment,
+  ],
   [commitCartAdd, cartClient, signingMaterial, environment],
   [cartContext, cartClient, signingMaterial, environment],
 ] as const;

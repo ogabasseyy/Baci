@@ -60,6 +60,39 @@ describe('buildChatwootCheckoutOrderRequest', () => {
     });
   });
 
+  it('includes the confirmed carrier fee in the Oxygen order total and forwards its stored quote', () => {
+    const quoteId = '00000000-0000-4000-8000-000000000009';
+    const order = buildChatwootCheckoutOrderRequest(
+      {
+        review: checkoutReview,
+        display: checkoutDisplayCart,
+        delivery: {
+          ...delivery,
+          carrier: 'GIGL',
+          merchantRateId: null,
+          quote: {
+            ...delivery.quote,
+            id: quoteId,
+            provider: 'GIGL',
+            price: 2700,
+          },
+        },
+        customer: checkoutPlaceRequest.customer,
+        taxRate: 0.075,
+        paymentMethod: 'oxygen',
+      },
+      checkoutDisplayCart
+    );
+    expect(order).toMatchObject({
+      shipping_fee: 2700,
+      expected_total: 4850,
+      shipping_provider: 'GIGL',
+      selected_quote_id: quoteId,
+      payment_method: 'oxygen',
+    });
+    expect(order).not.toHaveProperty('shipping_rate_id');
+  });
+
   it('adds no tax for an unregistered merchant', () => {
     expect(build(0)).toMatchObject({ tax_amount: 0, expected_total: 4500 });
   });

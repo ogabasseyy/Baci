@@ -107,6 +107,7 @@ export async function derivePublicVerificationPlan(
       path,
       canonical: boundary.canonicalUrl,
       title: boundary.title,
+      renderedTitle: true as const,
     });
   }
   return {

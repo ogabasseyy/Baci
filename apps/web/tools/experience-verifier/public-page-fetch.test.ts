@@ -181,3 +181,23 @@ it('allows missing canonical metadata only on the bound native checkout', async 
     )
   ).rejects.toThrow('INVALID_PUBLIC_ROUTES');
 });
+
+it('captures the server title and root canonical before the experience hydrates', async () => {
+  const network = async () => ({
+    response: new Response(
+      html('Synthetic shop - Official Online Store', origin),
+      { headers: { 'content-type': 'text/html' } }
+    ),
+    close: async () => {},
+  });
+  const page = {
+    ...routes[0],
+    title: 'Synthetic shop · home',
+    renderedTitle: true as const,
+  };
+  await expect(
+    fetchPublicPages(origin, [page], { resolve, network })
+  ).resolves.toMatchObject([
+    { title: 'Synthetic shop - Official Online Store' },
+  ]);
+});

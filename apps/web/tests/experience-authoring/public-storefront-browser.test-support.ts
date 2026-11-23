@@ -208,6 +208,11 @@ export async function checkPublicStorefrontBrowser(input: {
       .getByText('Synthetic New Merchant Device')
       .waitFor({ timeout: 30000 });
     if (input.nativeProductId) {
+      await page.waitForFunction(
+        () => document.title === 'Synthetic New Merchant · home',
+        undefined,
+        { timeout: 15000 }
+      );
       const path = '/synthetic/products/synthetic-new-device';
       const response = await page.goto(new URL(path, page.url()).href, {
         waitUntil: 'domcontentloaded',

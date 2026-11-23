@@ -5,7 +5,7 @@ import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
 import { createBoundPublicFetcher } from './public-fetch';
 
 type Route = { path: string; canonical: string } & (
-  | { title: string; native?: never }
+  | { title: string; native?: never; renderedTitle?: true }
   | { native: true; title?: never; checkout?: true }
 );
 
@@ -63,33 +63,38 @@ export async function fetchPublicPages(
         if (character === '<' && ++markup > 20000)
           throw Error('PUBLIC_PAGE_MISMATCH');
       document = new JSDOM(html);
-      const head = document.window.document.head;
-      const titles = head.querySelectorAll('title');
+      // Next may stream metadata in the body. Include those nodes while
+      // excluding SVG titles that belong to page content rather than metadata.
+      const doc = document.window.document;
+      const titles = [...doc.querySelectorAll('title')].filter(
+        (element) => element.namespaceURI === doc.documentElement.namespaceURI
+      );
       const title = titles[0]?.textContent;
-      const links = [...head.querySelectorAll('link')].filter((link) =>
+      const links = [...doc.querySelectorAll('link')].filter((link) =>
         (link.getAttribute('rel') ?? '')
           .toLowerCase()
           .split(/\s+/)
           .includes('canonical')
       );
-      const refresh = [
-        ...document.window.document.querySelectorAll('meta'),
-      ].some(
+      const serverCanonical = links[0]?.getAttribute('href');
+      const canonicalMatches =
+        serverCanonical === route.canonical ||
+        (route.path === '/' && serverCanonical === origin);
+      const refresh = [...doc.querySelectorAll('meta')].some(
         (meta) =>
           (meta.getAttribute('http-equiv') ?? '').trim().toLowerCase() ===
           'refresh'
       );
       if (
         titles.length !== 1 ||
-        !title ||
+        !title?.trim() ||
         title.length > 500 ||
-        (!route.native && title !== route.title) ||
+        (!route.native && !route.renderedTitle && title !== route.title) ||
         (links.length === 0
           ? !route.native || !route.checkout
-          : links.length !== 1 ||
-            links[0].getAttribute('href') !== route.canonical) ||
+          : links.length !== 1 || !canonicalMatches) ||
         refresh ||
-        document.window.document.querySelector('base')
+        doc.querySelector('base')
       )
         throw Error('PUBLIC_PAGE_MISMATCH');
       pages.push({

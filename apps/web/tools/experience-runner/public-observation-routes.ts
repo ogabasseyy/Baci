@@ -37,17 +37,7 @@ export async function inspectPublicRoutes(settings: {
         waitUntil: 'domcontentloaded',
         timeout,
       });
-      if (
-        response?.status() !== 200 ||
-        page.url() !== route.canonical ||
-        (await page.title()) !== route.title
-      )
-        throw Error('PUBLIC_ROUTE_MISMATCH');
-      const canonical = page.locator('link[rel~="canonical"]');
-      if (
-        (await canonical.count()) !== 1 ||
-        (await canonical.getAttribute('href')) !== route.canonical
-      )
+      if (response?.status() !== 200 || page.url() !== route.canonical)
         throw Error('PUBLIC_ROUTE_MISMATCH');
       const frame = page.locator('iframe[data-baci-experience-build]');
       await frame.first().waitFor({ state: 'attached', timeout });
@@ -72,6 +62,22 @@ export async function inspectPublicRoutes(settings: {
         settings.buildDigest
       )
         throw Error('PUBLIC_FRAME_MISMATCH');
+      // The platform shell sets the experience title after hydration.
+      await page.waitForFunction(
+        (title) => document.title === title,
+        route.title,
+        {
+          timeout,
+        }
+      );
+      const canonical = page.locator('link[rel~="canonical"]');
+      if (
+        page.url() !== route.canonical ||
+        (await canonical.count()) !== 1 ||
+        (await canonical.evaluate((link: HTMLLinkElement) => link.href)) !==
+          route.canonical
+      )
+        throw Error('PUBLIC_ROUTE_MISMATCH');
       const actualFrame = await (await frame.elementHandle())?.contentFrame();
       if (expired) throw Error('PUBLIC_ROUTE_TIMEOUT');
       if (!actualFrame || actualFrame.url() !== route.frameUrl)

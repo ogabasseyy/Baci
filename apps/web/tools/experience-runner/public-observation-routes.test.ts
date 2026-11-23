@@ -21,6 +21,7 @@ async function inspect(
     sandbox?: string;
     ready?: boolean;
     delayed?: boolean;
+    hydrateTitle?: boolean;
   } = {}
 ) {
   const browser = await chromium.launch({ headless: true });
@@ -32,7 +33,7 @@ async function inspect(
         await route.fulfill({
           status: 200,
           contentType: 'text/html',
-          body: `<title>${options.title ?? 'Synthetic store'}</title><link rel="canonical" href="${origin}/">${options.delayed ? `<script>setTimeout(() => document.body.insertAdjacentHTML('beforeend', ${JSON.stringify(iframe)}), 150)</script>` : iframe}`,
+          body: `<title>${options.title ?? 'Synthetic store'}</title><link rel="canonical" href="${origin}/">${options.delayed ? `<script>setTimeout(() => document.body.insertAdjacentHTML('beforeend', ${JSON.stringify(iframe)}), 150)</script>` : iframe}${options.hydrateTitle ? "<script>setTimeout(() => { document.title = 'Synthetic store'; }, 200)</script>" : ''}`,
         });
       } else if (route.request().url() === frameUrl) {
         await route.fulfill({
@@ -79,3 +80,12 @@ it.each([
 ])('rejects an inconsistent or unready browser rendering', async (options) => {
   await expect(inspect(options)).rejects.toThrow();
 }, 10000);
+
+it('waits for the exact hydrated title when the server renders the native title', async () => {
+  await expect(
+    inspect({
+      title: 'Synthetic store - Official Online Store',
+      hydrateTitle: true,
+    })
+  ).resolves.toMatchObject([{ title: 'Synthetic store' }]);
+});

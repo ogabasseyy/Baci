@@ -9,9 +9,13 @@ import {
 } from './public-observation-fixture.test-support';
 
 it.each([
-  false,
-  true,
-])('observes native guest checkout without Shared Cart (fixed color: %s)', async (fixedColor) => {
+  { fixedColor: false, quantity: 1 },
+  { fixedColor: true, quantity: 1 },
+  { fixedColor: true, quantity: 3 },
+])('observes native guest checkout without Shared Cart (fixed color: $fixedColor, quantity: $quantity)', async ({
+  fixedColor,
+  quantity,
+}) => {
   const browser = await chromium.launch({ headless: true });
   const payload = fixture();
   const product = payload.expected.product;
@@ -27,7 +31,7 @@ it.each([
           const add = document.querySelector("#add");
           add.onclick = () => {
             if (${fixedColor} || document.querySelector("[data-selected]"))
-              localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: "${variantId}", quantity: 1 }]));
+              localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: "${variantId}", quantity: ${quantity} }]));
           };
           add.dataset.baciPdpCartReady = "true";
         }, 200);

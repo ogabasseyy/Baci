@@ -14,10 +14,9 @@ export async function observeNativeCheckout(
   checkoutUrl: string
 ) {
   const storageKey = getStorefrontCartStorageKey(checkout.merchantSlug);
-  const line = {
+  const expectedLine = {
     id: product.id,
     variantId: product.variantId ?? '',
-    quantity: 1,
   };
   // The native provider persists its initial cart after hydration. An SSR
   // button can be visible while React still has no active click handler.
@@ -50,20 +49,30 @@ export async function observeNativeCheckout(
     }
   }
   await add.click({ timeout: actionTimeout });
-  await page.waitForFunction(
+  // The native PDP selects an allowed starting quantity, which can exceed one.
+  // Carry the observed quantity forward and check the same line at checkout.
+  const addedQuantity = await page.waitForFunction(
     ({ key, expected }) => {
       const items = JSON.parse(localStorage.getItem(key) ?? '[]');
+      if (!Array.isArray(items) || items.length !== 1) return false;
+      const [item] = items;
+      const quantity: unknown = item?.quantity;
       return (
-        Array.isArray(items) &&
-        items.length === 1 &&
-        items[0].id === expected.id &&
-        (items[0].variantId ?? '') === expected.variantId &&
-        items[0].quantity === expected.quantity
+        item?.id === expected.id &&
+        (item.variantId ?? '') === expected.variantId &&
+        typeof quantity === 'number' &&
+        Number.isSafeInteger(quantity) &&
+        quantity > 0 &&
+        quantity
       );
     },
-    { key: storageKey, expected: line },
+    { key: storageKey, expected: expectedLine },
     { timeout: actionTimeout }
   );
+  const quantity = await addedQuantity.jsonValue();
+  await addedQuantity.dispose();
+  if (!quantity) throw Error('PUBLIC_NATIVE_CART_MISMATCH');
+  const line = { ...expectedLine, quantity };
   const response = await page.goto(checkoutUrl, {
     waitUntil: 'domcontentloaded',
     timeout: actionTimeout,

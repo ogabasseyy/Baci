@@ -42,6 +42,7 @@ export type ChatAutoReplyOutcome =
   | 'failed';
 
 const HISTORY_DEADLINE_MS = 6_000;
+const WORK_DEADLINE_MS = 30_000;
 
 /** Labels are merged against the live list, never the webhook's old copy. */
 async function updateLabels(
@@ -153,27 +154,36 @@ export async function runChatAutoReply(
   const question = (event.content ?? '')
     .trim()
     .slice(0, CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH);
-  const history = await withDeadline(
-    loadChatAutoReplyHistory(binding, conversationId, event.id),
-    HISTORY_DEADLINE_MS,
-    []
+  const work = await withDeadline(
+    (async () => {
+      const history = await withDeadline(
+        loadChatAutoReplyHistory(binding, conversationId, event.id),
+        HISTORY_DEADLINE_MS,
+        []
+      );
+      const generated = await generateChatAutoReply({
+        merchantId: binding.merchantId,
+        conversationId,
+        question,
+        history,
+      });
+      const latest = await isLatestChatMessage(
+        binding,
+        conversationId,
+        event.id
+      );
+      return { generated, latest };
+    })(),
+    WORK_DEADLINE_MS,
+    null
   );
-  const result = await generateChatAutoReply({
-    merchantId: binding.merchantId,
-    conversationId,
-    question,
-    history,
-  });
-  if (!result.ok) {
-    return handOver(binding, conversationId, 'the assistant was unavailable');
+  if (!work) {
+    if (!(await isStillPending(binding, conversationId))) return 'skipped';
+    return handOver(binding, conversationId, 'the assistant timed out');
   }
-  const reason = needsHandover(result.reply);
-  if (reason) return handOver(binding, conversationId, reason);
-
-  // Generation can take a while: a person may have replied, or a later
-  // message may have asked for one, since the webhook arrived.
+  const { generated: result, latest } = work;
+  if (latest === false) return 'skipped';
   if (!(await isStillPending(binding, conversationId))) return 'skipped';
-  const latest = await isLatestChatMessage(binding, conversationId, event.id);
   if (latest === null) {
     return handOver(
       binding,
@@ -181,9 +191,11 @@ export async function runChatAutoReply(
       'the message history could not be checked'
     );
   }
-  if (!latest) {
-    return 'skipped';
+  if (!result.ok) {
+    return handOver(binding, conversationId, 'the assistant was unavailable');
   }
+  const reason = needsHandover(result.reply);
+  if (reason) return handOver(binding, conversationId, reason);
   const sent = await postAssistantMessage(binding, {
     conversationId,
     content: result.reply.reply,

@@ -17,6 +17,7 @@ type Props = {
   storeSlug: string;
   widgetOrigin: string;
   checkoutEnabled?: boolean;
+  oxygenHostedOrigins?: readonly string[];
 };
 
 /** Optional adapter for an already-mounted, trusted Chatwoot widget. */
@@ -24,6 +25,7 @@ export function ChatwootInlineCartBridge({
   storeSlug,
   widgetOrigin,
   checkoutEnabled = false,
+  oxygenHostedOrigins,
 }: Props) {
   const merchant = useMerchantSafe();
   const cart = useCartSafe();
@@ -184,6 +186,7 @@ export function ChatwootInlineCartBridge({
           key={applicationPath}
           orderId={applicationPath.split('/').at(-1) ?? ''}
           storeSlug={storeSlug}
+          hostedOrigins={oxygenHostedOrigins}
         />
       )}
       {ordersOpen && (

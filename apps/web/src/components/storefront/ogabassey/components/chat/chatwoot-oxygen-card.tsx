@@ -15,7 +15,15 @@ const OxygenApplicationDialog = lazy(() =>
 );
 
 /** A first-party sibling of the Chatwoot frame. Secure form data stays with Baci. */
-export function ChatwootOxygenCard({ orderId, storeSlug }: { orderId: string; storeSlug: string }) {
+export function ChatwootOxygenCard({
+  orderId,
+  storeSlug,
+  hostedOrigins,
+}: {
+  orderId: string;
+  storeSlug: string;
+  hostedOrigins?: readonly string[];
+}) {
   const [open, setOpen] = useState(true);
   const [contact, setContact] = useState<OxygenCustomerPrefill>();
   const [contactUnavailable, setContactUnavailable] = useState(false);
@@ -98,7 +106,13 @@ export function ChatwootOxygenCard({ orderId, storeSlug }: { orderId: string; st
         <div style={{ position: 'relative', flex: '1 1 0', minHeight: 0 }}>
           {contact ? (
             <Suspense fallback={<p role="status" className="p-4">Preparing your application…</p>}>
-              <OxygenApplicationDialog embedded orderId={orderId} merchantSlug={storeSlug} prefill={contact} />
+              <OxygenApplicationDialog
+                embedded
+                orderId={orderId}
+                merchantSlug={storeSlug}
+                prefill={contact}
+                hostedOrigins={hostedOrigins}
+              />
             </Suspense>
           ) : contactUnavailable ? (
             <div className="p-4">

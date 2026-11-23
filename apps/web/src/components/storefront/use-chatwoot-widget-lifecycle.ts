@@ -14,6 +14,7 @@ export type ChatwootWidgetConfig = {
   websiteToken: string;
   storeSlug: string;
   checkoutEnabled?: boolean;
+  oxygenHostedOrigins?: readonly string[];
 };
 
 type ChatwootWidgetWindow = Window & {

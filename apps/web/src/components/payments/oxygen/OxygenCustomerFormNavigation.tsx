@@ -2,6 +2,7 @@ import { OxygenLoadingButton } from './OxygenLoadingButton';
 
 export function OxygenCustomerFormNavigation({
   step,
+  canGoBack,
   busy,
   continuing,
   disabled,
@@ -9,15 +10,17 @@ export function OxygenCustomerFormNavigation({
   continueLabel,
 }: {
   step: number;
+  canGoBack?: boolean;
   busy: boolean;
   continuing: 'saving' | 'starting' | null;
   disabled: boolean;
   onBack(): void;
   continueLabel?: string;
 }) {
+  const showBack = canGoBack ?? step > 0;
   return (
     <div className="flex items-center justify-between gap-3 pt-1">
-      {step > 0 ? (
+      {showBack ? (
         <button
           type="button"
           disabled={busy || Boolean(continuing)}

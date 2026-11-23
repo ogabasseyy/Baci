@@ -1,3 +1,4 @@
+import { requiresProductSelection } from '@baci/shared/lib';
 import type { ChatProductResult } from '@/ai/chat-product-result';
 
 export type ChatAutoReplyTurn = {
@@ -42,16 +43,16 @@ export function formatChatAutoReplyProducts(
   return products
     .slice(0, 5)
     .map((product) => {
-      const stock =
-        product.stock === null
-          ? 'availability unknown'
-          : product.stock > 0
-            ? 'in stock'
-            : 'out of stock';
-      const selectionRequired =
-        product.has_variants ||
-        product.variant_model === 'sku_matrix' ||
-        product.has_condition_offers;
+      const selectionRequired = requiresProductSelection(product);
+      const stock = selectionRequired
+        ? 'check options for availability'
+        : product.manage_stock === false
+          ? 'in stock'
+          : product.stock === null
+            ? 'availability unknown'
+            : product.stock > 0
+              ? 'in stock'
+              : 'out of stock';
       return `- ${product.name}${includeProductSlugs && product.slug ? ` (slug: ${product.slug})` : ''} | ${currency} ${product.price} | ${stock}${selectionRequired ? ' | requires configuration; exact price and stock depend on selected options' : ''}`;
     })
     .join('\n');

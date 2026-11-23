@@ -1,6 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { generateObjectWithChain } from '@/ai/generate-object-with-chain';
 import { sanitizePromptInput } from '@/ai/provider';
 import {
@@ -17,35 +16,12 @@ import {
   verifyChatwootSessionCapability,
 } from '@/lib/chatwoot/commerce-context';
 import { checkCsrfProtection } from '@/lib/csrf';
-
-const scopeSchema = z.object({
-  conversationId: z.number().int().positive().safe(),
-  sessionToken: z.string().min(1).max(12_000),
-});
-const matchSchema = z.object({
-  placeId: z.string().min(1).max(4000),
-  label: z.string().min(1).max(500),
-  googleSession: z.string().uuid(),
-  expiresAt: z.number().int().safe(),
-  proof: z.string().regex(/^[a-f0-9]{64}$/),
-});
-const inputSchema = z.discriminatedUnion('action', [
-  scopeSchema.extend({
-    action: z.literal('search'),
-    address: z.string().trim().min(3).max(300),
-  }),
-  scopeSchema.extend({
-    action: z.literal('decide'),
-    answer: z.string().trim().min(1).max(160),
-    match: matchSchema,
-  }),
-]);
-const decisionSchema = z.object({
-  decision: z.enum(['confirmed', 'different_address', 'unclear']),
-});
-const deliveryInputSchema = z.object({
-  decision: z.enum(['address', 'side_question', 'unclear']),
-});
+import {
+  type ChatwootDeliveryMatch,
+  chatwootDeliveryDecisionSchema as decisionSchema,
+  chatwootDeliveryInputClassificationSchema as deliveryInputSchema,
+  chatwootDeliveryConfirmationInputSchema as inputSchema,
+} from '@/schemas/chatwoot-delivery-confirmation';
 
 function response(body: Record<string, unknown>, status = 200) {
   return NextResponse.json(body, {
@@ -56,10 +32,7 @@ function response(body: Record<string, unknown>, status = 200) {
 const result = (decision: string, status = 200) =>
   response({ decision }, status);
 
-function signMatch(
-  scope: string,
-  match: Omit<z.infer<typeof matchSchema>, 'proof'>
-) {
+function signMatch(scope: string, match: Omit<ChatwootDeliveryMatch, 'proof'>) {
   return createHmac('sha256', challengePrivateKeyPem(process.env))
     .update(
       JSON.stringify([

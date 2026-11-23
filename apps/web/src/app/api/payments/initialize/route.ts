@@ -1990,19 +1990,22 @@ export async function POST(request: NextRequest) {
                 platformFeeKobo: fees.platformFee,
               });
 
+            const {
+              createPaystackBankTransferCharge,
+              isValidPaystackSubaccountCode,
+            } = await import('@/lib/agentic/paystack');
             const subaccountCode =
               merchantWithPaystack.paystack_subaccount_code;
-            if (!subaccountCode) {
+            if (
+              !subaccountCode ||
+              !isValidPaystackSubaccountCode(subaccountCode)
+            ) {
               return createErrorResponse(
                 'Bank transfer is not configured for this store. Please choose another payment method.',
                 'PAYSTACK_SUBACCOUNT_MISSING',
                 503
               );
             }
-
-            const { createPaystackBankTransferCharge } = await import(
-              '@/lib/agentic/paystack'
-            );
             const chargeResult = await createPaystackBankTransferCharge({
               email: paymentData.customer_email,
               amountKobo: amountInKobo,

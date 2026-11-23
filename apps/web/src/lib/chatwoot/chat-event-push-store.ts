@@ -2,9 +2,11 @@ import 'server-only';
 
 import { createHmac } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getExpoClient } from '@/lib/expo-client';
+import { createLazyExpoGetter } from '@/lib/expo-push-lazy-client';
 import type { PushDelivery } from '@/lib/expo-push-types';
 import { chatEventPushTokenRowsSchema } from '@/schemas/chat-event-push';
+
+const getExpoClient = createLazyExpoGetter(() => process.env.EXPO_ACCESS_TOKEN);
 
 export type ChatEventPushScope = {
   merchantId: string;

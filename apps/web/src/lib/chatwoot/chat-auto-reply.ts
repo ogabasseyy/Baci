@@ -29,6 +29,11 @@ import {
   CHAT_LABEL_NEEDS_HUMAN,
   mergeChatLabels,
 } from './chat-auto-reply-labels';
+import {
+  CHAT_EVENT_NAME_MAX_LENGTH,
+  normalizeChatEventText,
+} from './chat-event-intake';
+import { alertMerchantOfHandover } from './chat-handover-alert';
 
 import { prepareChatwootProductCards } from './prepare-product-cards';
 
@@ -43,6 +48,10 @@ export type ChatAutoReplyOutcome =
 
 const HISTORY_DEADLINE_MS = 6_000;
 const WORK_DEADLINE_MS = 30_000;
+// The merchant alert starts at the queue move and runs alongside the customer
+// message and the labels, so this only bounds what is left of it afterwards: a
+// hung alert must not hold the webhook run (and invite a redelivery).
+const HANDOVER_ALERT_DEADLINE_MS = 5_000;
 
 /** Labels are merged against the live list, never the webhook's old copy. */
 async function updateLabels(
@@ -75,9 +84,10 @@ async function isStillPending(
 
 async function handOver(
   binding: ChatAutoReplyBinding,
-  conversationId: number,
+  event: ChatWebhookMessageCreated,
   reason: string
 ): Promise<ChatAutoReplyOutcome> {
+  const conversationId = event.conversation.id;
   if (!(await isStillPending(binding, conversationId))) return 'skipped';
   // The status move comes first: it is what stops the assistant. If it fails
   // the customer is not told anything, so the next message simply tries again
@@ -87,6 +97,17 @@ async function handOver(
     status: 'open',
   });
   if (!opened) return 'failed';
+  // Alert the merchant as soon as the chat enters the person queue; DB applies
+  // their alert level, and a slow/failed alert never blocks the reply/labels.
+  const alert = alertMerchantOfHandover({
+    merchantId: binding.merchantId,
+    eventKey: `chat-handover-${event.account.id}-${event.id}`,
+    conversationId,
+    customerName: normalizeChatEventText(
+      event.sender?.name,
+      CHAT_EVENT_NAME_MAX_LENGTH
+    ),
+  }).catch(() => undefined);
   await postAssistantMessage(binding, {
     conversationId,
     content: HANDOVER_MESSAGE,
@@ -100,6 +121,7 @@ async function handOver(
     add: [CHAT_LABEL_NEEDS_HUMAN],
     remove: [CHAT_LABEL_AI],
   });
+  await withDeadline(alert, HANDOVER_ALERT_DEADLINE_MS, undefined);
   return 'handed_over';
 }
 
@@ -144,7 +166,7 @@ export async function runChatAutoReply(
   if (decision.action === 'handover') {
     return handOver(
       binding,
-      conversationId,
+      event,
       decision.reason === 'customer_sent_attachment'
         ? 'the customer sent an attachment the assistant cannot read'
         : 'the customer asked for a person'
@@ -173,29 +195,28 @@ export async function runChatAutoReply(
         event.id
       );
       return { generated, latest };
-    })(),
+    })().catch(() => null),
     WORK_DEADLINE_MS,
     null
   );
   if (!work) {
-    if (!(await isStillPending(binding, conversationId))) return 'skipped';
-    return handOver(binding, conversationId, 'the assistant timed out');
+    return handOver(binding, event, 'the assistant took too long');
   }
   const { generated: result, latest } = work;
+  // A later customer message has its own run; skip if superseded.
   if (latest === false) return 'skipped';
-  if (!(await isStillPending(binding, conversationId))) return 'skipped';
+  // If history could not be read, hand over rather than leaving them pending.
   if (latest === null) {
-    return handOver(
-      binding,
-      conversationId,
-      'the message history could not be checked'
-    );
+    return handOver(binding, event, 'the chat could not be read');
   }
   if (!result.ok) {
-    return handOver(binding, conversationId, 'the assistant was unavailable');
+    return handOver(binding, event, 'the assistant was unavailable');
   }
   const reason = needsHandover(result.reply);
-  if (reason) return handOver(binding, conversationId, reason);
+  if (reason) return handOver(binding, event, reason);
+
+  // Recheck right before sending in case a person replied meanwhile.
+  if (!(await isStillPending(binding, conversationId))) return 'skipped';
   const sent = await postAssistantMessage(binding, {
     conversationId,
     content: result.reply.reply,
@@ -211,7 +232,7 @@ export async function runChatAutoReply(
   // A rejected reply (an expired bot credential, say) must not leave the
   // customer pending with nobody queued: a person takes it from here.
   if (!sent) {
-    return handOver(binding, conversationId, 'the reply could not be sent');
+    return handOver(binding, event, 'the reply could not be sent');
   }
   if (result.cards?.length) {
     const cards = await prepareChatwootProductCards(
@@ -228,11 +249,7 @@ export async function runChatAutoReply(
           : {}),
       });
       if (!cardSent) {
-        return handOver(
-          binding,
-          conversationId,
-          'the product cards could not be sent'
-        );
+        return handOver(binding, event, 'the product cards could not be sent');
       }
     }
   }

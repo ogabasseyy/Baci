@@ -1,21 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CHAT_ALERT_LEVELS,
+  chatAlertLevelSchema,
   chatNotificationSettingsPatchSchema,
   chatNotificationSettingsSchema,
 } from './chat-notification-settings';
 
+describe('chatAlertLevelSchema', () => {
+  it('knows exactly the three levels the database stores', () => {
+    expect([...CHAT_ALERT_LEVELS]).toEqual(['all', 'handover', 'off']);
+    for (const level of CHAT_ALERT_LEVELS) {
+      expect(chatAlertLevelSchema.safeParse(level).success).toBe(true);
+    }
+    expect(chatAlertLevelSchema.safeParse('sometimes').success).toBe(false);
+  });
+});
+
 describe('chatNotificationSettingsPatchSchema', () => {
-  it.each([true, false])('accepts push_enabled=%s', (push_enabled) => {
+  it.each(CHAT_ALERT_LEVELS)('accepts level=%s', (level) => {
     expect(
-      chatNotificationSettingsPatchSchema.safeParse({ push_enabled }).success
+      chatNotificationSettingsPatchSchema.safeParse({ level }).success
     ).toBe(true);
   });
 
   it.each([
     ['empty body', {}],
-    ['string instead of boolean', { push_enabled: 'false' }],
-    ['null', { push_enabled: null }],
-    ['unknown extra key', { push_enabled: true, merchant_id: 'x' }],
+    ['unknown level', { level: 'sometimes' }],
+    ['upper-case level', { level: 'ALL' }],
+    ['boolean instead of a level', { level: true }],
+    ['null', { level: null }],
+    ['the old push switch', { push_enabled: true }],
+    ['unknown extra key', { level: 'all', merchant_id: 'x' }],
   ])('rejects %s', (_label, body) => {
     expect(chatNotificationSettingsPatchSchema.safeParse(body).success).toBe(
       false
@@ -24,10 +39,13 @@ describe('chatNotificationSettingsPatchSchema', () => {
 });
 
 describe('chatNotificationSettingsSchema', () => {
-  it('parses the response shape and rejects a missing switch', () => {
+  it('parses the response shape and rejects a missing or unknown level', () => {
     expect(
-      chatNotificationSettingsSchema.safeParse({ push_enabled: false }).success
+      chatNotificationSettingsSchema.safeParse({ level: 'handover' }).success
     ).toBe(true);
     expect(chatNotificationSettingsSchema.safeParse({}).success).toBe(false);
+    expect(
+      chatNotificationSettingsSchema.safeParse({ level: 'x' }).success
+    ).toBe(false);
   });
 });

@@ -140,7 +140,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.push_notification_attempts WHERE merchant_id = m AND notification_type = 'customer_message'
     AND app_type = 'admin' AND status = 'sent' AND token_count = 1 AND sent_count = 1
     AND title = 'New customer message' AND body = 'A customer sent a message to your store.'
-    AND payload = '{"type":"customer_message","event_key":"evt-push-0001"}'::jsonb) THEN
+    AND payload = '{"type":"customer_message","event_key":"evt-push-0001","handover":false}'::jsonb) THEN
     RAISE EXCEPTION 'attempt row is not the fixed, scoped record';
   END IF;
   BEGIN PERFORM public.chat_event_record_push_attempt(pg_temp.push_proof('evt-push-0001', claim, 'attempt'), pg_temp.at(), m, 'evt-push-0001', claim, '{"status":"whatever"}'::jsonb);

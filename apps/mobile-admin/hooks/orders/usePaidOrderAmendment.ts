@@ -1,5 +1,5 @@
 import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type AmendmentConfirmation,
@@ -42,13 +42,29 @@ export function usePaidOrderAmendment(
   const workspaceKey = ['paid-order-amendment', user?.id, merchantId, orderId];
   const pendingKey = [...workspaceKey, 'pending'];
   const storageKey = workspaceKey.join(':');
+  const [pendingUnreadable, setPendingUnreadable] = useState(false);
   const pending = useQuery({
     queryKey: pendingKey,
     queryFn: async () => {
-      const saved = await asyncStorage.getItem(storageKey);
-      return saved
-        ? amendmentConfirmationSchema.parse(JSON.parse(saved))
-        : null;
+      let saved: string | null;
+      try {
+        saved = await asyncStorage.getItem(storageKey);
+      } catch {
+        setPendingUnreadable(true);
+        return null;
+      }
+      if (!saved) {
+        setPendingUnreadable(false);
+        return null;
+      }
+      try {
+        const parsed = amendmentConfirmationSchema.safeParse(JSON.parse(saved));
+        setPendingUnreadable(!parsed.success);
+        return parsed.success ? parsed.data : null;
+      } catch {
+        setPendingUnreadable(true);
+        return null;
+      }
     },
     enabled: Boolean(user?.id),
     staleTime: Number.POSITIVE_INFINITY,
@@ -64,6 +80,7 @@ export function usePaidOrderAmendment(
         user?.id &&
           (!deferWorkspace ||
             pending.data ||
+            pendingUnreadable ||
             pending.isError ||
             query.state.data?.summary)
       ),
@@ -73,6 +90,17 @@ export function usePaidOrderAmendment(
   async function clearPending() {
     await asyncStorage.removeItem(storageKey);
     client.setQueryData(pendingKey, null);
+    setPendingUnreadable(false);
+  }
+
+  async function recoverUnreadableConfirmation() {
+    if (!pendingUnreadable) {
+      throw new Error('There is no unreadable confirmation to recover.');
+    }
+    if (!(await refreshOrder())) {
+      throw new Error('Order status could not be reloaded. Try again.');
+    }
+    await clearPending();
   }
 
   async function refreshOrder(): Promise<boolean> {
@@ -169,7 +197,8 @@ export function usePaidOrderAmendment(
       !deferWorkspace &&
         workspace.isSuccess &&
         workspace.data.canStart &&
-        pending.isSuccess
+        pending.isSuccess &&
+        !pendingUnreadable
     ),
     canRefund: Boolean(workspace.isSuccess && workspace.data.canRefund),
     summary: workspace.isSuccess ? workspace.data.customer : null,
@@ -182,6 +211,8 @@ export function usePaidOrderAmendment(
     operatorId: user?.id,
     refreshOrder,
     pending: pending.data,
+    pendingUnreadable,
+    recoverUnreadableConfirmation,
     confirm,
     checkConfirmation,
   };

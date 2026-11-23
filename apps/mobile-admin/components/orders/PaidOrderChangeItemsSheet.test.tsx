@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { expect, it, vi } from 'vitest';
 import { PaidOrderChangeItemsSheet } from './PaidOrderChangeItemsSheet';
@@ -46,6 +46,8 @@ it('distinguishes lines with the same name and different conditions', () => {
         operatorId: 'operator',
         refreshOrder: vi.fn(),
         pending: null,
+        pendingUnreadable: false,
+        recoverUnreadableConfirmation: vi.fn(),
         confirm: vi.fn(),
         checkConfirmation: vi.fn(),
       }}
@@ -82,6 +84,8 @@ it('retries a pending confirmation without starting a fresh preview', async () =
         operatorId: 'operator',
         refreshOrder: vi.fn(),
         pending,
+        pendingUnreadable: false,
+        recoverUnreadableConfirmation: vi.fn(),
         confirm,
         checkConfirmation: vi.fn(),
       }}
@@ -93,4 +97,41 @@ it('retries a pending confirmation without starting a fresh preview', async () =
   );
   expect(confirm).toHaveBeenCalledExactlyOnceWith(pending);
   await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+});
+
+it('offers an order reload for an unreadable saved confirmation', async () => {
+  const recover = vi.fn().mockResolvedValue(undefined);
+  render(
+    <PaidOrderChangeItemsSheet
+      orderId="order"
+      items={[]}
+      formatPrice={String}
+      amendment={{
+        canStart: false,
+        canRefund: false,
+        summary: null,
+        verification: null,
+        operatorId: 'operator',
+        refreshOrder: vi.fn(),
+        pending: null,
+        pendingUnreadable: true,
+        recoverUnreadableConfirmation: recover,
+        confirm: vi.fn(),
+        checkConfirmation: vi.fn(),
+      }}
+      onClose={vi.fn()}
+    />
+  );
+  expect(
+    screen.getByText(/saved confirmation could not be read/i)
+  ).toBeDefined();
+  await act(async () => {
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reload order status' })
+    );
+  });
+  await vi.waitFor(() => expect(recover).toHaveBeenCalledOnce());
+  expect(
+    screen.getByText(/close and reopen change items to continue/i)
+  ).toBeDefined();
 });

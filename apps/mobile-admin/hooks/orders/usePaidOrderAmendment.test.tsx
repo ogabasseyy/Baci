@@ -121,10 +121,38 @@ describe('usePaidOrderAmendment', () => {
     expect(mocks.confirm).not.toHaveBeenCalled();
   });
 
+  it('blocks a malformed saved command until order status reloads successfully', async () => {
+    persisted = '{malformed';
+    const { result, rerender } = renderAmendmentHook(true);
+    await waitFor(() => expect(result.current.pendingUnreadable).toBe(true));
+    await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
+    expect(result.current.canStart).toBe(false);
+
+    await act(async () => {
+      await result.current.recoverUnreadableConfirmation();
+    });
+
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(storageKey);
+    await waitFor(() => expect(result.current.pendingUnreadable).toBe(false));
+    expect(result.current.pending).toBeNull();
+    rerender(false);
+    await waitFor(() => expect(result.current.canStart).toBe(true));
+  });
+
+  it('treats a saved command with an invalid schema as unreadable', async () => {
+    persisted = JSON.stringify({ ...confirmation, customerAgreed: false });
+    const { result } = renderAmendmentHook(true);
+    await waitFor(() => expect(result.current.pendingUnreadable).toBe(true));
+    await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
+    expect(result.current.pending).toBeNull();
+    expect(result.current.canStart).toBe(false);
+  });
+
   it('checks the server when the local recovery state cannot be read', async () => {
     mocks.get.mockRejectedValue(new Error('Storage unavailable'));
     const { result } = renderAmendmentHook(true);
     await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
+    await waitFor(() => expect(result.current.pendingUnreadable).toBe(true));
     expect(result.current.canStart).toBe(false);
   });
 

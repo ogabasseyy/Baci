@@ -107,7 +107,8 @@ export function PaidOrderChangePreview({
                 style={inputStyle}
               />
               <Text style={{ color: colors.textMuted }}>
-                Use 8–100 letters, numbers, _, ., /, : or -.
+                Start with a letter or number; use 8–100 total characters from
+                letters, numbers, _, ., /, :, or -.
               </Text>
             </>
           )}

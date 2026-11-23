@@ -46,7 +46,7 @@ export function PaidOrderChangeItemsSheet({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const inFlight = useRef(false);
-  const { pending } = amendment;
+  const { pending, pendingUnreadable } = amendment;
   const requiresEvidence =
     preview?.bankEvidence !== undefined && preview.adjustmentMinor > 0;
   const canRecordStaffTopUp = preview?.canRecordStaffTopUp === true;
@@ -138,7 +138,24 @@ export function PaidOrderChangeItemsSheet({
         <Text style={{ color: colors.text, fontSize: 21, fontWeight: '700' }}>
           Change items
         </Text>
-        {pending ? (
+        {pendingUnreadable ? (
+          <>
+            <Text style={{ color: colors.text }}>
+              The saved confirmation could not be read. Reload the order status
+              before starting another change.
+            </Text>
+            {action(
+              'Reload order status',
+              () =>
+                void run(async () => {
+                  await amendment.recoverUnreadableConfirmation();
+                  setMessage(
+                    'Order status reloaded. Close and reopen Change items to continue.'
+                  );
+                })
+            )}
+          </>
+        ) : pending ? (
           <>
             <Text style={{ color: colors.text }}>
               A confirmation needs to be checked.

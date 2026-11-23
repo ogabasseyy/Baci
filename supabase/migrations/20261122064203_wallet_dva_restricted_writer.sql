@@ -13,8 +13,25 @@ BEGIN
 END;
 $roles$;
 
-ALTER ROLE baci_wallet_dva_writer
-  NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION;
+DO $assert_role$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_roles
+    WHERE rolname = 'baci_wallet_dva_writer'
+      AND NOT rolcanlogin
+      AND NOT rolsuper
+      AND NOT rolbypassrls
+      AND NOT rolcreaterole
+      AND NOT rolcreatedb
+      AND NOT rolreplication
+  ) THEN
+    RAISE EXCEPTION
+      'baci_wallet_dva_writer must be a non-login least-privilege role'
+      USING ERRCODE = '42501';
+  END IF;
+END;
+$assert_role$;
 
 CREATE SCHEMA IF NOT EXISTS wallet_dva_private;
 REVOKE ALL ON SCHEMA wallet_dva_private FROM PUBLIC, anon, authenticated, service_role;

@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -85,6 +86,23 @@ describe('ChatOrderActions', () => {
       screen.queryByRole('button', { name: /view my orders/i })
     ).toBeNull();
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('only allows the preview store when both the staging gate and current tenant match', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost:3440');
+    try {
+      mocks.merchant = { slug: 'savings-synthetic' };
+      render(<ChatOrderActions merchantSlug="savings-synthetic" />);
+      expect(screen.queryByRole('button', { name: /view my orders/i })).toBeNull();
+      cleanup();
+      render(<ChatOrderActions merchantSlug="savings-synthetic" allowStagingStore />);
+      await screen.findByRole('button', { name: /view my orders/i });
+      expect(global.fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('clears displayed order data immediately when the buyer signs out', async () => {

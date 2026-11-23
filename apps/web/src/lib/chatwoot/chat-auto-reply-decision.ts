@@ -32,7 +32,8 @@ export function decideChatAutoReply(
   event: Pick<
     ChatWebhookMessageCreated,
     'content' | 'conversation' | 'attachments'
-  >
+  >,
+  { semanticHandoff = false }: { semanticHandoff?: boolean } = {}
 ): ChatAutoReplyDecision {
   if (event.conversation.status !== 'pending') {
     return { action: 'skip', reason: 'not_pending' };
@@ -45,7 +46,7 @@ export function decideChatAutoReply(
     return { action: 'handover', reason: 'customer_sent_attachment' };
   }
   if (!text) return { action: 'skip', reason: 'empty' };
-  if (asksForHuman(text)) {
+  if (!semanticHandoff && asksForHuman(text)) {
     return { action: 'handover', reason: 'customer_requested_human' };
   }
   return { action: 'reply' };

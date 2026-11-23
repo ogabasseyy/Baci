@@ -14,6 +14,7 @@ export type ChatwootWidgetConfig = {
   websiteToken: string;
   storeSlug: string;
   checkoutEnabled?: boolean;
+  oxygenHostedOrigins?: readonly string[];
 };
 
 type ChatwootWidgetWindow = Window & {
@@ -279,9 +280,7 @@ export function useChatwootWidgetLifecycle(
     script.addEventListener('load', run, { once: true });
     script.addEventListener(
       'error',
-      () => {
-        if (script.isConnected) script.remove();
-      },
+      () => script.isConnected && script.remove(),
       { once: true }
     );
     document.head.appendChild(script);
@@ -295,6 +294,5 @@ export function useChatwootWidgetLifecycle(
     websiteToken,
     validConfig,
   ]);
-
   return widgetStarted;
 }

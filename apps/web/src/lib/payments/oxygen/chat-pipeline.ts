@@ -5,23 +5,7 @@ import {
   oxygenChatResponseSchema,
 } from '@/schemas/oxygen-chat';
 import type { OxygenWorkflowStage } from '@/schemas/oxygen-workflow';
-
-const prompts: Record<OxygenWorkflowStage, string> = {
-  application_required:
-    'Continue your saved application securely. Enter identity details in the secure form, not in chat.',
-  eligibility_required: 'Your application is awaiting an eligibility check.',
-  kyc_required:
-    'Continue securely to complete your remaining verification steps.',
-  plan_required: 'Continue securely to review your payment plan.',
-  booked: 'Your plan is booked. Review the next steps securely.',
-  approval_required: 'Your plan is awaiting approval. Review it securely.',
-  payment_required: 'Your application is awaiting the upfront payment step.',
-  ready_for_activation:
-    'Your application is ready for the next step. Activation remains disabled in this test.',
-  activated: 'Your application status has been updated.',
-  reconciliation_required:
-    'Your application needs a status check before you continue. Do not repeat a payment.',
-};
+import { getOxygenChatStep } from './chat-journey';
 
 /** Deliberate whitelist. Never spread a runtime snapshot or saved draft into chat. */
 export function projectOxygenChat(
@@ -36,7 +20,7 @@ export function projectOxygenChat(
       stage: workflow.stage,
       version: workflow.version,
     },
-    prompt: prompts[workflow.stage],
+    prompt: getOxygenChatStep(workflow.stage).prompt,
     actions: [
       {
         type: 'secure_handoff',

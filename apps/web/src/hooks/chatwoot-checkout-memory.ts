@@ -7,6 +7,8 @@ export interface ChatwootCheckoutIssuedPayment {
   reference: string;
   /** When the bank details were issued (epoch ms); bounds how long a poll is meaningful. */
   issuedAt: number;
+  /** Provider-reported expiry for temporary transfer accounts (epoch ms). */
+  expiresAt?: number;
 }
 
 export interface ChatwootCheckoutRememberedOrder {

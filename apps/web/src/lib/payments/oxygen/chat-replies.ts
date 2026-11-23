@@ -2,6 +2,7 @@ import {
   type OxygenChatResponse,
   oxygenChatResponseSchema,
 } from '@/schemas/oxygen-chat';
+import { getOxygenChatStep } from './chat-journey';
 
 /** Origin comes from the trusted transport config, never a message or Host header. */
 function handoffUrl(origin: string, path: string): string {
@@ -44,6 +45,7 @@ export function formatOxygenWebchatReply(
   return {
     type: 'oxygen_application' as const,
     text: response.prompt,
+    nextStep: getOxygenChatStep(response.application.stage),
     actions: response.actions.map((action) => ({
       label: action.label,
       href: handoffUrl(applicationOrigin, action.path),

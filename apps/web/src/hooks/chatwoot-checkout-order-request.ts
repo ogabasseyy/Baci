@@ -23,6 +23,7 @@ export interface ChatwootCheckoutOrderInput {
   };
   /** Fractional VAT rate (0.075), or 0 when the merchant is not registered. */
   taxRate: number;
+  paymentMethod?: 'bank_transfer' | 'oxygen';
 }
 
 /** The order body, built by the same pure builders the store checkout uses. */
@@ -35,7 +36,7 @@ export function buildChatwootCheckoutOrderRequest(
   return buildCheckoutOrderRequest({
     merchantId: review.merchantId,
     items: buildCheckoutOrderItems(items),
-    paymentMethod: 'bank_transfer',
+    paymentMethod: input.paymentMethod ?? 'bank_transfer',
     acceptsMarketing: false,
     customer: {
       name: `${customer.firstName} ${customer.lastName}`.trim(),
@@ -63,7 +64,7 @@ export function buildChatwootCheckoutOrderRequest(
       quoteMatchesMethod: true,
       selectedQuoteId: String(delivery.quote.id),
       merchantRateId: delivery.merchantRateId,
-      provider: null,
+      provider: delivery.carrier ?? null,
       address: delivery.address,
     },
     sharedCart: {

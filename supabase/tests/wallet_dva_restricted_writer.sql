@@ -66,7 +66,9 @@ BEGIN
   INSERT INTO public.merchant_feature_settings (merchant_id, wallet_paystack_dva_enabled)
   VALUES
     ('86110000-0000-4000-8000-000000000001', true),
-    ('86110000-0000-4000-8000-000000000002', true);
+    ('86110000-0000-4000-8000-000000000002', true)
+  ON CONFLICT (merchant_id) DO UPDATE
+    SET wallet_paystack_dva_enabled = EXCLUDED.wallet_paystack_dva_enabled;
 
   INSERT INTO public.checkout_sessions (
     id, session_id, merchant_id, payment_provider, status,
@@ -102,6 +104,7 @@ BEGIN
   CREATE ROLE baci_wallet_dva_provisioner
     LOGIN INHERIT NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION;
   GRANT baci_wallet_dva_writer TO baci_wallet_dva_provisioner;
+  EXECUTE format('GRANT baci_wallet_dva_provisioner TO %I', current_user);
 END;
 $writer_login$;
 
@@ -122,7 +125,7 @@ BEGIN
 END;
 $writer_login_privileges$;
 
-SET LOCAL SESSION AUTHORIZATION baci_wallet_dva_provisioner;
+SET LOCAL ROLE baci_wallet_dva_provisioner;
 
 DO $writer$
 DECLARE
@@ -309,7 +312,7 @@ BEGIN
 END;
 $writer$;
 
-RESET SESSION AUTHORIZATION;
+RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 DO $authenticated$

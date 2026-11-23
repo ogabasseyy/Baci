@@ -8,7 +8,7 @@ export function isOxygenStorefrontStagingEnabled(): boolean {
   try {
     const backend = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '');
     return (
-      backend.protocol === 'http:' &&
+      (backend.protocol === 'http:' || backend.protocol === 'https:') &&
       ['localhost', '127.0.0.1'].includes(backend.hostname)
     );
   } catch {

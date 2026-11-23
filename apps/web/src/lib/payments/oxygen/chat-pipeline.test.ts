@@ -128,6 +128,30 @@ describe('shared Oxygen chat pipeline', () => {
     ).toEqual([{ label: 'Continue securely', href: url }]);
   });
   it.each([
+    ['application_required', 'secure_card', 'application details'],
+    ['eligibility_required', 'wait', 'eligibility and verification checks'],
+    [
+      'approval_required',
+      'wait',
+      'confirm completion from the application status',
+    ],
+    [
+      'payment_required',
+      'wait',
+      'confirm completion from the application status',
+    ],
+    [
+      'reconciliation_required',
+      'wait',
+      'reconcile an unconfirmed action before retrying',
+    ],
+    ['activated', 'complete', 'application complete'],
+  ] as const)('guides webchat from %s without guessing a finer step', (stage, mode, label) => {
+    const response = projectOxygenChat(request, { ...workflow, stage });
+    const reply = formatOxygenWebchatReply(response, 'https://shop.example');
+    expect(reply.nextStep).toEqual({ mode, label, prompt: reply.text });
+  });
+  it.each([
     'http://shop.example',
     'https://name:secret@shop.example',
     'https://shop.example/?token=secret',

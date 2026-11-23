@@ -34,3 +34,31 @@ it('provides decorative icons and preserves prefilled contact values', () => {
     );
   }
 });
+
+it('carries the chat checkout contact into the secure form without asking again', () => {
+  render(
+    <form aria-label="Secure identity">
+      <OxygenContactFields
+        fromConversation
+        prefill={{
+          first_name: 'Ada',
+          last_name: 'Obi',
+          email: 'ada@example.com',
+        }}
+        defaults={{ first_name: 'Old draft name', middle_name: 'Saved' }}
+      />
+    </form>
+  );
+  expect(screen.queryByLabelText('First name')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
+  expect(screen.queryByText('Edit name and email')).not.toBeInTheDocument();
+  const form = screen.getByRole<HTMLFormElement>('form', {
+    name: 'Secure identity',
+  });
+  expect(Object.fromEntries(new FormData(form))).toEqual({
+    first_name: 'Ada',
+    last_name: 'Obi',
+    email: 'ada@example.com',
+    middle_name: 'Saved',
+  });
+});

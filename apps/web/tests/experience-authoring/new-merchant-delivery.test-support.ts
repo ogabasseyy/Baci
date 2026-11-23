@@ -139,11 +139,20 @@ export async function checkNewMerchantDelivery({
       // This is a synthetic read projection in the disposable DB, not a publication operation.
       const nativeCheckout =
         process.env.BACI_LOCAL_NATIVE_CHECKOUT_TEST === '1';
-      if (!nativeCheckout)
+      if (nativeCheckout) {
+        const enrollment = await f.other.supabase
+          .from('merchants')
+          .select('premium_features')
+          .eq('id', storefrontId)
+          .single();
+        expect(enrollment.error).toBeNull();
+        expect(enrollment.data?.premium_features).toEqual([]);
+      } else {
         await f.db.pool.query(
           `UPDATE merchants SET premium_features='["shared_cart"]' WHERE id=$1`,
           [storefrontId]
         );
+      }
       const publicHead = await seedSyntheticPublicRead(
         f,
         storefrontId,

@@ -27,10 +27,11 @@ export async function seedNewMerchantShipping(
     await setSyntheticShippingOrigin(f.other, storefrontId);
   }
   const currency = resolveMerchantCurrencyConfig(merchantCurrency.data).code;
-  await f.db.pool.query(
-    `UPDATE merchants SET premium_features='["shared_cart"]' WHERE id=$1`,
-    [storefrontId]
-  );
+  if (process.env.BACI_LOCAL_NATIVE_CHECKOUT_TEST !== '1')
+    await f.db.pool.query(
+      `UPDATE merchants SET premium_features='["shared_cart"]' WHERE id=$1`,
+      [storefrontId]
+    );
   const zone = await f.other.supabase
     .from('merchant_shipping_zones')
     .insert({ merchant_id: storefrontId, name: 'Synthetic US' })

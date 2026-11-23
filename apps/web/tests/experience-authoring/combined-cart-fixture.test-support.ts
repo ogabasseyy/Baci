@@ -127,6 +127,28 @@ export async function installCombinedPublicCatalogFixture(
     CREATE POLICY fixture_public_variants ON product_variants FOR SELECT TO anon,authenticated USING(EXISTS(SELECT 1 FROM products p WHERE p.id=product_id AND p.merchant_id=product_variants.merchant_id));
     GRANT SELECT(id,product_id,merchant_id,inventory_tracking_policy,is_inventory_anchor) ON product_variants TO anon,authenticated;
     GRANT SELECT ON merchant_slug_aliases,domains TO anon,authenticated;
+    -- Match the simple-product response consumed by the native PDP. Reads
+    -- still run under the requesting role and the public products policy.
+    CREATE FUNCTION public.get_storefront_pdp_core_v2(
+      p_merchant_id uuid, p_product_slug text, p_branch_id uuid DEFAULT NULL
+    )
+    RETURNS TABLE(resolution_status text, product_data jsonb)
+    LANGUAGE sql STABLE SECURITY INVOKER SET search_path TO ''
+    AS $fixture$
+      WITH product AS (
+        SELECT p.id, p.merchant_id, p.slug, p.name, p.description, p.price,
+          p.images, p.status, p.manage_stock, p.stock_quantity, p.has_variants
+        FROM public.products p
+        WHERE p.merchant_id = p_merchant_id AND p.slug = p_product_slug
+          AND p.status = 'active' AND NOT p.has_variants
+      )
+      SELECT 'found'::text, to_jsonb(product) FROM product
+      UNION ALL
+      SELECT 'not_found'::text, NULL::jsonb WHERE NOT EXISTS (SELECT 1 FROM product);
+    $fixture$;
+    REVOKE ALL ON FUNCTION public.get_storefront_pdp_core_v2(uuid,text,uuid) FROM PUBLIC;
+    GRANT EXECUTE ON FUNCTION public.get_storefront_pdp_core_v2(uuid,text,uuid) TO anon,authenticated;
+
   `);
   const source = readFileSync(
     new URL('../experience-commerce/commerce-catalog.sql', import.meta.url),

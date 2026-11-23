@@ -204,14 +204,19 @@ it('finds a purchasable product past a full page of unavailable products', async
   expect(deps.catalog).toHaveBeenCalledTimes(2);
 });
 
-it('verifies the native checkout route for an unenrolled storefront', async () => {
-  const partial = { ...head, routes: [head.routes[0]] };
+it.each([
+  '/',
+  '/pages/story',
+])('verifies native checkout when %s is the only custom route and Shared Cart is disabled', async (path) => {
+  const route = head.routes.find((item) => item.path === path);
+  if (!route) throw Error('FIXTURE_ROUTE_MISSING');
+  const partial = { ...head, routes: [route] };
   const deps = fixture();
   deps.resolveBoundary.mockResolvedValueOnce({
     manifest: partial,
     title: 'Synthetic page',
-    canonicalUrl: 'https://shop.example/',
-    bootstrap: { route: { routeId: 'home' } },
+    canonicalUrl: `https://shop.example${path}`,
+    bootstrap: { route: { routeId: route.view } },
   });
   const plan = await derivePublicVerificationPlan(
     { ...binding, head: partial, sharedCartEnabled: false },

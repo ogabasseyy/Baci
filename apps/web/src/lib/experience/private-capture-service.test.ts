@@ -40,13 +40,17 @@ function fixture() {
   const eq = vi.fn();
   const from = vi.fn((table: string) => {
     let allowedPaths: string[] | undefined;
+    let replayPrefix: string | undefined;
     const q = {
       select: () => q,
       eq: (key: string, value: string) => {
         eq(table, key, value);
         return q;
       },
-      like: () => q,
+      like: (_key: string, pattern: string) => {
+        replayPrefix = pattern.slice(0, -1);
+        return q;
+      },
       in: (key: string, values: string[]) => {
         if (key !== 'path') return q;
         allowedPaths = values;
@@ -55,9 +59,17 @@ function fixture() {
       maybeSingle: async () => ({ data: rows[table], error: null }),
       limit: async (n: number) => ({
         data: Array.isArray(rows[table])
-          ? (rows[table] as { path?: string }[])
+          ? (
+              rows[table] as {
+                path?: string;
+                snapshot_key?: { state: string };
+              }[]
+            )
               .filter(
-                (row) => !allowedPaths || allowedPaths.includes(row.path ?? '')
+                (row) =>
+                  (!allowedPaths || allowedPaths.includes(row.path ?? '')) &&
+                  (!replayPrefix ||
+                    row.snapshot_key?.state.startsWith(replayPrefix))
               )
               .slice(0, n)
           : rows[table],
@@ -81,6 +93,7 @@ function fixture() {
       snapshot: { key: unknown };
     }) => {
       rows.experience_snapshots = [
+        ...(rows.experience_snapshots as unknown[]),
         {
           id: capture.id,
           build_id: capture.buildId,
@@ -91,22 +104,30 @@ function fixture() {
       ];
     }
   );
-  const capture = vi.fn(async ({ assetsDigest }: { assetsDigest: string }) => ({
-    snapshot: {
-      key: {
-        build: buildDigest,
-        assets: assetsDigest,
-        catalog: 'revision',
-        path: '/',
-        viewport: '390',
-        locale: 'en-NG',
-        browser: 'chromium',
-        extractor: 'semantic-v1',
+  const capture = vi.fn(
+    async ({
+      assetsDigest,
+      bootstrap,
+    }: {
+      assetsDigest: string;
+      bootstrap?: { catalog: { revision: string } };
+    }) => ({
+      snapshot: {
+        key: {
+          build: buildDigest,
+          assets: assetsDigest,
+          catalog: bootstrap?.catalog.revision ?? 'revision',
+          path: '/',
+          viewport: '390',
+          locale: 'en-NG',
+          browser: 'chromium',
+          extractor: 'semantic-v1',
+        },
+        text: 'synthetic',
       },
-      text: 'synthetic',
-    },
-    evidence: { bytes: Buffer.from('synthetic-image') },
-  }));
+      evidence: { bytes: Buffer.from('synthetic-image') },
+    })
+  );
   const bootstrap = vi.fn(async () => ({
     catalog: { revision: 'revision' },
     route: { canonicalPath: '/' },
@@ -199,6 +220,23 @@ it('does not reuse evidence after its catalog changes, even before restart', asy
     'IDEMPOTENCY_CONFLICT'
   );
   expect(f.capture).toHaveBeenCalledOnce();
+});
+
+it('reuses internal approval evidence only for the exact current snapshot', async () => {
+  const f = fixture();
+  const attest = () => f.run(f.ctx as never, input, 'approval');
+
+  const first = await attest();
+  expect(await attest()).toEqual(first);
+  f.bootstrap.mockResolvedValue({
+    catalog: { revision: 'changed' },
+    route: { canonicalPath: '/' },
+  });
+  const second = await attest();
+  expect(second.evidenceId).not.toBe(first.evidenceId);
+  expect(await attest()).toEqual(second);
+  expect(f.capture).toHaveBeenCalledTimes(2);
+  expect(f.record).toHaveBeenCalledTimes(2);
 });
 
 it('rejects owner authorization before reads, including cached replay', async () => {

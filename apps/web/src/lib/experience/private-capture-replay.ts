@@ -7,6 +7,22 @@ type CaptureInput = {
   idempotencyKey: string;
 };
 
+/** Scope only verifier-owned retries to server-computed snapshot freshness. */
+export function approvalSnapshotReplayKey(
+  approvalKey: string,
+  snapshotDigest: string
+) {
+  const hex = digestBytes(
+    JSON.stringify([
+      'baci-approval-snapshot-replay/v1',
+      approvalKey,
+      snapshotDigest,
+    ])
+  );
+  // RFC 9562 custom UUID with a deterministic SHA-256 payload.
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 /** State is bounded to the snapshot schema while binding the exact route and build. */
 export function captureReplayState(input: CaptureInput) {
   const fingerprint = digestBytes(

@@ -58,7 +58,8 @@ it('reuses the same capture keys after a lost attestation response and separates
     return query;
   };
   const keys: string[] = [];
-  const capture = createApprovalCapture((async (_ctx, input) => {
+  const capture = createApprovalCapture((async (_ctx, input, replay) => {
+    expect(replay).toBe('approval');
     keys.push(z.uuid().parse(input.idempotencyKey));
     return { evidenceId: 'snapshot' };
   }) as Parameters<typeof createApprovalCapture>[0]);

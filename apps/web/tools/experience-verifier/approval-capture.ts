@@ -92,7 +92,8 @@ export function createApprovalCapture(
           buildId: approval.buildId,
           routeId: route.path,
           idempotencyKey: approvalCaptureKey(binding, route.path),
-        }
+        },
+        'approval'
       );
       signal?.throwIfAborted();
       const snapshot = await client

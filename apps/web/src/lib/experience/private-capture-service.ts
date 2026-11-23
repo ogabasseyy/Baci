@@ -13,6 +13,7 @@ import {
 } from './authorization';
 import { digestBytes } from './manifest-digest';
 import {
+  approvalSnapshotReplayKey,
   captureReplayState,
   findCaptureReplay,
   loadCaptureReplay,
@@ -75,7 +76,8 @@ export function createPrivateExperienceCapture(deps: {
   >();
   return async (
     inputCtx: OwnerRequestContext,
-    input: { buildId: string; routeId: string; idempotencyKey: string }
+    input: { buildId: string; routeId: string; idempotencyKey: string },
+    replay: 'strict' | 'approval' = 'strict'
   ) => {
     const signal = inputCtx.signal;
     signal?.throwIfAborted();
@@ -87,6 +89,7 @@ export function createPrivateExperienceCapture(deps: {
       ctx.actorUserId,
       ctx.identity?.connectionId ?? 'owner',
       ctx.identity?.grantVersion ?? 0,
+      replay,
       input.idempotencyKey,
     ].join(':');
     const fingerprint = digestBytes(JSON.stringify(input));
@@ -98,11 +101,10 @@ export function createPrivateExperienceCapture(deps: {
     }
     if (cache.size >= capacity) throw Error('QUOTA_EXCEEDED');
     const value = (async () => {
-      const priorBinding = await loadCaptureReplay(
-        ctx.supabase,
-        ctx.merchantId,
-        input
-      );
+      const priorBinding =
+        replay === 'strict'
+          ? await loadCaptureReplay(ctx.supabase, ctx.merchantId, input)
+          : null;
       const build = await ctx.supabase
         .from('experience_builds')
         .select('id,build_digest,job_id,host_origin')
@@ -167,30 +169,43 @@ export function createPrivateExperienceCapture(deps: {
       const assetsDigest = digestBytes(
         JSON.stringify(assets.map((a) => a.digest))
       );
-      const state = captureReplayState(input);
-      const expectedKey = snapshotKeyDigest({
+      const snapshotIdentity = {
         build: build.data.build_digest,
         assets: assetsDigest,
         catalog: bootstrap.catalog.revision,
         path: bootstrap.route.canonicalPath,
-        viewport: '390',
+        viewport: '390' as const,
         locale: 'en-NG',
-        browser: 'chromium',
-        state,
-      });
+        browser: 'chromium' as const,
+      };
+      const replayInput =
+        replay === 'approval'
+          ? {
+              ...input,
+              idempotencyKey: approvalSnapshotReplayKey(
+                input.idempotencyKey,
+                snapshotKeyDigest(snapshotIdentity)
+              ),
+            }
+          : input;
+      const state = captureReplayState(replayInput);
+      const expectedKey = snapshotKeyDigest({ ...snapshotIdentity, state });
       const findReplay = () =>
         findCaptureReplay(
           ctx.supabase,
           ctx.merchantId,
-          input,
+          replayInput,
           buildData.build_digest,
           expectedKey
         );
-      const priorEvidence = validateCaptureReplay(
-        priorBinding,
-        build.data.build_digest,
-        expectedKey
-      );
+      const priorEvidence =
+        replay === 'approval'
+          ? await findReplay()
+          : validateCaptureReplay(
+              priorBinding,
+              buildData.build_digest,
+              expectedKey
+            );
       const result = (evidenceId: string) => ({
         evidenceId,
         buildId: input.buildId,

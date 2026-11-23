@@ -6,14 +6,11 @@ const mocks = vi.hoisted(() => ({
   createSupabase: vi.fn(async () => ({})),
 }));
 
-vi.mock('@/lib/agentic/paystack', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/lib/agentic/paystack')>();
-  return {
-    ...actual,
-    createPaystackBankTransferCharge: mocks.createCharge,
-  };
-});
+vi.mock('@/lib/agentic/paystack', () => ({
+  createPaystackBankTransferCharge: mocks.createCharge,
+  isValidPaystackSubaccountCode: (code: string) =>
+    /^ACCT_[A-Za-z0-9]{15}$/.test(code),
+}));
 vi.mock('@/lib/payments/resolve-paystack-split-transaction-charge', () => ({
   resolvePaystackSplitTransactionCharge: mocks.resolveSplit,
 }));

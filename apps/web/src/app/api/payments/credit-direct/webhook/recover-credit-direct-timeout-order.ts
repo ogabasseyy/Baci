@@ -43,14 +43,26 @@ export async function recoverCreditDirectTimeoutOrder<T>({
   }
   if (reinstatement === 'blocked') return { kind: 'blocked' };
 
-  const { data, error } = await supabase
-    .from('orders')
-    .select('notes')
-    .eq('id', orderId)
-    .eq('merchant_id', merchantId)
-    .single();
+  let data: { notes: string | null } | null = null;
+  let error: unknown;
+  for (let attempt = 0; attempt < 2 && !data; attempt += 1) {
+    const result = await supabase
+      .from('orders')
+      .select('notes')
+      .eq('id', orderId)
+      .eq('merchant_id', merchantId)
+      .single();
+    data = result.data;
+    error = result.error;
+  }
 
   if (error || !data) {
+    logger.error({
+      error,
+      message: 'Credit Direct reinstated order notes remained unavailable',
+      orderId,
+      transactionId,
+    });
     // The RPC has already committed. Let the caller file its reconciliation
     // review instead of returning a retryable webhook error.
     return { kind: 'review_required' };

@@ -53,6 +53,10 @@ describe('finalizeJuicywayTerminalOrder', () => {
         transaction,
       })
     ).resolves.toEqual({ kind: 'completed' });
+    expect(supabase.query.eq).toHaveBeenCalledWith(
+      'merchant_id',
+      transaction.merchant_id
+    );
     expect(finalizeOrderGatewayPayment).toHaveBeenCalledWith(
       expect.objectContaining({
         actor: 'juicyway:late_payment',

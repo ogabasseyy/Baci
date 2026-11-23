@@ -170,6 +170,10 @@ BEGIN
     ))
     OR (v_payment.gateway = 'klump' AND v_order.payment_method IS DISTINCT FROM 'klump')
     OR v_payment.currency IS DISTINCT FROM v_order.currency
+    -- The recovery RPC requires an exact ledger match. Provider-specific
+    -- webhook tolerances validate capture authenticity but do not authorize
+    -- reopening an order for a short or rounded amount; those captures stay
+    -- in reconciliation for review.
     OR v_payment.amount IS DISTINCT FROM v_order.total
     OR NOT coalesce(v_payment.amount > 0, false)
     THEN

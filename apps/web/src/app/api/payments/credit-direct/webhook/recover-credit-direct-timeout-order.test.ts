@@ -75,10 +75,35 @@ describe('recoverCreditDirectTimeoutOrder', () => {
 
   it('files the existing reconciliation path when the reinstated order cannot be read', async () => {
     reinstate.mockResolvedValue('already_reinstated');
-    const { input } = mockRecovery('{}', { message: 'Unavailable' });
+    const { input, query } = mockRecovery('{}', { message: 'Unavailable' });
+    query.single
+      .mockResolvedValueOnce({ data: null, error: { message: 'Unavailable' } })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'Still unavailable' },
+      });
     await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
       kind: 'review_required',
     });
+    expect(query.single).toHaveBeenCalledTimes(2);
     expect(input.resume).not.toHaveBeenCalled();
+  });
+
+  it('retries one transient notes read failure and resumes after the committed flip', async () => {
+    reinstate.mockResolvedValue('reinstated');
+    const { input, query } = mockRecovery('{}');
+    query.single
+      .mockResolvedValueOnce({ data: null, error: { message: 'Unavailable' } })
+      .mockResolvedValueOnce({
+        data: { notes: '{"merchantAmount":100}' },
+        error: null,
+      });
+
+    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
+      kind: 'recovered',
+      response: 'processed',
+    });
+    expect(query.single).toHaveBeenCalledTimes(2);
+    expect(input.resume).toHaveBeenCalledWith({ merchantAmount: 100 });
   });
 });

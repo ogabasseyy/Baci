@@ -35,6 +35,7 @@ export async function finalizeJuicywayTerminalOrder({
     .from('orders')
     .select('id, payment_status, shipping_status, cancelled_at, order_number')
     .eq('id', orderId)
+    .eq('merchant_id', transaction.merchant_id)
     .maybeSingle<TerminalOrder>();
   if (error || !terminalOrder) return { kind: 'failed', stage: 'lookup' };
 

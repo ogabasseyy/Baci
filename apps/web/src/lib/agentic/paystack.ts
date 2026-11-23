@@ -82,7 +82,10 @@ async function paystackRequest(
   body?: unknown
 ) {
   // Build-time safety: If key is missing during build, don't crash, but fail at runtime
-  const secretKey = PAYSTACK_SECRET_KEY || 'sk_test_placeholder';
+  const secretKey =
+    process.env.PAYSTACK_SECRET_KEY ||
+    PAYSTACK_SECRET_KEY ||
+    'sk_test_placeholder';
 
   // SSRF Protection: Ensure endpoint is relative and safe
   if (!endpoint.startsWith('/') || endpoint.includes('://')) {
@@ -204,5 +207,71 @@ export async function createDedicatedVirtualAccount(
     bank_name: res.data.bank?.name || res.data.assignment?.bank_name || 'Bank',
     currency: res.data.currency || 'NGN',
     assigned: true,
+  };
+}
+
+export interface BankTransferChargeResponse {
+  account_number: string;
+  account_name: string;
+  bank_name: string;
+  account_expires_at: string | null;
+  reference: string;
+}
+
+export async function createPaystackBankTransferCharge(input: {
+  email: string;
+  amountKobo: number;
+  reference: string;
+  subaccount: string;
+  transactionChargeKobo: number;
+  metadata?: Record<string, unknown>;
+}): Promise<BankTransferChargeResponse> {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('PAYSTACK_SECRET_KEY is not configured');
+  }
+  if (!isValidPaystackSubaccountCode(input.subaccount)) {
+    throw new Error('Paystack subaccount is not configured');
+  }
+
+  const res: {
+    status: boolean;
+    message?: string;
+    data?: {
+      status?: string;
+      reference?: string;
+      account_number?: string;
+      account_name?: string;
+      bank?: { name?: string };
+      account_expires_at?: string | null;
+    };
+  } = await paystackRequest('/charge', 'POST', {
+    email: input.email,
+    amount: String(input.amountKobo),
+    currency: 'NGN',
+    reference: input.reference,
+    subaccount: input.subaccount,
+    transaction_charge: input.transactionChargeKobo,
+    bearer: 'account',
+    bank_transfer: { account_expires_at: null },
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  });
+
+  if (!res.status || !res.data?.account_number || !res.data?.account_name) {
+    const safeMessage = sanitizeForLog(
+      res.message || 'Unknown bank transfer error',
+      200
+    );
+    throw new Error(
+      `Failed to initialize Paystack bank transfer: ${safeMessage}`
+    );
+  }
+
+  return {
+    account_number: res.data.account_number,
+    account_name: res.data.account_name,
+    bank_name: res.data.bank?.name || 'Bank',
+    account_expires_at: res.data.account_expires_at ?? null,
+    reference: res.data.reference || input.reference,
   };
 }

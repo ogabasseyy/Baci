@@ -48,6 +48,21 @@ it('lists only the four context routes, the quantity, add and product routes and
       helper,
       ...tail,
     ],
+    [
+      'apps/web/src/app/api/storefront/chatwoot/bank-verification/route.ts',
+      helper,
+      ...tail,
+    ],
+    [
+      'apps/web/src/app/api/storefront/chatwoot/checkout-turn/route.ts',
+      helper,
+      ...tail,
+    ],
+    [
+      'apps/web/src/app/api/storefront/chatwoot/delivery-confirmation/route.ts',
+      helper,
+      ...tail,
+    ],
     ['apps/web/src/lib/chatwoot/commit-cart-add.ts', ...tail],
     [helper, ...tail],
   ]);

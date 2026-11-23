@@ -40,7 +40,12 @@ export async function handleChatwootInlineContextHandshake(
 async function issueChallenge(input: HandshakeInput<RequestMessage>) {
   const { requestId, conversationId } = input.message.data;
   input.begin(conversationId, requestId);
-  if (!input.isCurrent(conversationId, requestId)) return;
+  if (!input.isCurrent(conversationId, requestId)) {
+    // The widget can ask before the storefront cart hydrates on a reload.
+    // Tell it to discard this attempt so the next shopper action can connect.
+    input.post('baci-commerce-context-denied:', { requestId });
+    return;
+  }
   let cartSession: Awaited<ReturnType<typeof input.ensureCartSession>>;
   try {
     cartSession = await input.ensureCartSession();

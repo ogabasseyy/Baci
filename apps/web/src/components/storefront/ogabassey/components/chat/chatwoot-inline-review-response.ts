@@ -1,3 +1,4 @@
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import { buildChatwootInlineReview } from '@/components/storefront/ogabassey/components/chat/chatwoot-inline-review';
 
 type ReviewResponse = {
@@ -7,6 +8,7 @@ type ReviewResponse = {
   cartVersion?: number;
   currency?: string;
   subtotalMinor?: number;
+  paySmallSmallAvailable?: true;
   items?: Array<{
     name: string;
     quantity: number;
@@ -33,6 +35,9 @@ export function buildChatwootInlineReviewResponse(
     cartVersion: review.cartVersion,
     currency: review.currency,
     subtotalMinor: review.itemsSubtotalMinor,
+    ...(review.currency === 'NGN' && isOxygenStorefrontStagingEnabled()
+      ? { paySmallSmallAvailable: true as const }
+      : {}),
     items: review.items.map((item) => ({
       name: item.name,
       quantity: item.quantity,

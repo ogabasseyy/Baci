@@ -35,9 +35,10 @@ describe('recoverCreditDirectTimeoutOrder', () => {
   ])('uses readable notes or reconciles missing evidence for %s', async (notes) => {
     reinstate.mockResolvedValue('reinstated');
     const { input, query } = mockRecovery(notes);
-    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toBe(
-      'processed'
-    );
+    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
+      kind: 'recovered',
+      response: 'processed',
+    });
     expect(query.eq).toHaveBeenCalledWith('merchant_id', 'merchant');
     expect(input.resume).toHaveBeenCalledWith(
       notes.startsWith('{') ? { merchantAmount: 100 } : {}
@@ -47,7 +48,9 @@ describe('recoverCreditDirectTimeoutOrder', () => {
   it('leaves a blocked timeout in the original reconciliation flow', async () => {
     reinstate.mockResolvedValue('blocked');
     const { input, query } = mockRecovery('{}');
-    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toBeNull();
+    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
+      kind: 'blocked',
+    });
     expect(query.single).not.toHaveBeenCalled();
     expect(input.resume).not.toHaveBeenCalled();
   });
@@ -57,14 +60,16 @@ describe('recoverCreditDirectTimeoutOrder', () => {
     const { input } = mockRecovery('{}');
     await expect(
       recoverCreditDirectTimeoutOrder({ ...input, transactionId: null })
-    ).resolves.toBeNull();
+    ).resolves.toEqual({ kind: 'blocked' });
     expect(reinstate).not.toHaveBeenCalled();
   });
 
   it('files the existing reconciliation path when the reinstated order cannot be read', async () => {
     reinstate.mockResolvedValue('already_reinstated');
     const { input } = mockRecovery('{}', { message: 'Unavailable' });
-    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toBeNull();
+    await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
+      kind: 'committed_unread',
+    });
     expect(input.resume).not.toHaveBeenCalled();
   });
 });

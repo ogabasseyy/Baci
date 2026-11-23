@@ -13,6 +13,18 @@ function buildSupabaseMock(rpcResult: {
 }) {
   return {
     rpc: vi.fn().mockResolvedValue({ data: null, error: null, ...rpcResult }),
+    from: vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          amount_paid: 4200,
+          paid_at: '2026-11-23T11:00:00Z',
+          paid_transaction_id: 'txn-1',
+        },
+        error: null,
+      }),
+    })),
   } as unknown as SupabaseClient;
 }
 
@@ -113,7 +125,21 @@ describe('completeOrderGatewayPayment', () => {
         error: null,
       })
       .mockResolvedValueOnce({ data: state, error: null });
-    const supabase = { rpc } as unknown as SupabaseClient;
+    const supabase = {
+      rpc,
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            amount_paid: 4200,
+            paid_at: '2026-11-23T11:00:00Z',
+            paid_transaction_id: 'txn-1',
+          },
+          error: null,
+        }),
+      })),
+    } as unknown as SupabaseClient;
 
     const result = await completeOrderGatewayPayment({
       actor: 'webhook:BAC-REF',
@@ -141,9 +167,12 @@ describe('completeOrderGatewayPayment', () => {
     expect(result).toMatchObject({
       ok: true,
       completion: {
+        amount_paid: 4200,
         cancelled_at: null,
         order_cancelled: false,
         order_updated: updated,
+        paid_at: '2026-11-23T11:00:00Z',
+        paid_transaction_id: 'txn-1',
         payment_status: 'paid',
         shipping_status: 'processing',
         timeout_inventory_confirmed: true,

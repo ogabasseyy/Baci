@@ -703,7 +703,27 @@ export async function POST(request: NextRequest) {
                   supabase,
                 }),
             });
-            if (recovered) return recovered;
+            if (recovered.kind === 'recovered') return recovered.response;
+            if (recovered.kind === 'committed_unread') {
+              const reviewFiled = await handlePaymentForCancelledOrder({
+                gatewayReference: payload.checkoutTransactionId,
+                issueType: 'gateway_payment_wedge_requires_review',
+                order: { id: order.id },
+                reason:
+                  'Credit Direct timeout order was reinstated but its notes could not be loaded',
+                transactionId: cancelledTxResult.transactionId,
+              });
+              if (!reviewFiled) {
+                return NextResponse.json(
+                  { error: 'Payment reconciliation review unavailable' },
+                  { status: 500 }
+                );
+              }
+              return NextResponse.json({
+                message: 'Payment recorded; order filed for review',
+                success: true,
+              });
+            }
             const cancelReviewFiled = await handlePaymentForCancelledOrder({
               gatewayReference: payload.checkoutTransactionId,
               order: { id: order.id },
@@ -804,7 +824,27 @@ export async function POST(request: NextRequest) {
                 supabase,
               }),
           });
-          if (recovered) return recovered;
+          if (recovered.kind === 'recovered') return recovered.response;
+          if (recovered.kind === 'committed_unread') {
+            const reviewFiled = await handlePaymentForCancelledOrder({
+              gatewayReference: payload.checkoutTransactionId,
+              issueType: 'gateway_payment_wedge_requires_review',
+              order: { id: order.id },
+              reason:
+                'Credit Direct timeout order was reinstated but its notes could not be loaded',
+              transactionId: recordedTransactionId,
+            });
+            if (!reviewFiled) {
+              return NextResponse.json(
+                { error: 'Payment reconciliation review unavailable' },
+                { status: 500 }
+              );
+            }
+            return NextResponse.json({
+              message: 'Payment recorded; order filed for review',
+              success: true,
+            });
+          }
           const cancellationReviewFiled = await handlePaymentForCancelledOrder({
             gatewayReference: payload.checkoutTransactionId,
             order: updatedOrder,

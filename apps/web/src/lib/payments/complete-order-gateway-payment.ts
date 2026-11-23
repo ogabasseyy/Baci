@@ -71,9 +71,26 @@ export async function completeOrderGatewayPayment({
         merchantId
       );
       if (reinstatement !== 'blocked') {
+        const { data: reinstatedOrder, error: reinstatedOrderError } =
+          await supabase
+            .from('orders')
+            .select('amount_paid, paid_transaction_id, paid_at')
+            .eq('id', orderId)
+            .eq('merchant_id', merchantId)
+            .maybeSingle();
+        if (reinstatedOrderError || !reinstatedOrder) {
+          return {
+            error:
+              reinstatedOrderError ?? new Error('Reinstated order not found'),
+            ok: false,
+          };
+        }
         return {
           completion: {
             ...parsed.data,
+            amount_paid: reinstatedOrder.amount_paid,
+            paid_at: reinstatedOrder.paid_at,
+            paid_transaction_id: reinstatedOrder.paid_transaction_id,
             already_completed: reinstatement === 'already_reinstated',
             cancelled_at: null,
             order_already_paid: reinstatement === 'already_reinstated',

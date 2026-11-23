@@ -601,7 +601,10 @@ export async function POST(request: NextRequest) {
         const terminalIssueType =
           terminalOrder.payment_status === 'refunded'
             ? 'payment_received_after_refund'
-            : null;
+            : isOrderClampedAsCancelled(terminalOrder) ||
+                ['cancelled', 'canceled'].includes(terminalOrder.payment_status)
+              ? 'payment_received_after_cancellation'
+              : null;
         if (terminalIssueType) {
           const reviewFiled = await handlePaymentForCancelledOrder({
             gatewayReference: reference,

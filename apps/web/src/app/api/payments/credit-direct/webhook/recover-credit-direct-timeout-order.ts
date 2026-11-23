@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { reinstateTimeoutOrderPayment } from '@/lib/payments/reinstate-timeout-order-payment';
 
+export type CreditDirectTimeoutRecoveryResult<T> =
+  | { kind: 'blocked' }
+  | { kind: 'committed_unread' }
+  | { kind: 'recovered'; response: T };
+
 export async function recoverCreditDirectTimeoutOrder<T>({
   merchantId,
   orderId,
@@ -13,7 +18,7 @@ export async function recoverCreditDirectTimeoutOrder<T>({
   resume: (notes: Record<string, unknown>) => Promise<T>;
   supabase: SupabaseClient;
   transactionId: string | null;
-}): Promise<T | null> {
+}): Promise<CreditDirectTimeoutRecoveryResult<T>> {
   if (
     !transactionId ||
     (await reinstateTimeoutOrderPayment(
@@ -23,7 +28,7 @@ export async function recoverCreditDirectTimeoutOrder<T>({
       merchantId
     )) === 'blocked'
   ) {
-    return null;
+    return { kind: 'blocked' };
   }
 
   const { data, error } = await supabase
@@ -36,7 +41,7 @@ export async function recoverCreditDirectTimeoutOrder<T>({
   if (error || !data) {
     // The RPC has already committed. Let the caller file its reconciliation
     // review instead of returning a retryable webhook error.
-    return null;
+    return { kind: 'committed_unread' };
   }
 
   let notes: Record<string, unknown> = {};
@@ -49,5 +54,5 @@ export async function recoverCreditDirectTimeoutOrder<T>({
     // The existing replay flow reconciles missing fee evidence.
   }
 
-  return resume(notes);
+  return { kind: 'recovered', response: await resume(notes) };
 }

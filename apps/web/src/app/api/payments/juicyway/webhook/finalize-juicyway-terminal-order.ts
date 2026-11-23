@@ -18,6 +18,7 @@ export type JuicywayTerminalOrderResult =
 
 export async function finalizeJuicywayTerminalOrder({
   gatewayResponse,
+  allowReinstatement = true,
   orderId,
   reference,
   scheduleAfter,
@@ -25,6 +26,7 @@ export async function finalizeJuicywayTerminalOrder({
   transaction,
 }: {
   gatewayResponse: Record<string, unknown>;
+  allowReinstatement?: boolean;
   orderId: string;
   reference: string;
   scheduleAfter: (task: () => Promise<void>) => void;
@@ -43,6 +45,10 @@ export async function finalizeJuicywayTerminalOrder({
     !isOrderClampedAsCancelled(terminalOrder) &&
     !['cancelled', 'canceled'].includes(terminalOrder.payment_status)
   ) {
+    return { kind: 'not_cancelled', order: terminalOrder };
+  }
+
+  if (!allowReinstatement) {
     return { kind: 'not_cancelled', order: terminalOrder };
   }
 

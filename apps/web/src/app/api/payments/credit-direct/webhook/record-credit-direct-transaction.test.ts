@@ -56,5 +56,7 @@ describe('recordCreditDirectTransaction', () => {
     expect(from).toHaveBeenCalledTimes(3);
     expect(eq).toHaveBeenCalledWith('gateway_reference', 'provider-reference');
     expect(eq).toHaveBeenCalledWith('gateway', 'credit_direct');
+    expect(eq).toHaveBeenCalledWith('order_id', 'order');
+    expect(eq).toHaveBeenCalledWith('merchant_id', 'merchant');
   });
 });

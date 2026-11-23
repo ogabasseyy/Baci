@@ -562,6 +562,7 @@ export async function POST(request: NextRequest) {
         !response.error && !response.data
           ? await finalizeJuicywayTerminalOrder({
               gatewayResponse: data as unknown as Record<string, unknown>,
+              allowReinstatement: requireExpectedSettlementMetadata,
               orderId: transaction.order_id,
               reference,
               scheduleAfter: (task) => after(task),

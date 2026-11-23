@@ -116,6 +116,30 @@ describe('finalizeJuicywayTerminalOrder', () => {
     expect(finalizeOrderGatewayPayment).not.toHaveBeenCalled();
   });
 
+  it('returns legacy cancelled captures for review without reinstating them', async () => {
+    const order = {
+      id: 'order',
+      order_number: 'ORD-1',
+      payment_status: 'cancelled',
+      shipping_status: 'cancelled',
+      cancelled_at: '2026-01-01T00:00:00Z',
+    };
+    const supabase = mockSupabase(order);
+
+    await expect(
+      finalizeJuicywayTerminalOrder({
+        allowReinstatement: false,
+        gatewayResponse: { status: 'success' },
+        orderId: 'order',
+        reference: 'reference',
+        scheduleAfter: vi.fn(),
+        supabase: supabase as unknown as SupabaseClient,
+        transaction,
+      })
+    ).resolves.toEqual({ kind: 'not_cancelled', order });
+    expect(finalizeOrderGatewayPayment).not.toHaveBeenCalled();
+  });
+
   it('fails closed when terminal order state cannot be loaded', async () => {
     const supabase = mockSupabase(null, { message: 'Unavailable' });
 

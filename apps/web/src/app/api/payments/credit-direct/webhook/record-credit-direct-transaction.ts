@@ -32,6 +32,8 @@ export async function recordCreditDirectTransaction({
   const { data: existingTx, error: existingTxError } = await supabase
     .from('transactions')
     .select('id')
+    .eq('order_id', orderId)
+    .eq('merchant_id', merchantId)
     .eq('gateway_reference', gatewayReference)
     .eq('gateway', 'credit_direct')
     .single();
@@ -83,6 +85,8 @@ export async function recordCreditDirectTransaction({
     const { data: racedTx, error: racedTxError } = await supabase
       .from('transactions')
       .select('id')
+      .eq('order_id', orderId)
+      .eq('merchant_id', merchantId)
       .eq('gateway_reference', gatewayReference)
       .eq('gateway', 'credit_direct')
       .single();

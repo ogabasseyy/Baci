@@ -6,6 +6,7 @@ import type {
 } from '@/schemas/merchant-inbox-customer';
 import { createChatCustomerLinkVerifier } from './chat-customer-link-token';
 import { loadChatwootMerchantCurrency } from './merchant-currency';
+import { MerchantInboxCustomerUnavailableError } from './merchant-inbox-customer-unavailable';
 import type { resolveMerchantInboxRequest } from './merchant-inbox-request';
 
 type Resolved = Extract<
@@ -103,7 +104,9 @@ export async function loadCustomerProfile(input: {
     .eq('merchant_id', input.merchantId)
     .is('deleted_at', null)
     .maybeSingle();
-  if (error || !customer) return null;
+  // A failed read is not "no such customer": say so instead of showing no card.
+  if (error) throw new MerchantInboxCustomerUnavailableError();
+  if (!customer) return null;
 
   const [orders, merchantCurrency] = await Promise.all([
     input.includeOrders
@@ -116,7 +119,11 @@ export async function loadCustomerProfile(input: {
           .eq('customer_id', customer.id)
           .order('created_at', { ascending: false })
           .limit(5)
-          .then(({ data }) => data)
+          .then(({ data, error: ordersError }) => {
+            // An unreadable order history must not read as "no orders yet".
+            if (ordersError) throw new MerchantInboxCustomerUnavailableError();
+            return data;
+          })
       : Promise.resolve(null),
     loadChatwootMerchantCurrency(input.merchantId),
   ]);

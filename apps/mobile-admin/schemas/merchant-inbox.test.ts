@@ -106,6 +106,24 @@ describe('inboxCustomerProfileSchema', () => {
     ).toBe(true);
   });
 
+  it('accepts at most five recent orders, as the server sends', () => {
+    const order = profile.recentOrders[0];
+    const orders = (n: number) => Array.from({ length: n }, () => order);
+
+    expect(
+      inboxCustomerProfileSchema.safeParse({
+        ...profile,
+        recentOrders: orders(5),
+      }).success
+    ).toBe(true);
+    expect(
+      inboxCustomerProfileSchema.safeParse({
+        ...profile,
+        recentOrders: orders(6),
+      }).success
+    ).toBe(false);
+  });
+
   it('requires a three-letter currency for the store and for each order', () => {
     expect(
       inboxCustomerProfileSchema.safeParse({ ...profile, currency: 'NG' })

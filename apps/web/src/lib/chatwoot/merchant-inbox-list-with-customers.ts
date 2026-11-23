@@ -23,6 +23,13 @@ type Db = Extract<
  * carries on from the page reached.
  */
 const RETURNING_MAX_PROVIDER_PAGES = 4;
+/**
+ * The reads are one after another, each allowed several seconds, while the app
+ * gives a request 20 seconds. No new engine page is started once this much time
+ * has passed, so the answer (the last page read, with more to come) always
+ * arrives before the app gives up and starts the same scan again.
+ */
+const RETURNING_SCAN_BUDGET_MS = 8_000;
 
 type Input = {
   binding: MerchantInboxBinding;
@@ -33,6 +40,8 @@ type Input = {
   page: number;
   status: 'open' | 'resolved' | 'pending' | 'snoozed' | 'all';
   view?: MerchantInboxView;
+  /** The clock, for tests. */
+  now?: () => number;
 };
 
 type Listed =
@@ -95,9 +104,13 @@ export async function listConversationsWithCustomers(
   }
 
   const found: MerchantInboxConversation[] = [];
+  const clock = input.now ?? Date.now;
+  const startedAt = clock();
   let page = input.page;
   let hasMore = true;
   for (let read = 0; read < RETURNING_MAX_PROVIDER_PAGES; read++) {
+    // Out of time: stop here and report the last page read (see above).
+    if (read > 0 && clock() - startedAt >= RETURNING_SCAN_BUDGET_MS) break;
     const result = await readPage(page);
     // Any failed read is a failure, never an empty "success": an outage must
     // not look like "no returning customers here". (Rows found so far return

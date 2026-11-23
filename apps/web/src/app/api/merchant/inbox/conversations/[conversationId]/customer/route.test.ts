@@ -20,6 +20,7 @@ vi.mock('@/lib/chatwoot/merchant-inbox-customer', () => ({
   loadCustomerProfile: mocks.profile,
 }));
 
+import { MerchantInboxCustomerUnavailableError } from '@/lib/chatwoot/merchant-inbox-customer-unavailable';
 import { GET } from './route';
 
 const binding = { merchantId: 'm', accountId: 2, inboxId: 20 };
@@ -108,6 +109,24 @@ describe('GET /api/merchant/inbox/conversations/[id]/customer', () => {
   it('answers 503 when the chat engine is unavailable', async () => {
     mocks.get.mockResolvedValue({ ok: false, code: 'unavailable' });
     expect((await call('7')).status).toBe(503);
+  });
+
+  it('bugfix: answers 503, not a guest chat, when the customer records cannot be read', async () => {
+    mocks.profile.mockRejectedValue(
+      new MerchantInboxCustomerUnavailableError()
+    );
+
+    const response = await call('7');
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'temporarily_unavailable',
+    });
+  });
+
+  it('does not hide an unexpected failure as an outage', async () => {
+    mocks.profile.mockRejectedValue(new Error('bug'));
+    await expect(call('7')).rejects.toThrow('bug');
   });
 
   it('rejects a bad id and answers a guest before reading input', async () => {

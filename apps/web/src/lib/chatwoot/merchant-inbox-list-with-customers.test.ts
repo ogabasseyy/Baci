@@ -34,7 +34,8 @@ const providerPage = (ids: number[], hasMore: boolean) => ({
 const run = (
   view?: 'returning' | 'needs_reply',
   page = 1,
-  canViewOrders = true
+  canViewOrders = true,
+  now?: () => number
 ) =>
   listConversationsWithCustomers({
     binding,
@@ -44,6 +45,7 @@ const run = (
     page,
     status: 'all',
     view,
+    now,
   });
 
 beforeEach(() => {
@@ -184,6 +186,39 @@ describe('listConversationsWithCustomers', () => {
         hasMore: true,
         page: 8,
       });
+    });
+
+    it('bugfix: starts no new engine page once the scan has used its time budget', async () => {
+      // Each engine read takes 5 seconds; the app gives the whole request 20.
+      let clock = 0;
+      mocks.list.mockImplementation(async () => {
+        clock += 5_000;
+        return providerPage([9], true);
+      });
+
+      const result = await run('returning', 1, true, () => clock);
+
+      // Page 1 (5s), page 2 (10s), then no third read: the answer is the last
+      // page read with more to come, so the app asks for page 3 next.
+      expect(mocks.list).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        ok: true,
+        conversations: [],
+        hasMore: true,
+        page: 2,
+      });
+    });
+
+    it('still reads all four engine pages when each is quick', async () => {
+      let clock = 0;
+      mocks.list.mockImplementation(async () => {
+        clock += 100;
+        return providerPage([9], true);
+      });
+
+      await run('returning', 1, true, () => clock);
+
+      expect(mocks.list).toHaveBeenCalledTimes(4);
     });
 
     it('bugfix: a failure on a later engine page is a failure, not an empty page with more to come', async () => {

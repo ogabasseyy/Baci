@@ -85,7 +85,7 @@ export function CustomerCard({
       {open
         ? customer.recentOrders.map((order) => (
             <View
-              key={order.orderNumber}
+              key={`${order.orderNumber}-${order.createdAt ?? ''}`}
               style={[styles.order, { borderTopColor: colors.border }]}
             >
               <View style={styles.flex}>

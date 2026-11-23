@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getMerchantInboxConversation } from '@/lib/chatwoot/merchant-inbox-client';
 import { loadCustomerProfile } from '@/lib/chatwoot/merchant-inbox-customer';
+import { MerchantInboxCustomerUnavailableError } from '@/lib/chatwoot/merchant-inbox-customer-unavailable';
 import {
   merchantInboxError,
   merchantInboxJson,
@@ -45,12 +46,24 @@ export async function GET(
   }
   if (!owned.link) return merchantInboxJson({ customer: null });
 
-  const customer = await loadCustomerProfile({
-    supabase: resolved.supabase,
-    merchantId: resolved.merchantId,
-    token: owned.link,
-    // Order details need their own permission, beyond reading chats.
-    includeOrders: resolved.canViewOrders,
-  });
-  return merchantInboxJson({ customer });
+  try {
+    const customer = await loadCustomerProfile({
+      supabase: resolved.supabase,
+      merchantId: resolved.merchantId,
+      token: owned.link,
+      // Order details need their own permission, beyond reading chats.
+      includeOrders: resolved.canViewOrders,
+    });
+    return merchantInboxJson({ customer });
+  } catch (error) {
+    // Unreadable records are an outage, not a guest chat.
+    if (error instanceof MerchantInboxCustomerUnavailableError) {
+      return merchantInboxError(
+        503,
+        'Customer details are temporarily unavailable',
+        'temporarily_unavailable'
+      );
+    }
+    throw error;
+  }
 }

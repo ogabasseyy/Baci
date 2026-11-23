@@ -78,17 +78,20 @@ export const inboxCustomerProfileSchema = z.object({
   loyaltyPoints: z.number().int().nonnegative(),
   // True when this user may not see order data (counts and spend are then 0).
   ordersHidden: z.boolean().optional(),
-  recentOrders: z.array(
-    z.object({
-      orderNumber: z.string(),
-      total: z.number(),
-      // The currency this order was placed in.
-      currency: z.string().length(3),
-      paymentStatus: z.string(),
-      shippingStatus: z.string(),
-      createdAt: z.string().nullable(),
-    })
-  ),
+  // The server sends at most five (its own limit); mirrored here.
+  recentOrders: z
+    .array(
+      z.object({
+        orderNumber: z.string(),
+        total: z.number(),
+        // The currency this order was placed in.
+        currency: z.string().length(3),
+        paymentStatus: z.string(),
+        shippingStatus: z.string(),
+        createdAt: z.string().nullable(),
+      })
+    )
+    .max(5),
 });
 
 export const inboxCustomerResponseSchema = z.object({

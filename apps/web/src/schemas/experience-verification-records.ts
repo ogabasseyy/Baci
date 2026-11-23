@@ -18,12 +18,14 @@ export const publicHeadMerchant = z.object({
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,99}$/),
 });
 
+export const verifierApprovalExpiry = z.iso.datetime({ offset: true });
+
 export const verifierApprovalRecord = z.strictObject({
   approvalId: z.uuid(),
   kind: z.enum(['draft', 'lifecycle']),
   effectDigest: z.string().regex(/^[a-f0-9]{64}$/),
   markerDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  expiresAt: z.iso.datetime({ offset: true }),
+  expiresAt: verifierApprovalExpiry,
 });
 
 export const verifierPublicRecord = z.strictObject({

@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import {
   publicHeadMerchant,
   publicHeadReceipt,
+  verifierApprovalExpiry,
   verifierApprovalRecord,
   verifierPublicRecord,
 } from './experience-verification-records';
@@ -51,4 +52,17 @@ it('checks verifier records independently of their transport', () => {
     verifierApprovalRecord.safeParse({ ...approval, expiresAt: 'later' })
       .success
   ).toBe(false);
+});
+
+it('preserves approval expiry timestamps with UTC or an explicit offset', () => {
+  for (const value of ['2026-11-23T00:00:00Z', '2026-11-23T01:00:00+01:00'])
+    expect(verifierApprovalExpiry.parse(value)).toBe(value);
+
+  for (const value of [
+    '2026-11-23T00:00:00',
+    '2026-02-30T00:00:00Z',
+    'later',
+    undefined,
+  ])
+    expect(verifierApprovalExpiry.safeParse(value).success).toBe(false);
 });

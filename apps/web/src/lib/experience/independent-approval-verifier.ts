@@ -1,9 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import {
   experienceCapturedEvidence,
   experienceVerifierDigest,
 } from '@/schemas/experience-captured-evidence';
+import { verifierApprovalExpiry } from '@/schemas/experience-verification-records';
 import { loadDraftApproval } from './approval-service';
 import { digestBytes } from './manifest-digest';
 import type { OwnerLifecycleVerification } from './owner-lifecycle-runtime';
@@ -48,9 +48,7 @@ export function createIndependentApprovalVerifier(
       const effectDigest = experienceVerifierDigest.parse(
         approval.effectDigest
       );
-      const expiresAt = z.iso
-        .datetime({ offset: true })
-        .parse(approval.expiresAt);
+      const expiresAt = verifierApprovalExpiry.parse(approval.expiresAt);
       const remainingMs = Date.parse(expiresAt) - Date.now();
       if (remainingMs <= 0) throw Error('APPROVAL_EXPIRED');
       // The listener already cancels long requests. Respect an earlier

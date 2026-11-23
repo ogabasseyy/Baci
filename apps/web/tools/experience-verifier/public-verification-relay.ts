@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import { productionOrigin } from '@/lib/experience/production-origins';
+import { experiencePublicRelayIdentitySchema } from '@/schemas/experience-public-relay';
 import { experienceLaunchRenewalSchema } from '@/schemas/experience-public-request';
 import { createPublicCartNetwork } from './public-cart-network';
 import { createPublicCartSession } from './public-cart-session';
@@ -39,16 +39,13 @@ export function createPublicVerificationRelay(
     makeCatalogReader: createPublicCatalogReader,
   }
 ) {
-  const merchantId = z.uuid().parse(input.binding.merchantId);
-  const merchantSlug = z
-    .string()
-    .regex(/^[a-z0-9][a-z0-9-]{0,99}$/)
-    .parse(input.binding.slug);
-  const productId = z.uuid().parse(input.product.id);
-  const variantId =
-    input.product.variantId === undefined
-      ? undefined
-      : z.uuid().parse(input.product.variantId);
+  const { merchantId, merchantSlug, productId, variantId } =
+    experiencePublicRelayIdentitySchema.parse({
+      merchantId: input.binding.merchantId,
+      merchantSlug: input.binding.slug,
+      productId: input.product.id,
+      variantId: input.product.variantId,
+    });
   const origin = productionOrigin(input.binding.canonicalBase);
   const productOrigin = productionOrigin(input.supabase.url);
   if (!/^sb_publishable_[A-Za-z0-9_-]{8,}$/.test(input.supabase.anonKey))

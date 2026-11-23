@@ -43,7 +43,10 @@ export async function observeNativeCheckout(
         .and(page.getByText(label, { exact: true }))
         .or(page.getByRole('button', { name: label, exact: true }))
         .filter({ visible: true });
-      await options.click({ timeout: actionTimeout });
+      // The native PDP can omit an already-resolved single-option axis.
+      // The cart and checkout must still carry the exact bound variant ID.
+      if (await options.count())
+        await options.click({ timeout: actionTimeout });
     }
   }
   await add.click({ timeout: actionTimeout });

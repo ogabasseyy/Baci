@@ -1,8 +1,8 @@
 import { EXPERIENCE_LIMITS } from '@baci/shared/experience';
-import { z } from 'zod';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
 import { publicExperienceCatalogSchema } from '@/schemas/experience-catalog';
+import { experiencePublicRelayCatalogSchema } from '@/schemas/experience-public-relay';
 import { createBoundPublicFetcher } from './public-fetch';
 
 /** Anonymous public catalog reads scoped to the resolved merchant and journey. */
@@ -20,15 +20,11 @@ export function createPublicCatalogReader(
   > = {}
 ) {
   const origin = productionOrigin(settings.origin);
-  const slug = z
-    .string()
-    .regex(/^[a-z0-9][a-z0-9-]{0,99}$/)
-    .parse(settings.merchantSlug);
-  const productId = z.uuid().parse(settings.productId);
-  const productSlug = z
-    .string()
-    .regex(/^[a-z0-9-]{1,240}$/)
-    .parse(settings.productSlug);
+  const {
+    merchantSlug: slug,
+    productId,
+    productSlug,
+  } = experiencePublicRelayCatalogSchema.parse(settings);
   if (
     !settings.paths.length ||
     settings.paths.length > 128 ||

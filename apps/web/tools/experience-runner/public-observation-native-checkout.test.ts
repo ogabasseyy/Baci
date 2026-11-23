@@ -8,7 +8,10 @@ import {
   productId,
 } from './public-observation-fixture.test-support';
 
-it('observes native guest checkout through the isolated browser without Shared Cart', async () => {
+it.each([
+  false,
+  true,
+])('observes native guest checkout without Shared Cart (fixed color: %s)', async (fixedColor) => {
   const browser = await chromium.launch({ headless: true });
   const payload = fixture();
   const product = payload.expected.product;
@@ -16,14 +19,14 @@ it('observes native guest checkout through the isolated browser without Shared C
   const storageKey = getStorefrontCartStorageKey('synthetic');
   const body = {
     [product.path]: `<title>Native device</title><link rel="canonical" href="${origin}${product.path}">
-      <button data-ogabassey-pdp-commerce-variant-option onclick="this.dataset.selected = 'true'">Blue</button>
+      ${fixedColor ? '' : `<button data-ogabassey-pdp-commerce-variant-option onclick="this.dataset.selected = 'true'">Blue</button>`}
       <button id="add">Add to cart</button>
       <script>
         localStorage.setItem("${storageKey}", "[]");
         setTimeout(() => {
           const add = document.querySelector("#add");
           add.onclick = () => {
-            if (document.querySelector("[data-selected]"))
+            if (${fixedColor} || document.querySelector("[data-selected]"))
               localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: "${variantId}", quantity: 1 }]));
           };
           add.dataset.baciPdpCartReady = "true";

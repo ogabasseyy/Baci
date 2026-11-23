@@ -1,6 +1,6 @@
-import { z } from 'zod';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
+import { experiencePublicRelayStateSchema } from '@/schemas/experience-public-relay';
 import { experiencePublicationStateSchema } from '@/schemas/experience-public-request';
 import { createBoundPublicFetcher } from './public-fetch';
 
@@ -19,15 +19,11 @@ export function createPublicStateReader(
   > = {}
 ) {
   const origin = productionOrigin(binding.canonicalBase);
-  const slug = z
-    .string()
-    .regex(/^[a-z0-9][a-z0-9-]{0,99}$/)
-    .parse(binding.slug);
-  const build = z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .parse(binding.buildDigest);
-  const revision = z.string().min(1).max(128).parse(binding.policyRevision);
+  const {
+    slug,
+    buildDigest: build,
+    policyRevision: revision,
+  } = experiencePublicRelayStateSchema.parse(binding);
   if (!paths.length || paths.length > 128) throw Error('INVALID_PUBLIC_ROUTES');
   const allowed = new Set<string>();
   for (const path of paths) {

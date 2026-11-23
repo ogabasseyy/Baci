@@ -125,3 +125,8 @@ export function followUpOptions(
       iso: option.date.toISOString(),
     }));
 }
+
+/** "1 order" or "5 orders". */
+export function formatOrderCount(count: number): string {
+  return `${count} ${count === 1 ? 'order' : 'orders'}`;
+}

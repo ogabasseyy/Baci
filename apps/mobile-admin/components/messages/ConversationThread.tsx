@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { ConversationActions } from '@/components/messages/ConversationActions';
 import { CustomerCard } from '@/components/messages/CustomerCard';
+import { CustomerUnavailable } from '@/components/messages/CustomerUnavailable';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { ReplyBox } from '@/components/messages/ReplyBox';
 import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
@@ -91,6 +92,13 @@ export function ConversationThread({
           ) : null}
           {customer.data ? (
             <CustomerCard colors={colors} customer={customer.data} />
+          ) : customer.isError ? (
+            <CustomerUnavailable
+              colors={colors}
+              onRetry={() => {
+                customer.refetch();
+              }}
+            />
           ) : null}
           <FlatList
             contentContainerStyle={styles.list}

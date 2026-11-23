@@ -7,7 +7,7 @@ import {
   type ThemeColors,
   TYPOGRAPHY,
 } from '@/constants/theme';
-import { formatInboxTime } from '@/lib/merchant-inbox-format';
+import { formatInboxTime, formatOrderCount } from '@/lib/merchant-inbox-format';
 import { formatCurrencyNoDecimals } from '@/lib/utils';
 import type { InboxCustomerProfile } from '@/schemas/merchant-inbox';
 
@@ -18,13 +18,28 @@ const titleCase = (value: string) =>
       value.slice(1).toLowerCase().replace(/[_-]+/g, ' ')
     : '';
 
+type Order = InboxCustomerProfile['recentOrders'][number];
+
+/**
+ * A key for each order row. The number and date normally tell rows apart; a
+ * repeat of both (bad data) still gets its own key instead of merging rows.
+ */
+function withRowKeys(orders: Order[]): { key: string; order: Order }[] {
+  const seen = new Map<string, number>();
+  return orders.map((order) => {
+    const base = `${order.orderNumber}-${order.createdAt ?? ''}`;
+    const times = (seen.get(base) ?? 0) + 1;
+    seen.set(base, times);
+    return { key: times === 1 ? base : `${base}-${times}`, order };
+  });
+}
+
 /** "Returning customer · 5 orders · ₦412,000", or a plain signed-in line. */
 export function customerSummary(customer: InboxCustomerProfile): string {
   // Order counts and spend are order data: not shown without order access.
   if (customer.ordersHidden) return 'Signed-in customer';
   if (customer.orderCount === 0) return 'Signed-in customer · no orders yet';
-  const orders =
-    customer.orderCount === 1 ? '1 order' : `${customer.orderCount} orders`;
+  const orders = formatOrderCount(customer.orderCount);
   return `Returning customer · ${orders} · ${formatCurrencyNoDecimals(customer.totalSpent, customer.currency)}`;
 }
 
@@ -83,9 +98,9 @@ export function CustomerCard({
         ) : null}
       </Pressable>
       {open
-        ? customer.recentOrders.map((order) => (
+        ? withRowKeys(customer.recentOrders).map(({ key, order }) => (
             <View
-              key={`${order.orderNumber}-${order.createdAt ?? ''}`}
+              key={key}
               style={[styles.order, { borderTopColor: colors.border }]}
             >
               <View style={styles.flex}>

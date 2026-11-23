@@ -1,5 +1,9 @@
-import { formatFollowUp, formatInboxTag } from '@/lib/merchant-inbox-format';
-import { isFollowUpDue } from '@/lib/merchant-inbox-sort';
+import {
+  formatFollowUp,
+  formatInboxTag,
+  formatOrderCount,
+} from '@/lib/merchant-inbox-format';
+import { isFollowUpDue, isReturningCustomer } from '@/lib/merchant-inbox-sort';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 import { PRIORITY_LABEL } from './ConversationMeta';
 
@@ -21,8 +25,8 @@ export function conversationA11yLabel(
   const customer = conversation.customer;
   if (customer) {
     parts.push(
-      !customer.ordersHidden && customer.orderCount > 0
-        ? `returning customer, ${customer.orderCount} ${customer.orderCount === 1 ? 'order' : 'orders'}`
+      isReturningCustomer(conversation)
+        ? `returning customer, ${formatOrderCount(customer.orderCount)}`
         : 'signed-in customer'
     );
   }

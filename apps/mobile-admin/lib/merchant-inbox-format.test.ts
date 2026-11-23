@@ -3,6 +3,7 @@ import {
   followUpOptions,
   formatFollowUp,
   formatInboxTag,
+  formatOrderCount,
 } from './merchant-inbox-format';
 
 describe('formatInboxTag', () => {
@@ -43,5 +44,13 @@ describe('followUpOptions', () => {
     const times = options.map((o) => Date.parse(o.iso));
     expect(times.every((t) => t > now.getTime())).toBe(true);
     expect([...times].sort((a, b) => a - b)).toEqual(times);
+  });
+});
+
+describe('formatOrderCount', () => {
+  it('says one order in the singular and anything else in the plural', () => {
+    expect(formatOrderCount(1)).toBe('1 order');
+    expect(formatOrderCount(5)).toBe('5 orders');
+    expect(formatOrderCount(0)).toBe('0 orders');
   });
 });

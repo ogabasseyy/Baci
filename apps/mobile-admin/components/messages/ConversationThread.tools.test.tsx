@@ -214,4 +214,50 @@ describe('ConversationThread customer card', () => {
     await waitFor(() => expect(mocks.isFocused).toHaveBeenCalled());
     expect(mocks.back).not.toHaveBeenCalled();
   });
+
+  it('bugfix: says so, with a retry, when the customer lookup fails instead of looking like a guest chat', () => {
+    const refetch = vi.fn();
+    mocks.customer.mockReturnValue({ data: undefined, isError: true, refetch });
+    renderThread();
+
+    expect(
+      screen.getByText('Customer details could not be loaded.')
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retry loading customer details' })
+    );
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows nothing extra for a confirmed guest chat', () => {
+    mocks.customer.mockReturnValue({ data: null, isError: false });
+    renderThread();
+
+    expect(
+      screen.queryByText('Customer details could not be loaded.')
+    ).toBeNull();
+  });
+
+  it('keeps showing the last known customer when only a later check fails', () => {
+    mocks.customer.mockReturnValue({
+      data: {
+        name: 'Ada Obi',
+        currency: 'NGN',
+        memberSince: '2025-01-02T00:00:00Z',
+        orderCount: 2,
+        totalSpent: 1000,
+        loyaltyPoints: 0,
+        recentOrders: [],
+      },
+      isError: true,
+      refetch: vi.fn(),
+    });
+    renderThread();
+
+    expect(screen.getByText('Ada Obi')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Customer details could not be loaded.')
+    ).toBeNull();
+  });
 });

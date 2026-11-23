@@ -6,8 +6,12 @@ import {
   type ThemeColors,
   TYPOGRAPHY,
 } from '@/constants/theme';
-import { formatFollowUp, formatInboxTag } from '@/lib/merchant-inbox-format';
-import { isFollowUpDue } from '@/lib/merchant-inbox-sort';
+import {
+  formatFollowUp,
+  formatInboxTag,
+  formatOrderCount,
+} from '@/lib/merchant-inbox-format';
+import { isFollowUpDue, isReturningCustomer } from '@/lib/merchant-inbox-sort';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 
 const MAX_VISIBLE_TAGS = 2;
@@ -46,8 +50,8 @@ export function ConversationMeta({
         <View style={[styles.pill, { backgroundColor: colors.successLight }]}>
           <Ionicons color={colors.success} name="person" size={12} />
           <Text style={[styles.text, { color: colors.success }]}>
-            {!customer.ordersHidden && customer.orderCount > 0
-              ? `Returning · ${customer.orderCount} ${customer.orderCount === 1 ? 'order' : 'orders'}`
+            {isReturningCustomer(conversation)
+              ? `Returning · ${formatOrderCount(customer.orderCount)}`
               : 'Signed in'}
           </Text>
         </View>

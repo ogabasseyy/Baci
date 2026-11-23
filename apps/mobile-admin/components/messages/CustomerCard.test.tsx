@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
 import type { InboxCustomerProfile } from '@/schemas/merchant-inbox';
 import { CustomerCard, customerSummary } from './CustomerCard';
@@ -75,6 +75,26 @@ describe('CustomerCard', () => {
     expect(
       screen.getByText('Last order ORD-1 · In transit')
     ).toBeInTheDocument();
+  });
+
+  it('bugfix: keeps both rows when an order number and date repeat, with no key clash', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The same number with no date, twice: bad data, but it must not merge rows.
+    const twin = customer.recentOrders[1];
+    render(
+      <CustomerCard
+        colors={LIGHT_COLORS}
+        customer={{ ...customer, recentOrders: [twin, twin] }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Ada Obi/ }));
+
+    expect(screen.getAllByText('ORD-0')).toHaveLength(2);
+    expect(
+      warn.mock.calls.some((call) => /same key/i.test(String(call[0])))
+    ).toBe(false);
+    warn.mockRestore();
   });
 
   it('opens to list the recent orders and closes again', () => {

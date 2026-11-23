@@ -1,3 +1,4 @@
+import { findLatestOpenDisbursementClaim } from '@baci/shared';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { z } from 'zod';
 import { formatPrice } from '@/components/orders-screen/format-price';
@@ -28,22 +29,7 @@ export function PaidOrderVerifiedBankReturn({
   setOutgoingEvidence,
   onSubmit,
 }: Props) {
-  const latestClaim = [...verification.events]
-    .sort(
-      (left, right) =>
-        Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
-        right.id - left.id
-    )
-    .find(
-      (event) =>
-        event.type === 'offline_disbursement_claimed' &&
-        typeof event.details.claimId === 'string' &&
-        !verification.events.some(
-          (verified) =>
-            verified.type === 'offline_disbursement_verified' &&
-            verified.details.claimId === event.details.claimId
-        )
-    );
+  const latestClaim = findLatestOpenDisbursementClaim(verification.events);
   const claimId =
     typeof latestClaim?.details.claimId === 'string'
       ? latestClaim.details.claimId

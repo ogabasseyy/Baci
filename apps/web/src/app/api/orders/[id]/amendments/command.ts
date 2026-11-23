@@ -22,7 +22,7 @@ const conflicts: ReadonlyMap<string, string> = new Map([
   ],
   [
     'staff_pos_receipt_used',
-    'This POS receipt reference has already been recorded.',
+    'This staff-recorded payment conflicts with an existing payment entry.',
   ],
   ['bank_evidence_required', 'Select a verified payment entry.'],
   [

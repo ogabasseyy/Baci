@@ -100,6 +100,25 @@ it('hides the entry when the server has paused new changes', () => {
   expect(screen.queryByRole('button', { name: 'Change items' })).toBeNull();
 });
 
+it('keeps unreadable-confirmation recovery reachable after reopening the order', () => {
+  const recoverUnreadableConfirmation = vi.fn();
+  mocks.workspace.mockReturnValue({
+    canStart: false,
+    pending: null,
+    pendingUnreadable: true,
+    recoverUnreadableConfirmation,
+    confirm: mocks.confirm,
+    checkConfirmation: mocks.checkConfirmation,
+    refreshOrder: vi.fn(),
+  });
+
+  showButton();
+  fireEvent.click(screen.getByRole('button', { name: 'Change items' }));
+  expect(
+    screen.getByText(/saved confirmation could not be read/i)
+  ).toBeVisible();
+});
+
 it.each([
   ['bank_transfer', 'Bank transfer'],
   ['cash', 'Cash'],

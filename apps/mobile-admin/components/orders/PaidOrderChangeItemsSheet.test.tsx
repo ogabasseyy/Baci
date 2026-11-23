@@ -41,6 +41,7 @@ it('distinguishes lines with the same name and different conditions', () => {
       amendment={{
         canStart: true,
         canRefund: false,
+        workspaceFresh: true,
         summary: null,
         verification: null,
         operatorId: 'operator',
@@ -79,6 +80,7 @@ it('retries a pending confirmation without starting a fresh preview', async () =
       amendment={{
         canStart: false,
         canRefund: false,
+        workspaceFresh: true,
         summary: null,
         verification: null,
         operatorId: 'operator',
@@ -109,6 +111,7 @@ it('offers an order reload for an unreadable saved confirmation', async () => {
       amendment={{
         canStart: false,
         canRefund: false,
+        workspaceFresh: true,
         summary: null,
         verification: null,
         operatorId: 'operator',

@@ -26,7 +26,9 @@ export function PaidOrderChangeItems({
   const [open, setOpen] = useState(false);
   const amendment = usePaidOrderAmendment(orderId, merchantId, deferWorkspace);
   const canOpen = Boolean(
-    amendment.pending || (amendment.canStart && items.length)
+    amendment.pending ||
+      amendment.pendingUnreadable ||
+      (amendment.canStart && items.length)
   );
   const summary = amendment.summary;
   if (!canOpen && !summary && !open) return null;
@@ -69,6 +71,7 @@ export function PaidOrderChangeItems({
           verification={amendment.verification}
           colors={colors}
           refreshOrder={amendment.refreshOrder}
+          workspaceFresh={amendment.workspaceFresh}
         />
       )}
       {open && (

@@ -1,5 +1,6 @@
 'use client';
 
+import { findLatestOpenDisbursementClaim } from '@baci/shared';
 import { useState } from 'react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -22,22 +23,7 @@ export function OrderAmendmentBankRepayment({
   const [outgoingId, setOutgoingId] = useState('');
   const money = (minor: number) => formatDisplayCurrency(minor / 100, currency);
   const evidenceIdIsValid = z.uuid().safeParse(outgoingId.trim()).success;
-  const latestClaim = [...workspace.events]
-    .sort(
-      (left, right) =>
-        Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
-        right.id - left.id
-    )
-    .find(
-      (event) =>
-        event.type === 'offline_disbursement_claimed' &&
-        typeof event.details.claimId === 'string' &&
-        !workspace.events.some(
-          (verified) =>
-            verified.type === 'offline_disbursement_verified' &&
-            verified.details.claimId === event.details.claimId
-        )
-    );
+  const latestClaim = findLatestOpenDisbursementClaim(workspace.events);
   const claimId =
     typeof latestClaim?.details.claimId === 'string'
       ? latestClaim.details.claimId

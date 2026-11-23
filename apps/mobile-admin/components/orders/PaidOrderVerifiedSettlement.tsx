@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import type { ThemeColors } from '@/constants/theme';
 import { AuthenticatedFetchPreflightError } from '@/hooks/orders/authenticated-fetch';
 import { usePaidOrderSettlementPending } from '@/hooks/orders/usePaidOrderSettlementPending';
@@ -12,6 +12,8 @@ import {
 } from '@/lib/paid-order-amendment-api';
 import { asyncStorage } from '@/lib/storage';
 import { generateUUID } from '@/utils/uuid';
+import { PaidOrderSettlementAction } from './PaidOrderSettlementAction';
+import { PaidOrderSettlementWorkspaceRecovery } from './PaidOrderSettlementWorkspaceRecovery';
 import { PaidOrderVerifiedBankReturn } from './PaidOrderVerifiedBankReturn';
 import { PaidOrderVerifiedCancellationSheet } from './PaidOrderVerifiedCancellationSheet';
 
@@ -22,6 +24,7 @@ interface Props {
   verification: AmendmentWorkspace;
   colors: ThemeColors;
   refreshOrder: () => Promise<boolean>;
+  workspaceFresh?: boolean;
 }
 export function PaidOrderVerifiedSettlement({
   orderId,
@@ -30,6 +33,7 @@ export function PaidOrderVerifiedSettlement({
   verification,
   colors,
   refreshOrder,
+  workspaceFresh = true,
 }: Props) {
   const client = useQueryClient();
   const {
@@ -70,32 +74,32 @@ export function PaidOrderVerifiedSettlement({
     verification.verifiedCancellationPending;
   if (!visible) return null;
 
-  function action(label: string, onPress: () => void, disabled = false) {
+  function action(
+    label: string,
+    onPress: () => void,
+    disabled = false,
+    allowWhenWorkspaceStale = false
+  ) {
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ disabled: disabled || busy }}
-        disabled={disabled || busy}
+      <PaidOrderSettlementAction
+        label={label}
         onPress={onPress}
-        style={{
-          minHeight: 44,
-          justifyContent: 'center',
-          paddingHorizontal: 12,
-        }}
-      >
-        <Text
-          style={{
-            color: disabled || busy ? colors.textMuted : colors.primary,
-          }}
-        >
-          {label}
-        </Text>
-      </Pressable>
+        disabled={disabled}
+        busy={busy}
+        workspaceFresh={workspaceFresh}
+        allowWhenWorkspaceStale={allowWhenWorkspaceStale}
+        colors={colors}
+      />
     );
   }
 
   async function submit(payload: VerifiedSettlementAction, retrySaved = false) {
-    if (inFlight.current || (recoveryRequired && !retrySaved)) return;
+    if (
+      inFlight.current ||
+      (!workspaceFresh && !retrySaved) ||
+      (recoveryRequired && !retrySaved)
+    )
+      return;
     const wasPending = Boolean(savedAction);
     inFlight.current = true;
     setBusy(true);
@@ -155,11 +159,13 @@ export function PaidOrderVerifiedSettlement({
     }
   }
 
-  function retrySavedAction(payload: VerifiedSettlementAction) {
-    return action('Retry the same settlement request', () => {
-      void submit(payload, true);
-    });
-  }
+  const retrySavedAction = (payload: VerifiedSettlementAction) =>
+    action(
+      'Retry the same settlement request',
+      () => void submit(payload, true),
+      false,
+      true
+    );
 
   async function reloadOrderStatus() {
     setBusy(true);
@@ -187,35 +193,23 @@ export function PaidOrderVerifiedSettlement({
 
   return (
     <View>
-      {verification.verifiedCancellationPending && (
-        <Text style={{ color: colors.text, paddingHorizontal: 12 }}>
-          {verification.verifiedCancellationReady
-            ? 'Refund evidence complete.'
-            : 'Fulfillment is on hold while Finance verifies each refund.'}
-        </Text>
-      )}
-      {pending.isError && (
-        <>
-          <Text style={{ color: colors.text }}>
-            Unable to read the saved settlement request. Retry before
-            continuing.
-          </Text>
-          {action(
-            'Retry saved settlement check',
-            () => void pending.refetch(),
-            busy
-          )}
-        </>
-      )}
-      {unreadableMessage && (
-        <Text style={{ color: colors.text }}>
-          A saved settlement request could not be read. Reload the order status
-          before starting another settlement action.
-        </Text>
-      )}
-      {recoveryRequired &&
-        !cancellation &&
-        action('Reload order status', () => void reloadOrderStatus(), busy)}
+      <PaidOrderSettlementWorkspaceRecovery
+        colors={colors}
+        busy={busy}
+        pendingReadError={pending.isError}
+        unreadableMessage={unreadableMessage}
+        recoveryRequired={recoveryRequired}
+        workspaceFresh={workspaceFresh}
+        showGeneralReload={!cancellation}
+        verifiedCancellationPending={Boolean(
+          verification.verifiedCancellationPending
+        )}
+        verifiedCancellationReady={Boolean(
+          verification.verifiedCancellationReady
+        )}
+        onRetryPending={() => void pending.refetch()}
+        onReload={() => void reloadOrderStatus()}
+      />
       {savedAction ? (
         !cancellation && retrySavedAction(savedAction)
       ) : (
@@ -258,7 +252,9 @@ export function PaidOrderVerifiedSettlement({
           <PaidOrderVerifiedBankReturn
             verification={verification}
             colors={colors}
-            disabled={busy || !pending.isSuccess || recoveryRequired}
+            disabled={
+              busy || !pending.isSuccess || recoveryRequired || !workspaceFresh
+            }
             outgoingEvidence={outgoingEvidence}
             setOutgoingEvidence={setOutgoingEvidence}
             onSubmit={(payload) => void submit(payload)}
@@ -271,13 +267,13 @@ export function PaidOrderVerifiedSettlement({
           reason={reason}
           setReason={setReason}
           busy={busy}
-          recoveryRequired={recoveryRequired}
-          pendingReady={pending.isSuccess}
+          recoveryRequired={recoveryRequired || !workspaceFresh}
+          pendingReady={pending.isSuccess && workspaceFresh}
           canOpenVerifiedCancellation={Boolean(
-            verification.canOpenVerifiedCancellation
+            workspaceFresh && verification.canOpenVerifiedCancellation
           )}
           verifiedCancellationReady={Boolean(
-            verification.verifiedCancellationReady
+            workspaceFresh && verification.verifiedCancellationReady
           )}
           savedAction={savedAction}
           message={message}

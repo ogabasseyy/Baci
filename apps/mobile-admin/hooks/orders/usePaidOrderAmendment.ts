@@ -201,13 +201,12 @@ export function usePaidOrderAmendment(
         !pendingUnreadable
     ),
     canRefund: Boolean(workspace.isSuccess && workspace.data.canRefund),
-    summary: workspace.isSuccess ? workspace.data.customer : null,
+    summary: workspace.data?.customer ?? null,
     verification:
-      workspace.isSuccess &&
-      workspace.data.isVerifiedFunding &&
-      workspace.data.canRefund
+      workspace.data?.isVerifiedFunding && workspace.data.canRefund
         ? workspace.data
         : null,
+    workspaceFresh: workspace.isSuccess,
     operatorId: user?.id,
     refreshOrder,
     pending: pending.data,

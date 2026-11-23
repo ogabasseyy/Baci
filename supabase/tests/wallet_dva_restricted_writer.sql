@@ -66,7 +66,9 @@ BEGIN
   INSERT INTO public.merchant_feature_settings (merchant_id, wallet_paystack_dva_enabled)
   VALUES
     ('86110000-0000-4000-8000-000000000001', true),
-    ('86110000-0000-4000-8000-000000000002', true);
+    ('86110000-0000-4000-8000-000000000002', true)
+  ON CONFLICT (merchant_id) DO UPDATE
+    SET wallet_paystack_dva_enabled = EXCLUDED.wallet_paystack_dva_enabled;
 
   INSERT INTO public.checkout_sessions (
     id, session_id, merchant_id, payment_provider, status,

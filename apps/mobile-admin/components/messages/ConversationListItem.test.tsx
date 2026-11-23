@@ -107,7 +107,7 @@ describe('ConversationListItem', () => {
     renderItem(chat());
     expect(
       screen.getByRole('button', {
-        name: 'Conversation with small-meadow-890, needs reply',
+        name: 'Conversation with small-meadow-890, needs reply. Hello there',
       })
     ).toBeInTheDocument();
     expect(needsReply(chat({ status: 'resolved' }))).toBe(false);

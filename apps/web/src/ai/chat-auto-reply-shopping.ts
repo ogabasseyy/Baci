@@ -134,7 +134,7 @@ export async function buildShoppingAutoReplyOutcome(input: {
   cards?: ChatAutoReplyProduct[];
   cartAction?: {
     slug: string;
-    options: readonly { axis: string; value: string }[];
+    options: { axis: string; value: string }[];
   };
   suggestions?: ChatSuggestion[];
 }> {

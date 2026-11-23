@@ -326,10 +326,7 @@ export function CustomerFormFields({
         <OxygenVerificationTrust />
         <OxygenCustomerFormNavigation
           step={step}
-          canGoBack={
-            step > 0 ||
-            (conversational && chatTurn !== undefined && chatTurn !== 'bvn')
-          }
+          canGoBack={step > 0 || (conversational && chatTurn > 0)}
           busy={busy}
           continuing={continuing}
           disabled={

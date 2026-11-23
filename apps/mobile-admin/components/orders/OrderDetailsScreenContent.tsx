@@ -138,12 +138,18 @@ export function OrderDetailsScreenContent({
             vatLabel={paymentBreakdown.vatLabel}
             walletAmountUsed={paymentBreakdown.walletAmountUsed}
           />
-          {/* Keep recovery and the amendment summary available after status changes. */}
           {merchant?.id && order.currency === 'NGN' && (
             <PaidOrderChangeItems
               key={`${merchant.id}:${order.id}`}
               orderId={order.id}
               merchantId={merchant.id}
+              deferWorkspace={
+                (order.payment_status === 'unpaid' ||
+                  order.payment_status === 'pending') &&
+                order.amount_paid === 0 &&
+                order.shipping_status === 'pending' &&
+                !order.cancelled_at
+              }
               colors={controller.colors}
               items={order.items ?? []}
               formatPrice={controller.formatPrice}

@@ -9,6 +9,7 @@ import { PaidOrderVerifiedSettlement } from './PaidOrderVerifiedSettlement';
 interface Props {
   orderId: string;
   merchantId: string;
+  deferWorkspace?: boolean;
   colors: ThemeColors;
   items: OrderDetailsItem[];
   formatPrice: (amount: number) => string;
@@ -17,12 +18,13 @@ interface Props {
 export function PaidOrderChangeItems({
   orderId,
   merchantId,
+  deferWorkspace,
   colors,
   items,
   formatPrice,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const amendment = usePaidOrderAmendment(orderId, merchantId);
+  const amendment = usePaidOrderAmendment(orderId, merchantId, deferWorkspace);
   const canOpen = Boolean(
     amendment.pending || (amendment.canStart && items.length)
   );

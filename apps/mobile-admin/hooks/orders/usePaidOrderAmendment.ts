@@ -24,18 +24,16 @@ const definitiveReplayConflicts = new Set([
   'tender_evidence_required',
 ]);
 
-export function usePaidOrderAmendment(orderId: string, merchantId: string) {
+export function usePaidOrderAmendment(
+  orderId: string,
+  merchantId: string,
+  deferWorkspace = false
+) {
   const { user } = useAuth();
   const client = useQueryClient();
   const workspaceKey = ['paid-order-amendment', user?.id, merchantId, orderId];
   const pendingKey = [...workspaceKey, 'pending'];
   const storageKey = workspaceKey.join(':');
-  const workspace = useQuery({
-    queryKey: workspaceKey,
-    queryFn: ({ signal }) => paidOrderAmendment.workspace(orderId, signal),
-    enabled: Boolean(user?.id),
-    retry: false,
-  });
   const pending = useQuery({
     queryKey: pendingKey,
     queryFn: async () => {
@@ -46,6 +44,21 @@ export function usePaidOrderAmendment(orderId: string, merchantId: string) {
     },
     enabled: Boolean(user?.id),
     staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+  const workspace = useQuery({
+    queryKey: workspaceKey,
+    queryFn: ({ signal }) => paidOrderAmendment.workspace(orderId, signal),
+    // An unpaid snapshot can be stale. Preserve saved or known recovery, and
+    // check the server if the local recovery state could not be read.
+    enabled: (query) =>
+      Boolean(
+        user?.id &&
+          (!deferWorkspace ||
+            pending.data ||
+            pending.isError ||
+            query.state.data?.summary)
+      ),
     retry: false,
   });
 
@@ -123,7 +136,10 @@ export function usePaidOrderAmendment(orderId: string, merchantId: string) {
 
   return {
     canStart: Boolean(
-      workspace.isSuccess && workspace.data.canStart && pending.isSuccess
+      !deferWorkspace &&
+        workspace.isSuccess &&
+        workspace.data.canStart &&
+        pending.isSuccess
     ),
     canRefund: Boolean(workspace.isSuccess && workspace.data.canRefund),
     summary: workspace.isSuccess ? workspace.data.customer : null,

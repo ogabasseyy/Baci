@@ -62,13 +62,20 @@ const amendedWorkspace = {
   confirmationKey: confirmation.idempotencyKey,
 };
 
-async function openHook() {
-  const client = new QueryClient();
-  const hook = renderHook(() => usePaidOrderAmendment(order, merchant), {
+function renderAmendmentHook(
+  deferWorkspace = false,
+  client = new QueryClient()
+) {
+  return renderHook((defer) => usePaidOrderAmendment(order, merchant, defer), {
+    initialProps: deferWorkspace,
     wrapper: ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     ),
   });
+}
+
+async function openHook() {
+  const hook = renderAmendmentHook();
   await waitFor(() => expect(hook.result.current.pending).not.toBeUndefined());
   await waitFor(() => expect(hook.result.current.canStart).toBe(true));
   return hook;
@@ -88,6 +95,51 @@ describe('usePaidOrderAmendment', () => {
     });
     mocks.workspace.mockResolvedValue(emptyWorkspace);
     mocks.confirm.mockResolvedValue({ amendmentId: confirmation.previewId });
+  });
+
+  it('skips the workspace for an unpaid order until its payment details change', async () => {
+    const { result, rerender } = renderAmendmentHook(true);
+    await waitFor(() => expect(result.current.pending).toBeNull());
+    expect(mocks.workspace).not.toHaveBeenCalled();
+    expect(result.current.canStart).toBe(false);
+
+    rerender(false);
+    await waitFor(() => expect(result.current.canStart).toBe(true));
+    expect(mocks.workspace).toHaveBeenCalledOnce();
+  });
+
+  it('loads the workspace for an unpaid snapshot with a saved confirmation', async () => {
+    persisted = JSON.stringify(confirmation);
+    mocks.workspace.mockResolvedValue(amendedWorkspace);
+    const { result } = renderAmendmentHook(true);
+    await waitFor(() => expect(result.current.pending).toEqual(confirmation));
+    await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it('checks the server when the local recovery state cannot be read', async () => {
+    mocks.get.mockRejectedValue(new Error('Storage unavailable'));
+    const { result } = renderAmendmentHook(true);
+    await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
+    expect(result.current.canStart).toBe(false);
+  });
+
+  it('refreshes known settlement recovery even if the order snapshot looks unpaid', async () => {
+    const client = new QueryClient();
+    const recovery = {
+      ...amendedWorkspace,
+      canRefund: true,
+      isVerifiedFunding: true,
+      verifiedCancellationPending: true,
+    };
+    client.setQueryData(
+      ['paid-order-amendment', 'operator', merchant, order],
+      recovery
+    );
+    mocks.workspace.mockResolvedValue(recovery);
+    const { result } = renderAmendmentHook(true, client);
+    await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
+    expect(result.current.verification).toEqual(recovery);
   });
 
   it('persists the exact command before dispatch and clears it on success', async () => {

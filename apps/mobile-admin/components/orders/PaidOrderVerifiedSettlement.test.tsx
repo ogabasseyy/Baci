@@ -258,7 +258,9 @@ it('does not carry an outgoing evidence ID into a different bank-return claim', 
           ...baseVerification,
           events: [
             {
+              id: 1,
               type: 'offline_disbursement_claimed',
+              createdAt: '2026-11-23T12:00:00Z',
               details: { claimId: firstClaimId },
             },
           ],
@@ -280,7 +282,9 @@ it('does not carry an outgoing evidence ID into a different bank-return claim', 
           ...baseVerification,
           events: [
             {
+              id: 2,
               type: 'offline_disbursement_claimed',
+              createdAt: '2026-11-23T13:00:00Z',
               details: { claimId: secondClaimId },
             },
           ],

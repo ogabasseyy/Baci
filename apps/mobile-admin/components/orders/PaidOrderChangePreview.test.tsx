@@ -59,6 +59,9 @@ it('shows the quoted increase and keeps receipt entry tied to the POS choice', (
   expect(
     screen.getByRole('textbox', { name: 'POS receipt reference' })
   ).toBeTruthy();
+  expect(
+    screen.getByText('Use 8–100 letters, numbers, _, ., /, : or -.')
+  ).toBeTruthy();
   rerender(
     <PaidOrderChangePreview
       {...props}

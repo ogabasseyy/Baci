@@ -23,7 +23,11 @@ export function OrderAmendmentBankRepayment({
   const money = (minor: number) => formatDisplayCurrency(minor / 100, currency);
   const evidenceIdIsValid = z.uuid().safeParse(outgoingId.trim()).success;
   const latestClaim = [...workspace.events]
-    .reverse()
+    .sort(
+      (left, right) =>
+        Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
+        right.id - left.id
+    )
     .find(
       (event) =>
         event.type === 'offline_disbursement_claimed' &&

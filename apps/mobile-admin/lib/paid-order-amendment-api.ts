@@ -25,7 +25,9 @@ const workspaceSchema = z.object({
   summary: z.object({ amendmentId: z.uuid() }).nullable(),
   events: z.array(
     z.object({
+      id: z.number().int(),
       type: z.string(),
+      createdAt: z.iso.datetime({ offset: true }),
       details: z.record(z.string(), z.unknown()),
     })
   ),

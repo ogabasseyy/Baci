@@ -126,3 +126,53 @@ it('requires a UUID before submitting outgoing refund evidence', () => {
     evidenceId: '9d165858-13b4-47d7-a4eb-38f97bb6c182',
   });
 });
+
+it('selects the newest open repayment claim by event time', () => {
+  const submit = vi.fn();
+  const workspace = workspaceSchema.parse({
+    canStart: false,
+    canEdit: true,
+    canRefund: true,
+    isVerifiedFunding: true,
+    customer: null,
+    summary: null,
+    events: [
+      {
+        id: 1,
+        type: 'offline_disbursement_claimed',
+        createdAt: '2026-11-23T12:00:00Z',
+        details: { claimId: 'newer-claim' },
+      },
+      {
+        id: 2,
+        type: 'offline_disbursement_claimed',
+        createdAt: '2026-11-23T11:00:00Z',
+        details: { claimId: 'older-claim' },
+      },
+    ],
+    refunds: [],
+    bankEvidence: [],
+  });
+  render(
+    <OrderAmendmentBankRepayment
+      workspace={workspace}
+      currency="NGN"
+      cancelled={false}
+      submit={submit}
+    />
+  );
+  fireEvent.change(
+    screen.getByLabelText('Verified outgoing bank evidence ID'),
+    {
+      target: { value: '9d165858-13b4-47d7-a4eb-38f97bb6c182' },
+    }
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Verify bank repayment' })
+  );
+  expect(submit).toHaveBeenCalledWith({
+    action: 'record_offline_refund',
+    claimId: 'newer-claim',
+    evidenceId: '9d165858-13b4-47d7-a4eb-38f97bb6c182',
+  });
+});

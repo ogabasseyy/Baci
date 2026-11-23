@@ -149,7 +149,15 @@ it('records outgoing evidence against the outstanding bank-return claim', () => 
         ...verifiedCancellation,
         events: [
           {
+            id: 2,
             type: 'offline_disbursement_claimed',
+            createdAt: '2026-11-23T11:00:00Z',
+            details: { claimId: '52778a83-0ed7-4fa5-9e1d-4ea7a085b218' },
+          },
+          {
+            id: 1,
+            type: 'offline_disbursement_claimed',
+            createdAt: '2026-11-23T12:00:00Z',
             details: { claimId: id },
           },
         ],
@@ -180,7 +188,9 @@ it('keeps repayment verification disabled for a malformed evidence ID', () => {
         ...verifiedCancellation,
         events: [
           {
+            id: 1,
             type: 'offline_disbursement_claimed',
+            createdAt: '2026-11-23T12:00:00Z',
             details: { claimId: id },
           },
         ],

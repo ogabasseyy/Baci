@@ -29,7 +29,11 @@ export function PaidOrderVerifiedBankReturn({
   onSubmit,
 }: Props) {
   const latestClaim = [...verification.events]
-    .reverse()
+    .sort(
+      (left, right) =>
+        Date.parse(right.createdAt) - Date.parse(left.createdAt) ||
+        right.id - left.id
+    )
     .find(
       (event) =>
         event.type === 'offline_disbursement_claimed' &&

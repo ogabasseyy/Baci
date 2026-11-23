@@ -93,18 +93,23 @@ export function PaidOrderChangePreview({
             staffPayment.method === 'pos'
           )}
           {staffPayment.method === 'pos' && (
-            <TextInput
-              accessibilityLabel="POS receipt reference"
-              placeholder="POS receipt reference"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              maxLength={100}
-              editable={!busy}
-              value={staffPayment.receiptReference}
-              onChangeText={staffPayment.setReceiptReference}
-              style={inputStyle}
-            />
+            <>
+              <TextInput
+                accessibilityLabel="POS receipt reference"
+                placeholder="POS receipt reference"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={100}
+                editable={!busy}
+                value={staffPayment.receiptReference}
+                onChangeText={staffPayment.setReceiptReference}
+                style={inputStyle}
+              />
+              <Text style={{ color: colors.textMuted }}>
+                Use 8–100 letters, numbers, _, ., /, : or -.
+              </Text>
+            </>
           )}
         </>
       )}

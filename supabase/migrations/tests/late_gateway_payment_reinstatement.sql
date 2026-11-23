@@ -93,6 +93,17 @@ BEGIN
     END IF;
     DELETE FROM public.order_items WHERE order_id = replacement_id;
     DELETE FROM public.orders WHERE id = replacement_id;
+    UPDATE public.orders SET customer_phone = '+2348000000000' WHERE id = test_order_id;
+    replacement_id := gen_random_uuid();
+    INSERT INTO public.orders (id, merchant_id, customer_email, customer_phone, created_at, payment_status)
+    VALUES (replacement_id, merchant_id, 'different@example.test', '+2348000000000', now(), 'pending');
+    INSERT INTO public.order_items VALUES (replacement_id, product_id, NULL);
+    IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'blocked' THEN
+      RAISE EXCEPTION 'Phone-matched replacement did not block % reinstatement', provider;
+    END IF;
+    DELETE FROM public.order_items WHERE order_id = replacement_id;
+    DELETE FROM public.orders WHERE id = replacement_id;
+    UPDATE public.orders SET customer_phone = NULL WHERE id = test_order_id;
     UPDATE public.orders SET customer_email = NULL WHERE id = test_order_id;
     IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'blocked' THEN
       RAISE EXCEPTION 'Missing customer identity did not block % reinstatement', provider;

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import { reinstateTimeoutOrderPayment } from '@/lib/payments/reinstate-timeout-order-payment';
 
 export type CreditDirectTimeoutRecoveryResult<T> =
@@ -31,7 +32,13 @@ export async function recoverCreditDirectTimeoutOrder<T>({
       transactionId,
       merchantId
     );
-  } catch {
+  } catch (error) {
+    logger.error({
+      error,
+      message: 'Credit Direct late payment reinstatement failed',
+      orderId,
+      transactionId,
+    });
     return { kind: 'review_required' };
   }
   if (reinstatement === 'blocked') return { kind: 'blocked' };

@@ -285,7 +285,8 @@ BEGIN
     WHERE later.merchant_id = v_order.merchant_id
       AND (later.created_at, later.id) > (v_order.created_at, v_order.id)
       AND (later.customer_id = v_order.customer_id
-        OR nullif(lower(btrim(later.customer_email)), '') = nullif(lower(btrim(v_order.customer_email)), ''))
+        OR nullif(lower(btrim(later.customer_email)), '') = nullif(lower(btrim(v_order.customer_email)), '')
+        OR nullif(btrim(later.customer_phone), '') = nullif(btrim(v_order.customer_phone), ''))
       AND EXISTS (
         SELECT 1 FROM public.order_items newer_item
         JOIN public.order_items original_item ON original_item.order_id = p_order_id

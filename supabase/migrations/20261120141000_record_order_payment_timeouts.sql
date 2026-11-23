@@ -29,6 +29,7 @@ SET search_path TO 'public'
 AS $$
 DECLARE
   v_order_id uuid;
+  v_candidate_ids uuid[];
 BEGIN
   IF hours_threshold IS NULL OR hours_threshold < 1 OR hours_threshold > 720 THEN
     RAISE EXCEPTION 'invalid_hours_threshold: % (expected 1-720)', hours_threshold
@@ -37,9 +38,9 @@ BEGIN
 
   -- Use the same advisory lock as reinstatement for every order the cleanup
   -- may cancel, before taking any order row locks.
-  FOR v_order_id IN
-    SELECT o.id
-    FROM public.orders o
+  SELECT coalesce(array_agg(o.id ORDER BY o.id), '{}'::uuid[])
+  INTO v_candidate_ids
+  FROM public.orders o
     WHERE (
         o.payment_status = 'unpaid'
         AND o.created_at < (now() - (hours_threshold * interval '1 hour'))
@@ -47,8 +48,11 @@ BEGIN
         o.payment_status IN ('pending', 'bnpl_pending')
         AND o.payment_method IN ('credit_direct', 'klump')
         AND o.updated_at < (now() - (hours_threshold * interval '1 hour'))
-      )
-    ORDER BY o.id
+      );
+
+  FOR v_order_id IN
+    SELECT candidate_id FROM unnest(v_candidate_ids) AS candidates(candidate_id)
+    ORDER BY candidate_id
   LOOP
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended('baci_order_payment:' || v_order_id::text, 0)
@@ -62,7 +66,8 @@ BEGIN
     SELECT o.id, o.payment_method, o.source, o.shipping_status,
       o.cancelled_at, o.cancelled_by, o.cancellation_reason
     FROM public.orders o
-    WHERE (
+    WHERE o.id = ANY(v_candidate_ids)
+      AND (
         (o.payment_status = 'unpaid'
           AND o.created_at < (now() - (hours_threshold * interval '1 hour')))
         OR (o.payment_status IN ('pending', 'bnpl_pending')

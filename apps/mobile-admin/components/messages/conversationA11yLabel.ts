@@ -18,6 +18,14 @@ export function conversationA11yLabel(
   if (conversation.unreadCount > 0) {
     parts.push(`${conversation.unreadCount} new`);
   }
+  const customer = conversation.customer;
+  if (customer) {
+    parts.push(
+      !customer.ordersHidden && customer.orderCount > 0
+        ? `returning customer, ${customer.orderCount} ${customer.orderCount === 1 ? 'order' : 'orders'}`
+        : 'signed-in customer'
+    );
+  }
   if (conversation.priority) {
     parts.push(`${PRIORITY_LABEL[conversation.priority]} priority`);
   }

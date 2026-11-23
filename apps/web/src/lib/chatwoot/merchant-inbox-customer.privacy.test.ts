@@ -90,4 +90,32 @@ describe('bugfix: the customer card shows only what the caller may see', () => {
 
     expect(profile?.recentOrders.map((o) => o.orderNumber)).toEqual(['ORD-7']);
   });
+
+  it('shows a missing payment or shipping status as "unknown", never "null"', async () => {
+    const { client } = db({
+      customers: { data: customer },
+      orders: {
+        data: [
+          {
+            ...order('ORD-8'),
+            payment_status: null,
+            shipping_status: null,
+          },
+        ],
+      },
+    });
+
+    const profile = await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'good',
+      includeOrders: true,
+    });
+
+    expect(profile?.recentOrders[0]).toMatchObject({
+      orderNumber: 'ORD-8',
+      paymentStatus: 'unknown',
+      shippingStatus: 'unknown',
+    });
+  });
 });

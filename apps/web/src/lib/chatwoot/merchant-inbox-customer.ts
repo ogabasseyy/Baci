@@ -163,8 +163,12 @@ export async function loadCustomerProfile(input: {
           orderNumber,
           total: toNumber(order.total),
           currency: currencyCode(order.currency, storeCurrency),
-          paymentStatus: String(order.payment_status).slice(0, 40),
-          shippingStatus: String(order.shipping_status).slice(0, 40),
+          // A missing status reads as "unknown", never as the text "null".
+          paymentStatus: String(order.payment_status ?? 'unknown').slice(0, 40),
+          shippingStatus: String(order.shipping_status ?? 'unknown').slice(
+            0,
+            40
+          ),
           createdAt: order.created_at,
         },
       ];

@@ -59,6 +59,7 @@ export function ChatwootInlineCartBridge({
         if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
           return undefined;
         if (unit === 'mm') return value / 10;
+        if (unit === 'm') return value * 100;
         if (unit === 'in') return value * 2.54;
         return value;
       };

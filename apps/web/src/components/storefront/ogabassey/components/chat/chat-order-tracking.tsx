@@ -72,7 +72,7 @@ export function ChatOrderTracking({
         type="button"
         disabled={loading}
         onClick={loadTracking}
-        className="rounded-lg border px-3 py-1.5 text-xs font-medium"
+        className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
       >
         {loading
           ? 'Checking delivery…'
@@ -83,28 +83,28 @@ export function ChatOrderTracking({
               : 'Track delivery'}
       </button>
       {error && (
-        <p role="alert" className="mt-1.5 text-xs text-red-700">
+        <p role="alert" className="mt-1.5 text-xs text-destructive">
           {error}
         </p>
       )}
       {result && !result.trackingAvailable && (
-        <p role="status" className="mt-1.5 text-xs text-gray-600">
+        <p role="status" className="mt-1.5 text-xs text-muted-foreground">
           {result.reason}
         </p>
       )}
       {result?.trackingAvailable && (
         <div
           role="status"
-          className="mt-2 rounded-lg bg-gray-50 p-2 text-xs text-gray-800"
+          className="mt-2 rounded-lg border border-border bg-muted p-2 text-xs text-foreground"
         >
           <p className="font-semibold">
             {result.tracking.carrierName}: {result.tracking.statusLabel}
           </p>
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             Waybill: {result.tracking.trackingNumber}
           </p>
           {result.tracking.liveUnavailable ? (
-            <p className="mt-1 text-gray-600">
+            <p className="mt-1 text-muted-foreground">
               Live carrier updates are temporarily unavailable. Please check
               back shortly.
             </p>

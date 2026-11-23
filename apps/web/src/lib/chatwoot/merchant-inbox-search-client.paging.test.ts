@@ -30,34 +30,74 @@ describe('searchMerchantInboxConversations paging and volume', () => {
     ).resolves.toEqual({ ok: true, results: [], hasMore: false });
   });
 
-  it('bugfix: keeps every match of a provider page, none lost beyond twenty', async () => {
-    const rows = Array.from({ length: 30 }, (_, i) => contactRow(i + 1, 20));
+  it('reads at most the providers own page size, never an unbounded fan-out', async () => {
+    // An answer far larger than Chatwoot ever sends (25 and 15 per page).
+    const contact = Array.from({ length: 100 }, (_, i) =>
+      contactRow(i + 1, 20)
+    );
+    const message = Array.from({ length: 100 }, (_, i) =>
+      messageRow(i + 1000, 20)
+    );
     const reads: Record<number, unknown> = {};
-    for (let i = 1; i <= 30; i++) {
+    for (const row of [...contact, ...message]) {
+      reads[row.id] = { ...named(row.id, `Shopper ${row.id}`) };
+    }
+    const { calls } = stub({
+      contact: { payload: { conversations: contact } },
+      message: { meta: {}, payload: message },
+      reads,
+    });
+
+    const result = await searchMerchantInboxConversations(binding, {
+      q: 'x',
+      page: 1,
+    });
+
+    const reads_ = calls.filter((u) =>
+      /\/conversations\/\d+$/.test(u.pathname)
+    );
+    expect(reads_).toHaveLength(40);
+    expect(result.ok && result.results).toHaveLength(40);
+  });
+
+  it('makes no conversation reads for a page made only of other stores chats', async () => {
+    const other = Array.from({ length: 100 }, (_, i) => contactRow(i + 1, 99));
+    const { calls } = stub({
+      contact: { payload: { conversations: other } },
+      message: { meta: {}, payload: other.map((r) => messageRow(r.id, 99)) },
+    });
+
+    const result = await searchMerchantInboxConversations(binding, {
+      q: 'x',
+      page: 1,
+    });
+
+    expect(
+      calls.filter((u) => /\/conversations\/\d+$/.test(u.pathname))
+    ).toHaveLength(0);
+    // Nothing for this store here, but the provider has more pages to look at.
+    expect(result).toEqual({ ok: true, results: [], hasMore: true });
+  });
+
+  it('keeps every match of a full provider page, none lost', async () => {
+    const rows = Array.from({ length: 15 }, (_, i) => contactRow(i + 1, 20));
+    const reads: Record<number, unknown> = {};
+    for (let i = 1; i <= 15; i++) {
       reads[i] = {
         ...named(i, `Shopper ${i}`),
         last_activity_at: 1_794_720_000 + i,
       };
     }
-    const { calls } = stub({
-      contact: { payload: { conversations: rows } },
-      reads,
-    });
+    stub({ contact: { payload: { conversations: rows } }, reads });
 
     const result = await searchMerchantInboxConversations(binding, {
       q: 'shopper',
       page: 1,
     });
 
-    expect(result.ok && result.results).toHaveLength(30);
-    // Newest first, and the ones past twenty are present.
-    expect(result.ok && result.results[0].conversation.id).toBe(30);
-    expect(
-      result.ok && result.results.some((r) => r.conversation.id === 21)
-    ).toBe(true);
-    expect(
-      calls.filter((u) => /\/conversations\/\d+$/.test(u.pathname))
-    ).toHaveLength(30);
+    expect(result.ok && result.results).toHaveLength(15);
+    // Newest first.
+    expect(result.ok && result.results[0].conversation.id).toBe(15);
   });
 
   it('merges both searches at their full page sizes without losing any', async () => {

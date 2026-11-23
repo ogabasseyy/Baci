@@ -48,6 +48,10 @@ describe('merchantInboxUpdateSchema', () => {
     ['a follow-up that is not an ISO time', { followUpAt: '2026-11-23' }],
     ['a follow-up that is not text', { followUpAt: 12345 }],
     [
+      'a reopen combined with a follow-up time (one would be ignored)',
+      { status: 'open', followUpAt: '2026-11-23T08:00:00.000Z' },
+    ],
+    [
       'a finished chat with a follow-up',
       {
         status: 'resolved',
@@ -66,6 +70,10 @@ describe('merchantInboxUpdateSchema', () => {
     ],
   ])('rejects %s', (_name, body) => {
     expect(parse(body).success).toBe(false);
+  });
+
+  it('allows a reopen together with clearing the follow-up', () => {
+    expect(parse({ status: 'open', followUpAt: null }).success).toBe(true);
   });
 
   it('allows a finished chat with the follow-up explicitly cleared', () => {

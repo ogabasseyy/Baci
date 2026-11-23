@@ -127,4 +127,42 @@ describe('MessagesScreen search and paging', () => {
 
     expect(mocks.fetchNextPage).toHaveBeenCalled();
   });
+
+  const emptyPages = (count: number) => ({
+    ...ready([]),
+    hasNextPage: true,
+    data: {
+      pages: Array.from({ length: count }, (_, i) => ({
+        conversations: [],
+        hasMore: true,
+        page: i + 1,
+      })),
+    },
+  });
+
+  it('bugfix: ends in the empty message, not a spinner, when every page was narrowed to nothing', () => {
+    // Five pages loaded and empty, the server still says there are more.
+    mocks.query.mockReturnValue(emptyPages(5));
+    render(<MessagesScreen />);
+
+    expect(screen.getByText('You are all caught up')).toBeInTheDocument();
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it('lets the person look further back from that empty message', () => {
+    mocks.query.mockReturnValue(emptyPages(5));
+    render(<MessagesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Look further back' }));
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a spinner while the first pages are still being loaded automatically', () => {
+    mocks.query.mockReturnValue(emptyPages(2));
+    render(<MessagesScreen />);
+
+    expect(screen.queryByText('You are all caught up')).toBeNull();
+    expect(mocks.fetchNextPage).toHaveBeenCalled();
+  });
 });

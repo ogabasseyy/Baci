@@ -86,11 +86,14 @@ export default function MessagesScreen() {
     setRefreshing(false);
   };
 
+  // Only the pages loaded so far are counted: with more to come it is "at least".
   const summary =
     view === 'needs_reply' && conversations.length > 0
-      ? conversations.length === 1
-        ? '1 chat is waiting for your reply'
-        : `${conversations.length} chats are waiting for your reply`
+      ? query.hasNextPage
+        ? `${conversations.length}+ chats are waiting for your reply`
+        : conversations.length === 1
+          ? '1 chat is waiting for your reply'
+          : `${conversations.length} chats are waiting for your reply`
       : null;
 
   return (

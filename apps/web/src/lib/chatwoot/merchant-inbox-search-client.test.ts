@@ -108,7 +108,7 @@ describe('searchMerchantInboxConversations', () => {
     );
   });
 
-  it('refuses a chat whose full read says it is in another inbox', async () => {
+  it('never shows a chat whose full read says it is in another inbox', async () => {
     stub({
       contact: { payload: { conversations: [contactRow(5, 20)] } },
       // A row claiming the bound inbox but a read that disagrees.
@@ -120,10 +120,8 @@ describe('searchMerchantInboxConversations', () => {
       page: 1,
     });
 
-    expect(result).toEqual({
-      ok: false,
-      code: 'unavailable',
-    });
+    // Left out, not an error: nothing from the other inbox is shown or leaked.
+    expect(result).toEqual({ ok: true, results: [], hasMore: true });
   });
 
   it('merges both searches, shows a chat once and keeps the shopper snippet', async () => {

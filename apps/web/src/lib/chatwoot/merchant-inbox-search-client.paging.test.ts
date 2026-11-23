@@ -160,6 +160,21 @@ describe('bugfix: a page must not silently lose a match', () => {
   });
 });
 
+describe('bugfix: a page of chats that are all gone is an empty page, not an error', () => {
+  it('lets paging move past hits that no longer exist', async () => {
+    // Every hit is a plain 404: deleted or moved since the search indexed it.
+    stub({
+      contact: {
+        payload: { conversations: [contactRow(1, 20), contactRow(2, 20)] },
+      },
+    });
+
+    await expect(
+      searchMerchantInboxConversations(binding, { q: 'a', page: 3 })
+    ).resolves.toEqual({ ok: true, results: [], hasMore: true });
+  });
+});
+
 describe('bugfix: no next page past the last one the API accepts', () => {
   const answer = {
     contact: { payload: { conversations: [contactRow(1, 20)] } },

@@ -1,10 +1,10 @@
 import { cartRoute } from '@/hooks/cart/shared-cart-client-support';
 import { initializeCsrfToken } from '@/lib/api-client';
-import {
-  buildCsrfHeaders,
-  CSRF_HEADER_NAME,
-  getClientCsrfToken,
-} from '@/lib/csrf';
+import { buildCsrfHeaders } from '@/lib/csrf';
+
+function hasCsrfHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((key) => key.toLowerCase() === 'x-csrf-token');
+}
 
 export async function postChatwootBridgeJson(
   path: string,
@@ -16,15 +16,22 @@ export async function postChatwootBridgeJson(
   try {
     const url = cartRoute(path, storeSlug);
     const serialized = JSON.stringify(body);
+    const initialHeaders = buildCsrfHeaders({
+      'Content-Type': 'application/json',
+    });
     let response = await fetch(url, {
       method: 'POST',
       credentials: 'same-origin',
       cache: 'no-store',
-      headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
+      headers: initialHeaders,
       body: serialized,
       signal,
     });
-    if (response.status === 403 && !getClientCsrfToken()) {
+    if (
+      response.status === 403 &&
+      !hasCsrfHeader(initialHeaders) &&
+      !options.allowNonOkResponse
+    ) {
       const csrfToken = await initializeCsrfToken(signal);
       if (csrfToken) {
         response = await fetch(url, {
@@ -33,7 +40,7 @@ export async function postChatwootBridgeJson(
           cache: 'no-store',
           headers: {
             'Content-Type': 'application/json',
-            [CSRF_HEADER_NAME]: csrfToken,
+            'x-csrf-token': csrfToken,
           },
           body: serialized,
           signal,

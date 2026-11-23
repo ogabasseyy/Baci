@@ -16,10 +16,10 @@ function response(body: unknown, ok = true, status = ok ? 200 : 400) {
 }
 
 describe('postChatwootBridgeJson', () => {
-  it('initializes a missing CSRF token before connecting the chat to checkout', async () => {
-    getClientCsrfToken.mockReturnValueOnce(null);
+  it('initializes a missing CSRF token and retries when a fresh session gets 403', async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(response({ error: 'CSRF' }, false, 403))
       .mockResolvedValueOnce(response({}))
       .mockResolvedValueOnce(response({ requestId: 'request-1' }));
     vi.stubGlobal('fetch', fetchMock);
@@ -28,10 +28,11 @@ describe('postChatwootBridgeJson', () => {
       postChatwootBridgeJson('/api/storefront/chatwoot/context/challenge', {}, 'store-a')
     ).resolves.toEqual({ requestId: 'request-1' });
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/storefront/chatwoot/context/challenge?merchantSlug=store-a',
       '/api/csrf',
       '/api/storefront/chatwoot/context/challenge?merchantSlug=store-a',
     ]);
-    expect(fetchMock.mock.calls[1]?.[1].headers).toEqual({
+    expect(fetchMock.mock.calls[2]?.[1].headers).toEqual({
       'Content-Type': 'application/json',
       'x-csrf-token': 'csrf-token',
     });

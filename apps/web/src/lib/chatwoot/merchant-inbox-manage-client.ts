@@ -205,7 +205,9 @@ export async function updateMerchantInboxConversation(
     ) {
       return unavailable;
     }
-    if (followUpAt === null) followUp = false;
+    // Either way no follow-up is pending any more (reopening cancels a snooze),
+    // so a leftover label, say on a chat resolved outside the app, goes too.
+    if (followUpAt === null || owned.conversation.followUp) followUp = false;
   }
 
   if (update.priority !== undefined) {

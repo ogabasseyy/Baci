@@ -146,4 +146,48 @@ describe('updateMerchantInboxConversation', () => {
       })
     ).resolves.toEqual({ ok: false, code: 'unavailable' });
   });
+
+  it('bugfix: reopening a chat drops a leftover follow-up label', async () => {
+    // Resolved outside the app, so the label was never cleared by Done.
+    const { calls } = recorder({
+      ...conversation(7),
+      status: 'resolved',
+      labels: ['follow-up', 'handled-by-ai'],
+    });
+
+    await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update: { status: 'open' },
+      now: NOW,
+    });
+
+    expect(posts(calls)).toEqual([
+      expect.objectContaining({
+        path: '/conversations/7/toggle_status',
+        body: { status: 'open' },
+      }),
+      expect.objectContaining({
+        path: '/conversations/7/labels',
+        body: { labels: ['handled-by-ai'] },
+      }),
+    ]);
+  });
+
+  it('reopens a chat without rewriting labels when it has no follow-up', async () => {
+    const { calls } = recorder({
+      ...conversation(7),
+      status: 'resolved',
+      labels: ['handled-by-ai'],
+    });
+
+    await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update: { status: 'open' },
+      now: NOW,
+    });
+
+    expect(posts(calls).map((c) => c.path)).toEqual([
+      '/conversations/7/toggle_status',
+    ]);
+  });
 });

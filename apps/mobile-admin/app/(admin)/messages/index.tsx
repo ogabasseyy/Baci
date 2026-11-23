@@ -9,12 +9,17 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConversationListItem } from '@/components/messages/ConversationListItem';
-import { FloatingSearchBar } from '@/components/messages/FloatingSearchBar';
+import {
+  FLOATING_SEARCH_CLEARANCE,
+  FloatingSearchBar,
+} from '@/components/messages/FloatingSearchBar';
 import { InboxEmptyState } from '@/components/messages/InboxEmptyState';
 import { InboxSearchResults } from '@/components/messages/InboxSearchResults';
 import { InboxViewChips } from '@/components/messages/InboxViewChips';
-import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
+import { AppHeaderKeyboardContainer } from '@/components/ui/AppHeaderKeyboardContainer';
+import { KeyboardInsetView } from '@/components/ui/KeyboardInsetView';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useInboxSearch } from '@/hooks/useInboxSearch';
@@ -48,6 +53,9 @@ function errorText(error: unknown): string {
 
 export default function MessagesScreen() {
   const { colors } = useTheme();
+  // The lists run to the screen edge, under the floating search pill, so the
+  // safe area is left to them and to the pill instead of a padded strip.
+  const bottomInset = Math.max(useSafeAreaInsets().bottom, SPACING.md);
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<InboxView>('needs_reply');
   const [term, setTerm] = useState('');
@@ -98,114 +106,132 @@ export default function MessagesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppKeyboardContainer align="start" scrollEnabled={false}>
+      <AppHeaderKeyboardContainer contentContainerStyle={{ paddingBottom: 0 }}>
         {searching ? null : (
           <InboxViewChips colors={colors} onChange={setView} value={view} />
         )}
-        <View style={styles.flex}>
-          {searching ? (
-            <InboxSearchResults
-              colors={colors}
-              hasMore={search.hasMore}
-              isError={search.isError}
-              isLoadingMore={search.isLoadingMore}
-              isPending={search.isPending}
-              loadMoreFailed={search.loadMoreFailed}
-              onLoadMore={search.loadMore}
-              onRetry={search.retry}
-              results={search.results}
-              term={term}
-            />
-          ) : query.isLoading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator color={colors.primary} size="large" />
-            </View>
-          ) : query.isError && conversations.length === 0 ? (
-            <View style={styles.centered}>
-              <Text style={[styles.title, { color: colors.text }]}>
-                {errorText(query.error)}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  query.refetch();
-                }}
-                style={styles.retry}
-              >
-                <Text style={{ color: colors.primary }}>Tap to retry</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <FlashList
-              data={conversations}
-              keyExtractor={(item) => String(item.id)}
-              ListEmptyComponent={
-                <InboxEmptyState
-                  canLoadMore={!!query.hasNextPage && !query.isFetchingNextPage}
-                  colors={colors}
-                  loading={autoLoading || query.isFetchingNextPage}
-                  onLoadMore={() => {
-                    query.fetchNextPage();
+        <View style={styles.stage}>
+          <View style={styles.flex}>
+            {searching ? (
+              <InboxSearchResults
+                bottomInset={bottomInset}
+                colors={colors}
+                hasMore={search.hasMore}
+                isError={search.isError}
+                isLoadingMore={search.isLoadingMore}
+                isPending={search.isPending}
+                loadMoreFailed={search.loadMoreFailed}
+                onLoadMore={search.loadMore}
+                onRetry={search.retry}
+                results={search.results}
+                term={term}
+              />
+            ) : query.isLoading ? (
+              <View style={styles.centered}>
+                <ActivityIndicator color={colors.primary} size="large" />
+              </View>
+            ) : query.isError && conversations.length === 0 ? (
+              <View style={styles.centered}>
+                <Text style={[styles.title, { color: colors.text }]}>
+                  {errorText(query.error)}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    query.refetch();
                   }}
-                  view={view}
-                />
-              }
-              ListHeaderComponent={
-                summary ? (
-                  <Text
-                    style={[styles.summary, { color: colors.textSecondary }]}
-                  >
-                    {summary}
-                  </Text>
-                ) : null
-              }
-              ListFooterComponent={
-                query.isFetchingNextPage ? (
-                  <ActivityIndicator color={colors.primary} />
-                ) : query.isFetchNextPageError ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
+                  style={styles.retry}
+                >
+                  <Text style={{ color: colors.primary }}>Tap to retry</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <FlashList
+                contentContainerStyle={{
+                  paddingBottom: FLOATING_SEARCH_CLEARANCE + bottomInset,
+                }}
+                data={conversations}
+                keyExtractor={(item) => String(item.id)}
+                ListEmptyComponent={
+                  <InboxEmptyState
+                    canLoadMore={
+                      !!query.hasNextPage && !query.isFetchingNextPage
+                    }
+                    colors={colors}
+                    loading={autoLoading || query.isFetchingNextPage}
+                    onLoadMore={() => {
                       query.fetchNextPage();
                     }}
-                    style={styles.retry}
-                  >
-                    <Text style={{ color: colors.primary }}>
-                      Could not load more chats. Tap to retry.
-                    </Text>
-                  </Pressable>
-                ) : null
-              }
-              onEndReached={() => {
-                if (
-                  !pageFailed &&
-                  query.hasNextPage &&
-                  !query.isFetchingNextPage
-                ) {
-                  query.fetchNextPage();
+                    view={view}
+                  />
                 }
-              }}
-              refreshControl={
-                <RefreshControl onRefresh={onRefresh} refreshing={refreshing} />
-              }
-              renderItem={({ item }) => (
-                <ConversationListItem
-                  colors={colors}
-                  conversation={item}
-                  onPress={(id) =>
-                    router.push(`/(admin)/messages/${id}` as never)
+                ListHeaderComponent={
+                  summary ? (
+                    <Text
+                      style={[styles.summary, { color: colors.textSecondary }]}
+                    >
+                      {summary}
+                    </Text>
+                  ) : null
+                }
+                ListFooterComponent={
+                  query.isFetchingNextPage ? (
+                    <ActivityIndicator color={colors.primary} />
+                  ) : query.isFetchNextPageError ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        query.fetchNextPage();
+                      }}
+                      style={styles.retry}
+                    >
+                      <Text style={{ color: colors.primary }}>
+                        Could not load more chats. Tap to retry.
+                      </Text>
+                    </Pressable>
+                  ) : null
+                }
+                onEndReached={() => {
+                  if (
+                    !pageFailed &&
+                    query.hasNextPage &&
+                    !query.isFetchingNextPage
+                  ) {
+                    query.fetchNextPage();
                   }
-                />
-              )}
+                }}
+                refreshControl={
+                  <RefreshControl
+                    onRefresh={onRefresh}
+                    refreshing={refreshing}
+                  />
+                }
+                renderItem={({ item }) => (
+                  <ConversationListItem
+                    colors={colors}
+                    conversation={item}
+                    onPress={(id) =>
+                      router.push(`/(admin)/messages/${id}` as never)
+                    }
+                  />
+                )}
+              />
+            )}
+          </View>
+          <KeyboardInsetView
+            opened={SPACING.sm}
+            property="bottom"
+            resting={bottomInset}
+            style={styles.floating}
+          >
+            <FloatingSearchBar
+              colors={colors}
+              onChangeText={setTerm}
+              value={term}
             />
-          )}
+          </KeyboardInsetView>
         </View>
-        <FloatingSearchBar
-          colors={colors}
-          onChangeText={setTerm}
-          value={term}
-        />
-      </AppKeyboardContainer>
+      </AppHeaderKeyboardContainer>
     </View>
   );
 }
@@ -220,6 +246,8 @@ const styles = StyleSheet.create({
   },
   container: { flex: 1 },
   flex: { flex: 1 },
+  floating: { left: 0, position: 'absolute', right: 0 },
+  stage: { flex: 1 },
   retry: {
     alignItems: 'center',
     justifyContent: 'center',

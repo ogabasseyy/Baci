@@ -10,8 +10,11 @@ import {
 import { SPACING, type ThemeColors, TYPOGRAPHY } from '@/constants/theme';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 import { ConversationListItem } from './ConversationListItem';
+import { FLOATING_SEARCH_CLEARANCE } from './FloatingSearchBar';
 
 interface InboxSearchResultsProps {
+  /** Safe-area room below the floating search pill, so rows can scroll clear. */
+  bottomInset?: number;
   colors: ThemeColors;
   /** More pages exist; shown as a button when the pages so far had no match. */
   hasMore: boolean;
@@ -28,6 +31,7 @@ interface InboxSearchResultsProps {
 
 /** What the list shows while the search box has text. */
 export function InboxSearchResults({
+  bottomInset = 0,
   colors,
   hasMore,
   isError,
@@ -73,6 +77,9 @@ export function InboxSearchResults({
   }
   return (
     <FlatList
+      contentContainerStyle={{
+        paddingBottom: FLOATING_SEARCH_CLEARANCE + bottomInset,
+      }}
       data={results}
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => String(item.conversation.id)}

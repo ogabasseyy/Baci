@@ -58,4 +58,20 @@ describe('FloatingSearchBar', () => {
       '100'
     );
   });
+
+  it('has a solid field, so what is typed stays readable', () => {
+    render(
+      <FloatingSearchBar
+        colors={LIGHT_COLORS}
+        onChangeText={vi.fn()}
+        value=""
+      />
+    );
+
+    const pill = screen.getByLabelText('Search chats').parentElement;
+    const fill = pill ? getComputedStyle(pill).backgroundColor : '';
+
+    // The card colour, fully opaque (no alpha channel).
+    expect(fill).toBe('rgb(255, 255, 255)');
+  });
 });

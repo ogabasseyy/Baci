@@ -155,6 +155,39 @@ it('starts with restricted nonce and proof stores and refuses a reused runner ke
   expect(f.worker).toHaveBeenCalledWith(
     expect.objectContaining({ hostOrigin: host })
   );
+  const legacyBinding = { ...binding, kind: 'lifecycle', buildId: undefined };
+  const legacySummary = {
+    namespace: 'baci.full-code.lifecycle.v1',
+    action: 'draft-only',
+    merchant: id,
+    payload: {
+      expectedDraftVersion: 1,
+      expectedPublishedVersion: 0,
+      targetLegacyRevision: id,
+    },
+    website: id,
+    draft: 1,
+    published: 0,
+    template: 'puck',
+    legacy: { config: null },
+  };
+  f.load.mockResolvedValue({
+    ...legacyBinding,
+    status: 'confirmation-required',
+    merchantId: id,
+    buildId: null,
+    action: 'draft-only',
+    summary: legacySummary,
+  });
+  await expect(capture(client, legacyBinding)).resolves.toMatchObject({
+    effectDigest: binding.effectDigest,
+    routes: ['/'],
+  });
+  expect(f.worker).toHaveBeenCalledTimes(1);
+  await expect(
+    capture(client, { ...legacyBinding, kind: 'draft' })
+  ).rejects.toThrow('APPROVAL_MISMATCH');
+
   await service.close();
   expect(close).toHaveBeenCalledOnce();
   await expect(

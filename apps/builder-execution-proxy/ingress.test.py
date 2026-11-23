@@ -70,6 +70,7 @@ class Backend(BaseHTTPRequestHandler):
             'host': self.headers.get('Host'),
             'origin': self.headers.get('Origin'),
             'cookie': self.headers.get('Cookie'),
+            'referer': self.headers.get('Referer'),
             'authorization': self.headers.get('Authorization'),
             'key': self.headers.get(KEY_HEADER),
         }).encode())
@@ -136,14 +137,15 @@ def smoke(root, backend_port, secret, dead=False):
                 return
             body, status = request(PATH, '-H', f'{KEY_HEADER}: {KEY}',
                                    '-H', 'Origin: null', '-H', 'Cookie: sensitive=x',
-                                   '-H', 'Authorization: Bearer sensitive')
+                                   '-H', 'Authorization: Bearer sensitive',
+                                   '-H', 'Referer: https://usebaci.com/?value=synthetic')
             if not secret:
                 assert status == '404'
                 return
             assert status == '200'
             assert json.loads(body) == {
                 'path': PATH, 'host': EXECUTION, 'origin': 'null', 'cookie': None,
-                'authorization': None, 'key': None,
+                'authorization': None, 'key': None, 'referer': None,
             }
             assert request('/internal/owner/preview', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
             assert request(PATH, '-H', f'{KEY_HEADER}: {KEY}', '-X', 'POST')[-1] == '404'

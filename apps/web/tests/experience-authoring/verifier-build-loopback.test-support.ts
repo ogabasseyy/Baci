@@ -57,6 +57,7 @@ export async function setupBuildVerification(input: {
   const ctx: OwnerRequestContext = { ...input.f.owner, identity };
   return {
     ctx,
+    port: address.port,
     client: createVerifierBuildClient({
       key: input.key,
       port: address.port,

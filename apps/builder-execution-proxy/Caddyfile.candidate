@@ -28,6 +28,7 @@ builder-output-origin.usebaci.com {
 			header_up -X-Baci-Execution-Origin-Key
 			header_up -Authorization
 			header_up -Cookie
+			header_up -Referer
 		}
 	}
 	handle {

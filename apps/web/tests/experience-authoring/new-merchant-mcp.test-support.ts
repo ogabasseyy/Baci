@@ -46,7 +46,23 @@ export async function startNewMerchantMcp(
   const port = await unusedPort();
   let deliveryPort = await unusedPort();
   while (deliveryPort === port) deliveryPort = await unusedPort();
+  const verifier = runner.verifier;
+  let ownerPort = verifier ? await unusedPort() : undefined;
+  while (
+    verifier &&
+    (ownerPort === deliveryPort ||
+      ownerPort === port ||
+      ownerPort === verifier.port)
+  )
+    ownerPort = await unusedPort();
   const stack = await startProductionBuilderStack({
+    ...(verifier
+      ? {
+          ownerPort,
+          verifierPort: verifier.port,
+          verifierKey: verifier.key,
+        }
+      : {}),
     port,
     deliveryPort,
     ...(background

@@ -16,6 +16,7 @@ import { createVerifierBuildRecorder } from './build-recorder';
 import { createIndependentBuildVerifier } from './build-verifier';
 import { createVerifierCaptureHandler } from './capture-handler';
 import { startVerifierListener } from './listener';
+import { createModeExitProof } from './mode-exit-proof';
 import { createVerifierNonceStore } from './nonce-store';
 import { createOwnerVerificationSlots } from './owner-verification-slots';
 import { createPublicVerificationCoordinator } from './public-verification-coordinator';
@@ -77,12 +78,27 @@ export async function startVerifierService(settings: {
         approval.status !== 'confirmation-required' ||
         approval.approvalId !== binding.approvalId ||
         approval.effectDigest !== binding.effectDigest ||
-        typeof approval.merchantId !== 'string' ||
+        typeof approval.merchantId !== 'string'
+      )
+        throw Error('APPROVAL_MISMATCH');
+      signal?.throwIfAborted();
+      if (
+        binding.kind === 'lifecycle' &&
+        binding.buildId === undefined &&
+        approval.buildId === null &&
+        'summary' in approval
+      )
+        return createModeExitProof({
+          action: approval.action,
+          summary: approval.summary,
+          merchantId: approval.merchantId,
+          effectDigest: binding.effectDigest,
+        });
+      if (
         typeof approval.buildId !== 'string' ||
         approval.buildId !== binding.buildId
       )
         throw Error('APPROVAL_MISMATCH');
-      signal?.throwIfAborted();
       const worker = await workers.resolve(
         { supabase: client, merchantId: approval.merchantId, signal },
         approval.buildId

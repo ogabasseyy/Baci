@@ -183,9 +183,14 @@ it('links a new synthetic user and creates a private merchant through MCP under 
         result: { structuredContent: { storefrontId, isPublished: false } },
       }
     );
-    expect(
-      await call('get_experience_capabilities', { storefrontId })
-    ).toMatchObject({
+    const capabilities = await call('get_experience_capabilities', {
+      storefrontId,
+    });
+    if (!background || !runner.verifier) {
+      expect(capabilities).toMatchObject({ error: { code: -32602 } });
+      return;
+    }
+    expect(capabilities).toMatchObject({
       result: {
         structuredContent: {
           status: 'ok',

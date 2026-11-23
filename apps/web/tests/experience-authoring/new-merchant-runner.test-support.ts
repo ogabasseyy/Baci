@@ -102,12 +102,13 @@ export async function setupNewMerchantRunner(
     return currentBootstrap(ctx, manifest, routeId);
   };
   const pool = useLocalRunner ? await setupVerifierPool(f) : undefined;
+  const verifierKey = new Uint8Array(32).fill(3);
   try {
     const verification = pool
       ? await setupBuildVerification({
           f,
           pool,
-          key: new Uint8Array(32).fill(3),
+          key: verifierKey,
           verify: createIndependentBuildVerifier({
             execute: createRunnerExecutor(runner),
             bootstrap: currentBootstrap,
@@ -137,6 +138,9 @@ export async function setupNewMerchantRunner(
       execute,
       runner,
       bootstrap,
+      verifier: verification
+        ? { port: verification.port, key: verifierKey }
+        : undefined,
       build: {
         key: new Uint8Array(32).fill(2),
         toolchainDigest: 'a'.repeat(64),

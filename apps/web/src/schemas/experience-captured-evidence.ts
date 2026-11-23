@@ -8,3 +8,12 @@ export const experienceCapturedEvidence = z.strictObject({
   evidenceDigest: experienceVerifierDigest,
   routes: z.array(z.string().min(1).max(240)).min(1).max(128),
 });
+
+export const experienceCaptureRecordBindingSchema = z.object({
+  id: z.uuid(),
+  merchantId: z.uuid(),
+  buildId: z.uuid(),
+  buildDigest: experienceVerifierDigest,
+  keyDigest: experienceVerifierDigest,
+  evidenceDigest: experienceVerifierDigest,
+});

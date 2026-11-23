@@ -2,6 +2,8 @@ import { expect, it } from 'vitest';
 import {
   experiencePublicRelayCatalogSchema,
   experiencePublicRelayIdentitySchema,
+  experiencePublicRelayProductSchema,
+  experiencePublicRelayRequestLimitSchema,
   experiencePublicRelayStateSchema,
 } from './experience-public-relay';
 
@@ -67,4 +69,27 @@ it('binds the state request to a digest and a bounded policy revision', () => {
       policyRevision: 'a'.repeat(129),
     }).success
   ).toBe(false);
+});
+
+it('validates the product policy binding independently of the cart slug', () => {
+  expect(
+    experiencePublicRelayProductSchema.parse({ merchantId, productId })
+  ).toEqual({ merchantId, productId });
+  expect(
+    experiencePublicRelayProductSchema.safeParse({
+      merchantId,
+      productId: 'bad',
+    }).success
+  ).toBe(false);
+  expect(
+    experiencePublicRelayProductSchema.safeParse({ productId }).success
+  ).toBe(false);
+});
+
+it('requires a positive bounded whole-number request budget', () => {
+  expect(experiencePublicRelayRequestLimitSchema.parse(1)).toBe(1);
+  for (const invalid of [0, 1.5, 1000])
+    expect(
+      experiencePublicRelayRequestLimitSchema.safeParse(invalid).success
+    ).toBe(false);
 });

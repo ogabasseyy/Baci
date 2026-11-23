@@ -1,6 +1,6 @@
-import { z } from 'zod';
 import { HYDRATION_SELECT } from '@/hooks/cart/shared-cart-products';
 import { productionOrigin } from '@/lib/experience/production-origins';
+import { experiencePublicRelayProductSchema } from '@/schemas/experience-public-relay';
 
 /** Exact anonymous product projection; credentials and transport are host-owned. */
 export function createPublicProductPolicy(settings: {
@@ -9,8 +9,8 @@ export function createPublicProductPolicy(settings: {
   productId: string;
 }) {
   const origin = productionOrigin(settings.origin);
-  const merchantId = z.uuid().parse(settings.merchantId);
-  const productId = z.uuid().parse(settings.productId);
+  const { merchantId, productId } =
+    experiencePublicRelayProductSchema.parse(settings);
   const expected = new Map([
     ['select', HYDRATION_SELECT.replace(/\s+/g, '')],
     ['merchant_id', `eq.${merchantId}`],

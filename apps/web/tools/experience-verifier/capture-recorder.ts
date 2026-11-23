@@ -1,24 +1,16 @@
 import type { Pool } from 'pg';
-import { z } from 'zod';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import type { RecordedPrivateCapture } from '@/lib/experience/private-capture-service';
 import { validateSemanticSnapshot } from '@/lib/experience/semantic-data';
 import { snapshotKeyDigest } from '@/lib/experience/snapshot-key';
+import { experienceCaptureRecordBindingSchema } from '@/schemas/experience-captured-evidence';
 import { verifyVerifierDatabaseRole } from './database-role';
-
-const id = z.uuid();
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
 
 /** Private verifier worker only: this stores evidence; it does not verify its provenance. */
 export async function createVerifierCaptureRecorder(pool: Pool) {
   await verifyVerifierDatabaseRole(pool);
   return async (capture: RecordedPrivateCapture) => {
-    id.parse(capture.id);
-    id.parse(capture.merchantId);
-    id.parse(capture.buildId);
-    digest.parse(capture.buildDigest);
-    digest.parse(capture.keyDigest);
-    digest.parse(capture.evidenceDigest);
+    experienceCaptureRecordBindingSchema.parse(capture);
     const { key, consumesCatalog, nodes } = capture.snapshot;
     if (
       key.build !== capture.buildDigest ||

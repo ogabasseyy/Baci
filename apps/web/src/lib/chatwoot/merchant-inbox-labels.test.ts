@@ -98,3 +98,25 @@ describe('bugfix: look-alike tags are the same tag', () => {
     ).toEqual([]);
   });
 });
+
+describe('bugfix: tags created elsewhere with capitals are the same tag', () => {
+  it('removes a tag stored as "Order_Issue" when asked to remove "order-issue"', () => {
+    expect(
+      applyInboxLabelChange(['tag-Order_Issue', 'needs-human'], {
+        removeTags: ['order-issue'],
+      })
+    ).toEqual(['needs-human']);
+  });
+
+  it('does not add a second tag that differs from a stored one only by case', () => {
+    expect(applyInboxLabelChange(['tag-VIP'], { addTags: ['vip'] })).toEqual([
+      'tag-VIP',
+    ]);
+  });
+
+  it('lists look-alike stored tags once', () => {
+    expect(
+      tagsFromLabels(['tag-order-issue', 'tag-Order_Issue', 'tag-lead'])
+    ).toEqual(['order-issue', 'lead']);
+  });
+});

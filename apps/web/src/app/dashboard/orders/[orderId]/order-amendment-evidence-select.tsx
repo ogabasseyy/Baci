@@ -9,12 +9,22 @@ export function OrderAmendmentEvidenceSelect({
   value,
   onChange,
   money,
+  canRecordStaffTopUp,
 }: {
   entries: z.infer<typeof amendmentPreviewResult>['bankEvidence'];
   value: string;
   onChange: (id: string) => void;
   money: (minor: number) => string;
+  canRecordStaffTopUp?: boolean;
 }) {
+  if (canRecordStaffTopUp && !entries?.length) {
+    return (
+      <p role="status" className="text-sm">
+        Use Change items in the mobile admin app to record Cash or POS. You can
+        also return here once a payment has been verified.
+      </p>
+    );
+  }
   return (
     <div className="grid gap-1.5">
       <Label htmlFor="amendment-bank-evidence">Verified top-up</Label>

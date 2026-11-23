@@ -41,3 +41,19 @@ it('explains when the order has no matching verified payment', () => {
     screen.getByRole('option', { name: 'No matching payment verified' })
   ).toBeVisible();
 });
+
+it('directs staff to mobile for an eligible Cash or POS top-up', () => {
+  render(
+    <OrderAmendmentEvidenceSelect
+      entries={[]}
+      value=""
+      onChange={vi.fn()}
+      money={String}
+      canRecordStaffTopUp
+    />
+  );
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Use Change items in the mobile admin app to record Cash or POS.'
+  );
+  expect(screen.queryByRole('combobox')).toBeNull();
+});

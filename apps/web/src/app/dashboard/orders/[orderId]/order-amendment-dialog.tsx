@@ -181,7 +181,9 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
               </dl>
               <p className="text-sm">
                 {requiresBankEvidence
-                  ? `Select the verified payment of ${money(preview.adjustmentMinor)} to confirm.`
+                  ? preview.canRecordStaffTopUp && !preview.bankEvidence?.length
+                    ? `Balance due ${money(preview.adjustmentMinor)}.`
+                    : `Select the verified payment of ${money(preview.adjustmentMinor)} to confirm.`
                   : preview.adjustmentMinor > 0
                     ? `Balance due ${money(preview.adjustmentMinor)}. Fulfillment will be held.`
                     : preview.adjustmentMinor < 0
@@ -194,6 +196,7 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
                   value={bankEvidenceId}
                   onChange={setBankEvidenceId}
                   money={money}
+                  canRecordStaffTopUp={preview.canRecordStaffTopUp === true}
                 />
               )}
               {preview.adjustmentMinor < 0 && !canRefund && (

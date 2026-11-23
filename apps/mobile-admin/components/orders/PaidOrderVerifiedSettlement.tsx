@@ -1,19 +1,19 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import { AppSheetModal } from '@/components/ui/AppSheetModal';
+import { Pressable, Text, View } from 'react-native';
 import type { ThemeColors } from '@/constants/theme';
 import { AuthenticatedFetchPreflightError } from '@/hooks/orders/authenticated-fetch';
+import { usePaidOrderSettlementPending } from '@/hooks/orders/usePaidOrderSettlementPending';
 import {
   type AmendmentWorkspace,
   PaidOrderAmendmentError,
   paidOrderAmendment,
   type VerifiedSettlementAction,
-  verifiedSettlementActionSchema,
 } from '@/lib/paid-order-amendment-api';
 import { asyncStorage } from '@/lib/storage';
 import { generateUUID } from '@/utils/uuid';
 import { PaidOrderVerifiedBankReturn } from './PaidOrderVerifiedBankReturn';
+import { PaidOrderVerifiedCancellationSheet } from './PaidOrderVerifiedCancellationSheet';
 
 interface Props {
   orderId: string;
@@ -24,9 +24,6 @@ interface Props {
   refreshOrder: () => Promise<boolean>;
 }
 
-const unreadableSettlementMessage =
-  'A saved settlement request could not be read. Reload the order status before starting another settlement action.';
-
 export function PaidOrderVerifiedSettlement({
   orderId,
   amendmentId,
@@ -36,65 +33,19 @@ export function PaidOrderVerifiedSettlement({
   refreshOrder,
 }: Props) {
   const client = useQueryClient();
-  const key = [
-    'verified-amendment-operation',
-    operatorId,
-    orderId,
-    amendmentId,
-  ];
-  const storageKey = key.join(':');
-  const unreadableKey = `${storageKey}:unreadable`;
-  const [unreadableMessage, setUnreadableMessage] = useState(false);
+  const {
+    pending,
+    queryKey: key,
+    storageKey,
+    unreadableKey,
+    unreadableSavedAction,
+    unreadableMessage,
+    setUnreadableMessage,
+    savedAction,
+  } = usePaidOrderSettlementPending({ operatorId, orderId, amendmentId });
   const [refreshRequired, setRefreshRequired] = useState(false);
   const [message, setMessage] = useState('');
-  const pending = useQuery({
-    queryKey: key,
-    queryFn: async () => {
-      if ((await asyncStorage.getItem(unreadableKey)) === '1') {
-        setUnreadableMessage(true);
-        setMessage(unreadableSettlementMessage);
-        return { unreadable: true as const };
-      }
-      const saved = await asyncStorage.getItem(storageKey);
-      if (!saved) return null;
-      let decoded: unknown;
-      try {
-        decoded = JSON.parse(saved);
-      } catch {
-        decoded = undefined;
-      }
-      const parsed = verifiedSettlementActionSchema.safeParse(decoded);
-      if (parsed.success) return parsed.data;
-      try {
-        await asyncStorage.setItem(unreadableKey, '1');
-      } catch {
-        setUnreadableMessage(true);
-        setMessage(unreadableSettlementMessage);
-        return { unreadable: true as const };
-      }
-      try {
-        await asyncStorage.removeItem(storageKey);
-      } catch {
-        // The durable marker keeps the recovery action available to retry.
-      }
-      setUnreadableMessage(true);
-      setMessage(unreadableSettlementMessage);
-      return { unreadable: true as const };
-    },
-    staleTime: Number.POSITIVE_INFINITY,
-    retry: false,
-  });
-  const isVerifiedAction = (
-    value: typeof pending.data
-  ): value is VerifiedSettlementAction =>
-    Boolean(value && !('unreadable' in value));
-  const unreadableSavedAction =
-    (pending.data !== undefined &&
-      pending.data !== null &&
-      !isVerifiedAction(pending.data)) ||
-    unreadableMessage;
   const recoveryRequired = unreadableSavedAction || refreshRequired;
-  const savedAction = isVerifiedAction(pending.data) ? pending.data : null;
   const [cancellation, setCancellation] = useState<
     'open_verified_cancellation' | 'cancel_with_verified_refunds' | null
   >(null);
@@ -257,6 +208,12 @@ export function PaidOrderVerifiedSettlement({
           )}
         </>
       )}
+      {unreadableMessage && (
+        <Text style={{ color: colors.text }}>
+          A saved settlement request could not be read. Reload the order status
+          before starting another settlement action.
+        </Text>
+      )}
       {recoveryRequired &&
         !cancellation &&
         action('Reload order status', () => void reloadOrderStatus(), busy)}
@@ -309,67 +266,35 @@ export function PaidOrderVerifiedSettlement({
           />
         )}
       {cancellation && (
-        <AppSheetModal
-          visible
-          accessibilityLabel="Verified cancellation"
+        <PaidOrderVerifiedCancellationSheet
+          colors={colors}
+          closing={closing}
+          reason={reason}
+          setReason={setReason}
+          busy={busy}
+          recoveryRequired={recoveryRequired}
+          pendingReady={pending.isSuccess}
+          canOpenVerifiedCancellation={Boolean(
+            verification.canOpenVerifiedCancellation
+          )}
+          verifiedCancellationReady={Boolean(
+            verification.verifiedCancellationReady
+          )}
+          savedAction={savedAction}
+          message={message}
+          onConfirm={() =>
+            void submit({
+              action: cancellation,
+              idempotencyKey: generateUUID(),
+              reason: reason.trim(),
+            })
+          }
+          onReload={() => void reloadOrderStatus()}
           onClose={() => {
             if (!inFlight.current) setCancellation(null);
           }}
-        >
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 20 }}>
-            {closing
-              ? 'Cancel with verified refunds'
-              : 'Hold fulfillment for cancellation'}
-          </Text>
-          <Text style={{ color: colors.text, marginVertical: 12 }}>
-            {closing
-              ? 'This marks the order cancelled, posts the verified refunds, and returns stock to inventory.'
-              : 'Finance will verify Credit Direct and any separate top-up before the order is cancelled.'}
-          </Text>
-          <TextInput
-            accessibilityLabel="Cancellation reason"
-            placeholder="Cancellation reason"
-            placeholderTextColor={colors.textMuted}
-            value={reason}
-            onChangeText={setReason}
-            editable={!busy}
-            maxLength={500}
-            style={{
-              color: colors.text,
-              borderColor: colors.border,
-              borderWidth: 1,
-              padding: 12,
-            }}
-          />
-          {savedAction
-            ? retrySavedAction(savedAction)
-            : action(
-                'Confirm',
-                () =>
-                  void submit({
-                    action: cancellation,
-                    idempotencyKey: generateUUID(),
-                    reason: reason.trim(),
-                  }),
-                !reason.trim() ||
-                  recoveryRequired ||
-                  !pending.isSuccess ||
-                  !(closing
-                    ? verification.verifiedCancellationReady
-                    : verification.canOpenVerifiedCancellation)
-              )}
-          {recoveryRequired &&
-            action('Reload order status', () => void reloadOrderStatus(), busy)}
-          {message && (
-            <Text
-              accessibilityLiveRegion="polite"
-              style={{ color: colors.text }}
-            >
-              {message}
-            </Text>
-          )}
-          {action('Close', () => setCancellation(null))}
-        </AppSheetModal>
+          retrySavedAction={retrySavedAction}
+        />
       )}
     </View>
   );

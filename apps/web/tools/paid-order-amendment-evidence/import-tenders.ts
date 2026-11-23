@@ -10,7 +10,7 @@ const receiptFields = {
   orderId: z.uuid(),
   amountMinor: z.number().int().min(1).max(9_999_999_999),
   receiptReference: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{7,99}$/),
-  reconciliationReference: z.string().min(8).max(160),
+  reconciliationReference: z.string().min(8).max(120),
   occurredAt: instant,
 };
 const receiptSchema = z.discriminatedUnion('method', [

@@ -135,6 +135,16 @@ BEGIN
         AND amount = 20000 AND metadata->>'payment_method' = method;
     END IF;
 
+    IF method = 'bank_transfer' THEN
+      SELECT bank_account_id INTO STRICT bank_account
+      FROM private.paid_order_amendment_config WHERE merchant_id = m;
+      PERFORM set_config('request.jwt.claim.role','service_role',true);
+      late_transfer := public.register_paid_order_bank_evidence(
+        bank_account,'PRE-HOLD-TRANSFER-' || o,'incoming',500000,now(),
+        'Pre-hold bank transfer fixture',NULL,o);
+      PERFORM set_config('request.jwt.claim.role','authenticated',true);
+    END IF;
+
     -- An ordinary cancellation cannot bypass the lender process.
     BEGIN
       PERFORM public.cancel_order_as_merchant(o,'Synthetic ordinary attempt','automatic');
@@ -148,7 +158,7 @@ BEGIN
     END IF;
     UPDATE public.orders SET tracking_number = NULL WHERE id = o;
     IF public.read_paid_order_amendment_workspace(o)->>'canOpenVerifiedCancellation' IS DISTINCT FROM 'true' THEN
-      RAISE EXCEPTION 'Cancellation missing for an eligible order';
+      RAISE EXCEPTION 'Cancellation missing for an eligible order with a pending transfer';
     END IF;
     result := public.run_paid_order_amendment_action(o,amendment,draft_cancel);
     IF result->>'holdFulfillment' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Missing cancellation hold'; END IF;
@@ -179,15 +189,12 @@ BEGIN
     END IF;
     PERFORM set_config('request.jwt.claim.role','authenticated',true);
     PERFORM set_config('request.jwt.claim.sub',f->>'actor',true);
-    IF public.read_paid_order_amendment_workspace(o)->>'verifiedCancellationReady' IS DISTINCT FROM 'true' THEN
-      RAISE EXCEPTION 'Complete refund evidence did not unlock cancellation';
+    IF public.read_paid_order_amendment_workspace(o)->>'verifiedCancellationReady'
+      IS DISTINCT FROM CASE WHEN method = 'bank_transfer' THEN 'false' ELSE 'true' END THEN
+      RAISE EXCEPTION 'Cancellation readiness did not match pending refund evidence';
     END IF;
     IF method = 'bank_transfer' THEN
-      SELECT bank_account_id INTO STRICT bank_account
-      FROM private.paid_order_amendment_config WHERE merchant_id = m;
       PERFORM set_config('request.jwt.claim.role','service_role',true);
-      late_transfer := public.register_paid_order_bank_evidence(
-        bank_account,'LATE-TRANSFER-' || o,'incoming',500000,now(),'Late bank transfer fixture',NULL,o);
       outgoing := public.register_paid_order_bank_evidence(
         bank_account,'LATE-RETURN-' || o,'outgoing',500000,now(),'Verified outgoing return fixture',late_transfer);
       PERFORM set_config('request.jwt.claim.role','authenticated',true);

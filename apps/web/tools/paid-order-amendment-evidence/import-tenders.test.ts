@@ -177,12 +177,12 @@ describe('approved tender exports', () => {
     expect(fetchRpc).not.toHaveBeenCalled();
   });
 
-  it('accepts reconciliation references across the database 8 to 160 range', async () => {
+  it('accepts reconciliation references across the import database 8 to 120 range', async () => {
     const fetchRpc = vi.fn(async () => Response.json([evidence]));
     for (const reconciliationReference of [
       'A'.repeat(8),
-      'reconciliation reference with punctuation !'.repeat(3),
-      'R'.repeat(160),
+      'reconciliation reference with punctuation !'.repeat(2),
+      'R'.repeat(120),
     ]) {
       await expect(
         invoke(
@@ -195,6 +195,22 @@ describe('approved tender exports', () => {
       ).resolves.toEqual([evidence]);
     }
     expect(fetchRpc).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects reconciliation references above the batch SQL limit', async () => {
+    const fetchRpc = vi.fn();
+    for (const reconciliationReference of ['R'.repeat(121), 'R'.repeat(160)]) {
+      await expect(
+        invoke(
+          signed({
+            ...manifest,
+            receipts: [{ ...receipt, reconciliationReference }],
+          }),
+          { fetchRpc }
+        )
+      ).rejects.toThrow();
+    }
+    expect(fetchRpc).not.toHaveBeenCalled();
   });
 
   it('reports a malformed database origin without posting a receipt', async () => {

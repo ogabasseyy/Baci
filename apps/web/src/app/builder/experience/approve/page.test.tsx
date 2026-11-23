@@ -7,9 +7,13 @@ const f = vi.hoisted(() => ({
   configured: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: f.client }));
-vi.mock('@/lib/experience/approval-service', () => ({
-  loadDraftApproval: f.load,
-}));
+vi.mock(
+  import('@/lib/experience/approval-service'),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    loadDraftApproval: f.load,
+  })
+);
 vi.mock('@/lib/experience/publication-service', () => ({
   loadLifecycleApproval: f.load,
 }));

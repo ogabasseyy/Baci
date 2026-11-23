@@ -129,9 +129,13 @@ $writer_login_privileges$;
 -- The CI replay connection is not a superuser, so SET SESSION AUTHORIZATION to
 -- the synthetic login is refused (42501). Exercise the same boundary as the
 -- NOLOGIN group role that the login inherits; the catalog checks above already
--- prove the login is a member of it and holds no extra privileges. The
--- self-grant works because the replay user created the group role (migration
--- above) and so holds ADMIN OPTION on it, which PostgreSQL 16+ requires.
+-- prove the login is a member of it and holds no extra privileges.
+-- Precondition: PostgreSQL 16+ lets the replay user grant the group role to
+-- itself only when it is a superuser or holds ADMIN OPTION on that role. It
+-- does, because it created the role when the replay applied the migration
+-- above to a fresh database. If the role were created by another user, this
+-- GRANT would fail with 42501 at setup: a harness precondition, not a defect
+-- in the writer.
 GRANT baci_wallet_dva_writer TO CURRENT_USER;
 SET LOCAL ROLE baci_wallet_dva_writer;
 

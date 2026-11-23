@@ -2,14 +2,16 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Statements only: comments may legitimately name the attributes they explain.
-const migration = readFileSync(
-  resolve(
-    process.cwd(),
-    '../../supabase/migrations/20261122064203_wallet_dva_restricted_writer.sql'
-  ),
-  'utf8'
-).replace(/^\s*--.*$/gm, '');
+// Anchored to this file, not the working directory, so the test also passes
+// when vitest is started from the repository root.
+const migrationPath = resolve(
+  import.meta.dirname,
+  '../../../../supabase/migrations/20261122064203_wallet_dva_restricted_writer.sql'
+);
+
+// Statements only: comments, whole-line or trailing, may legitimately name the
+// attributes they explain.
+const migration = readFileSync(migrationPath, 'utf8').replace(/--.*$/gm, '');
 
 const alterRoleStatements = [...migration.matchAll(/ALTER\s+ROLE[^;]*;/gi)].map(
   (match) => match[0]

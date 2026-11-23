@@ -5,6 +5,7 @@ import {
   stripSantaActions,
 } from '@baci/shared/lib';
 import { getCachedSantaProductList } from '@/ai/santa-data';
+import { withTimeout } from '@/app/api/chat/route-helpers';
 import { createPublicClient } from '@/lib/supabase/public';
 import {
   CHAT_SANTA_MAX_OFFERS,
@@ -77,7 +78,7 @@ async function verifyOne(input: {
   };
 }
 
-const UNPARSED_ACTION_RE = /\bACTION\s*:/i;
+const UNPARSED_ACTION_RE = /\bACTION\s*:\s*ADD_TO_CART\b/i;
 
 /**
  * Turns Santa's raw text into what the customer may see. Every ACTION line is
@@ -90,6 +91,7 @@ export async function verifySantaAnswer(input: {
   merchantId: string;
   priceNegotiationEnabled: boolean;
   currency: string;
+  timeoutMs?: number;
 }): Promise<SantaVerifiedAnswer> {
   const actions = parseSantaActions(input.text);
   const visible = stripSantaActions(input.text);
@@ -104,7 +106,7 @@ export async function verifySantaAnswer(input: {
   }
   if (actions.length > CHAT_SANTA_MAX_OFFERS) return refused;
   try {
-    const checked = await Promise.all(
+    const verifyAll = Promise.all(
       actions.map((action) =>
         verifyOne({
           merchantId: input.merchantId,
@@ -115,6 +117,13 @@ export async function verifySantaAnswer(input: {
         })
       )
     );
+    const checked = input.timeoutMs
+      ? await withTimeout(
+          verifyAll,
+          input.timeoutMs,
+          'Santa offer verification timed out'
+        )
+      : await verifyAll;
     const offers = checked.filter(
       (offer): offer is ChatSantaOffer => offer !== null
     );

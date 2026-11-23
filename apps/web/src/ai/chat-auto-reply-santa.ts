@@ -8,7 +8,6 @@ import {
   generateSantaPrompt,
   SANTA_CATALOG_TIMEOUT_MS,
 } from '@/ai/santa-system-instruction';
-import { logSantaInteraction } from '@/app/api/chat/santa/santa-analytics';
 import type { AgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
 import {
   CHAT_AUTO_REPLY_MAX_LENGTH,
@@ -61,26 +60,8 @@ export async function answerSantaWish(input: {
     merchantId: input.tenant.merchantId,
     priceNegotiationEnabled: input.tenant.priceNegotiationEnabled,
     currency: input.tenant.currencyCode,
+    timeoutMs: Math.max(1_000, deadline - Date.now()),
   });
   const reply = verified.reply.slice(0, CHAT_AUTO_REPLY_MAX_LENGTH);
-
-  // Record one analytics event per verified offer so multi-offer grants are not undercounted.
-  const analyticsPayloads =
-    verified.offers.length > 0
-      ? verified.offers.map(
-          (offer) =>
-            `${reply}\nACTION:ADD_TO_CART|PRODUCT:${offer.name}|PRICE:${offer.grantedPrice}`
-        )
-      : [reply];
-  for (const recorded of analyticsPayloads) {
-    void logSantaInteraction({
-      clientIp: `chat-${input.conversationId}`,
-      response: recorded,
-      tenant: input.tenant,
-      userMessage: input.question,
-    }).catch(() => {
-      console.error('[chat-auto-reply] santa analytics failed');
-    });
-  }
   return { reply, offers: verified.offers };
 }

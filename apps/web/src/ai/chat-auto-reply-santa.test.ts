@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   text: vi.fn(),
   prompt: vi.fn(),
   verify: vi.fn(),
-  log: vi.fn(),
 }));
 vi.mock('@/ai/generate-text-with-chain', () => ({
   generateTextWithChain: mocks.text,
@@ -15,9 +14,6 @@ vi.mock('@/ai/santa-system-instruction', () => ({
 }));
 vi.mock('@/ai/chat-santa-offers', () => ({
   verifySantaAnswer: mocks.verify,
-}));
-vi.mock('@/app/api/chat/santa/santa-analytics', () => ({
-  logSantaInteraction: mocks.log,
 }));
 
 import { answerSantaWish } from './chat-auto-reply-santa';
@@ -54,22 +50,21 @@ beforeEach(() => {
     offers: [offer],
     dropped: false,
   });
-  mocks.log.mockResolvedValue(undefined);
 });
 
 describe('answerSantaWish', () => {
-  it('answers as Santa with the verified offer and records the grant', async () => {
+  it('answers as Santa with the verified offer and bounded verification timeout', async () => {
     expect(await answerSantaWish(input)).toEqual({
       reply: 'Deal!',
       offers: [offer],
     });
     expect(mocks.text.mock.calls[0][0].system).toBe('SANTA SYSTEM');
-    expect(mocks.log.mock.calls[0][0].response).toContain(
-      'ACTION:ADD_TO_CART|PRODUCT:Demo Phone X|PRICE:90000'
+    expect(mocks.verify.mock.calls[0][0].timeoutMs).toBeGreaterThanOrEqual(
+      1000
     );
   });
 
-  it('records a refusal without a directive', async () => {
+  it('returns refusal reply with no offers when verification drops the grant', async () => {
     mocks.verify.mockResolvedValue({
       reply: 'I cannot approve that',
       offers: [],
@@ -79,19 +74,13 @@ describe('answerSantaWish', () => {
       reply: 'I cannot approve that',
       offers: [],
     });
-    expect(mocks.log.mock.calls[0][0].response).not.toContain('ACTION:');
   });
 
-  it('still answers when analytics fails', async () => {
-    mocks.log.mockRejectedValue(new Error('insert refused'));
-    const errors = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => undefined);
-    await expect(answerSantaWish(input)).resolves.toMatchObject({
-      reply: 'Deal!',
-    });
-    await Promise.resolve();
-    errors.mockRestore();
+  it('fails fast when the shared deadline is already exhausted', async () => {
+    await expect(
+      answerSantaWish({ ...input, deadlineMs: Date.now() - 100 })
+    ).rejects.toThrow('Santa wish deadline exceeded');
+    expect(mocks.text).not.toHaveBeenCalled();
   });
 
   it('lets a model failure reach the caller, which falls back', async () => {

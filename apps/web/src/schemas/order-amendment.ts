@@ -1,3 +1,4 @@
+import { staffTopUpSchema } from '@baci/shared/schemas';
 import { z } from 'zod';
 import { paidOrderAmendmentStatusSchema } from './order-amendment-document';
 
@@ -17,17 +18,6 @@ export const amendmentPreviewSchema = z.strictObject({
     kind: z.enum(['product', 'variant', 'condition_offer']),
   }),
 });
-
-const staffTopUpSchema = z.discriminatedUnion('method', [
-  z.strictObject({ method: z.literal('cash') }),
-  z.strictObject({
-    method: z.literal('pos'),
-    receiptReference: z
-      .string()
-      .trim()
-      .regex(/^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}$/),
-  }),
-]);
 
 export const amendmentConfirmSchema = z
   .strictObject({

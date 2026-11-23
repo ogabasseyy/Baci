@@ -1,4 +1,4 @@
-import { formatOrderItemDisplayName } from '@baci/shared';
+import { formatOrderItemDisplayName, staffTopUpSchema } from '@baci/shared';
 import { useRef, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { AppSheetModal } from '@/components/ui/AppSheetModal';
@@ -9,7 +9,6 @@ import {
   type AmendmentPreview,
   type AmendmentReplacement,
   paidOrderAmendment,
-  staffTopUpSchema,
 } from '@/lib/paid-order-amendment-api';
 import { generateUUID } from '@/utils/uuid';
 import type { OrderDetailsItem } from './order-details.types';

@@ -236,6 +236,23 @@ describe('runChatAutoReply', () => {
     expect(await runChatAutoReply(binding, event())).toBe('failed');
     expect(mocks.labels).not.toHaveBeenCalled();
   });
+
+  it('hands over when the product-card message fails to post after the text reply', async () => {
+    mocks.generate.mockResolvedValueOnce({
+      ...draft(),
+      cards: [{ name: 'iPhone 13', slug: 'iphone-13', currency: 'NGN' }],
+    });
+    mocks.post
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
+
+    expect(await runChatAutoReply(binding, event())).toBe('handed_over');
+    expect(mocks.status).toHaveBeenCalledWith(binding, {
+      conversationId: 7,
+      status: 'open',
+    });
+  });
 });
 
 describe('recordMerchantTakeover', () => {

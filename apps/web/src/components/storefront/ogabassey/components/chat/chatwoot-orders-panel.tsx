@@ -35,7 +35,7 @@ export function ChatwootOrdersPanel({
   return createPortal(
     <section
       aria-label="Your orders in Ekaette"
-      className="absolute inset-0 z-10 flex flex-col overflow-hidden rounded-[inherit] bg-white text-gray-900"
+      className="absolute inset-0 z-10 flex flex-col overflow-hidden rounded-[inherit] bg-background text-foreground"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation();
@@ -43,12 +43,12 @@ export function ChatwootOrdersPanel({
         }
       }}
     >
-      <header className="flex min-h-14 shrink-0 items-center gap-2 border-b px-3">
+      <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border px-3">
         <button
           ref={back}
           type="button"
           aria-label="Back to conversation"
-          className="grid size-10 place-items-center rounded-lg hover:bg-gray-100"
+          className="grid size-10 place-items-center rounded-lg hover:bg-muted"
           onClick={onClose}
         >
           <ArrowLeft size={20} aria-hidden="true" />

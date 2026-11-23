@@ -219,7 +219,7 @@ export async function runChatAutoReply(
       result.cards
     );
     if (await isStillPending(binding, conversationId)) {
-      await postAssistantMessage(binding, {
+      const cardSent = await postAssistantMessage(binding, {
         conversationId,
         content: cards.map((card) => card.name).join(', '),
         cards,
@@ -227,6 +227,13 @@ export async function runChatAutoReply(
           ? { cartAction: { for_message_id: event.id, ...result.cartAction } }
           : {}),
       });
+      if (!cardSent) {
+        return handOver(
+          binding,
+          conversationId,
+          'the product cards could not be sent'
+        );
+      }
     }
   }
   await updateLabels(

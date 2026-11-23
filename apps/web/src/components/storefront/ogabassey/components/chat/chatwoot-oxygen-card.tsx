@@ -95,21 +95,21 @@ export function ChatwootOxygenCard({
     <>
       {open ? <section
         aria-label="Ekaette secure application"
-        className="flex flex-col overflow-hidden rounded-t-2xl border-t border-gray-200 bg-white text-gray-900 shadow-2xl"
+        className="flex flex-col overflow-hidden rounded-t-2xl border-t border-border bg-background text-foreground shadow-2xl"
         style={{ position: 'absolute', inset: 'auto 0 0', width: '100%', height: '64%', zIndex: 10 }}
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-4 py-2">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2">
           <button
             ref={back}
             type="button"
             aria-label="Back to conversation"
-            className="flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            className="flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-foreground hover:bg-muted"
             onClick={() => setOpen(false)}
           >
             <ArrowLeft size={14} aria-hidden="true" />
             Hide card
           </button>
-          <span className="flex items-center gap-1 text-xs font-medium text-gray-600">
+          <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
             <LockKeyhole size={13} aria-hidden="true" />
             Secure card · hidden from chat
           </span>
@@ -143,7 +143,7 @@ export function ChatwootOxygenCard({
         <button
           ref={resume}
           type="button"
-          className="absolute right-3 top-16 z-10 rounded-full bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-md"
+          className="absolute right-3 top-16 z-10 rounded-full border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-md"
           onClick={() => setOpen(true)}
         >
           Continue secure application

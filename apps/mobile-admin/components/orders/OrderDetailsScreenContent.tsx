@@ -138,6 +138,7 @@ export function OrderDetailsScreenContent({
             vatLabel={paymentBreakdown.vatLabel}
             walletAmountUsed={paymentBreakdown.walletAmountUsed}
           />
+          {/* Keep recovery and the amendment summary available after status changes. */}
           {merchant?.id && order.currency === 'NGN' && (
             <PaidOrderChangeItems
               key={`${merchant.id}:${order.id}`}

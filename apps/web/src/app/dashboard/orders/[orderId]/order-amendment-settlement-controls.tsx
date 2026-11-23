@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import type { workspaceSchema } from '@/schemas/order-amendment';
+import { OrderAmendmentBankRepayment } from './order-amendment-bank-repayment';
 import { OrderAmendmentVerifiedSettlement } from './order-amendment-verified-settlement';
 
 export function OrderAmendmentSettlementControls({
@@ -33,97 +34,12 @@ export function OrderAmendmentSettlementControls({
   submit: (action: Record<string, string>) => Promise<void>;
 }) {
   const [evidenceId, setEvidenceId] = useState('');
-  const [outgoingId, setOutgoingId] = useState('');
   const [reason, setReason] = useState('');
   const [confirmCancellation, setConfirmCancellation] = useState(false);
   const status = workspace.customer;
   if (!workspace.canEdit || !status) return null;
   const latestRefund = workspace.refunds[0];
   const money = (minor: number) => formatDisplayCurrency(minor / 100, currency);
-  const latestClaim = workspace.events.findLast(
-    (event) =>
-      event.type === 'offline_disbursement_claimed' &&
-      typeof event.details.claimId === 'string' &&
-      !workspace.events.some(
-        (verified) =>
-          verified.type === 'offline_disbursement_verified' &&
-          verified.details.claimId === event.details.claimId
-      )
-  );
-  const claimId =
-    typeof latestClaim?.details.claimId === 'string'
-      ? latestClaim.details.claimId
-      : null;
-
-  const bankRepayment = (
-    <>
-      {!claimId &&
-        workspace.bankEvidence.map((entry) => {
-          if (workspace.isVerifiedFunding && entry.method !== 'bank_transfer')
-            return null;
-          const sourceId =
-            entry.status === 'unapplied' ||
-            (workspace.isVerifiedFunding && entry.status === null)
-              ? entry.id
-              : !workspace.isVerifiedFunding &&
-                  cancelled &&
-                  entry.status === 'top_up'
-                ? entry.transactionId
-                : null;
-          if (!sourceId) return null;
-          return (
-            <Button
-              key={entry.id}
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={() =>
-                submit({
-                  action: 'claim_offline_disbursement',
-                  sourceId,
-                  sourceKind:
-                    entry.status !== 'top_up'
-                      ? 'unapplied'
-                      : 'cancellation_leg',
-                })
-              }
-            >
-              Prepare bank repayment of {money(entry.amountMinor)}
-            </Button>
-          );
-        })}
-      {claimId && (
-        <div className="grid gap-1.5">
-          <Label htmlFor="outgoing-evidence-id">
-            Verified outgoing bank evidence ID
-          </Label>
-          <Input
-            id="outgoing-evidence-id"
-            value={outgoingId}
-            maxLength={36}
-            onChange={(event) => setOutgoingId(event.target.value)}
-          />
-          <Button
-            size="sm"
-            type="button"
-            variant="outline"
-            className="justify-self-start"
-            disabled={!outgoingId.trim()}
-            onClick={() =>
-              submit({
-                action: 'record_offline_refund',
-                claimId,
-                evidenceId: outgoingId.trim(),
-              })
-            }
-          >
-            Verify bank repayment
-          </Button>
-        </div>
-      )}
-    </>
-  );
-
   if (workspace.isVerifiedFunding) {
     return (
       <>
@@ -136,7 +52,12 @@ export function OrderAmendmentSettlementControls({
         />
         {workspace.canRefund && workspace.verifiedCancellationPending && (
           <fieldset disabled={disabled} className="space-y-3">
-            {bankRepayment}
+            <OrderAmendmentBankRepayment
+              workspace={workspace}
+              currency={currency}
+              cancelled={cancelled}
+              submit={submit}
+            />
           </fieldset>
         )}
       </>
@@ -300,7 +221,12 @@ export function OrderAmendmentSettlementControls({
                 </div>
               </div>
             )}
-            {bankRepayment}
+            <OrderAmendmentBankRepayment
+              workspace={workspace}
+              currency={currency}
+              cancelled={cancelled}
+              submit={submit}
+            />
           </>
         )}
       </fieldset>

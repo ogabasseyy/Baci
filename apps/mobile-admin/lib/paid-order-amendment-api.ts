@@ -67,6 +67,8 @@ export const staffTopUpSchema = z.discriminatedUnion('method', [
   z.strictObject({ method: z.literal('cash') }),
   z.strictObject({
     method: z.literal('pos'),
+    // Staff record the terminal's own reference. The signed batch importer
+    // has a separate provider-reference format for reconciled exports.
     receiptReference: z
       .string()
       .trim()

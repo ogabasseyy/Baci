@@ -1,6 +1,6 @@
 import { formatOrderItemDisplayName } from '@baci/shared';
 import { useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import { AppSheetModal } from '@/components/ui/AppSheetModal';
 import { SPACING } from '@/constants/theme';
 import type { usePaidOrderAmendment } from '@/hooks/orders/usePaidOrderAmendment';
@@ -13,6 +13,7 @@ import {
 } from '@/lib/paid-order-amendment-api';
 import { generateUUID } from '@/utils/uuid';
 import type { OrderDetailsItem } from './order-details.types';
+import { PaidOrderChangeAction } from './PaidOrderChangeAction';
 import { PaidOrderChangePreview } from './PaidOrderChangePreview';
 
 interface Props {
@@ -107,24 +108,13 @@ export function PaidOrderChangeItemsSheet({
     key = label
   ) {
     return (
-      <Pressable
+      <PaidOrderChangeAction
         key={key}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: disabled || busy, selected }}
-        disabled={disabled || busy}
+        label={label}
         onPress={press}
-        style={{
-          minHeight: 44,
-          justifyContent: 'center',
-          borderWidth: 1,
-          borderColor: selected ? colors.primary : colors.border,
-          borderRadius: 8,
-          padding: SPACING.sm,
-          opacity: disabled || busy ? 0.55 : 1,
-        }}
-      >
-        <Text style={{ color: colors.primary }}>{label}</Text>
-      </Pressable>
+        disabled={disabled || busy}
+        selected={selected}
+      />
     );
   }
 

@@ -95,6 +95,7 @@ export type MerchantInboxMessage = {
   kind: 'text' | 'product_card' | 'other';
   text: string;
   createdAt: string;
+  checkoutNameRequested?: true;
 };
 
 export type MerchantInboxConversation = {

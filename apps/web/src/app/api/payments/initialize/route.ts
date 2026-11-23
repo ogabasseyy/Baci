@@ -153,7 +153,7 @@ const PaymentInitRequestSchema = z.object({
   items: z.array(OrderItemSchema).optional(),
   channels: z.array(z.string()).optional(),
   // Payment type: 'dva' for Dedicated Virtual Account (bank transfer)
-  payment_type: z.enum(['dva']).optional(),
+  payment_type: z.enum(['dva', 'bank_transfer']).optional(),
   // Crypto payment options (only for juicyway gateway)
   crypto_chain: z.enum(['TRX', 'ETH', 'MATIC', 'AVAXC']).optional(),
   crypto_currency: z.enum(['USDT', 'USDC']).optional(),
@@ -427,6 +427,7 @@ interface PaymentResult {
     bank_name: string;
     account_number: string;
     account_name: string;
+    account_expires_at?: string | null;
   };
   crypto_payment?: {
     address: string;
@@ -1548,7 +1549,7 @@ export async function POST(request: NextRequest) {
     const hasPaystackSubaccount =
       !!merchantWithPaystack.paystack_subaccount_code;
     const gateway: PaymentGateway =
-      data.payment_type === 'dva'
+      data.payment_type === 'dva' || data.payment_type === 'bank_transfer'
         ? 'paystack'
         : data.gateway && PAYMENT_GATEWAYS.includes(data.gateway)
           ? data.gateway
@@ -1706,7 +1707,11 @@ export async function POST(request: NextRequest) {
     let preparedPaystack:
       | Awaited<ReturnType<typeof preparePaystackPayment>>
       | undefined;
-    if (gateway === 'paystack' && data.payment_type !== 'dva') {
+    if (
+      gateway === 'paystack' &&
+      data.payment_type !== 'dva' &&
+      data.payment_type !== 'bank_transfer'
+    ) {
       try {
         preparedPaystack = await preparePaystackPayment(
           paymentData,
@@ -1733,9 +1738,11 @@ export async function POST(request: NextRequest) {
             ? gateway
             : data.payment_type === 'dva'
               ? 'paystack_dva'
-              : merchantWithPaystack.paystack_subaccount_code
-                ? 'paystack'
-                : 'paystack_no_subaccount',
+              : data.payment_type === 'bank_transfer'
+                ? 'paystack_bank_transfer'
+                : merchantWithPaystack.paystack_subaccount_code
+                  ? 'paystack'
+                  : 'paystack_no_subaccount',
         p_reference: reference,
         p_currency: chargeCurrency,
         p_expected_amount_minor: Math.round(payableAmount * 100),
@@ -1963,6 +1970,39 @@ export async function POST(request: NextRequest) {
               platformFee: fees.platformFee / 100,
               merchantAmount: fees.merchantAmount / 100,
             };
+          } else if (data.payment_type === 'bank_transfer') {
+            if (amendmentClaim !== 'untracked') {
+              return createErrorResponse(
+                'This order cannot start a bank transfer checkout payment',
+                'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+                409
+              );
+            }
+            const { initializePaystackBankTransfer } = await import(
+              './paystack-bank-transfer'
+            );
+            const bankTransferOutcome = await initializePaystackBankTransfer({
+              isNigerianCustomer: isNigerianPaystackCustomer(
+                data,
+                formatPhoneToE164(paymentData.customer_phone)
+              ),
+              merchantId,
+              subaccountCode: merchantWithPaystack.paystack_subaccount_code,
+              reference,
+              orderId: paymentData.order_id,
+              amount: paymentData.amount,
+              customerEmail: paymentData.customer_email,
+              customerName: paymentData.customer_name,
+              customerPhone: paymentData.customer_phone,
+            });
+            if (!bankTransferOutcome.ok) {
+              return createErrorResponse(
+                bankTransferOutcome.message,
+                bankTransferOutcome.code,
+                bankTransferOutcome.status
+              );
+            }
+            paymentResult = bankTransferOutcome.paymentResult;
           } else {
             if (!preparedPaystack)
               throw new Error('Prepared Paystack checkout is missing');

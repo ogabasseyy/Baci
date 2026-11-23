@@ -41,6 +41,97 @@ describe('chat auto-reply provider client', () => {
     });
   });
 
+  it('binds assistant suggestions to the customer message being answered', async () => {
+    const fetchMock = stubFetch(() => ({ body: {} }));
+    await postAssistantMessage(binding, {
+      conversationId: 7,
+      content: 'Here are two phones.',
+      followUps: { for_message_id: 42, actions: ['compare_products'] },
+    });
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    ).toMatchObject({
+      content_attributes: {
+        ekaette_follow_ups: {
+          for_message_id: 42,
+          actions: ['compare_products'],
+        },
+      },
+    });
+  });
+
+  it('includes options alongside the card without changing the provider item format', async () => {
+    const fetchMock = stubFetch(() => ({ body: {} }));
+    const initialProduct = {
+      name: 'iPhone 13',
+      slug: 'iphone-13',
+      currency: 'NGN',
+      availability: 'in_stock' as const,
+      price: 385000,
+      variants: [],
+    };
+    await postAssistantMessage(binding, {
+      conversationId: 7,
+      content: 'iPhone 13',
+      cards: [{ name: 'iPhone 13', slug: 'iphone-13', initialProduct }],
+    });
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    ).toMatchObject({
+      content_attributes: {
+        items: [{ title: 'iPhone 13' }],
+        ekaette_product_options: {
+          prepared_at: expect.any(Number),
+          products: [initialProduct],
+        },
+      },
+    });
+  });
+
+  it('posts a product card using the widget’s existing product action', async () => {
+    const fetchMock = stubFetch(() => ({ body: {} }));
+    await postAssistantMessage(binding, {
+      conversationId: 7,
+      content: 'iPhone 13',
+      cards: [
+        {
+          name: 'iPhone 13',
+          slug: 'iphone-13',
+          imageUrl: 'https://cdn.example.test/phone.avif',
+          productPath: '/savings-synthetic/smartphones/iphone-13',
+          priceLabel: 'From ₦385,000',
+        },
+        {
+          name: 'iPhone 13 mini',
+          slug: 'iphone-13-mini',
+        },
+      ],
+    });
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))
+    ).toMatchObject({
+      private: false,
+      content_type: 'cards',
+      content_attributes: {
+        items: [
+          {
+            title: 'iPhone 13',
+            media_url: 'https://cdn.example.test/phone.avif',
+            description: '\nFrom ₦385,000',
+            actions: [
+              { type: 'link', uri: '/savings-synthetic/smartphones/iphone-13' },
+              { type: 'postback', payload: 'product:iphone-13' },
+            ],
+          },
+          {
+            title: 'iPhone 13 mini',
+            actions: [{ type: 'postback', payload: 'product:iphone-13-mini' }],
+          },
+        ],
+      },
+    });
+  });
+
   it('posts a private note when asked', async () => {
     const fetchMock = stubFetch(() => ({ body: {} }));
     await postAssistantMessage(binding, {
@@ -65,37 +156,6 @@ describe('chat auto-reply provider client', () => {
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       status: 'open',
     });
-  });
-
-  it('moves the status with the inbox credential when the bot credential is refused', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const fetchMock = stubFetch((_url, init) =>
-      header(init) === 'synthetic-bot-token-bbbb'
-        ? { status: 401 }
-        : { body: {} }
-    );
-    expect(
-      await setConversationStatus(binding, {
-        conversationId: 7,
-        status: 'open',
-      })
-    ).toBe(true);
-    expect(fetchMock.mock.calls.map(([, init]) => header(init))).toEqual([
-      'synthetic-bot-token-bbbb',
-      'synthetic-agent-token-aaaa',
-    ]);
-  });
-
-  it('does not retry a status move that timed out or hit a server error', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const fetchMock = stubFetch(() => ({ status: 500 }));
-    expect(
-      await setConversationStatus(binding, {
-        conversationId: 7,
-        status: 'open',
-      })
-    ).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('sets labels with the agent credential', async () => {

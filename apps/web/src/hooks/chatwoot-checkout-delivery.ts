@@ -40,8 +40,12 @@ export type ChatwootCheckoutDeliveryResult =
       ok: true;
       method: Extract<DeliveryMethod, 'door' | 'pickup_station'>;
       quote: ShippingQuote;
-      merchantRateId: string;
-      address: ReturnType<typeof prepareCheckoutDelivery>['address'];
+      merchantRateId: string | null;
+      carrier?: 'GIGL';
+      address: ReturnType<typeof prepareCheckoutDelivery>['address'] & {
+        latitude?: number;
+        longitude?: number;
+      };
     }
   | { ok: false; code: ChatwootCheckoutFailureCode };
 

@@ -25,16 +25,24 @@ vi.mock('@/lib/agentic/agentic-merchant-slug', () => ({
 const rpc = vi.fn();
 let user: { id: string } | null;
 
-const patch = (body: unknown, raw?: string) =>
+const SELECTED_MERCHANT = '223e4567-e89b-12d3-a456-426614174002';
+
+const get = (headers?: Record<string, string>) =>
+  new NextRequest('http://localhost/api/merchant/chat-notifications', {
+    headers,
+  });
+
+const patch = (body: unknown, raw?: string, headers?: Record<string, string>) =>
   new NextRequest('http://localhost/api/merchant/chat-notifications', {
     method: 'PATCH',
     body: raw ?? JSON.stringify(body),
+    headers,
   });
 
 beforeEach(() => {
   vi.clearAllMocks();
   user = { id: 'user-1' };
-  rpc.mockResolvedValue({ data: true, error: null });
+  rpc.mockResolvedValue({ data: 'all', error: null });
   vi.mocked(createClient).mockReturnValue({
     auth: { getUser: vi.fn(async () => ({ data: { user } })) },
     rpc,
@@ -49,19 +57,23 @@ beforeEach(() => {
 });
 
 describe('GET /api/merchant/chat-notifications', () => {
-  it('returns the stored switch for the chat tenant', async () => {
-    rpc.mockResolvedValue({ data: false, error: null });
-    const response = await GET();
+  it.each([
+    'all',
+    'handover',
+    'off',
+  ])('returns the stored level %s for the chat tenant', async (stored) => {
+    rpc.mockResolvedValue({ data: stored, error: null });
+    const response = await GET(get());
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ push_enabled: false });
-    expect(rpc).toHaveBeenCalledWith('get_chat_message_push_preference', {
+    expect(await response.json()).toEqual({ level: stored });
+    expect(rpc).toHaveBeenCalledWith('get_chat_message_alert_level', {
       p_merchant_id: MERCHANT_ID,
     });
   });
 
   it('returns 401 when signed out', async () => {
     user = null;
-    expect((await GET()).status).toBe(401);
+    expect((await GET(get())).status).toBe(401);
     expect(rpc).not.toHaveBeenCalled();
   });
 
@@ -71,7 +83,7 @@ describe('GET /api/merchant/chat-notifications', () => {
       merchantSlug: 'someone-else',
       staffAccess: {},
     } as never);
-    const response = await GET();
+    const response = await GET(get());
     expect(response.status).toBe(404);
     expect((await response.json()).code).toBe('not_available');
     expect(rpc).not.toHaveBeenCalled();
@@ -79,32 +91,93 @@ describe('GET /api/merchant/chat-notifications', () => {
 
   it('returns 403 without dashboard view permission', async () => {
     vi.mocked(hasPermission).mockReturnValue(false);
-    expect((await GET()).status).toBe(403);
+    expect((await GET(get())).status).toBe(403);
   });
 
-  it('returns 500 when the read fails or is not a boolean', async () => {
+  it('returns 500 when the read fails or is not a known level', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: 'XX000' } });
-    expect((await GET()).status).toBe(500);
+    expect((await GET(get())).status).toBe(500);
     rpc.mockResolvedValue({ data: 'yes', error: null });
-    expect((await GET()).status).toBe(500);
+    expect((await GET(get())).status).toBe(500);
+    rpc.mockResolvedValue({ data: true, error: null });
+    expect((await GET(get())).status).toBe(500);
+  });
+});
+
+describe('bugfix: the route acts on the store the dashboard selected', () => {
+  it.each([
+    ['GET', () => GET(get({ 'x-baci-merchant-id': SELECTED_MERCHANT }))],
+    [
+      'PATCH',
+      () =>
+        PATCH(
+          patch({ level: 'all' }, undefined, {
+            'x-baci-merchant-id': SELECTED_MERCHANT,
+          })
+        ),
+    ],
+  ])('%s passes the selected store to the merchant lookup', async (_m, call) => {
+    await call();
+    expect(getMerchantForApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      { requestedMerchantId: SELECTED_MERCHANT }
+    );
+  });
+
+  it('falls back to the account default only when no store is selected', async () => {
+    await GET(get());
+    expect(getMerchantForApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      { requestedMerchantId: null }
+    );
+  });
+
+  it.each([
+    ['GET', () => GET(get({ 'x-baci-merchant-id': 'not-a-uuid' }))],
+    [
+      'PATCH',
+      () =>
+        PATCH(
+          patch({ level: 'all' }, undefined, {
+            'x-baci-merchant-id': 'not-a-uuid',
+          })
+        ),
+    ],
+  ])('%s refuses a malformed store header before any lookup', async (_m, call) => {
+    const response = await call();
+    expect(response.status).toBe(400);
+    // Same { error, code } shape as every other error body on this route.
+    expect(await response.json()).toEqual({
+      error: 'Invalid merchant context',
+      code: 'invalid_request',
+    });
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(getMerchantForApiRequest).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 });
 
 describe('PATCH /api/merchant/chat-notifications', () => {
-  it('saves the switch through the permission-checked function', async () => {
-    rpc.mockResolvedValue({ data: false, error: null });
-    const response = await PATCH(patch({ push_enabled: false }));
+  it.each([
+    'all',
+    'handover',
+    'off',
+  ])('saves the level %s through the permission-checked function', async (level) => {
+    rpc.mockResolvedValue({ data: level, error: null });
+    const response = await PATCH(patch({ level }));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ push_enabled: false });
-    expect(rpc).toHaveBeenCalledWith('set_chat_message_push_preference', {
+    expect(await response.json()).toEqual({ level });
+    expect(rpc).toHaveBeenCalledWith('set_chat_message_alert_level', {
       p_merchant_id: MERCHANT_ID,
-      p_enabled: false,
+      p_level: level,
     });
   });
 
   it('returns 401 when signed out', async () => {
     user = null;
-    expect((await PATCH(patch({ push_enabled: true }))).status).toBe(401);
+    expect((await PATCH(patch({ level: 'all' }))).status).toBe(401);
   });
 
   it('returns 404 for a store that is not the chat tenant', async () => {
@@ -113,26 +186,27 @@ describe('PATCH /api/merchant/chat-notifications', () => {
       merchantSlug: null,
       staffAccess: {},
     } as never);
-    expect((await PATCH(patch({ push_enabled: true }))).status).toBe(404);
+    expect((await PATCH(patch({ level: 'all' }))).status).toBe(404);
     expect(rpc).not.toHaveBeenCalled();
   });
 
   it('returns 403 without settings edit permission', async () => {
     vi.mocked(hasPermission).mockReturnValue(false);
-    expect((await PATCH(patch({ push_enabled: true }))).status).toBe(403);
+    expect((await PATCH(patch({ level: 'all' }))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
   });
 
   it('returns 403 when CSRF validation fails', async () => {
     vi.mocked(checkCsrfProtection).mockResolvedValue({ valid: false });
-    expect((await PATCH(patch({ push_enabled: true }))).status).toBe(403);
+    expect((await PATCH(patch({ level: 'all' }))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
   });
 
   it.each([
     ['empty body', {}],
-    ['non-boolean', { push_enabled: 'no' }],
-    ['unknown key', { push_enabled: true, merchant_id: 'other' }],
+    ['unknown level', { level: 'sometimes' }],
+    ['the old push switch', { push_enabled: true }],
+    ['unknown key', { level: 'all', merchant_id: 'other' }],
   ])('returns 400 for %s', async (_label, body) => {
     expect((await PATCH(patch(body))).status).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
@@ -143,16 +217,23 @@ describe('PATCH /api/merchant/chat-notifications', () => {
   });
 
   it('never takes the store from the request body', async () => {
-    await PATCH(patch({ push_enabled: true }));
+    await PATCH(patch({ level: 'all' }));
     expect(rpc).toHaveBeenCalledWith(
-      'set_chat_message_push_preference',
+      'set_chat_message_alert_level',
       expect.objectContaining({ p_merchant_id: MERCHANT_ID })
     );
   });
 
+  it('returns 500 when the database answers with an unknown level', async () => {
+    rpc.mockResolvedValue({ data: 'nonsense', error: null });
+    const response = await PATCH(patch({ level: 'all' }));
+    expect(response.status).toBe(500);
+    expect((await response.json()).code).toBe('save_failed');
+  });
+
   it('returns 500 when the save fails', async () => {
     rpc.mockResolvedValue({ data: null, error: { code: '42501' } });
-    const response = await PATCH(patch({ push_enabled: true }));
+    const response = await PATCH(patch({ level: 'all' }));
     expect(response.status).toBe(500);
     expect((await response.json()).code).toBe('save_failed');
   });

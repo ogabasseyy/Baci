@@ -46,6 +46,31 @@ describe('merchantInboxCustomerBadgeSchema', () => {
   });
 });
 
+describe('order-data permission flag', () => {
+  it('accepts ordersHidden on a badge and a profile, and keeps it optional', () => {
+    expect(
+      merchantInboxCustomerBadgeSchema.safeParse({
+        orderCount: 0,
+        totalSpent: 0,
+        ordersHidden: true,
+      }).success
+    ).toBe(true);
+    expect(
+      merchantInboxCustomerProfileSchema.safeParse({
+        ...profile,
+        ordersHidden: true,
+      }).success
+    ).toBe(true);
+    expect(
+      merchantInboxCustomerBadgeSchema.safeParse({
+        orderCount: 0,
+        totalSpent: 0,
+        ordersHidden: 'yes',
+      }).success
+    ).toBe(false);
+  });
+});
+
 describe('merchantInboxCustomerOrderSchema', () => {
   it('accepts an order with or without a date', () => {
     expect(merchantInboxCustomerOrderSchema.safeParse(order).success).toBe(

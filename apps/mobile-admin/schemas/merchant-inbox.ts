@@ -29,6 +29,8 @@ export const inboxConversationSchema = z.object({
     .object({
       orderCount: z.number().int().nonnegative(),
       totalSpent: z.number().nonnegative(),
+      // True when this user may not see order data (the counts are then 0).
+      ordersHidden: z.boolean().optional(),
     })
     .nullable()
     .optional(),
@@ -74,6 +76,8 @@ export const inboxCustomerProfileSchema = z.object({
   orderCount: z.number().int().nonnegative(),
   totalSpent: z.number().nonnegative(),
   loyaltyPoints: z.number().int().nonnegative(),
+  // True when this user may not see order data (counts and spend are then 0).
+  ordersHidden: z.boolean().optional(),
   recentOrders: z.array(
     z.object({
       orderNumber: z.string(),

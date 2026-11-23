@@ -31,11 +31,16 @@ const providerPage = (ids: number[], hasMore: boolean) => ({
   links: Object.fromEntries(ids.map((id) => [id, `link-${id}`])),
 });
 
-const run = (view?: 'returning' | 'needs_reply', page = 1) =>
+const run = (
+  view?: 'returning' | 'needs_reply',
+  page = 1,
+  canViewOrders = true
+) =>
   listConversationsWithCustomers({
     binding,
     supabase,
     merchantId: 'merchant-1',
+    canViewOrders,
     page,
     status: 'all',
     view,
@@ -72,7 +77,27 @@ describe('listConversationsWithCustomers', () => {
       supabase,
       merchantId: 'merchant-1',
       links: { 1: 'link-1', 2: 'link-2' },
+      includeOrderData: true,
     });
+  });
+
+  it('bugfix: asks for no order data when the caller cannot see orders', async () => {
+    mocks.list.mockResolvedValue(providerPage([1], false));
+    await run('needs_reply', 1, false);
+    expect(mocks.badges).toHaveBeenCalledWith(
+      expect.objectContaining({ includeOrderData: false })
+    );
+  });
+
+  it('bugfix: the Customers view is empty, and reads nothing, without order access', async () => {
+    await expect(run('returning', 2, false)).resolves.toEqual({
+      ok: true,
+      conversations: [],
+      hasMore: false,
+      page: 2,
+    });
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.badges).not.toHaveBeenCalled();
   });
 
   it('answers a failure of the first page as a failure', async () => {

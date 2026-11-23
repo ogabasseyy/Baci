@@ -10,7 +10,7 @@ const rank = (c: InboxConversation): number =>
 
 /** A signed-in customer who has bought before. */
 export const isReturningCustomer = (c: InboxConversation): boolean =>
-  (c.customer?.orderCount ?? 0) > 0;
+  !c.customer?.ordersHidden && (c.customer?.orderCount ?? 0) > 0;
 
 /** A follow-up whose time has come: marked, but no longer snoozed. */
 export function isFollowUpDue(c: InboxConversation): boolean {

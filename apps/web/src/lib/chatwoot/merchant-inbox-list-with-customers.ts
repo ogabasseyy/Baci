@@ -28,6 +28,8 @@ type Input = {
   binding: MerchantInboxBinding;
   supabase: Db;
   merchantId: string;
+  /** May the caller see order data (counts, spend, orders)? */
+  canViewOrders: boolean;
   page: number;
   status: 'open' | 'resolved' | 'pending' | 'snoozed' | 'all';
   view?: MerchantInboxView;
@@ -64,6 +66,7 @@ export async function listConversationsWithCustomers(
       supabase: input.supabase,
       merchantId: input.merchantId,
       links: result.links,
+      includeOrderData: input.canViewOrders,
     });
     const conversations = result.conversations.map((conversation) =>
       badges[conversation.id]
@@ -76,6 +79,12 @@ export async function listConversationsWithCustomers(
   if (input.view !== 'returning') {
     const result = await readPage(input.page);
     return result.ok ? { ...result, page: input.page } : result;
+  }
+
+  // Returning customers are defined by their orders: without order access
+  // there is nothing to list, and nothing is read.
+  if (!input.canViewOrders) {
+    return { ok: true, conversations: [], hasMore: false, page: input.page };
   }
 
   const found: MerchantInboxConversation[] = [];

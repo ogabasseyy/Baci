@@ -214,3 +214,22 @@ describe('constants', () => {
     expect(INBOX_PRESET_TAGS).toHaveLength(5);
   });
 });
+
+describe('order-data permission flag', () => {
+  it('accepts ordersHidden on a customer badge and profile, and rejects a non-boolean', () => {
+    expect(
+      inboxConversationSchema.safeParse({
+        ...chat,
+        customer: { orderCount: 0, totalSpent: 0, ordersHidden: true },
+      }).success
+    ).toBe(true);
+    expect(
+      inboxCustomerProfileSchema.safeParse({ ...profile, ordersHidden: true })
+        .success
+    ).toBe(true);
+    expect(
+      inboxCustomerProfileSchema.safeParse({ ...profile, ordersHidden: 'yes' })
+        .success
+    ).toBe(false);
+  });
+});

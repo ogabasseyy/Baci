@@ -16,6 +16,8 @@ const titleCase = (value: string) =>
 
 /** "Returning customer · 5 orders · ₦412,000", or a plain signed-in line. */
 export function customerSummary(customer: InboxCustomerProfile): string {
+  // Order counts and spend are order data: not shown without order access.
+  if (customer.ordersHidden) return 'Signed-in customer';
   if (customer.orderCount === 0) return 'Signed-in customer · no orders yet';
   const orders =
     customer.orderCount === 1 ? '1 order' : `${customer.orderCount} orders`;

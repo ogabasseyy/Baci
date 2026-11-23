@@ -184,4 +184,12 @@ describe('ConversationListItem', () => {
     renderItem(chat({ customer: null }));
     expect(screen.queryByText(/Returning|Signed in/)).toBeNull();
   });
+
+  it('bugfix: shows only Signed in, never counts, when order data is hidden from this user', () => {
+    renderItem(
+      chat({ customer: { orderCount: 0, totalSpent: 0, ordersHidden: true } })
+    );
+    expect(screen.getByText('Signed in')).toBeInTheDocument();
+    expect(screen.queryByText(/Returning/)).toBeNull();
+  });
 });

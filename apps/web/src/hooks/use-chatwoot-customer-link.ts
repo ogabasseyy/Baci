@@ -49,6 +49,7 @@ export function useChatwootCustomerLink(
     // Each sync gets a number; only the newest may act on its answer.
     let generation = 0;
     let lastSyncAt = 0;
+    let guestCleared = false;
     let trailing: ReturnType<typeof setTimeout> | undefined;
     const cancelTrailing = () => {
       if (trailing !== undefined) clearTimeout(trailing);
@@ -87,8 +88,18 @@ export function useChatwootCustomerLink(
       const mine = ++generation;
       lastSyncAt = Date.now();
       const stale = () => cancelled || mine !== generation;
-      if (readCustomerSessionHint() !== '1') {
-        clearLink();
+      const hint = readCustomerSessionHint();
+      if (hint !== '1') {
+        // An explicit guest hint means the shopper signed out (or never was
+        // one): remove any note even if the "linked" marker was lost, once per
+        // page load. With no hint at all, only a recorded link is removed, so a
+        // visitor who was never linked costs no request.
+        if (hint === '0' && !guestCleared) {
+          guestCleared = true;
+          clearLink(true);
+        } else {
+          clearLink();
+        }
         return;
       }
       if (mode === 'identity-change') clearLink(true);
@@ -102,7 +113,8 @@ export function useChatwootCustomerLink(
         });
         if (stale()) return;
         if (response.status === 401 || response.status === 404) {
-          clearLink();
+          // The server says there is no session: nothing may stay linked.
+          clearLink(true);
           return;
         }
         if (!response.ok) {

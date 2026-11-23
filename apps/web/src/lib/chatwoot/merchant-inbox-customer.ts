@@ -29,6 +29,8 @@ export async function loadCustomerBadges(input: {
   supabase: Db;
   merchantId: string;
   links: Record<number, string>;
+  /** Order counts and spend are order data: only for callers with orders:view. */
+  includeOrderData: boolean;
 }): Promise<Record<number, MerchantInboxCustomerBadge>> {
   const entries = Object.entries(input.links);
   if (entries.length === 0) return {};
@@ -59,10 +61,12 @@ export async function loadCustomerBadges(input: {
   for (const { conversationId, link } of verified) {
     const row = link ? byId.get(link.customerId) : undefined;
     if (!row) continue;
-    badges[conversationId] = {
-      orderCount: Math.trunc(toNumber(row.total_orders)),
-      totalSpent: toNumber(row.total_spent),
-    };
+    badges[conversationId] = input.includeOrderData
+      ? {
+          orderCount: Math.trunc(toNumber(row.total_orders)),
+          totalSpent: toNumber(row.total_spent),
+        }
+      : { orderCount: 0, totalSpent: 0, ordersHidden: true };
   }
   return badges;
 }
@@ -127,8 +131,12 @@ export async function loadCustomerProfile(input: {
     name: name.slice(0, 120),
     currency: storeCurrency,
     memberSince: customer.created_at,
-    orderCount: Math.trunc(toNumber(customer.total_orders)),
-    totalSpent: toNumber(customer.total_spent),
+    // Counts and spend are order data, gated like the order list itself.
+    orderCount: input.includeOrders
+      ? Math.trunc(toNumber(customer.total_orders))
+      : 0,
+    totalSpent: input.includeOrders ? toNumber(customer.total_spent) : 0,
+    ...(input.includeOrders ? {} : { ordersHidden: true }),
     loyaltyPoints: Math.trunc(toNumber(customer.loyalty_points)),
     recentOrders: (orders ?? []).map((order) => ({
       orderNumber: String(order.order_number).slice(0, 60),

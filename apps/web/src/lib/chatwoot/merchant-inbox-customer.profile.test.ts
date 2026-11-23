@@ -160,7 +160,9 @@ describe('loadCustomerProfile', () => {
     });
 
     expect(profile?.recentOrders).toEqual([]);
-    expect(profile?.orderCount).toBe(5);
+    // Order counts are order data too: hidden along with the order list.
+    expect(profile?.orderCount).toBe(0);
+    expect(profile?.ordersHidden).toBe(true);
     expect(seen.map((entry) => entry.table)).not.toContain('orders');
   });
 
@@ -219,5 +221,45 @@ describe('loadCustomerProfile', () => {
       includeOrders: true,
     });
     expect(profile?.currency).toBe('NGN');
+  });
+
+  it('bugfix: shows no order count or spend without order access, but still the name and points', async () => {
+    verifyAs({ good: A });
+    const { client } = db({
+      customers: { data: customer },
+      orders: { data: [] },
+    });
+
+    const profile = await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'good',
+      includeOrders: false,
+    });
+
+    expect(profile).toMatchObject({
+      name: 'Ada Obi',
+      loyaltyPoints: 120,
+      orderCount: 0,
+      totalSpent: 0,
+      ordersHidden: true,
+      recentOrders: [],
+    });
+  });
+
+  it('does not flag the profile as hidden for a caller with order access', async () => {
+    verifyAs({ good: A });
+    const { client } = db({
+      customers: { data: customer },
+      orders: { data: [] },
+    });
+    const profile = await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'good',
+      includeOrders: true,
+    });
+    expect(profile?.ordersHidden).toBeUndefined();
+    expect(profile?.orderCount).toBe(5);
   });
 });

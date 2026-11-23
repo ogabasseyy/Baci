@@ -4,6 +4,8 @@ import { z } from 'zod';
 export const merchantInboxCustomerBadgeSchema = z.object({
   orderCount: z.number().int().nonnegative(),
   totalSpent: z.number().nonnegative(),
+  /** True when the caller may not see order data: the counts above are then 0. */
+  ordersHidden: z.boolean().optional(),
 });
 export type MerchantInboxCustomerBadge = z.infer<
   typeof merchantInboxCustomerBadgeSchema
@@ -28,6 +30,8 @@ export const merchantInboxCustomerProfileSchema = z.object({
   orderCount: z.number().int().nonnegative(),
   totalSpent: z.number().nonnegative(),
   loyaltyPoints: z.number().int().nonnegative(),
+  /** True when the caller may not see order data: counts and spend are then 0. */
+  ordersHidden: z.boolean().optional(),
   recentOrders: z.array(merchantInboxCustomerOrderSchema).max(5),
 });
 export type MerchantInboxCustomerProfile = z.infer<

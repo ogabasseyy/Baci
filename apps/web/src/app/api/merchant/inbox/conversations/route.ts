@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     binding: resolved.binding,
     supabase: resolved.supabase,
     merchantId: resolved.merchantId,
+    canViewOrders: resolved.canViewOrders,
     page: query.data.page,
     status: query.data.status,
     view: query.data.view,

@@ -38,6 +38,7 @@ beforeEach(() => {
     binding,
     supabase,
     merchantId: 'merchant-1',
+    canViewOrders: true,
   });
   mocks.badges.mockResolvedValue({});
   mocks.list.mockResolvedValue({
@@ -85,6 +86,7 @@ describe('GET /api/merchant/inbox/conversations', () => {
       supabase,
       merchantId: 'merchant-1',
       links: { 1: 'signed.link' },
+      includeOrderData: true,
     });
     // The signed link itself never reaches the response.
     expect(JSON.stringify(body)).not.toContain('signed.link');

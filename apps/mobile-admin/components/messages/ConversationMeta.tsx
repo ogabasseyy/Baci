@@ -46,7 +46,7 @@ export function ConversationMeta({
         <View style={[styles.pill, { backgroundColor: colors.successLight }]}>
           <Ionicons color={colors.success} name="person" size={12} />
           <Text style={[styles.text, { color: colors.success }]}>
-            {customer.orderCount > 0
+            {!customer.ordersHidden && customer.orderCount > 0
               ? `Returning · ${customer.orderCount} ${customer.orderCount === 1 ? 'order' : 'orders'}`
               : 'Signed in'}
           </Text>

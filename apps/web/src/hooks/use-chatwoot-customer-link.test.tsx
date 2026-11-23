@@ -127,4 +127,21 @@ describe('useChatwootCustomerLink', () => {
     expect(deleteCustomAttribute).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(MARKER)).toBe('1');
   });
+
+  it('bugfix: a guest hint removes a leftover link even with no marker, once per page load', () => {
+    mocks.hint.mockReturnValue('0');
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+
+    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('removes a leftover link when the server says there is no session, marker or not', async () => {
+    mocks.fetch.mockResolvedValue(json(401));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+
+    await waitFor(() =>
+      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+    );
+  });
 });

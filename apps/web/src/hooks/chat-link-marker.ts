@@ -6,8 +6,16 @@
  */
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
-const cookieName = (storeSlug: string) =>
-  `baci_chat_link_${storeSlug.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+/**
+ * One cookie name per store, never shared: every character outside letters,
+ * digits, `_` and `-` becomes `.<hex>.`, which cannot occur in the plain part,
+ * so 'a/b' and 'a_b' can never end up with the same name.
+ */
+export const linkMarkerCookieName = (storeSlug: string) =>
+  `baci_chat_link_${storeSlug.replace(
+    /[^A-Za-z0-9_-]/g,
+    (char) => `.${char.charCodeAt(0).toString(16)}.`
+  )}`;
 const storageKey = (storeSlug: string) => `baci-chat-link:${storeSlug}`;
 
 function readCookie(name: string): boolean {
@@ -28,7 +36,7 @@ function writeCookie(name: string, linked: boolean): void {
 }
 
 export function readLinkMarker(storeSlug: string): boolean {
-  if (readCookie(cookieName(storeSlug))) return true;
+  if (readCookie(linkMarkerCookieName(storeSlug))) return true;
   try {
     return window.localStorage.getItem(storageKey(storeSlug)) === '1';
   } catch {
@@ -37,7 +45,7 @@ export function readLinkMarker(storeSlug: string): boolean {
 }
 
 export function writeLinkMarker(storeSlug: string, linked: boolean): void {
-  writeCookie(cookieName(storeSlug), linked);
+  writeCookie(linkMarkerCookieName(storeSlug), linked);
   try {
     if (linked) window.localStorage.setItem(storageKey(storeSlug), '1');
     else window.localStorage.removeItem(storageKey(storeSlug));

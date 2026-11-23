@@ -130,3 +130,19 @@ describe('sortInbox with customers', () => {
     expect(ids(sorted)).toEqual([1, 2]);
   });
 });
+
+describe('sortInbox with hidden order data', () => {
+  it('does not treat a customer whose orders are hidden as returning', () => {
+    const sorted = sortInbox(
+      [
+        chat(1),
+        chat(2, {
+          customer: { orderCount: 9, totalSpent: 5, ordersHidden: true },
+        }),
+      ],
+      'needs_reply'
+    );
+    // Same priority, no returning boost for either: longest waiting first.
+    expect(ids(sorted)).toEqual([1, 2]);
+  });
+});

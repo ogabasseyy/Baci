@@ -118,4 +118,23 @@ describe('CustomerCard', () => {
       screen.getByText(/Returning customer · 5 orders/)
     ).toBeInTheDocument();
   });
+
+  it('bugfix: shows no order count or spend when this user may not see order data', () => {
+    render(
+      <CustomerCard
+        colors={LIGHT_COLORS}
+        customer={{
+          ...customer,
+          orderCount: 0,
+          totalSpent: 0,
+          ordersHidden: true,
+          recentOrders: [],
+        }}
+      />
+    );
+    expect(screen.getByText('Ada Obi')).toBeInTheDocument();
+    expect(screen.getByText('Signed-in customer')).toBeInTheDocument();
+    expect(screen.queryByText(/orders|Returning/)).toBeNull();
+    expect(screen.getByRole('button', { name: /Ada Obi/ })).toBeDisabled();
+  });
 });

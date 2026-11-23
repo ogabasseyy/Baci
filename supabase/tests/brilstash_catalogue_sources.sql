@@ -216,6 +216,10 @@ END $$;
 \ir brilstash/stock-withdrawal.inc.sql
 \ir brilstash/source-remap.inc.sql
 \ir brilstash/promotion.inc.sql
+-- The replacement must be fresh at both the simulated recovery time and
+-- the live reader's statement time. Timestamp the fixture before both.
+ALTER TABLE private.brilstash_suspensions
+  ALTER COLUMN suspended_at SET DEFAULT LEAST(private.brilstash_clock(), statement_timestamp());
 \ir brilstash/released-attempts.inc.sql
 \ir brilstash/recovery.inc.sql
 \ir brilstash/setup.inc.sql

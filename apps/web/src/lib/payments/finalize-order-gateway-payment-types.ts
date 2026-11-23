@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-terminal-status';
 import type { BlockedOrderPaymentOutcome } from './file-blocked-order-payment-review';
 
 export interface FinalizeOrderGatewayPaymentArgs {
@@ -7,8 +8,8 @@ export interface FinalizeOrderGatewayPaymentArgs {
   orderId: string;
   gateway: 'juicyway' | 'paystack' | 'korapay';
   reference: string;
-  gatewayResponse: Record<string, unknown>;
-  wonTransactionFlip: boolean;
+  gatewayResponse?: Record<string, unknown>;
+  wonTransactionFlip?: boolean;
   actor: string;
   scheduleAfter: (task: () => Promise<void>) => void;
   // Aborts the awaited network leg (the paid-email send) when the caller
@@ -27,11 +28,19 @@ export interface FinalizeOrderGatewayPaymentArgs {
    * promoting. Unset preserves the legacy behavior.
    */
   expectedOutstandingMinor?: number | null;
+  /** This sweep pass can record only the corroborated terminal status. */
+  expectedBankOfferTerminalStatus?: BankCardOfferTerminalStatus;
 }
 
 export type FinalizeOrderGatewayPaymentOutcome =
   | { kind: 'captured_held'; duplicate: boolean; reason: string }
   | { kind: 'capture_evidence_review'; duplicate: boolean; reason: string }
+  | { kind: 'bank_offer_capture_review'; temporaryHold?: true }
+  | { kind: 'bank_offer_verification_wait'; providerUnavailable: boolean }
+  | {
+      kind: 'bank_offer_terminal';
+      status: BankCardOfferTerminalStatus;
+    }
   | { kind: 'capture_hold_failed'; error: unknown }
   | { kind: 'completion_failed'; error: unknown }
   | BlockedOrderPaymentOutcome

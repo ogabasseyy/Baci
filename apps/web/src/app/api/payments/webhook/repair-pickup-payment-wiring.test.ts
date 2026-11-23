@@ -10,7 +10,7 @@ describe('repair pickup payment webhook wiring', () => {
       "import { dispatchRepairPickupPayment } from '@/lib/repairs/dispatch-repair-pickup-payment';"
     );
 
-    const amountGuard = source.indexOf('const verifiedAmount =');
+    const amountGuard = source.indexOf('let verifiedAmount =');
     const repairDispatch = source.indexOf(
       'await dispatchRepairPickupPayment({'
     );

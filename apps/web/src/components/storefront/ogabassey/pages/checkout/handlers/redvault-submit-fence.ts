@@ -72,6 +72,14 @@ export async function resolveRedvaultSubmitFence({
     );
   }
 
+  if (fence.bankOfferVerification) {
+    setIsProcessing(false);
+    isOrderInFlightRef.current = false;
+    const query = new URLSearchParams(fence.bankOfferVerification);
+    pushSuccessRoute(`/checkout/success?${query.toString()}`);
+    return true;
+  }
+
   // The fenced order already committed money (e.g. the webhook marked it
   // paid after the browser closed): route to the completed order instead
   // of recreating from the unchanged cart.

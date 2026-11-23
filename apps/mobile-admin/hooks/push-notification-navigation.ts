@@ -73,6 +73,16 @@ export function navigateToNotificationTarget(
     case 'repairs':
       router.push('/(admin)/repairs');
       return;
+    case 'message':
+      router.push(
+        entityId
+          ? (`/(admin)/messages/${entityId}` as Href)
+          : ('/(admin)/messages' as Href)
+      );
+      return;
+    case 'messages':
+      router.push('/(admin)/messages' as Href);
+      return;
     default:
       router.push('/(admin)/(tabs)');
   }

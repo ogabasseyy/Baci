@@ -115,7 +115,21 @@ describe('recordMerchantTakeover', () => {
     );
     expect(mocks.status).not.toHaveBeenCalled();
   });
+  it('moves a still-pending conversation even when the event carries no status', async () => {
+    const noStatus = event({
+      message_type: 'outgoing',
+      sender: { name: 'Staff', type: 'user' },
+      conversation: { id: 7, labels: [] },
+    });
+    expect(await recordMerchantTakeover(binding, noStatus)).toBe('replied');
+    expect(mocks.status).toHaveBeenCalledWith(binding, {
+      conversationId: 7,
+      status: 'open',
+    });
+  });
+
   it('only relabels a conversation that is already open', async () => {
+    mocks.snapshot.mockResolvedValue({ status: 'open', labels: ['vip'] });
     await recordMerchantTakeover(binding, staff('open'));
     expect(mocks.status).not.toHaveBeenCalled();
     expect(mocks.labels).toHaveBeenCalledOnce();

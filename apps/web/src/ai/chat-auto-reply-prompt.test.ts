@@ -62,7 +62,7 @@ describe('formatChatAutoReplyProducts', () => {
     );
   });
 
-  it('never presents the parent price of an option product as an exact price, even in stock', () => {
+  it('never presents the parent price or parent stock of an option product as exact', () => {
     const variants = {
       name: 'Demo Phone',
       price: 100000,
@@ -70,7 +70,32 @@ describe('formatChatAutoReplyProducts', () => {
       has_variants: true,
     } as unknown as ChatProductResult;
     expect(formatChatAutoReplyProducts([variants], 'NGN')).toBe(
-      '- Demo Phone | base price NGN 100000, exact price depends on the option chosen | in stock'
+      '- Demo Phone | base price NGN 100000, exact price depends on the option chosen | availability depends on the option chosen'
+    );
+  });
+
+  it('does not call an option product in stock just because its parent is unmanaged', () => {
+    const offers = {
+      name: 'Demo Tablet',
+      price: 200000,
+      stock: 0,
+      manage_stock: false,
+      has_condition_offers: true,
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([offers], 'NGN')).toBe(
+      '- Demo Tablet | base price NGN 200000, exact price depends on the option chosen | availability depends on the option chosen'
+    );
+  });
+
+  it('treats a SKU-matrix product as sold by option even without the flags', () => {
+    const matrix = {
+      name: 'Demo Watch',
+      price: 80000,
+      stock: 3,
+      variant_model: 'sku_matrix',
+    } as unknown as ChatProductResult;
+    expect(formatChatAutoReplyProducts([matrix], 'NGN')).toBe(
+      '- Demo Watch | base price NGN 80000, exact price depends on the option chosen | availability depends on the option chosen'
     );
   });
 

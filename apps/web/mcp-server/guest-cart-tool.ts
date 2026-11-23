@@ -4,10 +4,12 @@ import {
 } from '../src/schemas/guest-oauth';
 import {
   GuestCartBridgePendingError,
+  GuestCartExpiredError,
   GuestCartPersistedError,
 } from './guest-cart-errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { McpServer } from '@modelcontextprotocol/server';
+import type { z } from 'zod';
 import {
   MCP_GUEST_CART_DESCRIPTION,
   mcpGuestCartInputSchema,
@@ -29,9 +31,15 @@ import {
   mapGuestCartToolError,
 } from './guest-cart-tool-responses';
 import { guestCredentialDescriptions } from './guest-credential-descriptions';
+import { withGuestCredentialFallback } from './guest-credential-fallback';
 import { guestCredentialHandoffUrl } from './guest-credential-handoff-url';
 import { guestCredentialReply } from './guest-credential-reply';
 import { parseGuestCredentialUpdateInput } from './parse-guest-credential-update-input';
+
+type GuestCartToolInput =
+  | z.output<typeof mcpGuestCartInputSchema>
+  | z.output<typeof mcpGuestCredentialUpdateInputSchema>
+  | z.output<typeof guestOAuthCartInputSchema>;
 
 export function registerGuestCartTool(
   server: McpServer,
@@ -116,8 +124,14 @@ export function registerGuestCartTool(
         'openai/toolInvocation/invoked': 'Guest cart saved',
       },
     },
-    async (input) => {
+    withGuestCredentialFallback(options.modelCredentialTool, async (input: GuestCartToolInput) => {
       try {
+        if (
+          options.modelCredentialTool &&
+          input.quantity === 0 &&
+          !('cartCredential' in input && input.cartCredential)
+        ) throw new GuestCartExpiredError();
+
         // Defensive validation for direct callers and tests. The SDK already
         // enforces the full schema, including cross-field refinements, before
         // invoking this registered handler.
@@ -144,15 +158,8 @@ export function registerGuestCartTool(
           });
         }
         const validated = parsed.data;
-        // Tokenless calls mint a fresh cart file, so anonymous creation (but
-        // never token-bound updates) is capped per caller IP. Reserve
-        // atomically before doing work: concurrent creations must observe
-        // each other's reservations instead of all peeking budget and then
-        // overshooting it. Failures refund below; a persisted cart keeps
-        // its reservation.
-        // Hoisted so the failure path below can refund the exact window
-        // this call reserved from (undefined for token-bound updates,
-        // which never reserve).
+        // Reserve quota atomically for tokenless creation. The failure
+        // path below refunds the reservation only if no cart persisted.
         let quota: GuestCartQuotaReservation | undefined;
         if (!validated.cart_token) {
           quota = reserveGuestCartCreation(options.clientIp ?? 'unknown');
@@ -260,11 +267,18 @@ export function registerGuestCartTool(
         const cartUrl = options.guestCredentialMode && canonicalUrl
           ? canonicalUrl
           : url.toString();
+        const notice =
+          options.modelCredentialTool &&
+          !validated.cart_token &&
+          'startFreshIfUnavailable' in input &&
+          input.startFreshIfUnavailable
+            ? 'The previous cart was unavailable, so I started a new guest cart and added this item.'
+            : 'Saved to your Ogabassey guest cart. No sign-in required.';
         return transcript({
           content: [
             {
               type: 'text' as const,
-              text: `Saved to your Ogabassey guest cart. No sign-in required.\n\n[Review cart and checkout](${cartUrl})`,
+              text: `${notice}\n\n[Review cart and checkout](${cartUrl})`,
             },
           ],
           structuredContent: {
@@ -276,6 +290,6 @@ export function registerGuestCartTool(
       } catch (error) {
         return transcript(mapGuestCartToolError(error));
       }
-    },
+    }),
   );
 }

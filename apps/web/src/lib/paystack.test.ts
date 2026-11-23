@@ -59,6 +59,15 @@ describe('paystack helpers', () => {
     });
   });
 
+  it('recognizes a verified transaction whose refund is pending', async () => {
+    const { PaymentVerificationSchema } = await import('@/lib/paystack');
+
+    expect(
+      PaymentVerificationSchema.shape.status.safeParse('reversal-pending')
+        .success
+    ).toBe(true);
+  });
+
   it('includes authorization details in verifyTransaction responses', async () => {
     const { verifyTransaction } = await import('@/lib/paystack');
     vi.stubGlobal(
@@ -251,6 +260,62 @@ describe('paystack helpers', () => {
     }
   });
 
+  it('verifies the created DVA by provider id when create omits split config', async () => {
+    const assignment = {
+      bank: { name: 'Titan Paystack', id: 9, slug: 'titan-paystack' },
+      account_name: 'Ogabassey/Jane Doe',
+      account_number: '1234567890',
+      assigned: true,
+      currency: 'NGN',
+      metadata: null,
+      active: true,
+      id: 97,
+      customer: {
+        id: 17328,
+        email: 'jane@example.com',
+        customer_code: 'CUS_wallet123',
+        first_name: 'Jane',
+        last_name: 'Doe',
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: true, message: 'ok', data: assignment }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: true,
+          message: 'ok',
+          data: {
+            ...assignment,
+            split_config: { subaccount: 'ACCT_merchant123' },
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { createDedicatedAccountForWallet } = await import('@/lib/paystack');
+    const result = await createDedicatedAccountForWallet({
+      customerCode: 'CUS_wallet123',
+      subaccount: 'ACCT_merchant123',
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        providerAccountId: '97',
+        providerCustomerCode: 'CUS_wallet123',
+        providerSubaccountCode: 'ACCT_merchant123',
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/dedicated_account/97');
+  });
+
   it('rejects wallet DVA responses with a different split-config subaccount', async () => {
     vi.stubGlobal(
       'fetch',
@@ -298,7 +363,53 @@ describe('paystack helpers', () => {
     expect(result).toEqual({
       success: false,
       code: 'VALIDATION_ERROR',
-      error: 'Wallet DVA response returned a different Paystack subaccount',
+      error:
+        'Wallet DVA response did not prove the requested Paystack subaccount',
+    });
+  });
+
+  it('rejects a wallet DVA response assigned to a different Paystack customer', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          status: true,
+          message: 'ok',
+          data: {
+            bank: { name: 'Titan Paystack', id: 9, slug: 'titan-paystack' },
+            account_name: 'Other Customer',
+            account_number: '1234567890',
+            assigned: true,
+            currency: 'NGN',
+            metadata: null,
+            active: true,
+            id: 97,
+            created_at: '2026-05-21T10:00:00.000Z',
+            updated_at: '2026-05-21T10:00:00.000Z',
+            customer: {
+              id: 17328,
+              email: 'jane@example.com',
+              customer_code: 'CUS_other_customer',
+              first_name: 'Jane',
+              last_name: 'Doe',
+            },
+            split_config: { subaccount: 'ACCT_merchant123' },
+          },
+        }),
+      })
+    );
+
+    const { createDedicatedAccountForWallet } = await import('@/lib/paystack');
+    const result = await createDedicatedAccountForWallet({
+      customerCode: 'CUS_wallet123',
+      subaccount: 'ACCT_merchant123',
+    });
+
+    expect(result).toEqual({
+      success: false,
+      code: 'VALIDATION_ERROR',
+      error: 'Wallet DVA response returned a different Paystack customer',
     });
   });
 

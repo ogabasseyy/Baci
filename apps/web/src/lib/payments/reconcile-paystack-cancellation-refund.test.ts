@@ -28,7 +28,7 @@ const refund = {
   status: 'refund_pending',
 };
 
-function database() {
+function database(gatewayResponse?: Record<string, number>) {
   const payment = {
     id: '11111111-1111-4111-8111-111111111111',
     order_id: 'order-1',
@@ -38,6 +38,7 @@ function database() {
     amount: 100,
     currency: 'NGN',
     status: 'completed',
+    gateway_response: gatewayResponse,
   };
   const query = {
     select: vi.fn().mockReturnThis(),
@@ -90,6 +91,51 @@ describe('Paystack cancellation refund reconciliation', () => {
       expect.any(AbortSignal),
       { textIds: true }
     );
+  });
+
+  it('verifies the marked provider gross while keeping the refund row at principal', async () => {
+    const db = database({
+      amount: 10157,
+      requested_amount: 10000,
+      baci_paystack_checkout_customer_fee_minor: 157,
+    });
+    provider.fetchRefund.mockResolvedValue({
+      success: true,
+      data: {
+        id: '42',
+        transaction: '123',
+        amount: 10157,
+        currency: 'NGN',
+        status: 'processed',
+      },
+    });
+    provider.verifyTransaction.mockResolvedValue({
+      success: true,
+      data: { id: '123', reference: 'PSK-1', amount: 10157, currency: 'NGN' },
+    });
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        metadata: { ...refund.metadata, provider_refund_amount_minor: 10157 },
+      })
+    ).resolves.toBe('updated');
+    expect(db.rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_amount_kobo: 10157 })
+    );
+  });
+
+  it('never verifies a principal-only refund against a certified surcharge capture', async () => {
+    const db = database({
+      amount: 10157,
+      requested_amount: 10000,
+      baci_paystack_checkout_customer_fee_minor: 157,
+    });
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, refund)
+    ).rejects.toThrow('refund_payment_link_mismatch');
+    expect(provider.fetchRefund).not.toHaveBeenCalled();
+    expect(db.rpc).not.toHaveBeenCalled();
   });
 
   it('accepts a legacy padded currency copied from the payment', async () => {

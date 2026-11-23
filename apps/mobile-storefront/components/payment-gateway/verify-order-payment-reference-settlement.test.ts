@@ -18,6 +18,7 @@ function jsonResponse(body: unknown) {
   return {
     json: async () => body,
     ok: true,
+    status: 200,
   };
 }
 
@@ -67,6 +68,83 @@ describe('checkReferenceSettled transport selection', () => {
         }),
       })
     );
+  });
+
+  it('uses the buyer session for a bank offer even with a tracking token and reports a reversal', async () => {
+    const reference = `BCO-${'a'.repeat(32)}`;
+    mockGetSession.mockResolvedValue({
+      access_token: 'session-token',
+    } as never);
+    mockFetchWithTimeout.mockResolvedValue(
+      jsonResponse({
+        orderNumber: 'BAC-001',
+        orderId: 'order-1',
+        success: false,
+        status: 'reversed',
+        reference,
+      }) as never
+    );
+
+    await expect(
+      checkReferenceSettled('order-1', reference, 'track-1')
+    ).resolves.toEqual({
+      paid: false,
+      reconciliation: 'payment_reversed',
+    });
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/payments\/verify$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ reference }),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer session-token',
+        }),
+      })
+    );
+  });
+
+  it('keeps a bank offer pending if only its tracking token is available', async () => {
+    await expect(
+      checkReferenceSettled('order-1', `BCO-${'a'.repeat(32)}`, 'track-1')
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { success: true, finalizationOutcome: 'completed' },
+    { finalizationOutcome: 'completed' },
+    { reference: `BCO-${'b'.repeat(32)}` },
+    { reference: undefined },
+    { orderId: 42 },
+  ])('does not trust an inconsistent or unbound reversal envelope %j', async (overrides) => {
+    mockGetSession.mockResolvedValue({
+      access_token: 'session-token',
+    } as never);
+    mockFetchWithTimeout.mockResolvedValue(
+      jsonResponse({
+        orderId: 'order-1',
+        success: false,
+        status: 'reversed',
+        reference: `BCO-${'a'.repeat(32)}`,
+        ...overrides,
+      }) as never
+    );
+    await expect(
+      checkReferenceSettled('order-1', `BCO-${'a'.repeat(32)}`)
+    ).resolves.toEqual({ paid: false, inconclusive: true });
+  });
+
+  it.each([
+    'BCO-',
+    'BCO-invalid',
+    `bco-${'a'.repeat(32)}`,
+    `BCO-${'A'.repeat(32)}`,
+  ])('rejects malformed bank offer reference %s without querying the order', async (reference) => {
+    await expect(
+      checkReferenceSettled('order-1', reference, 'track-1')
+    ).resolves.toEqual({ paid: false, terminalFailure: 'failed' });
+    expect(mockGetSession).not.toHaveBeenCalled();
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
   it('reports inconclusive with neither session nor token', async () => {

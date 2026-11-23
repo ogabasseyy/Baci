@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { initiateRefund as initiatePaystackRefund } from '@/lib/initiate-paystack-refund';
+import { logger } from '@/lib/logger';
+import type { BankOfferRefundEvidence } from '@/lib/orders/begin-bank-card-offer-refund-dispatch';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
@@ -23,6 +25,7 @@ type RefundFailure = Extract<
  * attempt since the drain never reselects attempts-capped rows.
  */
 export async function handlePaystackCancellationRefundFailure({
+  dispatchEvidence,
   isLastAttempt,
   order,
   paystackRefund,
@@ -30,6 +33,7 @@ export async function handlePaystackCancellationRefundFailure({
   supabase,
   transaction,
 }: {
+  dispatchEvidence?: BankOfferRefundEvidence;
   isLastAttempt?: boolean;
   order: { currency: string | null; id: string; merchant_id: string };
   paystackRefund: RefundFailure;
@@ -60,6 +64,24 @@ export async function handlePaystackCancellationRefundFailure({
     paystackRefund.code === 'HTTP_401' ||
     paystackRefund.code === 'HTTP_403' ||
     paystackRefund.code === 'CONFIG_ERROR';
+  if (dispatchEvidence && isDefiniteTransientFailure) {
+    const { data, error } = await supabase.rpc(
+      'release_rejected_bank_card_offer_refund_dispatch',
+      {
+        p_order_id: dispatchEvidence.p_order_id,
+        p_merchant_id: dispatchEvidence.p_merchant_id,
+        p_transaction_id: dispatchEvidence.p_transaction_id,
+        p_reference: dispatchEvidence.p_reference,
+        p_claim_token: dispatchEvidence.p_claim_token,
+        p_rejection_code: paystackRefund.code,
+      }
+    );
+    // An unconfirmed release changes no retry authority. The next worker
+    // still checks admission and quarantines any existing dispatch claim.
+    if (error || data !== true) {
+      logger.warn({ message: 'Bank offer refund claim release not confirmed' });
+    }
+  }
   // Transient legs stay review-free while retries remain — but the
   // drain never reselects attempts-capped rows, so a transient
   // failure on the last attempt must file durable evidence instead

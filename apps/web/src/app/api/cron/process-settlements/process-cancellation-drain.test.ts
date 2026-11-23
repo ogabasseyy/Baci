@@ -89,6 +89,28 @@ describe('processCancellationDrain', () => {
     });
   });
 
+  it('keeps notification delivery within the invocation after earlier work', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_050_000);
+    try {
+      const response = await processCancellationDrain(
+        supabase,
+        mocks.sendEmail,
+        mocks.notifyMerchant,
+        1_000_000
+      );
+      expect(response.status).toBe(200);
+      expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
+        supabase,
+        mocks.sendEmail,
+        expect.any(Number),
+        mocks.notifyMerchant,
+        1_270_000
+      );
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('runs every cancellation worker and reports their results', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     let response: Awaited<ReturnType<typeof processCancellationDrain>>;

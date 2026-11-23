@@ -7,11 +7,9 @@ import {
   getDedicatedAccounts,
 } from '@/lib/paystack';
 import {
-  createInsertQuery,
   createMaybeSingleQuery,
-  createSelectRowsQuery,
+  createWalletDvaTestWriter,
   customer,
-  existingAccountRow,
   merchant,
 } from './customer-wallet-payment-accounts.test-utils';
 
@@ -63,18 +61,8 @@ describe('customer wallet payment account name selection', () => {
     });
 
     const accountQuery = createMaybeSingleQuery(null);
-    const orderAliasQuery = createSelectRowsQuery([]);
-    const { query: insertQuery } = createInsertQuery({
-      ...existingAccountRow,
-      account_number: '2222222222',
-      provider_customer_code: 'CUS_trimmed',
-    });
     const supabase = {
-      from: vi
-        .fn()
-        .mockReturnValueOnce(accountQuery)
-        .mockReturnValueOnce(orderAliasQuery)
-        .mockReturnValueOnce(insertQuery),
+      from: vi.fn(() => accountQuery),
     } as unknown as SupabaseClient;
 
     await ensureCustomerWalletPaymentAccount({
@@ -82,6 +70,8 @@ describe('customer wallet payment account name selection', () => {
       customer: { ...customer, first_name: ' Jane ', last_name: ' Doe ' },
       merchant,
       supabase,
+      userId: customer.user_id,
+      walletDvaWriter: createWalletDvaTestWriter(),
     });
 
     expect(createDedicatedAccountForWallet).toHaveBeenCalledWith(
@@ -116,18 +106,8 @@ describe('customer wallet payment account name selection', () => {
     });
 
     const accountQuery = createMaybeSingleQuery(null);
-    const orderAliasQuery = createSelectRowsQuery([]);
-    const { query: insertQuery } = createInsertQuery({
-      ...existingAccountRow,
-      account_number: '2222222222',
-      provider_customer_code: 'CUS_existing',
-    });
     const supabase = {
-      from: vi
-        .fn()
-        .mockReturnValueOnce(accountQuery)
-        .mockReturnValueOnce(orderAliasQuery)
-        .mockReturnValueOnce(insertQuery),
+      from: vi.fn(() => accountQuery),
     } as unknown as SupabaseClient;
 
     await ensureCustomerWalletPaymentAccount({
@@ -135,6 +115,8 @@ describe('customer wallet payment account name selection', () => {
       customer,
       merchant,
       supabase,
+      userId: customer.user_id,
+      walletDvaWriter: createWalletDvaTestWriter(),
     });
 
     expect(createDedicatedAccountForWallet).toHaveBeenCalledWith(
@@ -166,6 +148,8 @@ describe('customer wallet payment account name selection', () => {
         customer: { ...customer, first_name: null, last_name: 'LocalLast' },
         merchant,
         supabase,
+        userId: customer.user_id,
+        walletDvaWriter: createWalletDvaTestWriter(),
       })
     ).rejects.toMatchObject({
       code: 'CUSTOMER_NAME_REQUIRED',
@@ -201,18 +185,8 @@ describe('customer wallet payment account name selection', () => {
     });
 
     const accountQuery = createMaybeSingleQuery(null);
-    const orderAliasQuery = createSelectRowsQuery([]);
-    const { query: insertQuery } = createInsertQuery({
-      ...existingAccountRow,
-      account_number: '2222222222',
-      provider_customer_code: 'CUS_existing',
-    });
     const supabase = {
-      from: vi
-        .fn()
-        .mockReturnValueOnce(accountQuery)
-        .mockReturnValueOnce(orderAliasQuery)
-        .mockReturnValueOnce(insertQuery),
+      from: vi.fn(() => accountQuery),
     } as unknown as SupabaseClient;
 
     await ensureCustomerWalletPaymentAccount({
@@ -220,6 +194,8 @@ describe('customer wallet payment account name selection', () => {
       customer: { ...customer, first_name: null, last_name: null },
       merchant,
       supabase,
+      userId: customer.user_id,
+      walletDvaWriter: createWalletDvaTestWriter(),
     });
 
     expect(createDedicatedAccountForWallet).toHaveBeenCalledWith(
@@ -251,6 +227,8 @@ describe('customer wallet payment account name selection', () => {
         customer: { ...customer, first_name: '  ', last_name: null },
         merchant,
         supabase,
+        userId: customer.user_id,
+        walletDvaWriter: createWalletDvaTestWriter(),
       })
     ).rejects.toMatchObject({
       code: 'CUSTOMER_NAME_REQUIRED',

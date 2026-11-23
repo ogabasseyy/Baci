@@ -134,6 +134,29 @@ describe('runChatAutoReply', () => {
     expect(mocks.status).not.toHaveBeenCalled();
     expect(mocks.post).not.toHaveBeenCalled();
   });
+  it('hands over when the latest-message read fails, instead of going quiet', async () => {
+    mocks.latest.mockResolvedValue(null);
+    expect(await runChatAutoReply(binding, event())).toBe('handed_over');
+    expect(mocks.post).not.toHaveBeenCalledWith(
+      binding,
+      expect.objectContaining({ content: 'Yes, it is in stock.' })
+    );
+  });
+  it('hands over when the whole run overruns its time limit', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.generate.mockReturnValue(new Promise(() => {}));
+      const run = runChatAutoReply(binding, event());
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(await run).toBe('handed_over');
+      expect(mocks.status).toHaveBeenCalledWith(binding, {
+        conversationId: 7,
+        status: 'open',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('hands over when the reply is rejected so the conversation is not left pending', async () => {
     mocks.post.mockResolvedValueOnce(false).mockResolvedValue(true);
     expect(await runChatAutoReply(binding, event())).toBe('handed_over');

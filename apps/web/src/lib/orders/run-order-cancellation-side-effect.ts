@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import type { Json } from '@/types/supabase';
+import { PartialCancellationRefundError } from './partial-cancellation-refund-error';
 
 export type OrderCancellationSideEffectStep = 'refund' | 'customer_email';
 export type OrderCancellationSideEffectStatus =
@@ -28,7 +29,7 @@ export async function runOrderCancellationSideEffect({
   step,
   supabase,
 }: {
-  execute: () => Promise<Json | undefined>;
+  execute: (claimToken: string) => Promise<Json | undefined>;
   orderId: string;
   step: OrderCancellationSideEffectStep;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
@@ -60,7 +61,7 @@ export async function runOrderCancellationSideEffect({
   // and the verification budget is enforced precisely where a leg
   // needing provider verification is scheduled.
   try {
-    result = await execute();
+    result = await execute(claimToken);
   } catch (error) {
     status =
       error instanceof DeliveryUncertainError
@@ -68,6 +69,9 @@ export async function runOrderCancellationSideEffect({
         : error instanceof DeferredError
           ? 'deferred'
           : 'failed';
+    if (error instanceof PartialCancellationRefundError) {
+      result = { refundIds: error.refundIds };
+    }
     errorMessage = error instanceof Error ? error.message : String(error);
   }
 

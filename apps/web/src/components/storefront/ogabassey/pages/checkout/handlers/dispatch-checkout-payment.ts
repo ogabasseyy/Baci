@@ -1,5 +1,6 @@
 import { captureOxygenCheckoutSnapshot } from '@/components/payments/oxygen/oxygen-checkout-snapshot';
 import { toast } from '@/hooks/use-toast';
+import { bankOfferCheckoutReferenceStorage } from '../bank-offer-checkout-reference-storage';
 import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-completed';
 import { captureCheckoutPaymentFailed } from '../capture-checkout-payment-failed';
 import { clearCheckoutIdempotencyKey } from '../checkout-idempotency';
@@ -18,7 +19,7 @@ export async function dispatchCheckoutPayment(
   const {
     merchant,
     order,
-    paymentMethod,
+    paymentMethod: requestedPaymentMethod,
     total,
     paymentAmount,
     createdOrderNumber,
@@ -47,6 +48,10 @@ export async function dispatchCheckoutPayment(
     redirect,
     payForMeDetails,
   } = context;
+  const paymentMethod =
+    order.payment_method === 'bank_card_offer'
+      ? 'paystack'
+      : requestedPaymentMethod;
   if (paymentMethod === 'oxygen') {
     if (
       context.freshOrder === true &&
@@ -132,6 +137,13 @@ export async function dispatchCheckoutPayment(
       isOrderInFlightRef.current = false;
       return;
     } else if (paymentResult.success && paymentResult.authorization_url) {
+      if (order.payment_method === 'bank_card_offer') {
+        bankOfferCheckoutReferenceStorage.write(
+          merchant.id,
+          order.id,
+          paymentResult.reference
+        );
+      }
       // NOTE: Don't clear cart here - it causes a flash of empty state
       // Cart will be cleared on the payment callback page after successful payment
       // (location.assign over `href =` — global assignment bails React Compiler)

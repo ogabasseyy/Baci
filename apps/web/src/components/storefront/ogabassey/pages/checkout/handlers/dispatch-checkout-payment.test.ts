@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { bankOfferCheckoutReferenceStorage } from '../bank-offer-checkout-reference-storage';
 import { paymentDispatchContext } from './checkout-payment-dispatch-context.test-support';
 import { completeCheckoutOrder } from './complete-checkout-order';
 import { dispatchCheckoutPayment } from './dispatch-checkout-payment';
@@ -66,6 +67,35 @@ describe('dispatchCheckoutPayment', () => {
       expect(context.capturePaymentStarted).not.toHaveBeenCalled();
     else expect(context.capturePaymentStarted).toHaveBeenCalledWith('ref');
   });
+  it('uses Paystack when the saved order is a bank offer', async () => {
+    const context = paymentDispatchContext();
+    context.paymentMethod = 'korapay';
+    context.order.payment_method = 'bank_card_offer';
+    vi.mocked(initializeCheckoutGateway).mockResolvedValue({
+      success: true,
+      reference: `BCO-${'a'.repeat(32)}`,
+      authorization_url: 'https://checkout.paystack.com/example',
+    });
+
+    vi.mocked(context.redirect).mockImplementationOnce(() => {
+      expect(
+        bankOfferCheckoutReferenceStorage.read(
+          context.merchant.id,
+          context.order.id
+        )
+      ).toBe(`BCO-${'a'.repeat(32)}`);
+    });
+    await dispatchCheckoutPayment(context);
+
+    expect(initializeCheckoutGateway).toHaveBeenCalledWith(
+      expect.objectContaining({ gateway: 'paystack', order: context.order })
+    );
+    expect(context.redirect).toHaveBeenCalledWith(
+      'https://checkout.paystack.com/example'
+    );
+    expect(context.clearCart).not.toHaveBeenCalled();
+  });
+
   it('opens crypto selection using the residual amount and canonical total without initializing a gateway', async () => {
     const context = paymentDispatchContext();
     context.paymentMethod = 'juicyway';

@@ -105,6 +105,7 @@ describe('analytics core', () => {
         ],
         before_send: expect.any(Function),
         customAppProperties: expect.any(Function),
+        enableSessionReplay: false,
         sessionReplayConfig: expect.objectContaining({
           maskAllTextInputs: true,
           maskAllImages: true,
@@ -149,14 +150,7 @@ describe('analytics core', () => {
   });
 
   it('uses the EU PostHog host when app config omits a host override', async () => {
-    mockExpoConfigExtra = {
-      posthogApiKey: 'ph_test',
-      posthogHost: undefined,
-      apiUrl: 'https://api.usebaci.com',
-      merchantId: 'merchant-1',
-      merchantSlug: 'ogabassey',
-      merchantDomain: 'ogabassey.com',
-    };
+    mockExpoConfigExtra = { ...mockExpoConfigExtra, posthogHost: undefined };
 
     const { initAnalytics } = await import('./analytics-core');
     const PostHog = (await import('posthog-react-native')).default;

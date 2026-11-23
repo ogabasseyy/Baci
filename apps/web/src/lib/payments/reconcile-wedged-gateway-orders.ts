@@ -1,7 +1,9 @@
+import { BANK_CARD_OFFER_REFERENCE_PATTERN } from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 import { finalizeOrderGatewayPayment } from '@/lib/payments/finalize-order-gateway-payment';
 import { finalizeVerifiedWedge } from '@/lib/payments/finalize-verified-wedge';
+import { handleUnverifiedWedge } from '@/lib/payments/handle-unverified-wedge';
 import { interleaveWedgeCandidates } from '@/lib/payments/interleave-wedge-candidates';
 import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
@@ -18,7 +20,6 @@ import {
   buildJuicywayVerificationContext,
   type HealableGateway,
   isHealableGateway,
-  isTerminalGatewayVerificationReason,
   verifyGatewayCharge,
 } from '@/lib/payments/verify-gateway-charge';
 
@@ -195,29 +196,28 @@ export async function reconcileWedgedGatewayOrders({
       );
 
       if (!verification.ok) {
-        summary.skipped.push({
-          reason: verification.reason,
-          transactionId: candidate.id,
+        await handleUnverifiedWedge({
+          candidate,
+          finalizePayment: finalizeOrderGatewayPayment,
+          retire: retireWedgeWithReview,
+          stamp: stampWedgeResolution,
+          scheduleAfter,
+          signal: verifySignal,
+          summary,
+          supabase,
+          verification,
         });
-        if (isTerminalGatewayVerificationReason(verification.reason)) {
-          // Definitive gateway verdict or evidence mismatch: file for ops and
-          // retire the row. Transient/pending outcomes stay in the sweep.
-          await retireWedgeWithReview({
-            candidate,
-            reason: `Wedge sweep: ${candidate.gateway} could not safely confirm reference ${candidate.gateway_reference} (${verification.reason}${verification.gatewayStatus ? `: ${verification.gatewayStatus}` : ''}); manual reconciliation required`,
-            resolution:
-              verification.reason === 'gateway_status_not_success'
-                ? 'gateway_verification_negative'
-                : verification.reason,
-            supabase,
-          });
-        }
-        // Transient verification failures stay unstamped and retry next run.
         continue;
       }
 
       const expectedAmount = Number(candidate.amount) || 0;
+      // The bank-offer finalizer re-verifies the exact saved amount and
+      // currency and files its own capture review before the row is stamped.
+      const isBankOffer =
+        candidate.gateway === 'paystack' &&
+        BANK_CARD_OFFER_REFERENCE_PATTERN.test(candidate.gateway_reference);
       if (
+        !isBankOffer &&
         candidate.gateway !== 'juicyway' &&
         Math.abs(verification.amount - expectedAmount) >
           AMOUNT_TOLERANCE_MAJOR_UNITS
@@ -237,6 +237,7 @@ export async function reconcileWedgedGatewayOrders({
         continue;
       }
       if (
+        !isBankOffer &&
         normalizePaymentGateway(candidate.gateway) !== 'JUICYWAY' &&
         candidate.currency &&
         verification.currency &&

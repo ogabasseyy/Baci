@@ -1,3 +1,4 @@
+import { fetchWithCsrf } from '@/lib/api-client';
 import type { CheckoutPaymentOrder } from './submit-checkout-order';
 
 export type RedirectGateway = 'paystack' | 'korapay' | 'juicyway' | 'klump';
@@ -48,9 +49,11 @@ export async function initializeCheckoutGateway({
   customerPhone,
   gateway,
   billingAddress,
-  request = fetch,
+  request,
 }: InitializeCheckoutGatewayOptions): Promise<InitializedCheckoutGatewayPayment> {
-  const response = await request('/api/payments/initialize', {
+  const isBankOffer = order.payment_method === 'bank_card_offer';
+  const send = request ?? (isBankOffer ? fetchWithCsrf : fetch);
+  const response = await send('/api/payments/initialize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -60,11 +63,17 @@ export async function initializeCheckoutGateway({
       customer_email: customerEmail,
       customer_name: customerName,
       customer_phone: customerPhone,
-      gateway,
+      gateway: isBankOffer ? 'paystack' : gateway,
+      ...(isBankOffer && { payment_method: 'bank_card_offer' }),
       billing_address: billingAddress,
     }),
   });
 
+  if (isBankOffer && (response.status === 202 || response.status === 503)) {
+    throw new Error(
+      'Payment initialization is pending. Retry from the same order.'
+    );
+  }
   if (!response.ok) {
     const errorData: unknown = await response.json().catch(() => null);
     const message =

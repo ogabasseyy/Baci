@@ -29,27 +29,34 @@ export async function finalizeOrderGatewayPayment({
   gateway,
   reference,
   gatewayResponse,
-  wonTransactionFlip,
+  wonTransactionFlip: externalTransactionFlip = false,
   actor,
   scheduleAfter,
   signal,
   fallbackDeadlineMs,
   emailMaxAttemptsPerSender,
   expectedOutstandingMinor,
+  expectedBankOfferTerminalStatus,
 }: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
   const result = await resolveOrderGatewayCompletion({
     actor,
+    expectedBankOfferTerminalStatus,
     expectedOutstandingMinor,
     gateway,
     gatewayResponse,
     merchantId: transaction.merchant_id,
     orderId,
     reference,
+    signal,
     supabase,
     transactionId: transaction.id,
   });
   if (!result.ok) return result.outcome;
   const completion = result.completion;
+  const wonTransactionFlip =
+    'atomicTransactionFlip' in result
+      ? result.atomicTransactionFlip
+      : externalTransactionFlip;
 
   const blockedOutcome = await fileBlockedOrderPaymentReview({
     completion,
@@ -59,9 +66,7 @@ export async function finalizeOrderGatewayPayment({
     transactionGatewayReference: transaction.gateway_reference,
     transactionId: transaction.id,
   });
-  if (blockedOutcome) {
-    return blockedOutcome;
-  }
+  if (blockedOutcome) return blockedOutcome;
 
   const {
     capturedOnAlreadyPaidOrder,
@@ -206,7 +211,7 @@ export async function finalizeOrderGatewayPayment({
     emailMaxAttemptsPerSender,
     externalGatewayReference: reference,
     fallbackDeadlineMs,
-    gatewayResponse,
+    gatewayResponse: result.verifiedGatewayResponse,
     order: richOrder,
     scheduleAfter,
     settlementGateway: gateway,

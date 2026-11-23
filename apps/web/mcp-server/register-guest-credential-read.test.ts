@@ -26,9 +26,9 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
   // Even an inherited text opt-in must not put the credential in content.
   vi.stubEnv('BACI_MCP_PRIVATE_TEXT_CONTINUATION', 'true');
   const { supabase, rows } = createFakeGuestCartSupabase();
-  const items = new Map<string, number>();
-  let version = 0;
+  const carts = new Map<string, { items: Map<string, number>; version: number }>();
   function state(cart_token: string) {
+    const { items, version } = carts.get(cart_token) ?? { items: new Map<string, number>(), version: 0 };
     return {
       cart_token,
       cart_url: items.size ? handoffUrl : 'https://ogabassey.com/cart',
@@ -47,9 +47,11 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
     update: vi.fn(
       async (token: string, edit: { product_id: string; quantity: number }) => {
         expect(rows.has(token)).toBe(true);
+        const current = carts.get(token) ?? { items: new Map<string, number>(), version: 0 };
+        const { items } = current;
         if (edit.quantity === 0) items.delete(edit.product_id);
         else items.set(edit.product_id, edit.quantity);
-        version += 1;
+        carts.set(token, { items, version: current.version + 1 });
         const cart = state(token);
         return {
           ...cart,
@@ -123,6 +125,7 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
     cartCredential: token,
     expectedVersion: 1,
     operationId: 'add-camera',
+    startFreshIfUnavailable: true,
   });
   const removal = await call(updateName, {
     product_id: charger,
@@ -188,6 +191,14 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
   }
   expect(rows.size).toBe(1);
 
+  const missingRead = await call(readName, {});
+  expect(missingRead.structuredContent).toMatchObject({ success: false, cart_expired: true });
+  expect(JSON.stringify(missingRead.content)).toContain('could not be opened');
+  const missingRemove = await call(updateName, { product_id: charger, quantity: 0 });
+  expect(missingRemove.structuredContent).toMatchObject({ success: false, cart_expired: true });
+  expect(JSON.stringify(missingRemove.content)).toContain('could not be opened or updated');
+  expect(rows.size).toBe(1);
+
   const empty = await call(updateName, {
     product_id: camera,
     quantity: 0,
@@ -201,4 +212,48 @@ it('offers one no-OAuth cart workflow to the model, preserves the credential bet
     cart_url: 'https://ogabassey.com/cart',
     items: [],
   });
+
+  urlAvailable = true;
+  const beforeFallback = rows.size;
+  const staleAdd = {
+    product_id: charger,
+    quantity: 1,
+    cartCredential: token,
+    expectedVersion: 5,
+    operationId: 'add-after-expiry',
+    startFreshIfUnavailable: true,
+  };
+  bridge.update.mockRejectedValueOnce(new Error('Temporary storage failure'));
+  const uncertain = await call(updateName, staleAdd);
+  expect(uncertain.isError).toBe(true);
+  expect(rows.size).toBe(beforeFallback);
+
+  bridge.update.mockRejectedValueOnce(new GuestCartExpiredError());
+  const replacement = await call(updateName, staleAdd);
+  expect(replacement.structuredContent).toMatchObject({
+    success: true,
+    items: [{ product_id: charger, quantity: 1 }],
+  });
+  expect(replacement.structuredContent?.cartCredential).not.toBe(token);
+  expect(JSON.stringify(replacement.content)).toContain('started a new guest cart');
+  expect(bridge.update.mock.lastCall?.[1]).toMatchObject({
+    expectedVersion: undefined,
+  });
+  expect(rows.size).toBe(beforeFallback + 1);
+
+  const missingAdd = await call(updateName, {
+    product_id: camera,
+    quantity: 1,
+    expectedVersion: 5,
+    startFreshIfUnavailable: true,
+  });
+  expect(missingAdd.structuredContent).toMatchObject({
+    success: true,
+    items: [{ product_id: camera, quantity: 1 }],
+  });
+  expect(JSON.stringify(missingAdd.content)).toContain('started a new guest cart');
+  expect(bridge.update.mock.lastCall?.[1]).toMatchObject({
+    expectedVersion: undefined,
+  });
+  expect(rows.size).toBe(beforeFallback + 2);
 });

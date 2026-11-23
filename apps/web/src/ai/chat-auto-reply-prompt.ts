@@ -1,3 +1,4 @@
+import { requiresProductSelection } from '@baci/shared/lib';
 import type { ChatProductResult } from '@/ai/chat-product-result';
 
 export type ChatAutoReplyTurn = { role: 'user' | 'assistant'; content: string };
@@ -29,20 +30,19 @@ export function formatChatAutoReplyProducts(
       // A store that does not track inventory sells without a count, so a zero
       // there is not "out of stock" (same rule as lib/product-stock.ts).
       // A product sold through variants or condition offers keeps its
-      // inventory on the options: a zero on the parent says nothing about
-      // them, so it is never reported as out of stock.
-      const soldByOption =
-        product.has_variants === true || product.has_condition_offers === true;
-      const stock =
-        product.manage_stock === false
+      // inventory on the options: the parent's count, zero or not, says
+      // nothing about a particular option, so neither is reported.
+      // The storefront's own rule for "the shopper must pick an option".
+      const soldByOption = requiresProductSelection(product);
+      const stock = soldByOption
+        ? 'availability depends on the option chosen'
+        : product.manage_stock === false
           ? 'in stock'
           : product.stock === null
             ? 'availability unknown'
             : product.stock > 0
               ? 'in stock'
-              : soldByOption
-                ? 'availability depends on the option chosen'
-                : 'out of stock';
+              : 'out of stock';
       // An option can carry its own price, so the parent's is only a base.
       const price = soldByOption
         ? `base price ${currency} ${product.price}, exact price depends on the option chosen`

@@ -8,7 +8,41 @@ import { asRoute } from '@/lib/routes';
 interface CheckoutReconciliationViewProps {
   orderNumber: string | null;
   getHref: (path: string) => string;
+  outcome?: keyof typeof copy;
 }
+
+const copy = {
+  reconciling: {
+    title: 'Payment Received — Order Under Review',
+    detail:
+      'Your payment went through, but this order was cancelled before it could be confirmed. Our team is reconciling it now — any amount due back to you will be refunded automatically.',
+    cart: "No action needed. Your cart is still intact if you'd like to place a fresh order.",
+  },
+  reversed: {
+    title: 'Payment reversed',
+    detail:
+      'Paystack reported a reversal for this payment. Contact support with your order number if you need help checking the status.',
+    cart: 'Your cart is still intact. Wait for the reversal to be confirmed before paying again.',
+  },
+  bank_offer_review: {
+    title: 'Payment attempt under review',
+    detail:
+      'Paystack reported that this payment did not complete. We need to check the original attempt before you can pay again.',
+    cart: 'Your cart is intact. Check your order status or contact support for help.',
+  },
+  verification_unavailable: {
+    title: 'Payment verification unavailable',
+    detail:
+      'Refresh this page to check your payment again, or see your order status in your account.',
+    cart: 'Check your payment status before starting another payment.',
+  },
+  access_required: {
+    title: 'Sign in to check your payment',
+    detail:
+      'Open your orders on the store where you checked out and sign in with the email you used for the order.',
+    cart: 'Check your order status or contact support before paying again.',
+  },
+};
 
 /**
  * Captured-but-cancelled/refunded outcome: the provider took the money but
@@ -19,7 +53,10 @@ interface CheckoutReconciliationViewProps {
 export function CheckoutReconciliationView({
   orderNumber,
   getHref,
+  outcome = 'reconciling',
 }: CheckoutReconciliationViewProps) {
+  const showOrderNumber =
+    outcome !== 'verification_unavailable' && outcome !== 'access_required';
   // Storefront theme tokens throughout (never hardcoded palette): this
   // state must honor merchant palettes and dark-mode storefronts like the
   // rest of the checkout flow.
@@ -40,23 +77,20 @@ export function CheckoutReconciliationView({
         </motion.div>
 
         <h1 className="text-2xl font-bold text-store-background-text mb-3">
-          Payment Received — Order Under Review
+          {copy[outcome].title}
         </h1>
-        {orderNumber && (
+        {showOrderNumber && orderNumber && (
           <p className="font-mono font-bold text-store-background-text mb-3">
             #{orderNumber}
           </p>
         )}
         <p className="text-store-background-text/70 mb-6">
-          Your payment went through, but this order was cancelled before it
-          could be confirmed. Our team is reconciling it now — any amount due
-          back to you will be refunded automatically.
+          {copy[outcome].detail}
         </p>
 
         <div className="bg-store-secondary border border-store-border rounded-2xl p-4 mb-6">
           <p className="text-sm text-store-secondary-text">
-            No action needed. Your cart is still intact if you&apos;d like to
-            place a fresh order.
+            {copy[outcome].cart}
           </p>
         </div>
 

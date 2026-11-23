@@ -54,7 +54,9 @@ export const merchantQuizActivationV2RequestSchema = z
         .min(1)
         .max(QUIZ_MAX_LOGICAL_QUESTIONS),
     }),
+    backendMode: z.enum(['postgres', 'edge_rooms']).optional(),
     confirmActivation: z.literal(true),
+    edgeRoomCount: z.coerce.number().int().min(1).max(256).optional(),
     eventId: quizUuidSchema,
     maxAttempts: z.coerce
       .number()
@@ -133,6 +135,12 @@ export const merchantQuizActivationV2RequestSchema = z
         code: 'custom',
         message: 'endsAt must be after startsAt',
         path: ['timing', 'endsAt'],
+      });
+    if (value.edgeRoomCount !== undefined && value.backendMode !== 'edge_rooms')
+      context.addIssue({
+        code: 'custom',
+        message: 'edgeRoomCount is only allowed when backendMode is edge_rooms',
+        path: ['edgeRoomCount'],
       });
   });
 

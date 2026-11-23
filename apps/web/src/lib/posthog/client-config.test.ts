@@ -49,7 +49,7 @@ describe('PostHog client config', () => {
         maskAllInputs: true,
         maskTextFn: expect.any(Function),
         maskTextSelector: 'body',
-        sampleRate: 0.05,
+        sampleRate: 0.01,
       }),
     });
     expect(config.property_blacklist).not.toContain('token');
@@ -58,11 +58,11 @@ describe('PostHog client config', () => {
     );
   });
 
-  it('samples session recording at the trimmed 5% rate on full surfaces', () => {
+  it('requires a manual start and samples 1% of eligible checkout sessions', () => {
     const config = buildPostHogClientConfig({ NODE_ENV: 'production' });
 
-    expect(config.disable_session_recording).toBe(false);
-    expect(config.session_recording?.sampleRate).toBe(0.05);
+    expect(config.disable_session_recording).toBe(true);
+    expect(config.session_recording?.sampleRate).toBe(0.01);
     // Privacy masking must survive the sampling trim.
     expect(config.session_recording?.maskAllInputs).toBe(true);
   });
@@ -72,7 +72,7 @@ describe('PostHog client config', () => {
 
     expect(config.autocapture).toBe(true);
     expect(config.rageclick).toBe(true);
-    expect(config.disable_session_recording).toBe(false);
+    expect(config.disable_session_recording).toBe(true);
     expect(config.disable_surveys).toBe(true);
     expect(config.capture_heatmaps).toBe(false);
     expect(config.capture_dead_clicks).toBe(false);
@@ -91,11 +91,11 @@ describe('PostHog client config', () => {
       autocapture: false,
       capture_dead_clicks: false,
       capture_heatmaps: false,
+      capture_pageview: false,
       capture_performance: false,
       disable_session_recording: true,
       rageclick: false,
     });
-    expect(config.capture_pageview).toBe(false);
     expect(config.before_send).toEqual(expect.any(Function));
     expect(config.loaded).toEqual(expect.any(Function));
     expect(config.property_blacklist).toContain('email');

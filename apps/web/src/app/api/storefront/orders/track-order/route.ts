@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { getOrderNumberLookupCandidates } from '@/lib/order-number-lookup';
+import { loadTrackingAmendment } from '@/lib/orders/paid-order-amendment-document';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
   trackOrderEmailSchema,
@@ -232,6 +233,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const trackedAmendment = await loadTrackingAmendment(
+      supabase,
+      order.id,
+      validatedMerchantSlug,
+      validatedToken,
+      validatedEmail
+    );
+
+    if (trackedAmendment?.projection) {
+      Object.assign(order, trackedAmendment.projection.order, {
+        items: trackedAmendment.projection.items,
+      });
+    }
+
     // Generate timeline events based on order status
     const timeline = generateTimeline(order);
 
@@ -262,6 +277,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       order: {
         id: order.id,
+        ...(trackedAmendment ? { amendment: trackedAmendment.amendment } : {}),
         order_number: order.order_number,
         // Outward key, not the raw row: legacy `canceled` rows must read
         // as `cancelled` here (the timeline already normalizes), or

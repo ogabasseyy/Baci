@@ -20,6 +20,7 @@ type CreateOrderResult = Awaited<ReturnType<typeof createOrder>>;
 export async function runCheckoutFinalization({
   accountPassword,
   address,
+  checkoutCartIdentity,
   clearCart,
   completedPaymentMethod,
   customer,
@@ -49,6 +50,7 @@ export async function runCheckoutFinalization({
 }: {
   accountPassword: UseCheckoutSubmitParams['accountPassword'];
   address: ShippingAddressInput;
+  checkoutCartIdentity?: string | null;
   clearCart: UseCheckoutSubmitParams['clearCart'];
   completedPaymentMethod: string;
   customer: UseCheckoutSubmitParams['customer'];
@@ -155,6 +157,7 @@ export async function runCheckoutFinalization({
       tax: snapshot.taxAmount,
       ...(finalizedCurrency ? { currency: finalizedCurrency } : {}),
     },
+    checkoutCartIdentity,
     clearCart,
     customerEmail,
     customerName,

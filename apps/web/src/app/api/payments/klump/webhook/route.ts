@@ -22,7 +22,10 @@ import {
   rollbackOrderStatusAfterInventoryConfirmationFailure,
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
-import { isOrderClampedAsCancelled } from '@/lib/payments/handle-payment-for-cancelled-order';
+import {
+  handlePaymentForCancelledOrder,
+  isOrderClampedAsCancelled,
+} from '@/lib/payments/handle-payment-for-cancelled-order';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
 import { resolveOrderGiglSettlementRpc } from '@/lib/payments/resolve-order-gigl-settlement-rpc';
 import { calculatePlatformFee } from '@/lib/paystack';
@@ -117,6 +120,7 @@ function updateKlumpOrder({
       // cancelled-order handler below files such payments for review.
       .neq('payment_status', 'cancelled')
       .neq('payment_status', 'canceled')
+      .neq('payment_status', 'refunded')
       // Same fence on the shipping axis: either axis releasing the
       // loyalty claim (migration 20261010000014) makes the order
       // terminal for payment finalization.
@@ -349,6 +353,23 @@ export async function POST(request: NextRequest) {
       }
 
       order = existingOrder;
+    }
+
+    if (order?.payment_status === 'refunded') {
+      const reviewFiled = await handlePaymentForCancelledOrder({
+        gatewayReference: referenceResult.data,
+        issueType: 'payment_received_after_refund',
+        order,
+        reason: 'Klump payment captured for an order already refunded',
+        transactionId: transaction.id,
+      });
+      if (!reviewFiled) {
+        return errorResponse('Payment reconciliation review unavailable', 500);
+      }
+      return NextResponse.json({
+        message: 'Klump payment recorded; refunded order filed for review',
+        success: true,
+      });
     }
 
     if (

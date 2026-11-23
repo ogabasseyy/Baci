@@ -236,10 +236,9 @@ describe('finalizeOrderGatewayPayment', () => {
   it('completes the happy path: inventory, push, and side effects', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue(completion());
     mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+    const supabase = buildSupabase({ data: richOrderRow });
 
-    const outcome = await finalizeOrderGatewayPayment(
-      baseArgs(buildSupabase({ data: richOrderRow }))
-    );
+    const outcome = await finalizeOrderGatewayPayment(baseArgs(supabase));
 
     expect(outcome).toEqual({
       capturedOnPaidOrder: false,
@@ -252,6 +251,9 @@ describe('finalizeOrderGatewayPayment', () => {
       'merchant-1',
       'order-1'
     );
+    expect(
+      (supabase as unknown as { eq: ReturnType<typeof vi.fn> }).eq
+    ).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(mocks.notifyPaymentReceived).toHaveBeenCalled();
     expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({

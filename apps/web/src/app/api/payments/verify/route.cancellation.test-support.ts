@@ -170,9 +170,11 @@ function buildSupabase({
     const data =
       name === 'complete_order_gateway_payment'
         ? normalizedCompletion
-        : name === 'claim_payment_side_effect'
-          ? { current_status: 'claimed', we_won: true }
-          : null;
+        : name === 'reinstate_timeout_order_payment'
+          ? 'blocked'
+          : name === 'claim_payment_side_effect'
+            ? { current_status: 'claimed', we_won: true }
+            : null;
     const result = {
       data,
       error:

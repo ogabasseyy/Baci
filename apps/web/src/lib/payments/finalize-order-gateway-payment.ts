@@ -96,6 +96,7 @@ export async function finalizeOrderGatewayPayment({
     .from('orders')
     .select(PAID_ORDER_RICH_SELECT)
     .eq('id', orderId)
+    .eq('merchant_id', transaction.merchant_id)
     .single();
 
   if (orderFetchError || !order) {

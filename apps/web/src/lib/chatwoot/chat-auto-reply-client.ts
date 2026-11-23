@@ -67,6 +67,7 @@ export function postAssistantMessage(
     conversationId: number;
     content: string;
     isPrivate?: boolean;
+    contentAttributes?: Record<string, unknown>;
     cards?: readonly ChatAutoReplyProduct[];
     cartAction?: {
       for_message_id: number;
@@ -93,6 +94,7 @@ export function postAssistantMessage(
         ? {
             content_type: 'cards',
             content_attributes: {
+              ...(input.contentAttributes ?? {}),
               ...(input.cards.some((card) => card.initialProduct)
                 ? {
                     ekaette_product_options: {
@@ -136,9 +138,10 @@ export function postAssistantMessage(
               })),
             },
           }
-        : input.followUps || input.checkoutName
+        : input.contentAttributes || input.followUps || input.checkoutName
           ? {
               content_attributes: {
+                ...(input.contentAttributes ?? {}),
                 ...(input.followUps
                   ? { ekaette_follow_ups: input.followUps }
                   : {}),

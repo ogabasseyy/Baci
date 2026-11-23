@@ -131,7 +131,14 @@ export async function startProductionBuilderStack(settings: {
         })
       : undefined;
     phase = 'mcp-listener';
-    listener = createProductionBuilderListener(host.publicJwks);
+    listener = createProductionBuilderListener(
+      host.publicJwks,
+      Boolean(
+        settings.backgroundWorker &&
+          settings.verifierPort &&
+          settings.verifierKey
+      )
+    );
     await listen(listener.server, settings.port);
     if (settings.ownerPort !== undefined) {
       phase = 'owner-listener';

@@ -75,9 +75,11 @@ evidence, and linked owners read through their normal data API authority.
 Keep the existing artifact volume available for legacy builds and recovery
 until all protected rollback targets have durable renderer evidence.
 
-Background finalization requires `"backgroundBuilds": true` in the private
-builder configuration. Leave it absent until the background worker, verifier
-and recovery path are qualified.
+The public MCP listener exposes full-code tools only with the background build
+worker and independent verifier configured. With `"backgroundBuilds"` absent,
+the listener can serve OAuth and legacy builder discovery during qualification.
+Enable `"backgroundBuilds": true` after the worker, verifier and recovery path
+are qualified.
 
 Do not activate builder OAuth, owner routes, the runner or delivery merely because
 the local smoke passes. Required reviews, CI, private-draft recovery, data and

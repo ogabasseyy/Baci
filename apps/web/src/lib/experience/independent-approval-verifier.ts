@@ -38,8 +38,8 @@ export function createIndependentApprovalVerifier(
   deps: IndependentApprovalDependencies
 ): OwnerLifecycleVerification {
   return {
-    attest: async (client, approvalId, kind, signal) => {
-      signal?.throwIfAborted();
+    attest: async (client, approvalId, kind, requestSignal) => {
+      requestSignal?.throwIfAborted();
       const approval =
         kind === 'draft'
           ? await loadDraftApproval(client, approvalId)
@@ -51,6 +51,16 @@ export function createIndependentApprovalVerifier(
       const expiresAt = z.iso
         .datetime({ offset: true })
         .parse(approval.expiresAt);
+      const remainingMs = Date.parse(expiresAt) - Date.now();
+      if (remainingMs <= 0) throw Error('APPROVAL_EXPIRED');
+      // The listener already cancels long requests. Respect an earlier
+      // PostgreSQL approval expiry when the owner starts with time elapsed.
+      const expirySignal =
+        remainingMs < 550_000 ? AbortSignal.timeout(remainingMs) : undefined;
+      const signal =
+        requestSignal && expirySignal
+          ? AbortSignal.any([requestSignal, expirySignal])
+          : (requestSignal ?? expirySignal);
       const buildId =
         typeof approval.buildId === 'string' ? approval.buildId : undefined;
       signal?.throwIfAborted();
@@ -93,6 +103,7 @@ export function createIndependentApprovalVerifier(
       )
         throw Error('APPROVAL_MISMATCH');
       signal?.throwIfAborted();
+      if (Date.parse(expiresAt) <= Date.now()) throw Error('APPROVAL_EXPIRED');
       await deps.record({
         approvalId,
         kind,

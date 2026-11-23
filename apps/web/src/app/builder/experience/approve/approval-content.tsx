@@ -1,4 +1,5 @@
 import { loadDraftApproval } from '@/lib/experience/approval-service';
+import { getConfiguredOwnerApproval } from '@/lib/experience/owner-approval-web-config';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { loadLifecycleApproval } from '@/lib/experience/publication-service';
 import { createClient } from '@/lib/supabase/server';
@@ -56,7 +57,10 @@ export async function ExperienceApprovalContent({
       routes: 'routes' in data ? data.routes : undefined,
       capabilities: 'capabilities' in data ? data.capabilities : undefined,
       summary: 'summary' in data ? data.summary : data,
-      enabled: !!getExperienceOwnerRuntime()?.approval,
+      enabled: Boolean(
+        getExperienceOwnerRuntime()?.approval ??
+          (p.data.kind === 'draft' ? getConfiguredOwnerApproval() : undefined)
+      ),
     };
     return <ExperienceApprovalClient view={view} />;
   } catch {

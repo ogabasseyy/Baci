@@ -138,7 +138,7 @@ it('starts the listener on loopback after the host, then closes listener before 
     port: 8790,
     deliveryPort: 8791,
   });
-  expect(f.listener).toHaveBeenCalledWith(jwks);
+  expect(f.listener).toHaveBeenCalledWith(jwks, false);
   expect(server.listen).toHaveBeenCalledWith(
     8790,
     '127.0.0.1',

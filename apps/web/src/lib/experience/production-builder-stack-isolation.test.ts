@@ -84,7 +84,7 @@ it('requires and uses a distinct loopback owner listener instead of adding owner
     ownerBridge,
   });
   try {
-    expect(f.mcp).toHaveBeenCalledWith({ keys: [] });
+    expect(f.mcp).toHaveBeenCalledWith({ keys: [] }, false);
     expect(f.owner).toHaveBeenCalledWith({
       ownerPreview,
       ownerPreviewAdmission: expect.any(Function),

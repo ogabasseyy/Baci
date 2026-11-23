@@ -36,7 +36,10 @@ f.owner.mockImplementation(() => ({
   close: vi.fn(async () => {}),
 }));
 
-it('installs a fixed verifier relay only when a distinct trusted port is configured', async () => {
+it.each([
+  false,
+  true,
+])('installs a fixed verifier relay and exposes full-code tools only with the worker (%s)', async (backgroundBuilds) => {
   const server = () => ({
     listen: vi.fn((_port, _host, callback) => callback()),
     once: vi.fn(),
@@ -69,9 +72,10 @@ it('installs a fixed verifier relay only when a distinct trusted port is configu
     ownerPort: 8793,
     verifierPort: 8792,
     verifierKey: new Uint8Array(32).fill(7),
+    ...(backgroundBuilds && { backgroundWorker: { schedule: () => () => {} } }),
   });
   try {
-    expect(f.listener).toHaveBeenLastCalledWith({ keys: [] });
+    expect(f.listener).toHaveBeenLastCalledWith({ keys: [] }, backgroundBuilds);
     expect(f.owner).toHaveBeenLastCalledWith({
       ownerPreview: undefined,
       ownerAttestation: expect.any(Function),
@@ -150,7 +154,7 @@ it('attaches the owner bridge only when a trusted key and durable nonce store ar
       resolveUserClient,
       launch,
     });
-    expect(f.listener).toHaveBeenCalledWith({ keys: [] });
+    expect(f.listener).toHaveBeenCalledWith({ keys: [] }, false);
     expect(f.owner).toHaveBeenCalledWith({
       ownerPreview: handler,
       ownerPreviewAdmission: expect.any(Function),

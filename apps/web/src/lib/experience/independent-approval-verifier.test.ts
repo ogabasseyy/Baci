@@ -78,6 +78,36 @@ it('does not certify when the approval expiry changes during capture', async () 
   ).rejects.toThrow('APPROVAL_MISMATCH');
   expect(f.deps.record).not.toHaveBeenCalled();
 });
+it('rejects an expired approval before starting another route capture', async () => {
+  const f = setup();
+  vi.mocked(loadDraftApproval).mockResolvedValueOnce({
+    ...approval,
+    expiresAt: '2000-01-01T00:00:00Z',
+  });
+  await expect(
+    f.verifier.attest(ownerClient() as never, id, 'draft')
+  ).rejects.toThrow('APPROVAL_EXPIRED');
+  expect(f.deps.capture).not.toHaveBeenCalled();
+  expect(f.deps.record).not.toHaveBeenCalled();
+});
+it('bounds a late-starting capture by the remaining approval time', async () => {
+  const f = setup();
+  const now = Date.UTC(2026, 10, 23, 6, 0, 0);
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+  const timer = vi.spyOn(AbortSignal, 'timeout');
+  vi.mocked(loadDraftApproval).mockResolvedValue({
+    ...approval,
+    expiresAt: new Date(now + 20_000).toISOString(),
+  });
+  try {
+    await f.verifier.attest(ownerClient() as never, id, 'draft');
+    expect(timer).toHaveBeenCalledWith(20_000);
+    expect(f.deps.record).toHaveBeenCalledOnce();
+  } finally {
+    timer.mockRestore();
+    clock.mockRestore();
+  }
+});
 it('rejects evidence for a different build digest and approval ownership changes', async () => {
   const f = setup();
   await expect(

@@ -8,7 +8,10 @@ vi.mock('server-only', () => ({}));
 import { installBuilderGateway } from '@/lib/builder-gateway/runtime';
 import { createProductionBuilderListener } from './production-builder-listener';
 
-it('verifies a broker-signed token and delivers the MCP request to the installed local gateway', async () => {
+it.each([
+  false,
+  true,
+])('authenticates and advertises full-code tools only with a worker (%s)', async (backgroundBuilds) => {
   const key = await generateKeyPair('ES256');
   const jwk = {
     ...(await exportJWK(key.publicKey)),
@@ -32,13 +35,16 @@ it('verifies a broker-signed token and delivers the MCP request to the installed
     return Response.json({ stores: [], nextCursor: null });
   });
   const uninstall = installBuilderGateway(gateway);
-  const listener = createProductionBuilderListener({ keys: [jwk] });
+  const listener = createProductionBuilderListener(
+    { keys: [jwk] },
+    backgroundBuilds
+  );
   listener.server.listen(0, '127.0.0.1');
   await once(listener.server, 'listening');
   try {
     const address = listener.server.address();
     if (!address || typeof address === 'string') throw Error('fixture');
-    const post = (bearer: string) =>
+    const post = (bearer: string, method = 'tools/call') =>
       fetch(`http://127.0.0.1:${address.port}/builder/mcp`, {
         method: 'POST',
         headers: {
@@ -49,8 +55,11 @@ it('verifies a broker-signed token and delivers the MCP request to the installed
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
-          method: 'tools/call',
-          params: { name: 'list_storefronts', arguments: {} },
+          method,
+          params:
+            method === 'tools/call'
+              ? { name: 'list_storefronts', arguments: {} }
+              : {},
         }),
       });
     expect((await post('invalid.token')).status).toBe(401);
@@ -58,6 +67,8 @@ it('verifies a broker-signed token and delivers the MCP request to the installed
     const result = await post(token);
     expect(result.status).toBe(200);
     expect(gateway).toHaveBeenCalledOnce();
+    const tools = await (await post(token, 'tools/list')).text();
+    expect(tools.includes('finalize_experience_build')).toBe(backgroundBuilds);
   } finally {
     await listener.close();
     uninstall();

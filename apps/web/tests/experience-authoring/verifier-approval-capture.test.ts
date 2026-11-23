@@ -59,6 +59,7 @@ function fixture() {
     },
   };
   const client = {
+    auth: { getUser: async () => ({ data: { user: { id } }, error: null }) },
     from: vi.fn((table: string) => {
       const q = {
         select: () => q,

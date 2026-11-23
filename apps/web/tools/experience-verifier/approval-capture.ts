@@ -9,13 +9,16 @@ type Worker = Awaited<ReturnType<typeof createVerifierCaptureWorker>>;
 
 function approvalCaptureKey(
   binding: Parameters<IndependentApprovalDependencies['capture']>[1],
+  merchantId: string,
+  actorId: string,
   route: string
 ) {
   const hex = digestBytes(
     JSON.stringify([
-      'baci-approval-route-capture/v1',
+      'baci-approval-route-capture/v2',
       binding.kind,
-      binding.approvalId,
+      merchantId,
+      actorId,
       binding.effectDigest,
       binding.buildId,
       route,
@@ -45,6 +48,9 @@ export function createApprovalCapture(
     )
       throw Error('APPROVAL_MISMATCH');
     const merchantId = approval.merchantId;
+    const actor = await client.auth.getUser();
+    if (actor.error || !actor.data.user) throw Error('APPROVAL_MISMATCH');
+    signal?.throwIfAborted();
     const build = await client
       .from('experience_builds')
       .select('job_id,build_digest,host_origin')
@@ -91,7 +97,12 @@ export function createApprovalCapture(
         {
           buildId: approval.buildId,
           routeId: route.path,
-          idempotencyKey: approvalCaptureKey(binding, route.path),
+          idempotencyKey: approvalCaptureKey(
+            binding,
+            merchantId,
+            actor.data.user.id,
+            route.path
+          ),
         },
         'approval'
       );

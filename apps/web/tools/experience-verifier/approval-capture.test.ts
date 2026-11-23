@@ -14,7 +14,7 @@ vi.mock('@/schemas/experience-manifest', () => ({
 import { loadDraftApproval } from '@/lib/experience/approval-service';
 import { createApprovalCapture } from './approval-capture';
 
-it('reuses the same capture keys after a lost attestation response and separates routes and effects', async () => {
+it('resumes unchanged route evidence across explicitly renewed approvals and separates owners, routes and effects', async () => {
   const binding = {
     kind: 'draft' as const,
     approvalId: 'approval',
@@ -63,13 +63,28 @@ it('reuses the same capture keys after a lost attestation response and separates
     keys.push(z.uuid().parse(input.idempotencyKey));
     return { evidenceId: 'snapshot' };
   }) as Parameters<typeof createApprovalCapture>[0]);
-  const client = { from } as never;
+  let actor = 'owner-a';
+  const client = {
+    from,
+    auth: {
+      getUser: async () => ({ data: { user: { id: actor } }, error: null }),
+    },
+  } as never;
   await capture(client, binding);
   await capture(client, binding);
   expect(keys.slice(0, 2)).toEqual(keys.slice(2, 4));
   expect(keys[0]).not.toBe(keys[1]);
 
+  approval.approvalId = 'renewed-approval';
+  const renewed = { ...binding, approvalId: approval.approvalId };
+  await capture(client, renewed);
+  expect(keys.slice(4, 6)).toEqual(keys.slice(0, 2));
+
+  actor = 'owner-b';
+  await capture(client, renewed);
+  expect(keys[6]).not.toBe(keys[4]);
+
   approval.effectDigest = 'effect-b';
-  await capture(client, { ...binding, effectDigest: approval.effectDigest });
-  expect(keys[4]).not.toBe(keys[0]);
+  await capture(client, { ...renewed, effectDigest: approval.effectDigest });
+  expect(keys[8]).not.toBe(keys[6]);
 });

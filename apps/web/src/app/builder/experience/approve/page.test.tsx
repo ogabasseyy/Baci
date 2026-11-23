@@ -4,6 +4,7 @@ import { expect, it, vi } from 'vitest';
 const f = vi.hoisted(() => ({
   load: vi.fn(),
   client: vi.fn(async () => ({})),
+  configured: vi.fn(),
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: f.client }));
 vi.mock('@/lib/experience/approval-service', () => ({
@@ -11,6 +12,9 @@ vi.mock('@/lib/experience/approval-service', () => ({
 }));
 vi.mock('@/lib/experience/publication-service', () => ({
   loadLifecycleApproval: f.load,
+}));
+vi.mock('@/lib/experience/owner-approval-web-config', () => ({
+  getConfiguredOwnerApproval: f.configured,
 }));
 vi.mock('./approval-client', () => ({
   ExperienceApprovalClient: ({ view }: { view: unknown }) => (
@@ -73,4 +77,26 @@ it('owner lookup failure does not leak database errors or offer approval', async
   ).toBeVisible();
   expect(screen.queryByText('private details')).not.toBeInTheDocument();
   expect(screen.queryByTestId('approval')).not.toBeInTheDocument();
+});
+
+it.each([
+  { kind: 'draft', action: 'apply', enabled: true },
+  { kind: 'lifecycle', action: 'publish', enabled: false },
+] as const)('honors remote draft confirmation without enabling remote publication ($kind)', async ({
+  kind,
+  action,
+  enabled,
+}) => {
+  f.configured.mockReturnValue({ confirm: vi.fn() });
+  f.load.mockResolvedValue({
+    status: 'confirmation-required',
+    merchantId: id,
+    buildId: id,
+    effectDigest: 'a'.repeat(64),
+    action,
+  });
+  render(await Page({ searchParams: Promise.resolve({ approval: id, kind }) }));
+  expect(
+    JSON.parse(screen.getByTestId('approval').textContent ?? '{}')
+  ).toMatchObject({ enabled });
 });

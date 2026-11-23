@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
-  maybeSingle: vi.fn(),
+  customerMaybeSingle: vi.fn(),
+  orderMaybeSingle: vi.fn(),
+  orderEq: vi.fn(),
   resolveMerchantIdBySlug: vi.fn(),
   trackShipment: vi.fn(),
 }));
@@ -15,13 +17,39 @@ vi.mock('next/headers', () => ({
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mocks.getUser },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          maybeSingle: mocks.maybeSingle,
+    from: vi.fn((table: string) => {
+      if (table === 'customers') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: mocks.customerMaybeSingle,
+              })),
+            })),
+          })),
+        };
+      }
+      return {
+        select: vi.fn(() => ({
+          eq: vi.fn((...firstArgs: unknown[]) => {
+            mocks.orderEq(...firstArgs);
+            return {
+              eq: vi.fn((...secondArgs: unknown[]) => {
+                mocks.orderEq(...secondArgs);
+                return {
+                  eq: vi.fn((...thirdArgs: unknown[]) => {
+                    mocks.orderEq(...thirdArgs);
+                    return {
+                      maybeSingle: mocks.orderMaybeSingle,
+                    };
+                  }),
+                };
+              }),
+            };
+          }),
         })),
-      })),
-    })),
+      };
+    }),
   })),
 }));
 
@@ -39,6 +67,7 @@ import { GET } from './route';
 
 const ORDER_ID = '11111111-1111-4111-8111-111111111111';
 const MERCHANT_ID = '22222222-2222-4222-8222-222222222222';
+const CUSTOMER_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('GET /api/storefront/orders/[id]/tracking', () => {
   beforeEach(() => {
@@ -48,6 +77,10 @@ describe('GET /api/storefront/orders/[id]/tracking', () => {
       error: null,
     });
     mocks.resolveMerchantIdBySlug.mockResolvedValue(MERCHANT_ID);
+    mocks.customerMaybeSingle.mockResolvedValue({
+      data: { id: CUSTOMER_ID },
+      error: null,
+    });
   });
 
   it('returns 401 when the shopper is not signed in', async () => {
@@ -55,7 +88,7 @@ describe('GET /api/storefront/orders/[id]/tracking', () => {
 
     const res = await GET(
       new NextRequest(
-        `https://localhost/api/storefront/orders/${ORDER_ID}/tracking`
+        `https://localhost/api/storefront/orders/${ORDER_ID}/tracking?merchantSlug=savings-synthetic`
       ),
       { params: Promise.resolve({ id: ORDER_ID }) }
     );
@@ -66,7 +99,7 @@ describe('GET /api/storefront/orders/[id]/tracking', () => {
   it('returns 400 for an invalid order UUID', async () => {
     const res = await GET(
       new NextRequest(
-        'https://localhost/api/storefront/orders/bad-id/tracking'
+        'https://localhost/api/storefront/orders/bad-id/tracking?merchantSlug=savings-synthetic'
       ),
       { params: Promise.resolve({ id: 'bad-id' }) }
     );
@@ -74,8 +107,52 @@ describe('GET /api/storefront/orders/[id]/tracking', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 when merchantSlug is omitted', async () => {
+    const res = await GET(
+      new NextRequest(
+        `https://localhost/api/storefront/orders/${ORDER_ID}/tracking`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(res.status).toBe(400);
+    expect(mocks.trackShipment).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the signed-in shopper has no customer record for the merchant', async () => {
+    mocks.customerMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const res = await GET(
+      new NextRequest(
+        `https://localhost/api/storefront/orders/${ORDER_ID}/tracking?merchantSlug=savings-synthetic`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(res.status).toBe(404);
+    expect(mocks.orderMaybeSingle).not.toHaveBeenCalled();
+    expect(mocks.trackShipment).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the order does not belong to the signed-in customer', async () => {
+    mocks.orderMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const res = await GET(
+      new NextRequest(
+        `https://localhost/api/storefront/orders/${ORDER_ID}/tracking?merchantSlug=savings-synthetic`
+      ),
+      { params: Promise.resolve({ id: ORDER_ID }) }
+    );
+
+    expect(res.status).toBe(404);
+    expect(mocks.orderEq).toHaveBeenCalledWith('id', ORDER_ID);
+    expect(mocks.orderEq).toHaveBeenCalledWith('merchant_id', MERCHANT_ID);
+    expect(mocks.orderEq).toHaveBeenCalledWith('customer_id', CUSTOMER_ID);
+    expect(mocks.trackShipment).not.toHaveBeenCalled();
+  });
+
   it('disables tracking when the order has not been shipped yet', async () => {
-    mocks.maybeSingle.mockResolvedValue({
+    mocks.orderMaybeSingle.mockResolvedValue({
       data: {
         id: ORDER_ID,
         merchant_id: MERCHANT_ID,
@@ -103,7 +180,7 @@ describe('GET /api/storefront/orders/[id]/tracking', () => {
   });
 
   it('returns live GIGL tracking events once the order is shipped', async () => {
-    mocks.maybeSingle.mockResolvedValue({
+    mocks.orderMaybeSingle.mockResolvedValue({
       data: {
         id: ORDER_ID,
         merchant_id: MERCHANT_ID,
@@ -163,7 +240,7 @@ describe('GET /api/storefront/orders/[id]/tracking', () => {
   });
 
   it('falls back gracefully when live GIGL tracking fails', async () => {
-    mocks.maybeSingle.mockResolvedValue({
+    mocks.orderMaybeSingle.mockResolvedValue({
       data: {
         id: ORDER_ID,
         merchant_id: MERCHANT_ID,

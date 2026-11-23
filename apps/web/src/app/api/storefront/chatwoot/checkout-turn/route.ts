@@ -23,7 +23,7 @@ const HEADERS = {
 };
 
 const SENSITIVE_PATTERN =
-  /(?:(?<!\d)\d(?:[\s-]?\d){9}(?!\d)|(?<!\d)(?:0|\+?234)[\s-]?[789](?:[\s-]?\d){9}(?!\d)|[^\s@]+@[^\s@]+\.[^\s@]+)/;
+  /(?:(?<!\d)\d(?:[\s-]?\d){9,11}(?!\d)|(?<!\d)(?:0|\+?234)[\s-]?[789](?:[\s-]?\d){9}(?!\d)|[^\s@]+@[^\s@]+\.[^\s@]+)/;
 
 function fail(status: number, error: string) {
   return NextResponse.json({ error }, { status, headers: HEADERS });

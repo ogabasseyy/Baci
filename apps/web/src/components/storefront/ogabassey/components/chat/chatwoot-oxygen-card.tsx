@@ -28,11 +28,22 @@ export function ChatwootOxygenCard({
   const [contact, setContact] = useState<OxygenCustomerPrefill>();
   const [contactUnavailable, setContactUnavailable] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [portalTarget, setPortalTarget] = useState<{
+    holder: HTMLElement;
+    widget: HTMLElement;
+  } | null>(null);
   const back = useRef<HTMLButtonElement>(null);
   const resume = useRef<HTMLButtonElement>(null);
-  const holder = document.getElementById('cw-widget-holder');
-  const frame = document.getElementById('chatwoot_live_chat_widget');
-  const widget = holder?.contains(frame) ? frame : null;
+
+  useEffect(() => {
+    const holder = document.getElementById('cw-widget-holder');
+    const frame = document.getElementById('chatwoot_live_chat_widget');
+    const widget = holder && frame && holder.contains(frame) ? frame : null;
+    setPortalTarget(holder && widget ? { holder, widget } : null);
+  }, []);
+
+  const holder = portalTarget?.holder ?? null;
+  const widget = portalTarget?.widget ?? null;
 
   useEffect(() => {
     if (!open || contact) return;

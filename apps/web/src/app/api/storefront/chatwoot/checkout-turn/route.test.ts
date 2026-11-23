@@ -124,6 +124,8 @@ describe('POST /api/storefront/chatwoot/checkout-turn', () => {
     '0123456789',
     'my account number is 0123456789',
     '0123456789 please',
+    '22234567890',
+    'my BVN is 22234567890',
     'my phone is 08012345678',
   ])('rejects sensitive reply %s before it can reach the LLM', async (answer) => {
     const res = await POST(

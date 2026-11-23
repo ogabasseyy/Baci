@@ -55,12 +55,54 @@ export async function GET(
     );
   }
 
+  const merchantSlug =
+    request.nextUrl.searchParams.get('merchantSlug')?.trim() ||
+    request.nextUrl.searchParams.get('merchant_slug')?.trim() ||
+    '';
+  if (!merchantSlug) {
+    return NextResponse.json(
+      { error: 'Merchant slug is required' },
+      { status: 400, headers: HEADERS }
+    );
+  }
+
+  const merchantId = await resolveMerchantIdBySlug(merchantSlug, supabase);
+  if (!merchantId) {
+    return NextResponse.json(
+      { error: 'Order not found' },
+      { status: 404, headers: HEADERS }
+    );
+  }
+
+  const { data: customer, error: customerError } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('merchant_id', merchantId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (customerError) {
+    return NextResponse.json(
+      { error: 'Unable to load order tracking' },
+      { status: 500, headers: HEADERS }
+    );
+  }
+
+  if (!customer) {
+    return NextResponse.json(
+      { error: 'Order not found' },
+      { status: 404, headers: HEADERS }
+    );
+  }
+
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select(
       'id, merchant_id, order_number, shipping_status, shipping_provider, tracking_number'
     )
     .eq('id', id)
+    .eq('merchant_id', merchantId)
+    .eq('customer_id', customer.id)
     .maybeSingle();
 
   if (orderError) {
@@ -75,23 +117,6 @@ export async function GET(
       { error: 'Order not found' },
       { status: 404, headers: HEADERS }
     );
-  }
-
-  const merchantSlug =
-    request.nextUrl.searchParams.get('merchantSlug')?.trim() ||
-    request.nextUrl.searchParams.get('merchant_slug')?.trim() ||
-    '';
-  if (merchantSlug) {
-    const requestedMerchantId = await resolveMerchantIdBySlug(
-      merchantSlug,
-      supabase
-    );
-    if (!requestedMerchantId || requestedMerchantId !== order.merchant_id) {
-      return NextResponse.json(
-        { error: 'Order not found' },
-        { status: 404, headers: HEADERS }
-      );
-    }
   }
 
   const shippingStatus = order.shipping_status?.trim().toLowerCase() ?? '';

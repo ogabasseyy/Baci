@@ -160,7 +160,9 @@ export async function runChatAutoReply(
   event: ChatWebhookMessageCreated
 ): Promise<ChatAutoReplyOutcome> {
   const decision = decideChatAutoReply(event, {
-    semanticHandoff: isOxygenStorefrontStagingEnabled(),
+    semanticHandoff:
+      isOxygenStorefrontStagingEnabled() ||
+      process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED === 'true',
   });
   if (decision.action === 'skip') return 'skipped';
   const conversationId = event.conversation.id;
@@ -279,11 +281,8 @@ export async function recordMerchantTakeover(
 ): Promise<ChatAutoReplyOutcome> {
   if (!isMerchantReply(event)) return 'skipped';
   const conversationId = event.conversation.id;
-  // The status move is what stops the assistant: if it fails the takeover
-  // is not complete, even when the label lands. The webhook's status can be
-  // old by now (a delayed or repeated delivery), so the live one decides:
-  // a conversation staff have since resolved or snoozed is left as it is.
-  // The event may carry no status at all, so the live read is unconditional.
+  // The status move stops the assistant. Recheck live status so stale
+  // webhooks do not overwrite staff-resolved or snoozed conversations.
   const live = await getConversationSnapshot(binding, conversationId);
   let moved = live !== null;
   if (live?.status === 'pending') {

@@ -42,8 +42,8 @@ vi.mock('@/lib/api-client', async () => {
   const errors = await import('@/lib/api-errors');
   return { apiClient: mocks.api, NetworkError: errors.NetworkError };
 });
-vi.mock('@/components/ui/AppKeyboardContainer', () => ({
-  AppKeyboardContainer: ({ children }: { children: ReactNode }) => (
+vi.mock('@/components/ui/AppHeaderKeyboardContainer', () => ({
+  AppHeaderKeyboardContainer: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
 }));

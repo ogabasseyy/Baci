@@ -16,15 +16,28 @@ import { applyInboxLabelChange } from './merchant-inbox-labels';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
-async function providerPost(
+/**
+ * How a write ended. `rejected`: the engine answered with a client error, so
+ * it certainly did not apply it. `unknown`: no usable answer (timeout, network
+ * error, a server error), so it may have been applied, or may still be.
+ */
+type WriteOutcome = 'ok' | 'rejected' | 'unknown';
+
+async function providerWrite(
   binding: MerchantInboxBinding,
   path: string,
   body: Record<string, unknown>
-): Promise<boolean> {
+): Promise<WriteOutcome> {
   const url = new URL(
     `/api/v1/accounts/${binding.accountId}${path}`,
     binding.apiOrigin
   );
+  const logFailure = (status: number | null) =>
+    // Status only: never the token or the response body.
+    console.error('[merchant-inbox] provider write failed', {
+      status,
+      path: path.replace(/\/\d+/g, '/:id'),
+    });
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -38,21 +51,25 @@ async function providerPost(
       redirect: 'error',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
-    if (!response.ok) {
-      // Status only: never the token or the response body.
-      console.error('[merchant-inbox] provider write failed', {
-        status: response.status,
-        path: path.replace(/\/\d+/g, '/:id'),
-      });
-    }
-    return response.ok;
+    if (response.ok) return 'ok';
+    logFailure(response.status);
+    const refused =
+      response.status >= 400 &&
+      response.status < 500 &&
+      response.status !== 408;
+    return refused ? 'rejected' : 'unknown';
   } catch {
-    console.error('[merchant-inbox] provider write failed', {
-      status: null,
-      path: path.replace(/\/\d+/g, '/:id'),
-    });
-    return false;
+    logFailure(null);
+    return 'unknown';
   }
+}
+
+async function providerPost(
+  binding: MerchantInboxBinding,
+  path: string,
+  body: Record<string, unknown>
+): Promise<boolean> {
+  return (await providerWrite(binding, path, body)) === 'ok';
 }
 
 const unavailable: MerchantInboxFailure = { ok: false, code: 'unavailable' };
@@ -79,21 +96,21 @@ async function writeLabels(
     : unavailable;
 }
 
-/** After a snooze whose answer did not arrive: did the engine apply it anyway? */
-async function snoozeOutcome(
+/** After a snooze with no clear answer: does the engine show it as applied? */
+async function snoozeApplied(
   binding: MerchantInboxBinding,
   conversationId: number,
   atMs: number
-): Promise<'applied' | 'not_applied' | 'unknown'> {
+): Promise<boolean> {
   const check = await getMerchantInboxConversation(binding, conversationId);
-  if (!check.ok) return 'unknown';
+  if (!check.ok) return false;
   const until = check.conversation.snoozedUntil
     ? Date.parse(check.conversation.snoozedUntil)
     : Number.NaN;
-  return check.conversation.status === 'snoozed' &&
+  return (
+    check.conversation.status === 'snoozed' &&
     until === Math.floor(atMs / 1000) * 1000
-    ? 'applied'
-    : 'not_applied';
+  );
 }
 
 /**
@@ -156,25 +173,28 @@ export async function updateMerchantInboxConversation(
     });
     if (labelled) return labelled;
     labelsSaved = true;
-    if (
-      !(await providerPost(binding, `${base}/toggle_status`, {
-        status: 'snoozed',
-        snoozed_until: Math.floor(at / 1000),
-      }))
-    ) {
-      // No answer is not the same as "not snoozed": the engine may have
-      // applied it and the reply got lost. Look before undoing anything.
-      const outcome = await snoozeOutcome(binding, conversationId, at);
-      if (outcome !== 'applied') {
-        // Only a snooze that is clearly absent takes the label back off, and
-        // not when the chat already had a follow-up (its earlier snooze and
-        // label still agree). If we cannot tell, the label stays: a chat that
-        // shows in the Follow-up view is better than one that vanished.
-        if (outcome === 'not_applied' && !owned.conversation.followUp) {
-          await writeLabels(binding, base, { followUp: false });
-        }
-        return unavailable;
+    const snooze = await providerWrite(binding, `${base}/toggle_status`, {
+      status: 'snoozed',
+      snoozed_until: Math.floor(at / 1000),
+    });
+    if (snooze === 'rejected') {
+      // The engine refused, so nothing is snoozed: take the label back off,
+      // unless the chat already had a follow-up (its earlier snooze and label
+      // still agree).
+      if (!owned.conversation.followUp) {
+        await writeLabels(binding, base, { followUp: false });
       }
+      return unavailable;
+    }
+    // No clear answer (timeout, server error): the snooze may have been
+    // applied, or may still land after any check made now, so the label is
+    // never taken back off; a chat that shows in the Follow-up view beats one
+    // that vanished. If the engine shows it as snoozed, carry on.
+    if (
+      snooze === 'unknown' &&
+      !(await snoozeApplied(binding, conversationId, at))
+    ) {
+      return unavailable;
     }
   } else if (update.status === 'open' || followUpAt === null) {
     if (

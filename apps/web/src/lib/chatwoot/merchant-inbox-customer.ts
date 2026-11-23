@@ -3,7 +3,7 @@ import 'server-only';
 import type {
   MerchantInboxCustomerBadge,
   MerchantInboxCustomerProfile,
-} from '@/schemas/merchant-inbox-customer';
+} from '@baci/shared';
 import { createChatCustomerLinkVerifier } from './chat-customer-link-token';
 import { loadChatwootMerchantCurrency } from './merchant-currency';
 import { MerchantInboxCustomerUnavailableError } from './merchant-inbox-customer-unavailable';

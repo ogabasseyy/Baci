@@ -1,3 +1,7 @@
+import {
+  merchantInboxCustomerBadgeSchema,
+  merchantInboxCustomerProfileSchema,
+} from '@baci/shared';
 import { z } from 'zod';
 
 /**
@@ -25,15 +29,7 @@ export const inboxConversationSchema = z.object({
   followUp: z.boolean().optional(),
   snoozedUntil: z.string().nullable().optional(),
   // A verified signed-in customer of this store, when the chat is linked.
-  customer: z
-    .object({
-      orderCount: z.number().int().nonnegative(),
-      totalSpent: z.number().nonnegative(),
-      // True when this user may not see order data (the counts are then 0).
-      ordersHidden: z.boolean().optional(),
-    })
-    .nullable()
-    .optional(),
+  customer: merchantInboxCustomerBadgeSchema.nullable().optional(),
 });
 
 export const inboxConversationsResponseSchema = z.object({
@@ -68,31 +64,8 @@ export const inboxSearchResponseSchema = z.object({
   page: z.number().int().positive(),
 });
 
-export const inboxCustomerProfileSchema = z.object({
-  name: z.string(),
-  // The store's currency, for the spend total.
-  currency: z.string().length(3),
-  memberSince: z.string().nullable(),
-  orderCount: z.number().int().nonnegative(),
-  totalSpent: z.number().nonnegative(),
-  loyaltyPoints: z.number().int().nonnegative(),
-  // True when this user may not see order data (counts and spend are then 0).
-  ordersHidden: z.boolean().optional(),
-  // The server sends at most five (its own limit); mirrored here.
-  recentOrders: z
-    .array(
-      z.object({
-        orderNumber: z.string(),
-        total: z.number(),
-        // The currency this order was placed in.
-        currency: z.string().length(3),
-        paymentStatus: z.string(),
-        shippingStatus: z.string(),
-        createdAt: z.string().nullable(),
-      })
-    )
-    .max(5),
-});
+// The same definition the server answers with, from the shared package.
+export const inboxCustomerProfileSchema = merchantInboxCustomerProfileSchema;
 
 export const inboxCustomerResponseSchema = z.object({
   customer: inboxCustomerProfileSchema.nullable(),

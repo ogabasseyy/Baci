@@ -1,8 +1,8 @@
-import { z } from 'zod';
 import {
   type MerchantInboxCustomerBadge,
   merchantInboxCustomerBadgeSchema,
-} from './merchant-inbox-customer';
+} from '@baci/shared';
+import { z } from 'zod';
 import { INBOX_PRIORITIES } from './merchant-inbox-manage';
 
 const providerId = z.number().int().positive().safe();

@@ -1,4 +1,7 @@
-import { loadDraftApproval } from '@/lib/experience/approval-service';
+import {
+  ApprovalExpired,
+  loadDraftApproval,
+} from '@/lib/experience/approval-service';
 import { getConfiguredOwnerApproval } from '@/lib/experience/owner-approval-web-config';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { loadLifecycleApproval } from '@/lib/experience/publication-service';
@@ -12,6 +15,7 @@ import {
   ExperienceApprovalClient,
   type ExperienceApprovalView,
 } from './approval-client';
+import { ExperiencePreparationRecovery } from './preparation-recovery';
 import { ExperienceVerificationRetry } from './verification-retry';
 export async function ExperienceApprovalContent({
   searchParams,
@@ -26,6 +30,9 @@ export async function ExperienceApprovalContent({
         <p>Request a fresh exact-build approval.</p>
       </main>
     );
+  const runtime =
+    getExperienceOwnerRuntime()?.approval ??
+    (p.data.kind === 'draft' ? getConfiguredOwnerApproval() : undefined);
   try {
     const client = await createClient();
     const data =
@@ -44,26 +51,43 @@ export async function ExperienceApprovalContent({
           ) : null}
         </main>
       );
+    const action =
+      'action' in data && typeof data.action === 'string'
+        ? data.action
+        : 'apply';
     const view: ExperienceApprovalView = {
       approvalId: p.data.approval,
       merchantId: experienceApprovalId.parse(data.merchantId),
       kind: p.data.kind,
-      action:
-        'action' in data && typeof data.action === 'string'
-          ? data.action
-          : 'apply',
+      action,
       buildId: typeof data.buildId === 'string' ? data.buildId : undefined,
       effectDigest: experienceDigest.parse(data.effectDigest),
       routes: 'routes' in data ? data.routes : undefined,
       capabilities: 'capabilities' in data ? data.capabilities : undefined,
       summary: 'summary' in data ? data.summary : data,
-      enabled: Boolean(
-        getExperienceOwnerRuntime()?.approval ??
-          (p.data.kind === 'draft' ? getConfiguredOwnerApproval() : undefined)
+      enabled: Boolean(runtime),
+      needsPreparation: Boolean(
+        p.data.kind === 'draft'
+          ? runtime?.prepareDraft
+          : (action === 'publish' || action === 'rollback') &&
+              runtime?.preparePublication
       ),
     };
     return <ExperienceApprovalClient view={view} />;
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof ApprovalExpired &&
+      (p.data.kind === 'draft'
+        ? runtime?.prepareDraft
+        : runtime?.preparePublication)
+    ) {
+      return (
+        <ExperiencePreparationRecovery
+          approvalId={p.data.approval}
+          kind={p.data.kind}
+        />
+      );
+    }
     return (
       <main>
         <h1>Approval unavailable</h1>

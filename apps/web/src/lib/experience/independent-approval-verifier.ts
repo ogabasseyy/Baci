@@ -42,8 +42,8 @@ export function createIndependentApprovalVerifier(
       requestSignal?.throwIfAborted();
       const approval =
         kind === 'draft'
-          ? await loadDraftApproval(client, approvalId)
-          : await loadLifecycleApproval(client, approvalId);
+          ? await loadDraftApproval(client, approvalId, requestSignal)
+          : await loadLifecycleApproval(client, approvalId, requestSignal);
       if (approval.status !== 'confirmation-required') return;
       const effectDigest = experienceVerifierDigest.parse(
         approval.effectDigest
@@ -92,8 +92,8 @@ export function createIndependentApprovalVerifier(
       signal?.throwIfAborted();
       const current =
         kind === 'draft'
-          ? await loadDraftApproval(client, approvalId)
-          : await loadLifecycleApproval(client, approvalId);
+          ? await loadDraftApproval(client, approvalId, signal)
+          : await loadLifecycleApproval(client, approvalId, signal);
       if (
         current.status !== 'confirmation-required' ||
         current.effectDigest !== effectDigest ||

@@ -3,6 +3,16 @@ import type { PerformanceReader } from './performance-read';
 export interface ExperienceOwnerRuntime {
   readPerformance?: PerformanceReader;
   approval?: {
+    prepareDraft?(
+      client: SupabaseClient,
+      approvalId: string,
+      signal?: AbortSignal
+    ): Promise<unknown>;
+    preparePublication?(
+      client: SupabaseClient,
+      approvalId: string,
+      signal?: AbortSignal
+    ): Promise<unknown>;
     load(client: SupabaseClient, approvalId: string): Promise<unknown>;
     confirm(
       client: SupabaseClient,

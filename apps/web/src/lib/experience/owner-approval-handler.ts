@@ -9,6 +9,16 @@ export interface OwnerApprovalDependencies {
   ownerClient(request: Request): Promise<SupabaseClient | null>;
   checkMutation(request: Request): Promise<Response | null>;
   load(client: SupabaseClient, id: string): Promise<unknown>;
+  prepareDraft?(
+    client: SupabaseClient,
+    id: string,
+    signal?: AbortSignal
+  ): Promise<unknown>;
+  preparePublication?(
+    client: SupabaseClient,
+    id: string,
+    signal?: AbortSignal
+  ): Promise<unknown>;
   confirm(
     client: SupabaseClient,
     id: string,
@@ -68,6 +78,21 @@ export function createOwnerApprovalHandler(deps: OwnerApprovalDependencies) {
       const parsed = experienceApprovalPost.safeParse(body.body);
       if (!parsed.success)
         return respond({ error: 'Invalid approval request.' }, 400);
+      if (
+        parsed.data.action === 'prepare-draft' ||
+        parsed.data.action === 'prepare-publication'
+      ) {
+        const prepare =
+          parsed.data.action === 'prepare-draft'
+            ? deps.prepareDraft
+            : deps.preparePublication;
+        if (!prepare)
+          return respond({ error: 'Approval preparation unavailable.' }, 503);
+        request.signal.throwIfAborted();
+        return respond(
+          await prepare(owner, parsed.data.approvalId, request.signal)
+        );
+      }
       const confirm =
         parsed.data.action === 'confirm-draft'
           ? deps.confirm

@@ -71,8 +71,8 @@ export async function startVerifierService(settings: {
       signal?.throwIfAborted();
       const approval =
         binding.kind === 'draft'
-          ? await loadDraftApproval(client, binding.approvalId)
-          : await loadLifecycleApproval(client, binding.approvalId);
+          ? await loadDraftApproval(client, binding.approvalId, signal)
+          : await loadLifecycleApproval(client, binding.approvalId, signal);
       if (
         approval.status !== 'confirmation-required' ||
         approval.approvalId !== binding.approvalId ||

@@ -36,48 +36,14 @@ it('stays off unless a distinct canonical verifier key is explicitly enabled', (
   ).toBeUndefined();
   expect(configuredOwnerApproval({ enabled: true, key })).toBeUndefined();
 });
-it('requires fresh verifier attestation before draft confirmation and exposes no publication operation', async () => {
+it('installs separate preparation and confirmation with no publication operation', async () => {
   const approval = configuredOwnerApproval({ enabled: true, key, ...owner });
-  expect(approval).toBeDefined();
-  f.load.mockResolvedValueOnce({ status: 'confirmation-required' });
-  f.attest.mockRejectedValueOnce(Error('unavailable'));
-  await expect(approval?.confirm({} as never, id)).rejects.toThrow(
-    'unavailable'
-  );
-  expect(f.confirm).not.toHaveBeenCalled();
-  f.load.mockResolvedValueOnce({ status: 'confirmation-required' });
-  f.attest.mockResolvedValueOnce(undefined);
+  expect(approval?.prepareDraft).toBeTypeOf('function');
   f.confirm.mockResolvedValueOnce({ version: 1 });
-  const { signal } = new AbortController();
-  await expect(approval?.confirm({} as never, id, signal)).resolves.toEqual({
+  await expect(approval?.confirm({} as never, id)).resolves.toEqual({
     version: 1,
   });
-  expect(f.attest).toHaveBeenLastCalledWith({}, id, 'draft', signal);
+  expect(f.attest).not.toHaveBeenCalled();
   expect(approval).not.toHaveProperty('confirmPublication');
   expect(approval).not.toHaveProperty('confirmModeExit');
-});
-it('reconciles an already applied approval without repeating attestation', async () => {
-  const approval = configuredOwnerApproval({ enabled: true, key, ...owner });
-  f.attest.mockClear();
-  f.load.mockResolvedValueOnce({ status: 'applied' });
-  f.confirm.mockResolvedValueOnce({ version: 2 });
-  await expect(approval?.confirm({} as never, id)).resolves.toEqual({
-    version: 2,
-  });
-  expect(f.attest).not.toHaveBeenCalled();
-});
-
-it('does not start the confirmation if the request ends during attestation', async () => {
-  const approval = configuredOwnerApproval({ enabled: true, key, ...owner });
-  const abort = new AbortController();
-  f.confirm.mockClear();
-  f.load.mockResolvedValueOnce({ status: 'confirmation-required' });
-  const reason = Error('request ended');
-  f.attest.mockImplementationOnce(async () => {
-    abort.abort(reason);
-  });
-  await expect(approval?.confirm({} as never, id, abort.signal)).rejects.toBe(
-    reason
-  );
-  expect(f.confirm).not.toHaveBeenCalled();
 });

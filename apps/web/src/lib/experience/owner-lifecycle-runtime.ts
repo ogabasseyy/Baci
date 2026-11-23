@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createApprovalPreparation } from './approval-preparation';
 import { confirmDraftApply, loadDraftApproval } from './approval-service';
 import { confirmExperienceModeExit } from './mode-exit-service';
 import type { ExperienceOwnerRuntime } from './owner-runtime';
@@ -29,17 +30,13 @@ export function createOwnerLifecycleRuntime(
     approval: {
       load: loadDraftApproval,
       loadLifecycle: loadLifecycleApproval,
-      confirm: async (client, id, signal) => {
-        const existing = await loadDraftApproval(client, id);
-        if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'draft', signal);
-        signal?.throwIfAborted();
-        return confirmDraftApply(client, id);
-      },
+      prepareDraft: createApprovalPreparation(verifier.attest, 'draft'),
+      preparePublication: createApprovalPreparation(
+        verifier.attest,
+        'lifecycle'
+      ),
+      confirm: confirmDraftApply,
       confirmPublication: async (client, id, signal) => {
-        const existing = await loadLifecycleApproval(client, id);
-        if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'lifecycle', signal);
         signal?.throwIfAborted();
         const receipt = await confirmExperiencePublication(client, id);
         if (receipt.status === 'verifying') {

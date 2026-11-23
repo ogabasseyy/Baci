@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { BUILDER_OWNER_APPROVAL_ENABLED } from '@/config/builder-owner-approval';
+import { createApprovalPreparation } from './approval-preparation';
 import { confirmDraftApply, loadDraftApproval } from './approval-service';
 import {
   configuredOwnerMtlsFetch,
@@ -36,16 +37,13 @@ export function configuredOwnerApproval(settings: {
   const attest = createVerifierAttestationClient({ key, fetch });
   return {
     load: loadDraftApproval,
+    prepareDraft: createApprovalPreparation(attest, 'draft'),
     confirm: async (
       client: SupabaseClient,
       id: string,
       signal?: AbortSignal
     ) => {
-      const current = await loadDraftApproval(client, id);
-      if (current.status === 'confirmation-required')
-        await attest(client, id, 'draft', signal);
-      signal?.throwIfAborted();
-      return confirmDraftApply(client, id);
+      return await confirmDraftApply(client, id, signal);
     },
   };
 }

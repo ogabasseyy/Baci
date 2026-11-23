@@ -5,6 +5,8 @@ import { getConfiguredOwnerApproval } from '@/lib/experience/owner-approval-web-
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { createClient } from '@/lib/supabase/server';
 
+export const maxDuration = 120;
+
 async function handle(request: NextRequest) {
   const client = await createClient();
   const user = await client.auth.getUser();
@@ -31,6 +33,8 @@ async function handle(request: NextRequest) {
       return csrf.valid ? null : new Response(null, { status: 403 });
     },
     load: runtime.load,
+    prepareDraft: runtime.prepareDraft,
+    preparePublication: runtime.preparePublication,
     confirm: runtime.confirm,
     loadLifecycle: runtime.loadLifecycle,
     confirmPublication: runtime.confirmPublication,

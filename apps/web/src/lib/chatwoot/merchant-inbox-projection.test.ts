@@ -115,6 +115,18 @@ describe('message ordering and truncation', () => {
     expect(text).toBe('a'.repeat(3_999));
   });
 
+  // Each case puts the 4,000-unit cap in the middle of one visible character.
+  it.each([
+    ['a flag', 3_997, '🇳🇬'],
+    ['a family emoji', 3_997, '👨‍👩‍👧'],
+    ['a letter with its accent', 3_999, 'e\u0301'],
+  ])('bugfix: does not leave half of %s at the cap', (_name, before, glyph) => {
+    const text = projectMerchantInboxMessage(
+      message({ content: `${'a'.repeat(before)}${glyph}tail` })
+    )?.text;
+    expect(text).toBe('a'.repeat(before));
+  });
+
   it('orders by creation time and uses the id only to break ties', () => {
     const at = (id: number, seconds: number) =>
       projectMerchantInboxMessage(message({ id, created_at: seconds }));

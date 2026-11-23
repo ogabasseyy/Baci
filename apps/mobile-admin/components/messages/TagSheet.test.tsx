@@ -85,6 +85,21 @@ describe('TagSheet', () => {
     await waitFor(() => expect(input).toHaveValue(''));
   });
 
+  it('bugfix: does not offer to save a tag that has no letters or numbers', () => {
+    const { onAdd } = renderSheet();
+    const add = screen.getByRole('button', { name: 'Add tag' });
+    const input = screen.getByLabelText('New tag');
+
+    fireEvent.change(input, { target: { value: ' !!! ' } });
+
+    expect(add).toBeDisabled();
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    expect(onAdd).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: 'VIP!' } });
+    expect(add).toBeEnabled();
+  });
+
   it('stops offering more tags once the chat has five', () => {
     const { onAdd } = renderSheet(['a', 'b', 'c', 'd', 'e']);
     expect(

@@ -61,7 +61,8 @@ export function TagSheet({
 
   const addCustom = async () => {
     const name = custom.trim();
-    if (!name || full || busy) return;
+    // No letters or numbers (say "!!!"): the server would refuse it.
+    if (!tagWords(name) || full || busy) return;
     const saved = await onAdd(name);
     // A failed save keeps what was typed, so it can be tried again as it is;
     // text typed since the tap is never wiped.
@@ -144,7 +145,7 @@ export function TagSheet({
         <Pressable
           accessibilityLabel="Add tag"
           accessibilityRole="button"
-          disabled={busy || full || custom.trim().length === 0}
+          disabled={busy || full || tagWords(custom).length === 0}
           onPress={() => {
             addCustom();
           }}
@@ -152,7 +153,7 @@ export function TagSheet({
             styles.add,
             {
               backgroundColor: colors.primary,
-              opacity: busy || full || custom.trim().length === 0 ? 0.5 : 1,
+              opacity: busy || full || tagWords(custom).length === 0 ? 0.5 : 1,
             },
           ]}
         >

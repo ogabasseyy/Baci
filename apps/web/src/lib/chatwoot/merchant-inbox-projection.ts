@@ -30,9 +30,23 @@ function snoozeToIso(value: number | string | null | undefined): string | null {
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
-/** Truncates without splitting a surrogate pair at the boundary. */
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * Cuts at `maxLength` UTF-16 units without splitting what a person sees as one
+ * character: a surrogate pair, a flag, a family emoji or a letter with its
+ * accents is kept whole or dropped whole.
+ */
 export function truncateByCodePoint(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
+  let kept = '';
+  for (const { segment } of GRAPHEMES.segment(value)) {
+    if (kept.length + segment.length > maxLength) break;
+    kept += segment;
+  }
+  if (kept.length > 0) return kept;
+  // One character longer than the whole cap: fall back to a plain cut that
+  // still never leaves half a surrogate pair.
   const cut = value.slice(0, maxLength);
   const last = cut.charCodeAt(cut.length - 1);
   return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;

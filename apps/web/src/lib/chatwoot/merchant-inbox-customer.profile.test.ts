@@ -223,7 +223,7 @@ describe('loadCustomerProfile', () => {
     expect(profile?.currency).toBe('NGN');
   });
 
-  it('bugfix: shows no order count or spend without order access, but still the name and points', async () => {
+  it('bugfix: shows no order count, spend or points without order access, but still the name', async () => {
     verifyAs({ good: A });
     const { client } = db({
       customers: { data: customer },
@@ -239,7 +239,7 @@ describe('loadCustomerProfile', () => {
 
     expect(profile).toMatchObject({
       name: 'Ada Obi',
-      loyaltyPoints: 120,
+      loyaltyPoints: 0,
       orderCount: 0,
       totalSpent: 0,
       ordersHidden: true,

@@ -17,8 +17,11 @@ export function useInboxCustomer({
     enabled: !!merchantId,
     queryFn: () => fetchInboxCustomer(conversationId),
     queryKey: inboxCustomerKey(merchantId, conversationId),
-    // The shopper can sign in, out or switch account while the chat is open.
-    refetchInterval: 30_000,
-    staleTime: 20_000,
+    // The shopper can sign in, out or switch account while the chat is open, so
+    // it is checked now and then: every minute for a known customer, every two
+    // for a guest chat (each check reads the chat engine). It also refreshes
+    // whenever the chat's own queries are invalidated.
+    refetchInterval: (query) => (query.state.data ? 60_000 : 120_000),
+    staleTime: 30_000,
   });
 }

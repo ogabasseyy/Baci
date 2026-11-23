@@ -110,7 +110,7 @@ describe('useInboxCustomer', () => {
     await waitFor(() => expect(result.current.data).toEqual(profile));
   });
 
-  it('polls on a timer so an open chat does not stay stale', () => {
+  it('polls now and then so an open chat does not stay stale, backing off for a guest chat', () => {
     mocks.fetch.mockResolvedValue(profile);
     renderHook(
       () => useInboxCustomer({ conversationId: 9, merchantId: 'm1' }),
@@ -119,8 +119,14 @@ describe('useInboxCustomer', () => {
     const [query] = client
       .getQueryCache()
       .findAll({ queryKey: ['inbox-customer', 'm1', 9] });
-    expect(
-      (query.options as { refetchInterval?: number }).refetchInterval
-    ).toBe(30_000);
+    const interval = (
+      query.options as {
+        refetchInterval: (q: { state: { data: unknown } }) => number;
+      }
+    ).refetchInterval;
+
+    expect(interval({ state: { data: profile } })).toBe(60_000);
+    expect(interval({ state: { data: null } })).toBe(120_000);
+    expect(interval({ state: { data: undefined } })).toBe(120_000);
   });
 });

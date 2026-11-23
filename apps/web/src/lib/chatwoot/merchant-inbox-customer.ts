@@ -137,7 +137,10 @@ export async function loadCustomerProfile(input: {
       : 0,
     totalSpent: input.includeOrders ? toNumber(customer.total_spent) : 0,
     ...(input.includeOrders ? {} : { ordersHidden: true }),
-    loyaltyPoints: Math.trunc(toNumber(customer.loyalty_points)),
+    // Points come from purchases, so they follow the same gate.
+    loyaltyPoints: input.includeOrders
+      ? Math.trunc(toNumber(customer.loyalty_points))
+      : 0,
     recentOrders: (orders ?? []).map((order) => ({
       orderNumber: String(order.order_number).slice(0, 60),
       total: toNumber(order.total),

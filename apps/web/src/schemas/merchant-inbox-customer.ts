@@ -30,7 +30,7 @@ export const merchantInboxCustomerProfileSchema = z.object({
   orderCount: z.number().int().nonnegative(),
   totalSpent: z.number().nonnegative(),
   loyaltyPoints: z.number().int().nonnegative(),
-  /** True when the caller may not see order data: counts and spend are then 0. */
+  /** True when the caller may not see order data: counts, spend and points are then 0. */
   ordersHidden: z.boolean().optional(),
   recentOrders: z.array(merchantInboxCustomerOrderSchema).max(5),
 });

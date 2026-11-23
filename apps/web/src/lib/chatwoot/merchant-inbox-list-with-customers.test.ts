@@ -173,16 +173,14 @@ describe('listConversationsWithCustomers', () => {
       });
     });
 
-    it('keeps what it knows when a later page fails, and lets the app carry on', async () => {
+    it('bugfix: a failure on a later engine page is a failure, not an empty page with more to come', async () => {
       mocks.list
         .mockResolvedValueOnce(providerPage([1], true))
         .mockResolvedValueOnce({ ok: false, code: 'unavailable' });
 
       await expect(run('returning')).resolves.toEqual({
-        ok: true,
-        conversations: [],
-        hasMore: true,
-        page: 1,
+        ok: false,
+        code: 'unavailable',
       });
     });
 

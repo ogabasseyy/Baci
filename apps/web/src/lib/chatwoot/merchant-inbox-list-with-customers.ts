@@ -92,13 +92,10 @@ export async function listConversationsWithCustomers(
   let hasMore = true;
   for (let read = 0; read < RETURNING_MAX_PROVIDER_PAGES; read++) {
     const result = await readPage(page);
-    if (!result.ok) {
-      // Nothing read yet: a plain failure. Otherwise the pages already read
-      // had no returning chats, and the app can carry on from there.
-      return read === 0
-        ? result
-        : { ok: true, conversations: found, hasMore: true, page: page - 1 };
-    }
+    // Any failed read is a failure, never an empty "success": an outage must
+    // not look like "no returning customers here". (Rows found so far return
+    // before the loop continues, so no found rows are lost by this.)
+    if (!result.ok) return result;
     found.push(...result.conversations.filter(isReturning));
     hasMore = result.hasMore;
     if (found.length > 0 || !hasMore) {

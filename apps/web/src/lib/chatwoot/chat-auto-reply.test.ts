@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   labels: vi.fn(),
   snapshot: vi.fn(),
 }));
+vi.mock('./chat-handover-alert', () => ({
+  alertMerchantOfHandover: vi.fn().mockResolvedValue('notified'),
+}));
 vi.mock('@/ai/chat-auto-reply', () => ({
   generateChatAutoReply: mocks.generate,
 }));

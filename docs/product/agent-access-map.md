@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
-Reviewed 22 November 2026 against source revision
-`96e3b2c45e17258683c3d6f469f08b4f21383bfc`. Staff-entered mobile orders were re-reviewed after the delivery-address selection change, rapid street edits, pending Places details and save/quote concurrency checks, following the current-main sync. Current-main customer checkout quote rejection, destination/state matching and stale-quote recovery were also reviewed, alongside the paid partner pickup and parcel-binding evidence and prior expense review. The web order detail, cancellation, and invoice paths were reviewed alongside the feature-gated item replacement flow. The paid-order replacement pilot remains disabled.
+Reviewed 23 November 2026 against source revision
+`1e7e12eef246c721d1a7de6efb1a624497829559`. Staff-entered mobile orders were re-reviewed after the delivery-address selection change, rapid street edits, pending Places details and save/quote concurrency checks, following the current-main sync. Current-main customer checkout quote rejection, destination/state matching and stale-quote recovery were also reviewed, alongside the paid partner pickup and parcel-binding evidence and prior expense review. The web order detail, cancellation, and invoice paths were reviewed alongside the feature-gated item replacement flow. The paid-order replacement pilot remains disabled.
 The Shopping MCP row was re-reviewed after the misleading link-only
 `add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
 connected cart read tool's description and failure text were reworded (wording only; no claim moved).

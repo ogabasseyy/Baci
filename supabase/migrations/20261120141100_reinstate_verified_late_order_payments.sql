@@ -9,7 +9,7 @@ BEGIN
   IF OLD.shipping_status = 'cancelled' OR OLD.cancelled_at IS NOT NULL THEN
     IF current_user = 'postgres'
       AND current_setting('baci.reinstating_order_id', true) = OLD.id::text
-      AND OLD.payment_status = 'cancelled'
+      AND OLD.payment_status IN ('cancelled', 'canceled')
       AND NEW.payment_status = 'paid'
       AND NEW.shipping_status = 'processing'
       AND NEW.cancelled_at IS NULL
@@ -32,6 +32,30 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.transactions
+    WHERE gateway = 'credit_direct'
+      AND transaction_type = 'payment'
+      AND merchant_id IS NOT NULL
+      AND gateway_reference IS NOT NULL
+    GROUP BY merchant_id, gateway_reference
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Duplicate Credit Direct references must be reconciled before reinstatement';
+  END IF;
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS transactions_credit_direct_merchant_reference_unique_idx
+  ON public.transactions (merchant_id, gateway_reference)
+  WHERE gateway = 'credit_direct'
+    AND transaction_type = 'payment'
+    AND merchant_id IS NOT NULL
+    AND gateway_reference IS NOT NULL;
 
 -- Storefront creation already takes these identity locks before inserting an
 -- order. Add the same fence to direct order inserts and late-payment recovery

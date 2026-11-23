@@ -74,14 +74,26 @@ export async function completeOrderGatewayPayment({
         const { data: reinstatedOrder, error: reinstatedOrderError } =
           await supabase
             .from('orders')
-            .select('amount_paid, paid_transaction_id, paid_at')
+            .select(
+              'amount_paid, paid_transaction_id, paid_at, payment_status, shipping_status, cancelled_at'
+            )
             .eq('id', orderId)
             .eq('merchant_id', merchantId)
             .maybeSingle();
-        if (reinstatedOrderError || !reinstatedOrder) {
+        if (
+          reinstatedOrderError ||
+          !reinstatedOrder ||
+          reinstatedOrder.payment_status !== 'paid' ||
+          reinstatedOrder.paid_transaction_id !== transactionId ||
+          reinstatedOrder.cancelled_at !== null ||
+          ['cancelled', 'canceled'].includes(
+            reinstatedOrder.shipping_status ?? ''
+          )
+        ) {
           return {
             error:
-              reinstatedOrderError ?? new Error('Reinstated order not found'),
+              reinstatedOrderError ??
+              new Error('Reinstated order is no longer paid'),
             ok: false,
           };
         }
@@ -96,8 +108,8 @@ export async function completeOrderGatewayPayment({
             order_already_paid: reinstatement === 'already_reinstated',
             order_cancelled: false,
             order_updated: reinstatement === 'reinstated',
-            payment_status: 'paid',
-            shipping_status: 'processing',
+            payment_status: reinstatedOrder.payment_status,
+            shipping_status: reinstatedOrder.shipping_status,
             timeout_inventory_confirmed: true,
           },
           ok: true,

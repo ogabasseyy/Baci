@@ -9,8 +9,15 @@ vi.mock('@/lib/logger', () => ({
 describe('recordCreditDirectTransaction', () => {
   it('loads the transaction ID after a concurrent insert wins', async () => {
     const selectResults = [
-      { data: null, error: { code: 'PGRST116' } },
-      { data: { id: 'winning-transaction' }, error: null },
+      { data: null, error: null },
+      {
+        data: {
+          id: 'winning-transaction',
+          merchant_id: 'merchant',
+          order_id: 'order',
+        },
+        error: null,
+      },
     ];
     const select = vi.fn().mockReturnThis();
     const eq = vi.fn().mockReturnThis();
@@ -23,7 +30,7 @@ describe('recordCreditDirectTransaction', () => {
     const from = vi.fn(() => ({
       select,
       eq,
-      single,
+      maybeSingle: single,
       insert: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({ single: insertSingle }),
       }),
@@ -56,7 +63,45 @@ describe('recordCreditDirectTransaction', () => {
     expect(from).toHaveBeenCalledTimes(3);
     expect(eq).toHaveBeenCalledWith('gateway_reference', 'provider-reference');
     expect(eq).toHaveBeenCalledWith('gateway', 'credit_direct');
-    expect(eq).toHaveBeenCalledWith('order_id', 'order');
     expect(eq).toHaveBeenCalledWith('merchant_id', 'merchant');
+  });
+
+  it('fails closed when the provider reference belongs to another order', async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: {
+        id: 'other-order-transaction',
+        merchant_id: 'merchant',
+        order_id: 'another-order',
+      },
+      error: null,
+    });
+    const insert = vi.fn();
+    const from = vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: single,
+      insert,
+    }));
+
+    await expect(
+      recordCreditDirectTransaction({
+        amount: 150,
+        gatewayReference: 'provider-reference',
+        gatewayResponse: {
+          checkoutCustomer: { firstName: 'Test', lastName: 'Customer' },
+          checkoutTransactionId: 'provider-reference',
+          eventType: 'Checkout_Merchant_Payment_Completed',
+          metaData: null,
+          products: [],
+          timeStamp: new Date(0).toISOString(),
+        },
+        merchantId: 'merchant',
+        merchantAmount: 145,
+        orderId: 'order',
+        platformFee: 5,
+        supabase: { from } as unknown as SupabaseClient,
+      })
+    ).resolves.toEqual({ kind: 'error' });
+    expect(insert).not.toHaveBeenCalled();
   });
 });

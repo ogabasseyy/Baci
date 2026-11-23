@@ -60,6 +60,18 @@ BEGIN
   END IF;
   INSERT INTO public.products VALUES (product_id, merchant_id);
 
+  INSERT INTO public.transactions (id, order_id, merchant_id, gateway, gateway_reference)
+  VALUES (gen_random_uuid(), gen_random_uuid(), merchant_id, 'credit_direct', 'shared-credit-direct-ref');
+  BEGIN
+    INSERT INTO public.transactions (id, order_id, merchant_id, gateway, gateway_reference)
+    VALUES (gen_random_uuid(), gen_random_uuid(), merchant_id, 'credit_direct', 'shared-credit-direct-ref');
+    RAISE EXCEPTION 'Credit Direct provider reference was reused across orders';
+  EXCEPTION WHEN unique_violation THEN
+    NULL;
+  END;
+  INSERT INTO public.transactions (id, order_id, merchant_id, gateway, gateway_reference)
+  VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'credit_direct', 'shared-credit-direct-ref');
+
   FOREACH provider IN ARRAY ARRAY['credit_direct', 'klump', 'paystack', 'korapay', 'juicyway'] LOOP
     test_order_id := gen_random_uuid();
     capture_id := gen_random_uuid();
@@ -155,8 +167,11 @@ BEGIN
   -- the same verified recovery path as current British-spelling rows.
   test_order_id := gen_random_uuid();
   capture_id := gen_random_uuid();
-  INSERT INTO public.orders (id, merchant_id, payment_method, payment_status)
-  VALUES (test_order_id, merchant_id, 'paystack', 'canceled');
+  INSERT INTO public.orders (
+    id, merchant_id, payment_method, payment_status, shipping_status, cancelled_at
+  ) VALUES (
+    test_order_id, merchant_id, 'paystack', 'canceled', 'cancelled', now() - interval '4 days'
+  );
   INSERT INTO public.order_items VALUES (test_order_id, product_id, NULL);
   INSERT INTO private.order_payment_timeouts (order_id, timed_out_at)
   VALUES (test_order_id, now() - interval '4 days');

@@ -7,21 +7,24 @@ vi.mock('./ensure-paid-order-inventory-confirmed', () => ({
   refreshReclaimedOrderInventory,
 }));
 
-function buildSupabaseMock(rpcResult: {
-  data?: unknown;
-  error?: { message: string } | null;
-}) {
+function buildSupabaseMock(
+  rpcResult: { data?: unknown; error?: { message: string } | null },
+  orderData = {
+    amount_paid: 4200,
+    cancelled_at: null,
+    paid_at: '2026-11-23T11:00:00Z',
+    paid_transaction_id: 'txn-1',
+    payment_status: 'paid',
+    shipping_status: 'processing',
+  }
+) {
   return {
     rpc: vi.fn().mockResolvedValue({ data: null, error: null, ...rpcResult }),
     from: vi.fn(() => ({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       maybeSingle: vi.fn().mockResolvedValue({
-        data: {
-          amount_paid: 4200,
-          paid_at: '2026-11-23T11:00:00Z',
-          paid_transaction_id: 'txn-1',
-        },
+        data: orderData,
         error: null,
       }),
     })),
@@ -133,8 +136,11 @@ describe('completeOrderGatewayPayment', () => {
         maybeSingle: vi.fn().mockResolvedValue({
           data: {
             amount_paid: 4200,
+            cancelled_at: null,
             paid_at: '2026-11-23T11:00:00Z',
             paid_transaction_id: 'txn-1',
+            payment_status: 'paid',
+            shipping_status: 'processing',
           },
           error: null,
         }),
@@ -178,6 +184,56 @@ describe('completeOrderGatewayPayment', () => {
         timeout_inventory_confirmed: true,
       },
     });
+  });
+
+  it('fails closed if the order left the paid state after reinstatement', async () => {
+    const supabase = buildSupabaseMock(
+      {
+        data: {
+          ...completionPayload,
+          cancelled_at: '2026-11-15T00:00:00Z',
+          order_cancelled: true,
+          order_updated: false,
+          payment_status: 'cancelled',
+          shipping_status: 'cancelled',
+        },
+      },
+      {
+        amount_paid: 4200,
+        cancelled_at: null,
+        paid_at: '2026-11-23T11:00:00Z',
+        paid_transaction_id: 'txn-1',
+        payment_status: 'refunded',
+        shipping_status: 'processing',
+      }
+    );
+    vi.mocked(supabase.rpc)
+      .mockResolvedValueOnce({
+        data: {
+          ...completionPayload,
+          cancelled_at: '2026-11-15T00:00:00Z',
+          order_cancelled: true,
+          order_updated: false,
+          payment_status: 'cancelled',
+          shipping_status: 'cancelled',
+        },
+        error: null,
+      } as never)
+      .mockResolvedValueOnce({
+        data: 'already_reinstated',
+        error: null,
+      } as never);
+
+    await expect(
+      completeOrderGatewayPayment({
+        actor: 'webhook:BAC-REF',
+        gatewayResponse: { status: 'success' },
+        merchantId: 'merchant-1',
+        orderId: 'order-1',
+        supabase,
+        transactionId: 'txn-1',
+      })
+    ).resolves.toMatchObject({ ok: false });
   });
 
   it('returns an error for a cancelled payment without a merchant identity', async () => {

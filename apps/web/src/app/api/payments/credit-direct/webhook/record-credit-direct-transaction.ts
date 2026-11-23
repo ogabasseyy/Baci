@@ -3,7 +3,6 @@ import type { CreditDirectWebhookPayload } from '@/lib/credit-direct';
 import { logger } from '@/lib/logger';
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
-const SUPABASE_NO_ROWS_RETURNED = 'PGRST116';
 
 export type RecordCreditDirectTransactionResult =
   | { kind: 'error' }
@@ -31,14 +30,13 @@ export async function recordCreditDirectTransaction({
 }): Promise<RecordCreditDirectTransactionResult> {
   const { data: existingTx, error: existingTxError } = await supabase
     .from('transactions')
-    .select('id')
-    .eq('order_id', orderId)
-    .eq('merchant_id', merchantId)
+    .select('id, merchant_id, order_id')
     .eq('gateway_reference', gatewayReference)
     .eq('gateway', 'credit_direct')
-    .single();
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
 
-  if (existingTxError && existingTxError.code !== SUPABASE_NO_ROWS_RETURNED) {
+  if (existingTxError) {
     logger.error({
       message: 'Failed to look up existing Credit Direct transaction',
       error: existingTxError,
@@ -49,6 +47,18 @@ export async function recordCreditDirectTransaction({
   }
 
   if (existingTx) {
+    if (
+      existingTx.order_id !== orderId ||
+      existingTx.merchant_id !== merchantId
+    ) {
+      logger.error({
+        message:
+          'Credit Direct provider reference is already bound to another order',
+        orderId,
+        transactionId: gatewayReference,
+      });
+      return { kind: 'error' };
+    }
     logger.info({
       message: 'Credit Direct transaction already processed (idempotent)',
       transactionId: gatewayReference,
@@ -84,14 +94,18 @@ export async function recordCreditDirectTransaction({
     });
     const { data: racedTx, error: racedTxError } = await supabase
       .from('transactions')
-      .select('id')
-      .eq('order_id', orderId)
-      .eq('merchant_id', merchantId)
+      .select('id, merchant_id, order_id')
       .eq('gateway_reference', gatewayReference)
       .eq('gateway', 'credit_direct')
-      .single();
+      .eq('merchant_id', merchantId)
+      .maybeSingle();
 
-    if (racedTxError || !racedTx) {
+    if (
+      racedTxError ||
+      !racedTx ||
+      racedTx.order_id !== orderId ||
+      racedTx.merchant_id !== merchantId
+    ) {
       logger.error({
         message: 'Unable to load the winning Credit Direct transaction insert',
         error: racedTxError,

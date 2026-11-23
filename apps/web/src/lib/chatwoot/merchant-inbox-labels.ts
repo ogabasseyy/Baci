@@ -26,18 +26,24 @@ export function slugifyInboxTag(name: string): string | null {
 }
 
 /**
- * Hyphen and underscore are one separator to a person, so tags are compared in
- * this form: a tag created elsewhere as "order_issue" is still "order-issue".
+ * Case and the hyphen/underscore choice mean nothing to a person, so tags are
+ * compared in this form: a tag created elsewhere as "Order_Issue" is still
+ * "order-issue".
  */
-const tagKey = (tag: string) => tag.replace(/_/g, '-');
+const tagKey = (tag: string) => tag.toLowerCase().replace(/_/g, '-');
 
 /** The merchant tags among a conversation's labels, without the prefix. */
 export function tagsFromLabels(labels: readonly string[]): string[] {
   const tags: string[] = [];
+  const seen = new Set<string>();
   for (const label of labels) {
     if (!label.startsWith(INBOX_TAG_PREFIX)) continue;
     const tag = label.slice(INBOX_TAG_PREFIX.length);
-    if (tag && !tags.includes(tag)) tags.push(tag);
+    // Look-alikes ("order-issue" and "Order_Issue") are one tag, shown once.
+    if (tag && !seen.has(tagKey(tag))) {
+      seen.add(tagKey(tag));
+      tags.push(tag);
+    }
   }
   return tags;
 }

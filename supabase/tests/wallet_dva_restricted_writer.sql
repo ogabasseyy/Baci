@@ -104,6 +104,7 @@ BEGIN
   CREATE ROLE baci_wallet_dva_provisioner
     LOGIN INHERIT NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION;
   GRANT baci_wallet_dva_writer TO baci_wallet_dva_provisioner;
+  EXECUTE format('GRANT baci_wallet_dva_provisioner TO %I', current_user);
 END;
 $writer_login$;
 
@@ -124,7 +125,7 @@ BEGIN
 END;
 $writer_login_privileges$;
 
-SET LOCAL SESSION AUTHORIZATION baci_wallet_dva_provisioner;
+SET LOCAL ROLE baci_wallet_dva_provisioner;
 
 DO $writer$
 DECLARE
@@ -311,7 +312,7 @@ BEGIN
 END;
 $writer$;
 
-RESET SESSION AUTHORIZATION;
+RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 DO $authenticated$

@@ -19,8 +19,9 @@ export function useInboxCustomer({
     queryKey: inboxCustomerKey(merchantId, conversationId),
     // The shopper can sign in, out or switch account while the chat is open, so
     // it is checked now and then: every minute for a known customer, every two
-    // for a guest chat (each check reads the chat engine). It also refreshes
-    // whenever the chat's own queries are invalidated.
+    // for a guest chat (each check is one read of the chat engine). Only this
+    // polling refreshes it: the key is kept apart from the list, thread and
+    // search keys, so invalidating those never reloads the card.
     refetchInterval: (query) => (query.state.data ? 60_000 : 120_000),
     staleTime: 30_000,
   });

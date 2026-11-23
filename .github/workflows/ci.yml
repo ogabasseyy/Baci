@@ -79,7 +79,7 @@ jobs:
       - name: Install Cosign for the Caddy release signature
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62
         with:
-          cosign-release: v2.6.5
+          cosign-release: v3.1.4
       - name: Test builder execution HTTPS ingress
         run: bash apps/builder-execution-proxy/ci-ingress.sh
       - name: Test loyalty replay binary discovery

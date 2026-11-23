@@ -1,3 +1,19 @@
+diff --git a/ios/Core/Functions/AsyncFunctionDefinition.swift b/ios/Core/Functions/AsyncFunctionDefinition.swift
+index 48ee585..dbe47a9 100644
+--- a/ios/Core/Functions/AsyncFunctionDefinition.swift
++++ b/ios/Core/Functions/AsyncFunctionDefinition.swift
+@@ -197,7 +197,10 @@ public class AsyncFunctionDefinition<Args, FirstArgType, ReturnType>: AnyAsyncFu
+         switch consume result {
+         case .success(let value):
+           promise.resolve(value)
+-        case .failure(let error as any Error):
++        // `Exception` already conforms to `Error`, so the former `as any Error` cast pattern was redundant.
++        // It also crashes the Swift 6.4.2 (Xcode 27.2) compiler in SILGen (consuming switch + cast pattern).
++        // Upstream dropped the cast in expo-modules-core 58.0.29.
++        case .failure(let error):
+           promise.reject(error)
+         }
+       }
 diff --git a/ios/Utilities/Utilities.swift b/ios/Utilities/Utilities.swift
 --- a/ios/Utilities/Utilities.swift
 +++ b/ios/Utilities/Utilities.swift

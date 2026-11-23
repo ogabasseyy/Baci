@@ -33,6 +33,7 @@ DECLARE
   replacement_id uuid;
   provider text;
   result text;
+  reinstatement_definition text;
 BEGIN
   IF has_function_privilege('authenticated', 'public.reinstate_timeout_order_payment(uuid,uuid)', 'EXECUTE')
     OR has_function_privilege('anon', 'public.reinstate_timeout_order_payment(uuid,uuid)', 'EXECUTE') THEN
@@ -45,6 +46,17 @@ BEGIN
       AND NOT t.tgisinternal
   ) THEN
     RAISE EXCEPTION 'Order creation does not share the replacement identity lock';
+  END IF;
+  SELECT pg_get_functiondef(
+    'public.reinstate_timeout_order_payment(uuid,uuid)'::regprocedure
+  ) INTO reinstatement_definition;
+  IF strpos(reinstatement_definition, 'PERFORM p.id') = 0
+    OR strpos(reinstatement_definition, 'PERFORM v.id') = 0
+    OR strpos(reinstatement_definition, 'PERFORM p.id') >
+      strpos(reinstatement_definition, 'PERFORM private.lock_order_replacement_identity')
+    OR strpos(reinstatement_definition, 'PERFORM v.id') >
+      strpos(reinstatement_definition, 'PERFORM private.lock_order_replacement_identity') THEN
+    RAISE EXCEPTION 'Reinstatement must lock catalog rows before customer identity';
   END IF;
   INSERT INTO public.products VALUES (product_id, merchant_id);
 

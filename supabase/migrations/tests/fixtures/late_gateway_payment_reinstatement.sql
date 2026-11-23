@@ -39,7 +39,7 @@ CREATE TABLE public.order_refund_events(order_id uuid);
 CREATE TABLE public.order_cancellation_side_effects(order_id uuid);
 CREATE TABLE public.paystack_refund_recovery_watch(paystack_ref text, status text);
 CREATE TABLE public.products(id uuid PRIMARY KEY, merchant_id uuid);
-CREATE TABLE public.product_variants(id uuid, product_id uuid);
+CREATE TABLE public.product_variants(id uuid, product_id uuid, merchant_id uuid);
 CREATE TABLE public.order_items(order_id uuid, product_id uuid, variant_id uuid);
 CREATE FUNCTION public.claim_paystack_refund_recovery_watches_v1(uuid, uuid) RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;
 CREATE TABLE private.inventory_test_effects(order_id uuid);

@@ -145,6 +145,31 @@ BEGIN
     RETURN 'blocked';
   END IF;
 
+  -- Storefront checkout locks catalog rows before customer identity locks.
+  -- Match that order here because inventory confirmation below may lock the
+  -- same product and variant rows while a replacement checkout is running.
+  -- This lets checkout finish (and become visible to the replacement scan)
+  -- instead of forming an identity/catalog lock cycle with reinstatement.
+  PERFORM p.id
+  FROM public.products p
+  WHERE p.merchant_id = v_order_identity.merchant_id
+    AND p.id IN (
+      SELECT oi.product_id FROM public.order_items oi
+      WHERE oi.order_id = p_order_id AND oi.product_id IS NOT NULL
+    )
+  ORDER BY p.id
+  FOR UPDATE;
+
+  PERFORM v.id
+  FROM public.product_variants v
+  WHERE v.merchant_id = v_order_identity.merchant_id
+    AND v.id IN (
+      SELECT oi.variant_id FROM public.order_items oi
+      WHERE oi.order_id = p_order_id AND oi.variant_id IS NOT NULL
+    )
+  ORDER BY v.id
+  FOR UPDATE;
+
   PERFORM private.lock_order_replacement_identity(
     v_order_identity.merchant_id,
     v_order_identity.customer_id,

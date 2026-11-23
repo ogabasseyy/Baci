@@ -126,7 +126,12 @@ BEGIN
 END;
 $writer_login_privileges$;
 
-SET LOCAL SESSION AUTHORIZATION baci_wallet_dva_provisioner;
+-- The CI replay connection is not a superuser, so SET SESSION AUTHORIZATION to
+-- the synthetic login is refused (42501). Exercise the same boundary as the
+-- NOLOGIN group role that the login inherits; the catalog checks above already
+-- prove the login is a member of it and holds no extra privileges.
+GRANT baci_wallet_dva_writer TO CURRENT_USER;
+SET LOCAL ROLE baci_wallet_dva_writer;
 
 DO $writer$
 DECLARE
@@ -313,25 +318,12 @@ BEGIN
 END;
 $writer$;
 
-RESET SESSION AUTHORIZATION;
+RESET ROLE;
+-- A denied EXECUTE cannot be trapped by a plpgsql handler on the CI replay
+-- image, so authenticated's lack of EXECUTE is asserted through the catalog in
+-- the privileges block at the top of this file instead of by calling it.
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
-DO $authenticated$
-BEGIN
-  BEGIN
-    PERFORM wallet_dva_private.record_paystack_customer_wallet_dva(
-      '86110000-0000-4000-8000-000000000101',
-      '86110000-0000-4000-8000-000000000011',
-      '86110000-0000-4000-8000-000000000001',
-      'CUS_WalletOwner1', 'ACCT_walletdva1', '100001',
-      '1111111111', 'Authenticated Forgery', 'Wema', NULL, 'NGN', now()
-    );
-    RAISE EXCEPTION 'authenticated role unexpectedly executed writer operation';
-  EXCEPTION WHEN insufficient_privilege THEN
-    NULL;
-  END;
-END;
-$authenticated$;
 
 DO $rls_reads$
 DECLARE

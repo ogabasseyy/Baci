@@ -129,7 +129,9 @@ $writer_login_privileges$;
 -- The CI replay connection is not a superuser, so SET SESSION AUTHORIZATION to
 -- the synthetic login is refused (42501). Exercise the same boundary as the
 -- NOLOGIN group role that the login inherits; the catalog checks above already
--- prove the login is a member of it and holds no extra privileges.
+-- prove the login is a member of it and holds no extra privileges. The
+-- self-grant works because the replay user created the group role (migration
+-- above) and so holds ADMIN OPTION on it, which PostgreSQL 16+ requires.
 GRANT baci_wallet_dva_writer TO CURRENT_USER;
 SET LOCAL ROLE baci_wallet_dva_writer;
 
@@ -319,9 +321,13 @@ END;
 $writer$;
 
 RESET ROLE;
--- A denied EXECUTE cannot be trapped by a plpgsql handler on the CI replay
--- image, so authenticated's lack of EXECUTE is asserted through the catalog in
--- the privileges block at the top of this file instead of by calling it.
+-- A denied EXECUTE is an ACL check made before the function body starts, and on
+-- the pinned CI replay image a plpgsql handler cannot trap it (same finding as
+-- supabase/tests/finalize_store_credit_order_payment_privileges.sql). Errors
+-- that the function body raises itself, such as the cross-owner and
+-- cross-merchant cases earlier in this file, are trapped normally. So
+-- authenticated's lack of EXECUTE is asserted through the catalog in the
+-- privileges block at the top of this file instead of by calling it.
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 

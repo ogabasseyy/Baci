@@ -102,6 +102,13 @@ async function snoozeOutcome(
  * an id from another store's inbox is a plain "not found", and the label list
  * is merged from the live labels (the provider replaces the whole list).
  *
+ * A request that changes several things at once (say a follow-up and a
+ * priority) is several writes and is not transactional: if a later one fails
+ * the earlier ones stay applied and the caller gets `unavailable`. Repeating
+ * the request re-applies them without harm (a follow-up time that has passed
+ * in the meantime is refused before anything is written), and the app sends
+ * one change per request.
+ *
  * A follow-up is two writes, the label and the snooze. The label goes first:
  * a chat snoozed without it would vanish from the Follow-up view, while a
  * label without the snooze still shows, and is taken off again if the snooze

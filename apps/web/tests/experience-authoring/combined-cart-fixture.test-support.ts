@@ -113,13 +113,13 @@ export async function installCombinedPublicCatalogFixture(
 ) {
   await fixture.db.pool.query(`
     ALTER TABLE merchants ADD COLUMN plan_tier text DEFAULT 'business', ADD COLUMN plan_expires_at timestamptz, ADD COLUMN business_address text, ADD COLUMN state_code text DEFAULT 'LA';
-    ALTER TABLE products ADD COLUMN description text, ADD COLUMN image_hint text, ADD COLUMN has_condition_offers boolean DEFAULT false, ADD COLUMN gtin text DEFAULT '', ADD COLUMN mpn text DEFAULT '';
+    ALTER TABLE products ADD COLUMN description text, ADD COLUMN image_hint text, ADD COLUMN has_condition_offers boolean DEFAULT false, ADD COLUMN gtin text DEFAULT '', ADD COLUMN mpn text DEFAULT '', ADD COLUMN weight_value numeric, ADD COLUMN weight_unit text, ADD COLUMN dimensions jsonb, ADD COLUMN commodity_code text;
     CREATE TABLE public.merchant_slug_aliases(old_slug text,merchant_id uuid REFERENCES merchants(id));
     CREATE POLICY fixture_published_merchant ON merchants FOR SELECT TO anon,authenticated USING(is_published IS TRUE OR user_id=auth.uid());
     GRANT SELECT(id,slug,business_name,business_address,state_code,phone,email,template_id,is_published,payout_currency,country,premium_features,plan_tier,plan_expires_at) ON merchants TO anon,authenticated;
     GRANT UPDATE(business_address,state_code,phone) ON merchants TO authenticated;
     CREATE POLICY fixture_public_products ON products FOR SELECT TO anon,authenticated USING(status='active' AND EXISTS(SELECT 1 FROM merchants m WHERE m.id=merchant_id AND m.is_published));
-    GRANT SELECT(id,merchant_id,slug,name,description,price,status,images,category,category_id,canonical_url,is_parent,parent_product_id,manage_stock,stock,stock_quantity,has_variants,inventory_tracking_policy,image_hint,has_condition_offers,brand,gtin,mpn) ON products TO anon,authenticated;
+    GRANT SELECT(id,merchant_id,slug,name,description,price,status,images,category,category_id,canonical_url,is_parent,parent_product_id,manage_stock,stock,stock_quantity,has_variants,inventory_tracking_policy,image_hint,has_condition_offers,brand,gtin,mpn,weight_value,weight_unit,dimensions,commodity_code) ON products TO anon,authenticated;
     CREATE POLICY fixture_public_categories ON categories FOR SELECT TO anon,authenticated USING(is_active AND EXISTS(SELECT 1 FROM merchants m WHERE m.id=merchant_id AND m.is_published));
     GRANT SELECT(id,merchant_id,name,slug,is_active,parent_id) ON categories TO anon,authenticated;
     CREATE POLICY fixture_public_membership ON product_categories FOR SELECT TO anon,authenticated USING(EXISTS(SELECT 1 FROM products p WHERE p.id=product_id));

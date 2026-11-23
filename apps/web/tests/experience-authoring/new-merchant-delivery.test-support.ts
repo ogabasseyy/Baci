@@ -3,6 +3,7 @@ import { readdirSync } from 'node:fs';
 import type { PublicBootstrap } from '@baci/shared/experience';
 import { expect } from 'vitest';
 import { z } from 'zod';
+import { HYDRATION_SELECT } from '@/hooks/cart/shared-cart-products';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { createPublicOutputReader } from '@/lib/experience/public-output-reader';
 import { createPublicExperienceRuntime } from '@/lib/experience/public-runtime';
@@ -158,6 +159,16 @@ export async function checkNewMerchantDelivery({
         storefrontId,
         buildId
       );
+      // Exercise the exact anonymous cart hydration projection before the
+      // browser starts, so a fixture schema error cannot look like a channel timeout.
+      const hydration = await f.anonymous
+        .from('products')
+        .select(HYDRATION_SELECT)
+        .eq('merchant_id', storefrontId)
+        .in('id', [productId])
+        .eq('status', 'active');
+      expect(hydration.error).toBeNull();
+      expect(hydration.data).toMatchObject([{ id: productId }]);
       const publishedDocument = await stack.deliver(
         new Request(
           `https://output.synthetic-output.test/published/${publicHead.slug}/${publicHead.digest}/index.html`

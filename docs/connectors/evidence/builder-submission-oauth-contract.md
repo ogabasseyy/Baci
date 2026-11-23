@@ -1073,6 +1073,17 @@ that run. Because the preceding run failed and the cause has not been proven,
 the intermittent frame handoff remains an investigation item; the passing
 rerun does not establish production reliability or live OAuth/discovery.
 
+On 23 November, a local same-merchant rerun based on main at `7c6190efc2`
+failed earlier in the flow, before the cart command. The browser's anonymous
+PostgREST product read returned HTTP 400. Main had added four shipping fields
+to the shared-cart hydration projection, and the disposable fixture lacked
+those columns. The fixture now includes the fields under the existing public
+product RLS policy and asserts that the exact hydration query returns the
+published synthetic product before starting Chromium. The retest passed
+through cart confirmation, shipping, and the final Place Order button. It
+stopped before submission. The cause of the earlier HTTP 200 confirmation
+failure is still open.
+
 Targeted SDK channel and client tests subsequently passed (11 tests across
 two files), including the existing indeterminate-mutation and reconciliation
 contracts. The worktree's shared dependency was unavailable through its

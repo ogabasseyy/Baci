@@ -23,7 +23,9 @@ const toNumber = (value: unknown): number => {
  * Order count and spend for the customers behind a page of chats. Only a link
  * the server signed for this store counts, and the customer row is read under
  * the caller's own access, scoped to the store. Anything unreadable simply
- * leaves the badge off: the list never fails because of this.
+ * leaves the badge off: the list never fails because of this. `null` is the one
+ * case worth telling apart: the store's customer records could not be read, so
+ * "no badges" would be a guess (the Customers view must not read as "nobody").
  */
 export async function loadCustomerBadges(input: {
   supabase: Db;
@@ -31,7 +33,7 @@ export async function loadCustomerBadges(input: {
   links: Record<number, string>;
   /** Order counts and spend are order data: only for callers with orders:view. */
   includeOrderData: boolean;
-}): Promise<Record<number, MerchantInboxCustomerBadge>> {
+}): Promise<Record<number, MerchantInboxCustomerBadge> | null> {
   const entries = Object.entries(input.links);
   if (entries.length === 0) return {};
   const verify = await createChatCustomerLinkVerifier(input.merchantId);
@@ -54,7 +56,7 @@ export async function loadCustomerBadges(input: {
     .eq('merchant_id', input.merchantId)
     .in('id', customerIds)
     .is('deleted_at', null);
-  if (error || !data) return {};
+  if (error || !data) return null;
 
   const byId = new Map(data.map((row) => [row.id, row]));
   const badges: Record<number, MerchantInboxCustomerBadge> = {};

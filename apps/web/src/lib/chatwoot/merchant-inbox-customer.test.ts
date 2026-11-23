@@ -94,7 +94,7 @@ describe('loadCustomerBadges', () => {
     expect(badges[3]).toEqual({ orderCount: 0, totalSpent: 0 });
   });
 
-  it('leaves badges off when signing is not configured or the read fails', async () => {
+  it('leaves badges off when signing is not configured, and reports an unreadable store as null', async () => {
     mocks.verifier.mockResolvedValue(null);
     const off = db({});
     await expect(
@@ -115,7 +115,8 @@ describe('loadCustomerBadges', () => {
         links: { 1: 'good' },
         includeOrderData: true,
       })
-    ).resolves.toEqual({});
+      // Not {}: "no badges" would be a guess when the records cannot be read.
+    ).resolves.toBeNull();
   });
 
   it('bugfix: shows no order count or spend to a caller without order access', async () => {

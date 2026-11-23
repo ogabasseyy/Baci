@@ -81,6 +81,19 @@ describe('listConversationsWithCustomers', () => {
     });
   });
 
+  it('still lists the chats, without badges, when the customer records cannot be read', async () => {
+    mocks.list.mockResolvedValueOnce(providerPage([1, 2], false));
+    mocks.badges.mockResolvedValueOnce(null);
+
+    const result = await run('needs_reply');
+
+    expect(result).toMatchObject({ ok: true, page: 1 });
+    expect(result.ok && result.conversations.map((c) => c.id)).toEqual([1, 2]);
+    expect(result.ok && result.conversations.some((c) => c.customer)).toBe(
+      false
+    );
+  });
+
   it('bugfix: asks for no order data when the caller cannot see orders', async () => {
     mocks.list.mockResolvedValue(providerPage([1], false));
     await run('needs_reply', 1, false);
@@ -177,6 +190,16 @@ describe('listConversationsWithCustomers', () => {
       mocks.list
         .mockResolvedValueOnce(providerPage([1], true))
         .mockResolvedValueOnce({ ok: false, code: 'unavailable' });
+
+      await expect(run('returning')).resolves.toEqual({
+        ok: false,
+        code: 'unavailable',
+      });
+    });
+
+    it('bugfix: unreadable customer records are a failure, not an empty Customers view', async () => {
+      mocks.list.mockResolvedValueOnce(providerPage([1, 2], true));
+      mocks.badges.mockResolvedValueOnce(null);
 
       await expect(run('returning')).resolves.toEqual({
         ok: false,

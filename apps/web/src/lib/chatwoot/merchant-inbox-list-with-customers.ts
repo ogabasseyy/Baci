@@ -62,12 +62,19 @@ export async function listConversationsWithCustomers(
       view: input.view,
     });
     if (!result.ok) return result;
-    const badges = await loadCustomerBadges({
+    const loaded = await loadCustomerBadges({
       supabase: input.supabase,
       merchantId: input.merchantId,
       links: result.links,
       includeOrderData: input.canViewOrders,
     });
+    // `null`: the customer records could not be read. An ordinary list just goes
+    // without badges, but the Customers view is made of them, so for it an
+    // outage must not read as "no returning customers".
+    if (loaded === null && input.view === 'returning') {
+      return { ok: false as const, code: 'unavailable' as const };
+    }
+    const badges = loaded ?? {};
     const conversations = result.conversations.map((conversation) =>
       badges[conversation.id]
         ? { ...conversation, customer: badges[conversation.id] }

@@ -56,6 +56,10 @@ export function useChatwootCustomerLink(
       trailing = undefined;
     };
     let lastHint = readCustomerSessionHint();
+    // The widget removes the note with a request of its own and gives no answer
+    // to wait for. When that is sent with the browser offline it is lost, so it
+    // is sent again once the browser is back (see `onOnline`).
+    let pendingRemoval = false;
 
     // `force` is for a sign-out we just saw happen: remove the note even if no
     // marker survived (blocked storage), since a note may well be attached.
@@ -75,7 +79,18 @@ export function useChatwootCustomerLink(
       }
       linkedThisSession.delete(storeSlug);
       writeLinkMarker(storeSlug, false);
+      pendingRemoval =
+        typeof navigator !== 'undefined' && navigator.onLine === false;
     };
+
+    const onOnline = () => {
+      if (!pendingRemoval || cancelled) return;
+      pendingRemoval = false;
+      // Only while still a guest: a shopper who signed in again gets a fresh
+      // note from the check that follows the sign-in.
+      if (readCustomerSessionHint() !== '1') clearLink(true);
+    };
+    window.addEventListener('online', onOnline);
 
     /**
      * `initial`: the chat just loaded and we cannot tell whether the account
@@ -189,6 +204,7 @@ export function useChatwootCustomerLink(
     return () => {
       cancelled = true;
       cancelTrailing();
+      window.removeEventListener('online', onOnline);
       unsubscribe();
       crossTab.unsubscribe();
     };

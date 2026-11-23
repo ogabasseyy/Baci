@@ -141,6 +141,14 @@ it('does not offer allocated top-ups in the verified cancellation repayment flow
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
+it('explains when there are no unallocated bank transfers to repay', () => {
+  render(<Harness verification={verifiedCancellation} onSubmit={vi.fn()} />);
+
+  expect(
+    screen.getByText('No unallocated bank transfers need repayment.')
+  ).toBeInTheDocument();
+});
+
 it('records outgoing evidence against the outstanding bank-return claim', () => {
   const onSubmit = vi.fn();
   render(

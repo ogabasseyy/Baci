@@ -13,7 +13,11 @@ import {
 import { generateUUID } from '@/utils/uuid';
 import type { OrderDetailsItem } from './order-details.types';
 import { PaidOrderChangeAction } from './PaidOrderChangeAction';
+import { PaidOrderChangeMessage } from './PaidOrderChangeMessage';
+import { PaidOrderChangePendingConfirmation } from './PaidOrderChangePendingConfirmation';
 import { PaidOrderChangePreview } from './PaidOrderChangePreview';
+import { PaidOrderChangeUnreadableNotice } from './PaidOrderChangeUnreadableNotice';
+import { paidOrderChangeInputStyle } from './paid-order-change-input-style';
 
 interface Props {
   orderId: string;
@@ -99,32 +103,23 @@ export function PaidOrderChangeItemsSheet({
     setReceiptReference('');
   }
 
-  function action(
+  const action = (
     label: string,
     press: () => void,
     disabled = false,
     selected?: boolean,
     key = label
-  ) {
-    return (
-      <PaidOrderChangeAction
-        key={key}
-        label={label}
-        onPress={press}
-        disabled={disabled || busy}
-        selected={selected}
-      />
-    );
-  }
+  ) => (
+    <PaidOrderChangeAction
+      key={key}
+      label={label}
+      onPress={press}
+      disabled={disabled || busy}
+      selected={selected}
+    />
+  );
 
-  const inputStyle = {
-    minHeight: 44,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    color: colors.text,
-    paddingHorizontal: SPACING.sm,
-  };
+  const inputStyle = paidOrderChangeInputStyle(colors);
 
   return (
     <AppSheetModal
@@ -139,42 +134,33 @@ export function PaidOrderChangeItemsSheet({
           Change items
         </Text>
         {pendingUnreadable ? (
-          <>
-            <Text style={{ color: colors.text }}>
-              The saved confirmation could not be read. Reload the order status
-              before starting another change.
-            </Text>
-            {action(
-              'Reload order status',
-              () =>
-                void run(async () => {
-                  await amendment.recoverUnreadableConfirmation();
-                  setMessage(
-                    'Order status reloaded. Close and reopen Change items to continue.'
-                  );
-                })
-            )}
-          </>
+          <PaidOrderChangeUnreadableNotice
+            colors={colors}
+            disabled={busy}
+            onReload={() =>
+              void run(async () => {
+                await amendment.recoverUnreadableConfirmation();
+                setMessage(
+                  'Order status reloaded. Close and reopen Change items to continue.'
+                );
+              })
+            }
+          />
         ) : pending ? (
-          <>
-            <Text style={{ color: colors.text }}>
-              A confirmation needs to be checked.
-            </Text>
-            {action(
-              'Check confirmation status',
-              () =>
-                void run(async () =>
-                  showOutcome(await amendment.checkConfirmation(pending))
-                )
-            )}
-            {action(
-              'Retry the same confirmation',
-              () =>
-                void run(async () =>
-                  showOutcome(await amendment.confirm(pending))
-                )
-            )}
-          </>
+          <PaidOrderChangePendingConfirmation
+            colors={colors}
+            disabled={busy}
+            onCheck={() =>
+              void run(async () =>
+                showOutcome(await amendment.checkConfirmation(pending))
+              )
+            }
+            onRetry={() =>
+              void run(async () =>
+                showOutcome(await amendment.confirm(pending))
+              )
+            }
+          />
         ) : (
           <>
             {items.length > 1 &&
@@ -301,9 +287,7 @@ export function PaidOrderChangeItemsSheet({
           </>
         )}
         {message ? (
-          <Text accessibilityLiveRegion="polite" style={{ color: colors.text }}>
-            {message}
-          </Text>
+          <PaidOrderChangeMessage message={message} color={colors.text} />
         ) : null}
         {action('Close', onClose)}
       </View>

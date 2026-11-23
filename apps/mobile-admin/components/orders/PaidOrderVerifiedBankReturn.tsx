@@ -111,15 +111,20 @@ export function PaidOrderVerifiedBankReturn({
     );
   }
 
+  const repayableEvidence = verification.bankEvidence.filter(
+    (entry) =>
+      entry.method === 'bank_transfer' &&
+      (entry.status === null || entry.status === 'unapplied')
+  );
+
   return (
     <View>
-      {verification.bankEvidence
-        .filter(
-          (entry) =>
-            entry.method === 'bank_transfer' &&
-            (entry.status === null || entry.status === 'unapplied')
-        )
-        .map((entry) => (
+      {repayableEvidence.length === 0 ? (
+        <Text style={{ color: colors.textMuted }}>
+          No unallocated bank transfers need repayment.
+        </Text>
+      ) : (
+        repayableEvidence.map((entry) => (
           <View key={entry.id}>
             {action(
               `Prepare bank repayment (${formatPrice(entry.amountMinor / 100)})`,
@@ -133,7 +138,8 @@ export function PaidOrderVerifiedBankReturn({
               }
             )}
           </View>
-        ))}
+        ))
+      )}
     </View>
   );
 }

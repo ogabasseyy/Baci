@@ -100,7 +100,7 @@ export const verifiedSettlementActionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('claim_offline_disbursement'),
     idempotencyKey: z.uuid(),
-    sourceKind: z.enum(['unapplied', 'cancellation_leg']),
+    sourceKind: z.literal('unapplied'),
     sourceId: z.uuid(),
   }),
   z.object({

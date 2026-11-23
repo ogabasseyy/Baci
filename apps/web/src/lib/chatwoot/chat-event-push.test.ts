@@ -12,7 +12,9 @@ vi.mock('@/lib/supabase/anon', () => ({
 vi.mock('@/lib/expo-push-core', () => ({
   notifyMerchantWithStore: mocks.notify,
 }));
-vi.mock('@/lib/expo-client', () => ({ getExpoClient: () => ({}) }));
+vi.mock('@/lib/expo-push-lazy-client', () => ({
+  createLazyExpoGetter: () => () => ({}),
+}));
 vi.mock('./chat-event-push-store', async (importActual) => {
   const actual: Record<string, unknown> = await importActual();
   return { ...actual, createChatEventPushStore: mocks.createStore };

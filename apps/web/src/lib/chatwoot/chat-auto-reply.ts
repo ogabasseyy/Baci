@@ -97,10 +97,8 @@ async function handOver(
     status: 'open',
   });
   if (!opened) return 'failed';
-  // The merchant is alerted as soon as the chat is in the person queue, at
-  // the same time as the customer is told: their notification level (all or
-  // handover only) is applied in the database, and a failed or slow alert
-  // never holds back the customer's message or the labels.
+  // Alert the merchant as soon as the chat enters the person queue; DB applies
+  // their alert level, and a slow/failed alert never blocks the reply/labels.
   const alert = alertMerchantOfHandover({
     merchantId: binding.merchantId,
     eventKey: `chat-handover-${event.account.id}-${event.id}`,
@@ -205,12 +203,9 @@ export async function runChatAutoReply(
     return handOver(binding, event, 'the assistant took too long');
   }
   const { generated: result, latest } = work;
-  // Generation can take a while. A later customer message has its own run,
-  // so this one stays out of it: no answer and no handover for a question
-  // that has been superseded.
+  // A later customer message has its own run; skip if superseded.
   if (latest === false) return 'skipped';
-  // The messages could not be read, so nothing says this was superseded:
-  // a person takes it rather than the customer waiting with nobody queued.
+  // If history could not be read, hand over rather than leaving them pending.
   if (latest === null) {
     return handOver(binding, event, 'the chat could not be read');
   }
@@ -220,9 +215,7 @@ export async function runChatAutoReply(
   const reason = needsHandover(result.reply);
   if (reason) return handOver(binding, event, reason);
 
-  // Read last, right before sending: a person may have replied meanwhile.
-  // The send itself carries no status condition, so a takeover in the moment
-  // between this read and the send can still be followed by one reply.
+  // Recheck right before sending in case a person replied meanwhile.
   if (!(await isStillPending(binding, conversationId))) return 'skipped';
   const sent = await postAssistantMessage(binding, {
     conversationId,

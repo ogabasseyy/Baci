@@ -96,6 +96,12 @@ async function writeLabels(
     : unavailable;
 }
 
+/**
+ * The engine may round or shift a snooze by a few seconds, so a time this close
+ * to the requested one counts as the same snooze; a different hour is another.
+ */
+const SNOOZE_MATCH_TOLERANCE_MS = 60_000;
+
 /** After a snooze with no clear answer: does the engine show it as applied? */
 async function snoozeApplied(
   binding: MerchantInboxBinding,
@@ -109,7 +115,7 @@ async function snoozeApplied(
     : Number.NaN;
   return (
     check.conversation.status === 'snoozed' &&
-    until === Math.floor(atMs / 1000) * 1000
+    Math.abs(until - atMs) <= SNOOZE_MATCH_TOLERANCE_MS
   );
 }
 

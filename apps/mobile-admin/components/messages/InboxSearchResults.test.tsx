@@ -90,12 +90,20 @@ describe('InboxSearchResults', () => {
     expect(screen.getByText('Yan Test')).toBeInTheDocument();
   });
 
+  it('bugfix: does not claim nothing matches while older chats are still unsearched', () => {
+    renderResults({ hasMore: true, term: 'zebra' });
+
+    expect(
+      screen.getByText('No match for "zebra" in the chats checked so far')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No chats match/)).toBeNull();
+  });
+
   it('bugfix: lets the owner keep looking when the pages so far had no match', () => {
     const { onLoadMore } = renderResults({ hasMore: true, term: 'zebra' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Look further back' }));
 
-    expect(screen.getByText('No chats match "zebra"')).toBeInTheDocument();
     expect(onLoadMore).toHaveBeenCalledTimes(1);
   });
 

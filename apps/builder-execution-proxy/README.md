@@ -24,9 +24,13 @@ The preview delivery listener is the authoritative origin allowlist. It
 rejects origins outside its configured hosts and permits the opaque
 `Origin: null` used by sandboxed asset requests. The Worker admits private requests with no Origin or the sandbox Origin
 `null`, and only forwards an opaque CORS grant for an opaque request.
-Private output URLs carry short-lived vault tickets. The listener checks
-ticket expiry and the owner binding on each read and sends
-`Referrer-Policy: no-referrer`. Treat the entire URL as sensitive. The
+The private preview iframe loads its document through a browser navigation
+that can omit Origin. The same admission rule can allow a top-level navigation
+with a valid ticket. Browsers may retain that URL in history or bookmarks,
+so treat the entire URL as sensitive. Private output tickets inherit the
+launch expiration, at most ten minutes from creation. The listener checks
+expiry and the owner binding on each read and sends
+`Referrer-Policy: no-referrer`. The
 cross-origin embed relies on the CSP sandbox and `frame-ancestors`; the Worker
 does not forward COOP, COEP, or `X-Frame-Options`. Changes to that embed
 contract require browser verification through both the listener and the Worker.

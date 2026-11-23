@@ -40,6 +40,29 @@ it.each(operations)('validates the strict %s envelope', (operation, fields) => {
   ).toBe(true);
 });
 
+// These are signed bytes on the v1 wire. Changing the schema's output order
+// requires a coordinated protocol rollout even though parsers accept reordered JSON.
+it.each(
+  operations
+)('keeps the %s signing order when wire fields are reordered', (operation, fields) => {
+  const reversedFields =
+    'input' in fields
+      ? { input: { routeId: '/', buildId: id, merchantId: id } }
+      : 'kind' in fields
+        ? { kind: fields.kind, approvalId: id }
+        : { approvalId: id };
+  const input = {
+    ...reversedFields,
+    accessToken: envelope.accessToken,
+    expiresAt: envelope.expiresAt,
+    nonce: envelope.nonce,
+    version: envelope.version,
+  };
+  expect(
+    JSON.stringify(experienceOwnerWireSchemas[operation].parse(input))
+  ).toBe(JSON.stringify({ ...envelope, ...fields }));
+});
+
 it('accepts only the fields for each signed operation', () => {
   const preview = experienceOwnerWireSchemas['owner-preview/v1'];
   const attest = experienceOwnerWireSchemas['verifier-attest/v1'];

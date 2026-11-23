@@ -52,6 +52,9 @@ export function createBackgroundBuildExecutor(deps: {
     );
     if (preparation.error || preparation.data !== 'ready')
       throw Error('BUILD_UNAVAILABLE');
+    // PostgreSQL assigns a unique job UUID. Preparation locks that job
+    // under the merchant, connection and grant version. All worker retries
+    // for this job share its finalization key independently of the enqueue key.
     return deps.finalizeBuild(
       { identity, merchantId: v.merchantId, supabase },
       { jobId: v.jobId, idempotencyKey: v.jobId }

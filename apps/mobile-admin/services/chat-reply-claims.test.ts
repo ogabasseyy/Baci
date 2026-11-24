@@ -170,4 +170,14 @@ describe('claimChatReply', () => {
     expect(await claim(toChat(21))).toBe('new');
     expect(await claim(toChat(22))).toBe('new');
   });
+
+  it('bugfix: the in-memory claims are capped too, so a long launch does not grow without bound', async () => {
+    const claim = await freshClaim();
+    await claim(reply('first-ever', 'x'));
+
+    for (let i = 0; i < 510; i += 1) await claim(reply(`m${i}`, 'x'));
+
+    // Forgotten from memory (and from storage): no longer a 'repeat'.
+    expect(await claim(reply('first-ever', 'x'))).not.toBe('repeat');
+  });
 });

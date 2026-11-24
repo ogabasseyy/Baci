@@ -14,6 +14,15 @@ const claimedThisSession = new Set<string>();
 /** Replies already answered on screen this launch (alerts, never stored). */
 const shownThisLaunch = new Set<string>();
 
+/** Adds a key, forgetting the oldest beyond the same cap storage uses. */
+function remember(keys: Set<string>, key: string): void {
+  keys.add(key);
+  if (keys.size > KEEP_LAST) {
+    const oldest = keys.values().next().value;
+    if (oldest !== undefined) keys.delete(oldest);
+  }
+}
+
 /**
  * A short fingerprint of the text (cyrb53), so storage never holds what the
  * owner typed. Enough to tell two replies to one notification apart.
@@ -85,7 +94,7 @@ export async function claimChatReply(
   const key = responseKey(response);
   if (claimedThisSession.has(key)) return 'repeat';
   // Synchronous, before any await: a second delivery in the same tick loses.
-  claimedThisSession.add(key);
+  remember(claimedThisSession, key);
   try {
     return await persistClaim(key);
   } catch {
@@ -125,6 +134,6 @@ function persistClaim(key: string): Promise<ReplyClaim> {
 export function firstSightThisLaunch(response: NotificationResponse): boolean {
   const key = responseKey(response);
   if (shownThisLaunch.has(key)) return false;
-  shownThisLaunch.add(key);
+  remember(shownThisLaunch, key);
   return true;
 }

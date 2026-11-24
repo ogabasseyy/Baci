@@ -92,7 +92,10 @@ export function ConversationThread({
           ) : null}
           {customer.data ? (
             <CustomerCard colors={colors} customer={customer.data} />
-          ) : customer.isError ? (
+          ) : customer.isError && customer.data === undefined ? (
+            // Only while the lookup has never answered: a chat already
+            // confirmed as a guest (null) stays quiet when a later check
+            // fails, since there is nothing to hide or retry.
             <CustomerUnavailable
               colors={colors}
               onRetry={() => {

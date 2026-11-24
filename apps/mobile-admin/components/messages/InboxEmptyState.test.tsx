@@ -32,6 +32,15 @@ describe('InboxEmptyState', () => {
     ).toBeInTheDocument();
   });
 
+  it('bugfix: the Customers view does not tell staff who can view orders that they need permission', () => {
+    renderEmpty({ view: 'returning' });
+
+    expect(screen.queryByText(/needs permission/)).toBeNull();
+    expect(
+      screen.getByText(/People without access to orders do not see any\./)
+    ).toBeInTheDocument();
+  });
+
   it('shows only a spinner, no message, while pages are loading by themselves', () => {
     renderEmpty({ loading: true, canLoadMore: true });
     expect(screen.queryByText('You are all caught up')).toBeNull();

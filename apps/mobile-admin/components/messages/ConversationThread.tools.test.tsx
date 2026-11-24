@@ -239,6 +239,19 @@ describe('ConversationThread customer card', () => {
     ).toBeNull();
   });
 
+  it('bugfix: a chat already confirmed as a guest stays quiet when a later check fails', () => {
+    mocks.customer.mockReturnValue({
+      data: null,
+      isError: true,
+      refetch: vi.fn(),
+    });
+    renderThread();
+
+    expect(
+      screen.queryByText('Customer details could not be loaded.')
+    ).toBeNull();
+  });
+
   it('keeps showing the last known customer when only a later check fails', () => {
     mocks.customer.mockReturnValue({
       data: {

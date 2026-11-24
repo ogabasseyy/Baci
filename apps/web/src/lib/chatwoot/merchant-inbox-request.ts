@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import {
@@ -30,14 +31,19 @@ export function merchantInboxJson(body: unknown): NextResponse {
 
 /**
  * Authenticates the caller (cookie or Bearer), resolves their merchant (owner or staff) and
- * returns that merchant's inbox binding. The merchant is never chosen by the
- * request: only the signed-in session selects it.
+ * returns that merchant's inbox binding and the caller's session client. The
+ * merchant is never chosen by the request: only the signed-in session selects it.
  */
 export async function resolveMerchantInboxRequest(
   request: NextRequest,
   action: 'view' | 'edit'
 ): Promise<
-  | { ok: true; binding: MerchantInboxBinding }
+  | {
+      ok: true;
+      binding: MerchantInboxBinding;
+      /** The caller's own session client, so writes stay under their rights. */
+      supabase: SupabaseClient;
+    }
   | { ok: false; response: NextResponse }
 > {
   // Web cookie sessions and mobile-admin Bearer sessions, both under RLS.
@@ -78,5 +84,5 @@ export async function resolveMerchantInboxRequest(
       ),
     };
   }
-  return { ok: true, binding };
+  return { ok: true, binding, supabase };
 }

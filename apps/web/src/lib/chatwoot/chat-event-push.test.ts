@@ -127,6 +127,34 @@ describe('sendChatEventPush', () => {
     );
   });
 
+  it('pushes a due follow-up with its own wording and a follow-up marker', async () => {
+    await sendChatEventPush(
+      {
+        ...input,
+        eventKey: 'fu-0123456789abcdef0123456789abcdef',
+        preview: '',
+        kind: 'follow_up',
+      },
+      env
+    );
+    expect(mocks.notify).toHaveBeenCalledWith(
+      { store: true },
+      input.merchantId,
+      'Follow up: Ada',
+      'This chat is due for a follow-up. Open it to reply.',
+      { type: 'customer_message', conversation_id: 21, follow_up: true },
+      'general'
+    );
+  });
+
+  it('uses neutral wording for a follow-up on a chat with no name', async () => {
+    await sendChatEventPush(
+      { ...input, customerName: '', preview: '', kind: 'follow_up' },
+      env
+    );
+    expect(mocks.notify.mock.calls[0][2]).toBe('Time to follow up');
+  });
+
   it('keeps ordinary message pushes free of the handover marker', async () => {
     await sendChatEventPush(input, env);
     expect(mocks.notify.mock.calls[0][4]).toEqual({

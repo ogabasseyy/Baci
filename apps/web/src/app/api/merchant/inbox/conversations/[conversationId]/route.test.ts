@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  sync: vi.fn(),
   resolve: vi.fn(),
   update: vi.fn(),
   csrf: vi.fn(),
@@ -16,11 +17,15 @@ vi.mock('@/lib/chatwoot/merchant-inbox-request', () => ({
 vi.mock('@/lib/chatwoot/merchant-inbox-manage-client', () => ({
   updateMerchantInboxConversation: mocks.update,
 }));
+vi.mock('@/lib/chatwoot/chat-follow-up-reminder-sync', () => ({
+  syncChatFollowUpReminder: mocks.sync,
+}));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
 
 import { PATCH } from './route';
 
 const binding = { merchantId: 'm', accountId: 2, inboxId: 20 };
+const supabase = { marker: 'session-client' };
 
 function patch(conversationId: string, body: unknown, raw = false) {
   return PATCH(
@@ -39,8 +44,12 @@ function patch(conversationId: string, body: unknown, raw = false) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.csrf.mockResolvedValue({ valid: true });
-  mocks.resolve.mockResolvedValue({ ok: true, binding });
-  mocks.update.mockResolvedValue({ ok: true, conversation: { id: 7 } });
+  mocks.resolve.mockResolvedValue({ ok: true, binding, supabase });
+  mocks.sync.mockResolvedValue('unchanged');
+  mocks.update.mockResolvedValue({
+    ok: true,
+    conversation: { id: 7, customerName: 'Ada' },
+  });
 });
 
 describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
@@ -52,13 +61,38 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      conversation: { id: 7 },
+      conversation: { id: 7, customerName: 'Ada' },
     });
     expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'edit');
     expect(mocks.update).toHaveBeenCalledWith(binding, {
       conversationId: 7,
       update: { status: 'resolved', addTags: ['order-issue'] },
     });
+  });
+
+  it('records the reminder under the caller session after the engine accepts a follow-up', async () => {
+    const response = await patch('7', { followUpAt: '2026-11-25T09:00:00Z' });
+
+    expect(response.status).toBe(200);
+    expect(mocks.sync).toHaveBeenCalledWith(supabase, {
+      merchantId: 'm',
+      conversationId: 7,
+      update: { followUpAt: '2026-11-25T09:00:00Z' },
+      customerName: 'Ada',
+    });
+  });
+
+  it('still answers success when the reminder could not be recorded', async () => {
+    mocks.sync.mockResolvedValue('failed');
+    expect((await patch('7', { followUpAt: null })).status).toBe(200);
+  });
+
+  it('leaves the reminder alone when the engine refused the change', async () => {
+    mocks.update.mockResolvedValue({ ok: false, code: 'unavailable' });
+    expect(
+      (await patch('7', { followUpAt: '2026-11-25T09:00:00Z' })).status
+    ).toBe(503);
+    expect(mocks.sync).not.toHaveBeenCalled();
   });
 
   it.each([

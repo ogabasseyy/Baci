@@ -1,0 +1,2 @@
+supabase/tests/chat_follow_up_reminders.sql
+supabase/tests/chat_follow_up_reminder_sweep.sql

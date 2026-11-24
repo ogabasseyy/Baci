@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { syncChatFollowUpReminder } from '@/lib/chatwoot/chat-follow-up-reminder-sync';
 import { readMerchantInboxJsonBody } from '@/lib/chatwoot/merchant-inbox-body';
 import { updateMerchantInboxConversation } from '@/lib/chatwoot/merchant-inbox-manage-client';
 import {
@@ -43,8 +44,17 @@ export async function PATCH(
     conversationId: conversationId.data,
     update: update.data,
   });
-  if (result.ok)
+  if (result.ok) {
+    // The push reminder follows the change the chat engine just accepted. It
+    // is best effort: a failure here never fails the change itself.
+    await syncChatFollowUpReminder(resolved.supabase, {
+      merchantId: resolved.binding.merchantId,
+      conversationId: conversationId.data,
+      update: update.data,
+      customerName: result.conversation.customerName,
+    });
     return merchantInboxJson({ conversation: result.conversation });
+  }
   if (result.code === 'not_found') {
     return merchantInboxError(404, 'Conversation not found', 'not_found');
   }

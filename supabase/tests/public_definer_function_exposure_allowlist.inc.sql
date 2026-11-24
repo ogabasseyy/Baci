@@ -249,6 +249,10 @@ SELECT * FROM (VALUES
   ('public.chat_event_record_push_attempt(text,bigint,uuid,text,uuid,jsonb)',
    'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
   ('public.record_chat_handover(text,bigint,uuid,text,bigint,text)',
-   'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role')
+   'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role'),
+  ('public.list_due_chat_follow_up_reminders(text,bigint,integer)',
+   'cron sweep; short-lived HMAC proof verified in the body, no service role'),
+  ('public.record_chat_follow_up_reminder(text,bigint,uuid,uuid,boolean)',
+   'cron sweep; short-lived HMAC proof verified in the body, no service role')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

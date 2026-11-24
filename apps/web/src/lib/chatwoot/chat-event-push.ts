@@ -15,8 +15,11 @@ export type ChatEventPushInput = {
   conversationId: number;
   customerName: string;
   preview: string;
-  /** An assistant handover is worded and marked differently. Default: message. */
-  kind?: 'message' | 'handover';
+  /**
+   * An assistant handover and a due follow-up are worded and marked
+   * differently. Default: message.
+   */
+  kind?: 'message' | 'handover' | 'follow_up';
 };
 
 export type ChatEventPushResult =
@@ -30,6 +33,8 @@ export type ChatEventPushResult =
 
 const HANDOVER_PUSH_BODY =
   'The assistant handed this chat to your team. Open it to reply.';
+const FOLLOW_UP_PUSH_BODY =
+  'This chat is due for a follow-up. Open it to reply.';
 
 /** Fixed wording per kind; only the bounded customer name and preview vary. */
 function pushContent(input: ChatEventPushInput) {
@@ -46,6 +51,19 @@ function pushContent(input: ChatEventPushInput) {
       },
     };
   }
+  if (input.kind === 'follow_up') {
+    return {
+      title: input.customerName
+        ? `Follow up: ${input.customerName}`
+        : 'Time to follow up',
+      body: FOLLOW_UP_PUSH_BODY,
+      data: {
+        type: 'customer_message',
+        conversation_id: input.conversationId,
+        follow_up: true,
+      },
+    };
+  }
   return {
     title: input.customerName
       ? `New message from ${input.customerName}`
@@ -57,7 +75,7 @@ function pushContent(input: ChatEventPushInput) {
 
 /**
  * Pushes a "new customer message" (or, for an assistant handover, "needs a
- * person") notification to the store's merchant-app
+ * person", or for a due follow-up "Follow up") notification to the store's merchant-app
  * devices for one notified chat event, unless the merchant turned chat push
  * alerts off. Best effort and at most once: the
  * database hands out a single claim per event, so a redelivered webhook

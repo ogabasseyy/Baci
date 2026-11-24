@@ -246,7 +246,6 @@ export async function POST(request: NextRequest) {
       !isLegacyAnalyticsFanoutDisabled() &&
       eventType !== 'purchase' &&
       eventType !== 'place_order' &&
-      (input.analytics_consent === true || input.marketing_consent === true) &&
       isConversionEvent(eventType) &&
       contextVerified !== false &&
       clientMarketingTargets({

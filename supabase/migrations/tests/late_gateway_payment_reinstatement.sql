@@ -4,6 +4,9 @@ BEGIN;
 \ir fixtures/late_gateway_payment_reinstatement.sql
 \ir ../20261120141000_record_order_payment_timeouts.sql
 \ir ../20261120141100_reinstate_verified_late_order_payments.sql
+\ir ../20261124090000_prelock_storefront_customer_identity.sql
+\ir ../20261124100000_fix_authenticated_storefront_identity_confirmation.sql
+\ir ../20261124103000_clear_reinstatement_guard_after_block.sql
 
 CREATE TRIGGER prevent_cancelled_order_reopen
 BEFORE UPDATE ON public.orders
@@ -58,6 +61,18 @@ BEGIN
       strpos(reinstatement_definition, 'PERFORM private.lock_order_replacement_identity') THEN
     RAISE EXCEPTION 'Reinstatement must lock catalog rows before customer identity';
   END IF;
+
+  -- Authenticated callers may omit p_user_id; lock their effective identity
+  -- without routing the lookup through guest confirmation.
+  INSERT INTO public.customers (id, merchant_id, user_id, email)
+  VALUES (gen_random_uuid(), merchant_id, gen_random_uuid(), 'auth-user@example.test');
+  PERFORM set_config('request.jwt.claim.sub',
+    (SELECT user_id::text FROM public.customers WHERE email = 'auth-user@example.test'), true);
+  PERFORM private.lock_storefront_order_entrypoint_identity(
+    merchant_id, NULL, 'auth-user@example.test', NULL
+  );
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+
   INSERT INTO public.products VALUES (product_id, merchant_id);
 
   INSERT INTO public.transactions (id, order_id, merchant_id, gateway, gateway_reference)
@@ -95,6 +110,9 @@ BEGIN
       OR NOT EXISTS (SELECT 1 FROM public.orders o WHERE o.id = test_order_id
         AND o.payment_status = 'cancelled' AND o.amount_paid = 0 AND o.paid_transaction_id IS NULL) THEN
       RAISE EXCEPTION 'Clamped paid transition did not roll back % reinstatement', provider;
+    END IF;
+    IF current_setting('baci.reinstating_order_id', true) IS DISTINCT FROM '' THEN
+      RAISE EXCEPTION 'Blocked % reinstatement left its trigger bypass armed', provider;
     END IF;
     PERFORM set_config('baci.test_clamp', '', true);
 
@@ -139,6 +157,12 @@ BEGIN
       RAISE EXCEPTION 'Underpayment reinstated % order', provider;
     END IF;
     UPDATE public.transactions SET amount = 150 WHERE id = capture_id;
+
+    UPDATE public.orders SET amount_paid = 10 WHERE id = test_order_id;
+    IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'blocked' THEN
+      RAISE EXCEPTION 'Partially paid % order was reopened by the full-payment path', provider;
+    END IF;
+    UPDATE public.orders SET amount_paid = 0 WHERE id = test_order_id;
 
     INSERT INTO public.order_refund_events VALUES (test_order_id);
     IF public.reinstate_timeout_order_payment(test_order_id, capture_id) IS DISTINCT FROM 'blocked' THEN

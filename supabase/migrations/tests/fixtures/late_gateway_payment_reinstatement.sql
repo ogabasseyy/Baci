@@ -9,7 +9,12 @@ CREATE ROLE service_role;
 CREATE SCHEMA private;
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT current_setting('request.jwt.claim.role', true) $$;
-CREATE TABLE public.customers(id uuid PRIMARY KEY, merchant_id uuid, user_id uuid);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
+ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+$$;
+CREATE TABLE public.customers(
+ id uuid PRIMARY KEY, merchant_id uuid, user_id uuid, email text, phone text
+);
 CREATE TABLE public.orders(
  id uuid PRIMARY KEY, merchant_id uuid, customer_id uuid,
  customer_email text DEFAULT (gen_random_uuid()::text || '@example.test'), customer_phone text,

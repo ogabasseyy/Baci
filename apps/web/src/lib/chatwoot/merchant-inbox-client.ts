@@ -190,7 +190,12 @@ export async function listMerchantInboxMessages(
   // with fewer rows is the oldest one: a short chat must not offer "load
   // earlier". A full page may have an older one, and paging still ends on an
   // empty page. Re-check the size when the engine is upgraded.
-  const hasOlder = rawIds.length >= PROVIDER_MESSAGE_PAGE_SIZE;
+  // Fullness counts the rows the engine sent, not only those with a usable id:
+  // a full page holding a malformed row must still page on. The cursor needs
+  // at least one usable id, so without one paging ends.
+  const hasOlder =
+    parsed.data.payload.length >= PROVIDER_MESSAGE_PAGE_SIZE &&
+    rawIds.length > 0;
   return {
     ok: true,
     conversation: owned.conversation,

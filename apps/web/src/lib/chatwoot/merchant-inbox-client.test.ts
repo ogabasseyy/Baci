@@ -251,6 +251,49 @@ describe('listMerchantInboxMessages', () => {
       ).resolves.toMatchObject({ ok: true, hasOlder: false });
     });
 
+    it('still offers an older page when a full page holds a row without a usable id', async () => {
+      stubFetch((url) =>
+        url.pathname.endsWith('/messages')
+          ? {
+              body: {
+                payload: [
+                  { junk: true },
+                  ...Array.from(
+                    { length: PROVIDER_MESSAGE_PAGE_SIZE - 1 },
+                    (_, i) => message(100 + i)
+                  ),
+                ],
+              },
+            }
+          : { body: conversation(7) }
+      );
+      await expect(
+        listMerchantInboxMessages(binding, { conversationId: 7 })
+      ).resolves.toMatchObject({ ok: true, hasOlder: true, nextBefore: 100 });
+    });
+
+    it('ends paging when a full page has no usable id to page from', async () => {
+      stubFetch((url) =>
+        url.pathname.endsWith('/messages')
+          ? {
+              body: {
+                payload: Array.from(
+                  { length: PROVIDER_MESSAGE_PAGE_SIZE },
+                  () => ({ junk: true })
+                ),
+              },
+            }
+          : { body: conversation(7) }
+      );
+      await expect(
+        listMerchantInboxMessages(binding, { conversationId: 7 })
+      ).resolves.toMatchObject({
+        ok: true,
+        hasOlder: false,
+        nextBefore: null,
+      });
+    });
+
     it('offers an older page for a full page, with the oldest row as cursor', async () => {
       pageOf(PROVIDER_MESSAGE_PAGE_SIZE);
       await expect(

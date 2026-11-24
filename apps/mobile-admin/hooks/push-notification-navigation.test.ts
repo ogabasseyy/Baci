@@ -202,4 +202,14 @@ describe('handleNotificationTap', () => {
     expect(replyMocks.handle).not.toHaveBeenCalled();
     expect(router.push).toHaveBeenCalledWith('/(admin)/order/7');
   });
+
+  it('bugfix: a Reply from a notification with no usable data still reaches the reply handler', () => {
+    replyMocks.handle.mockClear();
+    const router = { push: vi.fn() };
+    const response = makeResponse(undefined, CHAT_REPLY_ACTION_ID);
+
+    handleNotificationTap(router, response, vi.fn());
+
+    expect(replyMocks.handle).toHaveBeenCalledWith(router, response);
+  });
 });

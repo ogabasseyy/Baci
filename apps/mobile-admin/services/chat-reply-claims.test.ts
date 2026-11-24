@@ -20,11 +20,15 @@ vi.mock('@/lib/storage', () => ({
   },
 }));
 
-function reply(id: string, text = 'Hello'): NotificationResponse {
+function reply(
+  id: string,
+  text = 'Hello',
+  date = 1_700_000_000
+): NotificationResponse {
   return {
     actionIdentifier: CHAT_REPLY_ACTION_ID,
     userText: text,
-    notification: { date: 1_700_000_000, request: { identifier: id } },
+    notification: { date, request: { identifier: id } },
   } as unknown as NotificationResponse;
 }
 
@@ -113,5 +117,12 @@ describe('claimChatReply', () => {
       store.data.get('@baci_chat_reply_handled') ?? '[]'
     ) as string[];
     expect(stored[0].length).toBeLessThan(60);
+  });
+
+  it('bugfix: counts the same reply once even when the two deliveries carry different dates', async () => {
+    const claim = await freshClaim();
+
+    expect(await claim(reply('d1', 'Same words', 1_700_000_000))).toBe(true);
+    expect(await claim(reply('d1', 'Same words', 1_700_000_999))).toBe(false);
   });
 });

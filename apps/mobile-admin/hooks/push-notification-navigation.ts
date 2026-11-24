@@ -114,14 +114,16 @@ export function handleNotificationTap(
     reason: 'push-notification'
   ) => void = requestMobileUpdateCheck
 ) {
-  const data = response.notification.request.content.data;
-  if (!isPlainNotificationData(data)) {
+  // The Reply box on a chat notification: send the text, do not just open it.
+  // Checked first, even for a response without usable data: the reply handler
+  // sends nothing then and shows the chat list.
+  if (isChatReplyResponse(response)) {
+    void handleChatReplyResponse(router, response);
     return;
   }
 
-  // The Reply box on a chat notification: send the text, do not just open it.
-  if (isChatReplyResponse(response)) {
-    void handleChatReplyResponse(router, response);
+  const data = response.notification.request.content.data;
+  if (!isPlainNotificationData(data)) {
     return;
   }
 

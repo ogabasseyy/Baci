@@ -28,10 +28,16 @@ function fingerprint(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
+/**
+ * The notification's id plus the text. Not its date: the live listener and
+ * the "last response" read must give the same key, and nothing proves they
+ * serialise the date alike. (The cost: the same words sent twice from one
+ * notification count as one reply, which iOS and Android clear after use.)
+ */
 function responseKey(response: NotificationResponse): string {
   const { identifier } = response.notification.request;
   const text = response.userText ?? '';
-  return `${identifier}:${response.notification.date}:${text.length}:${fingerprint(text)}`;
+  return `${identifier}:${text.length}:${fingerprint(text)}`;
 }
 
 function parseStored(raw: string | null): string[] {

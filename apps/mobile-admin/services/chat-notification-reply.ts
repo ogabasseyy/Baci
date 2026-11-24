@@ -117,6 +117,9 @@ async function sendChatReply(
   // Only the chat that changed, not every cached thread: key layout is
   // [prefix, merchantId, conversationId] (see inbox-query-keys.ts). The list
   // reorders and shows the new preview, so it refreshes.
+  // Best effort, each on its own: the reply is already sent, so neither may
+  // read as a failure (and so lead to sending it again), and a failed refresh
+  // must never stop the owner from seeing the chat.
   try {
     const threadPrefix = inboxThreadKey(undefined, 0)[0];
     deps.invalidate({
@@ -125,10 +128,13 @@ async function sendChatReply(
         query.queryKey[2] === conversationId,
     });
     deps.invalidate({ queryKey: [inboxConversationsKey(undefined)[0]] });
+  } catch {
+    // The chat refreshes when it opens anyway.
+  }
+  try {
     router.push(chat);
   } catch {
-    // Best effort: the reply is already sent, so this must never read as a
-    // failure (and so lead to sending it again).
+    // Nothing more can be done.
   }
 }
 

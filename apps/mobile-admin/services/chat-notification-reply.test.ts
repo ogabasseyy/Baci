@@ -250,4 +250,15 @@ describe('handleChatReplyResponse', () => {
     expect(mocks.send).toHaveBeenCalledTimes(1);
     expect(deps.alert).not.toHaveBeenCalled();
   });
+
+  it('bugfix: still opens the chat when the cache refresh fails after a successful send', async () => {
+    const { router, deps } = setup();
+    deps.invalidate.mockImplementation(() => {
+      throw new Error('query client gone');
+    });
+
+    await handleChatReplyResponse(router, reply('Sent fine'), deps);
+
+    expect(router.push).toHaveBeenCalledWith('/(admin)/messages/21');
+  });
 });

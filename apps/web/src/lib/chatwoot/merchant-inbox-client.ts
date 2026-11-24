@@ -12,6 +12,7 @@ import {
   projectMerchantInboxConversation,
   projectMerchantInboxMessage,
 } from './merchant-inbox-projection';
+import { PROVIDER_MESSAGE_PAGE_SIZE } from './merchant-inbox-provider-limits';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -137,9 +138,6 @@ export async function getMerchantInboxConversation(
   }
   return { ok: true, conversation };
 }
-
-/** Rows per page of the chat engine's message list (hidden rows included). */
-export const PROVIDER_MESSAGE_PAGE_SIZE = 20;
 
 /** Returns one page of a bound conversation's messages, oldest first. */
 export async function listMerchantInboxMessages(

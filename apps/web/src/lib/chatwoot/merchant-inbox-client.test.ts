@@ -182,8 +182,9 @@ describe('listMerchantInboxMessages', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      hasOlder: true,
-      nextBefore: 29,
+      // Three rows is fewer than a full page, so nothing older exists.
+      hasOlder: false,
+      nextBefore: null,
       conversation: { id: 7 },
       messages: [
         { id: 29, sender: 'store' },

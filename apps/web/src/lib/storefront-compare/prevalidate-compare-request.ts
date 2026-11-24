@@ -3,8 +3,12 @@ import {
   MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH,
 } from '@/lib/storefront-slug-safety';
 import { isValidMerchantIdentifier } from '@/lib/validation';
-import { type ParsedCompareSlug, parseCompareSlug } from './compare-slugs';
+import { parseCompareSlug } from './compare-slugs';
 import { isSelfComparePair } from './is-self-compare-pair';
+
+export type ParsedCompareSlug = NonNullable<
+  ReturnType<typeof parseCompareSlug>
+>;
 
 export const MAX_SAFE_COMPARE_SLUG_ENCODED_LENGTH =
   MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH * 2 + 4;

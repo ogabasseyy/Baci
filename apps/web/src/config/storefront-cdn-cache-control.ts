@@ -25,10 +25,11 @@
 //     origin errors during revalidation.
 //   * The CDN-visible value must NOT contain `s-maxage` or `must-revalidate` —
 //     either one disables `stale-while-revalidate`/`stale-if-error` at the edge.
-//   * Vercel's layer keeps a SHORT fresh window (300s) so a mutated/removed
-//     product is re-fetched from origin quickly; Cloudflare's longer window
-//     (3600s) is bounded by the active purge-on-mutation chain (#2935 / #3003).
-//     Do NOT raise these past the window the purge design covers.
+//   * Vercel's layer matches the purge-on-mutation coverage per document kind:
+//     3600s for `cacheable` storefront docs (home, listing, blog) and 1800s for
+//     `cacheable-pdp` (covered by exact + durable broad purge chains), while
+//     `cacheable-self-healing` stays at 300s when durable purge is disabled.
+//     Do NOT raise any tier past the window its purge design covers.
 //   * Explicitly qualified PDP policies use 1800s downstream freshness rather
 //     than the fallback 300s. Exact invalidation followed by the durable broad
 //     hostname purge owns all product mutations, including bulk updates.

@@ -87,7 +87,13 @@ export async function POST(request: NextRequest) {
   if (!body || typeof body !== 'object')
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
   const raw = body as Record<string, unknown>;
-  if (!(raw.event_type || raw.event_name) || !raw.merchant_id) {
+  const rawEventField = raw.event_type ?? raw.event_name;
+  if (
+    typeof rawEventField !== 'string' ||
+    !rawEventField.trim() ||
+    typeof raw.merchant_id !== 'string' ||
+    !raw.merchant_id.trim()
+  ) {
     return NextResponse.json(
       { error: 'Missing required fields: event_type and merchant_id' },
       { status: 400 }

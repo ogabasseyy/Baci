@@ -23,12 +23,16 @@ vi.mock('@/lib/storage', () => ({
 function reply(
   id: string,
   text = 'Hello',
-  date = 1_700_000_000
+  date = 1_700_000_000,
+  data: Record<string, unknown> = {}
 ): NotificationResponse {
   return {
     actionIdentifier: CHAT_REPLY_ACTION_ID,
     userText: text,
-    notification: { date, request: { identifier: id } },
+    notification: {
+      date,
+      request: { identifier: id, content: { data } },
+    },
   } as unknown as NotificationResponse;
 }
 
@@ -137,5 +141,33 @@ describe('claimChatReply', () => {
     expect(firstSightThisLaunch(response)).toBe(true);
     expect(firstSightThisLaunch(response)).toBe(false);
     expect(store.data.get('@baci_chat_reply_handled')).toBeUndefined();
+  });
+
+  it('bugfix: two different replies handled together are both remembered after a restart', async () => {
+    const claim = await freshClaim();
+
+    const results = await Promise.all([
+      claim(reply('c1', 'First reply')),
+      claim(reply('c2', 'Second reply')),
+    ]);
+    expect(results).toEqual(['new', 'new']);
+
+    vi.resetModules();
+    const afterRestart = await freshClaim();
+
+    expect(await afterRestart(reply('c1', 'First reply'))).toBe('replay');
+    expect(await afterRestart(reply('c2', 'Second reply'))).toBe('replay');
+  });
+
+  it('bugfix: the same words for two different chats are two replies, not a repeat', async () => {
+    const claim = await freshClaim();
+    const toChat = (conversationId: number) =>
+      reply('same-id', 'Yes, in stock', 1_700_000_000, {
+        merchant_id: '11111111-1111-4111-8111-111111111111',
+        conversation_id: conversationId,
+      });
+
+    expect(await claim(toChat(21))).toBe('new');
+    expect(await claim(toChat(22))).toBe('new');
   });
 });

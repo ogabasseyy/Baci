@@ -42,13 +42,6 @@ export async function registerChatReplyCategory(
   );
 }
 
-/** True when the shop owner used the Reply box (not a plain tap). */
-export function isChatReplyResponse(
-  response: NotificationsType.NotificationResponse
-): boolean {
-  return response.actionIdentifier === CHAT_REPLY_ACTION_ID;
-}
-
 export interface ReplyDeps {
   alert: (
     title: string,
@@ -227,7 +220,10 @@ export async function handleChatReplyResponse(
       deps.alert(
         'Reply not sent',
         'Something went wrong, so your reply was not sent. Open your messages and write it again.',
-        [{ text: 'OK' }]
+        [
+          { text: 'Open messages', onPress: () => router.push(MESSAGES) },
+          { text: 'OK' },
+        ]
       );
     } catch {
       // Nothing more can be done.

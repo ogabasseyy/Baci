@@ -3,9 +3,9 @@ import { asyncStorage } from '@/lib/storage';
 
 const STORAGE_KEY = '@baci_chat_reply_handled';
 /**
- * Claims kept in storage. Each is a short key, so this is small; a replay can
- * only be recognised while its claim is still kept, which takes this many newer
- * replies to lose.
+ * Claims kept in storage. Each is a short key, so this is small. Expo hands
+ * back only the most recent notification response, so a replay can only ever
+ * be of one of the latest replies; this many is far more than that needs.
  */
 const KEEP_LAST = 500;
 
@@ -36,15 +36,20 @@ function fingerprint(text: string): string {
 }
 
 /**
- * The notification's id plus the text. Not its date: the live listener and
- * the "last response" read must give the same key, and nothing proves they
- * serialise the date alike. (The cost: the same words sent twice from one
- * notification count as one reply, which iOS and Android clear after use.)
+ * The notification's id, the store and chat it names, and the text. Not its
+ * date: the live listener and the "last response" read must give the same key,
+ * and nothing proves they serialise the date alike. (The cost: the same words
+ * sent twice from one notification count as one reply, which iOS and Android
+ * clear after use.) The store and chat are in the key so that two chats can
+ * never collide even if a notification id is ever reused.
  */
 function responseKey(response: NotificationResponse): string {
-  const { identifier } = response.notification.request;
+  const { identifier, content } = response.notification.request;
+  const data = (content?.data ?? {}) as Record<string, unknown>;
   const text = response.userText ?? '';
-  return `${identifier}:${text.length}:${fingerprint(text)}`;
+  return `${identifier}:${String(data.merchant_id ?? '')}:${String(
+    data.conversation_id ?? ''
+  )}:${text.length}:${fingerprint(text)}`;
 }
 
 function parseStored(raw: string | null): string[] {
@@ -82,16 +87,33 @@ export async function claimChatReply(
   // Synchronous, before any await: a second delivery in the same tick loses.
   claimedThisSession.add(key);
   try {
+    return await persistClaim(key);
+  } catch {
+    // Storage unavailable: the in-session claim above still holds.
+    return 'new';
+  }
+}
+
+/**
+ * One storage update at a time: two different replies handled together would
+ * otherwise both read the same list and the second write would drop the first
+ * claim, letting that reply be sent again after a restart.
+ */
+let storageQueue: Promise<unknown> = Promise.resolve();
+
+function persistClaim(key: string): Promise<ReplyClaim> {
+  const run = storageQueue.then(async (): Promise<ReplyClaim> => {
     const stored = parseStored(await asyncStorage.getItem(STORAGE_KEY));
     if (stored.includes(key)) return 'replay';
     await asyncStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([...stored, key].slice(-KEEP_LAST))
     );
-  } catch {
-    // Storage unavailable: the in-session claim above still holds.
-  }
-  return 'new';
+    return 'new';
+  });
+  // The next update waits for this one, whether it worked or not.
+  storageQueue = run.catch(() => undefined);
+  return run;
 }
 
 /**

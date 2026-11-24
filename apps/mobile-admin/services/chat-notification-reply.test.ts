@@ -39,10 +39,14 @@ vi.mock('./push-notifications', () => ({
 import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
 import {
   handleChatReplyResponse,
-  isChatReplyResponse,
   registerChatReplyCategory,
 } from './chat-notification-reply';
-import { reply, STORE, setup } from './chat-notification-reply.test-support';
+import {
+  alertButtons,
+  reply,
+  STORE,
+  setup,
+} from './chat-notification-reply.test-support';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -68,15 +72,6 @@ describe('registerChatReplyCategory', () => {
         }),
       ]
     );
-  });
-});
-
-describe('isChatReplyResponse', () => {
-  it('is true for the Reply action and false for a plain tap', () => {
-    expect(isChatReplyResponse(reply('hi'))).toBe(true);
-    expect(
-      isChatReplyResponse(reply('hi', undefined, 'expo.default-action'))
-    ).toBe(false);
   });
 });
 
@@ -152,5 +147,10 @@ describe('handleChatReplyResponse: a reply that is sent', () => {
       expect.stringContaining('not sent'),
       expect.any(Array)
     );
+    // It also gives a way to the messages, like every other failure.
+    const buttons = alertButtons(deps.alert);
+    expect(buttons.map((b) => b.text)).toContain('Open messages');
+    buttons.find((b) => b.text === 'Open messages')?.onPress?.();
+    expect(router.push).toHaveBeenCalledWith('/(admin)/messages');
   });
 });

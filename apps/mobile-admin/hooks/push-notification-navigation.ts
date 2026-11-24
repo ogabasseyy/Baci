@@ -1,10 +1,8 @@
 import type { NotificationResponse } from 'expo-notifications';
 import type { Href } from 'expo-router';
 import { requestMobileUpdateCheck } from '@/components/updates/mobile-update-events';
-import {
-  handleChatReplyResponse,
-  isChatReplyResponse,
-} from '@/services/chat-notification-reply';
+import { handleChatReplyResponse } from '@/services/chat-notification-reply';
+import { isChatReplyResponse } from '@/services/chat-reply-response';
 import { getNotificationNavigationParams } from '@/services/push-notifications';
 
 interface AdminRouter {

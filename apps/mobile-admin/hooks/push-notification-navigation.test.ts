@@ -8,14 +8,10 @@ import {
 
 const replyMocks = vi.hoisted(() => ({ handle: vi.fn() }));
 
-vi.mock('@/services/chat-notification-reply', async () => {
-  const { CHAT_REPLY_ACTION_ID } = await import('@baci/shared');
-  return {
-    handleChatReplyResponse: replyMocks.handle,
-    isChatReplyResponse: (response: { actionIdentifier?: string }) =>
-      response.actionIdentifier === CHAT_REPLY_ACTION_ID,
-  };
-});
+// Only the sender is replaced; the real Reply-action check is used.
+vi.mock('@/services/chat-notification-reply', () => ({
+  handleChatReplyResponse: replyMocks.handle,
+}));
 
 vi.mock('@/services/push-notifications', () => ({
   getNotificationNavigationParams: (response: NotificationResponse) => {

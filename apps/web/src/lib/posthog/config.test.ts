@@ -7,9 +7,11 @@ import {
   getPostHogAssetsHost,
   getPostHogBrowserEnv,
   getPostHogIngestHost,
+  getPostHogLocalProxyPath,
   getPostHogProjectId,
   getPostHogProxyPath,
   getPostHogPublicBuildEnv,
+  getPostHogRelayUrl,
   getPostHogReleaseContext,
   getPostHogReleaseVersion,
   getPostHogServerApiKey,
@@ -17,6 +19,7 @@ import {
   isPostHogSourceMapUploadEnabled,
   normalizePostHogHost,
   normalizePostHogProxyPath,
+  normalizePostHogRelayUrl,
 } from './config';
 
 describe('PostHog config helpers', () => {
@@ -61,9 +64,36 @@ describe('PostHog config helpers', () => {
     expect(getPostHogProxyPath(env)).toBe('/baci-observe');
   });
 
+  it('prefers external relay URL for browser traffic while keeping local proxy path for Next rewrites', () => {
+    const env = {
+      NEXT_PUBLIC_POSTHOG_PROXY_PATH: ' /baci-observe/ ',
+      NEXT_PUBLIC_POSTHOG_RELAY_URL: ' https://posthog-proxy.usebaci.com/// ',
+    };
+
+    expect(normalizePostHogRelayUrl(' https://relay.example.com/ ')).toBe(
+      'https://relay.example.com'
+    );
+    expect(normalizePostHogRelayUrl('javascript:alert(1)')).toBeUndefined();
+    expect(normalizePostHogRelayUrl('not a url')).toBeUndefined();
+    expect(getPostHogRelayUrl(env)).toBe('https://posthog-proxy.usebaci.com');
+    expect(getPostHogProxyPath(env)).toBe('https://posthog-proxy.usebaci.com');
+    expect(getPostHogLocalProxyPath(env)).toBe('/baci-observe');
+
+    expect(
+      getPostHogProxyPath({
+        NEXT_PUBLIC_POSTHOG_RELAY_URL: 'not-a-url',
+        NEXT_PUBLIC_POSTHOG_PROXY_PATH: '/baci-observe',
+      })
+    ).toBe('/baci-observe');
+  });
+
   it('builds the public browser environment allowlist', () => {
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN', 'phc_public');
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_PROXY_PATH', '/baci-relay');
+    vi.stubEnv(
+      'NEXT_PUBLIC_POSTHOG_RELAY_URL',
+      'https://posthog-proxy.usebaci.com'
+    );
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_RELEASE_VERSION', 'public-release');
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_UI_HOST', 'https://eu.posthog.com');
     vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', 'usebaci.com');
@@ -77,6 +107,7 @@ describe('PostHog config helpers', () => {
     expect(getPostHogBrowserEnv()).toEqual({
       NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'phc_public',
       NEXT_PUBLIC_POSTHOG_PROXY_PATH: '/baci-relay',
+      NEXT_PUBLIC_POSTHOG_RELAY_URL: 'https://posthog-proxy.usebaci.com',
       NEXT_PUBLIC_POSTHOG_RELEASE_VERSION: 'public-release',
       NEXT_PUBLIC_POSTHOG_UI_HOST: 'https://eu.posthog.com',
       NEXT_PUBLIC_ROOT_DOMAIN: 'usebaci.com',

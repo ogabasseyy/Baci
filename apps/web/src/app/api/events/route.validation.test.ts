@@ -66,4 +66,27 @@ describe('POST /api/events validation', () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: 'Invalid JSON' });
   });
+
+  it('fast-paths crawler user-agents without persisting', async () => {
+    const response = await POST(
+      new NextRequest('https://shop.usebaci.com/api/events', {
+        body: JSON.stringify({
+          event_id: 'bot-evt-1',
+          event_type: 'page_view',
+          merchant_id: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
+          page_url: 'not-validated-for-bot',
+        }),
+        headers: {
+          'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)',
+        },
+        method: 'POST',
+      })
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      event_id: 'bot-evt-1',
+    });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
 });

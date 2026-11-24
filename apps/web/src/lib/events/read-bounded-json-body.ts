@@ -1,3 +1,5 @@
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+
 type BoundedJsonBodyResult =
   | { body: unknown; ok: true }
   | { ok: false; reason: 'invalid_json' | 'too_large' };
@@ -35,16 +37,21 @@ export async function readBoundedJsonBody(
     return { ok: false, reason: 'invalid_json' };
   }
 
-  const bytes = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
+  let bytes: Uint8Array;
+  if (chunks.length === 1) {
+    bytes = chunks[0];
+  } else {
+    bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
   }
 
   try {
     return {
-      body: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)),
+      body: JSON.parse(UTF8_DECODER.decode(bytes)),
       ok: true,
     };
   } catch {

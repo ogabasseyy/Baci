@@ -24,6 +24,7 @@ export function getPostHogBrowserEnv(): PostHogEnv {
     NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN:
       process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
     NEXT_PUBLIC_POSTHOG_PROXY_PATH: process.env.NEXT_PUBLIC_POSTHOG_PROXY_PATH,
+    NEXT_PUBLIC_POSTHOG_RELAY_URL: process.env.NEXT_PUBLIC_POSTHOG_RELAY_URL,
     NEXT_PUBLIC_POSTHOG_UI_HOST: process.env.NEXT_PUBLIC_POSTHOG_UI_HOST,
     NEXT_PUBLIC_ROOT_DOMAIN: process.env.NEXT_PUBLIC_ROOT_DOMAIN,
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF:
@@ -84,8 +85,39 @@ export function getPostHogUiHost(env: PostHogEnv = process.env): string {
   );
 }
 
-export function getPostHogProxyPath(env: PostHogEnv = process.env): string {
+export function normalizePostHogRelayUrl(
+  value?: string | null
+): string | undefined {
+  const trimmed = value?.trim().replace(/\/+$/, '');
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return undefined;
+    }
+    return trimmed;
+  } catch {
+    return undefined;
+  }
+}
+
+export function getPostHogRelayUrl(
+  env: PostHogEnv = process.env
+): string | undefined {
+  return normalizePostHogRelayUrl(env.NEXT_PUBLIC_POSTHOG_RELAY_URL);
+}
+
+export function getPostHogLocalProxyPath(
+  env: PostHogEnv = process.env
+): string {
   return normalizePostHogProxyPath(env.NEXT_PUBLIC_POSTHOG_PROXY_PATH);
+}
+
+export function getPostHogProxyPath(env: PostHogEnv = process.env): string {
+  return getPostHogRelayUrl(env) ?? getPostHogLocalProxyPath(env);
 }
 
 export function isPostHogSourceMapUploadEnabled(

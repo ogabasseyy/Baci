@@ -40,7 +40,8 @@ export function createOwnerAdmission(
         return false;
       for (const [seenNonce, expiry] of seen)
         if (expiry <= current) seen.delete(seenNonce);
-      if (seen.has(nonce) || seen.size >= 4096) return false;
+      if (seen.has(nonce)) return false;
+      if (seen.size >= 4096) return 'busy';
       if (reserveOwner) {
         // The trusted relay signs the entire token after verifying the user.
         // The subject is only a quota key; downstream still authenticates.

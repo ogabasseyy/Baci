@@ -89,7 +89,10 @@ it('bounds the early replay filter and releases entries after expiry', () => {
     expect(admit(...signed(i.toString(16).padStart(64, '0'), now + 1000))).toBe(
       true
     );
-  expect(admit(...signed('f'.repeat(64), now + 1000))).toBe(false);
+  const fresh = signed('f'.repeat(64), now + 1000);
+  expect(admit(...fresh)).toBe('busy');
+  expect(admit(...signed('0'.repeat(64), now + 1000))).toBe(false);
+  expect(admit(fresh[0], 'a'.repeat(64))).toBe(false);
   now += 1001;
   expect(admit(...signed('f'.repeat(64), now + 1000))).toBe(true);
 });

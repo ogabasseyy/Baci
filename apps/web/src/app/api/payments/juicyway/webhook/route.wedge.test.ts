@@ -125,6 +125,7 @@ describe('POST /api/payments/juicyway/webhook — wedge regression', () => {
 
     let transactionCallCount = 0;
     let orderUpdated = false;
+    const orderEqCalls: [string, unknown][] = [];
     const orderStateLookup = vi.fn().mockResolvedValue({
       data: {
         cancelled_at: null,
@@ -154,27 +155,33 @@ describe('POST /api/payments/juicyway/webhook — wedge regression', () => {
         };
       }
       if (table === 'orders') {
-        return {
-          eq: vi.fn().mockReturnThis(),
-          maybeSingle: orderStateLookup,
-          select: vi.fn().mockReturnThis(),
-          update: vi.fn(() => {
-            orderUpdated = true;
-            const chain: Record<string, unknown> = {
-              maybeSingle: vi
-                .fn()
-                .mockResolvedValue({ data: paidOrderRow, error: null }),
-              single: vi
-                .fn()
-                .mockResolvedValue({ data: paidOrderRow, error: null }),
-            };
-            chain.eq = vi.fn().mockReturnValue(chain);
-            chain.neq = vi.fn().mockReturnValue(chain);
-            chain.in = vi.fn().mockReturnValue(chain);
-            chain.select = vi.fn().mockReturnValue(chain);
-            return chain;
-          }),
-        };
+        const chain: Record<string, unknown> = {};
+        chain.eq = vi.fn((column: string, value: unknown) => {
+          orderEqCalls.push([column, value]);
+          return chain;
+        });
+        chain.maybeSingle = orderStateLookup;
+        chain.select = vi.fn().mockReturnValue(chain);
+        chain.update = vi.fn(() => {
+          orderUpdated = true;
+          const updateChain: Record<string, unknown> = {
+            maybeSingle: vi
+              .fn()
+              .mockResolvedValue({ data: paidOrderRow, error: null }),
+            single: vi
+              .fn()
+              .mockResolvedValue({ data: paidOrderRow, error: null }),
+          };
+          updateChain.eq = vi.fn((column: string, value: unknown) => {
+            orderEqCalls.push([column, value]);
+            return updateChain;
+          });
+          updateChain.neq = vi.fn().mockReturnValue(updateChain);
+          updateChain.in = vi.fn().mockReturnValue(updateChain);
+          updateChain.select = vi.fn().mockReturnValue(updateChain);
+          return updateChain;
+        });
+        return chain;
       }
       if (table === 'merchants') {
         return {
@@ -214,6 +221,12 @@ describe('POST /api/payments/juicyway/webhook — wedge regression', () => {
     });
     expect(orderStateLookup).toHaveBeenCalled();
     expect(orderUpdated).toBe(true);
+    expect(
+      orderEqCalls.filter(
+        ([column, value]) =>
+          column === 'merchant_id' && value === baseTransaction.merchant_id
+      )
+    ).toHaveLength(3);
   });
 
   it('still acks Already processed when the order is genuinely paid', async () => {

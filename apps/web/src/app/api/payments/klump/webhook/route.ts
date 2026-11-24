@@ -98,9 +98,11 @@ export function HEAD() {
 }
 
 function updateKlumpOrder({
+  merchantId,
   orderId,
   supabase,
 }: {
+  merchantId: string;
   orderId: string;
   supabase: ReturnType<typeof createAdminClient>;
 }) {
@@ -113,6 +115,7 @@ function updateKlumpOrder({
         updated_at: new Date().toISOString(),
       })
       .eq('id', orderId)
+      .eq('merchant_id', merchantId)
       .neq('payment_status', 'paid')
       // A payment-only cancellation (mark_abandoned_orders) is terminal
       // too: its loyalty claim may already be released and re-claimed by
@@ -306,6 +309,7 @@ export async function POST(request: NextRequest) {
         .from('orders')
         .select('payment_status, shipping_status')
         .eq('id', transaction.order_id)
+        .eq('merchant_id', transaction.merchant_id)
         .maybeSingle<OrderStatusRollbackSnapshot>();
     if (preUpdateStatusError || !preUpdateOrderStatus) {
       // Fail closed BEFORE mutating: without a trustworthy snapshot a later
@@ -320,6 +324,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: updatedOrder, error: orderError } = await updateKlumpOrder({
+      merchantId: transaction.merchant_id,
       orderId: transaction.order_id,
       supabase,
     });
@@ -340,6 +345,7 @@ export async function POST(request: NextRequest) {
         .from('orders')
         .select(KLUMP_PAYMENT_ORDER_SELECT)
         .eq('id', transaction.order_id)
+        .eq('merchant_id', transaction.merchant_id)
         .maybeSingle<KlumpUpdatedOrder>();
 
       if (existingOrderError) {

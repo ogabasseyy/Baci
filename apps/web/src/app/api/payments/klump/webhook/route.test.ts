@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   transactionSelectSingle: vi.fn(),
   transactionUpdateMaybeSingle: vi.fn(),
   orderUpdateSingle: vi.fn(),
+  orderUpdateEq: vi.fn(),
   orderUpdateNeq: vi.fn(),
 }));
 
@@ -187,6 +188,10 @@ function createSupabaseMock({
           update: vi.fn((payload: unknown) => {
             mocks.orderUpdateSingle(payload);
             const chain = makeUpdateChain(orderUpdateResult);
+            chain.eq = vi.fn((...args: unknown[]) => {
+              mocks.orderUpdateEq(...args);
+              return chain;
+            });
             chain.neq = vi.fn((...args: unknown[]) => {
               mocks.orderUpdateNeq(...args);
               return chain;
@@ -400,6 +405,10 @@ describe('POST /api/payments/klump/webhook', () => {
         payment_status: 'paid',
         shipping_status: 'processing',
       })
+    );
+    expect(mocks.orderUpdateEq).toHaveBeenCalledWith(
+      'merchant_id',
+      'merchant-123'
     );
     // A payment-only cancellation is terminal: the paid write must
     // exclude both cancelled spellings so a late capture cannot

@@ -243,6 +243,7 @@ export async function POST(request: NextRequest) {
               'id, order_number, total, currency, customer_id, customer_name, customer_email, customer_phone, shipping_address, order_items(id, product_id, condition, name, price, quantity, variant_name), ad_tracking, payment_status, shipping_status, cancelled_at'
             )
             .eq('id', transaction.order_id)
+            .eq('merchant_id', transaction.merchant_id)
             .maybeSingle();
 
         if (completedOrderError) {
@@ -528,6 +529,7 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', transaction.order_id)
+        .eq('merchant_id', transaction.merchant_id)
         .eq('shipping_status', 'pending')
         .in('payment_status', ELIGIBLE_ORDER_PAYMENT_STATUSES);
       if (shippingAdvanceError) {
@@ -552,6 +554,7 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', transaction.order_id)
+        .eq('merchant_id', transaction.merchant_id)
         .in('payment_status', ELIGIBLE_ORDER_PAYMENT_STATUSES)
         .select(
           'id, order_number, merchant_id, customer_id, total, subtotal, shipping_fee, customer_name, customer_email, customer_phone, shipping_address, currency, payment_status, shipping_status, cancelled_at, updated_at, ad_tracking, order_items(id, product_id, condition, name, price, quantity, variant_name)'
@@ -711,6 +714,7 @@ export async function POST(request: NextRequest) {
                 'id, order_number, total, currency, customer_id, customer_name, customer_email, customer_phone, shipping_address, order_items(id, product_id, condition, name, price, quantity, variant_name), ad_tracking'
               )
               .eq('id', transaction.order_id)
+              .eq('merchant_id', transaction.merchant_id)
               .single();
           if (conversionOrderError || !conversionOrderRow) {
             return NextResponse.json(

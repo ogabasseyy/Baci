@@ -61,4 +61,24 @@ describe('runReconcilePaystackDvaCli — ledger completion failures', () => {
     expect(exit).toBe(1);
     expect(mocks.applyPaidOrderSideEffects).not.toHaveBeenCalled();
   });
+
+  it('fails closed when the canonical order belongs to another merchant', async () => {
+    const { supabase } = createSupabaseMock({
+      order: {
+        id: '211bcf0e-0795-488f-aeeb-52c5b7a8b9ae',
+        merchant_id: 'another-merchant',
+      },
+    });
+    mocks.createServiceClient.mockReturnValue(supabase);
+    mocks.verifyTransaction.mockResolvedValue(verifySuccess);
+    mocks.completeOrderGatewayPayment.mockResolvedValue({
+      ok: true,
+      completion: { error_code: undefined },
+    });
+
+    const exit = await runReconcilePaystackDvaCli(efosaArgs);
+
+    expect(exit).toBe(1);
+    expect(mocks.applyPaidOrderSideEffects).not.toHaveBeenCalled();
+  });
 });

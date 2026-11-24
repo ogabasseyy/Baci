@@ -128,12 +128,26 @@ export function createSupabaseMock(opts: {
       };
     }
     if (table === 'orders') {
+      const filters: Array<[string, unknown]> = [];
+      const query: {
+        eq: ReturnType<typeof vi.fn>;
+        single: ReturnType<typeof vi.fn>;
+      } = {
+        eq: vi.fn(),
+        single: vi.fn(),
+      };
+      query.eq.mockImplementation((column: string, value: unknown) => {
+        filters.push([column, value]);
+        return query;
+      });
+      query.single.mockImplementation(async () => ({
+        data: filters.every(([column, value]) => order?.[column] === value)
+          ? order
+          : null,
+        error: null,
+      }));
       return {
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: order, error: null }),
-          }),
-        }),
+        select: vi.fn().mockReturnValue(query),
       };
     }
     if (table === 'merchants') {

@@ -57,7 +57,7 @@ export async function getCachedCompareCategoryShell(
   _comparisonRevision?: StorefrontComparisonRevision
 ): Promise<CompareCategoryShell> {
   'use cache';
-  cacheLife('products');
+  cacheLife({ stale: 3600, revalidate: 86400, expire: 604800 });
   // Nested tags propagate to the outer cache: a revision snapshot must not
   // inherit the broad stock-driven product invalidation tags.
   if (_comparisonRevision) {

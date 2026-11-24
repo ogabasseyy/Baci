@@ -5,7 +5,6 @@ import {
   getOgabasseyPreferredProviders,
   OGABASSEY_MODEL_PROVIDER_OPTIONS,
 } from '@/app/api/chat/ogabassey-model-providers';
-import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import { readCartJsonBody } from '@/lib/cart/request-context';
 import { checkCartQuota } from '@/lib/cart/request-quota';
 import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
@@ -176,10 +175,7 @@ function buildSystemPrompt(
  * before they can ever reach the model.
  */
 export async function POST(request: NextRequest) {
-  if (
-    !isOxygenStorefrontStagingEnabled() ||
-    process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED !== 'true'
-  ) {
+  if (process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED !== 'true') {
     return fail(404, 'Checkout assistant unavailable');
   }
   const csrf = await checkCsrfProtection(request);

@@ -180,4 +180,37 @@ describe('ChatwootInlineCartBridge', () => {
     expect(widget.inert).not.toBe(true);
   });
 
+  it('enables inline checkout panels outside staging while keeping Oxygen gated to staging', () => {
+    mocks.stagingEnabled.mockReturnValue(false);
+    const holder = document.createElement('div');
+    holder.id = 'cw-widget-holder';
+    const widget = document.createElement('iframe');
+    widget.id = 'chatwoot_live_chat_widget';
+    holder.append(widget);
+    document.body.append(holder);
+    const origin = 'https://chatwoot.example.com';
+    render(
+      <ChatwootInlineCartBridge storeSlug="store-a" widgetOrigin={origin} checkoutEnabled />
+    );
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        data: 'baci-ekaette-checkout-sign-in',
+        origin,
+        source: widget.contentWindow,
+      })
+    );
+    expect(
+      within(holder).getByRole('region', {
+        name: 'Sign in to continue in Ekaette',
+      })
+    ).toBeVisible();
+
+    expect(mocks.useChatwootInlineCartBridge.mock.lastCall?.[3]).toBeUndefined();
+    expect(
+      within(holder).queryByRole('region', { name: 'Ekaette secure application' })
+    ).toBeNull();
+  });
+
 });

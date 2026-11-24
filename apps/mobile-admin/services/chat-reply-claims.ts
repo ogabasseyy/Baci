@@ -86,21 +86,19 @@ export type ReplyClaim = 'new' | 'repeat' | 'replay';
  * repeat would be a second customer-visible reply; the claim is therefore also
  * kept in storage (the last response can be read again after a restart) and
  * taken before sending: a reply is never sent twice, even if the app stops half
- * way through.
+ * way through. Rejects when the claim cannot be stored (nothing is then sent).
  */
-export async function claimChatReply(
+export function claimChatReply(
   response: NotificationResponse
 ): Promise<ReplyClaim> {
   const key = responseKey(response);
-  if (claimedThisSession.has(key)) return 'repeat';
+  if (claimedThisSession.has(key)) return Promise.resolve('repeat');
   // Synchronous, before any await: a second delivery in the same tick loses.
   remember(claimedThisSession, key);
-  try {
-    return await persistClaim(key);
-  } catch {
-    // Storage unavailable: the in-session claim above still holds.
-    return 'new';
-  }
+  // A storage failure rejects, so the caller sends nothing: without the stored
+  // claim a restart could deliver the same response again and send it twice.
+  // The in-session claim above still holds for the rest of this launch.
+  return persistClaim(key);
 }
 
 /**

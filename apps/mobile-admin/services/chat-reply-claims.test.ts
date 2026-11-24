@@ -83,12 +83,20 @@ describe('claimChatReply', () => {
     expect(await afterRestart(reply('d'))).toBe('replay');
   });
 
-  it('still protects the session when storage is unavailable', async () => {
+  it('bugfix: rejects, so nothing is sent, when the claim cannot be stored', async () => {
     store.failing = true;
     const claim = await freshClaim();
 
-    expect(await claim(reply('e'))).toBe('new');
-    expect(await claim(reply('e'))).toBe('repeat');
+    await expect(claim(reply('e'))).rejects.toThrow('storage unavailable');
+  });
+
+  it('still protects the session after a storage failure', async () => {
+    store.failing = true;
+    const claim = await freshClaim();
+    const response = reply('e');
+
+    await expect(claim(response)).rejects.toThrow();
+    expect(await claim(response)).toBe('repeat');
   });
 
   it('keeps only the most recent claims in storage', async () => {

@@ -75,6 +75,9 @@ describe('registerChatReplyCategory', () => {
   });
 });
 
+// Has letters (a-f), so its upper-case form really differs.
+const LETTERED_STORE = 'abcdef12-3456-4abc-8def-abcdef123456';
+
 describe('handleChatReplyResponse: a reply that is sent', () => {
   it('sends the trimmed text to the chat and store named in the push, then opens that chat', async () => {
     const { router, deps } = setup(mocks.send);
@@ -106,15 +109,19 @@ describe('handleChatReplyResponse: a reply that is sent', () => {
       reply('Hi', {
         type: 'customer_message',
         conversation_id: 21,
-        merchant_id: STORE.toUpperCase(),
+        merchant_id: LETTERED_STORE.toUpperCase(),
       }),
       deps
     );
 
-    expect(mocks.send).toHaveBeenCalledWith(21, 'Hi', STORE);
+    expect(mocks.send).toHaveBeenCalledWith(21, 'Hi', LETTERED_STORE);
     const filters = deps.invalidate.mock.calls.map((c) => c[0]);
-    expect(filters).toContainEqual({ queryKey: inboxThreadKey(STORE, 21) });
-    expect(filters).toContainEqual({ queryKey: inboxConversationsKey(STORE) });
+    expect(filters).toContainEqual({
+      queryKey: inboxThreadKey(LETTERED_STORE, 21),
+    });
+    expect(filters).toContainEqual({
+      queryKey: inboxConversationsKey(LETTERED_STORE),
+    });
   });
 
   it('bugfix: posts a reply only once when the same response is delivered twice', async () => {

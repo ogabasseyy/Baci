@@ -87,8 +87,11 @@ async function handleReminder(
 /**
  * Pushes the follow-up reminders that came due. Each one is checked against
  * the chat engine, taken exactly once through the database, and pushed with
- * the same claim-based push as other chat alerts. Never throws for one
- * reminder's failure: the others still go out.
+ * the same claim-based push as other chat alerts. A reminder is pushed at most
+ * once: it is taken before the push, so a function killed between the two
+ * loses that reminder rather than ever sending it twice (the same trade-off as
+ * the message and handover pushes). Never throws for one reminder's failure:
+ * the others still go out.
  */
 export async function sweepChatFollowUpReminders(
   deps: Dependencies = defaults

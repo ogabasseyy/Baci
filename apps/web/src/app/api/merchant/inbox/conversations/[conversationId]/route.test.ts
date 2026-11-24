@@ -48,7 +48,11 @@ beforeEach(() => {
   mocks.sync.mockResolvedValue('unchanged');
   mocks.update.mockResolvedValue({
     ok: true,
-    conversation: { id: 7, customerName: 'Ada' },
+    conversation: {
+      id: 7,
+      customerName: 'Ada',
+      snoozedUntil: '2026-11-25T09:00:00.000Z',
+    },
   });
 });
 
@@ -61,7 +65,11 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      conversation: { id: 7, customerName: 'Ada' },
+      conversation: {
+        id: 7,
+        customerName: 'Ada',
+        snoozedUntil: '2026-11-25T09:00:00.000Z',
+      },
     });
     expect(mocks.resolve).toHaveBeenCalledWith(expect.anything(), 'edit');
     expect(mocks.update).toHaveBeenCalledWith(binding, {
@@ -79,6 +87,7 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       conversationId: 7,
       update: { followUpAt: '2026-11-25T09:00:00Z' },
       customerName: 'Ada',
+      observedSnoozedUntil: '2026-11-25T09:00:00.000Z',
     });
   });
 

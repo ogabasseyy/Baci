@@ -58,6 +58,39 @@ describe('syncChatFollowUpReminder', () => {
     expect(mocks.save.mock.calls[1][1].dueAt).toBe('2026-11-26T09:00:00.000Z');
   });
 
+  describe('bugfix: two team members changing one follow-up at the same moment', () => {
+    it('does not write an older time over a newer one the engine already shows', async () => {
+      await expect(
+        syncChatFollowUpReminder(client, {
+          ...base,
+          update: { followUpAt: '2026-11-25T09:00:00Z' },
+          observedSnoozedUntil: '2026-11-25T10:00:00.000Z',
+        })
+      ).resolves.toBe('unchanged');
+      expect(mocks.save).not.toHaveBeenCalled();
+    });
+
+    it('still writes when the engine shows the requested time, even rounded by seconds', async () => {
+      await expect(
+        syncChatFollowUpReminder(client, {
+          ...base,
+          update: { followUpAt: '2026-11-25T09:00:00Z' },
+          observedSnoozedUntil: '2026-11-25T09:00:20.000Z',
+        })
+      ).resolves.toBe('saved');
+    });
+
+    it('still writes when the engine shows no snooze time to compare', async () => {
+      await expect(
+        syncChatFollowUpReminder(client, {
+          ...base,
+          update: { followUpAt: '2026-11-25T09:00:00Z' },
+          observedSnoozedUntil: null,
+        })
+      ).resolves.toBe('saved');
+    });
+  });
+
   it('keeps an anonymous visitor name out of the reminder', async () => {
     await syncChatFollowUpReminder(client, {
       ...base,

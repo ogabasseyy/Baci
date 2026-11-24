@@ -208,4 +208,32 @@ BEGIN
   END IF;
 END $$;
 
+-- Fair listing: a reminder the sweep cannot act on moves to the back of the line,
+-- so it never starves the reminders behind it (one store's unreadable chat engine).
+INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, due_at) VALUES
+  ('c4a73000-0000-4000-8000-0000000000f1', 'c4a73000-0000-4000-8000-0000000000b1', 501, now() - interval '5 hours'),
+  ('c4a73000-0000-4000-8000-0000000000f2', 'c4a73000-0000-4000-8000-0000000000b1', 502, now() - interval '4 hours'),
+  ('c4a73000-0000-4000-8000-0000000000f3', 'c4a73000-0000-4000-8000-0000000000b1', 503, now() - interval '3 hours');
+DO $$
+DECLARE v_first uuid[]; v_second uuid[]; v_third bigint[];
+BEGIN
+  SELECT array_agg(id ORDER BY due_at) INTO v_first FROM pg_temp.due(2);
+  IF v_first IS DISTINCT FROM ARRAY['c4a73000-0000-4000-8000-0000000000f1'::uuid, 'c4a73000-0000-4000-8000-0000000000f2'::uuid] THEN
+    RAISE EXCEPTION 'first look did not return the oldest two: %', v_first;
+  END IF;
+  -- Neither was acted on (left as they were): the next look reaches the one behind them.
+  SELECT array_agg(id ORDER BY due_at) INTO v_second FROM pg_temp.due(2);
+  IF NOT ('c4a73000-0000-4000-8000-0000000000f3'::uuid = ANY (v_second)) THEN
+    RAISE EXCEPTION 'unactionable reminders starved the one behind them: %', v_second;
+  END IF;
+  IF (SELECT count(*) FROM public.chat_follow_up_reminders WHERE id IN
+    ('c4a73000-0000-4000-8000-0000000000f1', 'c4a73000-0000-4000-8000-0000000000f2', 'c4a73000-0000-4000-8000-0000000000f3') AND last_listed_at IS NOT NULL) <> 3 THEN
+    RAISE EXCEPTION 'looked-at reminders were not stamped';
+  END IF;
+  -- Replacing a follow-up through the app starts it afresh (unlisted, unhandled), as the app's upsert does.
+  UPDATE public.chat_follow_up_reminders SET id = gen_random_uuid(), processed_at = NULL, last_listed_at = NULL WHERE conversation_id = 501;
+  SELECT array_agg(conversation_id ORDER BY due_at) INTO v_third FROM pg_temp.due(1);
+  IF v_third IS DISTINCT FROM ARRAY[501::bigint] THEN RAISE EXCEPTION 'a replaced reminder did not go to the front: %', v_third; END IF;
+END $$;
+
 ROLLBACK;

@@ -33,16 +33,20 @@ CREATE TABLE IF NOT EXISTS public.chat_follow_up_reminders (
   customer_name text NOT NULL DEFAULT '' CHECK (char_length(customer_name) <= 80),
   -- Set when the sweep took this reminder (sent, muted or found stale).
   processed_at timestamptz,
+  -- Set each time the sweep lists this reminder. The sweep lists the ones it
+  -- has not looked at yet first, so reminders it cannot act on (an unreadable
+  -- chat engine for one store) never starve the other stores' reminders.
+  last_listed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   -- Also the index on merchant_id for the foreign key.
   CONSTRAINT chat_follow_up_reminders_chat_key UNIQUE (merchant_id, conversation_id)
 );
 
--- The sweep only looks at reminders nobody has handled yet.
+-- Serves the sweep's due-window read and its cleanup of week-old rows. The
+-- table only holds pending and recently handled reminders, so it stays small.
 CREATE INDEX IF NOT EXISTS chat_follow_up_reminders_due_idx
-  ON public.chat_follow_up_reminders (due_at)
-  WHERE processed_at IS NULL;
+  ON public.chat_follow_up_reminders (due_at);
 
 ALTER TABLE public.chat_follow_up_reminders ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.chat_follow_up_reminders FROM PUBLIC, anon, authenticated;

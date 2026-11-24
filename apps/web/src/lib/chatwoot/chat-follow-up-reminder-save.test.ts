@@ -32,6 +32,7 @@ describe('saveChatFollowUpReminder', () => {
       due_at: '2026-11-25T09:00:00.000Z',
       customer_name: 'Ada',
       processed_at: null,
+      last_listed_at: null,
     });
     expect(options).toEqual({ onConflict: 'merchant_id,conversation_id' });
   });

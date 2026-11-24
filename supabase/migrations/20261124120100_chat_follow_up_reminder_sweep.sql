@@ -45,9 +45,10 @@ $$;
 REVOKE ALL ON FUNCTION private.chat_event_require_proof(text, text, bigint) FROM PUBLIC, anon, authenticated, service_role;
 
 -- 1. The reminders that came due in the last 24 hours and nobody handled yet,
--- oldest first. A reminder older than a day is never listed, so switching the
--- feature on (or an outage) never replays a pile of old follow-ups. Reading
--- changes nothing, except a bounded cleanup of rows a week old.
+-- never-listed first, then oldest. A reminder older than a day is never listed,
+-- so switching the feature on (or an outage) never replays a pile of old
+-- follow-ups. Listing stamps last_listed_at and does a bounded cleanup of rows
+-- a week old.
 CREATE OR REPLACE FUNCTION public.list_due_chat_follow_up_reminders(
   p_proof text,
   p_issued_at bigint,
@@ -76,14 +77,30 @@ BEGIN
     LIMIT 200
   );
 
+  -- Reminders not listed before come first, then the ones listed longest ago,
+  -- so a reminder the sweep cannot act on moves to the back after each look
+  -- instead of holding the front of the line. Rows another sweep is reading
+  -- right now are skipped.
   RETURN QUERY
-  SELECT r.id, r.merchant_id, r.conversation_id, r.due_at, r.customer_name
-  FROM public.chat_follow_up_reminders r
-  WHERE r.processed_at IS NULL
-    AND r.due_at <= pg_catalog.now()
-    AND r.due_at > pg_catalog.now() - interval '24 hours'
-  ORDER BY r.due_at
-  LIMIT p_limit;
+  WITH picked AS (
+    SELECT r.id
+    FROM public.chat_follow_up_reminders r
+    WHERE r.processed_at IS NULL
+      AND r.due_at <= pg_catalog.now()
+      AND r.due_at > pg_catalog.now() - interval '24 hours'
+    ORDER BY r.last_listed_at NULLS FIRST, r.due_at
+    LIMIT p_limit
+    FOR UPDATE SKIP LOCKED
+  ), stamped AS (
+    UPDATE public.chat_follow_up_reminders u
+    SET last_listed_at = pg_catalog.now()
+    FROM picked
+    WHERE u.id = picked.id
+    RETURNING u.id, u.merchant_id, u.conversation_id, u.due_at, u.customer_name
+  )
+  SELECT s.id, s.merchant_id, s.conversation_id, s.due_at, s.customer_name
+  FROM stamped s
+  ORDER BY s.due_at;
 END;
 $$;
 

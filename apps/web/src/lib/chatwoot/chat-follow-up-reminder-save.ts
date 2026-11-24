@@ -28,6 +28,7 @@ export async function saveChatFollowUpReminder(
       due_at: input.dueAt,
       customer_name: input.customerName,
       processed_at: null,
+      last_listed_at: null,
       updated_at: now,
     },
     { onConflict: 'merchant_id,conversation_id' }

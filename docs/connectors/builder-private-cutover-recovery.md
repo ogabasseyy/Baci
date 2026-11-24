@@ -97,3 +97,23 @@ lock and job lease state before declaring it drained. The web operator also
 needs a demonstrated gate for editor saves, native provisioning, layout
 enqueue/apply and publication on every serving artifact. Closing the VPS
 entry points alone leaves those web paths active.
+
+The trigger starts detached processes that wait for those locks. In the
+24 November 2026 synthetic Linux rehearsal, stopping the listener rejected new
+requests, but a waiter started after the first job released its locks. Both
+processes had to exit before both locks were available. During a cutover,
+verify the trigger and scheduled fallback are fenced on each host, wait for
+detached children to settle, then hold both locks in the documented order
+through the cutover. Recheck pending, running and processing layout rows
+under the database cutover lock. The production worker release lock helper
+covers the scheduled locks during promotion but does not stop the storefront
+trigger service. Coordinate that stop separately.
+
+The same rehearsal built standalone web and layout worker artifacts from
+`4ed8b4eeb4`. A custom-format backup after committed contraction restored into
+a fresh database on the disposable Supabase instance with cron disabled. With
+GoTrue and PostgREST, the owner could edit, staff could read the edit, foreign
+and anonymous callers were denied, and the published config stayed readable.
+The built worker completed an owner-enqueued job through a deterministic local
+provider fixture and released its database lease. The hosted web write fence
+and production release artifacts still require qualification.

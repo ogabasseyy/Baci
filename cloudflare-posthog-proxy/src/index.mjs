@@ -98,13 +98,13 @@ export function buildCorsHeaders(request, env = {}) {
     'Access-Control-Allow-Headers':
       'Content-Type, Authorization, X-Requested-With',
     'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
   });
 
   if (origin) {
     if (isOriginAllowed(origin, env.ALLOWED_ORIGINS)) {
       headers.set('Access-Control-Allow-Origin', origin);
       headers.set('Access-Control-Allow-Credentials', 'true');
-      headers.set('Vary', 'Origin');
     }
   } else if (!env.ALLOWED_ORIGINS?.trim()) {
     headers.set('Access-Control-Allow-Origin', '*');

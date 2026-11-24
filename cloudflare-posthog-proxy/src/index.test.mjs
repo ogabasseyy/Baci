@@ -169,6 +169,17 @@ describe('cloudflare-posthog-proxy fetch handler', () => {
     });
     assert.equal(res.status, 204);
     assert.equal(res.headers.get('Access-Control-Allow-Origin'), null);
+    assert.equal(res.headers.get('Vary'), 'Origin');
+
+    const noOriginReq = new Request(
+      'https://posthog-proxy.usebaci.com/static/array.js',
+      { method: 'GET' }
+    );
+    const noOriginRes = await worker.fetch(noOriginReq, {
+      ALLOWED_ORIGINS: 'https://usebaci.com,*.usebaci.com',
+    });
+    assert.equal(noOriginRes.headers.get('Access-Control-Allow-Origin'), null);
+    assert.equal(noOriginRes.headers.get('Vary'), 'Origin');
 
     const allowedReq = new Request(
       'https://posthog-proxy.usebaci.com/i/v0/e/',

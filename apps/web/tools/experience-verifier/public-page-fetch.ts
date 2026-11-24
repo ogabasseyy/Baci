@@ -2,11 +2,13 @@ import { JSDOM } from 'jsdom';
 import { digestBytes } from '@/lib/experience/manifest-digest';
 import { productionOrigin } from '@/lib/experience/production-origins';
 import { normalizeExperiencePath } from '@/lib/experience/route-ownership';
+import { buildStorefrontVariantUrl } from '@/lib/storefront-variant-url';
 import { createBoundPublicFetcher } from './public-fetch';
 
 type Route = { path: string; canonical: string } & (
   | { title: string; native?: never; renderedTitle?: true }
-  | { native: true; title?: never; checkout?: true }
+  | { native: true; title?: never; checkout?: never; variantId?: string }
+  | { native: true; title?: never; checkout: true; variantId?: never }
 );
 
 /** Read the bound public documents without executing merchant scripts or following redirects. */
@@ -39,7 +41,9 @@ export async function fetchPublicPages(
       url.pathname !== path
     )
       throw Error('INVALID_PUBLIC_ROUTES');
-    return url.href;
+    return route.native && route.variantId
+      ? buildStorefrontVariantUrl(url.href, { id: route.variantId })
+      : url.href;
   });
   const fetchBound = createBoundPublicFetcher({
     origins: [origin],
@@ -47,8 +51,9 @@ export async function fetchPublicPages(
     ...options,
   });
   const pages = [];
-  for (const route of routes) {
-    const response = await fetchBound(route.canonical);
+  for (const [index, route] of routes.entries()) {
+    const requestUrl = urls[index];
+    const response = await fetchBound(requestUrl);
     if (
       response.contentType.split(';', 1)[0].trim().toLowerCase() !== 'text/html'
     )
@@ -99,6 +104,7 @@ export async function fetchPublicPages(
         throw Error('PUBLIC_PAGE_MISMATCH');
       pages.push({
         ...route,
+        ...(requestUrl === route.canonical ? {} : { requestUrl }),
         title,
         status: 200 as const,
         digest: digestBytes(response.body),

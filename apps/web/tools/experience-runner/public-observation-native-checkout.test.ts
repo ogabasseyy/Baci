@@ -9,29 +9,33 @@ import {
 } from './public-observation-fixture.test-support';
 
 it.each([
-  { fixedColor: false, quantity: 1 },
-  { fixedColor: true, quantity: 1 },
-  { fixedColor: true, quantity: 3 },
-])('observes native guest checkout without Shared Cart (fixed color: $fixedColor, quantity: $quantity)', async ({
-  fixedColor,
+  { noVariants: false, quantity: 1 },
+  { noVariants: true, quantity: 1 },
+  { noVariants: true, quantity: 3 },
+])('observes native guest checkout without Shared Cart (no variants: $noVariants, quantity: $quantity)', async ({
+  noVariants,
   quantity,
 }) => {
   const browser = await chromium.launch({ headless: true });
   const payload = fixture();
   const product = payload.expected.product;
   const variantId = '33333333-3333-4333-8333-333333333334';
+  const variantQuery = noVariants ? '' : `?variantId=${variantId}`;
+  const otherVariantId = '33333333-3333-4333-8333-333333333335';
   const storageKey = getStorefrontCartStorageKey('synthetic');
   const body = {
-    [product.path]: `<title>Native device</title><link rel="canonical" href="${origin}${product.path}">
-      ${fixedColor ? '' : `<button data-ogabassey-pdp-commerce-variant-option onclick="this.dataset.selected = 'true'">Blue</button>`}
+    [product.path + variantQuery]:
+      `<title>Native device</title><link rel="canonical" href="${origin}${product.path}">
+      ${noVariants ? '' : '<button>New</button><button>Used</button><button>Blue</button>'}
       <button id="add">Add to cart</button>
       <script>
         localStorage.setItem("${storageKey}", "[]");
         setTimeout(() => {
           const add = document.querySelector("#add");
           add.onclick = () => {
-            if (${fixedColor} || document.querySelector("[data-selected]"))
-              localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: "${variantId}", quantity: ${quantity} }]));
+            const routedVariant = new URLSearchParams(location.search).get("variantId");
+            const selectedVariant = ${noVariants} ? null : routedVariant ?? "${otherVariantId}";
+            localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: selectedVariant, quantity: ${quantity} }]));
           };
           add.dataset.baciPdpCartReady = "true";
         }, 200);
@@ -42,7 +46,7 @@ it.each([
         const summary = document.createElement('div');
         summary.textContent = 'Synthetic device';
         summary.dataset.baciCheckoutProduct = line.id;
-        summary.dataset.baciCheckoutVariant = line.variantId;
+        summary.dataset.baciCheckoutVariant = line.variantId ?? '';
         summary.dataset.baciCheckoutQuantity = line.quantity;
         document.body.append(summary);
       }
@@ -59,15 +63,18 @@ it.each([
     const observation = await observePublicBrowser(
       {
         ...payload,
-        product: { ...payload.product, variantId },
+        product: {
+          ...payload.product,
+          variantId: noVariants ? undefined : variantId,
+        },
         expected: {
           ...payload.expected,
           routes: [payload.expected.routes[0]],
           product: {
             ...product,
             native: true,
-            variantId,
-            nativeCheckout: { merchantSlug: 'synthetic', variantLabel: 'Blue' },
+            variantId: noVariants ? undefined : variantId,
+            nativeCheckout: { merchantSlug: 'synthetic' },
           },
         },
         resources: [
@@ -76,7 +83,7 @@ it.each([
               item.url !== `${origin}${product.path}` &&
               !item.url.endsWith(encodeURIComponent(product.path))
           ),
-          asResource(product.path),
+          asResource(product.path + variantQuery),
           asResource('/checkout'),
         ],
       },

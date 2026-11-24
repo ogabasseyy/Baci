@@ -126,7 +126,6 @@ export async function derivePublicVerificationPlan(
         ? {
             nativeCheckout: {
               merchantSlug: binding.slug,
-              ...(variant ? { variantLabel: variant.label } : {}),
             },
           }
         : {}),

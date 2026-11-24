@@ -48,6 +48,24 @@ it('reads native product titles from the canonical document', async () => {
     status: 200,
   });
 });
+it('captures the exact native variant while requiring the product canonical', async () => {
+  const { path, canonical } = routes[1];
+  const variantId = '33333333-3333-4333-8333-333333333334';
+  const requestUrl = `${canonical}?variantId=${variantId}`;
+  const route = { path, canonical, native: true as const, variantId };
+  const network = vi.fn(async (_url: URL) => ({
+    response: new Response(html('Device', canonical), {
+      headers: { 'content-type': 'text/html' },
+    }),
+    close: async () => {},
+  }));
+  const result = await fetchPublicPages(origin, [route], { resolve, network });
+  expect(network.mock.calls.map(([url]) => url.href)).toEqual([requestUrl]);
+  expect(result[0]).toMatchObject({ canonical, requestUrl });
+  await expect(
+    fetchPublicPages(origin, [route], { resolve, network: fixture() })
+  ).rejects.toThrow('PUBLIC_PAGE_MISMATCH');
+});
 it('recognizes canonical among whitespace-separated rel tokens and rejects duplicate canonicals', async () => {
   const document = html('Synthetic shop', `${origin}/`).replace(
     'rel="canonical"',

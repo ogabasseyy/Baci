@@ -101,6 +101,10 @@ export async function createPublicVerificationCoordinator(settings: {
                 path: expected.product.path,
                 canonical: `${binding.canonicalBase}${expected.product.path}`,
                 native: true,
+                ...(expected.product.nativeCheckout &&
+                expected.product.variantId
+                  ? { variantId: expected.product.variantId }
+                  : {}),
               },
               ...(expected.product.nativeCheckout
                 ? [

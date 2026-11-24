@@ -3,7 +3,7 @@ import type { Page } from 'playwright-core';
 import { getStorefrontCartStorageKey } from '@/hooks/cart/cart-storage';
 
 type Product = { id: string; path: string; variantId?: string };
-type Checkout = { merchantSlug: string; variantLabel?: string };
+type Checkout = { merchantSlug: string };
 const actionTimeout = 15000;
 
 /** Exercise the native guest cart and inspect the checkout without submitting it. */
@@ -35,19 +35,6 @@ export async function observeNativeCheckout(
     .filter({ visible: true });
   await add.waitFor({ state: 'visible', timeout: actionTimeout });
 
-  if (checkout.variantLabel) {
-    for (const label of checkout.variantLabel.split(' / ')) {
-      const options = page
-        .locator('[data-ogabassey-pdp-commerce-variant-option]')
-        .and(page.getByText(label, { exact: true }))
-        .or(page.getByRole('button', { name: label, exact: true }))
-        .filter({ visible: true });
-      // The native PDP can omit an already-resolved single-option axis.
-      // The cart and checkout must still carry the exact bound variant ID.
-      if (await options.count())
-        await options.click({ timeout: actionTimeout });
-    }
-  }
   await add.click({ timeout: actionTimeout });
   // The native PDP selects an allowed starting quantity, which can exceed one.
   // Carry the observed quantity forward and check the same line at checkout.

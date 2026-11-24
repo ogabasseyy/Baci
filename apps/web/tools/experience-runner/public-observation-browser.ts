@@ -4,6 +4,7 @@ import {
   productionDeliveryOrigins,
   productionOrigin,
 } from '@/lib/experience/production-origins';
+import { buildStorefrontVariantUrl } from '@/lib/storefront-variant-url';
 import { publicObservationPayload } from '@/schemas/experience-public-observation-payload';
 import { installPublicCartBrowserRoutes } from './public-cart-browser-route';
 import { createPublicCommerceEvidence } from './public-commerce-evidence';
@@ -94,13 +95,19 @@ export async function observePublicBrowser(
   const productPath = expected.product.path;
   const productCanonical = `${origin}${productPath}`;
   const nativeCheckout = expected.product.nativeCheckout;
+  const productUrl =
+    nativeCheckout && expected.product.variantId
+      ? buildStorefrontVariantUrl(productCanonical, {
+          id: expected.product.variantId,
+        })
+      : productCanonical;
   const checkoutUrl = `${origin}/checkout`;
   if (nativeCheckout && (!expected.product.native || !unique.has(checkoutUrl)))
     throw Error('PUBLIC_ROUTE_MISMATCH');
   const productFrame = routes.find((route) => route.path === productPath);
   if (
     expected.product.native
-      ? productFrame || !unique.has(productCanonical)
+      ? productFrame || !unique.has(productUrl)
       : !productFrame
   )
     throw Error('PUBLIC_ROUTE_MISMATCH');
@@ -147,11 +154,11 @@ export async function observePublicBrowser(
     });
     const page = await context.newPage();
     try {
-      const response = await page.goto(productCanonical, {
+      const response = await page.goto(productUrl, {
         waitUntil: 'domcontentloaded',
         timeout: 45000,
       });
-      if (response?.status() !== 200 || page.url() !== productCanonical)
+      if (response?.status() !== 200 || page.url() !== productUrl)
         throw Error('PUBLIC_ROUTE_MISMATCH');
       const frame = page.locator('iframe[data-baci-experience-build]');
       if (productFrame) {

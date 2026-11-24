@@ -69,7 +69,7 @@ export function createPublicObservationAdapter(
         headers: item.securityHeaders,
       })),
       ...pages.map((item) => ({
-        url: item.canonical,
+        url: item.requestUrl ?? item.canonical,
         mime: 'text/html',
         bytes: item.bytes,
         headers: item.securityHeaders,

@@ -224,7 +224,7 @@ it.each([
   );
   expect(plan.product).toMatchObject({
     native: true,
-    nativeCheckout: { merchantSlug: 'synthetic', variantLabel: 'Blue' },
+    nativeCheckout: { merchantSlug: 'synthetic' },
   });
   expect(plan.journeySteps.slice(-2)).toEqual([
     { action: 'cart-read', path: '/checkout' },

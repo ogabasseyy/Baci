@@ -8,6 +8,17 @@ vi.mock('react-native', () => ({ Alert: { alert: vi.fn() } }));
 vi.mock('@/lib/query-client', () => ({
   queryClient: { invalidateQueries: vi.fn() },
 }));
+vi.mock('@/lib/storage', () => {
+  const store = new Map<string, string>();
+  return {
+    asyncStorage: {
+      getItem: async (key: string) => store.get(key) ?? null,
+      setItem: async (key: string, value: string) => {
+        store.set(key, value);
+      },
+    },
+  };
+});
 vi.mock('@/lib/api-client', async () => {
   const errors = await import('@/lib/api-errors');
   return { apiClient: vi.fn(), NetworkError: errors.NetworkError };
@@ -29,6 +40,7 @@ import {
   isChatReplyResponse,
   registerChatReplyCategory,
 } from './chat-notification-reply';
+import { claimChatReply } from './chat-reply-claims';
 
 let counter = 0;
 function reply(
@@ -37,7 +49,7 @@ function reply(
     type: 'customer_message',
     conversation_id: 21,
   },
-  actionIdentifier = 'reply'
+  actionIdentifier = 'chat_reply_send'
 ): NotificationResponse {
   counter += 1;
   return {
@@ -54,6 +66,7 @@ function setup() {
   const router = { push: vi.fn() };
   const deps = {
     alert: vi.fn(),
+    claim: claimChatReply,
     invalidate: vi.fn(),
     send: mocks.send,
   };
@@ -75,7 +88,7 @@ describe('registerChatReplyCategory', () => {
 
     expect(setNotificationCategoryAsync).toHaveBeenCalledWith('chat_reply', [
       expect.objectContaining({
-        identifier: 'reply',
+        identifier: 'chat_reply_send',
         buttonTitle: 'Reply',
         textInput: expect.objectContaining({ submitButtonTitle: 'Send' }),
         options: { opensAppToForeground: true },
@@ -105,14 +118,22 @@ describe('handleChatReplyResponse', () => {
     expect(deps.alert).not.toHaveBeenCalled();
   });
 
-  it('refreshes the thread and the list, using the real key prefixes', async () => {
+  it('bugfix: refreshes only the chat that was answered, plus the list', async () => {
     const { router, deps } = setup();
 
     await handleChatReplyResponse(router, reply('Hello'), deps);
 
-    const keys = deps.invalidate.mock.calls.map((c) => c[0]);
-    expect(keys).toContainEqual([inboxThreadKey('m', 21)[0]]);
-    expect(keys).toContainEqual([inboxConversationsKey('m')[0]]);
+    const filters = deps.invalidate.mock.calls.map((c) => c[0]);
+    const threadFilter = filters.find((f) => 'predicate' in f);
+    const listFilter = filters.find((f) => 'queryKey' in f);
+    const matches = (key: readonly unknown[]) =>
+      threadFilter?.predicate?.({ queryKey: key } as never) ?? false;
+
+    // The real keys: this chat matches, another chat does not.
+    expect(matches(inboxThreadKey('m', 21))).toBe(true);
+    expect(matches(inboxThreadKey('m', 22))).toBe(false);
+    expect(matches(inboxConversationsKey('m'))).toBe(false);
+    expect(listFilter?.queryKey).toEqual([inboxConversationsKey('m')[0]]);
   });
 
   it('bugfix: posts a reply only once when the same response is delivered twice', async () => {

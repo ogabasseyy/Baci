@@ -2,12 +2,15 @@ import {
   CHAT_REPLY_ACTION_ID,
   CHAT_REPLY_NOTIFICATION_CATEGORY,
 } from '@baci/shared';
+import type { InvalidateQueryFilters } from '@tanstack/react-query';
 import type * as NotificationsType from 'expo-notifications';
 import type { Href } from 'expo-router';
 import { Alert } from 'react-native';
+import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
 import { isDefinitelyNotSent, sendInboxReply } from '@/lib/merchant-inbox-api';
 import { queryClient } from '@/lib/query-client';
 import { INBOX_REPLY_MAX_LENGTH } from '@/schemas/merchant-inbox';
+import { claimChatReply } from './chat-reply-claims';
 import { getNotificationNavigationParams } from './push-notifications';
 
 interface ReplyRouter {
@@ -47,37 +50,20 @@ interface ReplyDeps {
     message: string,
     buttons: { text: string; onPress?: () => void }[]
   ) => void;
-  invalidate: (queryKey: readonly string[]) => void;
+  /** True the first time a reply is seen, false for a repeat or a replay. */
+  claim: (response: NotificationsType.NotificationResponse) => Promise<boolean>;
+  invalidate: (filters: InvalidateQueryFilters) => void;
   send: typeof sendInboxReply;
 }
 
 const defaultDeps: ReplyDeps = {
   alert: (title, message, buttons) => Alert.alert(title, message, buttons),
-  invalidate: (queryKey) => {
-    void queryClient.invalidateQueries({ queryKey });
+  claim: claimChatReply,
+  invalidate: (filters) => {
+    void queryClient.invalidateQueries(filters);
   },
   send: sendInboxReply,
 };
-
-/**
- * The same reply can arrive twice (the live listener and the "last response"
- * read at start-up), and a reply must never be posted twice, so each one is
- * handled once. Short, since only recent responses can repeat.
- */
-const handled = new Set<string>();
-const HANDLED_LIMIT = 50;
-
-function firstTime(response: NotificationsType.NotificationResponse): boolean {
-  const { identifier } = response.notification.request;
-  const key = `${identifier}:${response.notification.date}:${response.userText ?? ''}`;
-  if (handled.has(key)) return false;
-  if (handled.size >= HANDLED_LIMIT) {
-    const oldest = handled.values().next().value;
-    if (oldest !== undefined) handled.delete(oldest);
-  }
-  handled.add(key);
-  return true;
-}
 
 /**
  * Sends what was typed in the notification's Reply box to that chat, once,
@@ -89,7 +75,7 @@ export async function handleChatReplyResponse(
   response: NotificationsType.NotificationResponse,
   deps: ReplyDeps = defaultDeps
 ): Promise<void> {
-  if (!firstTime(response)) return;
+  if (!(await deps.claim(response))) return;
 
   const target = getNotificationNavigationParams(response);
   const conversationId =
@@ -133,8 +119,15 @@ export async function handleChatReplyResponse(
     }
     return;
   }
-  // Prefixes of the thread and list keys (see inbox-query-keys.ts).
-  deps.invalidate(['inbox-thread']);
-  deps.invalidate(['inbox-conversations']);
+  // Only the chat that changed, not every cached thread: key layout is
+  // [prefix, merchantId, conversationId] (see inbox-query-keys.ts). The list
+  // reorders and shows the new preview, so it refreshes.
+  const threadPrefix = inboxThreadKey(undefined, 0)[0];
+  deps.invalidate({
+    predicate: (query) =>
+      query.queryKey[0] === threadPrefix &&
+      query.queryKey[2] === conversationId,
+  });
+  deps.invalidate({ queryKey: [inboxConversationsKey(undefined)[0]] });
   router.push(chat);
 }

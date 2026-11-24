@@ -10,7 +10,7 @@ const replyMocks = vi.hoisted(() => ({ handle: vi.fn() }));
 vi.mock('@/services/chat-notification-reply', () => ({
   handleChatReplyResponse: replyMocks.handle,
   isChatReplyResponse: (response: { actionIdentifier?: string }) =>
-    response.actionIdentifier === 'reply',
+    response.actionIdentifier === 'chat_reply_send',
 }));
 
 vi.mock('@/services/push-notifications', () => ({
@@ -176,7 +176,7 @@ describe('handleNotificationTap', () => {
     const router = { push: vi.fn() };
     const response = makeResponse(
       { type: 'customer_message', conversation_id: 4821 },
-      'reply'
+      'chat_reply_send'
     );
 
     handleNotificationTap(router, response, vi.fn());

@@ -4,4 +4,5 @@
  * and recognises the action. Both import these so they can never drift apart.
  */
 export const CHAT_REPLY_NOTIFICATION_CATEGORY = 'chat_reply';
-export const CHAT_REPLY_ACTION_ID = 'reply';
+/** Chat-specific, so a future second reply-style action can never collide. */
+export const CHAT_REPLY_ACTION_ID = 'chat_reply_send';

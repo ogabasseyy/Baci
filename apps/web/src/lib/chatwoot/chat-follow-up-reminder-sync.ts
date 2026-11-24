@@ -28,18 +28,24 @@ export async function syncChatFollowUpReminder(
     update: MerchantInboxUpdate;
     customerName: string;
     /**
-     * The snooze time the engine showed when it was read back after the
-     * change. When it is a different time, another team member changed the
-     * follow-up at the same moment and their sync owns the reminder.
+     * What the engine showed when it was read back after the change. If it
+     * shows another follow-up than this change left (a different snooze time
+     * after a set, a pending snooze after a clear), another team member
+     * changed the follow-up at the same moment and their sync owns the
+     * reminder.
      */
-    observedSnoozedUntil?: string | null;
+    observed?: {
+      status: string;
+      followUp?: boolean;
+      snoozedUntil?: string | null;
+    };
   }
 ): Promise<ChatFollowUpSyncResult> {
   const { update } = input;
   const wanted = typeof update.followUpAt === 'string' ? 'saved' : 'cleared';
   try {
     if (typeof update.followUpAt === 'string') {
-      if (supersededByAnotherChange(update.followUpAt, input)) {
+      if (supersededByAnotherSet(update.followUpAt, input.observed)) {
         return 'unchanged';
       }
       const saved = await saveChatFollowUpReminder(client, {
@@ -55,6 +61,7 @@ export async function syncChatFollowUpReminder(
       update.status === 'resolved' ||
       update.status === 'open'
     ) {
+      if (supersededByAnotherSet(null, input.observed)) return 'unchanged';
       const cleared = await clearChatFollowUpReminder(client, {
         merchantId: input.merchantId,
         conversationId: input.conversationId,
@@ -71,22 +78,29 @@ export async function syncChatFollowUpReminder(
 const SNOOZE_TOLERANCE_MS = 60_000;
 
 /**
- * True when the engine read-back shows another follow-up time than the one this
- * request set: a concurrent change won, and writing this older time over its
- * reminder would lose the newer follow-up. (A change landing between that
- * read-back and this write is not detectable without an engine version; the
- * sweep then finds the snooze moved, consumes the reminder as stale and the
- * newer change's own write is the one that matters.)
+ * True when the engine read-back shows a follow-up this request did not leave:
+ * after a set, another snooze time than the requested one; after a clear, Done
+ * or reopen (which all remove the follow-up), a snooze still pending. A
+ * concurrent change won, and applying this request to the reminder would lose
+ * the newer follow-up. (A change landing between that read-back and this write
+ * is not detectable without an engine version; the sweep then finds the snooze
+ * moved, consumes the reminder as stale and never pushes a wrong one.)
  */
-function supersededByAnotherChange(
-  requestedAt: string,
-  input: { observedSnoozedUntil?: string | null }
+function supersededByAnotherSet(
+  requestedAt: string | null,
+  observed:
+    | { status: string; followUp?: boolean; snoozedUntil?: string | null }
+    | undefined
 ): boolean {
-  if (!input.observedSnoozedUntil) return false;
-  const observed = Date.parse(input.observedSnoozedUntil);
+  if (!observed) return false;
+  if (requestedAt === null) {
+    return observed.status === 'snoozed' && observed.followUp === true;
+  }
+  if (!observed.snoozedUntil) return false;
+  const seen = Date.parse(observed.snoozedUntil);
   const requested = Date.parse(requestedAt);
-  if (Number.isNaN(observed) || Number.isNaN(requested)) return false;
-  return Math.abs(observed - requested) > SNOOZE_TOLERANCE_MS;
+  if (Number.isNaN(seen) || Number.isNaN(requested)) return false;
+  return Math.abs(seen - requested) > SNOOZE_TOLERANCE_MS;
 }
 
 function report(

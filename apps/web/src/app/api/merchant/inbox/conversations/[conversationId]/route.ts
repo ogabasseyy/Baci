@@ -52,7 +52,11 @@ export async function PATCH(
       conversationId: conversationId.data,
       update: update.data,
       customerName: result.conversation.customerName,
-      observedSnoozedUntil: result.conversation.snoozedUntil,
+      observed: {
+        status: result.conversation.status,
+        followUp: result.conversation.followUp,
+        snoozedUntil: result.conversation.snoozedUntil,
+      },
     });
     return merchantInboxJson({ conversation: result.conversation });
   }

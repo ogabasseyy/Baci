@@ -64,7 +64,10 @@ describe('syncChatFollowUpReminder', () => {
         syncChatFollowUpReminder(client, {
           ...base,
           update: { followUpAt: '2026-11-25T09:00:00Z' },
-          observedSnoozedUntil: '2026-11-25T10:00:00.000Z',
+          observed: {
+            status: 'snoozed',
+            snoozedUntil: '2026-11-25T10:00:00.000Z',
+          },
         })
       ).resolves.toBe('unchanged');
       expect(mocks.save).not.toHaveBeenCalled();
@@ -75,9 +78,37 @@ describe('syncChatFollowUpReminder', () => {
         syncChatFollowUpReminder(client, {
           ...base,
           update: { followUpAt: '2026-11-25T09:00:00Z' },
-          observedSnoozedUntil: '2026-11-25T09:00:20.000Z',
+          observed: {
+            status: 'snoozed',
+            snoozedUntil: '2026-11-25T09:00:20.000Z',
+          },
         })
       ).resolves.toBe('saved');
+    });
+
+    it('does not delete the reminder of a follow-up another member set while this one cleared', async () => {
+      await expect(
+        syncChatFollowUpReminder(client, {
+          ...base,
+          update: { followUpAt: null },
+          observed: {
+            status: 'snoozed',
+            followUp: true,
+            snoozedUntil: '2026-11-25T10:00:00.000Z',
+          },
+        })
+      ).resolves.toBe('unchanged');
+      expect(mocks.clear).not.toHaveBeenCalled();
+    });
+
+    it('still deletes when the engine shows the follow-up gone', async () => {
+      await expect(
+        syncChatFollowUpReminder(client, {
+          ...base,
+          update: { status: 'resolved' },
+          observed: { status: 'resolved', followUp: false },
+        })
+      ).resolves.toBe('cleared');
     });
 
     it('still writes when the engine shows no snooze time to compare', async () => {
@@ -85,7 +116,7 @@ describe('syncChatFollowUpReminder', () => {
         syncChatFollowUpReminder(client, {
           ...base,
           update: { followUpAt: '2026-11-25T09:00:00Z' },
-          observedSnoozedUntil: null,
+          observed: { status: 'snoozed', snoozedUntil: null },
         })
       ).resolves.toBe('saved');
     });

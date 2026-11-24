@@ -54,6 +54,12 @@ describe('checkFollowUpStillDue', () => {
     ).resolves.toBe('stale');
   });
 
+  it('is stale for a snoozed chat that shows no snooze time', async () => {
+    await expect(
+      check(found({ status: 'snoozed', snoozedUntil: null }))
+    ).resolves.toBe('stale');
+  });
+
   it('is stale when the chat no longer exists', async () => {
     await expect(check({ ok: false, code: 'not_found' })).resolves.toBe(
       'stale'

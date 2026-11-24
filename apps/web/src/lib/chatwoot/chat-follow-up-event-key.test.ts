@@ -8,6 +8,14 @@ describe('chatFollowUpEventKey', () => {
     );
   });
 
+  it.each([
+    '',
+    'not-a-uuid',
+    '5f2d3c1e-8a47-4b69-9c0e-1a2b3c4d5e6f-extra',
+  ])('refuses %j instead of building a plausible key', (id) => {
+    expect(() => chatFollowUpEventKey(id)).toThrow();
+  });
+
   it('fits the event key pattern the database enforces', () => {
     expect(
       chatFollowUpEventKey('5f2d3c1e-8a47-4b69-9c0e-1a2b3c4d5e6f')

@@ -48,7 +48,9 @@ export async function checkFollowUpStillDue(
   if (conversation.status === 'resolved' || conversation.followUp !== true) {
     return 'stale';
   }
-  if (conversation.status === 'snoozed' && conversation.snoozedUntil) {
+  if (conversation.status === 'snoozed') {
+    // A snooze with no time is not the one the reminder was set for.
+    if (!conversation.snoozedUntil) return 'stale';
     const snoozedAt = Date.parse(conversation.snoozedUntil);
     const dueAt = Date.parse(reminder.dueAt);
     if (

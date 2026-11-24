@@ -51,6 +51,8 @@ beforeEach(() => {
     conversation: {
       id: 7,
       customerName: 'Ada',
+      status: 'snoozed',
+      followUp: true,
       snoozedUntil: '2026-11-25T09:00:00.000Z',
     },
   });
@@ -68,6 +70,8 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       conversation: {
         id: 7,
         customerName: 'Ada',
+        status: 'snoozed',
+        followUp: true,
         snoozedUntil: '2026-11-25T09:00:00.000Z',
       },
     });
@@ -87,7 +91,11 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       conversationId: 7,
       update: { followUpAt: '2026-11-25T09:00:00Z' },
       customerName: 'Ada',
-      observedSnoozedUntil: '2026-11-25T09:00:00.000Z',
+      observed: {
+        status: 'snoozed',
+        followUp: true,
+        snoozedUntil: '2026-11-25T09:00:00.000Z',
+      },
     });
   });
 

@@ -23,7 +23,14 @@ beforeEach(() => {
   vi.stubEnv('CRON_SECRET', SECRET);
   mocks.sweep.mockResolvedValue({
     ok: true,
-    summary: { due: 1, sent: 1, skipped: 0, waiting: 0, failed: 0 },
+    summary: {
+      due: 1,
+      sent: 1,
+      skipped: 0,
+      waiting: 0,
+      deferred: 0,
+      failed: 0,
+    },
   });
 });
 
@@ -52,6 +59,7 @@ describe('GET /api/cron/chat-follow-up-reminders', () => {
       sent: 1,
       skipped: 0,
       waiting: 0,
+      deferred: 0,
       failed: 0,
     });
   });

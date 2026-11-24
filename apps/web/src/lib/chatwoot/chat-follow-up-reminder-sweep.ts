@@ -17,6 +17,8 @@ export type ChatFollowUpSweepSummary = {
   skipped: number;
   /** Left for the next sweep: the chat engine could not be read. */
   waiting: number;
+  /** Left for the next sweep: the time budget ran out before its turn. */
+  deferred: number;
   /** A step failed; a failed push is never retried, an unrecorded reminder is. */
   failed: number;
 };
@@ -107,13 +109,14 @@ export async function sweepChatFollowUpReminders(
     sent: 0,
     skipped: 0,
     waiting: 0,
+    deferred: 0,
     failed: 0,
   };
   const startedAt = deps.now();
   for (const reminder of listed.reminders) {
     if (deps.now() - startedAt > SWEEP_BUDGET_MS) {
       // Untouched reminders stay unhandled and are picked up by the next sweep.
-      summary.waiting += 1;
+      summary.deferred += 1;
       continue;
     }
     let handled: Handled;

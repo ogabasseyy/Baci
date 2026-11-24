@@ -51,6 +51,7 @@ describe('sweepChatFollowUpReminders', () => {
       sent: 1,
       skipped: 0,
       waiting: 0,
+      deferred: 0,
       failed: 0,
     });
     expect(mocks.record).toHaveBeenCalledWith({
@@ -155,7 +156,11 @@ describe('sweepChatFollowUpReminders', () => {
       reminders: [reminder(1), reminder(2)],
     });
     mocks.now.mockReturnValueOnce(0).mockReturnValue(60_000);
-    await expect(summary()).resolves.toMatchObject({ sent: 0, waiting: 2 });
+    await expect(summary()).resolves.toMatchObject({
+      sent: 0,
+      waiting: 0,
+      deferred: 2,
+    });
     expect(mocks.record).not.toHaveBeenCalled();
   });
 

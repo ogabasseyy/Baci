@@ -44,7 +44,9 @@ import {
   isChatReplyResponse,
   registerChatReplyCategory,
 } from './chat-notification-reply';
-import { claimChatReply, releaseChatReply } from './chat-reply-claims';
+import { claimChatReply } from './chat-reply-claims';
+
+const STORE = '11111111-1111-4111-8111-111111111111';
 
 let counter = 0;
 function reply(
@@ -52,6 +54,7 @@ function reply(
   data: Record<string, unknown> = {
     type: 'customer_message',
     conversation_id: 21,
+    merchant_id: STORE,
   },
   actionIdentifier = CHAT_REPLY_ACTION_ID
 ): NotificationResponse {
@@ -71,7 +74,6 @@ function setup() {
   const deps = {
     alert: vi.fn(),
     claim: claimChatReply,
-    release: releaseChatReply,
     invalidate: vi.fn(),
     send: mocks.send,
   };
@@ -121,27 +123,20 @@ describe('handleChatReplyResponse', () => {
     await handleChatReplyResponse(router, reply('  On its way!  '), deps);
 
     expect(mocks.send).toHaveBeenCalledTimes(1);
-    expect(mocks.send).toHaveBeenCalledWith(21, 'On its way!');
+    expect(mocks.send).toHaveBeenCalledWith(21, 'On its way!', STORE);
     expect(router.push).toHaveBeenCalledWith('/(admin)/messages/21');
     expect(deps.alert).not.toHaveBeenCalled();
   });
 
-  it('bugfix: refreshes only the chat that was answered, plus the list', async () => {
+  it("bugfix: refreshes only that store's chat and list, using the real keys", async () => {
     const { router, deps } = setup();
 
     await handleChatReplyResponse(router, reply('Hello'), deps);
 
     const filters = deps.invalidate.mock.calls.map((c) => c[0]);
-    const threadFilter = filters.find((f) => 'predicate' in f);
-    const listFilter = filters.find((f) => 'queryKey' in f);
-    const matches = (key: readonly unknown[]) =>
-      threadFilter?.predicate?.({ queryKey: key } as never) ?? false;
-
-    // The real keys: this chat matches, another chat does not.
-    expect(matches(inboxThreadKey('m', 21))).toBe(true);
-    expect(matches(inboxThreadKey('m', 22))).toBe(false);
-    expect(matches(inboxConversationsKey('m'))).toBe(false);
-    expect(listFilter?.queryKey).toEqual([inboxConversationsKey('m')[0]]);
+    expect(filters).toContainEqual({ queryKey: inboxThreadKey(STORE, 21) });
+    expect(filters).toContainEqual({ queryKey: inboxConversationsKey(STORE) });
+    expect(filters).toHaveLength(2);
   });
 
   it('bugfix: posts a reply only once when the same response is delivered twice', async () => {
@@ -285,7 +280,7 @@ describe('handleChatReplyResponse', () => {
     expect(router.push).not.toHaveBeenCalled();
   });
 
-  it('bugfix: the same words can be sent again from the notification after the server refused them', async () => {
+  it('bugfix: a refused reply stays consumed, so replaying the notification never delivers it later', async () => {
     const { router, deps } = setup();
     mocks.send.mockRejectedValueOnce(
       new NetworkError('Forbidden', { statusCode: 403 })
@@ -293,10 +288,44 @@ describe('handleChatReplyResponse', () => {
     const first = reply('Try again please');
 
     await handleChatReplyResponse(router, first, deps);
-    // The same notification, the same words (the owner tapped Reply again).
+    // The same response read again (say after a restart, once access is back).
     await handleChatReplyResponse(router, { ...first }, deps);
 
-    expect(mocks.send).toHaveBeenCalledTimes(2);
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("bugfix: never sends a reply into another store's chat", async () => {
+    const { router, deps } = setup();
+    mocks.send.mockRejectedValue(
+      new NetworkError('Conflict', { statusCode: 409 })
+    );
+
+    await handleChatReplyResponse(router, reply('For store A'), deps);
+
+    expect(mocks.send).toHaveBeenCalledWith(21, 'For store A', STORE);
+    expect(deps.alert).toHaveBeenCalledWith(
+      'Reply not sent',
+      expect.stringContaining('another store'),
+      expect.any(Array)
+    );
+    expect(deps.invalidate).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: sends nothing when the push does not say which store it came from', async () => {
+    const { router, deps } = setup();
+
+    await handleChatReplyResponse(
+      router,
+      reply('Which store?', { type: 'customer_message', conversation_id: 21 }),
+      deps
+    );
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(deps.alert).toHaveBeenCalledWith(
+      'Open the chat to reply',
+      expect.any(String),
+      expect.any(Array)
+    );
   });
 
   it('does not release the claim when the outcome is unknown, so it is never sent twice', async () => {

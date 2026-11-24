@@ -90,13 +90,13 @@ describe('claimChatReply', () => {
   it('keeps only the most recent claims in storage', async () => {
     const claim = await freshClaim();
 
-    for (let i = 0; i < 60; i += 1) await claim(reply(`n${i}`));
+    for (let i = 0; i < 510; i += 1) await claim(reply(`n${i}`));
 
     const stored = JSON.parse(
       store.data.get('@baci_chat_reply_handled') ?? '[]'
     ) as string[];
-    expect(stored).toHaveLength(50);
-    expect(stored.at(-1)).toContain('n59');
+    expect(stored).toHaveLength(500);
+    expect(stored.at(-1)).toContain('n509');
   });
 
   it('bugfix: never stores what the owner typed, only a fingerprint of it', async () => {
@@ -128,27 +128,5 @@ describe('claimChatReply', () => {
     expect(await claim(reply('d1', 'Same words', 1_700_000_999))).toBe(
       'repeat'
     );
-  });
-
-  it('bugfix: a released claim lets the same words be sent again', async () => {
-    const claim = await freshClaim();
-    const { releaseChatReply } = await import('./chat-reply-claims');
-    expect(await claim(reply('r1', 'Retry me'))).toBe('new');
-
-    await releaseChatReply(reply('r1', 'Retry me'));
-
-    expect(await claim(reply('r1', 'Retry me'))).toBe('new');
-  });
-
-  it('keeps a released claim released after a restart', async () => {
-    const first = await freshClaim();
-    await first(reply('r2', 'Again'));
-    const { releaseChatReply } = await import('./chat-reply-claims');
-    await releaseChatReply(reply('r2', 'Again'));
-
-    vi.resetModules();
-    const afterRestart = await freshClaim();
-
-    expect(await afterRestart(reply('r2', 'Again'))).toBe('new');
   });
 });

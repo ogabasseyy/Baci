@@ -6,15 +6,12 @@ import type { InvalidateQueryFilters } from '@tanstack/react-query';
 import type * as NotificationsType from 'expo-notifications';
 import type { Href } from 'expo-router';
 import { Alert } from 'react-native';
+import { NetworkError } from '@/lib/api-errors';
 import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
 import { isDefinitelyNotSent, sendInboxReply } from '@/lib/merchant-inbox-api';
 import { queryClient } from '@/lib/query-client';
 import { INBOX_REPLY_MAX_LENGTH } from '@/schemas/merchant-inbox';
-import {
-  claimChatReply,
-  type ReplyClaim,
-  releaseChatReply,
-} from './chat-reply-claims';
+import { claimChatReply, type ReplyClaim } from './chat-reply-claims';
 import { getNotificationNavigationParams } from './push-notifications';
 
 interface ReplyRouter {
@@ -58,8 +55,6 @@ interface ReplyDeps {
   claim: (
     response: NotificationsType.NotificationResponse
   ) => Promise<ReplyClaim>;
-  /** Gives the claim back after a clear refusal (nothing was sent). */
-  release: (response: NotificationsType.NotificationResponse) => Promise<void>;
   invalidate: (filters: InvalidateQueryFilters) => void;
   send: typeof sendInboxReply;
 }
@@ -67,12 +62,24 @@ interface ReplyDeps {
 const defaultDeps: ReplyDeps = {
   alert: (title, message, buttons) => Alert.alert(title, message, buttons),
   claim: claimChatReply,
-  release: releaseChatReply,
   invalidate: (filters) => {
     void queryClient.invalidateQueries(filters);
   },
   send: sendInboxReply,
 };
+
+const STORE_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The store that pushed the notification, if the push names one. */
+function pushedByStore(
+  response: NotificationsType.NotificationResponse
+): string | null {
+  const data = response.notification.request.content.data;
+  const value = (data as Record<string, unknown> | null | undefined)
+    ?.merchant_id;
+  return typeof value === 'string' && STORE_ID.test(value) ? value : null;
+}
 
 async function sendChatReply(
   router: ReplyRouter,
@@ -118,12 +125,32 @@ async function sendChatReply(
     return;
   }
 
+  // Which store's customer this is: without it the reply could end up in
+  // another store's chat, so it is not sent from here.
+  const merchantId = pushedByStore(response);
+  if (!merchantId) {
+    deps.alert(
+      'Open the chat to reply',
+      'This notification cannot be answered from here. Open the chat to write your reply.',
+      [openChat]
+    );
+    return;
+  }
+
   try {
-    await deps.send(conversationId, text);
+    await deps.send(conversationId, text, merchantId);
   } catch (error) {
-    if (isDefinitelyNotSent(error)) {
-      // Nothing was sent, so sending the same words again must work.
-      await deps.release(response).catch(() => undefined);
+    if (error instanceof NetworkError && error.statusCode === 409) {
+      // The signed-in store is not the one the notification was for.
+      deps.alert(
+        'Reply not sent',
+        'This message was for another store. Switch to that store to reply. Nothing was sent.',
+        [{ text: 'OK' }]
+      );
+    } else if (isDefinitelyNotSent(error)) {
+      // The claim stays used, so the same notification can never deliver these
+      // words later by itself (say, after a restart); they are shown here so
+      // they can be written again in the chat.
       deps.alert('Reply not sent', `Your reply was not sent:\n\n${text}`, [
         openChat,
         { text: 'OK' },
@@ -137,20 +164,13 @@ async function sendChatReply(
     }
     return;
   }
-  // Only the chat that changed, not every cached thread: key layout is
-  // [prefix, merchantId, conversationId] (see inbox-query-keys.ts). The list
-  // reorders and shows the new preview, so it refreshes.
-  // Best effort, each on its own: the reply is already sent, so neither may
+  // Only that store's chat and list (the list reorders and shows the new
+  // preview). Best effort, each on its own: the reply is already sent, so neither may
   // read as a failure (and so lead to sending it again), and a failed refresh
   // must never stop the owner from seeing the chat.
   try {
-    const threadPrefix = inboxThreadKey(undefined, 0)[0];
-    deps.invalidate({
-      predicate: (query) =>
-        query.queryKey[0] === threadPrefix &&
-        query.queryKey[2] === conversationId,
-    });
-    deps.invalidate({ queryKey: [inboxConversationsKey(undefined)[0]] });
+    deps.invalidate({ queryKey: inboxThreadKey(merchantId, conversationId) });
+    deps.invalidate({ queryKey: inboxConversationsKey(merchantId) });
   } catch {
     // The chat refreshes when it opens anyway.
   }

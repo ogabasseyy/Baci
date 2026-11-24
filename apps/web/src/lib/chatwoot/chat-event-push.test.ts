@@ -75,7 +75,11 @@ describe('sendChatEventPush', () => {
       input.merchantId,
       'New message from Ada',
       'Is it in stock?',
-      { type: 'customer_message', conversation_id: 21 },
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+      },
       'messages',
       { categoryId: 'chat_reply' }
     );
@@ -109,7 +113,12 @@ describe('sendChatEventPush', () => {
       input.merchantId,
       'Ada needs a person',
       'The assistant handed this chat to your team. Open it to reply.',
-      { type: 'customer_message', conversation_id: 21, handover: true },
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+        handover: true,
+      },
       'messages',
       { categoryId: 'chat_reply' }
     );
@@ -136,6 +145,7 @@ describe('sendChatEventPush', () => {
     expect(mocks.notify.mock.calls[0][4]).toEqual({
       type: 'customer_message',
       conversation_id: 21,
+      merchant_id: input.merchantId,
     });
   });
 

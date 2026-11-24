@@ -1,3 +1,4 @@
+import type { CHAT_REPLY_NOTIFICATION_CATEGORY } from '@baci/shared';
 import type Expo from 'expo-server-sdk';
 import type { DeliveryStartOptions } from './expo-push-chunk-delivery';
 import type { PushStore } from './push-store';
@@ -35,9 +36,10 @@ export type MerchantNotificationOptions = DeliveryStartOptions & {
   /**
    * Names a notification category the app has registered, which adds its
    * action buttons (for chat pushes, a Reply box). Apps that do not know the
-   * category show the plain notification.
+   * category show the plain notification. Only categories the app registers
+   * are allowed, so drift is a compile error.
    */
-  categoryId?: string;
+  categoryId?: typeof CHAT_REPLY_NOTIFICATION_CATEGORY;
 };
 
 // ── Core send functions ──────────────────────────────────────────────────────

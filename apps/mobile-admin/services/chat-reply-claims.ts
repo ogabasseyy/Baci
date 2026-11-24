@@ -2,7 +2,12 @@ import type { NotificationResponse } from 'expo-notifications';
 import { asyncStorage } from '@/lib/storage';
 
 const STORAGE_KEY = '@baci_chat_reply_handled';
-const KEEP_LAST = 50;
+/**
+ * Claims kept in storage. Each is a short key, so this is small; a replay can
+ * only be recognised while its claim is still kept, which takes this many newer
+ * replies to lose.
+ */
+const KEEP_LAST = 500;
 
 /** This session's claims: they win a race the storage read would lose. */
 const claimedThisSession = new Set<string>();
@@ -85,24 +90,4 @@ export async function claimChatReply(
     // Storage unavailable: the in-session claim above still holds.
   }
   return 'new';
-}
-
-/**
- * Gives a claim back after the server clearly refused the reply (nothing was
- * sent), so sending the same words again from the notification works.
- */
-export async function releaseChatReply(
-  response: NotificationResponse
-): Promise<void> {
-  const key = responseKey(response);
-  claimedThisSession.delete(key);
-  try {
-    const stored = parseStored(await asyncStorage.getItem(STORAGE_KEY));
-    await asyncStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(stored.filter((item) => item !== key))
-    );
-  } catch {
-    // Nothing more can be done.
-  }
 }

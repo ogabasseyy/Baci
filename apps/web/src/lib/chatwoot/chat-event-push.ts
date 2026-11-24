@@ -43,6 +43,7 @@ function pushContent(input: ChatEventPushInput) {
       data: {
         type: 'customer_message',
         conversation_id: input.conversationId,
+        merchant_id: input.merchantId,
         handover: true,
       },
     };
@@ -52,7 +53,11 @@ function pushContent(input: ChatEventPushInput) {
       ? `New message from ${input.customerName}`
       : 'New customer message',
     body: input.preview || 'A customer sent a message to your store.',
-    data: { type: 'customer_message', conversation_id: input.conversationId },
+    data: {
+      type: 'customer_message',
+      conversation_id: input.conversationId,
+      merchant_id: input.merchantId,
+    },
   };
 }
 

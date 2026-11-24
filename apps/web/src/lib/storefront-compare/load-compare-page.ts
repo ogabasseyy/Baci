@@ -27,15 +27,10 @@ import {
 } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import {
-  evaluateStorefrontSlugSafety,
-  MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH,
-} from '@/lib/storefront-slug-safety';
-import {
   buildProductComparisonMatrix,
   type ProductComparisonMatrix,
 } from '@/lib/storefront-specs/spec-matrix';
 import type { ComparableProductKeySpecs } from '@/lib/storefront-specs/spec-taxonomy';
-import { isValidMerchantIdentifier } from '@/lib/validation';
 import { buildBrandComparisonRows } from './build-brand-comparison-rows';
 import { buildCompareGuideContexts } from './build-compare-guide-contexts';
 import { extractComparableKeySpecs } from './comparable-key-specs';
@@ -57,7 +52,7 @@ import {
   type CompareCategoryInventoryProduct,
   getCachedCompareCategoryInventory,
 } from './get-cached-compare-category-inventory';
-import { isSelfComparePair } from './is-self-compare-pair';
+import { prevalidateCompareRequest } from './prevalidate-compare-request';
 
 interface CompareBreadcrumbItem {
   name: string;
@@ -294,110 +289,11 @@ type CachedComparePageCore =
     > &
       CanonicalCompareIndexability & { overlay: BrandCompareOverlayContext });
 
-const MAX_SAFE_COMPARE_SLUG_ENCODED_LENGTH =
-  MAX_SAFE_STOREFRONT_SLUG_ENCODED_LENGTH * 2 + 4;
-const DISALLOWED_COMPARE_SLUG_CHARS_PATTERN = /[\s\\/?#%]|\.\./;
 const COMPARE_PAGE_CACHE_LIFE = {
   stale: 3600,
   revalidate: 86400,
   expire: 604800,
 } as const;
-
-function hasDisallowedCompareSlugChars(value: string): boolean {
-  if (DISALLOWED_COMPARE_SLUG_CHARS_PATTERN.test(value)) {
-    return true;
-  }
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    if (code <= 0x1f || code === 0x7f) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function prevalidateCompareRequest(args: {
-  merchantSlug: string;
-  categorySlug: string;
-  comparisonSlug: string;
-}) {
-  if (!isValidMerchantIdentifier(args.merchantSlug)) {
-    return null;
-  }
-
-  // Over-long / repeatedly-encoded bot categories can never match; bail before
-  // any DB or `'use cache'` lookup runs.
-  if (
-    !evaluateStorefrontSlugSafety(args.categorySlug).safe ||
-    hasDisallowedCompareSlugChars(args.categorySlug)
-  ) {
-    logCompareRouteMiss({
-      merchantSlug: args.merchantSlug.slice(0, 120),
-      categorySlug: args.categorySlug.slice(0, 120),
-      comparisonSlug: args.comparisonSlug.slice(0, 120),
-      reason: 'unsafe_slug',
-    });
-    return null;
-  }
-
-  if (
-    !args.comparisonSlug ||
-    args.comparisonSlug.length > MAX_SAFE_COMPARE_SLUG_ENCODED_LENGTH
-  ) {
-    logCompareRouteMiss({
-      merchantSlug: args.merchantSlug.slice(0, 120),
-      categorySlug: args.categorySlug.slice(0, 120),
-      comparisonSlug: args.comparisonSlug.slice(0, 120),
-      reason: 'unsafe_compare_key',
-    });
-    return null;
-  }
-
-  const parsed = parseCompareSlug(args.comparisonSlug);
-
-  if (!parsed) {
-    logCompareRouteMiss({
-      merchantSlug: args.merchantSlug.slice(0, 120),
-      categorySlug: args.categorySlug.slice(0, 120),
-      comparisonSlug: args.comparisonSlug.slice(0, 120),
-      reason: 'invalid_compare_slug',
-    });
-    return null;
-  }
-
-  // Gate the parsed halves (each a single product slug) before either reaches
-  // getMerchantByIdentifier / getCachedProductWithDetails (`'use cache'`) or
-  // becomes part of the cached compare model key.
-  if (
-    !evaluateStorefrontSlugSafety(parsed.leftKey).safe ||
-    !evaluateStorefrontSlugSafety(parsed.rightKey).safe ||
-    hasDisallowedCompareSlugChars(parsed.leftKey) ||
-    hasDisallowedCompareSlugChars(parsed.rightKey)
-  ) {
-    logCompareRouteMiss({
-      merchantSlug: args.merchantSlug.slice(0, 120),
-      categorySlug: args.categorySlug.slice(0, 120),
-      comparisonSlug: args.comparisonSlug.slice(0, 120),
-      reason: 'unsafe_compare_key',
-    });
-    return null;
-  }
-
-  // This is the only missing-pair outcome known from the URL alone. Alias
-  // equivalence requires inventory/detail authority, so do not reject merely
-  // similar or canonicalized keys before the normal resolution path.
-  if (isSelfComparePair(parsed)) {
-    logCompareRouteMiss({
-      merchantSlug: args.merchantSlug.slice(0, 120),
-      categorySlug: args.categorySlug.slice(0, 120),
-      comparisonSlug: args.comparisonSlug.slice(0, 120),
-      reason: 'self_compare_pair',
-    });
-    return null;
-  }
-
-  return parsed;
-}
 
 export async function loadComparePage(args: {
   merchantSlug: string;
@@ -406,7 +302,7 @@ export async function loadComparePage(args: {
 }): Promise<ProductComparePageModel | BrandComparePageModel | null> {
   // Fast-path reject malformed, overly long, or duplicate (`a-vs-a`) compare
   // inputs BEFORE any DB or `'use cache'` lookup (including merchant resolution).
-  const parsed = prevalidateCompareRequest(args);
+  const parsed = prevalidateCompareRequest(args, logCompareRouteMiss);
   if (!parsed) {
     return null;
   }

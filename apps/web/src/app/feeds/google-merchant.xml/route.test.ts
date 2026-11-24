@@ -30,6 +30,7 @@ beforeEach(() => {
 
   mockGenerateGoogleMerchantFeedForIdentifier.mockResolvedValue({
     success: true,
+    merchantId: 'merchant-1',
     xml: '<rss />',
   });
 });
@@ -53,10 +54,13 @@ describe('GET /feeds/google-merchant.xml', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/xml');
     expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
-      'public, s-maxage=3600, stale-while-revalidate=86400'
+      'public, max-age=3600, stale-while-revalidate=86400'
     );
     expect(response.headers.get('CDN-Cache-Control')).toBe(
-      'public, s-maxage=3600, stale-while-revalidate=86400'
+      'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400'
+    );
+    expect(response.headers.get('Vercel-Cache-Tag')).toBe(
+      'google-merchant-feed,merchant-feed-merchant-1'
     );
     expect(response.headers.get('Cache-Control')).toBe(
       'public, max-age=300, stale-while-revalidate=86400'

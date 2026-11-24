@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { generateGoogleMerchantFeedForIdentifier } from '@/app/api/feed/google-merchant/feed-service';
-import { GOOGLE_MERCHANT_FEED_CACHE_HEADERS } from '@/app/api/feed/google-merchant/route-utils';
+import { buildGoogleMerchantFeedResponseHeaders } from '@/app/api/feed/google-merchant/route-utils';
 import { getRootDomain } from '@/env';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 
@@ -61,9 +61,8 @@ export async function GET(request: NextRequest) {
 
   return new NextResponse(result.xml, {
     status: 200,
-    headers: {
-      'Content-Type': 'application/xml; charset=utf-8',
-      ...GOOGLE_MERCHANT_FEED_CACHE_HEADERS,
-    },
+    headers: buildGoogleMerchantFeedResponseHeaders(
+      result.merchantId ?? resolution.merchant.id
+    ),
   });
 }

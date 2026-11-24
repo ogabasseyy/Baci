@@ -159,6 +159,7 @@ export async function drainStorefrontCacheInvalidation(
       ...dataTags,
       ...productTags,
       ...buildStorefrontPublicationCacheTags(identity),
+      `merchant-feed-${claim.merchant_id}`,
     ],
     vercelTimeoutMs
   );

@@ -37,6 +37,7 @@ async function getCachedGoogleMerchantFeedXml(
 
 type GoogleMerchantFeedServiceSuccess = {
   success: true;
+  merchantId: string;
   xml: string;
 };
 
@@ -67,6 +68,7 @@ export async function generateGoogleMerchantFeedForIdentifier({
 
     return {
       success: true,
+      merchantId: resolvedMerchant.id,
       xml,
     };
   } catch (error) {

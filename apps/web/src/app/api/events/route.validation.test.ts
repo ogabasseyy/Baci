@@ -89,4 +89,25 @@ describe('POST /api/events validation', () => {
     });
     expect(mocks.insert).not.toHaveBeenCalled();
   });
+
+  it('omits malformed or oversized event_id on crawler fast-path', async () => {
+    const response = await POST(
+      new NextRequest('https://shop.usebaci.com/api/events', {
+        body: JSON.stringify({
+          event_id: '<script>alert(1)</script>',
+          event_type: 'page_view',
+          merchant_id: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
+        }),
+        headers: {
+          'user-agent': 'Googlebot/2.1 (+http://www.google.com/bot.html)',
+        },
+        method: 'POST',
+      })
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+    });
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
 });

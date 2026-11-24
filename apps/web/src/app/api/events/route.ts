@@ -99,9 +99,16 @@ export async function POST(request: NextRequest) {
   ) {
     // Acknowledge but do not record crawler traffic (before schema validation).
     logger.debug({ message: 'Skipped crawler analytics event' });
+    const safeEventId =
+      typeof raw.event_id === 'string' &&
+      raw.event_id.length > 0 &&
+      raw.event_id.length <= 128 &&
+      /^[a-zA-Z0-9._:-]+$/.test(raw.event_id)
+        ? raw.event_id
+        : undefined;
     return NextResponse.json({
       success: true,
-      event_id: typeof raw.event_id === 'string' ? raw.event_id : undefined,
+      event_id: safeEventId,
     });
   }
   const parsed = analyticsEventRequestSchema.safeParse(body);

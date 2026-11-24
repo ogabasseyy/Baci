@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { RunnerCapacityError } from '../../../tools/experience-runner/runner-transport';
 import { createVerifierAttestationHandler } from '../../../tools/experience-verifier/attestation-handler';
 import { createVerifierAttestationClient } from './verifier-attestation-client';
 import { VerifierTemporarilyUnavailable } from './verifier-availability';
@@ -74,6 +75,16 @@ it('distinguishes an unavailable verifier from a verifier denial', async () => {
   await expect(
     f.client(f.user as never, id, 'draft')
   ).rejects.not.toBeInstanceOf(VerifierTemporarilyUnavailable);
+});
+it('retries attestation after runner capacity becomes available', async () => {
+  const f = fixture();
+  f.attest.mockRejectedValueOnce(new RunnerCapacityError());
+
+  await expect(f.client(f.user as never, id, 'draft')).rejects.toBeInstanceOf(
+    VerifierTemporarilyUnavailable
+  );
+  await expect(f.client(f.user as never, id, 'draft')).resolves.toBeUndefined();
+  expect(f.attest).toHaveBeenCalledTimes(2);
 });
 it('does not forward revoked users or malformed approval IDs', async () => {
   const f = fixture();

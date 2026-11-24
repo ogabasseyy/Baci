@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import type { OwnerLifecycleVerification } from '@/lib/experience/owner-lifecycle-runtime';
 import { experienceOwnerWireSchemas } from '@/schemas/experience-owner-wire';
+import { RunnerCapacityError } from '../experience-runner/runner-transport';
 import type { OwnerVerificationKind } from './owner-verification-slots';
 
 const message = experienceOwnerWireSchemas['verifier-attest/v1'];
@@ -82,7 +83,8 @@ export function createVerifierAttestationHandler(settings: {
       } finally {
         release?.();
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof RunnerCapacityError) return reply(429);
       return reply(403);
     }
   };

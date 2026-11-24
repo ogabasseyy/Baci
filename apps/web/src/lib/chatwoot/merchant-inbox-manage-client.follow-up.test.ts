@@ -73,7 +73,26 @@ describe('bugfix: a follow-up never ends up half applied', () => {
     expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
   });
 
-  it('keeps the label of an existing follow-up when changing its time fails', async () => {
+  it('keeps the label of an existing follow-up when the engine refuses the new time', async () => {
+    const { calls, labels } = chatWithLabels(
+      ['follow-up', 'handled-by-ai'],
+      '/toggle_status',
+      { failStatus: 422 }
+    );
+
+    await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update,
+      now: NOW,
+    });
+
+    // The earlier snooze is still in place, so its label must stay too: the
+    // refusal must not take it off (only the first write touches labels).
+    expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
+    expect(labels()).toContain('follow-up');
+  });
+
+  it('keeps the label of an existing follow-up when changing its time gets no clear answer', async () => {
     const { calls, labels } = chatWithLabels(
       ['follow-up', 'handled-by-ai'],
       '/toggle_status'
@@ -85,7 +104,6 @@ describe('bugfix: a follow-up never ends up half applied', () => {
       now: NOW,
     });
 
-    // The earlier snooze is still in place, so its label must stay too.
     expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
     expect(labels()).toContain('follow-up');
   });
@@ -164,5 +182,69 @@ describe('bugfix: a follow-up never ends up half applied', () => {
 
     expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
     expect(labels()).toEqual(['handled-by-ai', 'tag-payment', 'follow-up']);
+  });
+});
+
+describe('bugfix: clearing a follow-up never reopens finished or waiting chats', () => {
+  const clear = { followUpAt: null };
+
+  it('removes the label without reopening a resolved chat', async () => {
+    const { calls, labels } = chatWithLabels(['follow-up'], undefined, {
+      status: 'resolved',
+    });
+
+    const result = await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update: clear,
+      now: NOW,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(calls.some((c) => c.path.endsWith('/toggle_status'))).toBe(false);
+    expect(labels()).toEqual([]);
+  });
+
+  it('removes the label without changing a pending chat', async () => {
+    const { calls, labels } = chatWithLabels(['follow-up'], undefined, {
+      status: 'pending',
+    });
+
+    await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update: clear,
+      now: NOW,
+    });
+
+    expect(calls.some((c) => c.path.endsWith('/toggle_status'))).toBe(false);
+    expect(labels()).toEqual([]);
+  });
+
+  it('still reopens a snoozed chat whose follow-up is cleared', async () => {
+    const { calls, labels } = chatWithLabels(['follow-up'], undefined, {
+      status: 'snoozed',
+    });
+
+    await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update: clear,
+      now: NOW,
+    });
+
+    expect(calls.find((c) => c.path.endsWith('/toggle_status'))?.body).toEqual({
+      status: 'open',
+    });
+    expect(labels()).toEqual([]);
+  });
+
+  it('does not touch the status of an open chat when its follow-up is cleared', async () => {
+    const { calls } = chatWithLabels(['follow-up']);
+
+    await updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update: clear,
+      now: NOW,
+    });
+
+    expect(calls.some((c) => c.path.endsWith('/toggle_status'))).toBe(false);
   });
 });

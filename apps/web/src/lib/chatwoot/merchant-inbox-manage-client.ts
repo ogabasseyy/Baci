@@ -203,8 +203,15 @@ export async function updateMerchantInboxConversation(
       return unavailable;
     }
   } else if (update.status === 'open' || followUpAt === null) {
+    // Reopening is for an explicit "open" or for a snoozed chat whose
+    // follow-up is being cleared. Clearing a follow-up never reopens finished
+    // work (resolved) or changes a chat waiting on the shopper (pending).
+    const reopen =
+      update.status === 'open'
+        ? owned.conversation.status !== 'open'
+        : owned.conversation.status === 'snoozed';
     if (
-      owned.conversation.status !== 'open' &&
+      reopen &&
       !(await providerPost(binding, `${base}/toggle_status`, {
         status: 'open',
       }))

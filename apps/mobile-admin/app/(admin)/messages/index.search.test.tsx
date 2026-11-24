@@ -40,11 +40,15 @@ vi.mock('@/lib/api-client', async () => {
   return { NetworkError: errors.NetworkError };
 });
 vi.mock('@shopify/flash-list', async () => ({
-  FlashList: (await import('./index.test-support')).FlashListMock,
+  FlashList: (await import('@/test/messages-screen-support')).FlashListMock,
 }));
 
+import {
+  conversation,
+  idleSearch,
+  readyQuery,
+} from '@/test/messages-screen-support';
 import MessagesScreen from './index';
-import { conversation, idleSearch, readyQuery } from './index.test-support';
 
 const ready = (conversations: ReturnType<typeof conversation>[]) =>
   readyQuery(conversations, mocks);

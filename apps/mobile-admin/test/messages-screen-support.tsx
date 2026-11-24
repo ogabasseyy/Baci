@@ -7,6 +7,7 @@ export function FlashListMock({
   ListEmptyComponent,
   ListHeaderComponent,
   ListFooterComponent,
+  onEndReached,
   renderItem,
 }: {
   data?: unknown[];
@@ -14,6 +15,7 @@ export function FlashListMock({
   ListEmptyComponent?: ReactNode;
   ListHeaderComponent?: ReactNode;
   ListFooterComponent?: ReactNode;
+  onEndReached?: () => void;
   renderItem: (input: { index: number; item: unknown }) => ReactNode;
 }) {
   return (
@@ -31,6 +33,11 @@ export function FlashListMock({
             </div>
           ))}
       {ListFooterComponent}
+      {onEndReached ? (
+        <button onClick={onEndReached} type="button">
+          List end reached (test)
+        </button>
+      ) : null}
     </div>
   );
 }

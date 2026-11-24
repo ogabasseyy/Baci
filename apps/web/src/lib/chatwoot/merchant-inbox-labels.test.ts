@@ -120,3 +120,69 @@ describe('bugfix: tags created elsewhere with capitals are the same tag', () => 
     ).toEqual(['order-issue', 'lead']);
   });
 });
+
+describe('bugfix: tags stay within what the response allows', () => {
+  it('does not split an astral letter when the slug is cut to the limit', () => {
+    // NFKC turns U+FB03 into "ffi", so this 29-unit input grows to 31 units.
+    const slug = slugifyInboxTag(`${'a'.repeat(26)}\uFB03\u{10400}`);
+
+    expect(slug).toBe(`${'a'.repeat(26)}ffi`);
+    expect(slug?.length).toBeLessThanOrEqual(30);
+    expect(slug).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  });
+
+  it('keeps a whole astral letter that fits', () => {
+    expect(slugifyInboxTag(`${'a'.repeat(27)}\u{10400}`)).toBe(
+      `${'a'.repeat(27)}\u{10428}`
+    );
+  });
+
+  it('shows at most ten tags, in label order', () => {
+    const labels = Array.from({ length: 14 }, (_, i) => `tag-t${i}`);
+
+    const tags = tagsFromLabels(labels);
+
+    expect(tags).toHaveLength(10);
+    expect(tags[0]).toBe('t0');
+    expect(tags[9]).toBe('t9');
+  });
+
+  it('skips a tag label longer than a tag can be instead of breaking the page', () => {
+    const tags = tagsFromLabels([`tag-${'x'.repeat(31)}`, 'tag-ok']);
+
+    expect(tags).toEqual(['ok']);
+  });
+
+  it('skips a label with no usable letters or numbers', () => {
+    expect(tagsFromLabels(['tag---', 'tag-!!', 'tag-ok'])).toEqual(['ok']);
+  });
+});
+
+describe('bugfix: removing a tag also removes look-alike stored labels', () => {
+  it('removes a stored label that has repeated separators', () => {
+    const result = applyInboxLabelChange(
+      ['tag-order--issue', 'handled-by-ai'],
+      {
+        removeTags: ['order-issue'],
+      }
+    );
+
+    expect(result).toEqual(['handled-by-ai']);
+  });
+
+  it('removes a stored label written with underscores and capitals', () => {
+    const result = applyInboxLabelChange(['tag-Order_Issue'], {
+      removeTags: ['order-issue'],
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('does not add a tag that already exists with repeated separators', () => {
+    const result = applyInboxLabelChange(['tag-order--issue'], {
+      addTags: ['order-issue'],
+    });
+
+    expect(result).toEqual(['tag-order--issue']);
+  });
+});

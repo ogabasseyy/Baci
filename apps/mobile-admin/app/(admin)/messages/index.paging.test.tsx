@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
@@ -39,11 +39,15 @@ vi.mock('@/lib/api-client', async () => {
   return { NetworkError: errors.NetworkError };
 });
 vi.mock('@shopify/flash-list', async () => ({
-  FlashList: (await import('./index.test-support')).FlashListMock,
+  FlashList: (await import('@/test/messages-screen-support')).FlashListMock,
 }));
 
+import {
+  conversation,
+  idleSearch,
+  readyQuery,
+} from '@/test/messages-screen-support';
 import MessagesScreen from './index';
-import { conversation, idleSearch, readyQuery } from './index.test-support';
 
 /** The default Needs reply view, with older pages still to load. */
 const withMorePages = (fetching: boolean) => ({
@@ -94,5 +98,30 @@ describe('MessagesScreen automatic paging', () => {
     expect(
       screen.getByText('1 chat is waiting for your reply')
     ).toBeInTheDocument();
+  });
+
+  it('bugfix: scrolling to the end does not start a page while a refresh is running', () => {
+    // fetchNextPage cancels a refresh still running, so the scroll path must
+    // wait for it just like the automatic loader does.
+    mocks.query.mockReturnValue(withMorePages(true));
+    render(<MessagesScreen />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'List end reached (test)' })
+    );
+
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it('keeps loading older chats on scroll once nothing is being fetched', () => {
+    mocks.query.mockReturnValue(withMorePages(false));
+    render(<MessagesScreen />);
+    mocks.fetchNextPage.mockClear();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'List end reached (test)' })
+    );
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
   });
 });

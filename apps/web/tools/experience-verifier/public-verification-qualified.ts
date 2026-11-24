@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { experienceToolchainDigest } from '../../src/schemas/experience-runner-installation';
 import { createPublicObservationAdapter } from './public-verification-observer';
 
 /** Trusted co-located startup only: the receipt must come from the fixed helper preflight. */
@@ -8,10 +8,7 @@ export async function createQualifiedPublicObserver(settings: {
   verifyInstallation(): Promise<{ toolchainDigest: string }>;
   execute?: NonNullable<Parameters<typeof createPublicObservationAdapter>[1]>;
 }) {
-  const expected = z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .parse(settings.toolchainDigest);
+  const expected = experienceToolchainDigest.parse(settings.toolchainDigest);
   const receipt = await settings.verifyInstallation();
   if (receipt.toolchainDigest !== expected) throw Error('TOOLCHAIN_MISMATCH');
   const observe = createPublicObservationAdapter(

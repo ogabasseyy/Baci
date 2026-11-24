@@ -38,6 +38,9 @@ it('allows only one job at a time and releases its lane on failure', async () =>
   const expected = {
     buildDigest: digest,
     product: { id: '33333333-3333-4333-8333-333333333333' },
+    routes: [
+      { path: '/', canonical: 'https://shop.example.com/', title: 'Shop' },
+    ],
   };
   const output = [
     {
@@ -121,6 +124,9 @@ it.each([
       {
         buildDigest: digest,
         product: { id: '33333333-3333-4333-8333-333333333333' },
+        routes: [
+          { path: '/', canonical: 'https://shop.example.com/', title: 'Shop' },
+        ],
       } as never,
       vi.fn() as never,
       [],

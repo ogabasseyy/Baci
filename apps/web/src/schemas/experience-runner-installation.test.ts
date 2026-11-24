@@ -1,5 +1,21 @@
 import { expect, it } from 'vitest';
-import { experienceRunnerInstallationPin } from './experience-runner-installation';
+import {
+  experienceRunnerInstallationPin,
+  experienceToolchainDigest,
+} from './experience-runner-installation';
+
+it('accepts only a 64-character lowercase hexadecimal toolchain digest', () => {
+  const digest = '0123456789abcdef'.repeat(4);
+  expect(experienceToolchainDigest.parse(digest)).toBe(digest);
+  for (const invalid of [
+    digest.slice(1),
+    `${digest}0`,
+    digest.toUpperCase(),
+    'g'.repeat(64),
+  ]) {
+    expect(experienceToolchainDigest.safeParse(invalid).success).toBe(false);
+  }
+});
 
 it('requires complete immutable installation digests and explicit tool versions', () => {
   const digest = 'a'.repeat(64);

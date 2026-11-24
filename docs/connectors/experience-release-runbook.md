@@ -41,6 +41,8 @@ For the PostgreSQL pilot, the [renderer retention dry run](../../apps/web/tools/
 
 Run the synthetic report with `pnpm --dir apps/web exec vitest run --config vitest.experience-lifecycle.config.ts renderer-retention-dry-run.test.ts`. The expiry candidates are for review. Revalidate references and provide a grace period for existing rollback targets before enabling any future reclamation.
 
+The report leaves expired renderer rows in PostgreSQL, so storage can continue to grow with each verification attempt. During the pilot, record candidate bytes alongside total renderer storage and the database storage budget. Keep the pilot bounded by that budget. General availability requires a separately reviewed reclamation path that rechecks protected references before removing any bytes.
+
 Mode exit is explicit: private-draft-only cannot remove an unrelated public experience; compatible-legacy restore requires an already published compatible snapshot; missing fallback needs separately described unpublish-and-legacy-draft confirmation. No mode exit automatically restarts legacy AI. Native and queued legacy writes remain governed by the SQL revision lock and execution lease acknowledgement.
 
 ## Stop boundaries

@@ -1,6 +1,6 @@
-const GENERIC_NAME = 'Customer';
+const GENERIC_NAME = 'customer';
 // The engine names anonymous visitors like "withered-sun-554".
-const VISITOR_SLUG = /^[a-z]+(?:-[a-z]+)+-\d{1,4}$/;
+const VISITOR_SLUG = /^[a-z]+(?:-[a-z]+)+-\d{1,4}$/i;
 
 /**
  * The customer name a reminder push may show in its title: a real name only.
@@ -9,7 +9,11 @@ const VISITOR_SLUG = /^[a-z]+(?:-[a-z]+)+-\d{1,4}$/;
  */
 export function reminderCustomerName(name: string | null | undefined): string {
   const trimmed = (name ?? '').replace(/\s+/g, ' ').trim();
-  if (!trimmed || trimmed === GENERIC_NAME || VISITOR_SLUG.test(trimmed)) {
+  if (
+    !trimmed ||
+    trimmed.toLowerCase() === GENERIC_NAME ||
+    VISITOR_SLUG.test(trimmed)
+  ) {
     return '';
   }
   return trimmed.length > 80 ? trimmed.slice(0, 80).trim() : trimmed;

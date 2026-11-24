@@ -708,7 +708,7 @@ export async function POST(request: NextRequest) {
               const reviewFiled = await handlePaymentForCancelledOrder({
                 gatewayReference: payload.checkoutTransactionId,
                 issueType: 'gateway_payment_wedge_requires_review',
-                order: { id: order.id },
+                order: updatedOrder ?? order,
                 reason:
                   'Credit Direct timeout order was reinstated but its notes could not be loaded',
                 transactionId: cancelledTxResult.transactionId,
@@ -726,7 +726,7 @@ export async function POST(request: NextRequest) {
             }
             const cancelReviewFiled = await handlePaymentForCancelledOrder({
               gatewayReference: payload.checkoutTransactionId,
-              order: { id: order.id },
+              order: updatedOrder ?? order,
               reason:
                 'Credit Direct merchant payout captured for an order already cancelled',
               transactionId: cancelledTxResult.transactionId,

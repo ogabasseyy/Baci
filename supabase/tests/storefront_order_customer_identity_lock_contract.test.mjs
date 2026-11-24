@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   'utf8'
 );
+const correctiveMigration = readFileSync(
+  new URL(
+    '../migrations/20261124100000_fix_authenticated_storefront_identity_confirmation.sql',
+    import.meta.url
+  ),
+  'utf8'
+);
 
 test('storefront resolves and locks guest customer identity before checkout delegation', () => {
   const wrapperStart = migration.indexOf(
@@ -49,4 +56,12 @@ test('entrypoint identity locks follow phone, user, then email order', () => {
   assert.match(helper, /coalesce\(auth\.uid\(\), p_user_id\)/);
   assert.match(helper, /lower\(c\.email\) = v_email/);
   assert.match(helper, /c\.phone = v_phone/);
+});
+
+test('authenticated callers that omit p_user_id skip guest identity confirmation', () => {
+  assert.match(
+    correctiveMigration,
+    /IF auth\.uid\(\) IS NULL AND p_user_id IS NULL THEN/
+  );
+  assert.match(correctiveMigration, /coalesce\(auth\.uid\(\), p_user_id\)/);
 });

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { generateGoogleMerchantFeedForIdentifier } from '@/app/api/feed/google-merchant/feed-service';
+import { GOOGLE_MERCHANT_FEED_CACHE_HEADERS } from '@/app/api/feed/google-merchant/route-utils';
 import { getRootDomain } from '@/env';
-import { CACHE_HEADERS } from '@/lib/cache-headers';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 
 // Cold merchant feeds can exceed the platform default function duration after
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     status: 200,
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
-      ...CACHE_HEADERS.LONG,
+      ...GOOGLE_MERCHANT_FEED_CACHE_HEADERS,
     },
   });
 }

@@ -6,6 +6,11 @@ const mockGenerateGoogleMerchantFeed = vi.fn();
 const mockGetCachedGoogleMerchantFeedData = vi.fn();
 const mockLoggerError = vi.fn();
 
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
+}));
+
 vi.mock('@/lib/feed-identifier', () => {
   class _MerchantNotFoundError extends Error {
     constructor(identifier: string) {
@@ -172,6 +177,15 @@ describe('GET /api/feed/google-merchant', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/xml');
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe(
+      'public, s-maxage=3600, stale-while-revalidate=86400'
+    );
+    expect(response.headers.get('CDN-Cache-Control')).toBe(
+      'public, s-maxage=3600, stale-while-revalidate=86400'
+    );
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, max-age=300, stale-while-revalidate=86400'
+    );
     expect(xml).toContain('<rss');
     expect(xml).toContain('<g:id>product-1</g:id>');
     expect(mockGenerateGoogleMerchantFeed).toHaveBeenCalledWith(

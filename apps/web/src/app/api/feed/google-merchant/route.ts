@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { CACHE_HEADERS } from '@/lib/cache-headers';
 import { googleMerchantFeedQuerySchema } from '@/schemas/google-merchant-feed-query';
 import { generateGoogleMerchantFeedForIdentifier } from './feed-service';
+import { GOOGLE_MERCHANT_FEED_CACHE_HEADERS } from './route-utils';
 
 /**
  * Google Merchant Center Product Feed API
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'application/xml; charset=utf-8',
-        ...CACHE_HEADERS.LONG,
+        ...GOOGLE_MERCHANT_FEED_CACHE_HEADERS,
       },
     });
   }

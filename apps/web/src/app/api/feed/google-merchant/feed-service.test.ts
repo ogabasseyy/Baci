@@ -4,6 +4,13 @@ const mockResolveFeedMerchant = vi.fn();
 const mockGenerateGoogleMerchantFeed = vi.fn();
 const mockGetCachedGoogleMerchantFeedData = vi.fn();
 const mockLoggerError = vi.fn();
+const mockCacheLife = vi.fn();
+const mockCacheTag = vi.fn();
+
+vi.mock('next/cache', () => ({
+  cacheLife: (...args: unknown[]) => mockCacheLife(...args),
+  cacheTag: (...args: unknown[]) => mockCacheTag(...args),
+}));
 
 vi.mock('@/lib/feed-identifier', () => {
   class _MerchantNotFoundError extends Error {
@@ -68,6 +75,11 @@ describe('generateGoogleMerchantFeedForIdentifier', () => {
     });
 
     expect(result).toEqual({ success: true, xml: '<rss />' });
+    expect(mockCacheLife).toHaveBeenCalledWith('products');
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'google-merchant-feed',
+      'merchant-feed-merchant-1'
+    );
     expect(mockResolveFeedMerchant).toHaveBeenCalledWith('ogabassey', true);
     expect(mockGetCachedGoogleMerchantFeedData).toHaveBeenCalledWith(
       'merchant-1',

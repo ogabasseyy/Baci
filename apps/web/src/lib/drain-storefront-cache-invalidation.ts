@@ -144,6 +144,7 @@ export async function drainStorefrontCacheInvalidation(
     }
     revalidateCategories(claim.merchant_id, undefined, {
       expireImmediately: true,
+      omitSharedProductTags: true,
     });
     for (const tag of [...dataTags, ...productTags]) {
       revalidateTag(tag, { expire: 0 });

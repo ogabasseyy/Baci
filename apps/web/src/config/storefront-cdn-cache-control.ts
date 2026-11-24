@@ -40,6 +40,10 @@
 
 const CACHEABLE_BROWSER_CACHE_CONTROL = 'public, max-age=0, must-revalidate';
 const CACHEABLE_VERCEL_CDN_CACHE_CONTROL =
+  'max-age=3600, stale-while-revalidate=86400';
+const CACHEABLE_PDP_VERCEL_CDN_CACHE_CONTROL =
+  'max-age=1800, stale-while-revalidate=86400';
+const CACHEABLE_SELF_HEALING_VERCEL_CDN_CACHE_CONTROL =
   'max-age=300, stale-while-revalidate=86400';
 const CACHEABLE_CDN_CACHE_CONTROL =
   'max-age=3600, stale-while-revalidate=86400, stale-if-error=86400';
@@ -79,7 +83,7 @@ export function buildStorefrontDocumentCacheHeaders(
   if (kind === 'cacheable-pdp') {
     return {
       cacheControl: CACHEABLE_BROWSER_CACHE_CONTROL,
-      vercelCdnCacheControl: CACHEABLE_VERCEL_CDN_CACHE_CONTROL,
+      vercelCdnCacheControl: CACHEABLE_PDP_VERCEL_CDN_CACHE_CONTROL,
       cdnCacheControl: CACHEABLE_PDP_CDN_CACHE_CONTROL,
     };
   }
@@ -94,7 +98,7 @@ export function buildStorefrontDocumentCacheHeaders(
   if (kind === 'cacheable-self-healing') {
     return {
       cacheControl: CACHEABLE_BROWSER_CACHE_CONTROL,
-      vercelCdnCacheControl: CACHEABLE_VERCEL_CDN_CACHE_CONTROL,
+      vercelCdnCacheControl: CACHEABLE_SELF_HEALING_VERCEL_CDN_CACHE_CONTROL,
       cdnCacheControl: CACHEABLE_SELF_HEALING_CDN_CACHE_CONTROL,
     };
   }
@@ -102,7 +106,7 @@ export function buildStorefrontDocumentCacheHeaders(
   if (kind === 'cacheable-vercel-only') {
     return {
       cacheControl: CACHEABLE_BROWSER_CACHE_CONTROL,
-      vercelCdnCacheControl: CACHEABLE_VERCEL_CDN_CACHE_CONTROL,
+      vercelCdnCacheControl: CACHEABLE_SELF_HEALING_VERCEL_CDN_CACHE_CONTROL,
       cdnCacheControl: null,
     };
   }

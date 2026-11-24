@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { type Href, router } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
@@ -126,7 +126,7 @@ export function InboxSearchResults({
         <ConversationListItem
           colors={colors}
           conversation={item.conversation}
-          onPress={(id) => router.push(`/(admin)/messages/${id}` as never)}
+          onPress={(id) => router.push(`/(admin)/messages/${id}` as Href)}
           snippet={item.snippet}
         />
       )}

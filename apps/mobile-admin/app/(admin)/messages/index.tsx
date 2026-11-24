@@ -154,9 +154,7 @@ export default function MessagesScreen() {
                 keyExtractor={(item) => String(item.id)}
                 ListEmptyComponent={
                   <InboxEmptyState
-                    canLoadMore={
-                      !!query.hasNextPage && !query.isFetchingNextPage
-                    }
+                    canLoadMore={!!query.hasNextPage && !query.isFetching}
                     colors={colors}
                     loading={autoLoading || query.isFetchingNextPage}
                     onLoadMore={() => {
@@ -192,11 +190,7 @@ export default function MessagesScreen() {
                   ) : null
                 }
                 onEndReached={() => {
-                  if (
-                    !pageFailed &&
-                    query.hasNextPage &&
-                    !query.isFetchingNextPage
-                  ) {
+                  if (!pageFailed && query.hasNextPage && !query.isFetching) {
                     query.fetchNextPage();
                   }
                 }}

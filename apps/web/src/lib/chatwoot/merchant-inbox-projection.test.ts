@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { merchantInboxConversationSchema } from '@/schemas/merchant-inbox';
 import {
   compareMerchantInboxMessages,
   projectMerchantInboxConversation,
@@ -257,5 +258,23 @@ describe('projectMerchantInboxConversation', () => {
     expect(
       projectMerchantInboxConversation({ ...conversation, status: 'weird' }, 2)
     ).toBeNull();
+  });
+
+  it('bugfix: a chat with many or overlong tag labels still passes the response contract', () => {
+    const labels = [
+      ...Array.from({ length: 12 }, (_, i) => `tag-t${i}`),
+      `tag-${'x'.repeat(40)}`,
+    ];
+
+    const projected = projectMerchantInboxConversation(
+      { ...conversation, labels },
+      2
+    );
+
+    // One such chat used to make the whole conversations page fail to parse.
+    expect(merchantInboxConversationSchema.safeParse(projected).success).toBe(
+      true
+    );
+    expect(projected?.tags).toHaveLength(10);
   });
 });

@@ -147,6 +147,9 @@ export function ConversationActions({
       <ScrollView
         contentContainerStyle={styles.row}
         horizontal
+        // With the reply keyboard open, the first tap would otherwise only
+        // close it and never reach the button.
+        keyboardShouldPersistTaps="handled"
         showsHorizontalScrollIndicator={false}
         style={[styles.bar, { borderBottomColor: colors.border }]}
       >

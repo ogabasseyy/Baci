@@ -40,10 +40,14 @@ export function chatWithLabels(
     failStatus?: number;
     /** With `lostReply`: the engine stores the snooze this many seconds off. */
     snoozeDriftSeconds?: number;
+    /** The chat's status before any change (default open). */
+    status?: string;
   } = {}
 ) {
   let labels = initial;
-  let snooze: { status: string; snoozed_until?: number } = { status: 'open' };
+  let snooze: { status: string; snoozed_until?: number } = {
+    status: options.status ?? 'open',
+  };
   let readsDown = false;
   const calls: Call[] = [];
   stubFetch((url, init) => {

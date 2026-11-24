@@ -87,35 +87,11 @@ export async function POST(request: NextRequest) {
   if (!body || typeof body !== 'object')
     return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
   const raw = body as Record<string, unknown>;
-  const rawEventField = raw.event_type ?? raw.event_name;
-  if (
-    typeof rawEventField !== 'string' ||
-    !rawEventField.trim() ||
-    typeof raw.merchant_id !== 'string' ||
-    !raw.merchant_id.trim()
-  ) {
+  if (!(raw.event_type || raw.event_name) || !raw.merchant_id) {
     return NextResponse.json(
       { error: 'Missing required fields: event_type and merchant_id' },
       { status: 400 }
     );
-  }
-  if (
-    raw.source !== 'server' &&
-    isBotUserAgent(request.headers.get('user-agent'))
-  ) {
-    // Acknowledge but do not record crawler traffic (before schema validation).
-    logger.debug({ message: 'Skipped crawler analytics event' });
-    const safeEventId =
-      typeof raw.event_id === 'string' &&
-      raw.event_id.length > 0 &&
-      raw.event_id.length <= 128 &&
-      /^[a-zA-Z0-9._:-]+$/.test(raw.event_id)
-        ? raw.event_id
-        : undefined;
-    return NextResponse.json({
-      success: true,
-      event_id: safeEventId,
-    });
   }
   const parsed = analyticsEventRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -131,23 +107,29 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (
+    input.source !== 'server' &&
+    isBotUserAgent(request.headers.get('user-agent'))
+  ) {
+    // Acknowledge but do not record crawler traffic.
+    logger.debug({ message: 'Skipped crawler analytics event' });
+    return NextResponse.json({ success: true, event_id: input.event_id });
+  }
   const rawEventType = input.event_type ?? input.event_name ?? '';
   const eventType = normalizeEventType(rawEventType) ?? rawEventType;
-  const source = input.source ?? 'web';
-  const producer = source === 'mobile_app' ? 'mobile' : 'web';
+  const eventData = buildAnalyticsEventData(input, eventType);
+  const eventTimestamp = input.timestamp ?? new Date().toISOString();
   const durableEnqueue = isEventPipelineEnqueueEnabled();
   let responseEventId = input.event_id;
   let verifiedFanoutMerchantId: string | null = null;
-  let sharedServerClient: SupabaseClient | null = null;
-  let contextVerified: boolean | null = null;
   try {
     if (durableEnqueue) {
-      sharedServerClient = await createServerClient();
+      const contextSupabase = await createServerClient();
       const context = await resolveEventIngressContext({
         merchantId: input.merchant_id,
         pageUrl: input.page_url ?? request.headers.get('referer') ?? undefined,
         request,
-        supabase: sharedServerClient,
+        supabase: contextSupabase,
       });
       if (!context.ok) {
         return NextResponse.json(
@@ -161,23 +143,19 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         );
       }
-      contextVerified = context.verified;
       responseEventId = input.event_id ?? `evt_${crypto.randomUUID()}`;
-      const eventData = buildAnalyticsEventData(input, eventType);
-      const eventTimestamp = input.timestamp ?? new Date().toISOString();
-      const domainEventName = toClientAnalyticsDomainEventName(
-        eventType,
-        context.trustLevel
-      );
       const eventSupabase = await createEventIngressClient({
         eventId: responseEventId,
-        eventName: domainEventName,
+        eventName: toClientAnalyticsDomainEventName(
+          eventType,
+          context.trustLevel
+        ),
         eventTimestamp,
         eventType,
         kind: 'analytics',
         merchantId: context.merchantId,
-        producer,
-        source,
+        producer: input.source === 'mobile_app' ? 'mobile' : 'web',
+        source: input.source ?? 'web',
         trustLevel: context.trustLevel,
       });
       try {
@@ -188,13 +166,16 @@ export async function POST(request: NextRequest) {
             context.trustLevel
           ),
           eventData,
-          eventName: domainEventName,
+          eventName: toClientAnalyticsDomainEventName(
+            eventType,
+            context.trustLevel
+          ),
           eventTimestamp,
           eventType,
           externalEventId: responseEventId,
           merchantId: context.merchantId,
           requestId: request.headers.get('x-request-id') ?? undefined,
-          source,
+          source: input.source ?? 'web',
           trustLevel: context.trustLevel,
         });
       } catch (error) {
@@ -214,8 +195,6 @@ export async function POST(request: NextRequest) {
         if (legacyError) throw legacyError;
       }
     } else {
-      const eventData = buildAnalyticsEventData(input, eventType);
-      const eventTimestamp = input.timestamp ?? new Date().toISOString();
       const eventSupabase = await createEventIngressClient({
         eventId: responseEventId ?? '',
         eventName: `analytics.${eventType}.legacy.v1`,
@@ -223,8 +202,8 @@ export async function POST(request: NextRequest) {
         eventType,
         kind: 'analytics',
         merchantId: input.merchant_id,
-        producer,
-        source,
+        producer: input.source === 'mobile_app' ? 'mobile' : 'web',
+        source: input.source ?? 'web',
         trustLevel: 'anonymous_client',
       });
       const { error } = await storeLegacyEvent(
@@ -243,18 +222,16 @@ export async function POST(request: NextRequest) {
       }
     }
     if (
-      !isLegacyAnalyticsFanoutDisabled() &&
       eventType !== 'purchase' &&
       eventType !== 'place_order' &&
       isConversionEvent(eventType) &&
-      contextVerified !== false &&
+      !isLegacyAnalyticsFanoutDisabled() &&
       clientMarketingTargets({
         analytics: input.analytics_consent,
         marketing: input.marketing_consent,
       }).length > 0
     ) {
-      const contextSupabase =
-        sharedServerClient ?? (await createServerClient());
+      const contextSupabase = await createServerClient();
       verifiedFanoutMerchantId = await resolveLegacyFanoutContext({
         merchantId: input.merchant_id,
         request,

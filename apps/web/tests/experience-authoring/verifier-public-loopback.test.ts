@@ -9,6 +9,7 @@ import { createOwnerInternalNodeServer } from '../../builder-mcp-server/owner-in
 import { createVerifierPublicClient } from '../../src/lib/experience/verifier-public-client';
 import { startVerifierListener } from '../../tools/experience-verifier/listener';
 import { createVerifierLoopbackForwarder } from '../../tools/experience-verifier/loopback-forwarder';
+import { createOwnerVerificationSlots } from '../../tools/experience-verifier/owner-verification-slots';
 import { createPublicVerificationHandler } from '../../tools/experience-verifier/public-verification-handler';
 
 it('forwards a signed public-verification request over loopback and reauthenticates the synthetic owner', async () => {
@@ -30,7 +31,16 @@ it('forwards a signed public-verification request over loopback and reauthentica
       })),
     },
   };
-  const verify = vi.fn(async () => {});
+  const work = Promise.withResolvers<void>();
+  const settled = vi.fn();
+  const verify = vi.fn(
+    async (_owner, _id, signal: AbortSignal, accept?: () => void) => {
+      accept?.();
+      await work.promise;
+      signal.throwIfAborted();
+      settled();
+    }
+  );
   const used = new Set<string>();
   const handler = createPublicVerificationHandler({
     key,
@@ -40,6 +50,7 @@ it('forwards a signed public-verification request over loopback and reauthentica
       return true;
     },
     resolveUserClient: async () => owner as never,
+    reserveOwnerWork: createOwnerVerificationSlots(),
     verify,
   });
   const listener = await startVerifierListener(
@@ -90,14 +101,23 @@ it('forwards a signed public-verification request over loopback and reauthentica
         }),
     });
     await client(owner as never, { approvalId });
+    expect(settled).not.toHaveBeenCalled();
     expect(verify).toHaveBeenCalledOnce();
     expect(verify).toHaveBeenCalledWith(
       owner,
       approvalId,
-      expect.any(AbortSignal)
+      expect.any(AbortSignal),
+      expect.any(Function)
     );
     expect(owner.auth.getUser).toHaveBeenCalledTimes(2);
+    await expect(client(owner as never, { approvalId })).rejects.toThrow(
+      'VERIFIER_UNAVAILABLE'
+    );
+    expect(verify).toHaveBeenCalledOnce();
+    work.resolve();
+    await vi.waitFor(() => expect(settled).toHaveBeenCalledOnce());
   } finally {
+    work.resolve();
     await ownerListener.close();
     await listener.close();
   }

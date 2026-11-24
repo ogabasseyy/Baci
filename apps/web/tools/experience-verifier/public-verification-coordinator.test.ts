@@ -145,6 +145,7 @@ it('uses owner and anonymous clients for distinct reads and records only after t
   expect(f.makeRelay).toHaveBeenCalledWith({
     binding,
     product: plan.product,
+    allowSharedCart: true,
     signal,
     paths: plan.routes.map((route) => route.path),
     supabase: {

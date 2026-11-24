@@ -21,7 +21,7 @@ export function createPublicVerificationFlow<
   P,
   E extends PublicVerificationExpected,
 >(deps: {
-  bind(id: string): Promise<B>;
+  bind(id: string, accept?: () => void): Promise<B>;
   fetchOutput(binding: B): Promise<F>;
   deriveExpected(binding: B): Promise<E>;
   fetchPages(binding: B, expected: E): Promise<P>;
@@ -32,9 +32,9 @@ export function createPublicVerificationFlow<
     markerDigest: string;
   }): Promise<void>;
 }) {
-  return async (id: string, signal?: AbortSignal) => {
+  return async (id: string, signal?: AbortSignal, accept?: () => void) => {
     signal?.throwIfAborted();
-    const binding = await deps.bind(id);
+    const binding = await deps.bind(id, accept);
     signal?.throwIfAborted();
     const output = await deps.fetchOutput(binding);
     signal?.throwIfAborted();

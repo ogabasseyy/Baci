@@ -15,33 +15,37 @@ export function createPublicHeadResolver(
 ) {
   validateCanonicalRootDomain(rootDomain);
   const publicOutput = createPublicOutputReader(publicClient);
-  return (approvalId: string) =>
-    bindPublicHead(approvalId, {
-      loadReceipt: (id) => loadLifecycleApproval(owner, id),
-      async loadMerchant(id) {
-        const result = await owner
-          .from('merchants')
-          .select('slug,premium_features')
-          .eq('id', id)
-          .maybeSingle();
-        if (result.error || !result.data)
-          throw Error('PUBLIC_BINDING_UNAVAILABLE');
-        return result.data;
+  return (approvalId: string, accept?: () => void) =>
+    bindPublicHead(
+      approvalId,
+      {
+        loadReceipt: (id) => loadLifecycleApproval(owner, id),
+        async loadMerchant(id) {
+          const result = await owner
+            .from('merchants')
+            .select('slug,premium_features')
+            .eq('id', id)
+            .maybeSingle();
+          if (result.error || !result.data)
+            throw Error('PUBLIC_BINDING_UNAVAILABLE');
+          return result.data;
+        },
+        async loadBuildDigest(merchantId, buildId) {
+          const result = await owner
+            .from('experience_builds')
+            .select('build_digest')
+            .eq('merchant_id', merchantId)
+            .eq('id', buildId)
+            .maybeSingle();
+          if (result.error || !result.data)
+            throw Error('PUBLIC_BINDING_UNAVAILABLE');
+          return result.data.build_digest;
+        },
+        canonicalBase: (slug) =>
+          resolveCanonicalBase(publicClient, slug, rootDomain),
+        manifest: publicOutput.manifest,
+        read: publicOutput.read,
       },
-      async loadBuildDigest(merchantId, buildId) {
-        const result = await owner
-          .from('experience_builds')
-          .select('build_digest')
-          .eq('merchant_id', merchantId)
-          .eq('id', buildId)
-          .maybeSingle();
-        if (result.error || !result.data)
-          throw Error('PUBLIC_BINDING_UNAVAILABLE');
-        return result.data.build_digest;
-      },
-      canonicalBase: (slug) =>
-        resolveCanonicalBase(publicClient, slug, rootDomain),
-      manifest: publicOutput.manifest,
-      read: publicOutput.read,
-    });
+      accept
+    );
 }

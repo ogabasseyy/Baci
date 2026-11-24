@@ -140,7 +140,7 @@ export async function startVerifierService(settings: {
         consumeNonce,
         resolveUserClient,
         reserveOwnerWork,
-        verify: async (owner, id, signal) => {
+        verify: async (owner, id, signal, accept) => {
           if (!settings.publicVerification)
             throw Error('PUBLIC_VERIFIER_NOT_INSTALLED');
           const verify = await createPublicVerificationCoordinator({
@@ -152,7 +152,7 @@ export async function startVerifierService(settings: {
             executionOrigin: settings.executionOrigin,
             observe: settings.publicVerification.observe,
           });
-          await verify(id);
+          await verify(id, accept);
         },
       })
     : undefined;

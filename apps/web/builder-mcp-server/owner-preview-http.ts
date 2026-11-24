@@ -230,7 +230,9 @@ function createOwnerHttpHandler(
       const allowedStatuses = [
         200, 204, 400, 401, 403, 404, 409, 413, 429, 503,
       ];
-      if (!allowedStatuses.includes(result.status)) {
+      const acceptedPublicWork =
+        binding.path === '/internal/owner/public' && result.status === 202;
+      if (!acceptedPublicWork && !allowedStatuses.includes(result.status)) {
         respond(res, 502);
         return;
       }

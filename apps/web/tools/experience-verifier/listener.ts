@@ -47,7 +47,7 @@ export async function startVerifierListener(
   port: number,
   buildHandler?: (request: Request) => Promise<Response>,
   captureHandler?: (request: Request) => Promise<Response>,
-  publicHandler?: (request: Request) => Promise<Response>,
+  publicHandler?: (request: Request, accept: () => void) => Promise<Response>,
   deadlineMs?: number
 ) {
   if (!Number.isInteger(port) || port < 0 || port > 65535)
@@ -119,14 +119,22 @@ export async function startVerifierListener(
               ? publicHandler
               : handler;
       if (!selected) throw Error('VERIFIER_UNAVAILABLE');
-      const result = await selected(
-        new Request(`https://verifier.baci-internal.invalid${req.url}`, {
+      const input = new Request(
+        `https://verifier.baci-internal.invalid${req.url}`,
+        {
           method: 'POST',
           headers,
           body: new Uint8Array(bytes),
           signal: controller.signal,
-        })
+        }
       );
+      const result = await selected(input, () => {
+        controller.signal.throwIfAborted();
+        if (res.destroyed) throw Error('VERIFIER_REQUEST_CLOSED');
+        // The durable receipt is bound. The verifier keeps its work slot and
+        // deadline after acknowledging the handoff to the web request.
+        reply(202);
+      });
       if (controller.signal.aborted) {
         await result.body?.cancel();
         return;

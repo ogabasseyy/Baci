@@ -22,13 +22,14 @@ export function createPublicVerificationHandler(settings: {
   verify(
     client: SupabaseClient,
     approvalId: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    accept?: () => void
   ): Promise<unknown>;
 }) {
   if (settings.key.length !== 32) throw Error('INVALID_VERIFIER_CONFIG');
   const key = Uint8Array.from(settings.key);
   const now = settings.now ?? Date.now;
-  return async (request: Request) => {
+  return async (request: Request, accept?: () => void) => {
     const reply = (status: number) =>
       new Response(null, { status, headers: { 'Cache-Control': 'no-store' } });
     try {
@@ -74,7 +75,15 @@ export function createPublicVerificationHandler(settings: {
       const release = settings.reserveOwnerWork?.(user.data.user.id, 'public');
       if (release === null) return reply(429);
       try {
-        await settings.verify(client, parsed.data.approvalId, request.signal);
+        if (accept)
+          await settings.verify(
+            client,
+            parsed.data.approvalId,
+            request.signal,
+            accept
+          );
+        else
+          await settings.verify(client, parsed.data.approvalId, request.signal);
         request.signal.throwIfAborted();
         return reply(204);
       } finally {

@@ -94,6 +94,7 @@ export function createOwnerMtlsFetch(settings: {
             return;
           }
           if (
+            !(path === '/internal/owner/public' && status === 202) &&
             ![
               200, 204, 400, 401, 403, 404, 409, 413, 429, 500, 502, 503, 504,
             ].includes(status)

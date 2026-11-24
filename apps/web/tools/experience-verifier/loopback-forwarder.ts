@@ -50,9 +50,11 @@ export function createVerifierLoopbackForwarder(
         req.end(JSON.stringify(parsed.body));
       });
       return new Response(null, {
-        status: [204, 400, 401, 403, 404, 409, 413, 429].includes(status)
-          ? status
-          : 503,
+        status:
+          (operation === 'public' && status === 202) ||
+          [204, 400, 401, 403, 404, 409, 413, 429].includes(status)
+            ? status
+            : 503,
       });
     } catch {
       return new Response(null, { status: 503 });

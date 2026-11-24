@@ -22,10 +22,15 @@ type Dependencies = {
 };
 
 /** Binds verifier input to a current owner-scoped receipt and public bytes. */
-export async function bindPublicHead(approvalId: string, deps: Dependencies) {
+export async function bindPublicHead(
+  approvalId: string,
+  deps: Dependencies,
+  accept?: () => void
+) {
   const id = publicHeadApprovalId.parse(approvalId);
   const receipt = publicHeadReceipt.parse(await deps.loadReceipt(id));
   if (receipt.approvalId !== id) throw Error('PUBLIC_BINDING_MISMATCH');
+  accept?.();
   const merchant = publicHeadMerchant.parse(
     await deps.loadMerchant(receipt.merchantId)
   );

@@ -150,5 +150,5 @@ export async function createPublicVerificationCoordinator(settings: {
     },
     record,
   });
-  return (id: string) => verify(id, signal);
+  return (id: string, accept?: () => void) => verify(id, signal, accept);
 }

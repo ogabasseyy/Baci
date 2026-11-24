@@ -56,6 +56,7 @@ export function createVerifierPublicClient(settings: {
       }
     );
     await response.body?.cancel().catch(() => undefined);
-    if (response.status !== 204) throw Error('VERIFIER_UNAVAILABLE');
+    if (response.status !== 202 && response.status !== 204)
+      throw Error('VERIFIER_UNAVAILABLE');
   };
 }

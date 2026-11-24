@@ -48,6 +48,16 @@ function fixture() {
     ),
   };
 }
+it('acknowledges only the exact committed receipt before acquiring public assets', async () => {
+  const f = fixture();
+  const accept = vi.fn(() => expect(f.read).not.toHaveBeenCalled());
+  f.loadReceipt.mockResolvedValueOnce({ ...receipt, status: 'superseded' });
+  await expect(bindPublicHead(id, f, accept)).rejects.toThrow();
+  expect(accept).not.toHaveBeenCalled();
+  await bindPublicHead(id, f, accept);
+  expect(accept).toHaveBeenCalledOnce();
+  expect(f.read).toHaveBeenCalledTimes(2);
+});
 it('binds a verifying receipt to its exact public head, bytes and canonical origin', async () => {
   const result = await bindPublicHead(id, fixture());
   expect(result).toMatchObject({

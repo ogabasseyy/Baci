@@ -105,7 +105,7 @@ it('uses the full public verification deadline rather than the approval deadline
     });
     await verify(client as never, { approvalId });
     expect(timer).toHaveBeenCalledWith(PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS);
-    expect(PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS).toBeGreaterThan(600_000);
+    expect(PUBLIC_VERIFICATION_CLIENT_TIMEOUT_MS).toBe(30_000);
   } finally {
     timer.mockRestore();
   }

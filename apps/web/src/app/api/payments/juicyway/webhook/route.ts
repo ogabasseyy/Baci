@@ -565,6 +565,8 @@ export async function POST(request: NextRequest) {
         !response.error && !response.data
           ? await finalizeJuicywayTerminalOrder({
               gatewayResponse: data as unknown as Record<string, unknown>,
+              // Legacy sessions lack locked amount/currency metadata, so late
+              // captures stay in reconciliation instead of auto-reopening.
               allowReinstatement: requireExpectedSettlementMetadata,
               orderId: transaction.order_id,
               reference,

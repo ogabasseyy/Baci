@@ -51,7 +51,7 @@ export async function recoverCreditDirectTimeoutOrder<T>({
       .select('notes')
       .eq('id', orderId)
       .eq('merchant_id', merchantId)
-      .single();
+      .maybeSingle();
     data = result.data;
     error = result.error;
   }

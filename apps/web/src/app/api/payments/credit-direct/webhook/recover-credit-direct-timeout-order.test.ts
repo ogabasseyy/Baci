@@ -11,7 +11,7 @@ function mockRecovery(notes: string, error: { message: string } | null = null) {
   const query = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
-    single: vi.fn().mockResolvedValue({ data: { notes }, error }),
+    maybeSingle: vi.fn().mockResolvedValue({ data: { notes }, error }),
   };
   const from = vi.fn().mockReturnValue(query);
   return {
@@ -73,7 +73,7 @@ describe('recoverCreditDirectTimeoutOrder', () => {
     await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
       kind: 'blocked',
     });
-    expect(query.single).not.toHaveBeenCalled();
+    expect(query.maybeSingle).not.toHaveBeenCalled();
     expect(input.resume).not.toHaveBeenCalled();
   });
 
@@ -83,7 +83,7 @@ describe('recoverCreditDirectTimeoutOrder', () => {
     await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
       kind: 'review_required',
     });
-    expect(query.single).not.toHaveBeenCalled();
+    expect(query.maybeSingle).not.toHaveBeenCalled();
   });
 
   it('returns without an RPC when the transaction ID is missing', async () => {
@@ -98,7 +98,7 @@ describe('recoverCreditDirectTimeoutOrder', () => {
   it('files the existing reconciliation path when the reinstated order cannot be read', async () => {
     reinstate.mockResolvedValue('already_reinstated');
     const { input, query } = mockRecovery('{}', { message: 'Unavailable' });
-    query.single
+    query.maybeSingle
       .mockResolvedValueOnce({ data: null, error: { message: 'Unavailable' } })
       .mockResolvedValueOnce({
         data: null,
@@ -107,14 +107,14 @@ describe('recoverCreditDirectTimeoutOrder', () => {
     await expect(recoverCreditDirectTimeoutOrder(input)).resolves.toEqual({
       kind: 'review_required',
     });
-    expect(query.single).toHaveBeenCalledTimes(2);
+    expect(query.maybeSingle).toHaveBeenCalledTimes(2);
     expect(input.resume).not.toHaveBeenCalled();
   });
 
   it('retries one transient notes read failure and resumes after the committed flip', async () => {
     reinstate.mockResolvedValue('reinstated');
     const { input, query } = mockRecovery('{}');
-    query.single
+    query.maybeSingle
       .mockResolvedValueOnce({ data: null, error: { message: 'Unavailable' } })
       .mockResolvedValueOnce({
         data: { notes: '{"platformFee":10,"merchantAmount":100}' },
@@ -125,7 +125,7 @@ describe('recoverCreditDirectTimeoutOrder', () => {
       kind: 'recovered',
       response: 'processed',
     });
-    expect(query.single).toHaveBeenCalledTimes(2);
+    expect(query.maybeSingle).toHaveBeenCalledTimes(2);
     expect(input.resume).toHaveBeenCalledWith({
       merchantAmount: 100,
       platformFee: 10,

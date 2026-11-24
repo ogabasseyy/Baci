@@ -87,7 +87,11 @@ function pushedByStore(
   const data = response.notification.request.content.data;
   const value = (data as Record<string, unknown> | null | undefined)
     ?.merchant_id;
-  return typeof value === 'string' && STORE_ID.test(value) ? value : null;
+  // Lower-cased: the server accepts either case, but the app's query keys use
+  // the lower-case id, so an upper-case one would refresh the wrong cache entry.
+  return typeof value === 'string' && STORE_ID.test(value)
+    ? value.toLowerCase()
+    : null;
 }
 
 async function sendChatReply(

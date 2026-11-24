@@ -98,6 +98,25 @@ describe('handleChatReplyResponse: a reply that is sent', () => {
     expect(filters).toHaveLength(2);
   });
 
+  it('bugfix: an upper-case store id in the push is sent and refreshed in lower case', async () => {
+    const { router, deps } = setup(mocks.send);
+
+    await handleChatReplyResponse(
+      router,
+      reply('Hi', {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: STORE.toUpperCase(),
+      }),
+      deps
+    );
+
+    expect(mocks.send).toHaveBeenCalledWith(21, 'Hi', STORE);
+    const filters = deps.invalidate.mock.calls.map((c) => c[0]);
+    expect(filters).toContainEqual({ queryKey: inboxThreadKey(STORE, 21) });
+    expect(filters).toContainEqual({ queryKey: inboxConversationsKey(STORE) });
+  });
+
   it('bugfix: posts a reply only once when the same response is delivered twice', async () => {
     const { router, deps } = setup(mocks.send);
     const response = reply('Only once please');

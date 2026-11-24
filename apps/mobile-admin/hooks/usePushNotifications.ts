@@ -44,6 +44,7 @@ async function loadNotificationsForDevice() {
 
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { registerChatReplyCategory } from '@/services/chat-notification-reply';
 import {
   clearBadge,
   registerForPushNotifications,
@@ -172,6 +173,14 @@ export function usePushNotifications(): UsePushNotificationsResult {
       if (cancelled || !loadedNotifications) {
         return;
       }
+
+      // The Reply box on chat notifications. Best effort: without it the
+      // notification still opens the chat.
+      void registerChatReplyCategory(loadedNotifications).catch((error) => {
+        if (__DEV__) {
+          console.debug('[Push] Failed to register reply category:', error);
+        }
+      });
 
       // Listener for notifications received while app is foregrounded
       notificationListener.current =

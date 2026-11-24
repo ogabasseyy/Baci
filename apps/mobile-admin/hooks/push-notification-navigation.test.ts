@@ -5,6 +5,14 @@ import {
   navigateToNotificationTarget,
 } from './push-notification-navigation';
 
+const replyMocks = vi.hoisted(() => ({ handle: vi.fn() }));
+
+vi.mock('@/services/chat-notification-reply', () => ({
+  handleChatReplyResponse: replyMocks.handle,
+  isChatReplyResponse: (response: { actionIdentifier?: string }) =>
+    response.actionIdentifier === 'reply',
+}));
+
 vi.mock('@/services/push-notifications', () => ({
   getNotificationNavigationParams: (response: NotificationResponse) => {
     const data = response.notification.request.content.data as Record<
@@ -18,8 +26,12 @@ vi.mock('@/services/push-notifications', () => ({
   },
 }));
 
-function makeResponse(data: unknown): NotificationResponse {
+function makeResponse(
+  data: unknown,
+  actionIdentifier = 'expo.modules.notifications.actions.DEFAULT'
+): NotificationResponse {
   return {
+    actionIdentifier,
     notification: {
       request: {
         content: { data },
@@ -157,5 +169,33 @@ describe('handleNotificationTap', () => {
 
     expect(router.push).toHaveBeenNthCalledWith(1, '/(admin)/messages/4821');
     expect(router.push).toHaveBeenNthCalledWith(2, '/(admin)/messages');
+  });
+
+  it('bugfix: hands the Reply box of a chat notification to the reply sender instead of only opening the chat', () => {
+    replyMocks.handle.mockClear();
+    const router = { push: vi.fn() };
+    const response = makeResponse(
+      { type: 'customer_message', conversation_id: 4821 },
+      'reply'
+    );
+
+    handleNotificationTap(router, response, vi.fn());
+
+    expect(replyMocks.handle).toHaveBeenCalledWith(router, response);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('still just opens the chat for a plain tap on a chat notification', () => {
+    replyMocks.handle.mockClear();
+    const router = { push: vi.fn() };
+
+    handleNotificationTap(
+      router,
+      makeResponse({ screen: 'order', id: '7' }),
+      vi.fn()
+    );
+
+    expect(replyMocks.handle).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalledWith('/(admin)/order/7');
   });
 });

@@ -76,7 +76,8 @@ describe('sendChatEventPush', () => {
       'New message from Ada',
       'Is it in stock?',
       { type: 'customer_message', conversation_id: 21 },
-      'general'
+      'messages',
+      { categoryId: 'chat_reply' }
     );
   });
 
@@ -88,7 +89,8 @@ describe('sendChatEventPush', () => {
       'New customer message',
       'A customer sent a message to your store.',
       expect.anything(),
-      'general'
+      'messages',
+      { categoryId: 'chat_reply' }
     );
   });
 
@@ -108,7 +110,8 @@ describe('sendChatEventPush', () => {
       'Ada needs a person',
       'The assistant handed this chat to your team. Open it to reply.',
       { type: 'customer_message', conversation_id: 21, handover: true },
-      'general'
+      'messages',
+      { categoryId: 'chat_reply' }
     );
   });
 
@@ -123,7 +126,8 @@ describe('sendChatEventPush', () => {
       'A customer needs a person',
       'The assistant handed this chat to your team. Open it to reply.',
       expect.objectContaining({ handover: true }),
-      'general'
+      'messages',
+      { categoryId: 'chat_reply' }
     );
   });
 

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
+import { CHAT_REPLY_NOTIFICATION_CATEGORY } from '@baci/shared';
 import { notifyMerchantWithStore } from '@/lib/expo-push-core';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
@@ -108,7 +109,10 @@ export async function sendChatEventPush(
       content.title,
       content.body,
       content.data,
-      'general'
+      // A chat push is a person waiting: its own high-importance channel (the
+      // general one is silent on Android) and a Reply box on the notification.
+      'messages',
+      { categoryId: CHAT_REPLY_NOTIFICATION_CATEGORY }
     );
     // The delivery layer reports provider failures as counts and errors
     // instead of throwing, so the status has to be derived from them.

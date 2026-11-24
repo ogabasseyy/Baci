@@ -138,6 +138,9 @@ export async function getMerchantInboxConversation(
   return { ok: true, conversation };
 }
 
+/** Rows per page of the chat engine's message list (hidden rows included). */
+export const PROVIDER_MESSAGE_PAGE_SIZE = 20;
+
 /** Returns one page of a bound conversation's messages, oldest first. */
 export async function listMerchantInboxMessages(
   binding: MerchantInboxBinding,
@@ -182,9 +185,12 @@ export async function listMerchantInboxMessages(
       (id): id is number =>
         typeof id === 'number' && Number.isSafeInteger(id) && id > 0
     );
-  // As with conversations, no provider page size is assumed: any non-empty
-  // page may have an older one, and paging ends on an empty page.
-  const hasOlder = rawIds.length > 0;
+  // The chat engine's message finder returns at most 20 rows per page, hidden
+  // rows included (`limit(20)` in v4.19.1, verified in its source), so a page
+  // with fewer rows is the oldest one: a short chat must not offer "load
+  // earlier". A full page may have an older one, and paging still ends on an
+  // empty page. Re-check the size when the engine is upgraded.
+  const hasOlder = rawIds.length >= PROVIDER_MESSAGE_PAGE_SIZE;
   return {
     ok: true,
     conversation: owned.conversation,

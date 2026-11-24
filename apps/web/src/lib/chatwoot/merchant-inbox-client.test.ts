@@ -6,6 +6,7 @@ import {
   getMerchantInboxConversation,
   listMerchantInboxConversations,
   listMerchantInboxMessages,
+  PROVIDER_MESSAGE_PAGE_SIZE,
 } from './merchant-inbox-client';
 import {
   binding,
@@ -182,8 +183,9 @@ describe('listMerchantInboxMessages', () => {
 
     expect(result).toMatchObject({
       ok: true,
-      hasOlder: true,
-      nextBefore: 29,
+      // Three rows is fewer than a full page, so nothing older exists.
+      hasOlder: false,
+      nextBefore: null,
       conversation: { id: 7 },
       messages: [
         { id: 29, sender: 'store' },
@@ -215,6 +217,46 @@ describe('listMerchantInboxMessages', () => {
     });
     expect(result).toMatchObject({ ok: true, hasOlder: true, nextBefore: 100 });
     if (result.ok) expect(result.messages).toHaveLength(19);
+  });
+
+  describe('bugfix: a short chat offered "load earlier messages"', () => {
+    const pageOf = (rows: number) =>
+      stubFetch((url) =>
+        url.pathname.endsWith('/messages')
+          ? {
+              body: {
+                payload: Array.from({ length: rows }, (_, i) =>
+                  message(100 + i)
+                ),
+              },
+            }
+          : { body: conversation(7) }
+      );
+
+    it('has no older page for a two-message chat', async () => {
+      pageOf(2);
+      await expect(
+        listMerchantInboxMessages(binding, { conversationId: 7 })
+      ).resolves.toMatchObject({
+        ok: true,
+        hasOlder: false,
+        nextBefore: null,
+      });
+    });
+
+    it('has no older page for a page one row short of full', async () => {
+      pageOf(PROVIDER_MESSAGE_PAGE_SIZE - 1);
+      await expect(
+        listMerchantInboxMessages(binding, { conversationId: 7 })
+      ).resolves.toMatchObject({ ok: true, hasOlder: false });
+    });
+
+    it('offers an older page for a full page, with the oldest row as cursor', async () => {
+      pageOf(PROVIDER_MESSAGE_PAGE_SIZE);
+      await expect(
+        listMerchantInboxMessages(binding, { conversationId: 7 })
+      ).resolves.toMatchObject({ ok: true, hasOlder: true, nextBefore: 100 });
+    });
   });
 
   it('ends paging on an empty page', async () => {

@@ -4,6 +4,7 @@ import {
   formatFollowUp,
   formatInboxTag,
   formatOrderCount,
+  inboxDisplayName,
 } from './merchant-inbox-format';
 
 describe('formatInboxTag', () => {
@@ -52,5 +53,23 @@ describe('formatOrderCount', () => {
     expect(formatOrderCount(1)).toBe('1 order');
     expect(formatOrderCount(5)).toBe('5 orders');
     expect(formatOrderCount(0)).toBe('0 orders');
+  });
+});
+
+describe('inboxDisplayName', () => {
+  it('turns a made-up visitor name into friendly words', () => {
+    expect(inboxDisplayName('small-meadow-890')).toBe('Small Meadow');
+    expect(inboxDisplayName('sparkling-snow-568')).toBe('Sparkling Snow');
+  });
+
+  it('keeps a real name exactly as it is', () => {
+    expect(inboxDisplayName('Ada Obi')).toBe('Ada Obi');
+    expect(inboxDisplayName('baci-fan')).toBe('baci-fan');
+    expect(inboxDisplayName('Mary-Jane 2')).toBe('Mary-Jane 2');
+  });
+
+  it('calls a blank name Visitor', () => {
+    expect(inboxDisplayName('')).toBe('Visitor');
+    expect(inboxDisplayName('   ')).toBe('Visitor');
   });
 });

@@ -19,6 +19,7 @@ import { useInboxManage } from '@/hooks/useInboxManage';
 import { useInboxReply } from '@/hooks/useInboxReply';
 import { useInboxThread } from '@/hooks/useInboxThread';
 import { useTheme } from '@/hooks/useTheme';
+import { inboxDisplayName } from '@/lib/merchant-inbox-format';
 import { buildThreadRows } from '@/lib/merchant-inbox-rows';
 
 export function ConversationThread({
@@ -54,7 +55,11 @@ export function ConversationThread({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
-        options={{ title: conversation?.customerName ?? 'Conversation' }}
+        options={{
+          title: conversation
+            ? inboxDisplayName(conversation.customerName)
+            : 'Conversation',
+        }}
       />
       {thread.isLoading ? (
         <View style={styles.centered}>

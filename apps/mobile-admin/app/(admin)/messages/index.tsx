@@ -256,9 +256,9 @@ const styles = StyleSheet.create({
   },
   summary: {
     fontFamily: TYPOGRAPHY.fontFamily.medium,
-    fontSize: TYPOGRAPHY.size.md,
+    fontSize: TYPOGRAPHY.size.sm,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   title: {
     fontFamily: TYPOGRAPHY.fontFamily.semiBold,

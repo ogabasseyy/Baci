@@ -2,12 +2,9 @@ import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
+import { inboxAvatar } from '@/lib/merchant-inbox-avatar';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
-import {
-  badgeText,
-  ConversationListItem,
-  needsReply,
-} from './ConversationListItem';
+import { ConversationListItem, needsReply } from './ConversationListItem';
 
 const message = (
   sender: 'customer' | 'store' | 'assistant' | 'system',
@@ -66,48 +63,42 @@ describe('needsReply', () => {
   });
 });
 
-describe('badgeText', () => {
-  it('combines the unread count with needs reply', () => {
-    expect(badgeText(chat({ unreadCount: 3 }))).toBe('3 new · needs reply');
-  });
-
-  it('shows only the count when the store answered last', () => {
-    expect(
-      badgeText(chat({ unreadCount: 2, lastMessage: message('store') }))
-    ).toBe('2 new');
-  });
-
-  it('shows Needs reply with no unread count, and nothing when all is quiet', () => {
-    expect(badgeText(chat())).toBe('Needs reply');
-    expect(badgeText(chat({ lastMessage: message('store') }))).toBeNull();
-  });
-
-  it('shows nothing about replying for a resolved chat, only its unread count', () => {
-    expect(badgeText(chat({ status: 'resolved', unreadCount: 1 }))).toBe(
-      '1 new'
-    );
-    expect(badgeText(chat({ status: 'resolved' }))).toBeNull();
-  });
-});
-
 describe('ConversationListItem', () => {
-  it('shows the name, initials, preview and badge, and opens the chat', () => {
+  it('shows the friendly name, a face, the preview and the unread count, and opens the chat', () => {
     const { onPress } = renderItem(chat({ unreadCount: 2 }));
 
-    expect(screen.getByText('small-meadow-890')).toBeInTheDocument();
-    expect(screen.getByText('SM')).toBeInTheDocument();
+    expect(screen.getByText('Small Meadow')).toBeInTheDocument();
+    expect(
+      screen.getByText(inboxAvatar('small-meadow-890').emoji)
+    ).toBeInTheDocument();
     expect(screen.getByText('Hello there')).toBeInTheDocument();
-    expect(screen.getByText('2 new · needs reply')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText(/new · needs reply/)).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /small-meadow-890/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Small Meadow/ }));
     expect(onPress).toHaveBeenCalledWith(7);
+  });
+
+  it('caps a long unread count at 99+', () => {
+    renderItem(chat({ unreadCount: 140 }));
+    expect(screen.getByText('99+')).toBeInTheDocument();
+  });
+
+  it('shows a real customer name as it is', () => {
+    renderItem(chat({ customerName: 'Ada Obi' }));
+    expect(screen.getByText('Ada Obi')).toBeInTheDocument();
+  });
+
+  it('shows no unread count for a chat that is read', () => {
+    renderItem(chat({ unreadCount: 0, lastMessage: message('store') }));
+    expect(screen.queryByText('0')).toBeNull();
   });
 
   it('says in its accessible name when a reply is needed', () => {
     renderItem(chat());
     expect(
       screen.getByRole('button', {
-        name: 'Conversation with small-meadow-890, needs reply. Hello there',
+        name: 'Conversation with Small Meadow, needs reply. Hello there',
       })
     ).toBeInTheDocument();
     expect(needsReply(chat({ status: 'resolved' }))).toBe(false);
@@ -191,5 +182,26 @@ describe('ConversationListItem', () => {
     );
     expect(screen.getByText('Signed in')).toBeInTheDocument();
     expect(screen.queryByText(/Returning/)).toBeNull();
+  });
+
+  it('says a reply is needed in the accessible name even when the chat is read', () => {
+    renderItem(chat({ unreadCount: 0 }));
+    expect(
+      screen.getByRole('button', { name: /needs reply/ })
+    ).toBeInTheDocument();
+  });
+
+  it('keeps amber for a shopper who has waited more than a day', () => {
+    renderItem(chat({ lastActivityAt: '2020-01-01T10:00:00Z' }));
+    expect(screen.getByText(/2020|Jan/)).toHaveStyle({
+      color: LIGHT_COLORS.gold,
+    });
+  });
+
+  it('does not use amber for a shopper who only just wrote', () => {
+    renderItem(chat({ lastActivityAt: new Date().toISOString() }));
+    expect(screen.getByText('Just now')).not.toHaveStyle({
+      color: LIGHT_COLORS.gold,
+    });
   });
 });

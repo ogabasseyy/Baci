@@ -2,6 +2,7 @@ import {
   formatFollowUp,
   formatInboxTag,
   formatOrderCount,
+  inboxDisplayName,
 } from '@/lib/merchant-inbox-format';
 import { isFollowUpDue, isReturningCustomer } from '@/lib/merchant-inbox-sort';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
@@ -17,7 +18,9 @@ export function conversationA11yLabel(
   conversation: InboxConversation,
   { preview, waiting }: { preview: string; waiting: boolean }
 ): string {
-  const parts = [`Conversation with ${conversation.customerName}`];
+  const parts = [
+    `Conversation with ${inboxDisplayName(conversation.customerName)}`,
+  ];
   if (waiting) parts.push('needs reply');
   if (conversation.unreadCount > 0) {
     parts.push(`${conversation.unreadCount} new`);

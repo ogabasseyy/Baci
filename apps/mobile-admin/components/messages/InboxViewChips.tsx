@@ -47,7 +47,12 @@ export function InboxViewChips({
             <Text
               style={[
                 styles.label,
-                { color: selected ? colors.textOnPrimary : colors.text },
+                {
+                  color: selected ? colors.textOnPrimary : colors.textSecondary,
+                  fontFamily: selected
+                    ? TYPOGRAPHY.fontFamily.semiBold
+                    : TYPOGRAPHY.fontFamily.medium,
+                },
               ]}
             >
               {view.label}
@@ -65,13 +70,10 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 36,
-    paddingHorizontal: SPACING.md + 2,
+    minHeight: 34,
+    paddingHorizontal: SPACING.md,
   },
-  label: {
-    fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-    fontSize: TYPOGRAPHY.size.md,
-  },
+  label: { fontSize: TYPOGRAPHY.size.md },
   scroller: { flexGrow: 0 },
   row: {
     gap: SPACING.sm,

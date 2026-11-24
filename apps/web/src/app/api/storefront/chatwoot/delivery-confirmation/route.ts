@@ -7,7 +7,6 @@ import {
   OGABASSEY_MODEL_PROVIDER_OPTIONS,
 } from '@/app/api/chat/ogabassey-model-providers';
 import { fetchGoogleAutocomplete } from '@/app/api/places/google-autocomplete';
-import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import { readCartJsonBody } from '@/lib/cart/request-context';
 import { checkCartQuota } from '@/lib/cart/request-quota';
 import { loadChatwootCartContext } from '@/lib/chatwoot/cart-context';
@@ -48,10 +47,7 @@ function signMatch(scope: string, match: Omit<ChatwootDeliveryMatch, 'proof'>) {
 }
 
 export async function POST(request: NextRequest) {
-  if (
-    !isOxygenStorefrontStagingEnabled() ||
-    process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED !== 'true'
-  ) {
+  if (process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED !== 'true') {
     return result('unclear', 404);
   }
   if (!(await checkCsrfProtection(request)).valid)

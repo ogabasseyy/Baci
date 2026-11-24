@@ -37,12 +37,13 @@ export function ChatwootInlineCartBridge({
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [applicationPath, setApplicationPath] = useState<string | null>(null);
-  const inlineEnabled = checkoutEnabled && isOxygenStorefrontStagingEnabled();
+  const inlineEnabled = checkoutEnabled;
+  const oxygenEnabled = checkoutEnabled && isOxygenStorefrontStagingEnabled();
   useChatwootInlineCartBridge(
     storeSlug,
     widgetOrigin,
     checkoutEnabled,
-    inlineEnabled ? setApplicationPath : undefined
+    oxygenEnabled ? setApplicationPath : undefined
   );
   const basePath = merchant?.basePath;
   const activeSlug = merchant?.merchant?.slug;
@@ -202,7 +203,7 @@ export function ChatwootInlineCartBridge({
           }}
         />
       )}
-      {applicationPath && (
+      {oxygenEnabled && applicationPath && (
         <ChatwootOxygenCard
           key={applicationPath}
           orderId={applicationPath.split('/').at(-1) ?? ''}
@@ -215,6 +216,7 @@ export function ChatwootInlineCartBridge({
           storeSlug={storeSlug}
           onClose={() => setOrdersOpen(false)}
           onContinueApplication={(orderId) => {
+            if (!oxygenEnabled) return;
             setOrdersOpen(false);
             setApplicationPath(`/payments/oxygen/${orderId}`);
           }}

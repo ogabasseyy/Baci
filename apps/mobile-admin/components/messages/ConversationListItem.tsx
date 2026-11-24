@@ -103,12 +103,9 @@ export function ConversationListItem({
             numberOfLines={snippet ? 2 : 1}
             style={[
               styles.preview,
-              {
-                color: unread ? colors.text : colors.textSecondary,
-                fontFamily: unread
-                  ? TYPOGRAPHY.fontFamily.medium
-                  : TYPOGRAPHY.fontFamily.regular,
-              },
+              // Unread is shown by the darker colour and the bold name, not by
+              // a heavier preview: regular weight keeps the list calm.
+              { color: unread ? colors.text : colors.textSecondary },
             ]}
           >
             {preview}
@@ -156,7 +153,12 @@ const styles = StyleSheet.create({
   },
   main: { flex: 1 },
   name: { flex: 1, fontSize: TYPOGRAPHY.size.lg },
-  preview: { flex: 1, fontSize: TYPOGRAPHY.size.md, lineHeight: 20 },
+  preview: {
+    flex: 1,
+    fontFamily: TYPOGRAPHY.fontFamily.regular,
+    fontSize: TYPOGRAPHY.size.md,
+    lineHeight: 20,
+  },
   row: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',

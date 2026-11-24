@@ -7,9 +7,31 @@ const KEEP_LAST = 50;
 /** This session's claims: they win a race the storage read would lose. */
 const claimedThisSession = new Set<string>();
 
+/**
+ * A short fingerprint of the text (cyrb53), so storage never holds what the
+ * owner typed. Enough to tell two replies to one notification apart.
+ */
+function fingerprint(text: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 =
+    Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^
+    Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 =
+    Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^
+    Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
 function responseKey(response: NotificationResponse): string {
   const { identifier } = response.notification.request;
-  return `${identifier}:${response.notification.date}:${response.userText ?? ''}`;
+  const text = response.userText ?? '';
+  return `${identifier}:${response.notification.date}:${text.length}:${fingerprint(text)}`;
 }
 
 function parseStored(raw: string | null): string[] {

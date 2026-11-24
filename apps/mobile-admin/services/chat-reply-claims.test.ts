@@ -1,3 +1,4 @@
+import { CHAT_REPLY_ACTION_ID } from '@baci/shared';
 import type { NotificationResponse } from 'expo-notifications';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -21,7 +22,7 @@ vi.mock('@/lib/storage', () => ({
 
 function reply(id: string, text = 'Hello'): NotificationResponse {
   return {
-    actionIdentifier: 'chat_reply_send',
+    actionIdentifier: CHAT_REPLY_ACTION_ID,
     userText: text,
     notification: { date: 1_700_000_000, request: { identifier: id } },
   } as unknown as NotificationResponse;
@@ -90,5 +91,27 @@ describe('claimChatReply', () => {
     ) as string[];
     expect(stored).toHaveLength(50);
     expect(stored.at(-1)).toContain('n59');
+  });
+
+  it('bugfix: never stores what the owner typed, only a fingerprint of it', async () => {
+    const claim = await freshClaim();
+    const secret = 'My private reply with a phone number 0801 234 5678';
+
+    await claim(reply('s1', secret));
+
+    const stored = store.data.get('@baci_chat_reply_handled') ?? '';
+    expect(stored).not.toContain('private reply');
+    expect(stored).not.toContain('0801');
+  });
+
+  it('keeps stored claims short however long the reply is', async () => {
+    const claim = await freshClaim();
+
+    await claim(reply('s2', 'x'.repeat(2_000)));
+
+    const stored = JSON.parse(
+      store.data.get('@baci_chat_reply_handled') ?? '[]'
+    ) as string[];
+    expect(stored[0].length).toBeLessThan(60);
   });
 });

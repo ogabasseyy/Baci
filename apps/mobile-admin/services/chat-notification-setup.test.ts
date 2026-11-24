@@ -1,3 +1,4 @@
+import { CHAT_REPLY_NOTIFICATION_CATEGORY } from '@baci/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 // The reply handler's own dependencies are not under test here.
@@ -33,7 +34,7 @@ describe('prepareChatNotifications', () => {
     await prepareChatNotifications(module, { android: true });
 
     expect(module.setNotificationCategoryAsync).toHaveBeenCalledWith(
-      'chat_reply',
+      CHAT_REPLY_NOTIFICATION_CATEGORY,
       expect.any(Array)
     );
     expect(module.setNotificationChannelAsync).toHaveBeenCalledWith(

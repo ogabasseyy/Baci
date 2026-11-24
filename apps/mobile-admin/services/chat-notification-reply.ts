@@ -65,15 +65,10 @@ const defaultDeps: ReplyDeps = {
   send: sendInboxReply,
 };
 
-/**
- * Sends what was typed in the notification's Reply box to that chat, once,
- * then shows the chat. The server has no idempotency key, so there is no
- * automatic retry: a failure says so plainly and keeps the words on screen.
- */
-export async function handleChatReplyResponse(
+async function sendChatReply(
   router: ReplyRouter,
   response: NotificationsType.NotificationResponse,
-  deps: ReplyDeps = defaultDeps
+  deps: ReplyDeps
 ): Promise<void> {
   if (!(await deps.claim(response))) return;
 
@@ -122,12 +117,45 @@ export async function handleChatReplyResponse(
   // Only the chat that changed, not every cached thread: key layout is
   // [prefix, merchantId, conversationId] (see inbox-query-keys.ts). The list
   // reorders and shows the new preview, so it refreshes.
-  const threadPrefix = inboxThreadKey(undefined, 0)[0];
-  deps.invalidate({
-    predicate: (query) =>
-      query.queryKey[0] === threadPrefix &&
-      query.queryKey[2] === conversationId,
-  });
-  deps.invalidate({ queryKey: [inboxConversationsKey(undefined)[0]] });
-  router.push(chat);
+  try {
+    const threadPrefix = inboxThreadKey(undefined, 0)[0];
+    deps.invalidate({
+      predicate: (query) =>
+        query.queryKey[0] === threadPrefix &&
+        query.queryKey[2] === conversationId,
+    });
+    deps.invalidate({ queryKey: [inboxConversationsKey(undefined)[0]] });
+    router.push(chat);
+  } catch {
+    // Best effort: the reply is already sent, so this must never read as a
+    // failure (and so lead to sending it again).
+  }
+}
+
+/**
+ * Sends what was typed in the notification's Reply box to that chat, once,
+ * then shows the chat. The server has no idempotency key, so there is no
+ * automatic retry: a failure says so plainly and keeps the words on screen.
+ * Never rejects: it runs from a tap handler, where the owner is waiting.
+ */
+export async function handleChatReplyResponse(
+  router: ReplyRouter,
+  response: NotificationsType.NotificationResponse,
+  deps: ReplyDeps = defaultDeps
+): Promise<void> {
+  try {
+    await sendChatReply(router, response, deps);
+  } catch {
+    // Unexpected, and before anything was sent: failures after a successful
+    // send are swallowed above, so this never claims "not sent" for a sent reply.
+    try {
+      deps.alert(
+        'Reply not sent',
+        'Something went wrong, so your reply was not sent. Open the chat and write it again.',
+        [{ text: 'OK' }]
+      );
+    } catch {
+      // Nothing more can be done.
+    }
+  }
 }

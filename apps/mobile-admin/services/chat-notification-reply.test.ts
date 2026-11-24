@@ -1,3 +1,7 @@
+import {
+  CHAT_REPLY_ACTION_ID,
+  CHAT_REPLY_NOTIFICATION_CATEGORY,
+} from '@baci/shared';
 import type { NotificationResponse } from 'expo-notifications';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkError } from '@/lib/api-errors';
@@ -49,7 +53,7 @@ function reply(
     type: 'customer_message',
     conversation_id: 21,
   },
-  actionIdentifier = 'chat_reply_send'
+  actionIdentifier = CHAT_REPLY_ACTION_ID
 ): NotificationResponse {
   counter += 1;
   return {
@@ -86,14 +90,17 @@ describe('registerChatReplyCategory', () => {
       setNotificationCategoryAsync,
     } as unknown as Parameters<typeof registerChatReplyCategory>[0]);
 
-    expect(setNotificationCategoryAsync).toHaveBeenCalledWith('chat_reply', [
-      expect.objectContaining({
-        identifier: 'chat_reply_send',
-        buttonTitle: 'Reply',
-        textInput: expect.objectContaining({ submitButtonTitle: 'Send' }),
-        options: { opensAppToForeground: true },
-      }),
-    ]);
+    expect(setNotificationCategoryAsync).toHaveBeenCalledWith(
+      CHAT_REPLY_NOTIFICATION_CATEGORY,
+      [
+        expect.objectContaining({
+          identifier: CHAT_REPLY_ACTION_ID,
+          buttonTitle: 'Reply',
+          textInput: expect.objectContaining({ submitButtonTitle: 'Send' }),
+          options: { opensAppToForeground: true },
+        }),
+      ]
+    );
   });
 });
 
@@ -212,5 +219,35 @@ describe('handleChatReplyResponse', () => {
       expect.stringContaining('check'),
       expect.any(Array)
     );
+  });
+
+  it('bugfix: never rejects, and says nothing was sent, when something unexpected fails before sending', async () => {
+    const { router, deps } = setup();
+    deps.claim = vi.fn().mockRejectedValue(new Error('storage exploded'));
+
+    await expect(
+      handleChatReplyResponse(router, reply('Hello'), deps)
+    ).resolves.toBeUndefined();
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(deps.alert).toHaveBeenCalledWith(
+      'Reply not sent',
+      expect.stringContaining('not sent'),
+      expect.any(Array)
+    );
+  });
+
+  it('bugfix: a failure after a successful send is never reported as "not sent"', async () => {
+    const { router, deps } = setup();
+    deps.invalidate.mockImplementation(() => {
+      throw new Error('query client gone');
+    });
+
+    await expect(
+      handleChatReplyResponse(router, reply('Sent fine'), deps)
+    ).resolves.toBeUndefined();
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(deps.alert).not.toHaveBeenCalled();
   });
 });

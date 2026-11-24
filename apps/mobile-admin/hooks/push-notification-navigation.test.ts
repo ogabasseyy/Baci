@@ -1,3 +1,4 @@
+import { CHAT_REPLY_ACTION_ID } from '@baci/shared';
 import type { NotificationResponse } from 'expo-notifications';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -7,11 +8,14 @@ import {
 
 const replyMocks = vi.hoisted(() => ({ handle: vi.fn() }));
 
-vi.mock('@/services/chat-notification-reply', () => ({
-  handleChatReplyResponse: replyMocks.handle,
-  isChatReplyResponse: (response: { actionIdentifier?: string }) =>
-    response.actionIdentifier === 'chat_reply_send',
-}));
+vi.mock('@/services/chat-notification-reply', async () => {
+  const { CHAT_REPLY_ACTION_ID } = await import('@baci/shared');
+  return {
+    handleChatReplyResponse: replyMocks.handle,
+    isChatReplyResponse: (response: { actionIdentifier?: string }) =>
+      response.actionIdentifier === CHAT_REPLY_ACTION_ID,
+  };
+});
 
 vi.mock('@/services/push-notifications', () => ({
   getNotificationNavigationParams: (response: NotificationResponse) => {
@@ -176,7 +180,7 @@ describe('handleNotificationTap', () => {
     const router = { push: vi.fn() };
     const response = makeResponse(
       { type: 'customer_message', conversation_id: 4821 },
-      'chat_reply_send'
+      CHAT_REPLY_ACTION_ID
     );
 
     handleNotificationTap(router, response, vi.fn());

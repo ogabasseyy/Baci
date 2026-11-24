@@ -68,6 +68,36 @@ describe('POST /api/storefront/chatwoot/checkout-turn', () => {
     vi.clearAllMocks();
   });
 
+  it('works outside staging when checkout is enabled and returns 404 when disabled', async () => {
+    mocks.stagingEnabled.mockReturnValue(false);
+    mocks.generate.mockResolvedValueOnce({
+      object: { intent: 'confirm', selectedCode: null, reply: null },
+    });
+    const enabledRes = await POST(
+      makeRequest({
+        conversationId: 42,
+        sessionToken: 'session-tok',
+        step: 'confirm_payment',
+        question: 'Would you like to make payment now?',
+        answer: 'Yes, go ahead',
+      })
+    );
+    expect(enabledRes.status).toBe(200);
+    await expect(enabledRes.json()).resolves.toEqual({ intent: 'confirm' });
+
+    vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'false');
+    const disabledRes = await POST(
+      makeRequest({
+        conversationId: 42,
+        sessionToken: 'session-tok',
+        step: 'confirm_payment',
+        question: 'Would you like to make payment now?',
+        answer: 'Yes, go ahead',
+      })
+    );
+    expect(disabledRes.status).toBe(404);
+  });
+
   it('passes the assistant question and shopper reply to the AI for natural understanding', async () => {
     mocks.generate.mockResolvedValueOnce({
       object: { intent: 'confirm', selectedCode: null, reply: null },

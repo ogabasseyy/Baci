@@ -142,10 +142,11 @@ export async function generateChatAutoReply(input: {
     const checkoutEnabled =
       process.env.EKAETTE_CHATWOOT_CHECKOUT_ENABLED === 'true';
     const shoppingEnabled = isStaging || checkoutEnabled;
+    const lastAssistantTurn = input.history.findLast(
+      (turn) => turn.role === 'assistant'
+    );
     const awaitingCheckoutName =
-      checkoutEnabled &&
-      input.history.findLast((turn) => turn.role === 'assistant')
-        ?.checkoutNameRequested === true;
+      checkoutEnabled && lastAssistantTurn?.checkoutNameRequested === true;
     const openAIProvider = getOgabasseyPreferredProviders().find((provider) =>
       provider.name.startsWith('openai:')
     );
@@ -153,11 +154,17 @@ export async function generateChatAutoReply(input: {
       return { ok: false, reason: 'unavailable' };
     }
     if (awaitingCheckoutName) {
-      return await extractCheckoutNameReply({
+      const extracted = await extractCheckoutNameReply({
         openAIProvider,
         question: input.question,
         overallTimeoutMs: OVERALL_TIMEOUT_MS,
       });
+      if (
+        'checkoutName' in extracted ||
+        /name\s+and\s+surname/i.test(lastAssistantTurn.content)
+      ) {
+        return extracted;
+      }
     }
     // A failed or stalled search throws: an outage must never reach the model
     // as "no matching products", so the caller hands over instead.

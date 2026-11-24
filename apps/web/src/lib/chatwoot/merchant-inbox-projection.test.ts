@@ -48,6 +48,24 @@ describe('projectMerchantInboxMessage', () => {
     );
   });
 
+  it('marks review_checkout assistant messages as checkoutNameRequested', () => {
+    expect(
+      projectMerchantInboxMessage(
+        message({
+          message_type: 1,
+          sender: { type: 'agent_bot' },
+          content: 'I can help you check out here.',
+          content_attributes: {
+            ekaette_follow_ups: { actions: ['review_checkout'] },
+          },
+        })
+      )
+    ).toMatchObject({
+      sender: 'assistant',
+      checkoutNameRequested: true,
+    });
+  });
+
   it('includes product titles for a product card', () => {
     expect(
       projectMerchantInboxMessage(

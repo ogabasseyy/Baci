@@ -63,7 +63,15 @@ const defaultDeps: ReplyDeps = {
   alert: (title, message, buttons) => Alert.alert(title, message, buttons),
   claim: claimChatReply,
   invalidate: (filters) => {
-    void queryClient.invalidateQueries(filters);
+    // Not awaited by the caller, so a rejection is caught here or it would go
+    // unhandled.
+    void (async () => {
+      try {
+        await queryClient.invalidateQueries(filters);
+      } catch {
+        // The chat refreshes when it opens anyway.
+      }
+    })();
   },
   send: sendInboxReply,
 };
@@ -98,11 +106,15 @@ async function sendChatReply(
   const claim = await deps.claim(response);
   // Handled a moment ago in this launch: the first delivery already did it.
   if (claim === 'repeat') return;
-  // Handled before the app restarted: it may or may not have been sent, so it
-  // is never sent again, but the owner lands where the first delivery would
-  // have and can check.
+  // Handled before the app restarted: it may or may not have been sent (the
+  // app may have stopped half way), so it is never sent again, and the owner is
+  // told to check the chat instead of assuming either way.
   if (claim === 'replay') {
-    router.push(chat);
+    deps.alert(
+      'Could not confirm your reply',
+      'This reply was handled before the app restarted, so it may or may not have been sent. Open the chat to check before sending it again.',
+      [openChat]
+    );
     return;
   }
   if (!hasChat) {
@@ -145,7 +157,15 @@ async function sendChatReply(
       deps.alert(
         'Reply not sent',
         'This message was for another store. Switch to that store to reply. Nothing was sent.',
-        [{ text: 'OK' }]
+        [
+          // The list, not the chat: this store's chat with the same number
+          // is a different customer.
+          {
+            text: 'Open messages',
+            onPress: () => router.push('/(admin)/messages' as Href),
+          },
+          { text: 'OK' },
+        ]
       );
     } else if (isDefinitelyNotSent(error)) {
       // The claim stays used, so the same notification can never deliver these

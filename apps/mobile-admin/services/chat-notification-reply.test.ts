@@ -260,13 +260,23 @@ describe('handleChatReplyResponse', () => {
     expect(router.push).toHaveBeenCalledWith('/(admin)/messages/21');
   });
 
-  it('bugfix: a reply replayed after a restart is never sent again but still opens the chat', async () => {
+  it('bugfix: a reply replayed after a restart is never sent again and says to check the chat', async () => {
     const { router, deps } = setup();
     deps.claim = vi.fn().mockResolvedValue('replay') as never;
 
     await handleChatReplyResponse(router, reply('Was this sent?'), deps);
 
     expect(mocks.send).not.toHaveBeenCalled();
+    expect(deps.alert).toHaveBeenCalledWith(
+      'Could not confirm your reply',
+      expect.stringContaining('check'),
+      expect.any(Array)
+    );
+    const buttons = deps.alert.mock.calls[0][2] as {
+      text: string;
+      onPress?: () => void;
+    }[];
+    buttons.find((b) => b.text === 'Open chat')?.onPress?.();
     expect(router.push).toHaveBeenCalledWith('/(admin)/messages/21');
   });
 
@@ -309,6 +319,14 @@ describe('handleChatReplyResponse', () => {
       expect.any(Array)
     );
     expect(deps.invalidate).not.toHaveBeenCalled();
+    // It offers the list, never this store's chat with the same number.
+    const buttons = deps.alert.mock.calls[0][2] as {
+      text: string;
+      onPress?: () => void;
+    }[];
+    expect(buttons.map((b) => b.text)).not.toContain('Open chat');
+    buttons.find((b) => b.text === 'Open messages')?.onPress?.();
+    expect(router.push).toHaveBeenCalledWith('/(admin)/messages');
   });
 
   it('bugfix: sends nothing when the push does not say which store it came from', async () => {

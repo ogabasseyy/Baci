@@ -8,6 +8,19 @@ export async function reinstateTimeoutOrderPayment(
   transactionId: string,
   merchantId: string
 ): Promise<'reinstated' | 'already_reinstated' | 'blocked'> {
+  const { data: orderIdentity, error: identityError } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('id', orderId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+  if (identityError) {
+    throw new Error('Late payment merchant validation failed', {
+      cause: identityError,
+    });
+  }
+  if (!orderIdentity) return 'blocked';
+
   const { data, error } = await supabase.rpc(
     'reinstate_timeout_order_payment',
     {

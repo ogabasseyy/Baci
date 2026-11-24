@@ -9,7 +9,19 @@ vi.mock('./ensure-paid-order-inventory-confirmed', () => ({
 
 function mockClient(data: unknown, error: { message: string } | null = null) {
   const rpc = vi.fn().mockResolvedValue({ data, error });
-  return { client: { rpc } as unknown as SupabaseClient, rpc };
+  const orderQuery = {
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({
+      data: { id: 'order' },
+      error: null,
+    }),
+    select: vi.fn().mockReturnThis(),
+  };
+  const client = {
+    from: vi.fn().mockReturnValue(orderQuery),
+    rpc,
+  } as unknown as SupabaseClient;
+  return { client, orderQuery, rpc };
 }
 
 describe('reinstateTimeoutOrderPayment', () => {
@@ -27,6 +39,22 @@ describe('reinstateTimeoutOrderPayment', () => {
       'reinstate_timeout_order_payment',
       { p_order_id: 'order', p_transaction_id: 'transaction' }
     );
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('does not call the privileged RPC when the order is outside the merchant scope', async () => {
+    const { client, orderQuery, rpc } = mockClient('reinstated');
+    orderQuery.maybeSingle.mockResolvedValue({ data: null, error: null });
+    await expect(
+      reinstateTimeoutOrderPayment(
+        client,
+        'order',
+        'transaction',
+        'other-merchant'
+      )
+    ).resolves.toBe('blocked');
+    expect(orderQuery.eq).toHaveBeenCalledWith('merchant_id', 'other-merchant');
+    expect(rpc).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
   });
 

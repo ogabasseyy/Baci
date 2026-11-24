@@ -801,7 +801,8 @@ export async function POST(request: NextRequest) {
           const { error: amountRestoreError } = await supabase
             .from('orders')
             .update({ amount_paid: order.amount_paid ?? 0 })
-            .eq('id', order.id);
+            .eq('id', order.id)
+            .eq('merchant_id', order.merchant_id);
           if (amountRestoreError) {
             logger.warn({
               message:

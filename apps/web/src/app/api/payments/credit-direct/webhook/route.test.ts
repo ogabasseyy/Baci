@@ -1304,6 +1304,7 @@ describe('POST /api/payments/credit-direct/webhook', () => {
 
       const transactionInsert = vi.fn().mockReturnThis();
       const amountRestoreUpdate = vi.fn().mockReturnThis();
+      const amountRestoreEq = vi.fn();
       const mockChain = supabaseMock.from('orders');
 
       let fromCallCount = 0;
@@ -1341,7 +1342,7 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           const txCheckChain = { ...mockChain };
           txCheckChain.select = vi.fn().mockReturnValue(txCheckChain);
           txCheckChain.eq = vi.fn().mockReturnValue(txCheckChain);
-          txCheckChain.single = vi
+          txCheckChain.maybeSingle = vi
             .fn()
             .mockResolvedValue({ data: null, error: null });
           return txCheckChain;
@@ -1360,7 +1361,11 @@ describe('POST /api/payments/credit-direct/webhook', () => {
         // amount_paid restore on the clamped cancelled order
         const restoreChain = { ...mockChain };
         restoreChain.update = amountRestoreUpdate;
-        restoreChain.eq = vi.fn().mockResolvedValue({ error: null });
+        restoreChain.eq = amountRestoreEq.mockImplementation(() =>
+          amountRestoreEq.mock.calls.length === 1
+            ? restoreChain
+            : Promise.resolve({ error: null })
+        );
         return restoreChain;
       });
 
@@ -1378,6 +1383,12 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       // The clamp branch restores the pre-webhook amount_paid so duplicate
       // deliveries still resolve the correct residual and ack.
       expect(amountRestoreUpdate).toHaveBeenCalledWith({ amount_paid: 0 });
+      expect(amountRestoreEq).toHaveBeenNthCalledWith(1, 'id', mockOrder.id);
+      expect(amountRestoreEq).toHaveBeenNthCalledWith(
+        2,
+        'merchant_id',
+        mockOrder.merchant_id
+      );
       // Reconciliation row WAS filed through the service-role admin client,
       // linked to the recorded transaction.
       expect(mockReconciliationInsert).toHaveBeenCalledWith(
@@ -1968,8 +1979,12 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           };
           txCheckChain.select = vi.fn().mockReturnValue(txCheckChain);
           txCheckChain.eq = vi.fn().mockReturnValue(txCheckChain);
-          txCheckChain.single = vi.fn().mockResolvedValue({
-            data: { id: 'existing_tx_123' },
+          txCheckChain.maybeSingle = vi.fn().mockResolvedValue({
+            data: {
+              id: 'existing_tx_123',
+              merchant_id: mockOrder.merchant_id,
+              order_id: mockOrder.id,
+            },
             error: null,
           });
           return txCheckChain;
@@ -2035,7 +2050,7 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           const txCheckChain = { ...mockChain };
           txCheckChain.select = vi.fn().mockReturnValue(txCheckChain);
           txCheckChain.eq = vi.fn().mockReturnValue(txCheckChain);
-          txCheckChain.single = vi.fn().mockResolvedValue({
+          txCheckChain.maybeSingle = vi.fn().mockResolvedValue({
             data: null,
             error: { code: '57014', message: 'statement timeout' },
           });
@@ -2098,7 +2113,7 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           const txCheckChain = { ...mockChain };
           txCheckChain.select = vi.fn().mockReturnValue(txCheckChain);
           txCheckChain.eq = vi.fn().mockReturnValue(txCheckChain);
-          txCheckChain.single = vi
+          txCheckChain.maybeSingle = vi
             .fn()
             .mockResolvedValue({ data: null, error: null });
           return txCheckChain;
@@ -2170,7 +2185,7 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           const txCheckChain = { ...mockChain };
           txCheckChain.select = vi.fn().mockReturnValue(txCheckChain);
           txCheckChain.eq = vi.fn().mockReturnValue(txCheckChain);
-          txCheckChain.single = vi
+          txCheckChain.maybeSingle = vi
             .fn()
             .mockResolvedValue({ data: null, error: null });
           return txCheckChain;
@@ -2189,8 +2204,12 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           const racedTxChain = { ...mockChain };
           racedTxChain.select = vi.fn().mockReturnValue(racedTxChain);
           racedTxChain.eq = vi.fn().mockReturnValue(racedTxChain);
-          racedTxChain.single = vi.fn().mockResolvedValue({
-            data: { id: 'txn_123456789' },
+          racedTxChain.maybeSingle = vi.fn().mockResolvedValue({
+            data: {
+              id: 'txn_123456789',
+              merchant_id: mockOrder.merchant_id,
+              order_id: mockOrder.id,
+            },
             error: null,
           });
           return racedTxChain;

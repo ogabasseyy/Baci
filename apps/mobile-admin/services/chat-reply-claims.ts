@@ -53,24 +53,30 @@ function parseStored(raw: string | null): string[] {
 }
 
 /**
- * Claims one notification reply: true the first time it is seen, false for
- * every repeat. The same response can arrive twice in one launch (the live
- * listener and the "last response" read), and the last response can be read
- * again after the app restarts, so the claim is also kept in storage. The
- * server has no idempotency key, so a repeat would be a second customer-visible
- * reply. Claimed before sending: a reply is never sent twice, even if the app
- * stops half way through.
+ * `new`: first time, send it. `repeat`: already handled in this launch (the
+ * live listener and the "last response" read both delivered it): do nothing.
+ * `replay`: handled in an earlier launch, so it may or may not have been sent:
+ * never send it again, but let the owner check the chat.
+ */
+export type ReplyClaim = 'new' | 'repeat' | 'replay';
+
+/**
+ * Claims one notification reply. The server has no idempotency key, so a
+ * repeat would be a second customer-visible reply; the claim is therefore also
+ * kept in storage (the last response can be read again after a restart) and
+ * taken before sending: a reply is never sent twice, even if the app stops half
+ * way through.
  */
 export async function claimChatReply(
   response: NotificationResponse
-): Promise<boolean> {
+): Promise<ReplyClaim> {
   const key = responseKey(response);
-  if (claimedThisSession.has(key)) return false;
+  if (claimedThisSession.has(key)) return 'repeat';
   // Synchronous, before any await: a second delivery in the same tick loses.
   claimedThisSession.add(key);
   try {
     const stored = parseStored(await asyncStorage.getItem(STORAGE_KEY));
-    if (stored.includes(key)) return false;
+    if (stored.includes(key)) return 'replay';
     await asyncStorage.setItem(
       STORAGE_KEY,
       JSON.stringify([...stored, key].slice(-KEEP_LAST))
@@ -78,5 +84,25 @@ export async function claimChatReply(
   } catch {
     // Storage unavailable: the in-session claim above still holds.
   }
-  return true;
+  return 'new';
+}
+
+/**
+ * Gives a claim back after the server clearly refused the reply (nothing was
+ * sent), so sending the same words again from the notification works.
+ */
+export async function releaseChatReply(
+  response: NotificationResponse
+): Promise<void> {
+  const key = responseKey(response);
+  claimedThisSession.delete(key);
+  try {
+    const stored = parseStored(await asyncStorage.getItem(STORAGE_KEY));
+    await asyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(stored.filter((item) => item !== key))
+    );
+  } catch {
+    // Nothing more can be done.
+  }
 }

@@ -16,8 +16,10 @@ export async function prepareChatNotifications(
   if (options.android) steps.push(setupAndroidChannels(notifications));
   const results = await Promise.allSettled(steps);
   for (const result of results) {
-    if (result.status === 'rejected' && __DEV__) {
-      console.debug(
+    // Logged in production too, like the rest of the push code: a failing
+    // step means no Reply box or no `messages` channel on this device.
+    if (result.status === 'rejected') {
+      console.error(
         '[Push] Chat notification setup step failed:',
         result.reason
       );

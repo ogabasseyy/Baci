@@ -44,7 +44,7 @@ import {
   isChatReplyResponse,
   registerChatReplyCategory,
 } from './chat-notification-reply';
-import { claimChatReply } from './chat-reply-claims';
+import { claimChatReply, releaseChatReply } from './chat-reply-claims';
 
 let counter = 0;
 function reply(
@@ -71,6 +71,7 @@ function setup() {
   const deps = {
     alert: vi.fn(),
     claim: claimChatReply,
+    release: releaseChatReply,
     invalidate: vi.fn(),
     send: mocks.send,
   };
@@ -223,7 +224,9 @@ describe('handleChatReplyResponse', () => {
 
   it('bugfix: never rejects, and says nothing was sent, when something unexpected fails before sending', async () => {
     const { router, deps } = setup();
-    deps.claim = vi.fn().mockRejectedValue(new Error('storage exploded'));
+    deps.claim = vi
+      .fn()
+      .mockRejectedValue(new Error('storage exploded')) as never;
 
     await expect(
       handleChatReplyResponse(router, reply('Hello'), deps)
@@ -260,5 +263,52 @@ describe('handleChatReplyResponse', () => {
     await handleChatReplyResponse(router, reply('Sent fine'), deps);
 
     expect(router.push).toHaveBeenCalledWith('/(admin)/messages/21');
+  });
+
+  it('bugfix: a reply replayed after a restart is never sent again but still opens the chat', async () => {
+    const { router, deps } = setup();
+    deps.claim = vi.fn().mockResolvedValue('replay') as never;
+
+    await handleChatReplyResponse(router, reply('Was this sent?'), deps);
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalledWith('/(admin)/messages/21');
+  });
+
+  it('does nothing for a repeat in the same launch, since the first delivery already acted', async () => {
+    const { router, deps } = setup();
+    deps.claim = vi.fn().mockResolvedValue('repeat') as never;
+
+    await handleChatReplyResponse(router, reply('Twice'), deps);
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: the same words can be sent again from the notification after the server refused them', async () => {
+    const { router, deps } = setup();
+    mocks.send.mockRejectedValueOnce(
+      new NetworkError('Forbidden', { statusCode: 403 })
+    );
+    const first = reply('Try again please');
+
+    await handleChatReplyResponse(router, first, deps);
+    // The same notification, the same words (the owner tapped Reply again).
+    await handleChatReplyResponse(router, { ...first }, deps);
+
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not release the claim when the outcome is unknown, so it is never sent twice', async () => {
+    const { router, deps } = setup();
+    mocks.send.mockRejectedValue(
+      new NetworkError('timeout', { isTimeout: true })
+    );
+    const first = reply('Maybe sent');
+
+    await handleChatReplyResponse(router, first, deps);
+    await handleChatReplyResponse(router, { ...first }, deps);
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
   });
 });

@@ -76,4 +76,19 @@ describe('prepareChatNotifications', () => {
 
     expect(module.setNotificationCategoryAsync).toHaveBeenCalledTimes(1);
   });
+
+  it('bugfix: reports a failing step in production builds too, not only in development', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const module = notifications({
+      setNotificationCategoryAsync: vi.fn().mockRejectedValue(new Error('no')),
+    });
+
+    await prepareChatNotifications(module, { android: false });
+
+    expect(error).toHaveBeenCalledWith(
+      '[Push] Chat notification setup step failed:',
+      expect.any(Error)
+    );
+    error.mockRestore();
+  });
 });

@@ -10,7 +10,11 @@ import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
 import { isDefinitelyNotSent, sendInboxReply } from '@/lib/merchant-inbox-api';
 import { queryClient } from '@/lib/query-client';
 import { INBOX_REPLY_MAX_LENGTH } from '@/schemas/merchant-inbox';
-import { claimChatReply } from './chat-reply-claims';
+import {
+  claimChatReply,
+  type ReplyClaim,
+  releaseChatReply,
+} from './chat-reply-claims';
 import { getNotificationNavigationParams } from './push-notifications';
 
 interface ReplyRouter {
@@ -50,8 +54,12 @@ interface ReplyDeps {
     message: string,
     buttons: { text: string; onPress?: () => void }[]
   ) => void;
-  /** True the first time a reply is seen, false for a repeat or a replay. */
-  claim: (response: NotificationsType.NotificationResponse) => Promise<boolean>;
+  /** Whether this reply is new, a repeat of this launch, or a replay. */
+  claim: (
+    response: NotificationsType.NotificationResponse
+  ) => Promise<ReplyClaim>;
+  /** Gives the claim back after a clear refusal (nothing was sent). */
+  release: (response: NotificationsType.NotificationResponse) => Promise<void>;
   invalidate: (filters: InvalidateQueryFilters) => void;
   send: typeof sendInboxReply;
 }
@@ -59,6 +67,7 @@ interface ReplyDeps {
 const defaultDeps: ReplyDeps = {
   alert: (title, message, buttons) => Alert.alert(title, message, buttons),
   claim: claimChatReply,
+  release: releaseChatReply,
   invalidate: (filters) => {
     void queryClient.invalidateQueries(filters);
   },
@@ -70,18 +79,30 @@ async function sendChatReply(
   response: NotificationsType.NotificationResponse,
   deps: ReplyDeps
 ): Promise<void> {
-  if (!(await deps.claim(response))) return;
-
   const target = getNotificationNavigationParams(response);
   const conversationId =
     target?.screen === 'message' ? Number(target.params?.id) : Number.NaN;
-  if (!Number.isSafeInteger(conversationId) || conversationId < 1) {
-    // The push did not say which chat: nothing is sent.
-    router.push('/(admin)/messages' as Href);
+  const hasChat = Number.isSafeInteger(conversationId) && conversationId >= 1;
+  const chat = (
+    hasChat ? `/(admin)/messages/${conversationId}` : '/(admin)/messages'
+  ) as Href;
+  const openChat = { text: 'Open chat', onPress: () => router.push(chat) };
+
+  const claim = await deps.claim(response);
+  // Handled a moment ago in this launch: the first delivery already did it.
+  if (claim === 'repeat') return;
+  // Handled before the app restarted: it may or may not have been sent, so it
+  // is never sent again, but the owner lands where the first delivery would
+  // have and can check.
+  if (claim === 'replay') {
+    router.push(chat);
     return;
   }
-  const chat = `/(admin)/messages/${conversationId}` as Href;
-  const openChat = { text: 'Open chat', onPress: () => router.push(chat) };
+  if (!hasChat) {
+    // The push did not say which chat: nothing is sent.
+    router.push(chat);
+    return;
+  }
 
   const text = (response.userText ?? '').trim();
   if (!text) {
@@ -101,6 +122,8 @@ async function sendChatReply(
     await deps.send(conversationId, text);
   } catch (error) {
     if (isDefinitelyNotSent(error)) {
+      // Nothing was sent, so sending the same words again must work.
+      await deps.release(response).catch(() => undefined);
       deps.alert('Reply not sent', `Your reply was not sent:\n\n${text}`, [
         openChat,
         { text: 'OK' },

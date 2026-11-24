@@ -43,11 +43,11 @@ async function freshClaim() {
 }
 
 describe('claimChatReply', () => {
-  it('claims a reply the first time and refuses every repeat', async () => {
+  it('claims a reply the first time and calls every repeat in this launch a repeat', async () => {
     const claim = await freshClaim();
 
-    expect(await claim(reply('a'))).toBe(true);
-    expect(await claim(reply('a'))).toBe(false);
+    expect(await claim(reply('a'))).toBe('new');
+    expect(await claim(reply('a'))).toBe('repeat');
   });
 
   it('lets only one of two deliveries in the same moment through', async () => {
@@ -55,34 +55,36 @@ describe('claimChatReply', () => {
 
     const results = await Promise.all([claim(reply('b')), claim(reply('b'))]);
 
-    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.filter((result) => result === 'new')).toHaveLength(1);
   });
 
   it('treats a different reply as new', async () => {
     const claim = await freshClaim();
 
-    expect(await claim(reply('c', 'one'))).toBe(true);
-    expect(await claim(reply('c', 'two'))).toBe(true);
+    expect(await claim(reply('c', 'one'))).toBe('new');
+    expect(await claim(reply('c', 'two'))).toBe('new');
   });
 
   it('bugfix: refuses a reply that was already claimed before the app restarted', async () => {
     const first = await freshClaim();
-    expect(await first(reply('d'))).toBe(true);
+    expect(await first(reply('d'))).toBe('new');
 
     // A restart: a fresh module (empty memory), same storage, and the last
     // notification response is read again at launch.
     vi.resetModules();
     const afterRestart = await freshClaim();
 
-    expect(await afterRestart(reply('d'))).toBe(false);
+    // Not 'new' (never sent again) and not 'repeat' (the owner is taken to
+    // the chat to check, since the first attempt may not have finished).
+    expect(await afterRestart(reply('d'))).toBe('replay');
   });
 
   it('still protects the session when storage is unavailable', async () => {
     store.failing = true;
     const claim = await freshClaim();
 
-    expect(await claim(reply('e'))).toBe(true);
-    expect(await claim(reply('e'))).toBe(false);
+    expect(await claim(reply('e'))).toBe('new');
+    expect(await claim(reply('e'))).toBe('repeat');
   });
 
   it('keeps only the most recent claims in storage', async () => {
@@ -122,7 +124,31 @@ describe('claimChatReply', () => {
   it('bugfix: counts the same reply once even when the two deliveries carry different dates', async () => {
     const claim = await freshClaim();
 
-    expect(await claim(reply('d1', 'Same words', 1_700_000_000))).toBe(true);
-    expect(await claim(reply('d1', 'Same words', 1_700_000_999))).toBe(false);
+    expect(await claim(reply('d1', 'Same words', 1_700_000_000))).toBe('new');
+    expect(await claim(reply('d1', 'Same words', 1_700_000_999))).toBe(
+      'repeat'
+    );
+  });
+
+  it('bugfix: a released claim lets the same words be sent again', async () => {
+    const claim = await freshClaim();
+    const { releaseChatReply } = await import('./chat-reply-claims');
+    expect(await claim(reply('r1', 'Retry me'))).toBe('new');
+
+    await releaseChatReply(reply('r1', 'Retry me'));
+
+    expect(await claim(reply('r1', 'Retry me'))).toBe('new');
+  });
+
+  it('keeps a released claim released after a restart', async () => {
+    const first = await freshClaim();
+    await first(reply('r2', 'Again'));
+    const { releaseChatReply } = await import('./chat-reply-claims');
+    await releaseChatReply(reply('r2', 'Again'));
+
+    vi.resetModules();
+    const afterRestart = await freshClaim();
+
+    expect(await afterRestart(reply('r2', 'Again'))).toBe('new');
   });
 });

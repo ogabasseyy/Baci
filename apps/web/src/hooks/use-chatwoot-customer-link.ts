@@ -84,11 +84,21 @@ export function useChatwootCustomerLink(
     };
 
     const onOnline = () => {
-      if (!pendingRemoval || cancelled) return;
-      pendingRemoval = false;
-      // Only while still a guest: a shopper who signed in again gets a fresh
-      // note from the check that follows the sign-in.
-      if (readCustomerSessionHint() !== '1') clearLink(true);
+      if (cancelled) return;
+      if (pendingRemoval) {
+        pendingRemoval = false;
+        // Only while still a guest: a shopper who signed in again gets a fresh
+        // note from the check that follows the sign-in.
+        if (readCustomerSessionHint() !== '1') clearLink(true);
+      }
+      // A signed-in shopper whose check failed while offline was never linked:
+      // ask again now, instead of waiting for a focus, another tab or a reload.
+      if (
+        readCustomerSessionHint() === '1' &&
+        !linkedThisSession.has(storeSlug)
+      ) {
+        void sync('recheck');
+      }
     };
     window.addEventListener('online', onOnline);
 

@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +28,7 @@ import {
   json,
   MARKER,
   publishIdentity,
+  setCustomAttributes,
   uninstallHarness,
 } from './use-chatwoot-customer-link.test-support';
 
@@ -105,5 +106,38 @@ describe('bugfix: a sign-out while offline still removes the chat link', () => {
     window.dispatchEvent(new Event('online'));
 
     expect(deleteCustomAttribute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bugfix: a shopper whose first link check failed offline is linked when back online', () => {
+  it('asks again once the browser is back, without waiting for a focus or reload', async () => {
+    mocks.fetch.mockRejectedValueOnce(new Error('offline'));
+    renderHook(() => useChatwootCustomerLink('night-store', true));
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
+    expect(setCustomAttributes).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event('online'));
+
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not ask again when the shopper is already linked', async () => {
+    renderHook(() => useChatwootCustomerLink('linked-store', true));
+    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+
+    window.dispatchEvent(new Event('online'));
+
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks nothing for a guest when the browser comes back', () => {
+    mocks.hint.mockReturnValue('0');
+    renderHook(() => useChatwootCustomerLink('guest-store', true));
+    mocks.fetch.mockClear();
+
+    window.dispatchEvent(new Event('online'));
+
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });

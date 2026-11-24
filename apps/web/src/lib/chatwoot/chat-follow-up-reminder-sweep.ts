@@ -5,6 +5,7 @@ import { sendChatEventPush } from './chat-event-push';
 import { chatFollowUpEventKey } from './chat-follow-up-event-key';
 import { checkFollowUpStillDue } from './chat-follow-up-reminder-check';
 import { listDueChatFollowUpReminders } from './chat-follow-up-reminder-list';
+import { reminderCustomerName } from './chat-follow-up-reminder-name';
 import { recordChatFollowUpReminder } from './chat-follow-up-reminder-record';
 
 export type ChatFollowUpSweepSummary = {
@@ -70,7 +71,8 @@ async function handleReminder(
       merchantId: reminder.merchant_id,
       eventKey: chatFollowUpEventKey(reminder.reminder_id),
       conversationId: reminder.conversation_id,
-      customerName: reminder.customer_name,
+      // Re-cleaned here too, so the neutral title holds for any writer of the row.
+      customerName: reminderCustomerName(reminder.customer_name),
       preview: '',
       kind: 'follow_up',
     })

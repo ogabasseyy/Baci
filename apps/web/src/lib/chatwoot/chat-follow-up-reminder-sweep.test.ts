@@ -68,6 +68,17 @@ describe('sweepChatFollowUpReminders', () => {
     });
   });
 
+  it('bugfix: keeps an anonymous visitor name out of the push title even when the stored row has one', async () => {
+    mocks.list.mockResolvedValue({
+      ok: true,
+      reminders: [reminder(1, 'withered-sun-554')],
+    });
+    await summary();
+    expect(mocks.push).toHaveBeenCalledWith(
+      expect.objectContaining({ customerName: '' })
+    );
+  });
+
   it('sends nothing the second time: an already handled reminder is not listed', async () => {
     await summary();
     mocks.list.mockResolvedValue({ ok: true, reminders: [] });

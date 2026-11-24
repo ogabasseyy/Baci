@@ -80,7 +80,7 @@ describe('sendChatEventPush', () => {
         conversation_id: 21,
         merchant_id: input.merchantId,
       },
-      'messages',
+      'general',
       { categoryId: 'chat_reply' }
     );
   });
@@ -93,7 +93,7 @@ describe('sendChatEventPush', () => {
       'New customer message',
       'A customer sent a message to your store.',
       expect.anything(),
-      'messages',
+      'general',
       { categoryId: 'chat_reply' }
     );
   });
@@ -119,7 +119,7 @@ describe('sendChatEventPush', () => {
         merchant_id: input.merchantId,
         handover: true,
       },
-      'messages',
+      'general',
       { categoryId: 'chat_reply' }
     );
   });
@@ -135,7 +135,7 @@ describe('sendChatEventPush', () => {
       'A customer needs a person',
       'The assistant handed this chat to your team. Open it to reply.',
       expect.objectContaining({ handover: true }),
-      'messages',
+      'general',
       { categoryId: 'chat_reply' }
     );
   });

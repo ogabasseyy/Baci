@@ -129,4 +129,13 @@ describe('claimChatReply', () => {
       'repeat'
     );
   });
+
+  it('shows a reply that sends nothing once per launch, without storing it', async () => {
+    const { firstSightThisLaunch } = await import('./chat-reply-claims');
+    const response = reply('v1', 'too long');
+
+    expect(firstSightThisLaunch(response)).toBe(true);
+    expect(firstSightThisLaunch(response)).toBe(false);
+    expect(store.data.get('@baci_chat_reply_handled')).toBeUndefined();
+  });
 });

@@ -21,7 +21,6 @@ export type NotificationChannel =
   | 'payments'
   | 'stock'
   | 'general'
-  | 'messages'
   | 'admin'
   | 'promotions';
 

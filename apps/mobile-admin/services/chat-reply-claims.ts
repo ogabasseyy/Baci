@@ -11,6 +11,8 @@ const KEEP_LAST = 500;
 
 /** This session's claims: they win a race the storage read would lose. */
 const claimedThisSession = new Set<string>();
+/** Replies already answered on screen this launch (alerts, never stored). */
+const shownThisLaunch = new Set<string>();
 
 /**
  * A short fingerprint of the text (cyrb53), so storage never holds what the
@@ -90,4 +92,17 @@ export async function claimChatReply(
     // Storage unavailable: the in-session claim above still holds.
   }
   return 'new';
+}
+
+/**
+ * True the first time this launch sees a reply that sends nothing (empty, too
+ * long, no store): the live listener and the "last response" read can both
+ * deliver it, and the owner should be told once. Never stored, and never a
+ * claim, so such a reply can not later be mistaken for one that was sent.
+ */
+export function firstSightThisLaunch(response: NotificationResponse): boolean {
+  const key = responseKey(response);
+  if (shownThisLaunch.has(key)) return false;
+  shownThisLaunch.add(key);
+  return true;
 }

@@ -44,7 +44,7 @@ async function loadNotificationsForDevice() {
 
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { prepareChatNotifications } from '@/services/chat-notification-setup';
+import { registerChatReplyCategory } from '@/services/chat-notification-reply';
 import {
   clearBadge,
   registerForPushNotifications,
@@ -174,10 +174,11 @@ export function usePushNotifications(): UsePushNotificationsResult {
         return;
       }
 
-      // The Reply box on chat notifications and, on Android, their channel.
-      // Best effort: without them the notification still opens the chat.
-      void prepareChatNotifications(loadedNotifications, {
-        android: isRuntimePlatform('android'),
+      // The Reply box on chat notifications. Best effort: without it the
+      // notification still opens the chat. Logged in production too, like the
+      // other push errors.
+      void registerChatReplyCategory(loadedNotifications).catch((error) => {
+        console.error('[Push] Failed to register the chat Reply box:', error);
       });
 
       // Listener for notifications received while app is foregrounded

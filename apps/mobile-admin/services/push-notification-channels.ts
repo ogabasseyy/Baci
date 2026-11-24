@@ -21,15 +21,6 @@ export async function setupAndroidChannels(
     vibrationPattern: [0, 250, 250, 250],
   });
 
-  // A customer is waiting in a chat: heads-up and sound, unlike "general".
-  await notifications.setNotificationChannelAsync('messages', {
-    description: 'Messages from customers chatting with your store',
-    importance: notifications.AndroidImportance?.HIGH || 4,
-    lightColor: '#4A90D9',
-    name: 'Customer Messages',
-    vibrationPattern: [0, 250, 250, 250],
-  });
-
   await notifications.setNotificationChannelAsync('stock', {
     description: 'Low stock and inventory notifications',
     importance: notifications.AndroidImportance?.DEFAULT || 3,

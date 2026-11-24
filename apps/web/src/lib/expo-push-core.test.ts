@@ -122,15 +122,14 @@ describe('notifyMerchantWithStore message shape', () => {
   it('carries the category on the push so the app can show its action buttons', async () => {
     const { sentMessages, store } = deliveryWithExpo();
 
-    await notifyMerchantWithStore(store, 'm', 't', 'b', undefined, 'messages', {
+    await notifyMerchantWithStore(store, 'm', 't', 'b', undefined, 'general', {
       categoryId: 'chat_reply',
     });
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]).toMatchObject({
       categoryId: 'chat_reply',
-      channelId: 'messages',
-      priority: 'high',
+      channelId: 'general',
     });
   });
 

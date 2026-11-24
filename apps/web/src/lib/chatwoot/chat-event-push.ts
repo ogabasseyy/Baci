@@ -114,9 +114,11 @@ export async function sendChatEventPush(
       content.title,
       content.body,
       content.data,
-      // A chat push is a person waiting: its own high-importance channel (the
-      // general one is silent on Android) and a Reply box on the notification.
-      'messages',
+      // Still the general channel: Expo does not show a push for an Android
+      // channel the installed app has not created yet, so moving chat pushes to
+      // a louder channel has to wait until the apps that create it are out.
+      'general',
+      // The Reply box; apps that do not know the category show the plain push.
       { categoryId: CHAT_REPLY_NOTIFICATION_CATEGORY }
     );
     // The delivery layer reports provider failures as counts and errors

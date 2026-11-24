@@ -11,14 +11,10 @@ describe('setupAndroidChannels', () => {
 
     await setupAndroidChannels(notifications);
 
-    expect(setNotificationChannelAsync).toHaveBeenCalledTimes(6);
+    expect(setNotificationChannelAsync).toHaveBeenCalledTimes(5);
     expect(setNotificationChannelAsync).toHaveBeenCalledWith(
       'orders',
       expect.objectContaining({ importance: 4, name: 'New Orders' })
-    );
-    expect(setNotificationChannelAsync).toHaveBeenCalledWith(
-      'messages',
-      expect.objectContaining({ importance: 4, name: 'Customer Messages' })
     );
     expect(setNotificationChannelAsync).toHaveBeenCalledWith(
       'general',

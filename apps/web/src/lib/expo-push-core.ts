@@ -121,9 +121,9 @@ export async function notifyMerchantWithStore(
     sound: 'default' as const,
     channelId,
     ...(options?.categoryId ? { categoryId: options.categoryId } : {}),
-    priority: (channelId === 'orders' || channelId === 'messages'
-      ? 'high'
-      : 'default') as 'high' | 'default',
+    priority: (channelId === 'orders' ? 'high' : 'default') as
+      | 'high'
+      | 'default',
   }));
 
   let result: NotificationSendResult;

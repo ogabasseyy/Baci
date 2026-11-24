@@ -422,6 +422,57 @@ describe('Ekaette staging product research', () => {
     });
   });
 
+  it('captures a name after the initial review_checkout prompt and falls through for non-name questions', async () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'true');
+    mocks.generate.mockResolvedValueOnce({
+      object: {
+        checkoutName: { firstName: 'Ada', lastName: 'Obi' },
+      },
+    });
+    await expect(
+      generateChatAutoReply({
+        ...input,
+        history: [
+          {
+            role: 'assistant',
+            content: 'I can help you check out here.',
+            checkoutNameRequested: true,
+          },
+        ],
+        question: 'Ada Obi',
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      checkoutName: { firstName: 'Ada', lastName: 'Obi' },
+      reply: { reply: 'Thanks. I’ve added your name to the checkout here.' },
+    });
+
+    mocks.generate
+      .mockResolvedValueOnce({ object: { checkoutName: null } })
+      .mockResolvedValueOnce({
+        object: {
+          ...reply,
+          reply: 'The iPhone 16 starts from ₦621,600.',
+        },
+      });
+    await expect(
+      generateChatAutoReply({
+        ...input,
+        history: [
+          {
+            role: 'assistant',
+            content: 'I can help you check out here.',
+            checkoutNameRequested: true,
+          },
+        ],
+        question: 'Wait, how much is iPhone 16?',
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      reply: { reply: 'The iPhone 16 starts from ₦621,600.' },
+    });
+  });
+
   it('offers help for a payment question without issuing a cart action', async () => {
     vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'true');
     mocks.generate.mockResolvedValue({

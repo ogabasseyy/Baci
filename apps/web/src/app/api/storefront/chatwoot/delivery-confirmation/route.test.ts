@@ -132,11 +132,22 @@ describe('staging chat delivery', () => {
     expect(await confirmed.json()).toEqual({ decision: 'confirmed' });
   });
 
-  it('leaves the route dark outside staging', async () => {
+  it('works outside staging when checkout is enabled and returns 404 when disabled', async () => {
     fixture.stageEnabled = false;
+    fixture.classify.mockResolvedValueOnce({
+      object: { decision: 'side_question' },
+    });
+    const enabledRes = await call({
+      action: 'search',
+      address: 'How fast is delivery?',
+    });
+    expect(enabledRes.status).toBe(200);
+    expect(await enabledRes.json()).toEqual({ decision: 'side_question' });
+
+    vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'false');
     expect(
       (await call({ action: 'search', address: 'Example Road' })).status
     ).toBe(404);
-    expect(fixture.classify).not.toHaveBeenCalled();
+    expect(fixture.classify).toHaveBeenCalledTimes(1);
   });
 });

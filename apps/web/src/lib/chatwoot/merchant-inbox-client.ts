@@ -12,6 +12,7 @@ import {
   projectMerchantInboxConversation,
   projectMerchantInboxMessage,
 } from './merchant-inbox-projection';
+import { PROVIDER_MESSAGE_PAGE_SIZE } from './merchant-inbox-provider-limits';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -182,9 +183,17 @@ export async function listMerchantInboxMessages(
       (id): id is number =>
         typeof id === 'number' && Number.isSafeInteger(id) && id > 0
     );
-  // As with conversations, no provider page size is assumed: any non-empty
-  // page may have an older one, and paging ends on an empty page.
-  const hasOlder = rawIds.length > 0;
+  // The chat engine's message finder returns at most 20 rows per page, hidden
+  // rows included (`limit(20)` in v4.19.1, verified in its source), so a page
+  // with fewer rows is the oldest one: a short chat must not offer "load
+  // earlier". A full page may have an older one, and paging still ends on an
+  // empty page. Re-check the size when the engine is upgraded.
+  // Fullness counts the rows the engine sent, not only those with a usable id:
+  // a full page holding a malformed row must still page on. The cursor needs
+  // at least one usable id, so without one paging ends.
+  const hasOlder =
+    parsed.data.payload.length >= PROVIDER_MESSAGE_PAGE_SIZE &&
+    rawIds.length > 0;
   return {
     ok: true,
     conversation: owned.conversation,

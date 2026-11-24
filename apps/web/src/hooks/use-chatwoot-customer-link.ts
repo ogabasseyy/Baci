@@ -71,8 +71,20 @@ export function useChatwootCustomerLink(
       ) {
         return;
       }
+      const widget = chatwoot();
       try {
-        chatwoot()?.deleteCustomAttribute?.(CHAT_CUSTOMER_LINK_ATTRIBUTE);
+        if (typeof widget?.deleteCustomAttribute === 'function') {
+          widget.deleteCustomAttribute(CHAT_CUSTOMER_LINK_ATTRIBUTE);
+        } else if (typeof widget?.setCustomAttributes === 'function') {
+          // A widget build without a delete call: overwrite the note with an
+          // empty value, which the inbox never accepts, instead of leaving the
+          // previous shopper's note in place.
+          widget.setCustomAttributes({ [CHAT_CUSTOMER_LINK_ATTRIBUTE]: '' });
+        } else {
+          // No widget to talk to yet: keep the record of the note, so a later
+          // check removes it, instead of forgetting a note that is still there.
+          return;
+        }
       } catch {
         // The widget may be mid-reload; the next load tries again.
         return;

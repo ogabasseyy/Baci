@@ -141,3 +141,31 @@ describe('bugfix: a shopper whose first link check failed offline is linked when
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: a sign-out always takes the previous note off', () => {
+  it('overwrites the note with an empty value when the widget has no delete call', () => {
+    (window as unknown as { $chatwoot: unknown }).$chatwoot = {
+      setCustomAttributes,
+    };
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    setCustomAttributes.mockClear();
+
+    signOut();
+
+    expect(setCustomAttributes).toHaveBeenCalledWith({
+      baci_customer_link: '',
+    });
+    expect(deleteCustomAttribute).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(MARKER)).not.toBe('1');
+  });
+
+  it('keeps the record of a linked note while there is no widget to remove it', () => {
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    delete (window as unknown as { $chatwoot?: unknown }).$chatwoot;
+
+    signOut();
+
+    // Nothing could be removed, so the next load must try again.
+    expect(window.localStorage.getItem(MARKER)).toBe('1');
+  });
+});

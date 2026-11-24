@@ -37,6 +37,10 @@ vi.mock('@/lib/supabase/service', () => ({
 const mockReconciliationInsert = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ data: null, error: null })
 );
+const mockTimeoutRecovery = vi.hoisted(() => vi.fn());
+vi.mock('./recover-credit-direct-timeout-order', () => ({
+  recoverCreditDirectTimeoutOrder: mockTimeoutRecovery,
+}));
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: vi.fn(() => ({
     from: vi.fn((table: string) => {
@@ -234,6 +238,7 @@ function createMockSupabaseClient() {
 describe('POST /api/payments/credit-direct/webhook', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTimeoutRecovery.mockResolvedValue({ kind: 'blocked' });
     // Default mocks
     vi.mocked(getWebhookSecret).mockReturnValue('webhook_secret');
     vi.mocked(verifyWebhookSignature).mockReturnValue(true);
@@ -1296,8 +1301,9 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       expect(createServiceClient).not.toHaveBeenCalled();
     });
 
-    it('suppresses paid side effects and files reconciliation when the order was clamped as cancelled', async () => {
+    it('files post-reinstatement notes failures with the terminal order snapshot', async () => {
       vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+      mockTimeoutRecovery.mockResolvedValueOnce({ kind: 'review_required' });
 
       const supabaseMock = createMockSupabaseClient();
       vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
@@ -1329,6 +1335,7 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           updateChain.select = vi.fn().mockReturnValue(updateChain);
           updateChain.maybeSingle = vi.fn().mockResolvedValue({
             data: {
+              ...mockOrder,
               id: 'order_abc',
               shipping_status: 'cancelled',
               cancelled_at: '2026-06-15T00:00:00Z',
@@ -1375,8 +1382,8 @@ describe('POST /api/payments/credit-direct/webhook', () => {
 
       expect(response.status).toBe(200);
       expect(data).toEqual({
-        received: true,
-        message: 'Order was cancelled; payment filed for review',
+        message: 'Payment recorded; order filed for review',
+        success: true,
       });
       // The disbursed BNPL transaction IS recorded (N4) so the money is tracked.
       expect(transactionInsert).toHaveBeenCalled();
@@ -1393,11 +1400,18 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       // linked to the recorded transaction.
       expect(mockReconciliationInsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          issue_type: 'payment_received_after_cancellation',
+          issue_type: 'gateway_payment_wedge_requires_review',
           order_id: 'order_abc',
           txn_id: 'cd-txn-1',
         })
       );
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cancelledAt: '2026-06-15T00:00:00Z',
+          orderId: 'order_abc',
+        })
+      );
+      expect(ensurePaidOrderInventoryConfirmed).not.toHaveBeenCalled();
     });
 
     it('returns 400 when expected amount is invalid', async () => {

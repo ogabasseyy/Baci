@@ -75,8 +75,26 @@ export async function recoverCreditDirectTimeoutOrder<T>({
       notes = { ...parsed };
     }
   } catch {
-    // The existing replay flow reconciles missing fee evidence.
+    // Without a valid split, the caller must file review and stop replay work.
+  }
+
+  const platformFee = readFeeAmount(notes.platformFee);
+  const merchantAmount = readFeeAmount(notes.merchantAmount);
+  if (
+    platformFee === null ||
+    merchantAmount === null ||
+    platformFee < 0 ||
+    merchantAmount <= 0
+  ) {
+    return { kind: 'review_required' };
   }
 
   return { kind: 'recovered', response: await resume(notes) };
+}
+
+function readFeeAmount(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const amount = Number(value.trim());
+  return Number.isFinite(amount) ? amount : null;
 }

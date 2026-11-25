@@ -159,7 +159,7 @@ export function useMerchantSetupChat() {
     }
 
     try {
-      await provisionMerchant.mutateAsync({
+      const provisioned = await provisionMerchant.mutateAsync({
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
         phone: data.phone.trim() || undefined,
@@ -174,9 +174,13 @@ export function useMerchantSetupChat() {
       });
       if (
         logoDraft?.pickedAsset &&
-        data.logoUrl === logoDraft.pickedAsset.uri
+        data.logoUrl === logoDraft.pickedAsset.uri &&
+        provisioned?.merchant?.id
       ) {
-        await uploadPickedLogoBestEffort(logoDraft.pickedAsset);
+        await uploadPickedLogoBestEffort(
+          logoDraft.pickedAsset,
+          provisioned.merchant.id
+        );
       }
       router.replace('/(admin)/(tabs)');
     } catch (error) {

@@ -194,6 +194,24 @@ export function transitionFromQuickReply(params: {
       ),
     };
   }
+  if (id === 'summary:edit_name') {
+    return {
+      nextStep: 'business_name',
+      messages: exchangeMessages(
+        'Change store name',
+        'Sure! What would you like to name your store?'
+      ),
+    };
+  }
+  if (id === 'summary:edit_phone') {
+    return {
+      nextStep: 'phone',
+      messages: exchangeMessages(
+        'Change phone',
+        'Enter your updated phone number or tap "Skip for now":'
+      ),
+    };
+  }
   if (id === 'summary:restart') return { sideEffect: { type: 'restart' } };
   return {};
 }

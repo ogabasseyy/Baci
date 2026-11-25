@@ -339,4 +339,38 @@ describe('MerchantSetupChat', () => {
       screen.queryByRole('button', { name: 'Use suggested link' })
     ).toBeNull();
   });
+
+  it('does not pre-seed OAuth avatar_url as the store logo when the user skips logo setup', async () => {
+    mocks.user = {
+      id: 'user-3',
+      email: 'oauth@example.com',
+      user_metadata: {
+        first_name: 'Ada',
+        last_name: 'Okafor',
+        avatar_url: 'https://lh3.googleusercontent.com/personal-avatar.jpg',
+      },
+    };
+
+    render(<MerchantSetupChat />);
+
+    fireEvent.click(screen.getByText(/Nigeria/));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByText('Fashion & Apparel'));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Kicks Hub' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Looks good!' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Launch my store' }));
+
+    await waitFor(() => {
+      expect(mocks.provisionMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessName: 'Kicks Hub',
+          logoUrl: undefined,
+        })
+      );
+    });
+  });
 });

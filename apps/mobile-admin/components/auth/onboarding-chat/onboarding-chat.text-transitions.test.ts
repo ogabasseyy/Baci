@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { transitionFromTextInput } from './onboarding-chat.text-transitions';
+import { transitionFromQuickReply } from './onboarding-chat.transitions';
 import {
   DEFAULT_BRAND_COLORS,
   type OnboardingChatData,
@@ -61,5 +62,42 @@ describe('transitionFromTextInput slug handling', () => {
     const result = transitionFromTextInput('logo', 'upload photo', BASE_DATA);
 
     expect(result.sideEffect).toEqual({ type: 'upload_logo' });
+  });
+
+  it('rejects invalid phone numbers at the phone step', () => {
+    const result = transitionFromTextInput('phone', 'not-a-phone', BASE_DATA);
+
+    expect(result.nextStep).toBeUndefined();
+    expect(result.nextData).toBeUndefined();
+    expect(result.messages?.[1]?.text).toContain('valid phone number');
+  });
+
+  it('accepts valid phone numbers and advances to business_type', () => {
+    const result = transitionFromTextInput(
+      'phone',
+      '+234 801 234 5678',
+      BASE_DATA
+    );
+
+    expect(result.nextStep).toBe('business_type');
+    expect(result.nextData).toEqual({ phone: '+234 801 234 5678' });
+  });
+
+  it('allows editing store name and phone from the summary step', () => {
+    const editName = transitionFromQuickReply({
+      option: { id: 'summary:edit_name', label: 'Change store name' },
+      data: BASE_DATA,
+      previewLogoUri: null,
+      previewColors: null,
+    });
+    expect(editName.nextStep).toBe('business_name');
+
+    const editPhone = transitionFromQuickReply({
+      option: { id: 'summary:edit_phone', label: 'Change phone' },
+      data: BASE_DATA,
+      previewLogoUri: null,
+      previewColors: null,
+    });
+    expect(editPhone.nextStep).toBe('phone');
   });
 });

@@ -11,6 +11,7 @@ vi.mock('@/ai/flows/guide-business-onboarding.core', () => ({
 
 vi.mock('@/lib/rate-limit', () => ({
   applyRateLimit: vi.fn(),
+  getTrustedClientIdentifier: vi.fn(() => '203.0.113.10'),
 }));
 
 vi.mock('../merchant-provisioning/get-mobile-bearer-user', () => ({
@@ -95,6 +96,53 @@ describe('POST /api/mobile/onboarding-assist', () => {
 
     expect(response.status).toBe(429);
     expect(await response.json()).toMatchObject({ code: 'rate_limited' });
+    expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('returns 429 when the secondary IP rate limit is exceeded', async () => {
+    mockApplyRateLimit
+      .mockResolvedValueOnce({
+        allowed: true,
+        limit: 6,
+        remaining: 5,
+        resetTime: Date.now() + 300_000,
+      })
+      .mockResolvedValueOnce({
+        allowed: false,
+        limit: 15,
+        remaining: 0,
+        resetTime: Date.now() + 300_000,
+      });
+
+    const response = await POST(
+      makeRequest({
+        task: 'generate_logos',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'black and gold',
+      })
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ code: 'rate_limited' });
+    expect(mockApplyRateLimit).toHaveBeenNthCalledWith(
+      1,
+      'user:user-123',
+      '/api/mobile/onboarding-assist:logos',
+      expect.objectContaining({
+        maxRequests: 5,
+        failClosedWithoutRedis: true,
+      })
+    );
+    expect(mockApplyRateLimit).toHaveBeenNthCalledWith(
+      2,
+      'ip:203.0.113.10',
+      '/api/mobile/onboarding-assist:logos:ip',
+      expect.objectContaining({
+        maxRequests: 15,
+        failClosedWithoutRedis: true,
+      })
+    );
     expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 

@@ -99,8 +99,8 @@ export function initialOnboardingChatData(user: User): OnboardingChatData {
     country: 'NG',
     slug: '',
     slugIsCustom: false,
-    logoUrl:
-      metadataString(user, 'avatar_url') || metadataString(user, 'picture'),
+    // Never pre-seed personal OAuth avatars as public store branding.
+    logoUrl: '',
     brandColors: DEFAULT_BRAND_COLORS,
   };
 }

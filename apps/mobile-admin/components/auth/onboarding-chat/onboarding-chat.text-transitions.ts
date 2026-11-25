@@ -66,6 +66,19 @@ export function transitionFromTextInput(
         ),
       };
     }
+    const digitsOnly = trimmed.replace(/\D/g, '');
+    if (
+      !/^[+\d\s()-]+$/.test(trimmed) ||
+      digitsOnly.length < 7 ||
+      digitsOnly.length > 15
+    ) {
+      return {
+        messages: exchangeMessages(
+          trimmed,
+          'Please enter a valid phone number (7–15 digits) or tap "Skip for now".'
+        ),
+      };
+    }
     return {
       nextData: { phone: trimmed },
       nextStep: 'business_type',

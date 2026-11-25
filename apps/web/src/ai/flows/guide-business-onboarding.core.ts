@@ -10,6 +10,7 @@ import {
 import { getOnboardingTextProviderChain } from '@/ai/text-provider-chain';
 import { getVisionProviderChain } from '@/ai/vision-provider-chain';
 import { fetchImageBytes } from '@/lib/fetch-image-bytes';
+import { isPublicHttpUrl } from '@/lib/is-public-http-url';
 import { logger } from '@/lib/logger';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
 import { createFallbackLogo } from './fallback-logo';
@@ -122,6 +123,23 @@ export async function runGuideBusinessOnboarding(
       throw new Error('logoUrl is required for color extraction.');
     }
     const logoUrl = input.logoUrl;
+    let parsedLogoUrl: URL;
+    try {
+      parsedLogoUrl = new URL(logoUrl);
+    } catch {
+      logger.warn({
+        message: 'Rejected malformed logoUrl for color extraction.',
+        flow: 'guideBusinessOnboarding',
+      });
+      throw new Error('Failed to extract brand colors.');
+    }
+    if (!(await isPublicHttpUrl(parsedLogoUrl))) {
+      logger.warn({
+        message: 'Rejected non-public logoUrl for color extraction.',
+        flow: 'guideBusinessOnboarding',
+      });
+      throw new Error('Failed to extract brand colors.');
+    }
     logger.info({
       message: 'Extracting colors from logo.',
       flow: 'guideBusinessOnboarding',

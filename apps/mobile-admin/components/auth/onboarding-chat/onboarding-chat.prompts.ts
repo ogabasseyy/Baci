@@ -224,6 +224,8 @@ export function getQuickRepliesForStep(params: {
           variant: 'accent',
         },
         { id: 'summary:edit_slug', label: 'Change link', variant: 'secondary' },
+        { id: 'summary:edit_name', label: 'Change store name' },
+        { id: 'summary:edit_phone', label: 'Change phone' },
         { id: 'summary:restart', label: 'Start over' },
       ];
     default:

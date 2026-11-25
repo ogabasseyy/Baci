@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
 import { logger } from '@/lib/logger';
-import { applyRateLimit } from '@/lib/rate-limit';
+import { applyRateLimit, getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
 import { getMobileBearerUser } from '../merchant-provisioning/get-mobile-bearer-user';
 
@@ -15,6 +15,18 @@ const MOBILE_ONBOARDING_TEXT_LIMIT = {
 
 const MOBILE_ONBOARDING_LOGO_LIMIT = {
   maxRequests: 5,
+  windowMs: 10 * 60 * 1000,
+  failClosedWithoutRedis: true,
+};
+
+const MOBILE_ONBOARDING_IP_TEXT_LIMIT = {
+  maxRequests: 30,
+  windowMs: 10 * 60 * 1000,
+  failClosedWithoutRedis: true,
+};
+
+const MOBILE_ONBOARDING_IP_LOGO_LIMIT = {
+  maxRequests: 15,
   windowMs: 10 * 60 * 1000,
   failClosedWithoutRedis: true,
 };
@@ -50,14 +62,14 @@ export async function POST(request: NextRequest) {
   }
 
   const isLogoTask = parsed.data.task === 'generate_logos';
-  const rateLimit = await applyRateLimit(
+  const userRateLimit = await applyRateLimit(
     `user:${auth.user.id}`,
     isLogoTask
       ? '/api/mobile/onboarding-assist:logos'
       : '/api/mobile/onboarding-assist',
     isLogoTask ? MOBILE_ONBOARDING_LOGO_LIMIT : MOBILE_ONBOARDING_TEXT_LIMIT
   );
-  if (!rateLimit.allowed) {
+  if (!userRateLimit.allowed) {
     return NextResponse.json(
       {
         error:
@@ -66,6 +78,29 @@ export async function POST(request: NextRequest) {
       },
       { status: 429 }
     );
+  }
+
+  const clientIp = getTrustedClientIdentifier(request);
+  if (clientIp) {
+    const ipRateLimit = await applyRateLimit(
+      `ip:${clientIp}`,
+      isLogoTask
+        ? '/api/mobile/onboarding-assist:logos:ip'
+        : '/api/mobile/onboarding-assist:ip',
+      isLogoTask
+        ? MOBILE_ONBOARDING_IP_LOGO_LIMIT
+        : MOBILE_ONBOARDING_IP_TEXT_LIMIT
+    );
+    if (!ipRateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            'Too many AI onboarding requests. Please try again in a few minutes.',
+          code: 'rate_limited',
+        },
+        { status: 429 }
+      );
+    }
   }
 
   try {

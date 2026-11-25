@@ -2,6 +2,7 @@ import { generateObject, generateText } from 'ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { fetchImageBytes } from '@/lib/fetch-image-bytes';
+import { isPublicHttpUrl } from '@/lib/is-public-http-url';
 import { guideBusinessOnboarding } from './guide-business-onboarding';
 
 vi.mock('ai', () => ({
@@ -38,10 +39,15 @@ vi.mock('@/lib/fetch-image-bytes', () => ({
   fetchImageBytes: vi.fn(),
 }));
 
+vi.mock('@/lib/is-public-http-url', () => ({
+  isPublicHttpUrl: vi.fn(async () => true),
+}));
+
 vi.mock('@/lib/logger', () => ({
   logger: {
     error: vi.fn(),
     info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -49,6 +55,7 @@ const mockGenerateText = vi.mocked(generateText);
 const mockGenerateObject = vi.mocked(generateObject);
 const mockEnsureActionRateLimit = vi.mocked(ensureActionRateLimit);
 const mockFetchImageBytes = vi.mocked(fetchImageBytes);
+const mockIsPublicHttpUrl = vi.mocked(isPublicHttpUrl);
 
 describe('guideBusinessOnboarding', () => {
   beforeEach(() => {
@@ -60,6 +67,7 @@ describe('guideBusinessOnboarding', () => {
     vi.stubEnv('GROQ_API_KEY', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');
     mockEnsureActionRateLimit.mockResolvedValue(true);
+    mockIsPublicHttpUrl.mockResolvedValue(true);
     // Default: no bytes available, so extract_colors tests exercise the
     // URL-based Gemini fallback unless a test opts into the bytes path.
     mockFetchImageBytes.mockResolvedValue(null);
@@ -366,5 +374,22 @@ describe('guideBusinessOnboarding', () => {
       })
     ).rejects.toThrow('logoUrl is required for color extraction.');
     expect(mockFetchImageBytes).not.toHaveBeenCalled();
+  });
+
+  it('rejects private or non-public logo URLs before fetching or invoking AI', async () => {
+    mockIsPublicHttpUrl.mockResolvedValueOnce(false);
+
+    await expect(
+      guideBusinessOnboarding({
+        businessName: 'Baci Meds',
+        businessType: 'pharmaceuticals',
+        brandPreferences: 'green',
+        logoUrl: 'http://127.0.0.1/logo.png',
+        task: 'extract_colors',
+      })
+    ).rejects.toThrow('Failed to extract brand colors.');
+
+    expect(mockFetchImageBytes).not.toHaveBeenCalled();
+    expect(mockGenerateObject).not.toHaveBeenCalled();
   });
 });

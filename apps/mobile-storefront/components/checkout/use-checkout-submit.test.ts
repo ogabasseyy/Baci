@@ -1013,4 +1013,19 @@ describe('useCheckoutSubmit', () => {
       useNativeSharedCartStore.setState({ enabled: false });
     }
   });
+
+  it('routes guests selecting oxygen to sign-in before creating an order', async () => {
+    const params = createParams({
+      isAuthenticated: false,
+      selectedPayment: 'oxygen',
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+    await act(async () => {
+      await result.current(address);
+    });
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      '/auth/login?returnTo=/checkout'
+    );
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+  });
 });

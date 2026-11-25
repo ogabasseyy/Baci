@@ -101,4 +101,46 @@ describe('useInboxSearch: refreshing cached results', () => {
     await settle(100);
     expect(result.current.results.map((r) => r.conversation.id)).toEqual([9]);
   });
+
+  it('bugfix: a retry tapped as a refresh starts does not cancel it', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const shared = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    let finish: (value: unknown) => void = () => {};
+    mocks.search
+      .mockResolvedValueOnce({ results: [hit(1)], hasMore: true, page: 1 })
+      .mockRejectedValueOnce(new Error('down'))
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+      );
+    const { result } = renderHook(() => useInboxSearch('order'), {
+      wrapper: shared,
+    });
+    await settle(DEBOUNCE + 100);
+    act(() => result.current.loadMore());
+    await settle(100);
+    // The footer's retry as it was on screen when the refresh began.
+    const { retry, loadMoreFailed } = result.current;
+    expect(loadMoreFailed).toBe(true);
+    act(() => {
+      client.refetchQueries();
+    });
+    await settle(100);
+
+    act(() => retry());
+    await settle(100);
+
+    // Page 1, the failed page 2, and the refresh: nothing replaced it.
+    expect(mocks.search).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      finish({ results: [hit(9)], hasMore: false, page: 1 });
+    });
+    await settle(100);
+    expect(result.current.results.map((r) => r.conversation.id)).toEqual([9]);
+  });
 });

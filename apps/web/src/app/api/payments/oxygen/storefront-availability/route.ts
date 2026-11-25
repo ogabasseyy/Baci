@@ -15,13 +15,14 @@ export async function GET(request: NextRequest) {
     authenticated && auth.user
       ? auth.user.id
       : `guest:${getTrustedClientIdentifier(request)}`;
+  const rateLimitMax = rateLimitSubject === 'guest:unknown' ? 120 : 30;
   try {
     if (
       !(
         await checkOxygenProviderRateLimit(
           rateLimitSubject,
           'storefront-availability',
-          30
+          rateLimitMax
         )
       ).allowed
     )

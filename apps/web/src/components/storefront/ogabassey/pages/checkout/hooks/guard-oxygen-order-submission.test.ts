@@ -21,15 +21,21 @@ function makeContext(overrides?: {
   authenticated?: boolean;
   currencyCode?: string;
   walletAmount?: number;
+  omitOpenAuthModal?: boolean;
 }) {
   const openAuthModal = vi.fn();
+  const pushSuccessRoute = vi.fn();
   const releaseSubmission = vi.fn();
   const context = {
     account: {
       waitForResolvedCustomerAuth: vi.fn(
         async () => overrides?.authenticated ?? true
       ),
-      openAuthModal,
+      ...(overrides?.omitOpenAuthModal ? {} : { openAuthModal }),
+    },
+    navigation: {
+      pushSuccessRoute,
+      getHref: (path: string) => `/ogabassey${path}`,
     },
     payment: {
       currencyCode: overrides?.currencyCode ?? 'NGN',
@@ -40,7 +46,7 @@ function makeContext(overrides?: {
     },
     processing: { releaseSubmission },
   } as unknown as CheckoutOrderSubmissionContext;
-  return { context, openAuthModal, releaseSubmission };
+  return { context, openAuthModal, pushSuccessRoute, releaseSubmission };
 }
 
 describe('guardOxygenOrderSubmission', () => {
@@ -60,6 +66,18 @@ describe('guardOxygenOrderSubmission', () => {
     expect(openAuthModal).toHaveBeenCalledTimes(1);
     expect(releaseSubmission).toHaveBeenCalledTimes(1);
     expect(mocks.checkAvailability).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the login route if openAuthModal is omitted for a guest', async () => {
+    const { context, pushSuccessRoute, releaseSubmission } = makeContext({
+      authenticated: false,
+      omitOpenAuthModal: true,
+    });
+    await expect(
+      guardOxygenOrderSubmission(context, 'merchant-1')
+    ).resolves.toBe(true);
+    expect(pushSuccessRoute).toHaveBeenCalledWith('/ogabassey/account/login');
+    expect(releaseSubmission).toHaveBeenCalledTimes(1);
   });
 
   it('allows an authenticated NGN Oxygen submission without wallet credit', async () => {

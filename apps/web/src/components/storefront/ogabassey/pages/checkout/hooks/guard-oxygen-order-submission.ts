@@ -14,7 +14,13 @@ export async function guardOxygenOrderSubmission(
 ): Promise<boolean> {
   if (context.payment.session.method !== 'oxygen') return false;
   if (!(await context.account.waitForResolvedCustomerAuth())) {
-    context.account.openAuthModal?.();
+    if (context.account.openAuthModal) {
+      context.account.openAuthModal();
+    } else {
+      context.navigation.pushSuccessRoute(
+        context.navigation.getHref('/account/login')
+      );
+    }
     toast({
       title: 'Sign in to continue',
       description:

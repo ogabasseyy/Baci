@@ -1,6 +1,9 @@
 -- Open production Oxygen admission for merchants with enabled production
 -- runtime bindings, and allow anonymous storefront display-hint queries
 -- when a merchant's production admission policy is set to 'open'.
+-- Newly onboarded merchants enabling production Oxygen later intentionally
+-- continue to fail closed until an operator inserts a 'pilot' or 'open'
+-- row in oxygen_private.production_admission_policy.
 -- Workflow creation (oxygen_private.start_workflow) continues to enforce
 -- authenticated customer ownership (auth.uid()).
 

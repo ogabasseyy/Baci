@@ -11,6 +11,10 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
  *
  * Only for screens inside a navigator that has a header: the header height is
  * not available anywhere else.
+ *
+ * `padding` on Android too: this is the keyboard library's view, not React
+ * Native's (whose Android `height` rule `AppKeyboardContainer` follows). Its
+ * `padding` has no platform branch: it pads by the measured overlap on both.
  */
 export function HeaderKeyboardAvoidingView({
   children,

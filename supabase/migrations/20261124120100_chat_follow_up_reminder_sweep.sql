@@ -46,16 +46,16 @@ $$;
 REVOKE ALL ON FUNCTION private.chat_event_require_proof(text, text, bigint) FROM PUBLIC, anon, authenticated, service_role;
 
 -- Puts a taken reminder back so a later sweep can push it, at most three takes
--- in all and only inside the 24-hour window. The push event is removed first:
--- with p_only_undispatched sending must never have been marked as begun (the
--- mark is written before anything is handed to the delivery provider, so
--- nothing can have left the server), and a run marking it late finds no event
--- and sends nothing. A muted or stale reminder has no notified event and is
--- never put back. updated_at is left as the last take: it spaces the retries.
+-- in all and only inside the 24-hour window. The push event is removed first,
+-- and only if sending was never marked as begun: the mark is written before
+-- anything is handed to the delivery provider, so nothing can have left the
+-- server, and a run marking it late finds no event and sends nothing. A marked
+-- push is never put back, whoever asks. A muted or stale reminder has no
+-- notified event and is never put back either. updated_at is left as the last
+-- take: it spaces the retries.
 CREATE OR REPLACE FUNCTION private.requeue_chat_follow_up_reminder(
   p_merchant_id uuid,
-  p_reminder_id uuid,
-  p_only_undispatched boolean
+  p_reminder_id uuid
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -70,7 +70,7 @@ BEGIN
   WHERE e.merchant_id = p_merchant_id
     AND e.event_key = 'fu-' || pg_catalog.replace(p_reminder_id::text, '-', '')
     AND e.kind = 'follow_up' AND e.outcome = 'notified'
-    AND (NOT p_only_undispatched OR e.push_dispatch_started_at IS NULL);
+    AND e.push_dispatch_started_at IS NULL;
   IF NOT FOUND THEN RETURN false; END IF;
 
   UPDATE public.chat_follow_up_reminders r
@@ -79,7 +79,7 @@ BEGIN
   RETURN true;
 END;
 $$;
-REVOKE ALL ON FUNCTION private.requeue_chat_follow_up_reminder(uuid, uuid, boolean) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.requeue_chat_follow_up_reminder(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 
 -- 1. The reminders that came due in the last 24 hours and nobody handled yet,
 -- never-listed first, then oldest. A reminder older than a day is never listed,
@@ -116,7 +116,7 @@ BEGIN
 
   -- A run stopped between taking a reminder and starting to send sent
   -- nothing: after ten minutes (far longer than a run lasts) it is put back.
-  PERFORM private.requeue_chat_follow_up_reminder(lost.merchant_id, lost.id, true)
+  PERFORM private.requeue_chat_follow_up_reminder(lost.merchant_id, lost.id)
   FROM (
     SELECT r.merchant_id, r.id
     FROM public.chat_follow_up_reminders r

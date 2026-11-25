@@ -37,6 +37,11 @@ describe('reminderCustomerName', () => {
     expect(reminderCustomerName('Mary-Jane-2')).toBe('Mary-Jane-2');
   });
 
+  it('accepts losing a capitalised name shaped like a slug with two or more digits', () => {
+    // It looks like a re-cased visitor slug; the neutral title is the safer mistake.
+    expect(reminderCustomerName('Mary-Jane-42')).toBe('');
+  });
+
   it('cuts a very long name to the stored limit', () => {
     expect(reminderCustomerName('A'.repeat(200))).toHaveLength(80);
   });

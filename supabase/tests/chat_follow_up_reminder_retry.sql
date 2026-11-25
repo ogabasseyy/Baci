@@ -22,9 +22,9 @@ BEGIN
     WHERE p.oid = 'public.chat_event_mark_push_dispatch(text,bigint,uuid,text,uuid)'::regprocedure AND a.grantee = 0) THEN
     RAISE EXCEPTION 'the dispatch mark is executable by PUBLIC';
   END IF;
-  IF has_function_privilege('anon', 'private.requeue_chat_follow_up_reminder(uuid,uuid,boolean)', 'EXECUTE')
-    OR has_function_privilege('authenticated', 'private.requeue_chat_follow_up_reminder(uuid,uuid,boolean)', 'EXECUTE')
-    OR has_function_privilege('service_role', 'private.requeue_chat_follow_up_reminder(uuid,uuid,boolean)', 'EXECUTE') THEN
+  IF has_function_privilege('anon', 'private.requeue_chat_follow_up_reminder(uuid,uuid)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'private.requeue_chat_follow_up_reminder(uuid,uuid)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'private.requeue_chat_follow_up_reminder(uuid,uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'the requeue helper is reachable from an API role';
   END IF;
   -- Proof vector the Node builder is tested against.
@@ -97,6 +97,9 @@ BEGIN
   IF NOT pg_temp.mark(key, claim) THEN RAISE EXCEPTION 'the claim holder could not mark the push'; END IF;
   PERFORM pg_temp.age_take(r, interval '121 minutes');
   IF EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a push marked as sending was put back: it could go out twice'; END IF;
+  -- Nor on the server's own say-so: the mark is the database's guarantee.
+  IF pg_temp.release(r) THEN RAISE EXCEPTION 'a push marked as sending was released'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = key) THEN RAISE EXCEPTION 'a marked event was removed'; END IF;
 END $$;
 
 -- A stale or muted reminder has no notified event and is never put back.

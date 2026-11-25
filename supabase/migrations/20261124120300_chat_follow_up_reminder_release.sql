@@ -28,7 +28,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('chat-events:' || p_merchant_id::text, 0)
   );
-  RETURN private.requeue_chat_follow_up_reminder(p_merchant_id, p_reminder_id, false);
+  RETURN private.requeue_chat_follow_up_reminder(p_merchant_id, p_reminder_id);
 END;
 $$;
 

@@ -101,9 +101,9 @@ async function handleReminder(
   if (push.status === 'skipped' && push.reason !== 'not_configured') {
     return 'skipped';
   }
-  if (push.status === 'failed' && push.nothingSent && (await release())) {
-    return 'retrying';
-  }
+  // Missing configuration or a failure before sending: nothing left the server.
+  const nothingSent = push.status === 'skipped' || push.nothingSent;
+  if (nothingSent && (await release())) return 'retrying';
   return 'failed';
 }
 

@@ -237,3 +237,25 @@ describe('bugfix: a store with no registered device used up the follow-up', () =
     });
   });
 });
+
+describe('bugfix: a push skipped for missing configuration was not put back', () => {
+  beforeEach(() => {
+    mocks.push.mockResolvedValue({
+      status: 'skipped',
+      reason: 'not_configured',
+    });
+  });
+
+  it('puts the reminder back', async () => {
+    await expect(summary()).resolves.toMatchObject({ retrying: 1, failed: 0 });
+    expect(mocks.release).toHaveBeenCalledWith({
+      merchantId: MERCHANT,
+      reminderId: reminder(1).reminder_id,
+    });
+  });
+
+  it('counts it as failed when it cannot be put back now', async () => {
+    mocks.release.mockResolvedValue(false);
+    await expect(summary()).resolves.toMatchObject({ retrying: 0, failed: 1 });
+  });
+});

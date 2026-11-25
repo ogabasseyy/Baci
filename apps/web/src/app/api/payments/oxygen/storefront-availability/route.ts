@@ -1,21 +1,28 @@
+import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { resolveOxygenEnvironment } from '@/lib/payments/oxygen/environment';
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
+import { getTrustedClientIdentifier } from '@/lib/rate-limit-client';
+import { createClient } from '@/lib/supabase/server';
 import { oxygenStorefrontAvailabilityQuery } from '@/schemas/oxygen-storefront-availability';
 
 /** Display hint only. Workflow creation independently enforces the policy. */
 export async function GET(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
-  if (auth.error || !auth.user || !auth.supabase)
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const authenticated = !auth.error && Boolean(auth.user && auth.supabase);
+  const rateLimitSubject =
+    authenticated && auth.user
+      ? auth.user.id
+      : `guest:${getTrustedClientIdentifier(request)}`;
+  const rateLimitMax = rateLimitSubject === 'guest:unknown' ? 120 : 30;
   try {
     if (
       !(
         await checkOxygenProviderRateLimit(
-          auth.user.id,
+          rateLimitSubject,
           'storefront-availability',
-          30
+          rateLimitMax
         )
       ).allowed
     )
@@ -40,7 +47,11 @@ export async function GET(request: NextRequest) {
       { headers: { 'Cache-Control': 'private, no-store' } }
     );
   try {
-    const { data, error } = await auth.supabase.rpc(
+    const supabase =
+      authenticated && auth.supabase
+        ? auth.supabase
+        : createClient(await cookies());
+    const { data, error } = await supabase.rpc(
       'oxygen_storefront_pilot_available',
       { p_merchant_id: parsed.data.merchantId }
     );

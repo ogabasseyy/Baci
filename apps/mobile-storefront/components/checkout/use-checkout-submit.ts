@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useIsMountedRef } from '@/components/bnpl-checkout/use-is-mounted-ref';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { ShippingAddressInput } from '@/lib/validation';
@@ -69,9 +70,7 @@ export function useCheckoutSubmit({
   return async (address: ShippingAddressInput) => {
     const submittedCart = captureSubmittedCheckoutCart(selectedPayment);
     const { checkoutGenerationSnapshot, itemsSnapshot } = submittedCart;
-    if (blockIfMixedPrizeCart(itemsSnapshot)) {
-      return;
-    }
+    if (blockIfMixedPrizeCart(itemsSnapshot)) return;
     const isVoucherOnlyCart = cartHasVoucherLine(itemsSnapshot);
     if (
       !validateCheckoutSubmission({
@@ -90,7 +89,10 @@ export function useCheckoutSubmit({
       }) ||
       !selectedPayment ||
       !paymentTab
-    ) {
+    )
+      return;
+    if (selectedPayment === 'oxygen' && !isAuthenticated) {
+      router.push('/auth/login?returnTo=/checkout');
       return;
     }
     // The REDVAULT fence holds the in-flight latch until completion.

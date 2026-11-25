@@ -36,8 +36,10 @@ describe('InboxEmptyState', () => {
     renderEmpty({ view: 'returning' });
 
     expect(screen.queryByText(/needs permission/)).toBeNull();
+    // States the rule without suggesting this person is the one shut out.
+    expect(screen.queryByText(/without access/)).toBeNull();
     expect(
-      screen.getByText(/People without access to orders do not see any\./)
+      screen.getByText(/to staff who can view orders\./)
     ).toBeInTheDocument();
   });
 

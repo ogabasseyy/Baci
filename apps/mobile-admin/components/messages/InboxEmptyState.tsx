@@ -24,7 +24,7 @@ export const INBOX_EMPTY_COPY: Record<
   },
   returning: {
     title: 'No customer chats',
-    body: 'Chats from signed-in customers who have ordered before show up here. People without access to orders do not see any.',
+    body: 'Chats from signed-in customers who have ordered before show up here, to staff who can view orders.',
   },
   done: {
     title: 'No finished chats yet',

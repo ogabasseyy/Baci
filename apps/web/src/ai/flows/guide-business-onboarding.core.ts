@@ -32,6 +32,9 @@ const AI_LOGO_RETRY_CONFIG = Object.freeze({
 });
 
 const ONBOARDING_CHAIN_TIMEOUT_MS = 40_000;
+const LOGO_GENERATION_TOTAL_BUDGET_MS = 45_000;
+const LOGO_COLOR_EXTRACT_RESERVE_MS = 10_000;
+const MIN_GEMINI_LOGO_BUDGET_MS = 3_000;
 
 const _GuideBusinessOnboardingOutputSchema = z.object({
   logos: z
@@ -112,6 +115,7 @@ Requirements:
 
 Please generate the logo image now.`;
 
+      const logoDeadline = Date.now() + LOGO_GENERATION_TOTAL_BUDGET_MS;
       const openAiLogoDataUri = allowPaidOpenAi
         ? await generateOpenAiLogo(prompt)
         : null;
@@ -122,9 +126,16 @@ Please generate the logo image now.`;
         const brandColors = await extractBrandColorsFromDataUriBestEffort(
           openAiLogoDataUri,
           businessName,
-          businessType
+          businessType,
+          Math.max(0, logoDeadline - Date.now())
         );
         return { logos: [openAiLogoDataUri], brandColors };
+      }
+
+      const geminiBudgetMs =
+        logoDeadline - Date.now() - LOGO_COLOR_EXTRACT_RESERVE_MS;
+      if (geminiBudgetMs < MIN_GEMINI_LOGO_BUDGET_MS) {
+        throw new Error('Logo generation deadline exceeded before fallback.');
       }
 
       const result = await withRetry(async () => {
@@ -132,6 +143,7 @@ Please generate the logo image now.`;
           model: activeImageModel,
           prompt,
           maxRetries: 0,
+          abortSignal: AbortSignal.timeout(geminiBudgetMs),
         });
       }, AI_LOGO_RETRY_CONFIG);
 
@@ -148,7 +160,8 @@ Please generate the logo image now.`;
       const brandColors = await extractBrandColorsFromDataUriBestEffort(
         logoDataUri,
         businessName,
-        businessType
+        businessType,
+        Math.max(0, logoDeadline - Date.now())
       );
 
       logger.info({
@@ -182,7 +195,8 @@ Please generate the logo image now.`;
     });
 
     const description = sanitizePromptInput(input.description, 200).value;
-    const tone = input.tone || 'Modern';
+    const tone =
+      sanitizePromptInput(input.tone || 'Modern', 50).value || 'Modern';
 
     try {
       const { object } = await generateObjectWithChain({

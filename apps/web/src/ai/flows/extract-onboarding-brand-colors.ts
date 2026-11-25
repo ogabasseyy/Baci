@@ -40,9 +40,12 @@ OUTPUT: Return JSON only, in exactly this shape (hex strings, no extra keys):
 export async function extractBrandColorsFromDataUriBestEffort(
   dataUri: string,
   businessName: string,
-  businessType: string
+  businessType: string,
+  timeoutMs: number = COLOR_EXTRACT_TIMEOUT_MS
 ): Promise<OnboardingBrandColors> {
   const fallback = createFallbackLogo(businessName, businessType).brandColors;
+  const effectiveTimeoutMs = Math.min(COLOR_EXTRACT_TIMEOUT_MS, timeoutMs);
+  if (effectiveTimeoutMs < 1_000) return fallback;
   const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i.exec(
     dataUri.trim()
   );
@@ -53,7 +56,7 @@ export async function extractBrandColorsFromDataUriBestEffort(
     const bytes = new Uint8Array(Buffer.from(base64, 'base64'));
     const { object } = await generateObjectWithChain({
       chain: getVisionProviderChain(),
-      overallTimeoutMs: COLOR_EXTRACT_TIMEOUT_MS,
+      overallTimeoutMs: effectiveTimeoutMs,
       schema: BrandColorsSchema,
       messages: [
         { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },

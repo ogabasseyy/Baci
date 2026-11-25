@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: vi.fn(),
   launchImageLibraryAsync: vi.fn(),
+  UIImagePickerPreferredAssetRepresentationMode: {
+    Automatic: 'automatic',
+    Compatible: 'compatible',
+    Current: 'current',
+  },
 }));
 
 vi.mock('react-native', () => ({
@@ -206,6 +211,36 @@ describe('uploadPickedLogoBestEffort', () => {
       'Unsupported Format',
       expect.stringContaining('PNG, JPEG, or WebP')
     );
+  });
+
+  it('requests a compatible iOS asset representation so HEIC iPhone photos convert to JPEG', async () => {
+    vi.mocked(
+      ImagePicker.requestMediaLibraryPermissionsAsync
+    ).mockResolvedValueOnce({ granted: true } as never);
+    vi.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValueOnce({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///tmp/IMG_1234.jpg',
+          fileName: 'IMG_1234.jpg',
+          mimeType: 'image/jpeg',
+        },
+      ],
+    } as never);
+
+    const picked = await pickOnboardingLogo();
+
+    expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      })
+    );
+    expect(picked).toEqual({
+      uri: 'file:///tmp/IMG_1234.jpg',
+      fileName: 'IMG_1234.jpg',
+      mimeType: 'image/jpeg',
+    });
   });
 
   it('rejects non-raster MIME types in uploadPickedLogoBestEffort without uploading', async () => {

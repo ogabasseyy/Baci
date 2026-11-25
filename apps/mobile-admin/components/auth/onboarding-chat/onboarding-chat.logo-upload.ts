@@ -99,6 +99,8 @@ export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
     allowsEditing: true,
     aspect: [1, 1],
     quality: 0.8,
+    preferredAssetRepresentationMode:
+      ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
   });
 
   if (result.canceled || !result.assets[0]) {

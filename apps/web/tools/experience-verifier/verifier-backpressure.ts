@@ -8,9 +8,13 @@ export async function retryVerifierBusy<T>(
 ): Promise<T> {
   const retryUntil = Date.now() + 75_000;
   let result = await send();
-  while (result === busy && Date.now() < retryUntil && !signal.aborted) {
-    await delay(2_000, undefined, { signal }).catch(() => undefined);
-    if (signal.aborted) break;
+  while (result === busy && !signal.aborted) {
+    const remaining = retryUntil - Date.now();
+    if (remaining <= 0) break;
+    await delay(Math.min(2_000, remaining), undefined, { signal }).catch(
+      () => undefined
+    );
+    if (signal.aborted || Date.now() >= retryUntil) break;
     result = await send();
   }
   return result;

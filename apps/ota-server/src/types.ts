@@ -70,9 +70,10 @@ export interface StoredReleaseRecord {
   channel: string;
   platform: OtaPlatform;
   sourceSha?: string;
+  rollbackOfUpdateId?: string;
   launchAsset: StoredManifestAsset;
   assets: StoredManifestAsset[];
-  metadata: Record<string, unknown>;
+  metadata: Record<string, string>;
   extra: Record<string, unknown>;
 }
 
@@ -82,7 +83,7 @@ export interface ExpoUpdateManifest {
   runtimeVersion: string;
   launchAsset: ExpoManifestAsset;
   assets: ExpoManifestAsset[];
-  metadata: Record<string, unknown>;
+  metadata: Record<string, string>;
   extra: Record<string, unknown>;
 }
 
@@ -90,18 +91,39 @@ export type ExpoDirective =
   | { type: 'noUpdateAvailable' }
   | { type: 'rollBackToEmbedded'; parameters: { commitTime: string } };
 
+export interface RollbackOperationResult {
+  ok: true;
+  mode: 'update' | 'rollback_to_embedded';
+  channel: string;
+  platform: OtaPlatform;
+  runtimeVersion: string;
+  updateId?: string;
+  rolledBackToUpdateId?: string;
+  commitTime?: string;
+  unchanged?: boolean;
+}
+
 export type ChannelCurrentState =
   | {
       mode: 'update';
       updateId: string;
+      activeSourceUpdateId?: string;
       previousUpdateId?: string;
       updatedAt: string;
+      lastRollback?: {
+        key: string;
+        response: RollbackOperationResult;
+      };
     }
   | {
       mode: 'rollback_to_embedded';
       commitTime: string;
       previousUpdateId?: string;
       updatedAt: string;
+      lastRollback?: {
+        key: string;
+        response: RollbackOperationResult;
+      };
     };
 
 export interface PublishPayload {
@@ -113,7 +135,7 @@ export interface PublishPayload {
   sourceSha?: string;
   launchAsset: StoredManifestAsset;
   assets?: StoredManifestAsset[];
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, string>;
   extra?: Record<string, unknown>;
 }
 
@@ -123,4 +145,5 @@ export interface RollbackPayload {
   runtimeVersion: string;
   targetUpdateId?: string;
   toEmbedded?: boolean;
+  idempotencyKey?: string;
 }

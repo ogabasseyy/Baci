@@ -248,4 +248,141 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       previousUpdateId: UPDATE_2,
     });
   });
+
+  it('keeps assets and releases immutable on collision while allowing identical retries', async () => {
+    const { env } = createEnv();
+    const bytes = new TextEncoder().encode('immutable-bundle-v1');
+    const shaHex = createHash('sha256').update(bytes).digest('hex');
+    const shaB64 = createHash('sha256').update(bytes).digest('base64url');
+    const assetUrl =
+      'https://ota.usebaci.com/api/admin/assets/bundles/ios/imm.hbc';
+
+    const putFirst = await worker.fetch(
+      new Request(assetUrl, {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/javascript',
+          'x-asset-sha256': shaHex,
+        },
+        body: bytes,
+      }),
+      env
+    );
+    expect(putFirst.status).toBe(200);
+
+    const putSameRetry = await worker.fetch(
+      new Request(assetUrl, {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/javascript',
+          'x-asset-sha256': shaHex,
+        },
+        body: bytes,
+      }),
+      env
+    );
+    expect(putSameRetry.status).toBe(200);
+
+    const otherBytes = new TextEncoder().encode('tampered-bundle-v1');
+    const otherHex = createHash('sha256').update(otherBytes).digest('hex');
+    const putConflictBytes = await worker.fetch(
+      new Request(assetUrl, {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/javascript',
+          'x-asset-sha256': otherHex,
+        },
+        body: otherBytes,
+      }),
+      env
+    );
+    expect(putConflictBytes.status).toBe(409);
+
+    const putConflictType = await worker.fetch(
+      new Request(assetUrl, {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'text/plain',
+          'x-asset-sha256': shaHex,
+        },
+        body: bytes,
+      }),
+      env
+    );
+    expect(putConflictType.status).toBe(409);
+
+    const basePublishBody = {
+      channel: 'production',
+      platform: 'ios',
+      runtimeVersion: RUNTIME,
+      updateId: UPDATE_1,
+      createdAt: '2026-11-25T12:00:00.000Z',
+      launchAsset: {
+        hash: shaB64,
+        key: shaHex,
+        contentType: 'application/javascript',
+        r2Key: 'bundles/ios/imm.hbc',
+      },
+    };
+    const pub1 = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(basePublishBody),
+      }),
+      env
+    );
+    expect(pub1.status).toBe(200);
+
+    const pubRetry = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(basePublishBody),
+      }),
+      env
+    );
+    expect(pubRetry.status).toBe(200);
+
+    // Retry without caller-supplied createdAt must also reuse stored timestamp.
+    const { createdAt: _omitted, ...publishWithoutCreatedAt } = basePublishBody;
+    const pubRetryNoCreatedAt = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(publishWithoutCreatedAt),
+      }),
+      env
+    );
+    expect(pubRetryNoCreatedAt.status).toBe(200);
+
+    const pubConflict = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...basePublishBody,
+          metadata: { tag: 'mutated' },
+        }),
+      }),
+      env
+    );
+    expect(pubConflict.status).toBe(409);
+  });
 });

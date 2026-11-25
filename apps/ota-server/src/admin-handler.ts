@@ -2,14 +2,17 @@ import {
   authenticateAdmin,
   parseJsonBody,
   parsePublishPayload,
-  parseRollbackPayload,
 } from './admin-auth';
-import { updateChannelPointerCas, verifyAssetIntegrity } from './admin-storage';
+import {
+  putImmutableAsset,
+  putImmutableRelease,
+  updateChannelPointerCas,
+  verifyAssetIntegrity,
+} from './admin-storage';
 import { sha256Base64Url, sha256Hex } from './crypto';
 import type {
   OtaWorkerEnv,
   PublishPayload,
-  RollbackPayload,
   StoredReleaseRecord,
 } from './types';
 import {
@@ -68,14 +71,20 @@ export async function handleAdminUploadAsset(
   const contentType =
     request.headers.get('content-type')?.trim() || 'application/octet-stream';
   const storageKey = `assets/${assetKey}`;
-
-  await env.OTA_BUCKET.put(storageKey, bytes, {
-    httpMetadata: { contentType },
-    customMetadata: {
-      sha256Hex: actualSha256,
-      sha256Base64Url: actualBase64Url,
-    },
-  });
+  const status = await putImmutableAsset(
+    env,
+    storageKey,
+    bytes,
+    contentType,
+    actualSha256,
+    actualBase64Url
+  );
+  if (status === 'conflict') {
+    return errorResponse(
+      'Asset already exists with conflicting bytes or content type',
+      409
+    );
+  }
 
   return jsonResponse({
     ok: true,
@@ -110,6 +119,7 @@ export async function handleAdminPublish(
 
   const channel = payload.channel ?? 'production';
   const updateId = payload.updateId ?? crypto.randomUUID().toLowerCase();
+  const callerProvidedCreatedAt = payload.createdAt !== undefined;
   const createdAt = payload.createdAt ?? new Date().toISOString();
   const assets = payload.assets ?? [];
 
@@ -134,9 +144,19 @@ export async function handleAdminPublish(
   };
 
   const releaseKey = `releases/${channel}/${payload.platform}/${payload.runtimeVersion}/${updateId}.json`;
-  await env.OTA_BUCKET.put(releaseKey, JSON.stringify(releaseRecord), {
-    httpMetadata: { contentType: 'application/json; charset=utf-8' },
-  });
+  const releaseResult = await putImmutableRelease(
+    env,
+    releaseKey,
+    releaseRecord,
+    { ignoreCreatedAtOnMatch: !callerProvidedCreatedAt }
+  );
+  if (releaseResult.status === 'conflict') {
+    return errorResponse(
+      `Release already exists with conflicting content for updateId: ${updateId}`,
+      409
+    );
+  }
+  const effectiveCreatedAt = releaseResult.createdAt;
 
   const pointerKey = `channels/${channel}/${payload.platform}/${payload.runtimeVersion}/current.json`;
   const result = await updateChannelPointerCas(env, pointerKey, (existing) => {
@@ -145,115 +165,33 @@ export async function handleAdminPublish(
         ? existing.updateId
         : existing?.previousUpdateId;
     return {
-      mode: 'update',
-      updateId,
-      ...(previousUpdateId ? { previousUpdateId } : {}),
-      updatedAt: new Date().toISOString(),
+      kind: 'write',
+      state: {
+        mode: 'update',
+        updateId,
+        activeSourceUpdateId: updateId,
+        ...(previousUpdateId ? { previousUpdateId } : {}),
+        updatedAt: effectiveCreatedAt,
+      },
     };
   });
 
   if (result instanceof Response) {
     return result;
   }
+  if ('idempotentResult' in result) {
+    return jsonResponse(result.idempotentResult);
+  }
 
+  const state = result.state;
   return jsonResponse({
     ok: true,
     channel,
     platform: payload.platform,
     runtimeVersion: payload.runtimeVersion,
     updateId,
-    ...(result.previousUpdateId
-      ? { previousUpdateId: result.previousUpdateId }
+    ...(state.previousUpdateId
+      ? { previousUpdateId: state.previousUpdateId }
       : {}),
-  });
-}
-
-export async function handleAdminRollback(
-  request: Request,
-  env: OtaWorkerEnv
-): Promise<Response> {
-  if (request.method !== 'POST') {
-    return errorResponse('Method not allowed', 405);
-  }
-  const authError = authenticateAdmin(request, env);
-  if (authError) {
-    return authError;
-  }
-
-  let payload: RollbackPayload;
-  try {
-    payload = parseRollbackPayload(await parseJsonBody(request));
-  } catch (err) {
-    if (err instanceof ValidationError) {
-      return errorResponse(err.message, err.status);
-    }
-    throw err;
-  }
-
-  const channel = payload.channel ?? 'production';
-  const pointerKey = `channels/${channel}/${payload.platform}/${payload.runtimeVersion}/current.json`;
-
-  if (payload.targetUpdateId) {
-    const targetReleaseKey = `releases/${channel}/${payload.platform}/${payload.runtimeVersion}/${payload.targetUpdateId}.json`;
-    const targetExists = await env.OTA_BUCKET.head(targetReleaseKey);
-    if (!targetExists) {
-      return errorResponse(
-        `Target update not found: ${payload.targetUpdateId}`,
-        404
-      );
-    }
-  }
-
-  const now = new Date().toISOString();
-  const result = await updateChannelPointerCas(env, pointerKey, (existing) => {
-    const priorActiveId =
-      existing?.mode === 'update'
-        ? existing.updateId
-        : existing?.previousUpdateId;
-    if (payload.toEmbedded) {
-      return {
-        mode: 'rollback_to_embedded',
-        commitTime: now,
-        ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
-        updatedAt: now,
-      };
-    }
-    const targetUpdateId = payload.targetUpdateId ?? existing?.previousUpdateId;
-    if (!targetUpdateId) {
-      return errorResponse(
-        'No targetUpdateId provided and no previousUpdateId recorded for rollback',
-        400
-      );
-    }
-    return {
-      mode: 'update',
-      updateId: targetUpdateId,
-      ...(priorActiveId && priorActiveId !== targetUpdateId
-        ? { previousUpdateId: priorActiveId }
-        : {}),
-      updatedAt: now,
-    };
-  });
-
-  if (result instanceof Response) {
-    return result;
-  }
-  if (result.mode === 'rollback_to_embedded') {
-    return jsonResponse({
-      ok: true,
-      mode: 'rollback_to_embedded',
-      channel,
-      platform: payload.platform,
-      runtimeVersion: payload.runtimeVersion,
-      commitTime: result.commitTime,
-    });
-  }
-  return jsonResponse({
-    ok: true,
-    mode: 'update',
-    channel,
-    platform: payload.platform,
-    runtimeVersion: payload.runtimeVersion,
-    updateId: result.updateId,
   });
 }

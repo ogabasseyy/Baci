@@ -38,6 +38,47 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
   }
 }
 
+const IDEMPOTENCY_KEY_REGEX = /^[a-zA-Z0-9._:-]{8,128}$/;
+
+function parseOptionalChannel(raw: unknown): string {
+  if (raw === undefined) {
+    return 'production';
+  }
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    throw new ValidationError('Invalid channel name');
+  }
+  return validateChannelName(raw);
+}
+
+function validateMetadataRecord(raw: unknown): Record<string, string> {
+  if (raw === undefined) {
+    return {};
+  }
+  if (!isPlainObject(raw)) {
+    throw new ValidationError('metadata must be an object');
+  }
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value !== 'string') {
+      throw new ValidationError(`metadata.${key} must be a string`);
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+export function parseIdempotencyKey(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  if (typeof raw !== 'string' || !IDEMPOTENCY_KEY_REGEX.test(raw.trim())) {
+    throw new ValidationError(
+      'Invalid idempotencyKey (expected 8-128 chars of [a-zA-Z0-9._:-])'
+    );
+  }
+  return raw.trim();
+}
+
 export function parsePublishPayload(body: unknown): PublishPayload {
   if (!isPlainObject(body)) {
     throw new ValidationError('Publish payload must be a JSON object');
@@ -49,15 +90,13 @@ export function parsePublishPayload(body: unknown): PublishPayload {
   const runtimeVersion = validateRuntimeVersion(
     typeof body.runtimeVersion === 'string' ? body.runtimeVersion : null
   );
-  const channel = validateChannelName(
-    typeof body.channel === 'string' ? body.channel : null
-  );
+  const channel = parseOptionalChannel(body.channel);
   const updateId =
     body.updateId !== undefined
       ? validateUpdateId(typeof body.updateId === 'string' ? body.updateId : '')
       : crypto.randomUUID().toLowerCase();
 
-  let createdAt = new Date().toISOString();
+  let createdAt: string | undefined;
   if (body.createdAt !== undefined) {
     if (
       typeof body.createdAt !== 'string' ||
@@ -87,14 +126,7 @@ export function parsePublishPayload(body: unknown): PublishPayload {
     );
   }
 
-  const metadata =
-    body.metadata === undefined
-      ? {}
-      : isPlainObject(body.metadata)
-        ? body.metadata
-        : (() => {
-            throw new ValidationError('metadata must be an object');
-          })();
+  const metadata = validateMetadataRecord(body.metadata);
 
   const extra =
     body.extra === undefined
@@ -110,7 +142,7 @@ export function parsePublishPayload(body: unknown): PublishPayload {
     platform,
     runtimeVersion,
     updateId,
-    createdAt,
+    ...(createdAt ? { createdAt } : {}),
     ...(sourceSha ? { sourceSha } : {}),
     launchAsset,
     assets,
@@ -129,9 +161,7 @@ export function parseRollbackPayload(body: unknown): RollbackPayload {
   const runtimeVersion = validateRuntimeVersion(
     typeof body.runtimeVersion === 'string' ? body.runtimeVersion : null
   );
-  const channel = validateChannelName(
-    typeof body.channel === 'string' ? body.channel : null
-  );
+  const channel = parseOptionalChannel(body.channel);
   const targetUpdateId =
     body.targetUpdateId !== undefined
       ? validateUpdateId(
@@ -139,6 +169,7 @@ export function parseRollbackPayload(body: unknown): RollbackPayload {
         )
       : undefined;
   const toEmbedded = body.toEmbedded === true;
+  const idempotencyKey = parseIdempotencyKey(body.idempotencyKey);
 
   if (body.toEmbedded !== undefined && typeof body.toEmbedded !== 'boolean') {
     throw new ValidationError('toEmbedded must be a boolean');
@@ -155,5 +186,6 @@ export function parseRollbackPayload(body: unknown): RollbackPayload {
     runtimeVersion,
     ...(targetUpdateId ? { targetUpdateId } : {}),
     toEmbedded,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
   };
 }

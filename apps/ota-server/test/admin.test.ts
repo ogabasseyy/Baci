@@ -221,6 +221,7 @@ describe('admin publish and rollback endpoints', () => {
         headers: {
           authorization: `Bearer ${TOKEN}`,
           'content-type': 'application/json',
+          'idempotency-key': 'rollback-auto-key-1',
         },
         body: JSON.stringify({
           channel: 'production',
@@ -231,11 +232,25 @@ describe('admin publish and rollback endpoints', () => {
       env
     );
     expect(rollbackAuto.status).toBe(200);
-    expect(await rollbackAuto.json()).toMatchObject({
+    const rollbackBody: unknown = await rollbackAuto.json();
+    expect(rollbackBody).toMatchObject({
       ok: true,
       mode: 'update',
-      updateId: UPDATE_1,
+      rolledBackToUpdateId: UPDATE_1,
     });
+    if (
+      typeof rollbackBody !== 'object' ||
+      rollbackBody === null ||
+      !('updateId' in rollbackBody) ||
+      typeof rollbackBody.updateId !== 'string'
+    ) {
+      throw new Error('Expected rollback response to include string updateId');
+    }
+    expect(rollbackBody.updateId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+    expect(rollbackBody.updateId).not.toBe(UPDATE_1);
+    expect(rollbackBody.updateId).not.toBe(UPDATE_2);
 
     const rollbackMissing = await worker.fetch(
       new Request('https://ota.usebaci.com/api/admin/rollback', {

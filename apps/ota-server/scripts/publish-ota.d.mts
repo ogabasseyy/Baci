@@ -1,5 +1,10 @@
 import type { OtaPlatform, PublishPayload } from '../src/types';
 
+export type OtaFetch = (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response>;
+
 export interface PublishCliOptions {
   channel: string;
   dryRun: boolean;
@@ -13,6 +18,7 @@ export interface PublishCliOptions {
   runtimeVersion?: string;
   sourceSha?: string;
   updateId?: string;
+  idempotencyKey?: string;
 }
 
 export interface PackagedAssetUpload {
@@ -52,7 +58,7 @@ export function publishOta(
     token: string;
     dryRun?: boolean;
   },
-  fetchImpl?: typeof fetch
+  fetchImpl?: OtaFetch
 ): Promise<Record<string, unknown>>;
 export function rollbackOta(
   options: {
@@ -61,9 +67,10 @@ export function rollbackOta(
     channel?: string;
     toEmbedded?: boolean;
     updateId?: string;
+    idempotencyKey?: string;
     serverUrl: string;
     token: string;
     dryRun?: boolean;
   },
-  fetchImpl?: typeof fetch
+  fetchImpl?: OtaFetch
 ): Promise<Record<string, unknown>>;

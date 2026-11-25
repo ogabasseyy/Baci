@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, readFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { lstat, open, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -34,9 +35,18 @@ const VALUE_FLAGS = {
   '--channel': 'channel',
   '--source-sha': 'sourceSha',
   '--update-id': 'updateId',
+  '--idempotency-key': 'idempotencyKey',
   '--server': 'serverUrl',
   '--token': 'token',
 };
+
+const BOOLEAN_FLAGS = new Set(['--rollback', '--to-embedded', '--dry-run']);
+const CHANNEL_REGEX = /^[a-zA-Z0-9._-]{1,64}$/;
+const RUNTIME_REGEX = /^[a-zA-Z0-9._+-]{1,128}$/;
+const IDEMPOTENCY_KEY_REGEX = /^[a-zA-Z0-9._:-]{8,128}$/;
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const COMMIT_SHA_REGEX = /^[0-9a-f]{40}$/i;
 
 export function inferAssetContentType(ext) {
   const normalized = (ext ?? '').replace(/^\./, '').toLowerCase();
@@ -56,7 +66,17 @@ export function parseCliArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg in VALUE_FLAGS) {
-      options[VALUE_FLAGS[arg]] = argv[++i];
+      const value = argv[i + 1];
+      if (
+        value === undefined ||
+        value.trim().length === 0 ||
+        value in VALUE_FLAGS ||
+        BOOLEAN_FLAGS.has(value)
+      ) {
+        throw new Error(`Missing or invalid value for ${arg}`);
+      }
+      options[VALUE_FLAGS[arg]] = value;
+      i += 1;
     } else if (arg === '--rollback') {
       options.rollback = true;
     } else if (arg === '--to-embedded') {
@@ -71,8 +91,40 @@ export function parseCliArgs(argv) {
   if (options.platform !== 'ios' && options.platform !== 'android') {
     throw new Error('--platform must be "ios" or "android"');
   }
-  if (!options.runtimeVersion?.trim()) {
-    throw new Error('--runtime is required');
+  if (
+    !options.runtimeVersion?.trim() ||
+    options.runtimeVersion.includes('..') ||
+    !RUNTIME_REGEX.test(options.runtimeVersion.trim())
+  ) {
+    throw new Error('--runtime is required and must be a valid runtime version');
+  }
+  if (
+    !options.channel?.trim() ||
+    options.channel.includes('..') ||
+    !CHANNEL_REGEX.test(options.channel.trim())
+  ) {
+    throw new Error('--channel must be a valid channel name');
+  }
+  if (options.updateId !== undefined && !UUID_REGEX.test(options.updateId.trim())) {
+    throw new Error('--update-id must be a valid UUID');
+  }
+  if (
+    options.idempotencyKey !== undefined &&
+    !IDEMPOTENCY_KEY_REGEX.test(options.idempotencyKey.trim())
+  ) {
+    throw new Error('--idempotency-key must match [a-zA-Z0-9._:-]{8,128}');
+  }
+  if (
+    options.sourceSha !== undefined &&
+    !COMMIT_SHA_REGEX.test(options.sourceSha.trim())
+  ) {
+    throw new Error('--source-sha must be a 40-char hex SHA');
+  }
+  if (options.toEmbedded && !options.rollback) {
+    throw new Error('--to-embedded requires --rollback');
+  }
+  if (options.rollback && options.toEmbedded && options.updateId) {
+    throw new Error('Specify either --update-id or --to-embedded, not both');
   }
   if (!options.rollback && !options.distDir?.trim()) {
     throw new Error('--dist is required when publishing');
@@ -87,16 +139,32 @@ async function readContainedFile(baseDir, relativePath) {
   if (typeof relativePath !== 'string' || path.isAbsolute(relativePath)) {
     throw new Error(`Invalid relative export path: ${String(relativePath)}`);
   }
-  const baseResolved = path.resolve(baseDir);
-  const resolved = path.resolve(baseResolved, relativePath);
-  if (!resolved.startsWith(`${baseResolved}${path.sep}`)) {
+  const canonicalRoot = await realpath(baseDir);
+  const resolved = path.resolve(canonicalRoot, relativePath);
+  if (!resolved.startsWith(`${canonicalRoot}${path.sep}`)) {
     throw new Error(`Export path escapes dist directory: ${relativePath}`);
   }
   const stat = await lstat(resolved);
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error(`Export file must be a regular file: ${relativePath}`);
   }
-  return readFile(resolved);
+  const canonicalTarget = await realpath(resolved);
+  if (!canonicalTarget.startsWith(`${canonicalRoot}${path.sep}`)) {
+    throw new Error(`Export path escapes canonical dist root: ${relativePath}`);
+  }
+  const handle = await open(
+    canonicalTarget,
+    fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)
+  );
+  try {
+    const fdStat = await handle.stat();
+    if (!fdStat.isFile()) {
+      throw new Error(`Export file must be a regular file: ${relativePath}`);
+    }
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
 }
 
 function hashBytes(bytes) {
@@ -212,7 +280,19 @@ async function assertOkResponse(response, label) {
 }
 
 function normalizeServerBaseUrl(serverUrl) {
-  return serverUrl.replace(/\/+$/, '').replace(/\/api\/manifest$/, '');
+  let parsed;
+  try {
+    parsed = new URL(serverUrl.trim());
+  } catch {
+    throw new Error(`Invalid OTA server URL: ${serverUrl}`);
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error('OTA server URL must use https://');
+  }
+  const normalizedPath = parsed.pathname
+    .replace(/\/+$/, '')
+    .replace(/\/api\/manifest$/, '');
+  return `${parsed.origin}${normalizedPath}`;
 }
 
 export async function publishOta(options, fetchImpl = fetch) {
@@ -232,6 +312,7 @@ export async function publishOta(options, fetchImpl = fetch) {
   for (const asset of packaged.uploads) {
     const headResp = await fetchImpl(`${baseUrl}/api/assets/${asset.r2Key}`, {
       method: 'HEAD',
+      redirect: 'error',
     });
     const remoteSha256 = headResp.headers.get('x-asset-sha256')?.trim();
     if (
@@ -249,6 +330,7 @@ export async function publishOta(options, fetchImpl = fetch) {
         'x-asset-sha256': asset.sha256Hex,
       },
       body: asset.bytes,
+      redirect: 'error',
     });
     await assertOkResponse(putResp, `Upload asset ${asset.r2Key}`);
   }
@@ -257,6 +339,7 @@ export async function publishOta(options, fetchImpl = fetch) {
     method: 'POST',
     headers: { ...authHeaders, 'content-type': 'application/json' },
     body: JSON.stringify(packaged.payload),
+    redirect: 'error',
   });
   return assertOkResponse(publishResp, 'Publish OTA manifest');
 }
@@ -273,13 +356,18 @@ export async function rollbackOta(options, fetchImpl = fetch) {
     return { dryRun: true, payload: body };
   }
   const baseUrl = normalizeServerBaseUrl(options.serverUrl);
+  const idempotencyKey =
+    options.idempotencyKey?.trim() ||
+    (!options.updateId ? randomUUID().toLowerCase() : undefined);
   const resp = await fetchImpl(`${baseUrl}/api/admin/rollback`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${options.token}`,
       'content-type': 'application/json',
+      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
     },
     body: JSON.stringify(body),
+    redirect: 'error',
   });
   return assertOkResponse(resp, 'Rollback OTA release');
 }

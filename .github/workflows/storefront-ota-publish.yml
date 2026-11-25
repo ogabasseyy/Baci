@@ -295,6 +295,7 @@ jobs:
             --platform "$PLATFORM"
             --runtime "$RUNTIME_VERSION"
             --channel "$CHANNEL"
+            --idempotency-key "gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           )
           if [[ "$ROLLBACK_TO_EMBEDDED" == "true" ]]; then
             args+=(--to-embedded)

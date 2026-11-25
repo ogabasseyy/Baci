@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   inferAssetContentType,
+  type OtaFetch,
   packageExportDirectory,
   parseCliArgs,
   publishOta,
@@ -70,8 +71,14 @@ async function createExportFixture() {
   return { dir, distDir, configPath, bundleBytes, pngBytes, assetMd5 };
 }
 
+function getRequestUrl(input: string | URL | Request): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
 describe('publish-ota CLI', () => {
-  it('infers asset content types and validates CLI args', () => {
+  it('infers asset content types and validates CLI args strictly', () => {
     expect(inferAssetContentType('png')).toBe('image/png');
     expect(inferAssetContentType('.woff2')).toBe('font/woff2');
     expect(inferAssetContentType('unknown')).toBe('application/octet-stream');
@@ -82,6 +89,41 @@ describe('publish-ota CLI', () => {
     expect(() =>
       parseCliArgs(['--platform', 'ios', '--runtime', '1.0.0', '--dry-run'])
     ).toThrow(/--dist/);
+    expect(() =>
+      parseCliArgs([
+        '--platform',
+        'ios',
+        '--runtime',
+        '1.0.0',
+        '--rollback',
+        '--dry-run',
+        '--update-id',
+      ])
+    ).toThrow(/Missing or invalid value/);
+    expect(() =>
+      parseCliArgs([
+        '--platform',
+        'ios',
+        '--runtime',
+        '1.0.0',
+        '--dist',
+        '/tmp/dist',
+        '--to-embedded',
+        '--dry-run',
+      ])
+    ).toThrow(/--to-embedded requires --rollback/);
+    expect(() =>
+      parseCliArgs([
+        '--platform',
+        'ios',
+        '--runtime',
+        '1.0.0',
+        '--channel',
+        '../prod',
+        '--rollback',
+        '--dry-run',
+      ])
+    ).toThrow(/--channel/);
 
     const rollbackArgs = parseCliArgs([
       '--platform',
@@ -94,6 +136,35 @@ describe('publish-ota CLI', () => {
     ]);
     expect(rollbackArgs.rollback).toBe(true);
     expect(rollbackArgs.toEmbedded).toBe(true);
+  });
+
+  it('rejects symlinked parent directories escaping canonical export root', async () => {
+    const { dir, distDir } = await createExportFixture();
+    const outsideDir = path.join(dir, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+    await writeFile(path.join(outsideDir, 'secret.hbc'), 'secret-bytes');
+    await symlink(outsideDir, path.join(distDir, 'linked-dir'));
+    await writeFile(
+      path.join(distDir, 'metadata.json'),
+      JSON.stringify({
+        version: 0,
+        bundler: 'metro',
+        fileMetadata: {
+          ios: {
+            bundle: 'linked-dir/secret.hbc',
+            assets: [],
+          },
+        },
+      })
+    );
+
+    await expect(
+      packageExportDirectory({
+        distDir,
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+      })
+    ).rejects.toThrow(/escapes/);
   });
 
   it('packages expo export --dump-assetmap output with SHA-256 hashes', async () => {
@@ -129,14 +200,67 @@ describe('publish-ota CLI', () => {
     });
   });
 
-  it('uploads uncached or mismatched assets, normalizes serverUrl, and supports rollback', async () => {
+  it('rejects non-HTTPS endpoints before any fetch call while allowing dry-run offline', async () => {
+    const { distDir, configPath } = await createExportFixture();
+    let fetchCount = 0;
+    const spyFetch: OtaFetch = async () => {
+      fetchCount += 1;
+      return new Response('{}', { status: 200 });
+    };
+
+    await expect(
+      publishOta(
+        {
+          distDir,
+          configPath,
+          platform: 'ios',
+          runtimeVersion: '2.1.663',
+          serverUrl: 'http://ota.usebaci.com',
+          token: 'secret-token',
+        },
+        spyFetch
+      )
+    ).rejects.toThrow(/https:\/\//);
+
+    await expect(
+      rollbackOta(
+        {
+          platform: 'ios',
+          runtimeVersion: '2.1.663',
+          serverUrl: 'http://ota.usebaci.com',
+          token: 'secret-token',
+        },
+        spyFetch
+      )
+    ).rejects.toThrow(/https:\/\//);
+
+    expect(fetchCount).toBe(0);
+
+    const dryRunResult = await publishOta(
+      {
+        distDir,
+        configPath,
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        serverUrl: 'http://localhost:8787',
+        token: '',
+        dryRun: true,
+      },
+      spyFetch
+    );
+    expect(dryRunResult.dryRun).toBe(true);
+    expect(fetchCount).toBe(0);
+  });
+
+  it('uploads uncached/mismatched assets with redirect error, normalizes serverUrl, and supports rollback', async () => {
     const { distDir, configPath, pngBytes } = await createExportFixture();
     const pngShaHex = createHash('sha256').update(pngBytes).digest('hex');
-    const calls: { url: string; method: string }[] = [];
+    const calls: { url: string; method: string; redirect?: string }[] = [];
 
-    const mockFetch = async (url: string, init?: RequestInit) => {
+    const mockFetch: OtaFetch = async (input, init) => {
+      const url = getRequestUrl(input);
       const method = init?.method ?? 'GET';
-      calls.push({ url, method });
+      calls.push({ url, method, redirect: init?.redirect });
       if (method === 'HEAD' && url.includes('/blobs/')) {
         return new Response(null, {
           status: 200,
@@ -144,7 +268,6 @@ describe('publish-ota CLI', () => {
         });
       }
       if (method === 'HEAD') {
-        // Return 200 with mismatched hash to confirm CLI does not skip upload.
         return new Response(null, {
           status: 200,
           headers: { 'x-asset-sha256': '0'.repeat(64) },
@@ -163,18 +286,35 @@ describe('publish-ota CLI', () => {
         serverUrl: 'https://ota.usebaci.com/api/manifest/',
         token: 'secret-token',
       },
-      mockFetch as unknown as typeof fetch
+      mockFetch
     );
 
     expect(result).toEqual({ ok: true });
     expect(calls.filter((c) => c.method === 'HEAD')).toHaveLength(2);
     expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+    expect(calls.every((c) => c.redirect === 'error')).toBe(true);
     expect(calls.find((c) => c.method === 'POST')?.url).toBe(
       'https://ota.usebaci.com/api/admin/publish'
     );
 
-    const rollbackCalls: { url: string; body: string }[] = [];
+    const rollbackCalls: {
+      url: string;
+      body: string;
+      redirect?: string;
+      idempotencyKey?: string;
+    }[] = [];
+    const rollbackFetch: OtaFetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      rollbackCalls.push({
+        url: getRequestUrl(input),
+        body: String(init?.body ?? ''),
+        redirect: init?.redirect,
+        idempotencyKey: headers.get('idempotency-key') ?? undefined,
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
     await rollbackOta(
       {
         platform: 'ios',
@@ -184,16 +324,15 @@ describe('publish-ota CLI', () => {
         serverUrl: 'https://ota.usebaci.com/',
         token: 'secret-token',
       },
-      (async (url: string, init?: RequestInit) => {
-        rollbackCalls.push({ url, body: String(init?.body ?? '') });
-        return new Response(JSON.stringify({ ok: true }), { status: 200 });
-      }) as unknown as typeof fetch
+      rollbackFetch
     );
 
     expect(rollbackCalls).toHaveLength(1);
     expect(rollbackCalls[0]?.url).toBe(
       'https://ota.usebaci.com/api/admin/rollback'
     );
+    expect(rollbackCalls[0]?.redirect).toBe('error');
+    expect(rollbackCalls[0]?.idempotencyKey).toBeTruthy();
     expect(JSON.parse(rollbackCalls[0]?.body ?? '')).toEqual({
       channel: 'production',
       platform: 'ios',

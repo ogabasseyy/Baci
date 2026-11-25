@@ -1,5 +1,5 @@
 {
-  "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "baci-ota-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-29",

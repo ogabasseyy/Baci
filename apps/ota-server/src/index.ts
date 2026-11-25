@@ -1,8 +1,5 @@
-import {
-  handleAdminPublish,
-  handleAdminRollback,
-  handleAdminUploadAsset,
-} from './admin-handler';
+import { handleAdminPublish, handleAdminUploadAsset } from './admin-handler';
+import { handleAdminRollback } from './admin-rollback-handler';
 import { handleGetAsset } from './assets-handler';
 import { handleGetManifest } from './manifest-handler';
 import type { OtaWorkerEnv } from './types';

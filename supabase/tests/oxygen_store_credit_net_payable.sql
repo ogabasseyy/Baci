@@ -197,7 +197,8 @@ BEGIN
     VALUES
       ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','completed',20000,0,'order_redemption','ec310000-0000-4000-8000-000000000016'),
       ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','pending',10000,0,'order_redemption','ec310000-0000-4000-8000-000000000016'),
-      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',20000,20000,'order_reversal','ec310000-0000-4000-8000-000000000016');
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',20000,20000,'order_reversal','ec310000-0000-4000-8000-000000000016'),
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','pending',10000,0,'order_reversal','ec310000-0000-4000-8000-000000000012');
 
     INSERT INTO public.customer_savings_goals(
       id,merchant_id,customer_id,product_id,title,target_amount,current_amount,contribution_amount,
@@ -212,6 +213,9 @@ BEGIN
 
     IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 50000 THEN
       RAISE EXCEPTION 'Expected reversed ledger order net payable 50000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 0, 0, 'unpaid');
+    END IF;
+    IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 35000 THEN
+      RAISE EXCEPTION 'Expected pending reversal not to reduce credit on order 12, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid');
     END IF;
   END IF;
 END $test$;

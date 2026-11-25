@@ -43,6 +43,18 @@ describe('sumNetWalletLedgerCredit', () => {
           type: 'credit',
           status: 'completed',
         },
+        {
+          amount: 3000,
+          source_type: 'order_reversal',
+          type: 'credit',
+          status: 'pending',
+        },
+        {
+          amount: 2000,
+          source_type: 'order_reversal',
+          type: 'credit',
+          status: 'failed',
+        },
       ])
     ).toBe(6000);
   });

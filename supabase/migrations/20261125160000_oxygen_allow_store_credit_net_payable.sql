@@ -66,6 +66,7 @@ BEGIN
           AND t.status = 'completed'
       ), 0) - COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
         WHERE t.source_type = 'order_reversal'
+          AND t.status = 'completed'
       ), 0),
       0
     )

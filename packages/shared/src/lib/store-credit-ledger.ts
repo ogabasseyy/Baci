@@ -48,7 +48,10 @@ export function sumNetWalletLedgerCredit(rows: unknown): number {
       record.status === 'completed'
     ) {
       redeemed += amount;
-    } else if (record.source_type === 'order_reversal') {
+    } else if (
+      record.source_type === 'order_reversal' &&
+      record.status === 'completed'
+    ) {
       reversed += amount;
     }
   }

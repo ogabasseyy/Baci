@@ -1385,12 +1385,14 @@ export async function POST(request: NextRequest) {
       const walletFromLedgerRows = sumNetWalletLedgerCredit(walletRows);
       const hasWalletReversal =
         Array.isArray(walletRows) &&
-        walletRows.some(
-          (row) =>
-            Boolean(row) &&
-            typeof row === 'object' &&
-            (row as { source_type?: unknown }).source_type === 'order_reversal'
-        );
+        walletRows.some((row) => {
+          if (!row || typeof row !== 'object') return false;
+          const record = row as { source_type?: unknown; status?: unknown };
+          return (
+            record.source_type === 'order_reversal' &&
+            record.status === 'completed'
+          );
+        });
 
       walletAmountUsed = hasWalletReversal
         ? walletFromLedgerRows

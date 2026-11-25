@@ -40,8 +40,12 @@ BEGIN
     ), 0),
     COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
       WHERE t.source_type = 'order_reversal'
+        AND t.status = 'completed'
     ), 0),
-    COALESCE(BOOL_OR(t.source_type = 'order_reversal'), false)
+    COALESCE(BOOL_OR(
+      t.source_type = 'order_reversal'
+      AND t.status = 'completed'
+    ), false)
     INTO v_wallet_redeemed, v_wallet_reversed, v_has_wallet_reversal
   FROM public.customer_wallet_transactions AS t
   WHERE t.source_id = p_order_id
@@ -495,7 +499,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_email TEXT;
@@ -503,41 +507,41 @@ DECLARE
   v_order_id UUID;
   v_is_token_lookup BOOLEAN := FALSE;
 BEGIN
-  IF p_merchant_slug IS NULL OR trim(p_merchant_slug) = '' THEN
+  IF p_merchant_slug IS NULL OR pg_catalog.btrim(p_merchant_slug) = '' THEN
     RAISE EXCEPTION 'merchant_slug_required';
   END IF;
 
   SELECT m.id INTO v_merchant_id
-  FROM merchants m
-  WHERE lower(m.slug) = lower(trim(p_merchant_slug))
+  FROM public.merchants m
+  WHERE pg_catalog.lower(m.slug) = pg_catalog.lower(pg_catalog.btrim(p_merchant_slug))
   LIMIT 1;
 
   IF v_merchant_id IS NULL THEN
     RETURN;
   END IF;
 
-  IF p_tracking_token IS NOT NULL AND trim(p_tracking_token) != '' THEN
+  IF p_tracking_token IS NOT NULL AND pg_catalog.btrim(p_tracking_token) != '' THEN
     v_is_token_lookup := TRUE;
     SELECT o.id INTO v_order_id
-    FROM orders o
+    FROM public.orders o
     WHERE o.merchant_id = v_merchant_id
       AND o.tracking_token = p_tracking_token
     LIMIT 1;
   ELSE
-    v_email := lower(trim(p_email));
+    v_email := pg_catalog.lower(pg_catalog.btrim(p_email));
 
     IF v_email IS NULL OR v_email = '' THEN
       RAISE EXCEPTION 'email_required';
     END IF;
 
-    IF p_order_id IS NULL AND (p_order_number IS NULL OR trim(p_order_number) = '') THEN
+    IF p_order_id IS NULL AND (p_order_number IS NULL OR pg_catalog.btrim(p_order_number) = '') THEN
       RAISE EXCEPTION 'order_id_or_number_required';
     END IF;
 
     SELECT o.id INTO v_order_id
-    FROM orders o
+    FROM public.orders o
     WHERE o.merchant_id = v_merchant_id
-      AND lower(o.customer_email) = v_email
+      AND pg_catalog.lower(o.customer_email) = v_email
       AND (
         (
           p_order_id IS NOT NULL
@@ -582,7 +586,7 @@ BEGIN
       COALESCE(
         (
           SELECT SUM(GREATEST(t.amount, 0))
-          FROM customer_wallet_transactions t
+          FROM public.customer_wallet_transactions t
           WHERE t.source_id = o.id
             AND t.merchant_id = o.merchant_id
             AND t.source_type = 'order_redemption'
@@ -593,10 +597,11 @@ BEGIN
       ) - COALESCE(
         (
           SELECT SUM(GREATEST(t.amount, 0))
-          FROM customer_wallet_transactions t
+          FROM public.customer_wallet_transactions t
           WHERE t.source_id = o.id
             AND t.merchant_id = o.merchant_id
             AND t.source_type = 'order_reversal'
+            AND t.status = 'completed'
         ),
         0
       ),
@@ -605,7 +610,7 @@ BEGIN
     COALESCE(
       (
         SELECT SUM(GREATEST(r.amount, 0))
-        FROM customer_savings_redemptions r
+        FROM public.customer_savings_redemptions r
         WHERE r.order_id = o.id
           AND r.merchant_id = o.merchant_id
           AND NOT (COALESCE(r.metadata, '{}'::jsonb) ? 'reversed_at')
@@ -619,17 +624,17 @@ BEGIN
     CASE WHEN v_is_token_lookup THEN o.customer_email
     ELSE
       CASE WHEN o.customer_email IS NULL OR o.customer_email = '' THEN '***'
-           WHEN position('@' in o.customer_email) = 0 THEN '***'
-           WHEN length(split_part(o.customer_email, '@', 1)) <= 2
-             THEN left(split_part(o.customer_email, '@', 1), 1) || '***@' || split_part(o.customer_email, '@', 2)
-           ELSE left(split_part(o.customer_email, '@', 1), 2) || '***@' || split_part(o.customer_email, '@', 2)
+           WHEN pg_catalog.strpos(o.customer_email, '@') = 0 THEN '***'
+           WHEN pg_catalog.length(pg_catalog.split_part(o.customer_email, '@', 1)) <= 2
+             THEN pg_catalog.left(pg_catalog.split_part(o.customer_email, '@', 1), 1) || '***@' || pg_catalog.split_part(o.customer_email, '@', 2)
+           ELSE pg_catalog.left(pg_catalog.split_part(o.customer_email, '@', 1), 2) || '***@' || pg_catalog.split_part(o.customer_email, '@', 2)
       END
     END AS customer_email,
     CASE WHEN v_is_token_lookup THEN o.customer_phone
     ELSE
       CASE WHEN o.customer_phone IS NULL OR o.customer_phone = '' THEN '***'
-           WHEN length(o.customer_phone) <= 6 THEN repeat('*', length(o.customer_phone))
-           ELSE left(o.customer_phone, 2) || repeat('*', greatest(length(o.customer_phone) - 4, 2)) || right(o.customer_phone, 2)
+           WHEN pg_catalog.length(o.customer_phone) <= 6 THEN pg_catalog.repeat('*', pg_catalog.length(o.customer_phone))
+           ELSE pg_catalog.left(o.customer_phone, 2) || pg_catalog.repeat('*', GREATEST(pg_catalog.length(o.customer_phone) - 4, 2)) || pg_catalog.right(o.customer_phone, 2)
       END
     END AS customer_phone,
     o.shipping_address,
@@ -650,8 +655,8 @@ BEGIN
     m.phone AS merchant_phone,
     COALESCE(
       (
-        SELECT jsonb_agg(
-          jsonb_build_object(
+        SELECT pg_catalog.jsonb_agg(
+          pg_catalog.jsonb_build_object(
             'id', oi.id,
             'product_id', oi.product_id,
             'image_url', oi.image_url,
@@ -664,16 +669,16 @@ BEGIN
           )
           ORDER BY oi.line_id NULLS LAST, oi.id
         )
-        FROM order_items oi
-        LEFT JOIN products p ON p.id = oi.product_id
+        FROM public.order_items oi
+        LEFT JOIN public.products p ON p.id = oi.product_id
         WHERE oi.order_id = o.id
       ),
       '[]'::jsonb
     ) AS items,
     COALESCE(
       (
-        SELECT jsonb_agg(
-          jsonb_build_object(
+        SELECT pg_catalog.jsonb_agg(
+          pg_catalog.jsonb_build_object(
             'account_number', opa.account_number,
             'bank_name', opa.bank_name,
             'account_name', opa.account_name,
@@ -685,19 +690,19 @@ BEGIN
           )
           ORDER BY opa.created_at DESC NULLS LAST, opa.account_number
         )
-        FROM order_payment_accounts opa
+        FROM public.order_payment_accounts opa
         WHERE opa.order_id = o.id
       ),
       '[]'::jsonb
     ) AS payment_accounts,
     EXISTS (
       SELECT 1
-      FROM immediate_order_notification_claims c
+      FROM public.immediate_order_notification_claims c
       WHERE c.order_id = o.id
         AND c.status = 'sent'
     ) AS notification_delivered
-  FROM orders o
-  JOIN merchants m ON m.id = o.merchant_id
+  FROM public.orders o
+  JOIN public.merchants m ON m.id = o.merchant_id
   WHERE o.id = v_order_id
   LIMIT 1;
 END;

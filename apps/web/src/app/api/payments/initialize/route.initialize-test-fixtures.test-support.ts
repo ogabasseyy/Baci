@@ -57,6 +57,7 @@ let featureSettingsResult: { data: unknown; error: unknown };
 let orderPaymentResult: { data: unknown; error: unknown };
 let orderTokenResult: { data: unknown; error: unknown };
 let savingsRedemptionsResult: { data: unknown; error: unknown };
+let walletTransactionsResult: { data: unknown; error: unknown };
 
 function createMockAdminClient() {
   return {
@@ -96,6 +97,19 @@ function createMockAdminClient() {
           select: () => ({
             eq: () => ({
               eq: () => Promise.resolve(savingsRedemptionsResult),
+            }),
+          }),
+        };
+      }
+      if (table === 'customer_wallet_transactions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => Promise.resolve(walletTransactionsResult),
+                }),
+              }),
             }),
           }),
         };
@@ -177,6 +191,7 @@ function setupDefaults() {
     error: null,
   };
   savingsRedemptionsResult = { data: [], error: null };
+  walletTransactionsResult = { data: [], error: null };
   routeMocks.authenticateApiRequest.mockResolvedValue({ user: null });
   routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
     available: false,

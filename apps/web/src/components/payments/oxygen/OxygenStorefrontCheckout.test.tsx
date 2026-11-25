@@ -325,3 +325,114 @@ it('passes net payable amount after store credit to OxygenApplicationDialog', as
   render(checkout);
   expect(screen.getByText('Plan amount: 250000')).toBeVisible();
 });
+
+it('rejects an unpaid Oxygen order whose store credit reduces net payable to zero', async () => {
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+        payment_status: 'unpaid',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'customer',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 400000,
+        wallet_amount_used: 400000,
+        order_items: [],
+      },
+      error: null,
+    });
+  await expect(
+    OxygenStorefrontCheckout({
+      orderId: id,
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+    })
+  ).rejects.toThrow('not found');
+});
+
+it('does not treat settled gateway amount_paid as store credit for paid or bnpl_approved orders', async () => {
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+        payment_status: 'bnpl_approved',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'customer',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 400000,
+        wallet_amount_used: 150000,
+        order_items: [],
+      },
+      error: null,
+    });
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  render(checkout);
+  const summary = screen.getByRole('region', { name: 'Saved order summary' });
+  expect(summary).toHaveTextContent('-₦150,000.00');
+  expect(summary).toHaveTextContent('₦250,000.00');
+  expect(screen.getByText('Plan amount: 250000')).toBeVisible();
+});

@@ -67,3 +67,37 @@ it('renders pre-gateway store credit and net amount due for credited Oxygen orde
   expect(region).toHaveTextContent('Amount due');
   expect(region).toHaveTextContent('₦90.00');
 });
+
+it('does not misclassify settled amount_paid as store credit on paid or bnpl_approved orders', () => {
+  render(
+    <OxygenSavedOrderSummary
+      order={{
+        id: 'order',
+        customer_name: 'Ada',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 100,
+        shipping_fee: 10,
+        tax_amount: 5,
+        total: 115,
+        payment_status: 'paid',
+        amount_paid: 115,
+        wallet_amount_used: 0,
+        order_items: [
+          {
+            id: 'line',
+            name: 'Camera',
+            quantity: 1,
+            price: 100,
+            image_url: null,
+            products: null,
+          },
+        ],
+      }}
+    />
+  );
+  const region = screen.getByRole('region', { name: 'Saved order summary' });
+  expect(region).not.toHaveTextContent('Store credit');
+  expect(region).toHaveTextContent('Order total');
+  expect(region).toHaveTextContent('₦115.00');
+});

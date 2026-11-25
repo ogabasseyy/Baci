@@ -50,10 +50,10 @@ export async function readOwnedOxygenOrder(
     throw new Error(
       'This order is closed. Open your order history for details.'
     );
-  const preGatewayPaid = Math.max(
-    order.amount_paid ?? 0,
-    order.wallet_amount_used ?? 0
-  );
+  const preGatewayPaid =
+    order.payment_status === 'unpaid'
+      ? Math.max(order.amount_paid ?? 0, order.wallet_amount_used ?? 0)
+      : Math.min(Math.max(order.wallet_amount_used ?? 0, 0), order.total);
   const payableTotal = Math.max(
     Number((order.total - preGatewayPaid).toFixed(2)),
     0

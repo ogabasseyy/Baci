@@ -199,6 +199,7 @@ let featureSettingsResult: { data: unknown; error: unknown };
 let orderPaymentResult: { data: unknown; error: unknown };
 let orderTokenResult: { data: unknown; error: unknown };
 let savingsRedemptionsResult: { data: unknown; error: unknown };
+let walletTransactionsResult: { data: unknown; error: unknown };
 
 function createMockAdminClient() {
   return {
@@ -238,6 +239,19 @@ function createMockAdminClient() {
           select: () => ({
             eq: () => ({
               eq: () => Promise.resolve(savingsRedemptionsResult),
+            }),
+          }),
+        };
+      }
+      if (table === 'customer_wallet_transactions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => Promise.resolve(walletTransactionsResult),
+                }),
+              }),
             }),
           }),
         };
@@ -336,6 +350,7 @@ function setupDefaults() {
     error: null,
   };
   savingsRedemptionsResult = { data: [], error: null };
+  walletTransactionsResult = { data: [], error: null };
   routeMocks.authenticateApiRequest.mockResolvedValue({ user: null });
   routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
     available: false,
@@ -1657,6 +1672,104 @@ describe('POST /api/payments/initialize', () => {
         p_merchant_amount: 25_000,
         p_gateway: 'klump',
       });
+    });
+
+    it('initializes Klump for the net remaining payable amount when wallet ledger rows exist without synced order wallet_amount_used', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { wallet_amount_used: 0 },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [{ amount: 25_000 }],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 25_000, gateway: 'klump' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.gateway).toBe('klump');
+      const txCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(txCall?.args).toMatchObject({
+        p_amount: 25_000,
+        p_merchant_amount: 25_000,
+        p_gateway: 'klump',
+      });
+    });
+
+    it('rejects Klump when wallet and savings ledger rows cover 100% even if order wallet_amount_used is zero', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { wallet_amount_used: 0 },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [{ amount: 30_000 }],
+        error: null,
+      };
+      savingsRedemptionsResult = {
+        data: [{ amount: 20_000 }],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 0, gateway: 'klump' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('NO_PAYABLE_AMOUNT');
+      expect(
+        rpcCalls.some((call) => call.name === 'create_payment_transaction')
+      ).toBe(false);
     });
 
     it('rejects Klump when store credits cover 100% of the order', async () => {

@@ -60,7 +60,7 @@ export async function OxygenStorefrontCheckout({
   const { data, error } = await client
     .from('orders')
     .select(
-      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, amount_paid, wallet_amount_used, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
+      'id, merchant_id, customer_id, payment_method, payment_status, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, amount_paid, wallet_amount_used, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -77,6 +77,9 @@ export async function OxygenStorefrontCheckout({
     notFound();
   const order = parsed.data;
   const netPayable = getOxygenOrderNetPayable(order);
+  if ((order.payment_status ?? 'unpaid') === 'unpaid' && netPayable <= 0) {
+    notFound();
+  }
   const prefill = await readOxygenCustomerPrefill(client, orderId, user.id);
   const names = order.customer_name?.trim().split(/\s+/) ?? [];
   const checkoutContact = oxygenCustomerPrefillSchema.safeParse({

@@ -1356,7 +1356,23 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      walletAmountUsed = Math.max(
+      const { data: walletRows, error: walletError } = await paymentDataClient
+        .from('customer_wallet_transactions')
+        .select('amount')
+        .eq('source_id', data.order_id)
+        .eq('merchant_id', merchantId)
+        .eq('source_type', 'order_redemption')
+        .eq('type', 'redemption');
+
+      if (walletError) {
+        return createErrorResponse(
+          'Unable to verify order wallet amount',
+          'ORDER_WALLET_LOOKUP_FAILED',
+          500
+        );
+      }
+
+      const walletFromOrderRow = Math.max(
         numberOrDefault(
           (orderPaymentRow as { wallet_amount_used?: unknown })
             .wallet_amount_used,
@@ -1364,6 +1380,17 @@ export async function POST(request: NextRequest) {
         ),
         0
       );
+      const walletFromLedgerRows = Array.isArray(walletRows)
+        ? walletRows.reduce((sum, row) => {
+            const amount =
+              row && typeof row === 'object'
+                ? (row as { amount?: unknown }).amount
+                : 0;
+            return sum + Math.max(numberOrDefault(amount, 0), 0);
+          }, 0)
+        : 0;
+
+      walletAmountUsed = Math.max(walletFromOrderRow, walletFromLedgerRows);
     }
 
     const { data: savingsRows, error: savingsError } = await paymentDataClient

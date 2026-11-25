@@ -117,3 +117,49 @@ it('rejects an unpaid zero-balance Oxygen order covered 100% by store credit', a
     readOwnedOxygenOrder(orderId, customerId, merchantId)
   ).rejects.toThrow('zero-balance order');
 });
+
+it('does not treat settled amount_paid as store credit for paid or bnpl_approved orders', async () => {
+  const paidQuery = {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    single: jest.fn().mockResolvedValue({
+      data: {
+        id: orderId,
+        total: 198000,
+        amount_paid: 198000,
+        wallet_amount_used: 0,
+        payment_method: 'oxygen',
+        payment_status: 'paid',
+        shipping_status: 'pending',
+      },
+      error: null,
+    }),
+  };
+  jest.mocked(supabase.from).mockReturnValueOnce(paidQuery as never);
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({ total: 198000 });
+
+  const approvedWithWalletQuery = {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    single: jest.fn().mockResolvedValue({
+      data: {
+        id: orderId,
+        total: 198000,
+        amount_paid: 198000,
+        wallet_amount_used: 48000,
+        payment_method: 'oxygen',
+        payment_status: 'bnpl_approved',
+        shipping_status: 'pending',
+      },
+      error: null,
+    }),
+  };
+  jest
+    .mocked(supabase.from)
+    .mockReturnValueOnce(approvedWithWalletQuery as never);
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({ total: 150000 });
+});

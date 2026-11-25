@@ -29,6 +29,7 @@ beforeEach(() => {
       skipped: 0,
       waiting: 0,
       deferred: 0,
+      retrying: 0,
       failed: 0,
     },
   });
@@ -60,6 +61,7 @@ describe('GET /api/cron/chat-follow-up-reminders', () => {
       skipped: 0,
       waiting: 0,
       deferred: 0,
+      retrying: 0,
       failed: 0,
     });
   });

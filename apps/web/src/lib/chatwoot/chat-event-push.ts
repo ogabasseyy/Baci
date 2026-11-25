@@ -29,7 +29,8 @@ export type ChatEventPushResult =
       status: 'skipped';
       reason: 'not_configured' | 'already_claimed' | 'muted';
     }
-  | { status: 'failed' };
+  /** `nothingSent`: the push provably never reached the delivery provider. */
+  | { status: 'failed'; nothingSent: boolean };
 
 const HANDOVER_PUSH_BODY =
   'The assistant handed this chat to your team. Open it to reply.';
@@ -79,7 +80,8 @@ function pushContent(input: ChatEventPushInput) {
  * devices for one notified chat event, unless the merchant turned chat push
  * alerts off. Best effort and at most once: the
  * database hands out a single claim per event, so a redelivered webhook
- * never pushes twice, and a failed push is not retried here.
+ * never pushes twice, and a failed push is not retried here (a caller may
+ * retry only a failure that says `nothingSent`).
  *
  * Contract: call this only for an event the database just recorded as
  * `notified` (and not as a duplicate). The alert level is applied there: an
@@ -101,6 +103,8 @@ export async function sendChatEventPush(
     eventKey: input.eventKey,
     claim: randomUUID(),
   };
+  // Set just before the first request to the delivery provider.
+  let dispatched = false;
   try {
     const client = createAnonClient();
     // The merchant can mute chat pushes. An unreadable switch is treated as
@@ -115,7 +119,7 @@ export async function sendChatEventPush(
       'chat_event_claim_push',
       chatEventPushArgs(secret, scope, 'claim')
     );
-    if (claimed.error) return { status: 'failed' };
+    if (claimed.error) return { status: 'failed', nothingSent: true };
     if (claimed.data !== true) {
       return { status: 'skipped', reason: 'already_claimed' };
     }
@@ -126,7 +130,12 @@ export async function sendChatEventPush(
       content.title,
       content.body,
       content.data,
-      'general'
+      'general',
+      {
+        onDeliveryStart: () => {
+          dispatched = true;
+        },
+      }
     );
     // The delivery layer reports provider failures as counts and errors
     // instead of throwing, so the status has to be derived from them.
@@ -134,10 +143,10 @@ export async function sendChatEventPush(
     if (failed > 0) {
       return result.sent > 0
         ? { status: 'partial', sent: result.sent, failed }
-        : { status: 'failed' };
+        : { status: 'failed', nothingSent: !dispatched };
     }
     return { status: 'sent', sent: result.sent, failed: 0 };
   } catch {
-    return { status: 'failed' };
+    return { status: 'failed', nothingSent: !dispatched };
   }
 }

@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS public.chat_follow_up_reminders (
   -- has not looked at yet first, so reminders it cannot act on (an unreadable
   -- chat engine for one store) never starve the other stores' reminders.
   last_listed_at timestamptz,
+  -- How many times the sweep took this reminder. A push that provably never
+  -- left the server is retried, and this bounds how often.
+  attempts smallint NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   -- Also the index on merchant_id for the foreign key.
@@ -67,6 +70,8 @@ CREATE POLICY chat_follow_up_reminders_insert ON public.chat_follow_up_reminders
   WITH CHECK (
     public.check_staff_permission((SELECT auth.uid()), merchant_id, 'customers', 'edit')
     AND due_at <= pg_catalog.now() + interval '91 days'
+    -- A follow-up is set for later: a past time would push at once.
+    AND due_at > pg_catalog.now() - interval '10 minutes'
   );
 DROP POLICY IF EXISTS chat_follow_up_reminders_update ON public.chat_follow_up_reminders;
 CREATE POLICY chat_follow_up_reminders_update ON public.chat_follow_up_reminders
@@ -75,6 +80,8 @@ CREATE POLICY chat_follow_up_reminders_update ON public.chat_follow_up_reminders
   WITH CHECK (
     public.check_staff_permission((SELECT auth.uid()), merchant_id, 'customers', 'edit')
     AND due_at <= pg_catalog.now() + interval '91 days'
+    -- A follow-up is set for later: a past time would push at once.
+    AND due_at > pg_catalog.now() - interval '10 minutes'
   );
 DROP POLICY IF EXISTS chat_follow_up_reminders_delete ON public.chat_follow_up_reminders;
 CREATE POLICY chat_follow_up_reminders_delete ON public.chat_follow_up_reminders

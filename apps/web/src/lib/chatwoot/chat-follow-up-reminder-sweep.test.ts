@@ -22,6 +22,7 @@ const mocks = {
   check: vi.fn(),
   record: vi.fn(),
   push: vi.fn(),
+  release: vi.fn(),
   now: vi.fn(),
 };
 const deps = mocks as unknown as Parameters<
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   mocks.now.mockReturnValue(0);
+  mocks.release.mockResolvedValue(true);
   mocks.list.mockResolvedValue({ ok: true, reminders: [reminder(1)] });
   mocks.check.mockResolvedValue('due');
   mocks.record.mockResolvedValue({ ok: true, outcome: 'notified' });
@@ -52,6 +54,7 @@ describe('sweepChatFollowUpReminders', () => {
       skipped: 0,
       waiting: 0,
       deferred: 0,
+      retrying: 0,
       failed: 0,
     });
     expect(mocks.record).toHaveBeenCalledWith({
@@ -170,5 +173,38 @@ describe('sweepChatFollowUpReminders', () => {
       ok: false,
       code: 'unavailable',
     });
+  });
+});
+
+describe('bugfix: a failed push lost the follow-up for good', () => {
+  it('puts the reminder back when the push never left the server', async () => {
+    mocks.push.mockResolvedValue({ status: 'failed', nothingSent: true });
+    await expect(summary()).resolves.toMatchObject({ retrying: 1, failed: 0 });
+    expect(mocks.release).toHaveBeenCalledWith({
+      merchantId: MERCHANT,
+      reminderId: reminder(1).reminder_id,
+    });
+  });
+
+  it('counts it as failed when the database will not put it back', async () => {
+    mocks.push.mockResolvedValue({ status: 'failed', nothingSent: true });
+    mocks.release.mockResolvedValue(false);
+    await expect(summary()).resolves.toMatchObject({ retrying: 0, failed: 1 });
+  });
+
+  it.each([
+    [
+      'the push may have left',
+      () =>
+        mocks.push.mockResolvedValue({ status: 'failed', nothingSent: false }),
+    ],
+    [
+      'the push call throws',
+      () => mocks.push.mockRejectedValue(new Error('boom')),
+    ],
+  ])('never retries when %s', async (_label, arrange) => {
+    arrange();
+    await expect(summary()).resolves.toMatchObject({ retrying: 0, failed: 1 });
+    expect(mocks.release).not.toHaveBeenCalled();
   });
 });

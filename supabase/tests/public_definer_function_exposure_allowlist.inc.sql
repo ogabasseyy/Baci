@@ -253,6 +253,8 @@ SELECT * FROM (VALUES
   ('public.list_due_chat_follow_up_reminders(text,bigint,integer)',
    'cron sweep; short-lived HMAC proof verified in the body, no service role'),
   ('public.record_chat_follow_up_reminder(text,bigint,uuid,uuid,boolean)',
+   'cron sweep; short-lived HMAC proof verified in the body, no service role'),
+  ('public.release_chat_follow_up_reminder(text,bigint,uuid,uuid)',
    'cron sweep; short-lived HMAC proof verified in the body, no service role')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

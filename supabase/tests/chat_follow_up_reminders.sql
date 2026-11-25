@@ -87,6 +87,10 @@ BEGIN
     RAISE EXCEPTION 'a reminder further than 91 days out was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   BEGIN
+    INSERT INTO public.chat_follow_up_reminders(merchant_id, conversation_id, due_at) VALUES (m, 103, now() - interval '1 hour');
+    RAISE EXCEPTION 'a follow-up in the past was accepted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
     INSERT INTO public.chat_follow_up_reminders(merchant_id, conversation_id, due_at, customer_name) VALUES (m, 102, now() + interval '1 day', repeat('x', 81));
     RAISE EXCEPTION 'an oversized name was accepted';
   EXCEPTION WHEN check_violation THEN NULL; END;

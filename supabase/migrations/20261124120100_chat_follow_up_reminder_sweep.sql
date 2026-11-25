@@ -7,7 +7,8 @@
 -- replayed as another kind. A shared private helper verifies the proof.
 BEGIN;
 
--- Verifies one server HMAC proof against the canonical text. Raises when the
+-- New in this migration (nothing earlier defines it, so no existing message or
+-- handover proof path changes). Verifies one server HMAC proof against the canonical text. Raises when the
 -- proof is stale, forged or the secret is not provisioned; returns when valid.
 CREATE OR REPLACE FUNCTION private.chat_event_require_proof(
   p_canonical text,
@@ -44,6 +45,41 @@ END;
 $$;
 REVOKE ALL ON FUNCTION private.chat_event_require_proof(text, text, bigint) FROM PUBLIC, anon, authenticated, service_role;
 
+-- Puts a taken reminder back so a later sweep can push it, at most three takes
+-- in all and only inside the 24-hour window. The push event is removed first:
+-- with p_only_unclaimed it must never have been claimed for a push (the claim
+-- precedes any send, so nothing can have left the server), and a claim racing
+-- this removal finds no event and sends nothing. A muted or stale reminder has
+-- no notified event and is never put back.
+CREATE OR REPLACE FUNCTION private.requeue_chat_follow_up_reminder(
+  p_merchant_id uuid,
+  p_reminder_id uuid,
+  p_only_unclaimed boolean
+) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM 1 FROM public.chat_follow_up_reminders r
+  WHERE r.id = p_reminder_id AND r.merchant_id = p_merchant_id
+    AND r.processed_at IS NOT NULL AND r.attempts < 3
+    AND r.due_at > pg_catalog.now() - interval '24 hours'
+  FOR UPDATE;
+  IF NOT FOUND THEN RETURN false; END IF;
+
+  DELETE FROM public.chat_message_events e
+  WHERE e.merchant_id = p_merchant_id
+    AND e.event_key = 'fu-' || pg_catalog.replace(p_reminder_id::text, '-', '')
+    AND e.kind = 'follow_up' AND e.outcome = 'notified'
+    AND (NOT p_only_unclaimed OR e.push_claim IS NULL);
+  IF NOT FOUND THEN RETURN false; END IF;
+
+  UPDATE public.chat_follow_up_reminders r
+  SET processed_at = NULL, updated_at = pg_catalog.now()
+  WHERE r.id = p_reminder_id;
+  RETURN true;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.requeue_chat_follow_up_reminder(uuid, uuid, boolean) FROM PUBLIC, anon, authenticated, service_role;
+
 -- 1. The reminders that came due in the last 24 hours and nobody handled yet,
 -- never-listed first, then oldest. A reminder older than a day is never listed,
 -- so switching the feature on (or an outage) never replays a pile of old
@@ -76,6 +112,22 @@ BEGIN
     WHERE old.due_at < pg_catalog.now() - interval '7 days'
     LIMIT 200
   );
+
+  -- A run stopped between taking a reminder and claiming its push sent
+  -- nothing: after ten minutes (far longer than a run lasts) it is put back.
+  PERFORM private.requeue_chat_follow_up_reminder(lost.merchant_id, lost.id, true)
+  FROM (
+    SELECT r.merchant_id, r.id
+    FROM public.chat_follow_up_reminders r
+    JOIN public.chat_message_events e
+      ON e.merchant_id = r.merchant_id
+      AND e.event_key = 'fu-' || pg_catalog.replace(r.id::text, '-', '')
+    WHERE r.processed_at < pg_catalog.now() - interval '10 minutes'
+      AND r.attempts < 3
+      AND r.due_at > pg_catalog.now() - interval '24 hours'
+      AND e.kind = 'follow_up' AND e.outcome = 'notified' AND e.push_claim IS NULL
+    LIMIT 50
+  ) lost;
 
   -- Reminders not listed before come first, then the ones listed longest ago,
   -- so a reminder the sweep cannot act on moves to the back after each look
@@ -146,7 +198,7 @@ BEGIN
 
   -- The single atomic take: only one caller can ever win a given reminder id.
   UPDATE public.chat_follow_up_reminders r
-  SET processed_at = pg_catalog.now(), updated_at = pg_catalog.now()
+  SET processed_at = pg_catalog.now(), updated_at = pg_catalog.now(), attempts = r.attempts + 1
   WHERE r.id = p_reminder_id
     AND r.merchant_id = p_merchant_id
     AND r.processed_at IS NULL

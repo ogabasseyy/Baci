@@ -33,6 +33,7 @@ describe('saveChatFollowUpReminder', () => {
       customer_name: 'Ada',
       processed_at: null,
       last_listed_at: null,
+      attempts: 0,
     });
     expect(options).toEqual({ onConflict: 'merchant_id,conversation_id' });
   });

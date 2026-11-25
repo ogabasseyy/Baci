@@ -118,6 +118,17 @@ describe('customer message notification navigation', () => {
     ).toEqual({ screen: 'message', params: { id: '4821' } });
   });
 
+  it('ignores extra keys such as the follow-up and handover markers', () => {
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'customer_message',
+        conversation_id: 4821,
+        follow_up: true,
+        handover: true,
+      })
+    ).toEqual({ screen: 'message', params: { id: '4821' } });
+  });
+
   it('accepts a numeric string id', () => {
     expect(
       getAdminNotificationNavigationTarget({

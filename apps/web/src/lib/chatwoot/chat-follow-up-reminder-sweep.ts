@@ -7,6 +7,7 @@ import { checkFollowUpStillDue } from './chat-follow-up-reminder-check';
 import { listDueChatFollowUpReminders } from './chat-follow-up-reminder-list';
 import { reminderCustomerName } from './chat-follow-up-reminder-name';
 import { recordChatFollowUpReminder } from './chat-follow-up-reminder-record';
+import { releaseChatFollowUpReminder } from './chat-follow-up-reminder-release';
 
 export type ChatFollowUpSweepSummary = {
   /** Reminders that were due and unhandled when the sweep started. */
@@ -19,7 +20,9 @@ export type ChatFollowUpSweepSummary = {
   waiting: number;
   /** Left for the next sweep: the time budget ran out before its turn. */
   deferred: number;
-  /** A step failed; a failed push is never retried, an unrecorded reminder is. */
+  /** The push never left the server: put back for the next sweep. */
+  retrying: number;
+  /** A step failed and the push is not retried (an unrecorded reminder is). */
   failed: number;
 };
 
@@ -32,6 +35,7 @@ type Dependencies = {
   check: typeof checkFollowUpStillDue;
   record: typeof recordChatFollowUpReminder;
   push: typeof sendChatEventPush;
+  release: typeof releaseChatFollowUpReminder;
 };
 
 const defaults: Dependencies = {
@@ -40,6 +44,7 @@ const defaults: Dependencies = {
   check: checkFollowUpStillDue,
   record: recordChatFollowUpReminder,
   push: sendChatEventPush,
+  release: releaseChatFollowUpReminder,
 };
 
 type Handled = keyof Omit<ChatFollowUpSweepSummary, 'due'>;
@@ -78,10 +83,18 @@ async function handleReminder(
       preview: '',
       kind: 'follow_up',
     })
-    .catch(() => ({ status: 'failed' as const }));
+    // A throw says nothing about what left the server: never retried.
+    .catch(() => ({ status: 'failed' as const, nothingSent: false }));
   if (push.status === 'sent' || push.status === 'partial') return 'sent';
   if (push.status === 'skipped' && push.reason !== 'not_configured') {
     return 'skipped';
+  }
+  if (push.status === 'failed' && push.nothingSent) {
+    const released = await deps.release({
+      merchantId: reminder.merchant_id,
+      reminderId: reminder.reminder_id,
+    });
+    if (released) return 'retrying';
   }
   return 'failed';
 }
@@ -89,11 +102,12 @@ async function handleReminder(
 /**
  * Pushes the follow-up reminders that came due. Each one is checked against
  * the chat engine, taken exactly once through the database, and pushed with
- * the same claim-based push as other chat alerts. A reminder is pushed at most
- * once: it is taken before the push, so a function killed between the two
- * loses that reminder rather than ever sending it twice (the same trade-off as
- * the message and handover pushes). Never throws for one reminder's failure:
- * the others still go out.
+ * the same claim-based push as other chat alerts. A reminder is taken before
+ * the push so it can never go out twice. A push that provably never reached
+ * the provider is put back for the next sweep, and so is one whose run stopped
+ * before claiming it (the database does that), three takes at most. Only a
+ * push that may have left is given up. Never throws for one reminder's
+ * failure: the others still go out.
  */
 export async function sweepChatFollowUpReminders(
   deps: Dependencies = defaults
@@ -110,6 +124,7 @@ export async function sweepChatFollowUpReminders(
     skipped: 0,
     waiting: 0,
     deferred: 0,
+    retrying: 0,
     failed: 0,
   };
   const startedAt = deps.now();
@@ -126,9 +141,10 @@ export async function sweepChatFollowUpReminders(
       handled = 'failed';
     }
     summary[handled] += 1;
-    if (handled === 'failed') {
+    if (handled === 'failed' || handled === 'retrying') {
       // Ids only: never customer text or names.
       console.warn('Chat follow-up reminder was not pushed', {
+        retrying: handled === 'retrying',
         merchantId: reminder.merchant_id,
         reminderId: reminder.reminder_id,
       });

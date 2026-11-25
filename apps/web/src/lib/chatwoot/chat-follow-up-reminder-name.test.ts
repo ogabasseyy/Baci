@@ -33,6 +33,10 @@ describe('reminderCustomerName', () => {
     expect(reminderCustomerName('Anne-Marie')).toBe('Anne-Marie');
   });
 
+  it('bugfix: keeps a capitalised hyphenated real name with one digit', () => {
+    expect(reminderCustomerName('Mary-Jane-2')).toBe('Mary-Jane-2');
+  });
+
   it('cuts a very long name to the stored limit', () => {
     expect(reminderCustomerName('A'.repeat(200))).toHaveLength(80);
   });

@@ -76,7 +76,8 @@ describe('sendChatEventPush', () => {
       'New message from Ada',
       'Is it in stock?',
       { type: 'customer_message', conversation_id: 21 },
-      'general'
+      'general',
+      { onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -88,7 +89,8 @@ describe('sendChatEventPush', () => {
       'New customer message',
       'A customer sent a message to your store.',
       expect.anything(),
-      'general'
+      'general',
+      expect.anything()
     );
   });
 
@@ -108,7 +110,8 @@ describe('sendChatEventPush', () => {
       'Ada needs a person',
       'The assistant handed this chat to your team. Open it to reply.',
       { type: 'customer_message', conversation_id: 21, handover: true },
-      'general'
+      'general',
+      expect.anything()
     );
   });
 
@@ -123,7 +126,8 @@ describe('sendChatEventPush', () => {
       'A customer needs a person',
       'The assistant handed this chat to your team. Open it to reply.',
       expect.objectContaining({ handover: true }),
-      'general'
+      'general',
+      expect.anything()
     );
   });
 
@@ -143,7 +147,8 @@ describe('sendChatEventPush', () => {
       'Follow up: Ada',
       'This chat is due for a follow-up. Open it to reply.',
       { type: 'customer_message', conversation_id: 21, follow_up: true },
-      'general'
+      'general',
+      expect.anything()
     );
   });
 
@@ -179,6 +184,7 @@ describe('sendChatEventPush', () => {
     );
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
     });
     expect(mocks.notify).not.toHaveBeenCalled();
   });
@@ -198,6 +204,7 @@ describe('sendChatEventPush', () => {
     });
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
     });
   });
 
@@ -205,6 +212,7 @@ describe('sendChatEventPush', () => {
     mocks.notify.mockResolvedValue({ sent: 0, failed: 0, errors: ['boom'] });
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
     });
   });
 
@@ -230,6 +238,18 @@ describe('sendChatEventPush', () => {
     mocks.notify.mockRejectedValue(new Error('expo down'));
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
+    });
+  });
+
+  it('bugfix: says a failure may have left once delivery to the provider started', async () => {
+    mocks.notify.mockImplementation(async (...args: unknown[]) => {
+      await (args[6] as { onDeliveryStart: () => void }).onDeliveryStart();
+      throw new Error('timed out');
+    });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'failed',
+      nothingSent: false,
     });
   });
 

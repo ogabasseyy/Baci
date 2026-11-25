@@ -139,6 +139,9 @@ export function applyLifecycleGuards(
   let destroyed = false;
   // Latched by a return-flow scan; fences arrival promotion like SDR does.
   let returning = false;
+  // A delivered or cancelled parcel gets no arrival update, unless a later
+  // failed scan reopens it (same rule as the aggregate).
+  let closed = false;
   // Same-city shipments: only a scan away from the destination name proves
   // the parcel left the origin centre (repeat origin scans prove nothing).
   let leftDestinationCentre = false;
@@ -150,6 +153,7 @@ export function applyLifecycleGuards(
       // is rewritten to the synthetic status.
       !destroyed &&
       !returning &&
+      !closed &&
       !arrived &&
       // A mapped reason that says failed/delivered/returned is not an arrival.
       (candidate.recognizedStatus === null ||
@@ -171,6 +175,13 @@ export function applyLifecycleGuards(
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
     if (startsReturnFlow(candidate)) returning = true;
+    if (candidate.recognizedStatus === 'failed') closed = false;
+    if (
+      candidate.recognizedStatus === 'delivered' ||
+      candidate.recognizedStatus === 'cancelled'
+    ) {
+      closed = true;
+    }
     if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {

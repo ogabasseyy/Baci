@@ -39,6 +39,9 @@ export async function handleGetAsset(
     if (head.httpEtag) {
       headers.set('etag', head.httpEtag);
     }
+    if (head.customMetadata?.sha256Hex) {
+      headers.set('x-asset-sha256', head.customMetadata.sha256Hex);
+    }
     return new Response(null, { status: 200, headers });
   }
 
@@ -55,6 +58,9 @@ export async function handleGetAsset(
   });
   if (object.httpEtag) {
     headers.set('etag', object.httpEtag);
+  }
+  if (object.customMetadata?.sha256Hex) {
+    headers.set('x-asset-sha256', object.customMetadata.sha256Hex);
   }
 
   return new Response(object.body, { status: 200, headers });

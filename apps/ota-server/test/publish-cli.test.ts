@@ -129,18 +129,26 @@ describe('publish-ota CLI', () => {
     });
   });
 
-  it('uploads uncached assets and publishes manifest, and supports rollback', async () => {
-    const { distDir, configPath } = await createExportFixture();
+  it('uploads uncached or mismatched assets, normalizes serverUrl, and supports rollback', async () => {
+    const { distDir, configPath, pngBytes } = await createExportFixture();
+    const pngShaHex = createHash('sha256').update(pngBytes).digest('hex');
     const calls: { url: string; method: string }[] = [];
 
     const mockFetch = async (url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET';
       calls.push({ url, method });
       if (method === 'HEAD' && url.includes('/blobs/')) {
-        return new Response(null, { status: 200 });
+        return new Response(null, {
+          status: 200,
+          headers: { 'x-asset-sha256': pngShaHex },
+        });
       }
       if (method === 'HEAD') {
-        return new Response(null, { status: 404 });
+        // Return 200 with mismatched hash to confirm CLI does not skip upload.
+        return new Response(null, {
+          status: 200,
+          headers: { 'x-asset-sha256': '0'.repeat(64) },
+        });
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     };
@@ -152,7 +160,7 @@ describe('publish-ota CLI', () => {
         platform: 'ios',
         runtimeVersion: '2.1.663',
         channel: 'production',
-        serverUrl: 'https://ota.usebaci.com',
+        serverUrl: 'https://ota.usebaci.com/api/manifest/',
         token: 'secret-token',
       },
       mockFetch as unknown as typeof fetch
@@ -162,6 +170,9 @@ describe('publish-ota CLI', () => {
     expect(calls.filter((c) => c.method === 'HEAD')).toHaveLength(2);
     expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+    expect(calls.find((c) => c.method === 'POST')?.url).toBe(
+      'https://ota.usebaci.com/api/admin/publish'
+    );
 
     const rollbackCalls: { url: string; body: string }[] = [];
     await rollbackOta(
@@ -170,7 +181,7 @@ describe('publish-ota CLI', () => {
         runtimeVersion: '2.1.663',
         channel: 'production',
         toEmbedded: true,
-        serverUrl: 'https://ota.usebaci.com',
+        serverUrl: 'https://ota.usebaci.com/',
         token: 'secret-token',
       },
       (async (url: string, init?: RequestInit) => {

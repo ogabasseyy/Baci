@@ -8,5 +8,11 @@
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "mkdir -p .wrangler-types && wrangler types .wrangler-types/worker-configuration.d.ts --config wrangler.jsonc && tsc -p tsconfig.json",
     "typecheck:ci": "mkdir -p .wrangler-types && wrangler types .wrangler-types/worker-configuration.d.ts --config wrangler.jsonc && tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "typescript": "npm:@typescript/typescript6@~6.0.2",
+    "vitest": "^4.1.11",
+    "wrangler": "4.115.0"
   }
 }

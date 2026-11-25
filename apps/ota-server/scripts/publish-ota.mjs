@@ -211,6 +211,10 @@ async function assertOkResponse(response, label) {
   return response.json();
 }
 
+function normalizeServerBaseUrl(serverUrl) {
+  return serverUrl.replace(/\/+$/, '').replace(/\/api\/manifest$/, '');
+}
+
 export async function publishOta(options, fetchImpl = fetch) {
   const packaged = await packageExportDirectory(options);
   if (options.dryRun) {
@@ -222,14 +226,21 @@ export async function publishOta(options, fetchImpl = fetch) {
     };
   }
 
-  const baseUrl = options.serverUrl.replace(/\/+$/, '');
+  const baseUrl = normalizeServerBaseUrl(options.serverUrl);
   const authHeaders = { authorization: `Bearer ${options.token}` };
 
   for (const asset of packaged.uploads) {
     const headResp = await fetchImpl(`${baseUrl}/api/assets/${asset.r2Key}`, {
       method: 'HEAD',
     });
-    if (headResp.ok) continue;
+    const remoteSha256 = headResp.headers.get('x-asset-sha256')?.trim();
+    if (
+      headResp.ok &&
+      remoteSha256 &&
+      remoteSha256.toLowerCase() === asset.sha256Hex.toLowerCase()
+    ) {
+      continue;
+    }
     const putResp = await fetchImpl(`${baseUrl}/api/admin/assets/${asset.r2Key}`, {
       method: 'PUT',
       headers: {
@@ -261,7 +272,7 @@ export async function rollbackOta(options, fetchImpl = fetch) {
   if (options.dryRun) {
     return { dryRun: true, payload: body };
   }
-  const baseUrl = options.serverUrl.replace(/\/+$/, '');
+  const baseUrl = normalizeServerBaseUrl(options.serverUrl);
   const resp = await fetchImpl(`${baseUrl}/api/admin/rollback`, {
     method: 'POST',
     headers: {

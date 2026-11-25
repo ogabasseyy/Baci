@@ -7,6 +7,7 @@ export interface R2ObjectLike {
   size: number;
   httpEtag?: string;
   httpMetadata?: R2HttpMetadata;
+  customMetadata?: Record<string, string>;
 }
 
 export interface R2ObjectBodyLike extends R2ObjectLike {
@@ -15,8 +16,15 @@ export interface R2ObjectBodyLike extends R2ObjectLike {
   json<T = unknown>(): Promise<T>;
 }
 
+export interface R2ConditionalLike {
+  etagMatches?: string;
+  etagDoesNotMatch?: string;
+}
+
 export interface R2PutOptionsLike {
   httpMetadata?: R2HttpMetadata;
+  customMetadata?: Record<string, string>;
+  onlyIf?: R2ConditionalLike;
 }
 
 export interface OtaR2Bucket {

@@ -173,7 +173,10 @@ describe('admin publish and rollback endpoints', () => {
         'https://ota.usebaci.com/api/admin/assets/bundles/ios/v1.hbc',
         {
           method: 'PUT',
-          headers: { authorization: `Bearer ${TOKEN}` },
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'x-asset-sha256': shaHex,
+          },
           body: assetBytes,
         }
       ),

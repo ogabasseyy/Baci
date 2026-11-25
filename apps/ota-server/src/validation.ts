@@ -13,6 +13,7 @@ export class ValidationError extends Error {
 const CHANNEL_REGEX = /^[a-zA-Z0-9._-]{1,64}$/;
 const RUNTIME_REGEX = /^[a-zA-Z0-9._+-]{1,128}$/;
 const SEGMENT_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
+const SHA256_BASE64URL_REGEX = /^[A-Za-z0-9_-]{43}$/;
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COMMIT_SHA_REGEX = /^[0-9a-f]{40}$/i;
@@ -157,8 +158,10 @@ export function validateStoredAsset(
     throw new ValidationError(`${label} must be an object`);
   }
   const { hash, key, contentType, fileExtension, r2Key, url } = raw;
-  if (typeof hash !== 'string' || hash.trim().length === 0) {
-    throw new ValidationError(`${label}.hash is required`);
+  if (typeof hash !== 'string' || !SHA256_BASE64URL_REGEX.test(hash.trim())) {
+    throw new ValidationError(
+      `${label}.hash must be an unpadded base64url SHA-256 digest`
+    );
   }
   if (typeof key !== 'string' || key.trim().length === 0) {
     throw new ValidationError(`${label}.key is required`);

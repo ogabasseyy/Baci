@@ -139,6 +139,18 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Normalize OTA server URL
+        env:
+          RAW_OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.usebaci.com' }}
+        run: |
+          set -euo pipefail
+          base_url="$RAW_OTA_SERVER_URL"
+          while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
+          base_url="${base_url%/api/manifest}"
+          while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
+          echo "OTA_BASE_URL=${base_url}" >> "$GITHUB_ENV"
+          echo "OTA_MANIFEST_URL=${base_url}/api/manifest" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         if: inputs.action == 'publish'
         env:
@@ -163,7 +175,7 @@ jobs:
           IOS_TIKTOK_CONFIGURED: ${{ inputs.ios_tiktok_configured }}
           EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}
           EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
-          EXPO_PUBLIC_OTA_UPDATES_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.usebaci.com' }}/api/manifest
+          EXPO_PUBLIC_OTA_UPDATES_URL: ${{ env.OTA_MANIFEST_URL }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
@@ -250,7 +262,7 @@ jobs:
       - name: Publish OTA update to ota.usebaci.com
         if: inputs.action == 'publish'
         env:
-          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.usebaci.com' }}
+          OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}
           OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
           PLATFORM: ${{ inputs.platform }}
           RUNTIME_VERSION: ${{ inputs.runtime_version }}
@@ -269,7 +281,7 @@ jobs:
       - name: Rollback OTA update on ota.usebaci.com
         if: inputs.action == 'rollback'
         env:
-          OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.usebaci.com' }}
+          OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}
           OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
           PLATFORM: ${{ inputs.platform }}
           RUNTIME_VERSION: ${{ inputs.runtime_version }}

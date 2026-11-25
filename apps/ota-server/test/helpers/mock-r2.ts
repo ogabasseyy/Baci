@@ -11,6 +11,7 @@ interface StoredObject {
   bytes: Uint8Array;
   etag: string;
   httpMetadata?: R2HttpMetadata;
+  customMetadata?: Record<string, string>;
 }
 
 async function toBytes(
@@ -45,6 +46,8 @@ async function toBytes(
 
 export class MockR2Bucket implements OtaR2Bucket {
   readonly store = new Map<string, StoredObject>();
+  onBeforePut?: (key: string, options?: R2PutOptionsLike) => void;
+  private writeCounter = 0;
 
   head(key: string): Promise<R2ObjectLike | null> {
     const entry = this.store.get(key);
@@ -54,6 +57,7 @@ export class MockR2Bucket implements OtaR2Bucket {
       size: entry.bytes.byteLength,
       httpEtag: entry.etag,
       httpMetadata: entry.httpMetadata,
+      customMetadata: entry.customMetadata,
     });
   }
 
@@ -66,6 +70,7 @@ export class MockR2Bucket implements OtaR2Bucket {
       size: bytes.byteLength,
       httpEtag: entry.etag,
       httpMetadata: entry.httpMetadata,
+      customMetadata: entry.customMetadata,
       body: new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(bytes);
@@ -88,18 +93,35 @@ export class MockR2Bucket implements OtaR2Bucket {
     value: ArrayBuffer | ArrayBufferView | string | ReadableStream<Uint8Array>,
     options?: R2PutOptionsLike
   ): Promise<R2ObjectLike | null> {
+    this.onBeforePut?.(key, options);
+    const existing = this.store.get(key);
+    if (options?.onlyIf) {
+      if (options.onlyIf.etagDoesNotMatch === '*' && existing) {
+        return null;
+      }
+      if (
+        options.onlyIf.etagMatches !== undefined &&
+        existing?.etag !== options.onlyIf.etagMatches
+      ) {
+        return null;
+      }
+    }
+
     const bytes = await toBytes(value);
-    const etag = `"${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}"`;
+    this.writeCounter += 1;
+    const etag = `"${createHash('sha256').update(bytes).digest('hex').slice(0, 12)}-${this.writeCounter}"`;
     this.store.set(key, {
       bytes: new Uint8Array(bytes),
       etag,
       httpMetadata: options?.httpMetadata,
+      customMetadata: options?.customMetadata,
     });
     return {
       key,
       size: bytes.byteLength,
       httpEtag: etag,
       httpMetadata: options?.httpMetadata,
+      customMetadata: options?.customMetadata,
     };
   }
 }

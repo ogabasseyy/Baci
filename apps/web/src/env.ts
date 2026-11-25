@@ -224,9 +224,6 @@ const serverSchema = z
     BACI_AGENTIC_MERCHANT_SLUG: z.string().optional(),
     BACI_AGENTIC_SIGNING_KEY: z.string().optional(),
     BACI_AGENTIC_SIGNING_KEY_PREVIOUS: z.string().optional(),
-    OPENAI_API_KEY: z.string().optional(),
-    OPENAI_TEXT_MODEL: z.string().optional(),
-    OPENAI_IMAGE_MODEL: z.string().optional(),
     OPENAI_AGENTIC_API_KEY: z.string().optional(),
     OPENAI_AGENTIC_API_KEY_PREVIOUS: z.string().optional(),
     OPENAI_AGENTIC_CONFIRMATION_KEY: z.string().optional(),
@@ -720,9 +717,6 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         BACI_AGENTIC_SIGNING_KEY: process.env.BACI_AGENTIC_SIGNING_KEY,
         BACI_AGENTIC_SIGNING_KEY_PREVIOUS:
           process.env.BACI_AGENTIC_SIGNING_KEY_PREVIOUS,
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-        OPENAI_TEXT_MODEL: process.env.OPENAI_TEXT_MODEL,
-        OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL,
         OPENAI_AGENTIC_API_KEY: process.env.OPENAI_AGENTIC_API_KEY,
         OPENAI_AGENTIC_API_KEY_PREVIOUS:
           process.env.OPENAI_AGENTIC_API_KEY_PREVIOUS,

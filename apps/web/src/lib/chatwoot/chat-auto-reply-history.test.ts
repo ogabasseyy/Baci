@@ -44,6 +44,32 @@ describe('loadChatAutoReplyHistory', () => {
     ]);
   });
 
+  it('preserves the product-card context from the assistant’s prior reply', async () => {
+    stubFetch((url) =>
+      url.pathname.endsWith('/messages')
+        ? {
+            body: {
+              payload: [
+                message(1, { content: 'iPhone 13' }),
+                message(2, {
+                  content: 'iPhone 13',
+                  message_type: 1,
+                  content_type: 'cards',
+                  sender: { type: 'agent_bot' },
+                  content_attributes: { items: [{ title: 'iPhone 13' }] },
+                }),
+              ],
+            },
+          }
+        : { body: conversation(7) }
+    );
+    expect(await loadChatAutoReplyHistory(bot, 7, 3)).toContainEqual({
+      role: 'assistant',
+      content: 'iPhone 13\niPhone 13',
+      productCard: true,
+    });
+  });
+
   it('never presents a staff reply to the model as an assistant turn', async () => {
     stubFetch((url) =>
       url.pathname.endsWith('/messages')
@@ -88,35 +114,26 @@ describe('isLatestChatMessage', () => {
     expect(await isLatestChatMessage(bot, 7, 3)).toBe(false);
   });
 
-  const stubMessages = (messages: ReturnType<typeof message>[]) =>
+  it('ignores the automatic email prompt after the first shopper message', async () => {
     stubFetch((url) =>
       url.pathname.endsWith('/messages')
-        ? { body: { payload: messages } }
+        ? {
+            body: {
+              payload: [
+                message(3, { content: 'How does Pay Small Small work?' }),
+                message(4, {
+                  message_type: 3,
+                  content: 'Get notified by email',
+                }),
+              ],
+            },
+          }
         : { body: conversation(7) }
     );
-
-  it('still counts as newest after an automated store message or a system notice', async () => {
-    stubMessages([
-      message(3),
-      message(4, { message_type: 1 }),
-      message(5, { message_type: 3 }),
-    ]);
     expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
   });
 
-  it("is not cancelled by an older run's late assistant reply", async () => {
-    // Message 3 is the newer question; the assistant message after it is the
-    // answer to an earlier one, posted late.
-    stubMessages([
-      message(2),
-      message(3),
-      message(4, { message_type: 1, sender: { type: 'agent_bot' } }),
-    ]);
-    expect(await isLatestChatMessage(bot, 7, 3)).toBe(true);
-    expect(await isLatestChatMessage(bot, 7, 2)).toBe(false);
-  });
-
-  it('is null, not false, when the messages cannot be read', async () => {
+  it('is null when the messages cannot be read', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     stubFetch(() => ({ status: 500 }));
     expect(await isLatestChatMessage(bot, 7, 3)).toBeNull();

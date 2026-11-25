@@ -3,14 +3,12 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { OxygenCustomerPrefill } from '@/schemas/oxygen-customer-prefill';
 import type { OxygenFormDraft } from '@/schemas/oxygen-form-draft';
 import { OxygenBankFields } from './OxygenBankFields';
-import { OxygenBirthDateField } from './OxygenBirthDateField';
-import { OxygenContactFields } from './OxygenContactFields';
 import styles from './OxygenCustomerFormFields.module.css';
 import { OxygenCustomerFormNavigation } from './OxygenCustomerFormNavigation';
 import { OxygenEmploymentAndAddress } from './OxygenEmploymentAndAddress';
 import { OxygenFormError } from './OxygenFormError';
 import { OxygenFormProgress } from './OxygenFormProgress';
-import { OxygenIdentityField } from './OxygenIdentityField';
+import { OxygenIdentityFields } from './OxygenIdentityFields';
 import { OxygenStepHeading } from './OxygenStepHeading';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { OxygenVerificationTrust } from './OxygenVerificationTrust';
@@ -20,19 +18,20 @@ import { getOxygenFormCorrection } from './oxygen-form-correction';
 import {
   clearOxygenControlError,
   clearOxygenFormErrors,
-  firstInvalidOxygenControl,
   highlightOxygenControl,
-  oxygenInvalidControlMessage,
+  validateOxygenSection,
 } from './oxygen-form-invalid-field';
 import {
   type ResidentialProof,
   residentialAddress,
   residentialKeys,
 } from './oxygen-residential-address';
+import { useOxygenCustomerTurns } from './use-oxygen-customer-turns';
 import { OXYGEN_SAVE_ERROR, useOxygenFormError } from './use-oxygen-form-error';
 import { useOxygenFormErrorFocus } from './use-oxygen-form-error-focus';
 export type CustomerFormProps = {
   prefill?: OxygenCustomerPrefill;
+  conversational?: boolean;
   workflowId?: string;
   checkoutAddress?: Record<string, string>;
   onResidentialReady?: (proof: ResidentialProof) => void;
@@ -50,6 +49,7 @@ export function CustomerFormFields({
   phone,
   submit,
   prefill = {},
+  conversational = false,
   workflowId,
   checkoutAddress = {},
   onResidentialReady,
@@ -67,7 +67,12 @@ export function CustomerFormFields({
   saveStatus?: string;
 }) {
   const defaults = initialDraft?.fields ?? {};
-  const [step, setStep] = useState(Math.min(initialDraft?.step ?? 0, 1));
+  const turns = useOxygenCustomerTurns(
+    initialDraft?.step ?? 0,
+    conversational,
+    Boolean(onResidentialReady)
+  );
+  const { step, turn, chatTurn, bankSelection, checkingAccount } = turns;
   // OxygenCustomerForm keys this entire form by workflow ID, resetting verification.
   const [bankVerified, setBankVerified] = useState(false);
   const [residentialFile, setResidentialFile] = useState<File | null>(null);
@@ -96,14 +101,18 @@ export function CustomerFormFields({
   }
   function validateSection(form: HTMLFormElement): boolean {
     focusInvalidField.current = false;
-    const invalid = firstInvalidOxygenControl(form, step);
-    if (invalid) {
-      highlightField(invalid);
-      setFormError(oxygenInvalidControlMessage(invalid));
-      return false;
-    }
-    if (step === 1 && !String(new FormData(form).get('account_name') ?? '')) {
-      setFormError('Verify your bank account before continuing.');
+    const result = validateOxygenSection({
+      form,
+      step,
+      turn,
+      bankSelection,
+      checkingAccount,
+      bankVerified,
+      requiresResidentialFile: turns.addressQuestion && !residentialFile,
+    });
+    if (!result.ok) {
+      if (result.field) highlightField(result.field);
+      setFormError(result.error);
       return false;
     }
     setFormError('');
@@ -130,6 +139,11 @@ export function CustomerFormFields({
         if (busy || saveBlocked || continuingRef.current) return;
         const form = event.currentTarget;
         if (!validateSection(form)) return;
+        if (turns.nextQuestion) {
+          turns.advanceQuestion();
+          capture();
+          return;
+        }
         const data = new FormData(form);
         capture(step < 2 ? step + 1 : step);
         if (step < 2) {
@@ -137,7 +151,7 @@ export function CustomerFormFields({
             step === 0 ? 'bank' : 'income',
             step === 0 ? 'identity' : 'bank'
           );
-          setStep(step + 1);
+          turns.goToStep(step + 1);
           // Only the final submit requires durable save acknowledgement.
           void flushDraft();
           return;
@@ -153,7 +167,7 @@ export function CustomerFormFields({
           const customer = parseOxygenCustomerForm(data, phone);
           if (!customer.success) {
             const correction = getOxygenFormCorrection(customer.error.issues);
-            setStep(correction.step);
+            turns.goToStep(correction.step);
             setFormError(correction.message);
             onProgress?.(
               ['identity', 'bank', 'income'][correction.step] as
@@ -168,6 +182,7 @@ export function CustomerFormFields({
               const upload = form.querySelector<HTMLInputElement>(
                 'input[type="file"][aria-label="Proof of address"]'
               );
+              if (conversational) turns.showAddress();
               if (upload) highlightField(upload);
               setFormError(
                 'Attach a utility bill or proof of your home address.'
@@ -203,34 +218,25 @@ export function CustomerFormFields({
     >
       <fieldset disabled={busy} className="grid min-w-0 gap-5">
         <legend className="sr-only">Customer verification</legend>
-        <OxygenFormProgress step={step} />
-        <OxygenStepHeading
-          step={(['identity', 'bank', 'income'] as const)[step] ?? 'identity'}
-        />
+        {!conversational && <OxygenFormProgress step={step} />}
+        {!conversational && (
+          <OxygenStepHeading
+            step={(['identity', 'bank', 'income'] as const)[step] ?? 'identity'}
+          />
+        )}
         <OxygenFormError id={formErrorId} error={formError} />
         <div
           data-step="0"
           hidden={step !== 0}
           className={step === 0 ? styles.enter : undefined}
         >
-          <OxygenContactFields prefill={prefill} defaults={defaults} />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <OxygenIdentityField
-              name="bvn"
-              label="BVN"
-              defaultValue={defaults.bvn}
-            />
-            <OxygenIdentityField
-              name="nin"
-              label="NIN"
-              defaultValue={defaults.nin}
-            />
-            <OxygenBirthDateField
-              defaultValue={defaults.date_of_birth ?? prefill.date_of_birth}
-              defaultEntry={defaults.birth_date_entry}
-              onValueChange={() => requestAnimationFrame(() => capture())}
-            />
-          </div>
+          <OxygenIdentityFields
+            conversational={conversational}
+            chatTurn={chatTurn}
+            prefill={prefill}
+            defaults={defaults}
+            onCapture={() => requestAnimationFrame(() => capture())}
+          />
         </div>
         <div
           data-step="1"
@@ -238,7 +244,8 @@ export function CustomerFormFields({
           className={step === 1 ? styles.enter : undefined}
         >
           <OxygenBankFields
-            active={step === 1}
+            active={checkingAccount}
+            conversationTurn={conversational ? chatTurn : undefined}
             onVerifiedChange={setBankVerified}
             workflowId={workflowId}
             busy={busy}
@@ -252,6 +259,7 @@ export function CustomerFormFields({
         >
           <OxygenEmploymentAndAddress
             defaults={defaults}
+            conversationTurn={conversational ? chatTurn : undefined}
             collectAddress={Boolean(onResidentialReady)}
             checkoutAddress={checkoutAddress}
             file={residentialFile}
@@ -262,16 +270,24 @@ export function CustomerFormFields({
         <OxygenVerificationTrust />
         <OxygenCustomerFormNavigation
           step={step}
+          canGoBack={step > 0 || (conversational && chatTurn > 0)}
           busy={busy}
           continuing={continuing}
           disabled={
-            busy || !phone || saveBlocked || (step === 1 && !bankVerified)
+            busy || !phone || saveBlocked || (checkingAccount && !bankVerified)
+          }
+          continueLabel={
+            turns.nextQuestion
+              ? 'Continue'
+              : conversational && checkingAccount
+                ? 'Yes, that’s my account'
+                : undefined
           }
           onBack={() => {
             clearOxygenFormErrors(formRef.current, formErrorId);
             setFormError('');
+            if (!turns.back()) return;
             capture(step - 1);
-            setStep(step - 1);
             onProgress?.(step === 2 ? 'bank' : 'identity');
           }}
         />

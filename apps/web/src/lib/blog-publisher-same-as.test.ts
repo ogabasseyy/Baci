@@ -11,7 +11,7 @@ describe('buildBlogPublisherSameAs', () => {
         youtube: null,
       })
     ).toEqual([
-      'https://instagram.com/ogabassey',
+      'https://www.instagram.com/ogabassey',
       'https://www.linkedin.com/company/ogabassey',
     ]);
   });
@@ -28,8 +28,8 @@ describe('buildBlogPublisherSameAs', () => {
         snapchat: 'ogabassey',
       })
     ).toEqual([
-      'https://instagram.com/ogabassey',
-      'https://facebook.com/ogabassey',
+      'https://www.instagram.com/ogabassey',
+      'https://www.facebook.com/ogabassey',
       'https://www.tiktok.com/@ogabassey',
       'https://x.com/ogabassey',
       'https://youtube.com/@ogabassey',
@@ -41,10 +41,10 @@ describe('buildBlogPublisherSameAs', () => {
   it('deduplicates duplicate normalized URLs', () => {
     expect(
       buildBlogPublisherSameAs({
-        instagram: 'https://instagram.com/ogabassey',
-        facebook: 'https://instagram.com/ogabassey',
+        instagram: 'https://www.instagram.com/ogabassey',
+        facebook: 'https://www.instagram.com/ogabassey',
       })
-    ).toEqual(['https://instagram.com/ogabassey']);
+    ).toEqual(['https://www.instagram.com/ogabassey']);
   });
 
   it('returns an empty array when no usable social media data is present', () => {

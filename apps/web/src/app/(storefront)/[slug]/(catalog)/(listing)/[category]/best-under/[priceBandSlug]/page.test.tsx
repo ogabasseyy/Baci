@@ -159,6 +159,22 @@ describe('price-band page metadata', () => {
       'max-snippet': -1,
       'max-video-preview': -1,
     });
+    expect(metadata.openGraph).toMatchObject({
+      title: priceBandPageModel.metaTitle,
+      description: priceBandPageModel.metaDescription,
+      url: priceBandPageModel.canonicalUrl,
+      type: 'website',
+      images: [
+        {
+          url: 'https://cdn.example.com/a56.jpg',
+          alt: priceBandPageModel.metaTitle,
+        },
+      ],
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: 'summary_large_image',
+      images: ['https://cdn.example.com/a56.jpg'],
+    });
   });
 
   it('calls notFound when the price-band loader returns null', async () => {

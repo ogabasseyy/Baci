@@ -13,11 +13,13 @@ interface AdmissionInput {
 /** A fail-closed display hint, tied to both the merchant and auth revision. */
 export function useOxygenStorefrontAvailability(input: AdmissionInput): boolean {
   const { customerId, merchantId, revision, authenticated, loading = false } = input;
-  const key = customerId && merchantId ? `${customerId}:${merchantId}` : null;
   const active = authenticated || loading;
+  const key = merchantId
+    ? `${active && customerId ? customerId : 'guest'}:${merchantId}`
+    : null;
   const [result, setResult] = useState<{ key: string; available: boolean } | null>(null);
   useEffect(() => {
-    if (!active || !key || !merchantId) return;
+    if (!key || !merchantId) return;
     const controller = new AbortController();
     void fetch(`/api/payments/oxygen/storefront-availability?merchantId=${encodeURIComponent(merchantId)}`, {
       cache: 'no-store', signal: controller.signal,
@@ -27,6 +29,6 @@ export function useOxygenStorefrontAvailability(input: AdmissionInput): boolean 
         if (!controller.signal.aborted) setResult({ key, available });
       });
     return () => controller.abort();
-  }, [active, key, merchantId, revision]);
-  return active && key !== null && result?.key === key && result.available;
+  }, [key, merchantId, revision]);
+  return key !== null && result?.key === key && result.available;
 }

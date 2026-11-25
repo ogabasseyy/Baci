@@ -53,8 +53,9 @@ const mockFetchImageBytes = vi.mocked(fetchImageBytes);
 describe('guideBusinessOnboarding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Force the deterministic Gemini-only chain (no Cerebras/Groq keys) so
+    // Force the deterministic Gemini-only chain (no OpenAI/Cerebras/Groq keys) so
     // provider-count assertions below are stable regardless of ambient env.
+    vi.stubEnv('OPENAI_API_KEY', '');
     vi.stubEnv('CEREBRAS_API_KEY', '');
     vi.stubEnv('GROQ_API_KEY', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');

@@ -34,11 +34,11 @@ describe('RegisterScreen', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not repeat the merchant setup progress before account creation', () => {
+  it('starts account creation in chat without form cards or merchant setup steps', () => {
     render(<RegisterScreen />);
 
-    expect(screen.getByText("Let's get to know you")).toBeTruthy();
-    expect(screen.getByText('Your details')).toBeTruthy();
+    expect(screen.getByText(/First, what's your full name\?/)).toBeTruthy();
+    expect(screen.queryByText('Your details')).toBeNull();
     expect(screen.queryByText('Your store setup')).toBeNull();
     expect(screen.queryByText('About you')).toBeNull();
     expect(screen.queryByText('Your business')).toBeNull();
@@ -50,11 +50,7 @@ describe('RegisterScreen', () => {
       screen.getByRole('region', { name: APP_KEYBOARD_CONTAINER_LABEL })
     ).toBeTruthy();
 
-    const submitButton = screen.getByRole('button', {
-      name: 'Proceed to next step',
-    });
     fillFormAndSubmit();
-    fireEvent.click(submitButton);
 
     await waitFor(() => expect(mocks.signUp).toHaveBeenCalledTimes(1));
     expect(mocks.signUp).toHaveBeenCalledWith({
@@ -69,32 +65,33 @@ describe('RegisterScreen', () => {
 
   it('trims identity fields while preserving password whitespace exactly', async () => {
     render(<RegisterScreen />);
-    fireEvent.change(screen.getByPlaceholderText('John'), {
-      target: { value: ' mary ann ' },
+    const send = () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Send response' }));
+
+    fireEvent.change(screen.getByLabelText('Full name'), {
+      target: { value: ' mary   van buren ' },
     });
-    fireEvent.change(screen.getByPlaceholderText('Doe'), {
-      target: { value: ' van buren ' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('you@example.com'), {
+    send();
+    fireEvent.change(screen.getByLabelText('Email address'), {
       target: { value: ' person@example.com ' },
     });
+    send();
     fireEvent.change(screen.getByLabelText('Password'), {
       target: { value: ' Strong P@ss123! ' },
     });
+    send();
     fireEvent.change(screen.getByLabelText('Confirm Password'), {
       target: { value: ' Strong P@ss123! ' },
     });
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Proceed to next step' })
-    );
+    send();
 
     await waitFor(() =>
       expect(mocks.signUp).toHaveBeenCalledWith({
         email: 'person@example.com',
         password: ' Strong P@ss123! ',
-        firstName: 'Mary ann',
+        firstName: 'Mary',
         lastName: 'Van buren',
-        fullName: 'Mary ann Van buren',
+        fullName: 'Mary Van buren',
         signupFlow: 'merchant',
       })
     );

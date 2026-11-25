@@ -57,6 +57,10 @@ export interface TextProvider {
   vision?: boolean;
 }
 
+export function getOpenAiTextModelName(): string {
+  return process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-4.1-mini';
+}
+
 export function getCerebrasTextModelName(): string {
   return process.env.COPILOT_CEREBRAS_MODEL?.trim() || 'gemma-4-31b';
 }
@@ -70,11 +74,25 @@ export function getGroqTextModelName(): string {
 export const OPENROUTER_TEXT_MODEL_NAME = 'google/gemma-4-31b-it:free';
 
 export function getTextProviderChain(): TextProvider[] {
+  const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
   const cerebrasApiKey = process.env.CEREBRAS_API_KEY?.trim();
   const groqApiKey = process.env.GROQ_API_KEY?.trim();
   const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim();
 
   const chain: TextProvider[] = [];
+
+  if (openAiApiKey) {
+    const modelName = getOpenAiTextModelName();
+    chain.push({
+      name: `openai:${modelName}`,
+      model: createOpenAICompatible({
+        name: 'openai',
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: openAiApiKey,
+      })(modelName),
+      vision: true,
+    });
+  }
 
   if (cerebrasApiKey) {
     const modelName = getCerebrasTextModelName();

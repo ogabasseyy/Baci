@@ -15,6 +15,7 @@ import { fetchImageBytes } from '@/lib/fetch-image-bytes';
 import { logger } from '@/lib/logger';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
 import { createFallbackLogo } from './fallback-logo';
+import { generateOpenAiLogo } from './generate-openai-logo';
 
 type GuideBusinessOnboardingInput = z.infer<
   typeof guideBusinessOnboardingInputSchema
@@ -178,6 +179,14 @@ Requirements:
 - The logo should work well at both large and small sizes
 
 Please generate the logo image now.`;
+
+      const openAiLogoDataUri = await generateOpenAiLogo(prompt);
+      if (openAiLogoDataUri) {
+        logger.info({
+          message: 'Logo generated successfully with OpenAI',
+        });
+        return { logos: [openAiLogoDataUri] };
+      }
 
       // Use Gemini 2.5 Flash Image for image generation (native multimodal)
       // Imagen models are not available in Google AI API - only in Vertex AI

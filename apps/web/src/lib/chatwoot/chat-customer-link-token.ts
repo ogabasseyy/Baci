@@ -13,9 +13,10 @@ import {
 /**
  * A signed note, made when a signed-in shopper opens the store chat, saying
  * "this browser belongs to customer X of store Y". The chat widget stores it
- * on the shopper's contact; the merchant inbox verifies it before showing
- * order history. Anyone can write to a contact, but only this server can sign,
- * so a forged or edited value never verifies.
+ * on the shopper's conversation, never on their contact (contacts are merged by
+ * email or phone); the merchant inbox verifies it before showing order history.
+ * Anyone can write their own chat attributes, but only this server can sign, so
+ * a forged or edited value never verifies.
  *
  * It reuses the chat engine's existing signing key under its own audience and
  * scope, so no other token of that key is accepted here (and the reverse).

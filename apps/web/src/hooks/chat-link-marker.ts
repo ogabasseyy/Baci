@@ -1,5 +1,5 @@
 /**
- * A record that this browser's chat contact carries a customer link, so a later
+ * A record that this browser's chat carries a customer link, so a later
  * page load can remove it after a sign-out. It lives in a cookie AND in local
  * storage: storage can be blocked or full, but the customer sign-in itself runs
  * on cookies, so a browser that can sign in can keep this too.

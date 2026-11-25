@@ -29,7 +29,7 @@ const RETURNING_MAX_PROVIDER_PAGES = 4;
  * has passed, so the answer (the last page read, with more to come) always
  * arrives before the app gives up and starts the same scan again.
  */
-const RETURNING_SCAN_BUDGET_MS = 8_000;
+const RETURNING_SCAN_BUDGET_MS = 5_000;
 
 type Input = {
   binding: MerchantInboxBinding;

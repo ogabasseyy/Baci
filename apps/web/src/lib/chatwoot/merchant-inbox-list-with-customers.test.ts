@@ -189,16 +189,16 @@ describe('listConversationsWithCustomers', () => {
     });
 
     it('bugfix: starts no new engine page once the scan has used its time budget', async () => {
-      // Each engine read takes 5 seconds; the app gives the whole request 20.
+      // Each engine read takes 3 seconds; the app gives the whole request 20.
       let clock = 0;
       mocks.list.mockImplementation(async () => {
-        clock += 5_000;
+        clock += 3_000;
         return providerPage([9], true);
       });
 
       const result = await run('returning', 1, true, () => clock);
 
-      // Page 1 (5s), page 2 (10s), then no third read: the answer is the last
+      // Page 1 (3s), page 2 (6s), then no third read: the answer is the last
       // page read with more to come, so the app asks for page 3 next.
       expect(mocks.list).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
@@ -207,6 +207,20 @@ describe('listConversationsWithCustomers', () => {
         hasMore: true,
         page: 2,
       });
+    });
+
+    it('starts no second page after a first one slower than the budget', async () => {
+      // A read may take 8 seconds, so starting another this late could push the
+      // answer close to the app's 20 second limit.
+      let clock = 0;
+      mocks.list.mockImplementation(async () => {
+        clock += 5_000;
+        return providerPage([9], true);
+      });
+
+      await run('returning', 1, true, () => clock);
+
+      expect(mocks.list).toHaveBeenCalledTimes(1);
     });
 
     it('still reads all four engine pages when each is quick', async () => {

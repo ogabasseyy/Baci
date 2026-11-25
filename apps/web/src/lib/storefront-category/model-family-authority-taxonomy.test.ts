@@ -20,6 +20,18 @@ describe('model family authority taxonomy', () => {
       displayName: 'Samsung Galaxy S',
       minimumProducts: 3,
     });
+    expect(
+      modelFamilyAuthorityTaxonomy.getEntry('smartphones', 'tecno', 'spark')
+    ).toMatchObject({
+      displayName: 'Tecno Spark',
+      minimumProducts: 2,
+    });
+    expect(
+      modelFamilyAuthorityTaxonomy.getEntry('smartphones', 'tecno', 'pop')
+    ).toMatchObject({
+      displayName: 'Tecno Pop',
+      minimumProducts: 2,
+    });
     expect(unsupportedEntry).toBeNull();
   });
 

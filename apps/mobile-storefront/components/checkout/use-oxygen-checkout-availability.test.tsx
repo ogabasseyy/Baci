@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { getOxygenStagingProfile } from '@/lib/oxygen-staging-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
+import { useAuthStore } from '@/stores/auth-store';
 import type { CartItem } from '@/stores/cart-store';
 import { useOxygenCheckoutAvailability } from './use-oxygen-checkout-availability';
 
@@ -226,5 +227,46 @@ it.each([
   } else {
     expect(mockCapabilities).not.toHaveBeenCalled();
     expect(result.current.disabledReason).toContain('unavailable');
+  }
+});
+
+it('shows Oxygen in production for guests when storefront availability is open without re-probing on fresh profile objects', async () => {
+  jest.mocked(getOxygenMobileProfile).mockImplementation(() => ({
+    ...profile,
+    environment: 'production',
+  }));
+  const previousAuthImpl = jest.mocked(useAuthStore).getMockImplementation();
+  jest.mocked(useAuthStore).mockImplementation((select) =>
+    select({
+      user: null,
+      customer: null,
+      merchantId: null,
+    } as Parameters<typeof select>[0])
+  );
+  const originalFetch = globalThis.fetch;
+  const fetchMock = jest.fn(
+    async () =>
+      ({
+        ok: true,
+        json: async () => ({ available: true }),
+      }) as Response
+  );
+  globalThis.fetch = fetchMock;
+  try {
+    const { result, rerender } = renderHook(() =>
+      useOxygenCheckoutAvailability([])
+    );
+    await waitFor(() => expect(result.current.visible).toBe(true));
+    rerender({});
+    await act(async () => {});
+    expect(result.current.visible).toBe(true);
+    expect(result.current.disabledReason).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockCapabilities).not.toHaveBeenCalled();
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousAuthImpl) {
+      jest.mocked(useAuthStore).mockImplementation(previousAuthImpl);
+    }
   }
 });

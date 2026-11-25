@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@/lib/expo-client', () => ({ getExpoClient: () => ({ expo: true }) }));
+vi.mock('@/lib/expo-push-lazy-client', () => ({
+  createLazyExpoGetter: () => () => ({ expo: true }),
+}));
 
 import {
   buildChatEventPushProof,

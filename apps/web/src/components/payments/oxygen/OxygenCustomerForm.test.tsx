@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
@@ -123,5 +123,95 @@ it('moves to bank verification and back without losing identity inputs or creati
   fireEvent.click(screen.getByRole('button', { name: 'Back' }));
   expect(progress).toHaveBeenLastCalledWith('identity');
   expect(screen.getByLabelText('BVN')).toHaveValue('12345678901');
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it('asks one bank or income question at a time in the chat application', async () => {
+  const submit = vi.fn();
+  api.fetch.mockImplementation(async (_: string, options: RequestInit) =>
+    JSON.parse(String(options.body)).action === 'banks'
+      ? Response.json({ banks: [{ name: 'Test bank', code: '001' }] })
+      : Response.json({ accountName: 'TEST CUSTOMER' })
+  );
+  render(
+    <OxygenCustomerForm
+      busy={false}
+      conversational
+      phone="08000000001"
+      submit={submit}
+      workflowId="60000000-0000-4000-8000-000000000001"
+      prefill={{
+        first_name: 'Ada',
+        last_name: 'Obi',
+        email: 'ada@example.com',
+      }}
+      onResidentialReady={vi.fn()}
+    />
+  );
+  const next = () =>
+    fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
+  expect(screen.getByLabelText('BVN')).toBeVisible();
+  expect(screen.getByLabelText('NIN')).not.toBeVisible();
+  fireEvent.change(screen.getByLabelText('BVN'), {
+    target: { value: '12345678901' },
+  });
+  next();
+  expect(screen.getByLabelText('NIN')).toBeVisible();
+  expect(screen.getByLabelText('Date of birth')).not.toBeVisible();
+  fireEvent.change(screen.getByLabelText('NIN'), {
+    target: { value: '12345678902' },
+  });
+  next();
+  expect(screen.getByLabelText('Date of birth')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Date of birth'), {
+    target: { value: '10/02/1990' },
+  });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue to bank details' })
+  );
+  expect(screen.getByText('Which bank should we use?')).toBeVisible();
+  expect(screen.getByLabelText('Account number')).not.toBeVisible();
+  await waitFor(() => expect(screen.getByLabelText('Bank')).toBeEnabled());
+  fireEvent.keyDown(screen.getByLabelText('Bank'), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('option', { name: 'Test bank' }));
+  expect(screen.getByLabelText('Account number')).not.toBeVisible();
+  next();
+  expect(screen.getByLabelText('Bank')).not.toBeVisible();
+  expect(screen.getByLabelText('Account number')).toBeVisible();
+  const verified = screen.getByRole('button', {
+    name: 'Yes, that’s my account',
+  });
+  expect(verified).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Account number'), {
+    target: { value: '0123456789' },
+  });
+  await waitFor(() => expect(verified).toBeEnabled());
+  fireEvent.click(verified);
+  expect(screen.getByLabelText('Employment status')).toBeVisible();
+  expect(screen.getByLabelText('Employer')).not.toBeVisible();
+  expect(screen.getByLabelText('Monthly income (₦)')).not.toBeVisible();
+  fireEvent.change(screen.getByLabelText('Employment status'), {
+    target: { value: 'EMPLOYED' },
+  });
+  next();
+  fireEvent.change(screen.getByLabelText('Employer'), {
+    target: { value: 'QA Employer' },
+  });
+  next();
+  expect(screen.getByLabelText('Employer')).not.toBeVisible();
+  expect(screen.getByLabelText('Monthly income (₦)')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
+    target: { value: '200000' },
+  });
+  next();
+  expect(screen.getByLabelText('When are you paid?')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('When are you paid?'), {
+    target: { value: '25' },
+  });
+  next();
+  expect(screen.getByLabelText('Proof of address')).toBeVisible();
+  expect(
+    screen.getByRole('checkbox', { name: /agree to share/i, hidden: true })
+  ).not.toBeVisible();
   expect(submit).not.toHaveBeenCalled();
 });

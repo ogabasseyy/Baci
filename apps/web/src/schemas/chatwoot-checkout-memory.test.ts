@@ -33,6 +33,33 @@ describe('chatwootCheckoutMemorySchema', () => {
     ).toBe(true);
   });
 
+  it('accepts Oxygen paymentMethod entries and rejects unsupported paymentMethod discriminators', () => {
+    expect(
+      chatwootCheckoutMemorySchema.safeParse([
+        [
+          'key-oxygen',
+          {
+            ...entry,
+            order: { ...entry.order, paymentMethod: 'oxygen' },
+            payment: null,
+          },
+        ],
+      ]).success
+    ).toBe(true);
+    expect(
+      chatwootCheckoutMemorySchema.safeParse([
+        [
+          'key-bad',
+          {
+            ...entry,
+            order: { ...entry.order, paymentMethod: 'card' },
+            payment: null,
+          },
+        ],
+      ]).success
+    ).toBe(false);
+  });
+
   it('rejects extra fields, such as contact details, at every level', () => {
     for (const bad of [
       { ...entry, email: 'shopper@example.test' },

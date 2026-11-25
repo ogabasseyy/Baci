@@ -34,6 +34,7 @@ export function ChatwootWidget({
           storeSlug={config.storeSlug}
           widgetOrigin={config.platformOrigin}
           checkoutEnabled={config.checkoutEnabled === true}
+          oxygenHostedOrigins={config.oxygenHostedOrigins}
         />
       ) : null}
     </ChatwootSupportActiveContext.Provider>

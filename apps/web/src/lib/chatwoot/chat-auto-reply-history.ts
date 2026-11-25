@@ -31,21 +31,21 @@ export async function loadChatAutoReplyHistory(
     .slice(-MAX_TURNS)
     .map((message) => ({
       role: message.sender === 'customer' ? 'user' : 'assistant',
+      ...(message.sender === 'assistant' && message.kind === 'product_card'
+        ? { productCard: true as const }
+        : {}),
+      ...(message.checkoutNameRequested
+        ? { checkoutNameRequested: true as const }
+        : {}),
       content: message.text.slice(0, CHAT_AUTO_REPLY_MAX_QUESTION_LENGTH),
     }));
 }
 
 /**
- * True only when no customer message has arrived after the one being
- * answered. A customer who writes again while the model works gets the answer
- * from the newer message's own run. Nothing else supersedes it: an automation
- * or campaign post starts no assistant run, and an assistant reply may belong
- * to an older run that finished late, so counting either would leave this
- * question unanswered. A repeat delivery of the same message is dropped at
- * intake, and a person's reply is caught by the conversation leaving
- * `pending`. Null means the messages could not be read: that is not the same
- * as superseded, and the caller hands over rather than going quiet with
- * nobody queued.
+ * True only when the message being answered is still the newest conversational
+ * turn. Chatwoot can attach an automatic email prompt to the first message;
+ * that system template does not replace the customer's turn. A newer message
+ * from the customer, the assistant or staff still stops this reply.
  */
 export async function isLatestChatMessage(
   binding: ChatAutoReplyBinding,

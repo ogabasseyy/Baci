@@ -3,10 +3,15 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { getIndexableRobotsMetadata } from '@/lib/seo-utils';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   getPriceBandStorefrontPathPrefix,
   loadPriceBandPage,
 } from '@/lib/storefront-compare/load-price-band-page';
+import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
 import { PriceBandPageContent } from './price-band-page-content';
 
 interface PriceBandPageRouteProps {
@@ -50,6 +55,17 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { page } = await loadIndexablePriceBandPage(props);
 
+  let baseUrl = page.merchant ? buildStoreUrl(page.merchant) : '';
+  if (!baseUrl) {
+    try {
+      baseUrl = new URL(page.canonicalUrl).origin;
+    } catch {
+      baseUrl = '';
+    }
+  }
+
+  const imageCandidates = [page.products?.[0]?.image, page.merchant?.logo_url];
+
   return {
     title: { absolute: page.metaTitle },
     description: page.metaDescription,
@@ -57,6 +73,24 @@ export async function generateMetadata(
       canonical: page.canonicalUrl,
     },
     robots: getIndexableRobotsMetadata(),
+    openGraph: {
+      title: page.metaTitle,
+      description: page.metaDescription,
+      url: page.canonicalUrl,
+      type: 'website',
+      siteName: page.merchant?.business_name,
+      images: getStorefrontOpenGraphImages(
+        baseUrl,
+        page.metaTitle,
+        ...imageCandidates
+      ),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: page.metaTitle,
+      description: page.metaDescription,
+      images: getStorefrontTwitterImages(baseUrl, ...imageCandidates),
+    },
   };
 }
 

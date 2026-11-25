@@ -84,6 +84,7 @@ export function generateFacebookCatalogFeed(
           currency,
           brand: product.brand || brandName,
           platform: 'facebook',
+          specOnlyTitles: merchant.slug === 'ogabassey',
         });
       }
       return buildConditionOfferItems({

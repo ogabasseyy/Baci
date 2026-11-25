@@ -61,6 +61,15 @@ describe('GET /api/merchant/inbox/conversations', () => {
     });
   });
 
+  it('passes a smart view through to the provider call', async () => {
+    await GET(request('?view=needs_reply'));
+    expect(mocks.list).toHaveBeenCalledWith(binding, {
+      page: 1,
+      status: 'all',
+      view: 'needs_reply',
+    });
+  });
+
   it('passes validated paging and status', async () => {
     await GET(request('?page=3&status=open'));
     expect(mocks.list).toHaveBeenCalledWith(binding, {
@@ -73,6 +82,7 @@ describe('GET /api/merchant/inbox/conversations', () => {
     '?page=0',
     '?page=abc',
     '?status=deleted',
+    '?view=everything',
   ])('rejects %s for a signed-in merchant without calling the provider', async (query) => {
     const response = await GET(request(query));
     expect(response.status).toBe(400);

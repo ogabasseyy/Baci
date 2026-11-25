@@ -8,9 +8,18 @@ const time = (iso: string | null | undefined): number =>
 const rank = (c: InboxConversation): number =>
   c.priority ? PRIORITY_RANK[c.priority] : 0;
 
-/** A follow-up whose time has come: marked, but no longer snoozed. */
-export function isFollowUpDue(c: InboxConversation): boolean {
-  return !!c.followUp && c.status !== 'snoozed' && c.status !== 'resolved';
+/**
+ * A follow-up whose time has come: marked, and either back from its snooze or
+ * past the snooze time while the chat engine has yet to reopen it.
+ */
+export function isFollowUpDue(
+  c: InboxConversation,
+  now: Date = new Date()
+): boolean {
+  if (!c.followUp || c.status === 'resolved') return false;
+  if (c.status !== 'snoozed') return true;
+  const until = time(c.snoozedUntil);
+  return until > 0 && until <= now.getTime();
 }
 
 /**

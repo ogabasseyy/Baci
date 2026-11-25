@@ -23,19 +23,24 @@ export interface OnboardingAssistResponse {
   brandColors?: OnboardingBrandColors;
 }
 
+export const ONBOARDING_ASSIST_TIMEOUT_MS = 55_000;
+
+export async function requestOnboardingAssist(
+  payload: OnboardingAssistRequest
+): Promise<OnboardingAssistResponse> {
+  return await apiClient<OnboardingAssistResponse>(
+    '/api/mobile/onboarding-assist',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeout: ONBOARDING_ASSIST_TIMEOUT_MS,
+    }
+  );
+}
+
 export function useOnboardingAssist() {
   return useMutation({
     retry: false,
-    mutationFn: async (
-      payload: OnboardingAssistRequest
-    ): Promise<OnboardingAssistResponse> => {
-      return await apiClient<OnboardingAssistResponse>(
-        '/api/mobile/onboarding-assist',
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        }
-      );
-    },
+    mutationFn: requestOnboardingAssist,
   });
 }

@@ -84,36 +84,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (parsed.data.task === 'extract_colors') {
-    const logoMerchantId = parsed.data.logoUrl
-      ? extractOnboardingStorageMerchantId(parsed.data.logoUrl)
-      : null;
-    if (!logoMerchantId) {
-      return NextResponse.json(
-        {
-          error: 'Logo URL must be a valid uploaded store logo.',
-          code: 'invalid_logo_url',
-        },
-        { status: 400 }
-      );
-    }
-    const { data: ownedMerchant, error: ownershipError } = await auth.supabase
-      .from('merchants')
-      .select('id')
-      .eq('id', logoMerchantId)
-      .eq('user_id', auth.user.id)
-      .maybeSingle();
-    if (ownershipError || !ownedMerchant) {
-      return NextResponse.json(
-        {
-          error: 'Logo URL does not belong to your store.',
-          code: 'forbidden_logo_url',
-        },
-        { status: 403 }
-      );
-    }
-  }
-
   const isImageTask =
     parsed.data.task === 'generate_logos' ||
     parsed.data.task === 'extract_colors';
@@ -154,6 +124,36 @@ export async function POST(request: NextRequest) {
           code: 'rate_limited',
         },
         { status: 429 }
+      );
+    }
+  }
+
+  if (parsed.data.task === 'extract_colors') {
+    const logoMerchantId = parsed.data.logoUrl
+      ? extractOnboardingStorageMerchantId(parsed.data.logoUrl)
+      : null;
+    if (!logoMerchantId) {
+      return NextResponse.json(
+        {
+          error: 'Logo URL must be a valid uploaded store logo.',
+          code: 'invalid_logo_url',
+        },
+        { status: 400 }
+      );
+    }
+    const { data: ownedMerchant, error: ownershipError } = await auth.supabase
+      .from('merchants')
+      .select('id')
+      .eq('id', logoMerchantId)
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+    if (ownershipError || !ownedMerchant) {
+      return NextResponse.json(
+        {
+          error: 'Logo URL does not belong to your store.',
+          code: 'forbidden_logo_url',
+        },
+        { status: 403 }
       );
     }
   }

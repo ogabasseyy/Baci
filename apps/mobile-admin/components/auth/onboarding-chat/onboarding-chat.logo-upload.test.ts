@@ -169,7 +169,10 @@ describe('uploadPickedLogoBestEffort', () => {
 
     expect(mocks.apiClient).toHaveBeenCalledWith(
       '/api/mobile/onboarding-assist',
-      expect.objectContaining({ method: 'POST' })
+      expect.objectContaining({
+        method: 'POST',
+        timeout: 55_000,
+      })
     );
     expect(mocks.update).toHaveBeenCalledWith({
       brand_colors: {
@@ -234,5 +237,20 @@ describe('uploadPickedLogoBestEffort', () => {
     });
 
     expect(persisted).toBe(false);
+  });
+
+  it('rejects SVG data URIs in uploadDataUriLogoBestEffort without uploading', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+
+    const persisted = await uploadDataUriLogoBestEffort(
+      'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+      'm-2'
+    );
+
+    expect(persisted).toBeNull();
+    expect(mocks.storageUpload).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

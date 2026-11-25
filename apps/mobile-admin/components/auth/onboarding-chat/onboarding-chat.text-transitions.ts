@@ -189,14 +189,13 @@ export function transitionFromTextInput(
   }
 
   if (step === 'logo') {
-    if (lower.includes('skip')) {
+    if (/\bskip\b/.test(lower)) {
       return skipLogoTextTransition(trimmed, data.slug);
     }
-    if (
-      lower.includes('no') ||
-      lower.includes("don't") ||
-      lower.includes('dont')
-    ) {
+    if (/\b(upload|choose|pick|photo)\b/.test(lower)) {
+      return { sideEffect: { type: 'upload_logo' } };
+    }
+    if (/\b(no|nope|nah|don't|dont|none)\b/.test(lower)) {
       return {
         nextStep: 'logo_generate_offer',
         messages: exchangeMessages(
@@ -204,14 +203,6 @@ export function transitionFromTextInput(
           `No problem! Want me to generate a starter logo for ${data.businessName}?`
         ),
       };
-    }
-    if (
-      lower.includes('upload') ||
-      lower.includes('choose') ||
-      lower.includes('pick') ||
-      lower.includes('photo')
-    ) {
-      return { sideEffect: { type: 'upload_logo' } };
     }
     return {
       messages: exchangeMessages(

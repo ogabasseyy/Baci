@@ -64,6 +64,24 @@ describe('transitionFromTextInput slug handling', () => {
     expect(result.sideEffect).toEqual({ type: 'upload_logo' });
   });
 
+  it('does not misclassify words containing substring "no" as rejecting logo upload', () => {
+    const chooseAnother = transitionFromTextInput(
+      'logo',
+      'choose another',
+      BASE_DATA
+    );
+    expect(chooseAnother.sideEffect).toEqual({ type: 'upload_logo' });
+    expect(chooseAnother.nextStep).toBeUndefined();
+
+    const haveOneNow = transitionFromTextInput(
+      'logo',
+      'I have one now',
+      BASE_DATA
+    );
+    expect(haveOneNow.nextStep).toBeUndefined();
+    expect(haveOneNow.messages?.[1]?.text).toContain('Upload logo');
+  });
+
   it('rejects invalid phone numbers at the phone step', () => {
     const result = transitionFromTextInput('phone', 'not-a-phone', BASE_DATA);
 

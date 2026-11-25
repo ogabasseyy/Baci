@@ -250,6 +250,30 @@ describe('POST /api/mobile/onboarding-assist', () => {
     expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
+  it('rate-limits extract_colors before running the merchant ownership DB query', async () => {
+    mockApplyRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      limit: 5,
+      remaining: 0,
+      resetTime: Date.now() + 300_000,
+    });
+
+    const response = await POST(
+      makeRequest({
+        task: 'extract_colors',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'black and gold',
+        logoUrl:
+          'https://project.supabase.co/storage/v1/object/public/media/other-merchant/logo.png',
+      })
+    );
+
+    expect(response.status).toBe(429);
+    expect(mockMerchantMaybeSingle).not.toHaveBeenCalled();
+    expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
+  });
+
   it('returns 400 for malformed JSON', async () => {
     const response = await POST(makeRequest(null, '{invalid-json'));
 

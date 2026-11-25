@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
+import { ONBOARDING_ASSIST_TIMEOUT_MS } from '@/hooks/useOnboardingAssist';
 import { apiClient } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import { readUploadBytes } from '@/lib/upload/readUploadBytes';
@@ -186,7 +187,15 @@ export async function uploadDataUriLogoBestEffort(
   if (!match) {
     return null;
   }
-  const [, contentType, base64Payload] = match;
+  const [, rawContentType, base64Payload] = match;
+  const contentType = normalizeUploadImageMime(rawContentType);
+  if (!ALLOWED_UPLOAD_IMAGE_MIMES.has(contentType)) {
+    console.warn(
+      'Rejected unsupported onboarding data-URI logo MIME type:',
+      contentType
+    );
+    return null;
+  }
   try {
     const bytes = decodeBase64ToBytes(base64Payload);
     return await persistLogoBytesToMerchant({
@@ -212,6 +221,7 @@ export async function extractAndPersistUploadedLogoColors(params: {
       brandColors?: { primary: string; background: string; accent: string };
     }>('/api/mobile/onboarding-assist', {
       method: 'POST',
+      timeout: ONBOARDING_ASSIST_TIMEOUT_MS,
       body: JSON.stringify({
         task: 'extract_colors',
         logoUrl: params.logoUrl,

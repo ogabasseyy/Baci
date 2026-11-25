@@ -49,6 +49,8 @@ SET search_path = ''
 AS $$
 DECLARE
   v_wallet_ledger numeric := 0;
+  v_has_wallet_reversal boolean := false;
+  v_effective_wallet numeric := 0;
   v_savings_ledger numeric := 0;
   v_pre_gateway_credit numeric := 0;
 BEGIN
@@ -59,18 +61,23 @@ BEGIN
   END IF;
 
   IF p_order_id IS NOT NULL THEN
-    SELECT GREATEST(
-      COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
-        WHERE t.source_type = 'order_redemption'
-          AND t.type = 'redemption'
-          AND t.status = 'completed'
-      ), 0) - COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
-        WHERE t.source_type = 'order_reversal'
-          AND t.status = 'completed'
-      ), 0),
-      0
-    )
-      INTO v_wallet_ledger
+    SELECT
+      GREATEST(
+        COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
+          WHERE t.source_type = 'order_redemption'
+            AND t.type = 'redemption'
+            AND t.status = 'completed'
+        ), 0) - COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
+          WHERE t.source_type = 'order_reversal'
+            AND t.status = 'completed'
+        ), 0),
+        0
+      ),
+      COALESCE(BOOL_OR(
+        t.source_type = 'order_reversal'
+        AND t.status = 'completed'
+      ), false)
+      INTO v_wallet_ledger, v_has_wallet_reversal
     FROM public.customer_wallet_transactions t
     WHERE t.source_id = p_order_id
       AND t.source_type IN ('order_redemption', 'order_reversal');
@@ -82,17 +89,21 @@ BEGIN
       AND NOT (COALESCE(r.metadata, '{}'::jsonb) ? 'reversed_at');
   END IF;
 
-  IF COALESCE(p_payment_status, 'unpaid') IN ('unpaid', 'pending') THEN
+  v_effective_wallet := CASE
+    WHEN v_has_wallet_reversal THEN COALESCE(v_wallet_ledger, 0)
+    ELSE GREATEST(COALESCE(p_wallet_amount_used, 0), COALESCE(v_wallet_ledger, 0), 0)
+  END;
+
+  IF COALESCE(p_payment_status, 'unpaid') IN ('unpaid', 'pending')
+    AND NOT v_has_wallet_reversal THEN
     v_pre_gateway_credit := GREATEST(
       COALESCE(p_amount_paid, 0),
-      COALESCE(p_wallet_amount_used, 0) + COALESCE(v_savings_ledger, 0),
-      COALESCE(v_wallet_ledger, 0) + COALESCE(v_savings_ledger, 0),
+      v_effective_wallet + COALESCE(v_savings_ledger, 0),
       0
     );
   ELSE
     v_pre_gateway_credit := GREATEST(
-      COALESCE(p_wallet_amount_used, 0) + COALESCE(v_savings_ledger, 0),
-      COALESCE(v_wallet_ledger, 0) + COALESCE(v_savings_ledger, 0),
+      v_effective_wallet + COALESCE(v_savings_ledger, 0),
       0
     );
   END IF;

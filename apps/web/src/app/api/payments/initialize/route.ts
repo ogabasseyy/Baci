@@ -10,9 +10,9 @@
  */
 
 import {
-  isPreGatewayCreditStatus,
+  computeOrderNetPayable,
   sumActiveSavingsLedgerCredit,
-  sumNetWalletLedgerCredit,
+  summarizeWalletLedgerCredit,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { customAlphabet } from 'nanoid';
@@ -1334,7 +1334,8 @@ export async function POST(request: NextRequest) {
     // (authenticated role with no sub for guests), which has no grant on
     // public.orders. Read the wallet amount from the bounded SECURITY DEFINER
     // snapshot instead of a direct table lookup that RLS would hide.
-    let walletAmountUsed: number;
+    let walletAmountUsed = 0;
+    let walletLedgerUsed = 0;
     let amountPaidFromOrderRow = 0;
     let orderPaymentStatus = 'unpaid';
     let hasWalletReversal = false;
@@ -1408,21 +1409,13 @@ export async function POST(request: NextRequest) {
         numberOrDefault(typedOrderPaymentRow.wallet_amount_used, 0),
         0
       );
-      const walletFromLedgerRows = sumNetWalletLedgerCredit(walletRows);
-      hasWalletReversal =
-        Array.isArray(walletRows) &&
-        walletRows.some((row) => {
-          if (!row || typeof row !== 'object') return false;
-          const record = row as { source_type?: unknown; status?: unknown };
-          return (
-            record.source_type === 'order_reversal' &&
-            record.status === 'completed'
-          );
-        });
+      const walletSummary = summarizeWalletLedgerCredit(walletRows);
+      walletLedgerUsed = walletSummary.netCredit;
+      hasWalletReversal = walletSummary.hasCompletedReversal;
 
       walletAmountUsed = hasWalletReversal
-        ? walletFromLedgerRows
-        : Math.max(walletFromOrderRow, walletFromLedgerRows);
+        ? walletLedgerUsed
+        : Math.max(walletFromOrderRow, walletLedgerUsed);
     }
 
     const { data: savingsRows, error: savingsError } = await paymentDataClient
@@ -1632,16 +1625,15 @@ export async function POST(request: NextRequest) {
 
     const chargeCurrency = currencyResolution.currency;
 
-    const preGatewayCredit =
-      isPreGatewayCreditStatus(orderPaymentStatus) && !hasWalletReversal
-        ? Math.max(
-            amountPaidFromOrderRow,
-            walletAmountUsed + savingsAmountUsed,
-            0
-          )
-        : walletAmountUsed + savingsAmountUsed;
-
-    const payableAmount = Math.max(snapshotTotal - preGatewayCredit, 0);
+    const payableAmount = computeOrderNetPayable({
+      total: snapshotTotal,
+      amountPaid: amountPaidFromOrderRow,
+      walletAmountUsed,
+      walletLedgerUsed: redvaultRequested ? walletAmountUsed : walletLedgerUsed,
+      savingsLedgerUsed: savingsAmountUsed,
+      paymentStatus: orderPaymentStatus,
+      walletReversalCompleted: hasWalletReversal,
+    });
 
     if (payableAmount <= 0) {
       return createErrorResponse(

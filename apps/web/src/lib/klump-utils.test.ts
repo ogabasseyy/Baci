@@ -187,5 +187,17 @@ describe('klump-utils', () => {
         wallet_amount_used: 0,
       })
     ).toBe(35_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'unpaid',
+        amount_paid: 20_000,
+        wallet_amount_used: 20_000,
+        wallet_ledger_used: 0,
+        savings_ledger_used: 5_000,
+        wallet_reversal_completed: true,
+      })
+    ).toBe(45_000);
   });
 });

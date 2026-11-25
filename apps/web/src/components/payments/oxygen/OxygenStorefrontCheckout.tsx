@@ -1,6 +1,6 @@
 import {
   sumActiveSavingsLedgerCredit,
-  sumNetWalletLedgerCredit,
+  summarizeWalletLedgerCredit,
 } from '@baci/shared/lib';
 import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
@@ -100,9 +100,11 @@ export async function OxygenStorefrontCheckout({
     readOxygenCustomerPrefill(client, orderId, user.id),
   ]);
   if (walletLedgerError || savingsLedgerError) notFound();
+  const walletLedgerSummary = summarizeWalletLedgerCredit(walletLedgerRows);
   const order = {
     ...parsed.data,
-    wallet_ledger_used: sumNetWalletLedgerCredit(walletLedgerRows),
+    wallet_ledger_used: walletLedgerSummary.netCredit,
+    wallet_reversal_completed: walletLedgerSummary.hasCompletedReversal,
     savings_ledger_used: sumActiveSavingsLedgerCredit(savingsLedgerRows),
   };
   const netPayable = getOxygenOrderNetPayable(order);

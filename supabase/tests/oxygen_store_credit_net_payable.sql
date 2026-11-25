@@ -191,7 +191,7 @@ BEGIN
       AND column_name = 'wallet_id'
   ) THEN
     INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
-    VALUES ('ec310000-0000-4000-8000-000000000016','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-REVERSED',50000,50000,'NGN','unpaid','oxygen',0,0,0,0);
+    VALUES ('ec310000-0000-4000-8000-000000000016','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-REVERSED',50000,50000,'NGN','unpaid','oxygen',0,0,20000,20000);
 
     INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
     VALUES
@@ -211,8 +211,8 @@ BEGIN
     VALUES
       ('ec310000-0000-4000-8000-000000000034','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000016',15000,'oxy-ledger-reversed','{"reversed_at":"2026-11-25T10:00:00Z"}'::jsonb);
 
-    IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 50000 THEN
-      RAISE EXCEPTION 'Expected reversed ledger order net payable 50000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 0, 0, 'unpaid');
+    IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 20000, 20000, 'unpaid') IS DISTINCT FROM 50000 THEN
+      RAISE EXCEPTION 'Expected reversed ledger order net payable 50000 despite stale columns, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 20000, 20000, 'unpaid');
     END IF;
     IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 35000 THEN
       RAISE EXCEPTION 'Expected pending reversal not to reduce credit on order 12, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid');

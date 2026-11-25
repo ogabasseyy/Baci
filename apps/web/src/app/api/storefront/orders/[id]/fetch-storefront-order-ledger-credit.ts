@@ -1,11 +1,16 @@
 import {
   sumActiveSavingsLedgerCredit,
-  sumNetWalletLedgerCredit,
+  summarizeWalletLedgerCredit,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type StorefrontOrderLedgerCreditResult =
-  | { ok: true; walletLedgerUsed: number; savingsLedgerUsed: number }
+  | {
+      ok: true;
+      walletLedgerUsed: number;
+      savingsLedgerUsed: number;
+      walletReversalCompleted: boolean;
+    }
   | { ok: false };
 
 const LEDGER_CREDIT_PAYMENT_METHODS = new Set([
@@ -54,9 +59,11 @@ export async function fetchStorefrontOrderLedgerCredit(
     return { ok: false };
   }
 
+  const walletSummary = summarizeWalletLedgerCredit(walletRows);
   return {
     ok: true,
-    walletLedgerUsed: sumNetWalletLedgerCredit(walletRows),
+    walletLedgerUsed: walletSummary.netCredit,
     savingsLedgerUsed: sumActiveSavingsLedgerCredit(savingsRows),
+    walletReversalCompleted: walletSummary.hasCompletedReversal,
   };
 }

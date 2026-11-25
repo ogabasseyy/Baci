@@ -1,4 +1,8 @@
-import { isPreGatewayCreditStatus } from '@baci/shared/lib';
+import {
+  computeOrderNetPayable,
+  computeOrderPreGatewayPaid,
+  isPreGatewayCreditStatus,
+} from '@baci/shared/lib';
 import { z } from 'zod';
 
 const amount = z
@@ -18,6 +22,7 @@ export const oxygenCheckoutOrderSchema = z.object({
   wallet_amount_used: amount.optional(),
   wallet_ledger_used: amount.optional(),
   savings_ledger_used: amount.optional(),
+  wallet_reversal_completed: z.boolean().optional(),
   payment_status: z.string().optional(),
   order_items: z.array(
     z.object({
@@ -39,47 +44,41 @@ export const oxygenCheckoutOrderSchema = z.object({
 
 export const isOxygenPreGatewayStatus = isPreGatewayCreditStatus;
 
+type OxygenOrderCreditFields = Pick<
+  z.infer<typeof oxygenCheckoutOrderSchema>,
+  | 'total'
+  | 'amount_paid'
+  | 'wallet_amount_used'
+  | 'wallet_ledger_used'
+  | 'savings_ledger_used'
+  | 'wallet_reversal_completed'
+  | 'payment_status'
+>;
+
 export function getOxygenOrderPreGatewayPaid(
-  order: Pick<
-    z.infer<typeof oxygenCheckoutOrderSchema>,
-    | 'total'
-    | 'amount_paid'
-    | 'wallet_amount_used'
-    | 'wallet_ledger_used'
-    | 'savings_ledger_used'
-    | 'payment_status'
-  >
+  order: OxygenOrderCreditFields
 ): number {
-  const walletColumn = Math.max(order.wallet_amount_used ?? 0, 0);
-  const walletLedger = Math.max(order.wallet_ledger_used ?? 0, 0);
-  const savingsLedger = Math.max(order.savings_ledger_used ?? 0, 0);
-  if (!isOxygenPreGatewayStatus(order.payment_status)) {
-    return Math.min(
-      Math.max(walletColumn, walletLedger) + savingsLedger,
-      order.total
-    );
-  }
-  return Math.max(
-    order.amount_paid ?? 0,
-    walletColumn + savingsLedger,
-    walletLedger + savingsLedger,
-    0
-  );
+  return computeOrderPreGatewayPaid({
+    total: order.total,
+    amountPaid: order.amount_paid,
+    walletAmountUsed: order.wallet_amount_used,
+    walletLedgerUsed: order.wallet_ledger_used,
+    savingsLedgerUsed: order.savings_ledger_used,
+    paymentStatus: order.payment_status,
+    walletReversalCompleted: order.wallet_reversal_completed,
+  });
 }
 
 export function getOxygenOrderNetPayable(
-  order: Pick<
-    z.infer<typeof oxygenCheckoutOrderSchema>,
-    | 'total'
-    | 'amount_paid'
-    | 'wallet_amount_used'
-    | 'wallet_ledger_used'
-    | 'savings_ledger_used'
-    | 'payment_status'
-  >
+  order: OxygenOrderCreditFields
 ): number {
-  return Math.max(
-    Number((order.total - getOxygenOrderPreGatewayPaid(order)).toFixed(2)),
-    0
-  );
+  return computeOrderNetPayable({
+    total: order.total,
+    amountPaid: order.amount_paid,
+    walletAmountUsed: order.wallet_amount_used,
+    walletLedgerUsed: order.wallet_ledger_used,
+    savingsLedgerUsed: order.savings_ledger_used,
+    paymentStatus: order.payment_status,
+    walletReversalCompleted: order.wallet_reversal_completed,
+  });
 }

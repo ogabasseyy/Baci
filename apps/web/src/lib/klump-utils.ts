@@ -1,4 +1,4 @@
-import { isPreGatewayCreditStatus } from '@baci/shared/lib';
+import { computeOrderNetPayable } from '@baci/shared/lib';
 
 export interface BnplOrderItem {
   name?: string;
@@ -14,6 +14,7 @@ export interface BnplOrder {
   wallet_amount_used?: number | string | null;
   wallet_ledger_used?: number | string | null;
   savings_ledger_used?: number | string | null;
+  wallet_reversal_completed?: boolean | null;
   payment_status?: string | null;
   currency?: string | null;
   order_number?: string | null;
@@ -79,21 +80,21 @@ export function getBnplRemainingAmount(
     | 'wallet_amount_used'
     | 'wallet_ledger_used'
     | 'savings_ledger_used'
+    | 'wallet_reversal_completed'
     | 'payment_status'
   >
 ) {
-  const total = toCurrencyAmount(order.total);
-  const walletColumn = toCurrencyAmount(order.wallet_amount_used);
-  const walletLedger = toCurrencyAmount(order.wallet_ledger_used);
-  const savingsLedger = toCurrencyAmount(order.savings_ledger_used);
-  const preGatewayPaid = isPreGatewayCreditStatus(order.payment_status)
-    ? Math.max(
-        toCurrencyAmount(order.amount_paid),
-        walletColumn + savingsLedger,
-        walletLedger + savingsLedger
-      )
-    : Math.max(walletColumn, walletLedger) + savingsLedger;
-  return toCurrencyAmount(Math.max(total - preGatewayPaid, 0));
+  return toCurrencyAmount(
+    computeOrderNetPayable({
+      total: toCurrencyAmount(order.total),
+      amountPaid: toCurrencyAmount(order.amount_paid),
+      walletAmountUsed: toCurrencyAmount(order.wallet_amount_used),
+      walletLedgerUsed: toCurrencyAmount(order.wallet_ledger_used),
+      savingsLedgerUsed: toCurrencyAmount(order.savings_ledger_used),
+      walletReversalCompleted: order.wallet_reversal_completed === true,
+      paymentStatus: order.payment_status,
+    })
+  );
 }
 
 export function toKlumpIntegerAmount(

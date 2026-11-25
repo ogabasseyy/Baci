@@ -1,7 +1,8 @@
 import {
+  computeOrderNetPayable,
   isPreGatewayCreditStatus,
   sumActiveSavingsLedgerCredit,
-  sumNetWalletLedgerCredit,
+  summarizeWalletLedgerCredit,
 } from '@baci/shared/lib';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
@@ -75,25 +76,18 @@ export async function readOwnedOxygenOrder(
     throw new Error(
       'This order is closed. Open your order history for details.'
     );
-  const walletLedgerUsed = sumNetWalletLedgerCredit(walletLedgerRows);
+  const walletSummary = summarizeWalletLedgerCredit(walletLedgerRows);
   const savingsLedgerUsed = sumActiveSavingsLedgerCredit(savingsLedgerRows);
   const isPreGateway = isPreGatewayCreditStatus(order.payment_status);
-  const preGatewayPaid = isPreGateway
-    ? Math.max(
-        order.amount_paid ?? 0,
-        (order.wallet_amount_used ?? 0) + savingsLedgerUsed,
-        walletLedgerUsed + savingsLedgerUsed,
-        0
-      )
-    : Math.min(
-        Math.max(order.wallet_amount_used ?? 0, walletLedgerUsed, 0) +
-          savingsLedgerUsed,
-        order.total
-      );
-  const payableTotal = Math.max(
-    Number((order.total - preGatewayPaid).toFixed(2)),
-    0
-  );
+  const payableTotal = computeOrderNetPayable({
+    total: order.total,
+    amountPaid: order.amount_paid,
+    walletAmountUsed: order.wallet_amount_used,
+    walletLedgerUsed: walletSummary.netCredit,
+    savingsLedgerUsed,
+    paymentStatus: order.payment_status,
+    walletReversalCompleted: walletSummary.hasCompletedReversal,
+  });
   if (isPreGateway && payableTotal <= 0) {
     throw new Error(
       'Choose another payment option for this zero-balance order.'

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  computeOrderNetPayable,
+  computeOrderPreGatewayPaid,
   isPreGatewayCreditStatus,
   sumActiveSavingsLedgerCredit,
+  summarizeWalletLedgerCredit,
   sumNetWalletLedgerCredit,
 } from './store-credit-ledger';
 
@@ -91,5 +94,49 @@ describe('sumActiveSavingsLedgerCredit', () => {
         { amount: 2500, metadata: null },
       ])
     ).toBe(7500);
+  });
+});
+
+describe('summarizeWalletLedgerCredit & computeOrderNetPayable', () => {
+  it('flags completed reversals and ignores stale order columns when reversed', () => {
+    const summary = summarizeWalletLedgerCredit([
+      {
+        amount: 20000,
+        source_type: 'order_redemption',
+        type: 'redemption',
+        status: 'completed',
+      },
+      {
+        amount: 20000,
+        source_type: 'order_reversal',
+        type: 'credit',
+        status: 'completed',
+      },
+    ]);
+    expect(summary).toEqual({ netCredit: 0, hasCompletedReversal: true });
+
+    expect(
+      computeOrderPreGatewayPaid({
+        total: 50000,
+        amountPaid: 20000,
+        walletAmountUsed: 20000,
+        walletLedgerUsed: summary.netCredit,
+        savingsLedgerUsed: 5000,
+        paymentStatus: 'unpaid',
+        walletReversalCompleted: summary.hasCompletedReversal,
+      })
+    ).toBe(5000);
+
+    expect(
+      computeOrderNetPayable({
+        total: 50000,
+        amountPaid: 20000,
+        walletAmountUsed: 20000,
+        walletLedgerUsed: summary.netCredit,
+        savingsLedgerUsed: 5000,
+        paymentStatus: 'unpaid',
+        walletReversalCompleted: summary.hasCompletedReversal,
+      })
+    ).toBe(45000);
   });
 });

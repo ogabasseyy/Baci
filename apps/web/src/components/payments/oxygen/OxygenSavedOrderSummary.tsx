@@ -4,6 +4,7 @@ import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import {
   getOxygenOrderNetPayable,
   getOxygenOrderPreGatewayPaid,
+  isOxygenPreGatewayStatus,
   type oxygenCheckoutOrderSchema,
 } from '@/schemas/oxygen-checkout-order';
 import { oxygenOrderItemImage } from './oxygen-order-item-image';
@@ -15,6 +16,8 @@ export function OxygenSavedOrderSummary({
 }) {
   const preGatewayPaid = getOxygenOrderPreGatewayPaid(order);
   const netPayable = getOxygenOrderNetPayable(order);
+  const isPreGateway = isOxygenPreGatewayStatus(order.payment_status);
+  const isPaid = (order.payment_status ?? '').trim().toLowerCase() === 'paid';
   const money = (amount: number) =>
     new Intl.NumberFormat('en-NG', {
       style: 'currency',
@@ -77,10 +80,25 @@ export function OxygenSavedOrderSummary({
             <dd>-{money(preGatewayPaid)}</dd>
           </div>
         )}
-        <div className="flex justify-between text-lg font-bold">
-          <dt>{preGatewayPaid > 0 ? 'Amount due' : 'Order total'}</dt>
-          <dd>{money(netPayable)}</dd>
-        </div>
+        {!isPreGateway && preGatewayPaid > 0 ? (
+          <>
+            <div className="flex justify-between font-semibold">
+              <dt>{isPaid ? 'Paid via Oxygen' : 'Financed principal'}</dt>
+              <dd>{money(netPayable)}</dd>
+            </div>
+            {isPaid && (
+              <div className="flex justify-between text-lg font-bold">
+                <dt>Amount due</dt>
+                <dd>{money(0)}</dd>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex justify-between text-lg font-bold">
+            <dt>{preGatewayPaid > 0 ? 'Amount due' : 'Order total'}</dt>
+            <dd>{money(netPayable)}</dd>
+          </div>
+        )}
       </dl>
     </section>
   );

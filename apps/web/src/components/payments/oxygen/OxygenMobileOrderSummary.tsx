@@ -17,6 +17,7 @@ export function OxygenMobileOrderSummary({
 }) {
   const preGatewayPaid = getOxygenOrderPreGatewayPaid(order);
   const netPayable = getOxygenOrderNetPayable(order);
+  const isPaid = (order.payment_status ?? '').trim().toLowerCase() === 'paid';
   const cart: CartItem[] = order.order_items.map((item) => ({
     id: item.id,
     cartItemId: item.id,
@@ -45,7 +46,7 @@ export function OxygenMobileOrderSummary({
       walletBalance={preGatewayPaid}
       payWithWallet={preGatewayPaid > 0}
       walletAmountUsed={preGatewayPaid}
-      remainingAmount={netPayable}
+      remainingAmount={isPaid ? 0 : netPayable}
       taxAmount={order.tax_amount}
     />
   );

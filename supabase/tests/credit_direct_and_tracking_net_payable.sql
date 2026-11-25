@@ -123,17 +123,19 @@ BEGIN
   SELECT * INTO v_tracking
   FROM public.get_order_tracking('cd-ledger-merchant', NULL, NULL, NULL, 'cd-track-partial');
   IF v_tracking.wallet_ledger_used IS DISTINCT FROM 10000
-     OR v_tracking.savings_ledger_used IS DISTINCT FROM 5000 THEN
-    RAISE EXCEPTION 'Unexpected tracking ledger credit: wallet=%, savings=%',
-      v_tracking.wallet_ledger_used, v_tracking.savings_ledger_used;
+     OR v_tracking.savings_ledger_used IS DISTINCT FROM 5000
+     OR v_tracking.wallet_reversal_completed IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'Unexpected tracking ledger credit: wallet=%, savings=%, rev=%',
+      v_tracking.wallet_ledger_used, v_tracking.savings_ledger_used, v_tracking.wallet_reversal_completed;
   END IF;
 
   SELECT * INTO v_tracking
   FROM public.get_order_tracking('cd-ledger-merchant', NULL, NULL, NULL, 'cd-track-rev');
   IF v_tracking.wallet_ledger_used IS DISTINCT FROM 0
-     OR v_tracking.savings_ledger_used IS DISTINCT FROM 0 THEN
-    RAISE EXCEPTION 'Reversed ledger rows leaked into tracking: wallet=%, savings=%',
-      v_tracking.wallet_ledger_used, v_tracking.savings_ledger_used;
+     OR v_tracking.savings_ledger_used IS DISTINCT FROM 0
+     OR v_tracking.wallet_reversal_completed IS DISTINCT FROM TRUE THEN
+    RAISE EXCEPTION 'Reversed ledger rows leaked into tracking: wallet=%, savings=%, rev=%',
+      v_tracking.wallet_ledger_used, v_tracking.savings_ledger_used, v_tracking.wallet_reversal_completed;
   END IF;
 
   -- 5. partially_paid order with stale amount_paid (wallet+savings) and completed wallet reversal

@@ -18,6 +18,7 @@ describe('buildGuestOrderResponse', () => {
         wallet_amount_used: 15000,
         wallet_ledger_used: 15000,
         savings_ledger_used: 10000,
+        wallet_reversal_completed: true,
         customer_name: 'Ada',
         customer_email: 'ada@example.com',
         customer_phone: '0801',
@@ -46,6 +47,7 @@ describe('buildGuestOrderResponse', () => {
       wallet_amount_used: 15000,
       wallet_ledger_used: 15000,
       savings_ledger_used: 10000,
+      wallet_reversal_completed: true,
     });
   });
 
@@ -77,6 +79,7 @@ describe('buildGuestOrderResponse', () => {
       wallet_amount_used: 0,
       wallet_ledger_used: 0,
       savings_ledger_used: 0,
+      wallet_reversal_completed: false,
     });
   });
 

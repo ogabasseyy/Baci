@@ -471,6 +471,7 @@ RETURNS TABLE (
   wallet_amount_used NUMERIC,
   wallet_ledger_used NUMERIC,
   savings_ledger_used NUMERIC,
+  wallet_reversal_completed BOOLEAN,
   currency TEXT,
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ,
@@ -617,6 +618,14 @@ BEGIN
       ),
       0
     ) AS savings_ledger_used,
+    EXISTS (
+      SELECT 1
+      FROM public.customer_wallet_transactions rev
+      WHERE rev.source_id = o.id
+        AND rev.merchant_id = o.merchant_id
+        AND rev.source_type = 'order_reversal'
+        AND rev.status = 'completed'
+    ) AS wallet_reversal_completed,
     o.currency,
     o.created_at,
     o.updated_at,

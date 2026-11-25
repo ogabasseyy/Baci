@@ -174,8 +174,8 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
     {
       id: orderId,
       total: 198000,
-      amount_paid: 0,
-      wallet_amount_used: 0,
+      amount_paid: 30000,
+      wallet_amount_used: 30000,
       payment_method: 'oxygen',
       payment_status: 'unpaid',
       shipping_status: 'pending',
@@ -218,8 +218,8 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
     {
       id: orderId,
       total: 198000,
-      amount_paid: 0,
-      wallet_amount_used: 0,
+      amount_paid: 30000,
+      wallet_amount_used: 30000,
       payment_method: 'oxygen',
       payment_status: 'unpaid',
       shipping_status: 'pending',
@@ -259,8 +259,8 @@ it('subtracts partial pre-gateway amount_paid on pending orders and ignores reve
     {
       id: orderId,
       total: 198000,
-      amount_paid: 0,
-      wallet_amount_used: 0,
+      amount_paid: 30000,
+      wallet_amount_used: 30000,
       payment_method: 'oxygen',
       payment_status: 'unpaid',
       shipping_status: 'pending',

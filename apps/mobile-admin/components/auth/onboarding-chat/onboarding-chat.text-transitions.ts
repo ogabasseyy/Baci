@@ -214,19 +214,18 @@ export function transitionFromTextInput(
   }
 
   if (step === 'logo_generate_offer') {
-    if (lower.includes('yes') || lower.includes('generate')) {
+    const isNegated = /\b(don't|dont|no|nope|nah|skip)\b/.test(lower);
+    if (!isNegated && (lower.includes('yes') || lower.includes('generate'))) {
       return { sideEffect: { type: 'generate_logo' } };
     }
     return skipLogoTextTransition(trimmed, data.slug);
   }
 
   if (step === 'slug') {
+    const normalizedConfirm = lower.replace(/[.!?]+$/, '').trim();
     if (
       !isCustomizingSlug &&
-      (lower === 'yes' ||
-        lower === 'looks good' ||
-        lower === 'ok' ||
-        lower === 'confirm')
+      /^(yes|looks good|ok|confirm)$/.test(normalizedConfirm)
     ) {
       return {
         nextStep: 'summary',

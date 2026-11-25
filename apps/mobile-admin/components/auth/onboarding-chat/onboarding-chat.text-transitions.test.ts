@@ -268,4 +268,36 @@ describe('transitionFromTextInput slug handling', () => {
     });
     expect(multiHyphenValid.nextStep).toBe('summary');
   });
+
+  it('skips logo generation when user types a negated reply containing "generate" at logo_generate_offer', () => {
+    for (const reply of [
+      "don't generate",
+      "no, don't generate one",
+      'nope skip generate',
+    ]) {
+      const result = transitionFromTextInput(
+        'logo_generate_offer',
+        reply,
+        BASE_DATA
+      );
+      expect(result.sideEffect).toBeUndefined();
+      expect(result.nextStep).toBe('slug');
+    }
+
+    const affirmative = transitionFromTextInput(
+      'logo_generate_offer',
+      'Yes, generate one',
+      BASE_DATA
+    );
+    expect(affirmative.sideEffect).toEqual({ type: 'generate_logo' });
+  });
+
+  it('confirms the suggested slug when the user types "Looks good!" or punctuated affirmations', () => {
+    for (const reply of ['Looks good!', 'yes!', 'ok.', 'confirm!']) {
+      const result = transitionFromTextInput('slug', reply, BASE_DATA, false);
+      expect(result.nextStep).toBe('summary');
+      expect(result.customizingSlug).toBe(false);
+      expect(result.nextData).toBeUndefined();
+    }
+  });
 });

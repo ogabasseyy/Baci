@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { logger } from '@/lib/logger';
 
-const DEFAULT_OPENAI_IMAGE_MODEL = 'gpt-image-1.5';
+const DEFAULT_OPENAI_IMAGE_MODEL = 'gpt-image-2.6-flare';
 const OPENAI_LOGO_TIMEOUT_MS = 20_000;
 
 export function getOpenAiImageModelName(): string {

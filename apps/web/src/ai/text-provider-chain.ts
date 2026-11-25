@@ -58,7 +58,7 @@ export interface TextProvider {
 }
 
 export function getOpenAiTextModelName(): string {
-  return process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-5-mini';
+  return process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-5.4-mini';
 }
 
 export function getCerebrasTextModelName(): string {

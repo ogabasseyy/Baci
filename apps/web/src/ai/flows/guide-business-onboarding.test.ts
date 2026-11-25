@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { fetchImageBytes } from '@/lib/fetch-image-bytes';
 import { isPublicHttpUrl } from '@/lib/is-public-http-url';
+import { generateOpenAiLogo } from './generate-openai-logo';
 import { guideBusinessOnboarding } from './guide-business-onboarding';
+import { runGuideBusinessOnboarding } from './guide-business-onboarding.core';
+
+vi.mock('./generate-openai-logo', () => ({
+  generateOpenAiLogo: vi.fn(async () => null),
+}));
 
 vi.mock('ai', () => ({
   generateObject: vi.fn(),
@@ -56,6 +62,7 @@ const mockGenerateObject = vi.mocked(generateObject);
 const mockEnsureActionRateLimit = vi.mocked(ensureActionRateLimit);
 const mockFetchImageBytes = vi.mocked(fetchImageBytes);
 const mockIsPublicHttpUrl = vi.mocked(isPublicHttpUrl);
+const mockGenerateOpenAiLogo = vi.mocked(generateOpenAiLogo);
 
 describe('guideBusinessOnboarding', () => {
   beforeEach(() => {
@@ -395,5 +402,61 @@ describe('guideBusinessOnboarding', () => {
         task: 'extract_colors',
       })
     ).rejects.toThrow('Failed to extract brand colors.');
+  });
+
+  it('keeps paid OpenAI disabled for the anonymous web server action even when OPENAI_API_KEY is set', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    mockGenerateOpenAiLogo.mockResolvedValue('data:image/png;base64,openai123');
+    mockGenerateText.mockResolvedValueOnce({
+      files: [{ mediaType: 'image/png', base64: 'gemini123' }],
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const logoResult = await guideBusinessOnboarding({
+      businessName: 'Baci Style',
+      businessType: 'fashion',
+      brandPreferences: 'rose and gold',
+      task: 'generate_logos',
+    });
+
+    expect(mockGenerateOpenAiLogo).not.toHaveBeenCalled();
+    expect(logoResult.logos).toEqual(['data:image/png;base64,gemini123']);
+
+    mockGenerateObject.mockResolvedValueOnce({
+      object: { businessNames: ['Glow Bar'] },
+    } as Awaited<ReturnType<typeof generateObject>>);
+
+    const nameResult = await guideBusinessOnboarding({
+      businessName: 'Starter',
+      businessType: 'health-beauty',
+      brandPreferences: 'pink',
+      description: 'clean skincare shop',
+      task: 'generate_names',
+    });
+
+    expect(nameResult.businessNames).toEqual(['Glow Bar']);
+    expect(mockGenerateObject).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'test-text-model' })
+    );
+  });
+
+  it('uses OpenAI first when allowPaidOpenAi is enabled by an authenticated caller', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    mockGenerateOpenAiLogo.mockResolvedValueOnce(
+      'data:image/png;base64,openai123'
+    );
+
+    const result = await runGuideBusinessOnboarding(
+      {
+        businessName: 'Baci Style',
+        businessType: 'fashion',
+        brandPreferences: 'rose and gold',
+        task: 'generate_logos',
+      },
+      { allowPaidOpenAi: true }
+    );
+
+    expect(mockGenerateOpenAiLogo).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(result.logos).toEqual(['data:image/png;base64,openai123']);
   });
 });

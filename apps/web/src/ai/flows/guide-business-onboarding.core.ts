@@ -6,7 +6,10 @@ import {
   sanitizePromptInput,
   withRetry,
 } from '@/ai/provider';
-import { getOnboardingTextProviderChain } from '@/ai/text-provider-chain';
+import {
+  getOnboardingTextProviderChain,
+  getTextProviderChain,
+} from '@/ai/text-provider-chain';
 import { logger } from '@/lib/logger';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
 import {
@@ -48,13 +51,24 @@ export type GuideBusinessOnboardingOutput = z.infer<
   typeof _GuideBusinessOnboardingOutputSchema
 >;
 
+export interface RunGuideBusinessOnboardingOptions {
+  /**
+   * Enables paid OpenAI-first routing (image + text). Must only be set by
+   * authenticated, Redis fail-closed rate-limited callers such as the mobile
+   * onboarding-assist route — never by the anonymous web server action.
+   */
+  allowPaidOpenAi?: boolean;
+}
+
 /**
  * Core server-side onboarding AI runner (non-Server-Action). Callers must
  * enforce their own auth and rate-limiting before invoking this function.
  */
 export async function runGuideBusinessOnboarding(
-  rawInput: GuideBusinessOnboardingInput
+  rawInput: GuideBusinessOnboardingInput,
+  options: RunGuideBusinessOnboardingOptions = {}
 ): Promise<GuideBusinessOnboardingOutput> {
+  const allowPaidOpenAi = options.allowPaidOpenAi === true;
   const parsedInput = guideBusinessOnboardingInputSchema.safeParse(rawInput);
   if (!parsedInput.success) {
     throw new Error('Invalid onboarding input provided.');
@@ -98,7 +112,9 @@ Requirements:
 
 Please generate the logo image now.`;
 
-      const openAiLogoDataUri = await generateOpenAiLogo(prompt);
+      const openAiLogoDataUri = allowPaidOpenAi
+        ? await generateOpenAiLogo(prompt)
+        : null;
       if (openAiLogoDataUri) {
         logger.info({
           message: 'Logo generated successfully with OpenAI',
@@ -170,7 +186,9 @@ Please generate the logo image now.`;
 
     try {
       const { object } = await generateObjectWithChain({
-        chain: getOnboardingTextProviderChain(),
+        chain: allowPaidOpenAi
+          ? getOnboardingTextProviderChain()
+          : getTextProviderChain(),
         overallTimeoutMs: ONBOARDING_CHAIN_TIMEOUT_MS,
         schema: z.object({
           businessNames: z

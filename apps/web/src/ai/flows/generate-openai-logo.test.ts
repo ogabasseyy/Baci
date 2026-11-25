@@ -64,7 +64,7 @@ describe('generateOpenAiLogo', () => {
     });
   });
 
-  it('defaults to gpt-image-1.5 when OPENAI_IMAGE_MODEL is unset', async () => {
+  it('defaults to gpt-image-2.6-flare when OPENAI_IMAGE_MODEL is unset', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'sk-test');
     vi.stubEnv('OPENAI_IMAGE_MODEL', '');
     mockImagesGenerate.mockResolvedValueOnce({
@@ -76,7 +76,7 @@ describe('generateOpenAiLogo', () => {
 
     expect(result).toBe('data:image/png;base64,iVBORw0KGgo=');
     expect(mockImagesGenerate).toHaveBeenCalledWith({
-      model: 'gpt-image-1.5',
+      model: 'gpt-image-2.6-flare',
       prompt: 'minimalist coffee logo',
       size: '1024x1024',
       n: 1,

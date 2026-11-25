@@ -161,7 +161,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await runGuideBusinessOnboarding(parsed.data);
+    const result = await runGuideBusinessOnboarding(parsed.data, {
+      allowPaidOpenAi: true,
+    });
     if (parsed.data.task === 'generate_logos' && result.logos) {
       const rasterLogos = result.logos.filter((uri) =>
         RASTER_DATA_URI_PATTERN.test(uri.trim())

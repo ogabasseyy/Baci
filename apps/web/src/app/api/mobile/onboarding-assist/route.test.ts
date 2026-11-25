@@ -313,6 +313,10 @@ describe('POST /api/mobile/onboarding-assist', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(mockGuideBusinessOnboarding).toHaveBeenCalledWith(
+      expect.objectContaining({ task: 'generate_names' }),
+      { allowPaidOpenAi: true }
+    );
     expect(await response.json()).toEqual({
       businessNames: ['Lagos Lace', 'Kicks Hub', 'Sole Craft'],
     });

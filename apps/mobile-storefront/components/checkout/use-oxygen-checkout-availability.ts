@@ -12,6 +12,19 @@ const unavailable =
   'Oxygen checkout is unavailable. Check your connection and try again.';
 const retryDelaysMs = [2000, 8000];
 
+async function checkGuestOxygenStorefrontAvailability(
+  apiOrigin: string,
+  merchantId: string
+): Promise<boolean> {
+  const response = await fetch(
+    `${apiOrigin}/api/payments/oxygen/storefront-availability?merchantId=${encodeURIComponent(merchantId)}`,
+    { headers: { Accept: 'application/json' } }
+  );
+  if (!response.ok) throw new Error(unavailable);
+  const body = (await response.json()) as { available?: unknown };
+  return body.available === true;
+}
+
 export function useOxygenCheckoutAvailability(items: CartItem[]) {
   const userId = useAuthStore((state) => state.user?.id);
   const customerId = useAuthStore((state) => state.customer?.id);
@@ -28,13 +41,23 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     customerUserId === userId &&
     customerMerchantId === profile?.merchantId &&
     merchantId === profile?.merchantId;
+  const isGuest = !userId;
   const hasVoucher = items.some(hasVoucherIdentifier);
+  const probeMode: 'linked' | 'guest' | null =
+    profile && !hasVoucher
+      ? linked
+        ? 'linked'
+        : isGuest && profile.environment === 'production'
+          ? 'guest'
+          : null
+      : null;
   const scope =
-    profile && linked && !hasVoucher
+    profile && probeMode
       ? JSON.stringify([
-          userId,
-          customerId,
-          merchantId,
+          probeMode,
+          userId ?? 'guest',
+          customerId ?? 'guest',
+          merchantId ?? profile.merchantId,
           profile.environment,
           profile.merchantId,
           profile.merchantSlug,
@@ -49,7 +72,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
 
   useEffect(() => {
     setReadiness(null);
-    if (!scope) return;
+    if (!scope || !profile || !probeMode) return;
     let probe = 0;
     let delayedProbe: ReturnType<typeof setTimeout> | undefined;
     let previousState: 'unknown' | 'online' | 'offline' | undefined;
@@ -57,11 +80,18 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
 
     const checkReadiness = (currentProbe: number, attempt = 0) => {
       setReadiness(null);
-      void withTimeout(
-        Promise.resolve().then(() => oxygenNativeSession().capabilities(true)),
-        8000,
-        unavailable
-      ).then(
+      const task: Promise<unknown> =
+        probeMode === 'linked'
+          ? Promise.resolve().then(() =>
+              oxygenNativeSession().capabilities(true)
+            )
+          : checkGuestOxygenStorefrontAvailability(
+              profile.apiOrigin,
+              profile.merchantId
+            ).then((available) => {
+              if (!available) throw new Error(unavailable);
+            });
+      void withTimeout(task, 8000, unavailable).then(
         () => {
           if (currentProbe === probe)
             setReadiness({ scope, reason: undefined });
@@ -111,16 +141,17 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
       clearTimeout(delayedProbe);
       unsubscribe();
     };
-  }, [scope, usesLocalNetwork]);
+  }, [probeMode, profile, scope, usesLocalNetwork]);
 
   if (!profile) return { visible: false, disabledReason: undefined };
-  const disabledReason = !linked
-    ? 'Sign in with your linked customer account'
-    : hasVoucher
-      ? 'Oxygen is unavailable for voucher carts'
-      : readiness?.scope !== scope
-        ? 'Checking Oxygen availability'
-        : readiness.reason;
+  const disabledReason =
+    !linked && !probeMode
+      ? 'Sign in with your linked customer account'
+      : hasVoucher
+        ? 'Oxygen is unavailable for voucher carts'
+        : readiness?.scope !== scope
+          ? 'Checking Oxygen availability'
+          : readiness.reason;
   return {
     visible: profile.environment === 'staging' || disabledReason === undefined,
     disabledReason,

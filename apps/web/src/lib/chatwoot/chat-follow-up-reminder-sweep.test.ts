@@ -208,3 +208,32 @@ describe('bugfix: a failed push lost the follow-up for good', () => {
     expect(mocks.release).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: a store with no registered device used up the follow-up', () => {
+  beforeEach(() => {
+    mocks.push.mockResolvedValue({
+      status: 'sent',
+      sent: 0,
+      failed: 0,
+      noDevices: true,
+    });
+  });
+
+  it('puts the reminder back and does not count it as sent', async () => {
+    await expect(summary()).resolves.toMatchObject({ sent: 0, retrying: 1 });
+    expect(mocks.release).toHaveBeenCalledWith({
+      merchantId: MERCHANT,
+      reminderId: reminder(1).reminder_id,
+    });
+  });
+
+  it('counts it as skipped once the database will not put it back', async () => {
+    mocks.release.mockResolvedValue(false);
+    await expect(summary()).resolves.toMatchObject({
+      sent: 0,
+      retrying: 0,
+      skipped: 1,
+      failed: 0,
+    });
+  });
+});

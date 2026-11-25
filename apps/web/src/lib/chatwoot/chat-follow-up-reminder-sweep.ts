@@ -14,13 +14,16 @@ export type ChatFollowUpSweepSummary = {
   due: number;
   /** A push went out (to at least one device). */
   sent: number;
-  /** Taken without a push: store muted, chat finished or follow-up changed. */
+  /**
+   * Taken without a push: store muted, chat finished, follow-up changed or
+   * still no registered device after the last take.
+   */
   skipped: number;
   /** Left for the next sweep: the chat engine could not be read. */
   waiting: number;
   /** Left for the next sweep: the time budget ran out before its turn. */
   deferred: number;
-  /** The push never left the server: put back for the next sweep. */
+  /** Nothing reached the provider (no device either): put back. */
   retrying: number;
   /** A step failed and the push is not retried (an unrecorded reminder is). */
   failed: number;
@@ -85,16 +88,21 @@ async function handleReminder(
     })
     // A throw says nothing about what left the server: never retried.
     .catch(() => ({ status: 'failed' as const, nothingSent: false }));
+  const release = () =>
+    deps.release({
+      merchantId: reminder.merchant_id,
+      reminderId: reminder.reminder_id,
+    });
+  // No device to deliver to: a phone may register before the next sweep.
+  if (push.status === 'sent' && push.noDevices) {
+    return (await release()) ? 'retrying' : 'skipped';
+  }
   if (push.status === 'sent' || push.status === 'partial') return 'sent';
   if (push.status === 'skipped' && push.reason !== 'not_configured') {
     return 'skipped';
   }
-  if (push.status === 'failed' && push.nothingSent) {
-    const released = await deps.release({
-      merchantId: reminder.merchant_id,
-      reminderId: reminder.reminder_id,
-    });
-    if (released) return 'retrying';
+  if (push.status === 'failed' && push.nothingSent && (await release())) {
+    return 'retrying';
   }
   return 'failed';
 }
@@ -104,10 +112,14 @@ async function handleReminder(
  * the chat engine, taken exactly once through the database, and pushed with
  * the same claim-based push as other chat alerts. A reminder is taken before
  * the push so it can never go out twice. A push that provably never reached
- * the provider is put back for the next sweep, and so is one whose run stopped
- * before claiming it (the database does that), three takes at most. Only a
- * push that may have left is given up. Never throws for one reminder's
- * failure: the others still go out.
+ * the provider (including a store with no registered device) is put back for
+ * the next sweep, and so is one whose run stopped before claiming it (the
+ * database does that), three takes at most. Only a push that may have left is
+ * given up. Never throws for one reminder's failure: the others still go out.
+ *
+ * Known limit: the chat is checked just before the take, not again while the
+ * push is being sent, so a Done or a cleared follow-up landing in that moment
+ * can still be followed by this one push.
  */
 export async function sweepChatFollowUpReminders(
   deps: Dependencies = defaults

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   update: vi.fn(),
   csrf: vi.fn(),
+  read: vi.fn(),
 }));
 
 vi.mock('@/lib/chatwoot/merchant-inbox-request', () => ({
@@ -13,6 +14,9 @@ vi.mock('@/lib/chatwoot/merchant-inbox-request', () => ({
   merchantInboxError: (status: number, error: string, code: string) =>
     NextResponse.json({ error, code }, { status }),
   merchantInboxJson: (body: unknown) => NextResponse.json(body),
+}));
+vi.mock('@/lib/chatwoot/merchant-inbox-client', () => ({
+  getMerchantInboxConversation: mocks.read,
 }));
 vi.mock('@/lib/chatwoot/merchant-inbox-manage-client', () => ({
   updateMerchantInboxConversation: mocks.update,
@@ -46,6 +50,10 @@ beforeEach(() => {
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.resolve.mockResolvedValue({ ok: true, binding, supabase });
   mocks.sync.mockResolvedValue('unchanged');
+  mocks.read.mockResolvedValue({
+    ok: true,
+    conversation: { id: 7, customerName: 'Ada', status: 'open' },
+  });
   mocks.update.mockResolvedValue({
     ok: true,
     conversation: {
@@ -110,6 +118,32 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       (await patch('7', { followUpAt: '2026-11-25T09:00:00Z' })).status
     ).toBe(503);
     expect(mocks.sync).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: records the reminder when the follow-up was applied but a later field failed', async () => {
+    mocks.update.mockResolvedValue({ ok: false, code: 'unavailable' });
+    const snoozed = {
+      status: 'snoozed',
+      followUp: true,
+      snoozedUntil: '2026-11-25T09:00:00.000Z',
+    };
+    mocks.read.mockResolvedValue({
+      ok: true,
+      conversation: { id: 7, customerName: 'Ada', ...snoozed },
+    });
+    const update = {
+      followUpAt: '2026-11-25T09:00:00Z',
+      priority: 'high',
+    };
+
+    expect((await patch('7', update)).status).toBe(503);
+    expect(mocks.sync).toHaveBeenCalledWith(supabase, {
+      merchantId: 'm',
+      conversationId: 7,
+      update,
+      customerName: 'Ada',
+      observed: snoozed,
+    });
   });
 
   it.each([

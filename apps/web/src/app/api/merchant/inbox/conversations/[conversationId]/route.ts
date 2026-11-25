@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { recoverAcceptedFollowUpReminder } from '@/lib/chatwoot/chat-follow-up-reminder-recover';
 import { syncChatFollowUpReminder } from '@/lib/chatwoot/chat-follow-up-reminder-sync';
 import { readMerchantInboxJsonBody } from '@/lib/chatwoot/merchant-inbox-body';
 import { updateMerchantInboxConversation } from '@/lib/chatwoot/merchant-inbox-manage-client';
@@ -70,6 +71,11 @@ export async function PATCH(
       'invalid_follow_up'
     );
   }
+  // A later write or the read-back can fail after the follow-up was accepted.
+  await recoverAcceptedFollowUpReminder(resolved.supabase, resolved.binding, {
+    conversationId: conversationId.data,
+    update: update.data,
+  });
   return merchantInboxError(
     503,
     'Messages are temporarily unavailable',

@@ -231,6 +231,7 @@ describe('sendChatEventPush', () => {
       status: 'sent',
       sent: 0,
       failed: 0,
+      noDevices: true,
     });
   });
 

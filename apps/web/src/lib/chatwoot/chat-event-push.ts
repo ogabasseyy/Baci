@@ -23,7 +23,8 @@ export type ChatEventPushInput = {
 };
 
 export type ChatEventPushResult =
-  | { status: 'sent'; sent: number; failed: number }
+  /** `noDevices`: nothing to deliver to, so nothing reached the provider. */
+  | { status: 'sent'; sent: number; failed: number; noDevices?: true }
   | { status: 'partial'; sent: number; failed: number }
   | {
       status: 'skipped';
@@ -144,6 +145,9 @@ export async function sendChatEventPush(
       return result.sent > 0
         ? { status: 'partial', sent: result.sent, failed }
         : { status: 'failed', nothingSent: !dispatched };
+    }
+    if (result.sent === 0 && !dispatched) {
+      return { status: 'sent', sent: 0, failed: 0, noDevices: true };
     }
     return { status: 'sent', sent: result.sent, failed: 0 };
   } catch {

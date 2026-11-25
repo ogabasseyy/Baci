@@ -13,11 +13,9 @@ import {
   runAiNameSuggestion,
 } from './onboarding-chat.ai-actions';
 import {
-  extractAndPersistUploadedLogoColors,
   type PickedLogoAsset,
+  persistProvisionedStoreLogo,
   pickOnboardingLogo,
-  uploadDataUriLogoBestEffort,
-  uploadPickedLogoBestEffort,
 } from './onboarding-chat.logo-upload';
 import { transitionFromTextInput } from './onboarding-chat.text-transitions';
 import {
@@ -176,26 +174,17 @@ export function useMerchantSetupChat() {
         brandColors: data.brandColors,
       });
       if (provisioned?.merchant?.id) {
-        if (
-          logoDraft?.pickedAsset &&
-          data.logoUrl === logoDraft.pickedAsset.uri
-        ) {
-          const uploadedUrl = await uploadPickedLogoBestEffort(
-            logoDraft.pickedAsset,
-            provisioned.merchant.id
-          );
-          if (uploadedUrl) {
-            await extractAndPersistUploadedLogoColors({
-              logoUrl: uploadedUrl,
-              merchantId: provisioned.merchant.id,
-              businessName: data.businessName.trim(),
-              businessType: data.businessType,
-            });
-          }
-        } else if (data.logoUrl.startsWith('data:image/')) {
-          await uploadDataUriLogoBestEffort(
-            data.logoUrl,
-            provisioned.merchant.id
+        const logoPersisted = await persistProvisionedStoreLogo({
+          merchantId: provisioned.merchant.id,
+          logoUrl: data.logoUrl,
+          pickedAsset: logoDraft?.pickedAsset ?? null,
+          businessName: data.businessName.trim(),
+          businessType: data.businessType,
+        });
+        if (!logoPersisted) {
+          Alert.alert(
+            'Store Created',
+            'Your store is ready, but we could not save your logo right now. You can add it anytime in Store Settings.'
           );
         }
       }

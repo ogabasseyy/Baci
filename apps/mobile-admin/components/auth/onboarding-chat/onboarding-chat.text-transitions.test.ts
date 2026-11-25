@@ -49,4 +49,17 @@ describe('transitionFromTextInput slug handling', () => {
     expect(result.nextStep).toBe('summary');
     expect(result.customizingSlug).toBe(false);
   });
+
+  it('does not open the image picker on ambiguous text at the logo step', () => {
+    const result = transitionFromTextInput('logo', 'maybe later', BASE_DATA);
+
+    expect(result.sideEffect).toBeUndefined();
+    expect(result.messages?.[1]?.text).toContain('Upload logo');
+  });
+
+  it('opens the image picker on explicit upload intent at the logo step', () => {
+    const result = transitionFromTextInput('logo', 'upload photo', BASE_DATA);
+
+    expect(result.sideEffect).toEqual({ type: 'upload_logo' });
+  });
 });

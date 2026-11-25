@@ -141,7 +141,20 @@ export function transitionFromTextInput(
         ),
       };
     }
-    return { sideEffect: { type: 'upload_logo' } };
+    if (
+      lower.includes('upload') ||
+      lower.includes('choose') ||
+      lower.includes('pick') ||
+      lower.includes('photo')
+    ) {
+      return { sideEffect: { type: 'upload_logo' } };
+    }
+    return {
+      messages: exchangeMessages(
+        trimmed,
+        'Tap "Upload logo" to pick an image, "I don\'t have one" to generate a starter logo, or "Skip for now".'
+      ),
+    };
   }
 
   if (step === 'logo_generate_offer') {

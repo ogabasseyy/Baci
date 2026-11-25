@@ -38,6 +38,41 @@ const AI_LOGO_RETRY_CONFIG = Object.freeze({
   backoffMultiplier: 1,
 });
 
+const ONBOARDING_CHAIN_TIMEOUT_MS = 40_000;
+const COLOR_EXTRACT_TIMEOUT_MS = 12_000;
+
+async function extractBrandColorsFromDataUriBestEffort(
+  dataUri: string,
+  businessName: string,
+  businessType: string
+): Promise<z.infer<typeof BrandColorsSchema>> {
+  const fallback = createFallbackLogo(businessName, businessType).brandColors;
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i.exec(
+    dataUri.trim()
+  );
+  if (!match) return fallback;
+
+  try {
+    const [, mediaType, base64] = match;
+    const bytes = new Uint8Array(Buffer.from(base64, 'base64'));
+    const { object } = await generateObjectWithChain({
+      chain: getVisionProviderChain(),
+      overallTimeoutMs: COLOR_EXTRACT_TIMEOUT_MS,
+      schema: BrandColorsSchema,
+      messages: [
+        { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: [{ type: 'image', image: bytes, mediaType }],
+        },
+      ],
+    });
+    return object;
+  } catch {
+    return fallback;
+  }
+}
+
 const EXTRACT_COLORS_SYSTEM_PROMPT = `You are a professional brand designer analyzing a logo image.
 TASK: Extract exactly 3 brand colors from this logo in hex format.
 INSTRUCTIONS:
@@ -98,6 +133,7 @@ export async function runGuideBusinessOnboarding(
       const { object } = imageBytes
         ? await generateObjectWithChain({
             chain: getVisionProviderChain(),
+            overallTimeoutMs: ONBOARDING_CHAIN_TIMEOUT_MS,
             schema: BrandColorsSchema,
             messages: [
               { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
@@ -169,11 +205,12 @@ Please generate the logo image now.`;
         logger.info({
           message: 'Logo generated successfully with OpenAI',
         });
-        const fallbackPalette = createFallbackLogo(
+        const brandColors = await extractBrandColorsFromDataUriBestEffort(
+          openAiLogoDataUri,
           businessName,
           businessType
-        ).brandColors;
-        return { logos: [openAiLogoDataUri], brandColors: fallbackPalette };
+        );
+        return { logos: [openAiLogoDataUri], brandColors };
       }
 
       const result = await withRetry(async () => {
@@ -194,15 +231,16 @@ Please generate the logo image now.`;
       }
 
       const logoDataUri = `data:${imageFile.mediaType};base64,${imageFile.base64}`;
-      const fallbackPalette = createFallbackLogo(
+      const brandColors = await extractBrandColorsFromDataUriBestEffort(
+        logoDataUri,
         businessName,
         businessType
-      ).brandColors;
+      );
 
       logger.info({
         message: 'Logo generated successfully with Gemini 2.5 Flash Image',
       });
-      return { logos: [logoDataUri], brandColors: fallbackPalette };
+      return { logos: [logoDataUri], brandColors };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -235,6 +273,7 @@ Please generate the logo image now.`;
     try {
       const { object } = await generateObjectWithChain({
         chain: getOnboardingTextProviderChain(),
+        overallTimeoutMs: ONBOARDING_CHAIN_TIMEOUT_MS,
         schema: z.object({
           businessNames: z
             .array(z.string())

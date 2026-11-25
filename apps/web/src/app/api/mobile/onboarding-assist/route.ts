@@ -7,9 +7,16 @@ import { getMobileBearerUser } from '../merchant-provisioning/get-mobile-bearer-
 
 export const maxDuration = 60;
 
-const MOBILE_ONBOARDING_ASSIST_LIMIT = {
+const MOBILE_ONBOARDING_TEXT_LIMIT = {
   maxRequests: 12,
   windowMs: 10 * 60 * 1000,
+  failClosedWithoutRedis: true,
+};
+
+const MOBILE_ONBOARDING_LOGO_LIMIT = {
+  maxRequests: 5,
+  windowMs: 10 * 60 * 1000,
+  failClosedWithoutRedis: true,
 };
 
 export async function POST(request: NextRequest) {
@@ -18,22 +25,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Authentication required.', code: 'unauthorized' },
       { status: 401 }
-    );
-  }
-
-  const rateLimit = await applyRateLimit(
-    `user:${auth.user.id}`,
-    '/api/mobile/onboarding-assist',
-    MOBILE_ONBOARDING_ASSIST_LIMIT
-  );
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      {
-        error:
-          'Too many AI onboarding requests. Please try again in a few minutes.',
-        code: 'rate_limited',
-      },
-      { status: 429 }
     );
   }
 
@@ -55,6 +46,25 @@ export async function POST(request: NextRequest) {
         code: 'invalid_input',
       },
       { status: 400 }
+    );
+  }
+
+  const isLogoTask = parsed.data.task === 'generate_logos';
+  const rateLimit = await applyRateLimit(
+    `user:${auth.user.id}`,
+    isLogoTask
+      ? '/api/mobile/onboarding-assist:logos'
+      : '/api/mobile/onboarding-assist',
+    isLogoTask ? MOBILE_ONBOARDING_LOGO_LIMIT : MOBILE_ONBOARDING_TEXT_LIMIT
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          'Too many AI onboarding requests. Please try again in a few minutes.',
+        code: 'rate_limited',
+      },
+      { status: 429 }
     );
   }
 

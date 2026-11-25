@@ -208,3 +208,33 @@ export async function extractAndPersistUploadedLogoColors(params: {
     // Non-blocking color extraction.
   }
 }
+
+export async function persistProvisionedStoreLogo(params: {
+  merchantId: string;
+  logoUrl: string;
+  pickedAsset: PickedLogoAsset | null;
+  businessName: string;
+  businessType: string;
+}): Promise<boolean> {
+  const { merchantId, logoUrl, pickedAsset, businessName, businessType } =
+    params;
+  if (pickedAsset && logoUrl === pickedAsset.uri) {
+    const uploadedUrl = await uploadPickedLogoBestEffort(
+      pickedAsset,
+      merchantId
+    );
+    if (!uploadedUrl) return false;
+    await extractAndPersistUploadedLogoColors({
+      logoUrl: uploadedUrl,
+      merchantId,
+      businessName,
+      businessType,
+    });
+    return true;
+  }
+  if (logoUrl.startsWith('data:image/')) {
+    const persistedUrl = await uploadDataUriLogoBestEffort(logoUrl, merchantId);
+    return Boolean(persistedUrl);
+  }
+  return true;
+}

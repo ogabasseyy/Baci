@@ -23,6 +23,26 @@ interface RegisterChatData {
   password: string;
 }
 
+const REGISTER_QUICK_REPLIES: Record<RegisterChatStep, QuickReplyOption[]> = {
+  full_name: [
+    {
+      id: 'sign_in',
+      label: 'Already have an account? Sign in',
+      variant: 'secondary',
+    },
+  ],
+  email: [
+    { id: 'edit_name', label: 'Change name', variant: 'secondary' },
+    { id: 'sign_in', label: 'Sign in instead' },
+  ],
+  password: [{ id: 'edit_email', label: 'Change email', variant: 'secondary' }],
+  confirm_password: [
+    { id: 'edit_password', label: 'Change password', variant: 'secondary' },
+    { id: 'edit_email', label: 'Change email' },
+    { id: 'edit_name', label: 'Change name' },
+  ],
+};
+
 function normalizePersonName(value: string): string {
   const collapsed = value.trim().replace(/\s+/g, ' ');
   if (!collapsed) return '';
@@ -261,37 +281,13 @@ export function useRegisterChat() {
     }
   };
 
-  const quickReplies: QuickReplyOption[] =
-    step === 'full_name'
-      ? [
-          {
-            id: 'sign_in',
-            label: 'Already have an account? Sign in',
-            variant: 'secondary',
-          },
-        ]
-      : step === 'email'
-        ? [
-            { id: 'edit_name', label: 'Change name', variant: 'secondary' },
-            { id: 'sign_in', label: 'Sign in instead' },
-          ]
-        : step === 'password'
-          ? [{ id: 'edit_email', label: 'Change email', variant: 'secondary' }]
-          : [
-              {
-                id: 'edit_password',
-                label: 'Change password',
-                variant: 'secondary',
-              },
-            ];
-
   return {
     handleQuickReply,
     handleSendText,
     inputText,
     isSubmitting,
     messages,
-    quickReplies,
+    quickReplies: REGISTER_QUICK_REPLIES[step],
     setInputText,
     showPassword,
     step,

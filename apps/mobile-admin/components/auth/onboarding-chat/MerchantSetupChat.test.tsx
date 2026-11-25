@@ -6,8 +6,7 @@ const mocks = vi.hoisted(() => ({
   signOut: vi.fn(async () => undefined),
   provisionMutateAsync: vi.fn(),
   assistMutateAsync: vi.fn(),
-  uploadDataUriLogoBestEffort: vi.fn(async () => undefined),
-  uploadPickedLogoBestEffort: vi.fn(async () => undefined),
+  persistProvisionedStoreLogo: vi.fn(async () => true),
   user: {
     id: 'user-1',
     email: 'ada@example.com',
@@ -118,14 +117,12 @@ vi.mock('@/components/ui/virtualized-list-props', () => ({
   getVirtualizedListProps: () => ({}),
 }));
 vi.mock('./onboarding-chat.logo-upload', () => ({
-  extractAndPersistUploadedLogoColors: vi.fn(async () => undefined),
+  persistProvisionedStoreLogo: mocks.persistProvisionedStoreLogo,
   pickOnboardingLogo: vi.fn(async () => ({
     uri: 'file:///tmp/uploaded-logo.png',
     fileName: 'uploaded-logo.png',
     mimeType: 'image/png',
   })),
-  uploadDataUriLogoBestEffort: mocks.uploadDataUriLogoBestEffort,
-  uploadPickedLogoBestEffort: mocks.uploadPickedLogoBestEffort,
 }));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -280,9 +277,11 @@ describe('MerchantSetupChat', () => {
           },
         })
       );
-      expect(mocks.uploadDataUriLogoBestEffort).toHaveBeenCalledWith(
-        'data:image/png;base64,iVBORw0KGgo=',
-        'm-1'
+      expect(mocks.persistProvisionedStoreLogo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: 'm-1',
+          logoUrl: 'data:image/png;base64,iVBORw0KGgo=',
+        })
       );
     });
   });

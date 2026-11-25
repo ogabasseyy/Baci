@@ -157,3 +157,65 @@ describe('MessagesScreen automatic paging', () => {
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
   });
 });
+
+/** Five pages in, the most the screen loads by itself, with more behind. */
+const capped = () => {
+  const query = withMorePages(false);
+  return {
+    ...query,
+    data: {
+      pages: [1, 2, 3, 4, 5].map((page) => ({
+        ...query.data.pages[0],
+        conversations: page === 1 ? query.data.pages[0].conversations : [],
+        page,
+      })),
+    },
+  };
+};
+
+const press = (name: string) =>
+  fireEvent.click(screen.getByRole('button', { name }));
+
+describe('MessagesScreen paging past the automatic pages', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search.mockReturnValue(idleSearch(vi.fn(), vi.fn()));
+    mocks.query.mockReturnValue(capped());
+  });
+
+  it('bugfix: a short list reporting its end by itself loads nothing more', () => {
+    // FlashList checks for the end after every render, without any scrolling.
+    render(<MessagesScreen />);
+
+    press('List end reached (test)');
+
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it('loads one more page for each scroll to the end', () => {
+    render(<MessagesScreen />);
+
+    press('List dragged (test)');
+    press('List end reached (test)');
+    press('List end reached (test)');
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers older chats on request when the list cannot be scrolled', () => {
+    render(<MessagesScreen />);
+
+    press('Look further back');
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('bugfix: opens a chat on the first tap while the search keyboard is up', () => {
+    render(<MessagesScreen />);
+
+    expect(screen.getByTestId('flash-list')).toHaveAttribute(
+      'data-keyboard-taps',
+      'handled'
+    );
+  });
+});

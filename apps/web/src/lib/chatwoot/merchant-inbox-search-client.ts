@@ -5,9 +5,9 @@ import {
   INBOX_SEARCH_MAX_PAGE,
   INBOX_SNIPPET_MAX_LENGTH,
 } from '@/schemas/merchant-inbox-manage';
+import { readMerchantInboxConversationsById } from './merchant-inbox-by-id-client';
 import {
   failure,
-  getMerchantInboxConversation,
   type MerchantInboxFailure,
   providerGet,
 } from './merchant-inbox-client';
@@ -23,13 +23,12 @@ export type MerchantInboxSearchResult = {
 /**
  * Chatwoot's search pages are fixed: 25 rows for message text and 15 for
  * contacts (v4.19.1), so a page never has more than 40 matches. Each source is
- * read only up to its own page size: every match of a page is read in full (a
- * few at a time) and none is lost when the app moves to the next provider page,
- * while an unexpectedly large answer can never fan out into more than 40 reads.
+ * read only up to its own page size: every match of a page is read in full and
+ * none is lost when the app moves to the next provider page, while an
+ * unexpectedly large answer can never ask the engine for more than 40 chats.
  */
 const MESSAGE_SEARCH_PAGE_SIZE = 25;
 const CONTACT_SEARCH_PAGE_SIZE = 15;
-const HYDRATE_CONCURRENCY = 5;
 const INCOMING = 0;
 
 type Hit = { id: number; snippet: string | null };
@@ -46,8 +45,8 @@ const positiveId = (value: unknown): number | null =>
 /**
  * The chat engine has two searches and neither returns the list's shape: rows
  * carry a nested `inbox.id` and `contact.name` and no status. They only name
- * the matching conversations; each is then read in full (which also proves it
- * belongs to the bound inbox) before it is shown.
+ * the matching conversations; they are then read in full, together (which also
+ * proves each belongs to the bound inbox), before they are shown.
  */
 function rowInbox(row: Record<string, unknown>): number | null {
   return isRecord(row.inbox) ? positiveId(row.inbox.id) : null;
@@ -131,41 +130,12 @@ async function searchByMessage(
 }
 
 /**
- * Reads every match in full. A chat that is gone or belongs to another inbox
- * (`not_found`) is simply left out; a read that failed for any other reason is
- * reported, because dropping it would show a page that silently lacks a match
- * and paging forward never goes back for it.
- */
-async function readInChunks(
-  binding: MerchantInboxBinding,
-  hits: Hit[]
-): Promise<{ results: MerchantInboxSearchResult[]; unavailable: boolean }> {
-  const results: MerchantInboxSearchResult[] = [];
-  for (let start = 0; start < hits.length; start += HYDRATE_CONCURRENCY) {
-    const chunk = hits.slice(start, start + HYDRATE_CONCURRENCY);
-    const owned = await Promise.all(
-      chunk.map((hit) => getMerchantInboxConversation(binding, hit.id))
-    );
-    if (owned.some((read) => !read.ok && read.code === 'unavailable')) {
-      return { results, unavailable: true };
-    }
-    owned.forEach((read, index) => {
-      if (read.ok) {
-        results.push({
-          conversation: read.conversation,
-          snippet: chunk[index].snippet,
-        });
-      }
-    });
-  }
-  return { results, unavailable: false };
-}
-
-/**
  * Searches the bound inbox by shopper name, contact, order or chat number and
  * by what the shopper wrote. Either search may fail alone; both failing is an
  * error. Rows from other inboxes are dropped before anything is read, and
  * every match is read through the inbox-ownership check before it is returned.
+ * A search is two rounds with the engine however many chats match: the two
+ * searches side by side, then one filtered read of the matches.
  */
 export async function searchMerchantInboxConversations(
   binding: MerchantInboxBinding,
@@ -191,11 +161,19 @@ export async function searchMerchantInboxConversations(
   }
 
   const hits = [...merged.values()];
-  const { results, unavailable } = await readInChunks(binding, hits);
-  // A read failed: the engine is unwell, and the same page can be asked for
-  // again. Chats that are gone or belong to another inbox are not a failure:
-  // a page made only of those is an empty page, so paging can move past it.
-  if (unavailable) return { ok: false, code: 'unavailable' };
+  const read = await readMerchantInboxConversationsById(
+    binding,
+    hits.map((hit) => hit.id)
+  );
+  // The read failed: the engine is unwell, and the same page can be asked for
+  // again (showing it without some matches would lose them, as paging forward
+  // never goes back). Chats that are gone or belong to another inbox are not a
+  // failure: a page made only of those is an empty page.
+  if (!read.ok) return read;
+  const results: MerchantInboxSearchResult[] = hits.flatMap((hit) => {
+    const conversation = read.conversations.get(hit.id);
+    return conversation ? [{ conversation, snippet: hit.snippet }] : [];
+  });
   results.sort(
     (a, b) =>
       (b.conversation.lastActivityAt

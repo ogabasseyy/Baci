@@ -53,6 +53,10 @@ const tagKey = canonicalTag;
  * The merchant tags among a conversation's labels, without the prefix. Always
  * fits the response contract: labels with no usable letters or numbers, or
  * longer than a tag can be, are skipped, and only the first ten are kept.
+ *
+ * A tag is returned as stored, on purpose: one made outside the app keeps its
+ * own spelling on screen (not re-slugged), while adding and removing match it
+ * by the canonical spelling.
  */
 export function tagsFromLabels(labels: readonly string[]): string[] {
   const tags: string[] = [];

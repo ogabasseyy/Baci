@@ -48,6 +48,10 @@ describe('merchantInboxUpdateSchema', () => {
     ['a follow-up that is not an ISO time', { followUpAt: '2026-11-23' }],
     ['a follow-up that is not text', { followUpAt: 12345 }],
     [
+      'a follow-up with a timezone offset instead of UTC',
+      { followUpAt: '2026-11-23T09:00:00+01:00' },
+    ],
+    [
       'a reopen combined with a follow-up time (one would be ignored)',
       { status: 'open', followUpAt: '2026-11-23T08:00:00.000Z' },
     ],

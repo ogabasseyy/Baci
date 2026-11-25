@@ -33,6 +33,7 @@ export async function handleGetAsset(
     const headers = new Headers({
       'content-type':
         head.httpMetadata?.contentType ?? 'application/octet-stream',
+      'content-length': String(head.size),
       'cache-control': IMMUTABLE_CACHE_CONTROL,
       'x-content-type-options': 'nosniff',
     });
@@ -53,6 +54,7 @@ export async function handleGetAsset(
   const headers = new Headers({
     'content-type':
       object.httpMetadata?.contentType ?? 'application/octet-stream',
+    'content-length': String(object.size),
     'cache-control': IMMUTABLE_CACHE_CONTROL,
     'x-content-type-options': 'nosniff',
   });

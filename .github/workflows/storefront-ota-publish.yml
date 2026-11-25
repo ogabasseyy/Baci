@@ -136,6 +136,8 @@ jobs:
           cp .github/scripts/storefront-ota-sha256.mjs "$RUNNER_TEMP/"
           cp .github/scripts/verify-storefront-self-hosted-ota-export.mjs "$RUNNER_TEMP/"
           cp .github/scripts/verify-storefront-self-hosted-ota-export.test.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/smoke-check-ota-manifest.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/smoke-check-ota-manifest.test.mjs "$RUNNER_TEMP/"
           cp apps/ota-server/scripts/publish-ota.mjs "$RUNNER_TEMP/"
           git checkout --detach "$SOURCE_SHA"
 
@@ -267,7 +269,7 @@ jobs:
             "$SOURCE_SHA" \
             "$OTA_MANIFEST_URL"
 
-      - name: Publish OTA update to ota.usebaci.com
+      - name: Publish OTA update to ota.usebaci.com and smoke-check manifest
         if: inputs.action == 'publish'
         env:
           OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}
@@ -276,17 +278,23 @@ jobs:
           RUNTIME_VERSION: ${{ inputs.runtime_version }}
           CHANNEL: ${{ inputs.channel }}
           SOURCE_SHA: ${{ inputs.source_sha }}
+          OTA_SIGNING_KEY_ID: ${{ vars.OTA_SIGNING_KEY_ID }}
         run: |
           set -euo pipefail
-          node "$RUNNER_TEMP/publish-ota.mjs" \
-            --dist "$RUNNER_TEMP/storefront-ota/dist" \
-            --config "$RUNNER_TEMP/storefront-ota/expo-config.json" \
-            --platform "$PLATFORM" \
-            --runtime "$RUNTIME_VERSION" \
-            --channel "$CHANNEL" \
-            --source-sha "$SOURCE_SHA"
+          node --test "$RUNNER_TEMP/smoke-check-ota-manifest.test.mjs"
+          result_json="$(
+            node "$RUNNER_TEMP/publish-ota.mjs" \
+              --dist "$RUNNER_TEMP/storefront-ota/dist" \
+              --config "$RUNNER_TEMP/storefront-ota/expo-config.json" \
+              --platform "$PLATFORM" \
+              --runtime "$RUNTIME_VERSION" \
+              --channel "$CHANNEL" \
+              --source-sha "$SOURCE_SHA"
+          )"
+          echo "$result_json"
+          OTA_OPERATION_RESULT="$result_json" node "$RUNNER_TEMP/smoke-check-ota-manifest.mjs"
 
-      - name: Rollback OTA update on ota.usebaci.com
+      - name: Rollback OTA update on ota.usebaci.com and smoke-check manifest
         if: inputs.action == 'rollback'
         env:
           OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}
@@ -296,8 +304,10 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
           ROLLBACK_UPDATE_ID: ${{ inputs.rollback_update_id }}
           ROLLBACK_TO_EMBEDDED: ${{ inputs.rollback_to_embedded }}
+          OTA_SIGNING_KEY_ID: ${{ vars.OTA_SIGNING_KEY_ID }}
         run: |
           set -euo pipefail
+          node --test .github/scripts/smoke-check-ota-manifest.test.mjs
           args=(
             --rollback
             --platform "$PLATFORM"
@@ -310,4 +320,6 @@ jobs:
           elif [[ -n "$ROLLBACK_UPDATE_ID" ]]; then
             args+=(--update-id "$ROLLBACK_UPDATE_ID")
           fi
-          node apps/ota-server/scripts/publish-ota.mjs "${args[@]}"
+          result_json="$(node apps/ota-server/scripts/publish-ota.mjs "${args[@]}")"
+          echo "$result_json"
+          OTA_OPERATION_RESULT="$result_json" node .github/scripts/smoke-check-ota-manifest.mjs

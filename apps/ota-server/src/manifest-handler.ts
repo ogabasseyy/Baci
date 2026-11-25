@@ -11,6 +11,8 @@ import type {
 } from './types';
 import {
   errorResponse,
+  parseStoredPointer,
+  parseStoredRelease,
   ValidationError,
   validateChannelName,
   validatePlatform,
@@ -34,8 +36,12 @@ function resolveAssetForManifest(
 
 function signBodyOrError(
   body: string,
-  env: OtaWorkerEnv
+  env: OtaWorkerEnv,
+  shouldSign: boolean
 ): { signature?: string; error?: Response } {
+  if (!shouldSign) {
+    return {};
+  }
   const privateKey = env.OTA_SIGNING_PRIVATE_KEY?.trim();
   if (!privateKey) {
     return {};
@@ -52,10 +58,11 @@ function signBodyOrError(
 
 function directiveResponse(
   directive: ExpoDirective,
-  env: OtaWorkerEnv
+  env: OtaWorkerEnv,
+  shouldSign: boolean
 ): Response {
   const body = JSON.stringify(directive);
-  const { signature, error } = signBodyOrError(body, env);
+  const { signature, error } = signBodyOrError(body, env, shouldSign);
   if (error) {
     return error;
   }
@@ -175,10 +182,23 @@ export async function handleGetManifest(
   const currentPointerKey = `channels/${channel}/${platform}/${runtimeVersion}/current.json`;
   const pointerObject = await env.OTA_BUCKET.get(currentPointerKey);
   if (!pointerObject) {
-    return directiveResponse({ type: 'noUpdateAvailable' }, env);
+    return directiveResponse(
+      { type: 'noUpdateAvailable' },
+      env,
+      expectSig.expected
+    );
   }
 
-  const current = await pointerObject.json<ChannelCurrentState>();
+  let current: ChannelCurrentState | null = null;
+  try {
+    current = parseStoredPointer(await pointerObject.json<unknown>());
+  } catch {
+    return errorResponse('Corrupt release pointer in storage', 500);
+  }
+  if (!current) {
+    return errorResponse('Corrupt release pointer in storage', 500);
+  }
+
   const currentUpdateId = request.headers
     .get('expo-current-update-id')
     ?.trim()
@@ -190,19 +210,28 @@ export async function handleGetManifest(
 
   if (current.mode === 'rollback_to_embedded') {
     if (!embeddedUpdateId || currentUpdateId === embeddedUpdateId) {
-      return directiveResponse({ type: 'noUpdateAvailable' }, env);
+      return directiveResponse(
+        { type: 'noUpdateAvailable' },
+        env,
+        expectSig.expected
+      );
     }
     return directiveResponse(
       {
         type: 'rollBackToEmbedded',
         parameters: { commitTime: current.commitTime },
       },
-      env
+      env,
+      expectSig.expected
     );
   }
 
   if (currentUpdateId && currentUpdateId === current.updateId.toLowerCase()) {
-    return directiveResponse({ type: 'noUpdateAvailable' }, env);
+    return directiveResponse(
+      { type: 'noUpdateAvailable' },
+      env,
+      expectSig.expected
+    );
   }
 
   const releaseKey = `releases/${channel}/${platform}/${runtimeVersion}/${current.updateId}.json`;
@@ -214,7 +243,16 @@ export async function handleGetManifest(
     );
   }
 
-  const release = await releaseObject.json<StoredReleaseRecord>();
+  let release: StoredReleaseRecord | null = null;
+  try {
+    release = parseStoredRelease(await releaseObject.json<unknown>());
+  } catch {
+    return errorResponse('Corrupt release manifest in storage', 500);
+  }
+  if (!release) {
+    return errorResponse('Corrupt release manifest in storage', 500);
+  }
+
   const manifest: ExpoUpdateManifest = {
     id: release.id,
     createdAt: release.createdAt,
@@ -228,7 +266,11 @@ export async function handleGetManifest(
   };
 
   const manifestJson = JSON.stringify(manifest);
-  const { signature, error } = signBodyOrError(manifestJson, env);
+  const { signature, error } = signBodyOrError(
+    manifestJson,
+    env,
+    expectSig.expected
+  );
   if (error) {
     return error;
   }

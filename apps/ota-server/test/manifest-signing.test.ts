@@ -115,6 +115,22 @@ describe('GET /api/manifest RSA-SHA256 code signing', () => {
     );
     expect(boolFalseSig.status).toBe(200);
 
+    // Configured key + sig=?0 must NOT sign or include expo-signature.
+    const boolFalseWithConfiguredKey = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          'expo-expect-signature': 'sig=?0, keyid="baci-2026"',
+        }),
+      }),
+      env
+    );
+    expect(boolFalseWithConfiguredKey.status).toBe(200);
+    const unsignedParts = parseMultipartMixed(
+      boolFalseWithConfiguredKey.headers.get('content-type'),
+      await boolFalseWithConfiguredKey.text()
+    );
+    expect(unsignedParts[0]?.headers['expo-signature']).toBeUndefined();
+
     for (const malformedHeader of [
       'keyid="baci-2026", alg="rsa-v1_5-sha256"',
       'sig="yes", keyid="baci-2026"',
@@ -171,10 +187,12 @@ describe('GET /api/manifest RSA-SHA256 code signing', () => {
       OTA_SIGNING_KEY_ID: 'baci-2026',
     };
 
-    // Directive path (no active release)
+    // Directive path (no active release, signature expected)
     const directiveResp = await worker.fetch(
       new Request('https://ota.usebaci.com/api/manifest', {
-        headers: createBaseHeaders(),
+        headers: createBaseHeaders({
+          'expo-expect-signature': 'sig, keyid="baci-2026"',
+        }),
       }),
       malformedEnv
     );
@@ -214,7 +232,9 @@ describe('GET /api/manifest RSA-SHA256 code signing', () => {
 
     const manifestResp = await worker.fetch(
       new Request('https://ota.usebaci.com/api/manifest', {
-        headers: createBaseHeaders(),
+        headers: createBaseHeaders({
+          'expo-expect-signature': 'sig, keyid="baci-2026"',
+        }),
       }),
       malformedEnv
     );

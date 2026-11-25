@@ -308,4 +308,54 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
     );
     expect(mixedAcceptResp.status).toBe(200);
   });
+
+  it('returns controlled 500 JSON when R2 pointer or release JSON is malformed or invalid shape', async () => {
+    const bucket = new MockR2Bucket();
+    const env: OtaWorkerEnv = { OTA_BUCKET: bucket };
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+    const releaseKey = `releases/production/ios/${RUNTIME}/${UPDATE_ID}.json`;
+
+    await bucket.put(pointerKey, 'not-json{');
+    const corruptPtr = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(corruptPtr.status).toBe(500);
+    expect(await corruptPtr.json()).toMatchObject({
+      error: expect.stringMatching(/pointer/i),
+    });
+
+    await bucket.put(pointerKey, JSON.stringify({ mode: 'update' }));
+    const badShapePtr = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(badShapePtr.status).toBe(500);
+
+    await seedRelease(bucket);
+    await bucket.put(releaseKey, '{broken-release-json');
+    const corruptRel = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(corruptRel.status).toBe(500);
+    expect(await corruptRel.json()).toMatchObject({
+      error: expect.stringMatching(/manifest/i),
+    });
+
+    await bucket.put(releaseKey, JSON.stringify({ id: UPDATE_ID }));
+    const badShapeRel = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(badShapeRel.status).toBe(500);
+  });
 });

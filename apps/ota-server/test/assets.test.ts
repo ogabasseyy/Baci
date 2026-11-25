@@ -26,6 +26,7 @@ describe('GET /api/assets/*', () => {
     );
     expect(getResp.status).toBe(200);
     expect(getResp.headers.get('content-type')).toBe('image/png');
+    expect(getResp.headers.get('content-length')).toBe('4');
     expect(getResp.headers.get('cache-control')).toBe(
       'public, max-age=31536000, immutable'
     );
@@ -42,6 +43,7 @@ describe('GET /api/assets/*', () => {
       env
     );
     expect(headResp.status).toBe(200);
+    expect(headResp.headers.get('content-length')).toBe('4');
     expect(headResp.headers.get('cache-control')).toBe(
       'public, max-age=31536000, immutable'
     );

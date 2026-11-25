@@ -107,6 +107,7 @@ export function getQuickRepliesForStep(params: {
   suggestedNames: string[];
   logoPreviewSource: 'uploaded' | 'generated' | null;
   isCustomizingSlug: boolean;
+  hasRejectedSlug?: boolean;
   isProvisioning: boolean;
 }): QuickReplyOption[] {
   const {
@@ -114,6 +115,7 @@ export function getQuickRepliesForStep(params: {
     suggestedNames,
     logoPreviewSource,
     isCustomizingSlug,
+    hasRejectedSlug = false,
     isProvisioning,
   } = params;
 
@@ -200,13 +202,15 @@ export function getQuickRepliesForStep(params: {
       ];
     case 'slug':
       if (isCustomizingSlug) {
-        return [
-          {
-            id: 'slug:confirm',
-            label: 'Use suggested link',
-            variant: 'secondary',
-          },
-        ];
+        return hasRejectedSlug
+          ? []
+          : [
+              {
+                id: 'slug:confirm',
+                label: 'Use suggested link',
+                variant: 'secondary',
+              },
+            ];
       }
       return [
         { id: 'slug:confirm', label: 'Looks good!', variant: 'accent' },

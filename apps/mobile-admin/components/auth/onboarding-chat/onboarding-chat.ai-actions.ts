@@ -77,10 +77,10 @@ export async function runAiLogoGeneration(
     const result = await mutateAsync({
       task: 'generate_logos',
       businessName: data.businessName,
-      businessType: getBusinessTypeLabel(
-        data.businessType,
-        data.otherBusinessType
-      ),
+      businessType:
+        data.businessType === 'other' && data.otherBusinessType.trim()
+          ? data.otherBusinessType.trim()
+          : data.businessType,
       brandPreferences: 'Modern minimalist',
     });
     const logoUri = result.logos?.[0] ?? null;

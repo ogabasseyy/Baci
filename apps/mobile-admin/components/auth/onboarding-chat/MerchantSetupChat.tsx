@@ -30,6 +30,7 @@ export function MerchantSetupChat() {
     handleQuickReply,
     handleSelectCountry,
     handleSendText,
+    hasRejectedSlug,
     inputText,
     isBusy,
     isCountryModalOpen,
@@ -60,6 +61,7 @@ export function MerchantSetupChat() {
     suggestedNames,
     logoPreviewSource,
     isCustomizingSlug,
+    hasRejectedSlug,
     isProvisioning,
   });
   const canSend = inputText.trim().length > 0 && !isBusy;

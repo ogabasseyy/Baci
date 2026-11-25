@@ -58,6 +58,7 @@ export function useMerchantSetupChat() {
   const [logoDraft, setLogoDraft] = useState<LogoDraft | null>(null);
   const [isCountryModalOpen, setIsCountryModalOpen] = useState(false);
   const [isCustomizingSlug, setIsCustomizingSlug] = useState(false);
+  const [rejectedSlug, setRejectedSlug] = useState<string | null>(null);
 
   const messageCounterRef = useRef(1);
   const hydratedUserId = useRef<string | null>(user?.id ?? null);
@@ -202,6 +203,7 @@ export function useMerchantSetupChat() {
     } catch (error) {
       const provisioningError = getMerchantProvisioningError(error);
       if (provisioningError.code === 'slug_unavailable') {
+        setRejectedSlug(data.slug);
         setIsCustomizingSlug(true);
         setStep('slug');
         appendMessages({
@@ -278,6 +280,7 @@ export function useMerchantSetupChat() {
         transitionFromTextInput(step, text, data, isCustomizingSlug)
       );
     },
+    hasRejectedSlug: Boolean(rejectedSlug && rejectedSlug === data.slug),
     inputText,
     isBusy,
     isCountryModalOpen,

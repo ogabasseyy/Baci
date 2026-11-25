@@ -6,14 +6,32 @@ afterEach(() => {
 });
 
 describe('getTextProviderChain', () => {
-  it('places OpenAI first ahead of Cerebras when OPENAI_API_KEY is configured', async () => {
+  it('keeps the platform-wide chain unchanged when OPENAI_API_KEY is configured', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'sk-test');
     vi.stubEnv('CEREBRAS_API_KEY', 'csk-test');
     vi.stubEnv('GROQ_API_KEY', 'gsk-test');
     vi.stubEnv('OPENROUTER_API_KEY', '');
 
     const { getTextProviderChain } = await import('./text-provider-chain');
-    const chain = getTextProviderChain();
+
+    expect(getTextProviderChain().map((provider) => provider.name)).toEqual([
+      'cerebras:gemma-4-31b',
+      'groq:openai/gpt-oss-120b',
+      'google:gemini-2.5-flash',
+      'google:gemini-2.5-flash-lite',
+    ]);
+  });
+
+  it('places OpenAI first in getOnboardingTextProviderChain when OPENAI_API_KEY is configured', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    vi.stubEnv('CEREBRAS_API_KEY', 'csk-test');
+    vi.stubEnv('GROQ_API_KEY', 'gsk-test');
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+
+    const { getOnboardingTextProviderChain } = await import(
+      './text-provider-chain'
+    );
+    const chain = getOnboardingTextProviderChain();
 
     expect(chain.map((provider) => provider.name)).toEqual([
       'openai:gpt-4.1-mini',
@@ -25,16 +43,18 @@ describe('getTextProviderChain', () => {
     expect(chain[0].vision).toBe(true);
   });
 
-  it('honors OPENAI_TEXT_MODEL to override the OpenAI model name', async () => {
+  it('honors OPENAI_TEXT_MODEL to override the onboarding OpenAI model name', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'sk-test');
     vi.stubEnv('OPENAI_TEXT_MODEL', 'gpt-4o-mini');
     vi.stubEnv('CEREBRAS_API_KEY', '');
     vi.stubEnv('GROQ_API_KEY', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');
 
-    const { getTextProviderChain } = await import('./text-provider-chain');
+    const { getOnboardingTextProviderChain } = await import(
+      './text-provider-chain'
+    );
 
-    expect(getTextProviderChain()[0].name).toBe('openai:gpt-4o-mini');
+    expect(getOnboardingTextProviderChain()[0].name).toBe('openai:gpt-4o-mini');
   });
 
   it('orders Cerebras → Groq → Gemini → Gemini-Lite → OpenRouter when all provider keys are set', async () => {

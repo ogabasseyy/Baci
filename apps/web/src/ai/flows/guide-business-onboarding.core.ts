@@ -7,6 +7,7 @@ import {
   sanitizePromptInput,
   withRetry,
 } from '@/ai/provider';
+import { getOnboardingTextProviderChain } from '@/ai/text-provider-chain';
 import { getVisionProviderChain } from '@/ai/vision-provider-chain';
 import { fetchImageBytes } from '@/lib/fetch-image-bytes';
 import { logger } from '@/lib/logger';
@@ -233,6 +234,7 @@ Please generate the logo image now.`;
 
     try {
       const { object } = await generateObjectWithChain({
+        chain: getOnboardingTextProviderChain(),
         schema: z.object({
           businessNames: z
             .array(z.string())

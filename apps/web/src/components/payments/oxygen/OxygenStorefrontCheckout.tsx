@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server';
 import {
   getOxygenOrderNetPayable,
   oxygenCheckoutOrderSchema,
+  sumPositiveLedgerAmounts,
 } from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
 import { OxygenApplicationDialog } from './OxygenApplicationDialog';
@@ -75,12 +76,37 @@ export async function OxygenStorefrontCheckout({
     !parsed.success
   )
     notFound();
-  const order = parsed.data;
+  const [
+    { data: walletLedgerRows, error: walletLedgerError },
+    { data: savingsLedgerRows, error: savingsLedgerError },
+    prefill,
+  ] = await Promise.all([
+    client
+      .from('customer_wallet_transactions')
+      .select('amount')
+      .eq('source_id', orderId)
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId)
+      .eq('source_type', 'order_redemption')
+      .eq('type', 'redemption'),
+    client
+      .from('customer_savings_redemptions')
+      .select('amount')
+      .eq('order_id', orderId)
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId),
+    readOxygenCustomerPrefill(client, orderId, user.id),
+  ]);
+  if (walletLedgerError || savingsLedgerError) notFound();
+  const order = {
+    ...parsed.data,
+    wallet_ledger_used: sumPositiveLedgerAmounts(walletLedgerRows),
+    savings_ledger_used: sumPositiveLedgerAmounts(savingsLedgerRows),
+  };
   const netPayable = getOxygenOrderNetPayable(order);
   if ((order.payment_status ?? 'unpaid') === 'unpaid' && netPayable <= 0) {
     notFound();
   }
-  const prefill = await readOxygenCustomerPrefill(client, orderId, user.id);
   const names = order.customer_name?.trim().split(/\s+/) ?? [];
   const checkoutContact = oxygenCustomerPrefillSchema.safeParse({
     ...prefill,

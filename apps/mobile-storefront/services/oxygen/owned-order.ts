@@ -16,6 +16,18 @@ const orderSchema = z.object({
   shipping_address: z.unknown().optional(),
   delivery_method: z.unknown().optional(),
 });
+function sumPositiveAmounts(rows: unknown): number {
+  if (!Array.isArray(rows)) return 0;
+  return rows.reduce((sum: number, row) => {
+    const raw =
+      row && typeof row === 'object'
+        ? (row as { amount?: unknown }).amount
+        : undefined;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? sum + value : sum;
+  }, 0);
+}
+
 export async function readOwnedOxygenOrder(
   orderId: string,
   customerId: string,
@@ -24,16 +36,36 @@ export async function readOwnedOxygenOrder(
   z.uuid().parse(orderId);
   z.uuid().parse(customerId);
   z.uuid().parse(merchantId);
-  const { data, error } = await supabase
-    .from('orders')
-    .select(
-      'id,order_number,total,amount_paid,wallet_amount_used,payment_method,payment_status,shipping_status,customer_email,shipping_address,delivery_method'
-    )
-    .eq('id', orderId)
-    .eq('customer_id', customerId)
-    .eq('merchant_id', merchantId)
-    .single();
-  if (error)
+  const [
+    { data, error },
+    { data: walletLedgerRows, error: walletLedgerError },
+    { data: savingsLedgerRows, error: savingsLedgerError },
+  ] = await Promise.all([
+    supabase
+      .from('orders')
+      .select(
+        'id,order_number,total,amount_paid,wallet_amount_used,payment_method,payment_status,shipping_status,customer_email,shipping_address,delivery_method'
+      )
+      .eq('id', orderId)
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId)
+      .single(),
+    supabase
+      .from('customer_wallet_transactions')
+      .select('amount')
+      .eq('source_id', orderId)
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId)
+      .eq('source_type', 'order_redemption')
+      .eq('type', 'redemption'),
+    supabase
+      .from('customer_savings_redemptions')
+      .select('amount')
+      .eq('order_id', orderId)
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId),
+  ]);
+  if (error || walletLedgerError || savingsLedgerError)
     throw new Error(
       'Your saved order is unavailable. Check your account and connection.'
     );
@@ -50,10 +82,21 @@ export async function readOwnedOxygenOrder(
     throw new Error(
       'This order is closed. Open your order history for details.'
     );
+  const walletLedgerUsed = sumPositiveAmounts(walletLedgerRows);
+  const savingsLedgerUsed = sumPositiveAmounts(savingsLedgerRows);
   const preGatewayPaid =
     order.payment_status === 'unpaid'
-      ? Math.max(order.amount_paid ?? 0, order.wallet_amount_used ?? 0)
-      : Math.min(Math.max(order.wallet_amount_used ?? 0, 0), order.total);
+      ? Math.max(
+          order.amount_paid ?? 0,
+          (order.wallet_amount_used ?? 0) + savingsLedgerUsed,
+          walletLedgerUsed + savingsLedgerUsed,
+          0
+        )
+      : Math.min(
+          Math.max(order.wallet_amount_used ?? 0, walletLedgerUsed, 0) +
+            savingsLedgerUsed,
+          order.total
+        );
   const payableTotal = Math.max(
     Number((order.total - preGatewayPaid).toFixed(2)),
     0

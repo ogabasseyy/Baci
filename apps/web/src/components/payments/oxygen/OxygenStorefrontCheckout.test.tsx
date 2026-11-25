@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   one: vi.fn(),
   eq: vi.fn(),
   from: vi.fn(),
+  walletLedger: vi.fn(),
+  savingsLedger: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('next/navigation', () => ({
@@ -78,9 +80,30 @@ beforeEach(() => {
     eq: mocks.eq,
     maybeSingle: mocks.one,
   };
+  const createLedgerQuery = (resolver: () => Promise<unknown>) => {
+    interface LedgerChain extends Promise<unknown> {
+      select: () => LedgerChain;
+      eq: () => LedgerChain;
+    }
+    const chain: LedgerChain = Object.assign(resolver(), {
+      select: (): LedgerChain => chain,
+      eq: (): LedgerChain => chain,
+    });
+    return chain;
+  };
   mocks.select.mockReturnValue(query);
   mocks.eq.mockReturnValue(query);
-  mocks.from.mockReturnValue(query);
+  mocks.walletLedger.mockResolvedValue({ data: [], error: null });
+  mocks.savingsLedger.mockResolvedValue({ data: [], error: null });
+  mocks.from.mockImplementation((table: string) => {
+    if (table === 'customer_wallet_transactions') {
+      return createLedgerQuery(() => mocks.walletLedger());
+    }
+    if (table === 'customer_savings_redemptions') {
+      return createLedgerQuery(() => mocks.savingsLedger());
+    }
+    return query;
+  });
   mocks.auth.mockResolvedValue({
     data: { user: { id: 'customer' } },
     error: null,
@@ -236,6 +259,8 @@ it('resumes the merchant-scoped order and displays persisted totals and checkout
     'orders',
     'customers',
     'orders',
+    'customer_wallet_transactions',
+    'customer_savings_redemptions',
   ]);
   expect(screen.getByText('Saved phone')).toBeVisible();
   expect(screen.getByText('Qty: 1')).toBeVisible();
@@ -421,6 +446,132 @@ it('does not treat settled gateway amount_paid as store credit for paid or bnpl_
         total: 400000,
         amount_paid: 400000,
         wallet_amount_used: 150000,
+        order_items: [],
+      },
+      error: null,
+    });
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  render(checkout);
+  const summary = screen.getByRole('region', { name: 'Saved order summary' });
+  expect(summary).toHaveTextContent('-₦150,000.00');
+  expect(summary).toHaveTextContent('₦250,000.00');
+  expect(screen.getByText('Plan amount: 250000')).toBeVisible();
+});
+
+it('falls back to wallet and savings ledger rows when order credit columns are zero', async () => {
+  mocks.walletLedger.mockResolvedValueOnce({
+    data: [{ amount: 100000 }],
+    error: null,
+  });
+  mocks.savingsLedger.mockResolvedValueOnce({
+    data: [{ amount: 50000 }],
+    error: null,
+  });
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+        payment_status: 'unpaid',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'customer',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 0,
+        wallet_amount_used: 0,
+        order_items: [],
+      },
+      error: null,
+    });
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  render(checkout);
+  const summary = screen.getByRole('region', { name: 'Saved order summary' });
+  expect(summary).toHaveTextContent('-₦150,000.00');
+  expect(summary).toHaveTextContent('₦250,000.00');
+  expect(screen.getByText('Plan amount: 250000')).toBeVisible();
+});
+
+it('subtracts device savings ledger credit on settled bnpl_approved orders', async () => {
+  mocks.savingsLedger.mockResolvedValueOnce({
+    data: [{ amount: 150000 }],
+    error: null,
+  });
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+        payment_status: 'bnpl_approved',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'customer',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 400000,
+        wallet_amount_used: 0,
         order_items: [],
       },
       error: null,

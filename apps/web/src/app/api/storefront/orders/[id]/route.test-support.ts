@@ -50,6 +50,36 @@ export const mockAnonClient = {
   from: vi.fn(),
 };
 
+export function createLedgerQueryMock(
+  rows: Array<{ amount: number }> = [],
+  error: unknown = null
+) {
+  const chain = Object.assign(Promise.resolve({ data: rows, error }), {
+    select: vi.fn(() => chain),
+    eq: vi.fn(() => chain),
+  });
+  return chain;
+}
+
+export function createStorefrontFromMock(
+  overrides: Record<string, unknown>,
+  ledger?: {
+    walletRows?: Array<{ amount: number }>;
+    savingsRows?: Array<{ amount: number }>;
+  }
+) {
+  return (table: string) => {
+    if (table in overrides) return overrides[table];
+    if (table === 'customer_wallet_transactions') {
+      return createLedgerQueryMock(ledger?.walletRows ?? []);
+    }
+    if (table === 'customer_savings_redemptions') {
+      return createLedgerQueryMock(ledger?.savingsRows ?? []);
+    }
+    return {};
+  };
+}
+
 export function resetStorefrontOrderMocks() {
   vi.clearAllMocks();
   vi.mocked(cookies).mockResolvedValue({} as never);

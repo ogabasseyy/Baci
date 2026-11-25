@@ -11,6 +11,7 @@ vi.mock('@/lib/sanitize-core', () => ({
 
 import { GET } from './route';
 import {
+  createStorefrontFromMock,
   mockItems,
   mockOrderData,
   mockSupabaseClient,
@@ -45,11 +46,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -112,11 +114,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -188,12 +191,13 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'merchants') return mockMerchantQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        merchants: mockMerchantQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -252,11 +256,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       ],
       error: null,
     });
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -331,11 +336,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
     mockSupabaseClient.rpc.mockImplementation((name: string) => {
       if (name === 'get_order_notification_delivered') {
         return Promise.resolve({ data: delivered, error: null });
@@ -379,11 +385,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
     mockSupabaseClient.rpc.mockImplementation((name: string) => {
       if (name === 'get_order_inventory_proof') {
         return Promise.resolve({ data: confirmed, error: null });
@@ -428,11 +435,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
     mockSupabaseClient.rpc.mockImplementation((name: string) => {
       if (name === 'get_order_notification_delivered') {
         return Promise.resolve({
@@ -450,5 +458,56 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
 
     expect(response.status).toBe(200);
     expect(data.notification_delivered).toBe(false);
+  });
+
+  it('includes wallet and savings ledger credit totals on authenticated order lookup', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          payment_status: 'unpaid',
+          amount_paid: 0,
+          wallet_amount_used: 0,
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock(
+        {
+          orders: mockOrderQuery,
+          order_items: mockItemsQuery,
+        },
+        {
+          walletRows: [{ amount: 3000 }],
+          savingsRows: [{ amount: 2000 }],
+        }
+      )
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.wallet_ledger_used).toBe(3000);
+    expect(data.savings_ledger_used).toBe(2000);
+    expect(mockOrderQuery.select.mock.calls[0][0]).toContain(
+      'wallet_amount_used'
+    );
   });
 });

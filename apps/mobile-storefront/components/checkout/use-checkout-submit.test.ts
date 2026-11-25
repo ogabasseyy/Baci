@@ -1122,4 +1122,42 @@ describe('useCheckoutSubmit', () => {
       expect.objectContaining({ pathname: '/oxygen-checkout' })
     );
   });
+
+  it('forwards appliedDiscountCode when resolving store credit selections so dropped savings cannot trigger zero-balance diversion', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
+    const { resolveCheckoutStoreCreditSelections } = jest.requireMock(
+      './checkout-store-credit'
+    ) as { resolveCheckoutStoreCreditSelections: jest.Mock };
+    resolveCheckoutStoreCreditSelections.mockReturnValueOnce({
+      liveSavingsSelection: undefined,
+      liveWalletSelection: undefined,
+    });
+    const params = createParams({
+      appliedDiscountCode: 'SAVE10',
+      isAuthenticated: true,
+      selectedPayment: 'klump',
+      user: { id: 'auth-user-1' },
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+    await act(async () => {
+      await result.current(address);
+    });
+    expect(resolveCheckoutStoreCreditSelections).toHaveBeenCalledWith(
+      expect.objectContaining({ appliedDiscountCode: 'SAVE10' })
+    );
+    expect(mockSubmitBnplCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appliedDiscountCode: 'SAVE10',
+        liveSavingsSelection: undefined,
+      })
+    );
+  });
 });

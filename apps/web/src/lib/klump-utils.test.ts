@@ -168,5 +168,15 @@ describe('klump-utils', () => {
         items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
       })
     ).toEqual([{ name: 'Phone', quantity: 1, unit_price: 35_000 }]);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        amount_paid: 0,
+        wallet_amount_used: 0,
+        wallet_ledger_used: 10_000,
+        savings_ledger_used: 5_000,
+      })
+    ).toBe(35_000);
   });
 });

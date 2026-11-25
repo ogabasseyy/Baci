@@ -39,7 +39,8 @@ CREATE FUNCTION oxygen_private.order_net_payable_for_order(
   p_order_id uuid,
   p_total numeric,
   p_amount_paid numeric,
-  p_wallet_amount_used numeric
+  p_wallet_amount_used numeric,
+  p_payment_status text DEFAULT 'unpaid'
 ) RETURNS numeric
 LANGUAGE plpgsql
 STABLE
@@ -71,17 +72,25 @@ BEGIN
     WHERE r.order_id = p_order_id;
   END IF;
 
-  v_pre_gateway_credit := GREATEST(
-    COALESCE(p_amount_paid, 0),
-    COALESCE(p_wallet_amount_used, 0) + COALESCE(v_savings_ledger, 0),
-    COALESCE(v_wallet_ledger, 0) + COALESCE(v_savings_ledger, 0),
-    0
-  );
+  IF COALESCE(p_payment_status, 'unpaid') = 'unpaid' THEN
+    v_pre_gateway_credit := GREATEST(
+      COALESCE(p_amount_paid, 0),
+      COALESCE(p_wallet_amount_used, 0) + COALESCE(v_savings_ledger, 0),
+      COALESCE(v_wallet_ledger, 0) + COALESCE(v_savings_ledger, 0),
+      0
+    );
+  ELSE
+    v_pre_gateway_credit := GREATEST(
+      COALESCE(p_wallet_amount_used, 0) + COALESCE(v_savings_ledger, 0),
+      COALESCE(v_wallet_ledger, 0) + COALESCE(v_savings_ledger, 0),
+      0
+    );
+  END IF;
 
   RETURN GREATEST(round(p_total - v_pre_gateway_credit, 2), 0);
 END;
 $$;
-REVOKE ALL ON FUNCTION oxygen_private.order_net_payable_for_order(uuid, numeric, numeric, numeric) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION oxygen_private.order_net_payable_for_order(uuid, numeric, numeric, numeric, text) FROM PUBLIC, anon, authenticated, service_role;
 
 -- Update the credit admission boundary: store credit is allowed before an
 -- Oxygen workflow starts provided a positive net balance remains due; once an
@@ -96,7 +105,7 @@ DECLARE
   v_order record;
 BEGIN
   PERFORM oxygen_private.credit_admission_lock(p_order_id);
-  SELECT o.total, o.amount_paid, o.wallet_amount_used
+  SELECT o.total, o.amount_paid, o.wallet_amount_used, o.payment_status
     INTO v_order
   FROM public.orders o
   WHERE o.id = p_order_id;
@@ -104,7 +113,8 @@ BEGIN
     p_order_id,
     v_order.total,
     v_order.amount_paid,
-    v_order.wallet_amount_used
+    v_order.wallet_amount_used,
+    v_order.payment_status
   ) <= 0 THEN
     RAISE EXCEPTION 'oxygen_order_total_must_be_positive' USING ERRCODE = '23514';
   END IF;
@@ -211,7 +221,7 @@ BEGIN
       'version',v_row.version,'environment',v_row.environment,
       'created_at',v_row.created_at,'updated_at',v_row.updated_at);
   END IF;
-  IF oxygen_private.order_net_payable_for_order(v_order.id, v_order.total, v_order.amount_paid, v_order.wallet_amount_used) <= 0
+  IF oxygen_private.order_net_payable_for_order(v_order.id, v_order.total, v_order.amount_paid, v_order.wallet_amount_used, v_order.payment_status) <= 0
     OR v_order.currency IS DISTINCT FROM 'NGN'
     OR v_order.payment_status <> 'unpaid' OR v_order.cancelled_at IS NOT NULL THEN
     RAISE EXCEPTION 'Order unavailable' USING ERRCODE = '22023';
@@ -262,7 +272,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used)<=0'
+    'oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used,v_order.payment_status)<=0'
   );
 
   needle := '''productAmount'',v_order.total,';
@@ -273,7 +283,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    '''productAmount'',oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used),'
+    '''productAmount'',oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used,v_order.payment_status),'
   );
 
   needle := '(p_payload->''state''->''booking''->>''product_amount'')::numeric <> v_order.total';
@@ -284,7 +294,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    '(p_payload->''state''->''booking''->>''product_amount'')::numeric <> oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used)'
+    '(p_payload->''state''->''booking''->>''product_amount'')::numeric <> oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used,v_order.payment_status)'
   );
 
   EXECUTE definition;
@@ -296,7 +306,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE amount numeric; chosen uuid; answer jsonb;
 BEGIN
  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
- SELECT oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used) INTO amount FROM public.oxygen_workflows w
+ SELECT oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status) INTO amount FROM public.oxygen_workflows w
  JOIN public.orders o ON o.id=w.order_id AND o.merchant_id=w.merchant_id AND o.customer_id=w.customer_id
  JOIN public.customers c ON c.id=w.customer_id AND c.merchant_id=w.merchant_id
  WHERE w.id=p_workflow_id AND c.user_id=auth.uid() AND w.environment='staging'
@@ -352,7 +362,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'product_amount=oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used)'
+    'product_amount=oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used,v_order.payment_status)'
   );
 
   EXECUTE definition;
@@ -387,7 +397,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used)<=0'
+    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)<=0'
   );
 
   needle := 'a.amount IS DISTINCT FROM o.total';
@@ -398,7 +408,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'a.amount IS DISTINCT FROM oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used)'
+    'a.amount IS DISTINCT FROM oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)'
   );
 
   needle := '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM o.total';
@@ -409,7 +419,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used)'
+    '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)'
   );
 
   EXECUTE definition;
@@ -442,7 +452,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used)<=0'
+    'oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)<=0'
   );
 
   needle := '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM o.total';
@@ -453,7 +463,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used)'
+    '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)'
   );
 
   needle := 'a.amount IS DISTINCT FROM o.total';
@@ -464,7 +474,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'a.amount IS DISTINCT FROM oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used)'
+    'a.amount IS DISTINCT FROM oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)'
   );
 
   needle := ',(s->>''bookingReference'')::uuid,o.total,''executing'')';
@@ -475,7 +485,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    ',(s->>''bookingReference'')::uuid,oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used),''executing'')'
+    ',(s->>''bookingReference'')::uuid,oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status),''executing'')'
   );
 
   EXECUTE definition;
@@ -504,7 +514,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used)'
+    '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)'
   );
 
   EXECUTE definition;
@@ -526,7 +536,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used)=(s->''booking''->>''product_amount'')::numeric'
+    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)=(s->''booking''->>''product_amount'')::numeric'
   );
 
   EXECUTE definition;
@@ -547,7 +557,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used)>0'
+    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)>0'
   );
   EXECUTE definition;
 
@@ -559,7 +569,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used)>0'
+    'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)>0'
   );
   EXECUTE definition;
 END $migration$;

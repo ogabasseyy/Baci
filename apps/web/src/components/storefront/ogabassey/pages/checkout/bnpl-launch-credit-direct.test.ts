@@ -135,4 +135,24 @@ describe('launchCreditDirectCheckout', () => {
     );
     expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
   });
+
+  it('passes net remaining amount from ledger credit when order amount_paid is zero', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 10_000,
+      savings_ledger_used: 5_000,
+      tracking_token: 'tok-1',
+      items: [{ product_name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchCreditDirectCheckout(ctx);
+
+    expect(mockOpenCreditDirectCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 35_000 })
+    );
+  });
 });

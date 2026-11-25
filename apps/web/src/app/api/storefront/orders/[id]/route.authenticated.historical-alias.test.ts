@@ -11,6 +11,7 @@ vi.mock('@/lib/sanitize-core', () => ({
 
 import { GET } from './route';
 import {
+  createStorefrontFromMock,
   mockItems,
   mockOrderData,
   mockSupabaseClient,
@@ -31,11 +32,12 @@ function configureAuthenticatedOrder() {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
   };
-  mockSupabaseClient.from.mockImplementation((table: string) => {
-    if (table === 'orders') return mockOrderQuery;
-    if (table === 'order_items') return mockItemsQuery;
-    return {};
-  });
+  mockSupabaseClient.from.mockImplementation(
+    createStorefrontFromMock({
+      orders: mockOrderQuery,
+      order_items: mockItemsQuery,
+    })
+  );
 }
 
 describe('GET /api/storefront/orders/[id] authenticated payment-account history', () => {

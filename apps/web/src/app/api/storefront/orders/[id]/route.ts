@@ -15,6 +15,7 @@ import { buildGuestOrderResponse } from './build-guest-order-response';
 import { fetchAuthenticatedDeliveryFlag } from './fetch-authenticated-delivery-flag';
 import { fetchOrderInventoryProof } from './fetch-inventory-proof';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
+import { fetchStorefrontOrderLedgerCredit } from './fetch-storefront-order-ledger-credit';
 import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
 import { mapTrackingPaymentAccounts } from './map-tracking-payment-accounts';
 import { orderDetailSelect } from './order-detail-select';
@@ -157,10 +158,14 @@ export async function GET(
         const notificationDelivered = await fetchAuthenticatedDeliveryFlag(supabase, order.id);
         // biome-ignore format: compact call preserves the 300-line route gate.
         const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null, email ?? null);
+        // biome-ignore format: compact call preserves the 300-line route gate.
+        const ledgerCredit = await fetchStorefrontOrderLedgerCredit(supabase, order.id);
 
         return NextResponse.json(
           sanitizePublicOrder({
             ...orderForResponse,
+            wallet_ledger_used: ledgerCredit.walletLedgerUsed,
+            savings_ledger_used: ledgerCredit.savingsLedgerUsed,
             notification_delivered: notificationDelivered,
             inventory_confirmed: inventoryConfirmed,
             shipping_cost: order.shipping_fee,

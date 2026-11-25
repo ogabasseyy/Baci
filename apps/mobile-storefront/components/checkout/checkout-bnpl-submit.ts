@@ -28,7 +28,10 @@ import {
   CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
 } from './checkout-screen.constants';
-import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
+import {
+  buildCheckoutSubmitOrderRequest,
+  resolveEffectiveSavingsSelection,
+} from './checkout-submit-order-request';
 import {
   type PaymentInitializeData,
   toPaymentInitializeData,
@@ -85,10 +88,14 @@ export async function submitBnplCheckout({
   snapshot,
   sharedCartBinding,
 }: SubmitBnplCheckoutParams) {
+  const effectiveSavingsSelection = resolveEffectiveSavingsSelection(
+    liveSavingsSelection,
+    appliedDiscountCode
+  );
   const netPayableAmount = Math.max(
     snapshot.total -
       (liveWalletSelection?.amount ?? 0) -
-      (liveSavingsSelection?.amount ?? 0),
+      (effectiveSavingsSelection?.amount ?? 0),
     0
   );
   if (netPayableAmount <= 0) {
@@ -108,7 +115,7 @@ export async function submitBnplCheckout({
           paymentSettings,
           netPayableAmount,
           liveWalletSelection,
-          liveSavingsSelection
+          effectiveSavingsSelection
         )
       : undefined;
 

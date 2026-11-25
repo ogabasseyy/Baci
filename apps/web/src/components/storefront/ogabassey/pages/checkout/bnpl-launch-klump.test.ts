@@ -150,4 +150,28 @@ describe('launchKlumpCheckout', () => {
     expect(ctx.setStatus).toHaveBeenCalledWith('error');
     expect(mockKlumpConstructor).not.toHaveBeenCalled();
   });
+
+  it('charges net remaining amount from ledger credit when order amount_paid is zero', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 12_000,
+      savings_ledger_used: 8_000,
+      items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchKlumpCheckout(ctx);
+
+    expect(mockKlumpConstructor).toHaveBeenCalledTimes(1);
+    const args = mockKlumpConstructor.mock.calls[0][0] as WidgetArgs & {
+      data: { items: Array<{ unit_price: number }> };
+    };
+    expect(args.data.amount).toBe(30_000);
+    expect(args.data.items).toEqual([
+      { name: 'Phone', quantity: 1, unit_price: 30_000 },
+    ]);
+  });
 });

@@ -10,6 +10,7 @@ import type {
 import type { CartItem } from '@/stores/cart-store';
 
 interface ResolveStoreCreditSelectionsParams {
+  appliedDiscountCode?: string | null;
   getLiveSavingsSelection: (input: {
     isStoreCreditCompatible: boolean;
     items: CartItem[];
@@ -24,6 +25,7 @@ interface ResolveStoreCreditSelectionsParams {
 }
 
 export function resolveCheckoutStoreCreditSelections({
+  appliedDiscountCode,
   getLiveSavingsSelection,
   itemsSnapshot,
   paymentTab,
@@ -36,11 +38,13 @@ export function resolveCheckoutStoreCreditSelections({
     paymentTab,
     selectedPayment,
   });
-  const liveSavingsSelection = getLiveSavingsSelection({
-    isStoreCreditCompatible,
-    items: itemsSnapshot,
-    orderTotal: snapshotTotal,
-  });
+  const liveSavingsSelection = appliedDiscountCode
+    ? undefined
+    : getLiveSavingsSelection({
+        isStoreCreditCompatible,
+        items: itemsSnapshot,
+        orderTotal: snapshotTotal,
+      });
   const liveSavingsAmount = liveSavingsSelection?.amount ?? 0;
   const walletResidualAfterSavings = Math.max(
     snapshotTotal - liveSavingsAmount,

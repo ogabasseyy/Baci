@@ -146,6 +146,7 @@ export function useCheckoutSubmit({
       );
       const { liveSavingsSelection, liveWalletSelection } =
         resolveCheckoutStoreCreditSelections({
+          appliedDiscountCode,
           getLiveSavingsSelection,
           itemsSnapshot: boundItemsSnapshot,
           paymentTab,

@@ -453,4 +453,69 @@ describe('submitBnplCheckout', () => {
     );
     expect(mockCreateOrder).not.toHaveBeenCalled();
   });
+
+  it('ignores savings in the BNPL gate when appliedDiscountCode drops savings from the order request', async () => {
+    const params = {
+      ...createParams(),
+      appliedDiscountCode: 'SAVE10',
+      selectedPayment: 'klump' as const,
+      liveWalletSelection: { use: true, amount: 5000 },
+      liveSavingsSelection: {
+        use: true,
+        goalId: 'goal-1',
+        amount: 15000,
+      },
+    };
+    mockCreateOrder.mockResolvedValueOnce({
+      amountDueToGateway: 16500,
+      order: {
+        created_at: '2026-05-30T12:00:00.000Z',
+        id: 'order-1',
+        order_number: 'BAC-001',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 21500,
+        tracking_token: 'tracking-token',
+      },
+      savings: null,
+      wallet: { amountUsed: 5000, newBalance: 0, transactionId: null },
+    });
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        authorization_url: 'https://klump.example/pay',
+        reference: 'klump-ref-1',
+      }),
+    }));
+    mockBuildKlumpBnplRouteParams.mockReturnValue({ amount: '16500.00' });
+
+    await submitBnplCheckout(params);
+
+    expect(mockGetKlumpDisabledReason).toHaveBeenCalledWith(
+      params.paymentSettings,
+      16500,
+      params.liveWalletSelection,
+      undefined
+    );
+    expect(mockBuildCheckoutOrderRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        discountCode: 'SAVE10',
+      })
+    );
+    expect(mockCreateOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        use_wallet_credit: true,
+        wallet_amount: 5000,
+      }),
+      expect.anything()
+    );
+    expect(mockCreateOrder.mock.calls[0][0]).not.toHaveProperty(
+      'savings_goal_id'
+    );
+    expect(mockBuildKlumpBnplRouteParams).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 16500 })
+    );
+  });
 });

@@ -10,6 +10,9 @@ export interface BnplOrder {
   total: number | string;
   amount_paid?: number | string | null;
   wallet_amount_used?: number | string | null;
+  wallet_ledger_used?: number | string | null;
+  savings_ledger_used?: number | string | null;
+  payment_status?: string | null;
   currency?: string | null;
   order_number?: string | null;
   shipping_cost?: number | string | null;
@@ -67,13 +70,28 @@ export function toCurrencyAmount(value: number | string | null | undefined) {
  * store credit (wallet or device savings) recorded on the order.
  */
 export function getBnplRemainingAmount(
-  order: Pick<BnplOrder, 'total' | 'amount_paid' | 'wallet_amount_used'>
+  order: Pick<
+    BnplOrder,
+    | 'total'
+    | 'amount_paid'
+    | 'wallet_amount_used'
+    | 'wallet_ledger_used'
+    | 'savings_ledger_used'
+    | 'payment_status'
+  >
 ) {
   const total = toCurrencyAmount(order.total);
-  const preGatewayPaid = Math.max(
-    toCurrencyAmount(order.amount_paid),
-    toCurrencyAmount(order.wallet_amount_used)
-  );
+  const walletColumn = toCurrencyAmount(order.wallet_amount_used);
+  const walletLedger = toCurrencyAmount(order.wallet_ledger_used);
+  const savingsLedger = toCurrencyAmount(order.savings_ledger_used);
+  const isUnpaid = (order.payment_status ?? 'unpaid') === 'unpaid';
+  const preGatewayPaid = isUnpaid
+    ? Math.max(
+        toCurrencyAmount(order.amount_paid),
+        walletColumn + savingsLedger,
+        walletLedger + savingsLedger
+      )
+    : Math.max(walletColumn, walletLedger) + savingsLedger;
   return toCurrencyAmount(Math.max(total - preGatewayPaid, 0));
 }
 

@@ -161,6 +161,21 @@ BEGIN
   IF (v_claim->'context'->>'productAmount')::numeric IS DISTINCT FROM 35000 THEN
     RAISE EXCEPTION 'Expected ledger-reduced productAmount 35000, got %', v_claim->'context'->>'productAmount';
   END IF;
+
+  -- Settled orders ('paid' / 'bnpl_approved') with amount_paid = total must not treat settled payment as store credit.
+  RESET ROLE;
+  INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
+  VALUES
+   ('ec310000-0000-4000-8000-000000000014','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PAID',50000,50000,'NGN','paid','oxygen',0,0,50000,0),
+   ('ec310000-0000-4000-8000-000000000015','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-APPROVED-WALLET',50000,50000,'NGN','bnpl_approved','oxygen',0,0,50000,15000);
+
+  IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 50000, 0, 'paid') IS DISTINCT FROM 50000 THEN
+    RAISE EXCEPTION 'Expected paid order net payable 50000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 50000, 0, 'paid');
+  END IF;
+
+  IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000015', 50000, 50000, 15000, 'bnpl_approved') IS DISTINCT FROM 35000 THEN
+    RAISE EXCEPTION 'Expected bnpl_approved order net payable 35000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000015', 50000, 50000, 15000, 'bnpl_approved');
+  END IF;
 END $test$;
 RESET ROLE;
 ROLLBACK;

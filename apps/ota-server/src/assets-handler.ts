@@ -3,6 +3,7 @@ import { errorResponse, ValidationError, validateAssetKey } from './validation';
 
 const ASSET_PREFIX = '/api/assets/';
 const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const SANDBOX_CSP = "default-src 'none'; sandbox";
 
 export async function handleGetAsset(
   request: Request,
@@ -36,6 +37,7 @@ export async function handleGetAsset(
       'content-length': String(head.size),
       'cache-control': IMMUTABLE_CACHE_CONTROL,
       'x-content-type-options': 'nosniff',
+      'content-security-policy': SANDBOX_CSP,
     });
     if (head.httpEtag) {
       headers.set('etag', head.httpEtag);
@@ -57,6 +59,7 @@ export async function handleGetAsset(
     'content-length': String(object.size),
     'cache-control': IMMUTABLE_CACHE_CONTROL,
     'x-content-type-options': 'nosniff',
+    'content-security-policy': SANDBOX_CSP,
   });
   if (object.httpEtag) {
     headers.set('etag', object.httpEtag);

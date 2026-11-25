@@ -1,4 +1,5 @@
 import { handleAdminPublish, handleAdminUploadAsset } from './admin-handler';
+import { handleAdminGetRelease } from './admin-release-handler';
 import { handleAdminRollback } from './admin-rollback-handler';
 import { handleGetAsset } from './assets-handler';
 import { handleGetManifest } from './manifest-handler';
@@ -40,6 +41,10 @@ export function handleRequest(
 
   if (pathname === '/api/admin/publish') {
     return handleAdminPublish(request, env);
+  }
+
+  if (pathname === '/api/admin/release') {
+    return handleAdminGetRelease(request, env);
   }
 
   if (pathname === '/api/admin/rollback') {

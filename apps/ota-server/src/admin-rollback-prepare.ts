@@ -65,6 +65,15 @@ export async function prepareRollbackRelease(
     return sourceRelease;
   }
 
+  if (
+    sourceRelease.id !== sourceTargetId ||
+    sourceRelease.channel !== channel ||
+    sourceRelease.platform !== payload.platform ||
+    sourceRelease.runtimeVersion !== payload.runtimeVersion
+  ) {
+    return errorResponse('Corrupt release manifest in storage', 500);
+  }
+
   let createdAt: string;
   try {
     createdAt = nextMonotonicTimestamp(

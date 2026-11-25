@@ -54,6 +54,11 @@ function extractMultipartParts(contentType, bodyText) {
 }
 
 function verifyPartSignature(part, expectSignatureKeyId, publicKeyOrCertPem) {
+  if (!publicKeyOrCertPem) {
+    throw new Error(
+      `Manifest signing is expected (keyid="${expectSignatureKeyId}") but publicKeyOrCertPem / OTA_CODE_SIGNING_CERTIFICATE_PATH is missing`
+    );
+  }
   const signatureHeader = part.headers['expo-signature'];
   if (!signatureHeader) {
     throw new Error(
@@ -75,13 +80,11 @@ function verifyPartSignature(part, expectSignatureKeyId, publicKeyOrCertPem) {
   if (alg && alg !== 'rsa-v1_5-sha256') {
     throw new Error(`Unsupported expo-signature alg "${alg}"`);
   }
-  if (publicKeyOrCertPem) {
-    const key = createPublicKey(publicKeyOrCertPem);
-    const verifier = createVerify('RSA-SHA256');
-    verifier.update(part.rawBody, 'utf8');
-    if (!verifier.verify(key, Buffer.from(sig, 'base64'))) {
-      throw new Error('Cryptographic verification failed for expo-signature');
-    }
+  const key = createPublicKey(publicKeyOrCertPem);
+  const verifier = createVerify('RSA-SHA256');
+  verifier.update(part.rawBody, 'utf8');
+  if (!verifier.verify(key, Buffer.from(sig, 'base64'))) {
+    throw new Error('Cryptographic verification failed for expo-signature');
   }
 }
 
@@ -98,6 +101,13 @@ export async function smokeCheckManifestEndpoint(
   },
   fetchImpl = fetch
 ) {
+  const normalizedKeyId = expectSignatureKeyId?.trim() || undefined;
+  const normalizedPem = publicKeyOrCertPem?.trim() || undefined;
+  if (normalizedPem && !normalizedKeyId) {
+    throw new Error(
+      'publicKeyOrCertPem was provided without expectSignatureKeyId / OTA_SIGNING_KEY_ID'
+    );
+  }
   const headers = {
     'expo-protocol-version': '1',
     'expo-platform': platform,
@@ -108,9 +118,9 @@ export async function smokeCheckManifestEndpoint(
     headers['expo-current-update-id'] = '00000000-0000-4000-8000-000000000001';
     headers['expo-embedded-update-id'] = '00000000-0000-4000-8000-000000000000';
   }
-  if (expectSignatureKeyId) {
+  if (normalizedKeyId) {
     headers['expo-expect-signature'] =
-      `sig, keyid="${expectSignatureKeyId}", alg="rsa-v1_5-sha256"`;
+      `sig, keyid="${normalizedKeyId}", alg="rsa-v1_5-sha256"`;
   }
 
   const resp = await fetchImpl(manifestUrl, {
@@ -134,8 +144,8 @@ export async function smokeCheckManifestEndpoint(
     throw new Error('Manifest smoke check returned no JSON payload part');
   }
 
-  if (expectSignatureKeyId) {
-    verifyPartSignature(firstPart, expectSignatureKeyId, publicKeyOrCertPem);
+  if (normalizedKeyId) {
+    verifyPartSignature(firstPart, normalizedKeyId, normalizedPem);
   }
 
   if (expectedMode === 'rollback_to_embedded') {
@@ -159,9 +169,11 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const runtimeVersion = process.env.RUNTIME_VERSION;
   const channel = process.env.CHANNEL;
   const resultJson = process.env.OTA_OPERATION_RESULT;
-  const expectSignatureKeyId = process.env.OTA_SIGNING_KEY_ID || undefined;
+  const expectSignatureKeyId = process.env.OTA_SIGNING_KEY_ID?.trim() || undefined;
+  const certPemEnv = process.env.OTA_CODE_SIGNING_CERTIFICATE_PEM?.trim();
   const certPath = process.env.OTA_CODE_SIGNING_CERTIFICATE_PATH?.trim();
-  const publicKeyOrCertPem = certPath ? readFileSync(certPath, 'utf8') : undefined;
+  const publicKeyOrCertPem =
+    certPemEnv || (certPath ? readFileSync(certPath, 'utf8') : undefined);
   if (!manifestUrl || !platform || !runtimeVersion || !channel || !resultJson) {
     throw new Error('Missing required env vars for OTA manifest smoke check');
   }

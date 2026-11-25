@@ -162,6 +162,77 @@ jobs:
           echo "OTA_BASE_URL=${base_url}" >> "$GITHUB_ENV"
           echo "OTA_MANIFEST_URL=${base_url}/api/manifest" >> "$GITHUB_ENV"
 
+      - name: Derive OTA code signing configuration
+        env:
+          KEY_ID: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID || vars.OTA_SIGNING_KEY_ID || '' }}
+          CERT_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH || '' }}
+          CERT_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$CERT_PATH" || -n "$CERT_PEM" || -n "$KEY_ID" ]]; then
+            effective_key_id="${KEY_ID:-main}"
+            if [[ -z "$CERT_PEM" && -z "$CERT_PATH" ]]; then
+              echo '::error::OTA signing keyid is configured, but neither EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH nor OTA_CODE_SIGNING_CERTIFICATE_PEM is set.' >&2
+              exit 1
+            fi
+            if [[ -n "$CERT_PATH" && -z "$CERT_PEM" && ! -f "apps/mobile-storefront/$CERT_PATH" ]]; then
+              echo "::error::Configured code-signing certificate apps/mobile-storefront/$CERT_PATH was not found." >&2
+              exit 1
+            fi
+            {
+              echo "EFFECTIVE_OTA_SIGNING_KEY_ID=${effective_key_id}"
+              echo "EFFECTIVE_OTA_CERT_PATH=${CERT_PATH:+apps/mobile-storefront/${CERT_PATH}}"
+            } >> "$GITHUB_ENV"
+          else
+            {
+              echo "EFFECTIVE_OTA_SIGNING_KEY_ID="
+              echo "EFFECTIVE_OTA_CERT_PATH="
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Refuse rollback target held by the storefront release gate
+        if: inputs.action == 'rollback' && !inputs.rollback_to_embedded
+        env:
+          OTA_BASE_URL: ${{ env.OTA_BASE_URL }}
+          OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
+          PLATFORM: ${{ inputs.platform }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          ROLLBACK_UPDATE_ID: ${{ inputs.rollback_update_id }}
+        run: |
+          set -euo pipefail
+          source_sha="$(node --input-type=module -e '
+            const { OTA_BASE_URL, OTA_ADMIN_TOKEN, CHANNEL, PLATFORM, RUNTIME_VERSION, ROLLBACK_UPDATE_ID } = process.env;
+            const url = new URL(OTA_BASE_URL + "/api/admin/release");
+            url.searchParams.set("channel", CHANNEL);
+            url.searchParams.set("platform", PLATFORM);
+            url.searchParams.set("runtimeVersion", RUNTIME_VERSION);
+            url.searchParams.set("updateId", ROLLBACK_UPDATE_ID);
+            const resp = await fetch(url, {
+              headers: { authorization: "Bearer " + OTA_ADMIN_TOKEN },
+              redirect: "error",
+            });
+            const body = await resp.text();
+            if (!resp.ok) {
+              throw new Error("Failed to fetch rollback target metadata (" + resp.status + "): " + body);
+            }
+            const parsed = JSON.parse(body);
+            process.stdout.write(typeof parsed.sourceSha === "string" ? parsed.sourceSha : "");
+          ')"
+          if ! [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Rollback target ${ROLLBACK_UPDATE_ID} does not record a valid 40-char sourceSha and cannot be verified against .github/storefront-release-gate.json." >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${source_sha}^{commit}" 2>/dev/null; then
+            echo "::error::Rollback target sourceSha ${source_sha} is not a commit in this repository." >&2
+            exit 1
+          fi
+          held_target="$(git ls-tree --full-tree --name-only "$source_sha" -- .github/storefront-release-gate.json)"
+          if [[ -n "$held_target" ]]; then
+            echo "::error::Rollback target ${ROLLBACK_UPDATE_ID} (${source_sha}) is held by the storefront release gate (.github/storefront-release-gate.json)." >&2
+            exit 1
+          fi
+
       - name: Install dependencies
         if: inputs.action == 'publish'
         env:
@@ -187,6 +258,8 @@ jobs:
           EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}
           EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
           EXPO_PUBLIC_OTA_UPDATES_URL: ${{ env.OTA_MANIFEST_URL }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_SIGNING_KEY_ID }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
@@ -234,7 +307,7 @@ jobs:
           pnpm exec expo config --type public --json > "$RUNNER_TEMP/storefront-ota/expo-config.json"
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
-            const [configPath, platform, expected] = process.argv.slice(1);
+            const [configPath, platform, expected, expectedKeyId] = process.argv.slice(1);
             const config = JSON.parse(readFileSync(configPath, "utf8"));
             const actual = platform === "ios"
               ? (config.ios?.runtimeVersion ?? config.runtimeVersion)
@@ -242,7 +315,13 @@ jobs:
             if (actual !== expected) {
               throw new Error("Exported " + platform + " runtimeVersion (" + actual + ") does not match input runtime_version (" + expected + ").");
             }
-          ' "$RUNNER_TEMP/storefront-ota/expo-config.json" "$BACI_MOBILE_BUILD_PLATFORM" "$RUNTIME_VERSION"
+            if (expectedKeyId) {
+              const actualKeyId = config.updates?.codeSigningMetadata?.keyid ?? "";
+              if (actualKeyId !== expectedKeyId) {
+                throw new Error("Exported codeSigningMetadata.keyid (" + actualKeyId + ") does not match EFFECTIVE_OTA_SIGNING_KEY_ID (" + expectedKeyId + ").");
+              }
+            }
+          ' "$RUNNER_TEMP/storefront-ota/expo-config.json" "$BACI_MOBILE_BUILD_PLATFORM" "$RUNTIME_VERSION" "$EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID"
           if [[ "$BACI_MOBILE_BUILD_PLATFORM" == "ios" ]]; then
             node "$RUNNER_TEMP/prepare-storefront-ota-public-config.mjs" "$RUNNER_TEMP/storefront-ota/expo-config.json" "$IOS_TIKTOK_CONFIGURED"
           fi
@@ -278,7 +357,9 @@ jobs:
           RUNTIME_VERSION: ${{ inputs.runtime_version }}
           CHANNEL: ${{ inputs.channel }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-          OTA_SIGNING_KEY_ID: ${{ vars.OTA_SIGNING_KEY_ID }}
+          OTA_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_SIGNING_KEY_ID }}
+          OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ env.EFFECTIVE_OTA_CERT_PATH }}
+          OTA_CODE_SIGNING_CERTIFICATE_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
         run: |
           set -euo pipefail
           node --test "$RUNNER_TEMP/smoke-check-ota-manifest.test.mjs"
@@ -304,7 +385,9 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
           ROLLBACK_UPDATE_ID: ${{ inputs.rollback_update_id }}
           ROLLBACK_TO_EMBEDDED: ${{ inputs.rollback_to_embedded }}
-          OTA_SIGNING_KEY_ID: ${{ vars.OTA_SIGNING_KEY_ID }}
+          OTA_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_SIGNING_KEY_ID }}
+          OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ env.EFFECTIVE_OTA_CERT_PATH }}
+          OTA_CODE_SIGNING_CERTIFICATE_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
         run: |
           set -euo pipefail
           node --test .github/scripts/smoke-check-ota-manifest.test.mjs

@@ -575,4 +575,28 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       error: expect.stringMatching(/pointer/i),
     });
   });
+
+  it('rejects active document content types like text/html and image/svg+xml on upload', async () => {
+    const { env } = createEnv();
+    for (const [key, contentType] of [
+      ['blobs/evil.html', 'text/html; charset=utf-8'],
+      ['blobs/icon.svg', 'image/svg+xml'],
+    ] as const) {
+      const bytes = new TextEncoder().encode('<svg/>');
+      const shaHex = createHash('sha256').update(bytes).digest('hex');
+      const resp = await worker.fetch(
+        new Request(`https://ota.usebaci.com/api/admin/assets/${key}`, {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': contentType,
+            'x-asset-sha256': shaHex,
+          },
+          body: bytes,
+        }),
+        env
+      );
+      expect(resp.status).toBe(415);
+    }
+  });
 });

@@ -250,3 +250,40 @@ export function validateStoredAsset(
     r2Key: validatedR2Key,
   };
 }
+
+const ALLOWED_ASSET_CONTENT_TYPES = new Set([
+  'application/javascript',
+  'application/json',
+  'application/octet-stream',
+  'application/pdf',
+  'application/wasm',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/wav',
+  'font/otf',
+  'font/ttf',
+  'font/woff',
+  'font/woff2',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'text/css',
+  'text/javascript',
+  'text/plain',
+  'video/mp4',
+]);
+
+export function validateAssetContentType(
+  rawHeader: string | null | undefined
+): string {
+  const raw = rawHeader?.trim() || 'application/octet-stream';
+  const mimeType = raw.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (!ALLOWED_ASSET_CONTENT_TYPES.has(mimeType)) {
+    throw new ValidationError(
+      `Unsupported asset content-type: ${mimeType || 'empty'}`,
+      415
+    );
+  }
+  return raw;
+}

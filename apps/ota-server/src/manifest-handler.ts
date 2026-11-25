@@ -252,6 +252,15 @@ export async function handleGetManifest(
     return errorResponse('Corrupt release manifest in storage', 500);
   }
 
+  if (
+    release.id !== current.updateId ||
+    release.channel !== channel ||
+    release.platform !== platform ||
+    release.runtimeVersion !== runtimeVersion
+  ) {
+    return errorResponse('Corrupt release manifest in storage', 500);
+  }
+
   const manifest: ExpoUpdateManifest = {
     id: release.id,
     createdAt: release.createdAt,

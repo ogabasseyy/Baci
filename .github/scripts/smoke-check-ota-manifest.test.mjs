@@ -131,6 +131,23 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
       },
       async () => multipartResponse(payload)
     ),
+    /OTA_CODE_SIGNING_CERTIFICATE_PATH is missing/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+        expectSignatureKeyId: 'baci-prod-1',
+        publicKeyOrCertPem: publicKey,
+      },
+      async () => multipartResponse(payload)
+    ),
     /Expected expo-signature header/
   );
 
@@ -144,6 +161,7 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
         expectedMode: 'update',
         expectedUpdateId: updateId,
         expectSignatureKeyId: 'baci-prod-1',
+        publicKeyOrCertPem: publicKey,
       },
       async () =>
         multipartResponse(payload, [
@@ -151,5 +169,28 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
         ])
     ),
     /Expected expo-signature keyid "baci-prod-1"/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+        expectSignatureKeyId: 'baci-prod-1',
+        publicKeyOrCertPem: publicKey,
+      },
+      async () =>
+        multipartResponse(
+          { id: updateId, tampered: true },
+          [
+            `expo-signature: sig="${sig}", keyid="baci-prod-1", alg="rsa-v1_5-sha256"`,
+          ]
+        )
+    ),
+    /Cryptographic verification failed/
   );
 });

@@ -639,4 +639,33 @@ describe('admin payload validation and rollback safety', () => {
       error: expect.stringMatching(/pointer/i),
     });
   });
+
+  it('exposes release sourceSha metadata via authenticated GET /api/admin/release', async () => {
+    const { bucket, env } = await setupChannelWithTwoReleases();
+    const sourceSha = 'a'.repeat(40);
+    const releaseKey = `releases/production/ios/${RUNTIME}/${UPDATE_A}.json`;
+    const existing = await (await bucket.get(releaseKey))?.json<
+      Record<string, unknown>
+    >();
+    await bucket.put(releaseKey, JSON.stringify({ ...existing, sourceSha }));
+
+    const queryUrl = `https://ota.usebaci.com/api/admin/release?channel=production&platform=ios&runtimeVersion=${encodeURIComponent(RUNTIME)}&updateId=${UPDATE_A}`;
+    const unauthResp = await worker.fetch(new Request(queryUrl), env);
+    expect(unauthResp.status).toBe(401);
+
+    const okResp = await worker.fetch(
+      new Request(queryUrl, {
+        headers: { authorization: `Bearer ${TOKEN}` },
+      }),
+      env
+    );
+    expect(okResp.status).toBe(200);
+    expect(await okResp.json()).toMatchObject({
+      id: UPDATE_A,
+      channel: 'production',
+      platform: 'ios',
+      runtimeVersion: RUNTIME,
+      sourceSha,
+    });
+  });
 });

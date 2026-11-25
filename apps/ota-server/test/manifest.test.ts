@@ -384,5 +384,32 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
       env
     );
     expect(badAssetRel.status).toBe(500);
+
+    await bucket.put(
+      releaseKey,
+      JSON.stringify({
+        id: UPDATE_ID,
+        createdAt: '2026-11-25T15:00:00.000Z',
+        runtimeVersion: RUNTIME,
+        channel: 'production',
+        platform: 'android',
+        launchAsset: {
+          hash: 'bundle-sha256-base64url',
+          key: 'bundle-key',
+          contentType: 'application/javascript',
+          r2Key: 'bundles/ios/abc123.hbc',
+        },
+        assets: [],
+        metadata: {},
+        extra: {},
+      })
+    );
+    const mismatchedRel = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(mismatchedRel.status).toBe(500);
   });
 });

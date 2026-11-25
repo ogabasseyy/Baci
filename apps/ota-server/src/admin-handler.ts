@@ -25,6 +25,7 @@ import {
   MAX_PUBLISH_JSON_BYTES,
   readBodyBytesWithLimit,
   ValidationError,
+  validateAssetContentType,
   validateAssetKey,
 } from './validation';
 
@@ -82,8 +83,15 @@ export async function handleAdminUploadAsset(
   }
   const actualBase64Url = sha256Base64Url(bytes);
 
-  const contentType =
-    request.headers.get('content-type')?.trim() || 'application/octet-stream';
+  let contentType: string;
+  try {
+    contentType = validateAssetContentType(request.headers.get('content-type'));
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return errorResponse(err.message, err.status);
+    }
+    throw err;
+  }
   const storageKey = `assets/${assetKey}`;
   const status = await putImmutableAsset(
     env,

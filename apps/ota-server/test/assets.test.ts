@@ -31,6 +31,9 @@ describe('GET /api/assets/*', () => {
       'public, max-age=31536000, immutable'
     );
     expect(getResp.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(getResp.headers.get('content-security-policy')).toBe(
+      "default-src 'none'; sandbox"
+    );
     expect(getResp.headers.get('etag')).toBeTruthy();
     expect(new Uint8Array(await getResp.arrayBuffer())).toEqual(
       new Uint8Array([1, 2, 3, 4])

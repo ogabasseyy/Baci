@@ -219,8 +219,8 @@ describe('Storefront homepage structured data', () => {
     });
     expect(organization).toMatchObject({
       sameAs: expect.arrayContaining([
-        'https://facebook.com/ogabasseyyy',
-        'https://instagram.com/ogabasseyy',
+        'https://www.facebook.com/ogabasseyyy',
+        'https://www.instagram.com/ogabasseyy',
         'https://linkedin.com/company/ogabasseyy',
         'https://www.snapchat.com/@ogabassey',
         'https://www.tiktok.com/@ogabasseyy',

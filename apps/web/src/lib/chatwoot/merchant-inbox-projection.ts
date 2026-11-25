@@ -5,6 +5,9 @@ import {
   providerInboxConversationSchema,
   providerInboxMessageSchema,
 } from '@/schemas/merchant-inbox';
+import { INBOX_PRIORITIES } from '@/schemas/merchant-inbox-manage';
+
+import { hasFollowUpLabel, tagsFromLabels } from './merchant-inbox-labels';
 
 const MAX_TEXT_LENGTH = 4_000;
 const MAX_NAME_LENGTH = 80;
@@ -12,6 +15,7 @@ const INCOMING = 0;
 const OUTGOING = 1;
 const TEMPLATE = 3;
 const STATUSES = new Set(['open', 'resolved', 'pending', 'snoozed']);
+const PRIORITIES = new Set<string>(INBOX_PRIORITIES);
 
 function toIso(seconds: number | null | undefined): string | null {
   if (typeof seconds !== 'number') return null;
@@ -19,9 +23,30 @@ function toIso(seconds: number | null | undefined): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-/** Truncates without splitting a surrogate pair at the boundary. */
-function truncateByCodePoint(value: string, maxLength: number): string {
+function snoozeToIso(value: number | string | null | undefined): string | null {
+  if (typeof value === 'number') return toIso(value);
+  if (typeof value !== 'string' || !value) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * Cuts at `maxLength` UTF-16 units without splitting what a person sees as one
+ * character: a surrogate pair, a flag, a family emoji or a letter with its
+ * accents is kept whole or dropped whole.
+ */
+export function truncateByCodePoint(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
+  let kept = '';
+  for (const { segment } of GRAPHEMES.segment(value)) {
+    if (kept.length + segment.length > maxLength) break;
+    kept += segment;
+  }
+  if (kept.length > 0) return kept;
+  // One character longer than the whole cap: fall back to a plain cut that
+  // still never leaves half a surrogate pair.
   const cut = value.slice(0, maxLength);
   const last = cut.charCodeAt(cut.length - 1);
   return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
@@ -135,5 +160,15 @@ export function projectMerchantInboxConversation(
     lastMessage: conversation.last_non_activity_message
       ? projectMerchantInboxMessage(conversation.last_non_activity_message)
       : null,
+    tags: tagsFromLabels(conversation.labels ?? []),
+    priority:
+      conversation.priority && PRIORITIES.has(conversation.priority)
+        ? (conversation.priority as (typeof INBOX_PRIORITIES)[number])
+        : null,
+    followUp: hasFollowUpLabel(conversation.labels ?? []),
+    snoozedUntil:
+      conversation.status === 'snoozed'
+        ? snoozeToIso(conversation.snoozed_until)
+        : null,
   };
 }

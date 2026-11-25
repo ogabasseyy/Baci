@@ -55,15 +55,33 @@ describe('normalizeSocialUrl', () => {
     expect(normalizeSocialUrl('   ', 'twitter')).toBeUndefined();
   });
 
-  it('preserves already-normalized non-Twitter social URLs', () => {
+  it('canonicalizes stored bare Instagram and Facebook URLs to www hosts', () => {
     expect(
       normalizeSocialUrl('https://instagram.com/ogabasseyy', 'instagram')
-    ).toBe('https://instagram.com/ogabasseyy');
+    ).toBe('https://www.instagram.com/ogabasseyy');
+    expect(
+      normalizeSocialUrl('http://instagram.com/ogabasseyy', 'instagram')
+    ).toBe('https://www.instagram.com/ogabasseyy');
+    expect(
+      normalizeSocialUrl('https://facebook.com/ogabasseyyy', 'facebook')
+    ).toBe('https://www.facebook.com/ogabasseyyy');
+    expect(
+      normalizeSocialUrl('http://www.instagram.com/ogabasseyy', 'instagram')
+    ).toBe('https://www.instagram.com/ogabasseyy');
+    expect(
+      normalizeSocialUrl('http://www.facebook.com/ogabasseyyy', 'facebook')
+    ).toBe('https://www.facebook.com/ogabasseyyy');
+    expect(normalizeSocialUrl('instagram.com/ogabasseyy', 'instagram')).toBe(
+      'https://www.instagram.com/ogabasseyy'
+    );
   });
 
   it('keeps platform-specific handle formats for other social networks', () => {
     expect(normalizeSocialUrl('@ogabassey', 'instagram')).toBe(
-      'https://instagram.com/ogabassey'
+      'https://www.instagram.com/ogabassey'
+    );
+    expect(normalizeSocialUrl('ogabassey', 'facebook')).toBe(
+      'https://www.facebook.com/ogabassey'
     );
     expect(normalizeSocialUrl('ogabassey', 'tiktok')).toBe(
       'https://www.tiktok.com/@ogabassey'
@@ -82,7 +100,7 @@ describe('normalizeSocialUrl', () => {
       'https://facebook.com:443/brand'
     );
     expect(normalizeSocialUrl('jane.doe', 'instagram')).toBe(
-      'https://instagram.com/jane.doe'
+      'https://www.instagram.com/jane.doe'
     );
   });
 });

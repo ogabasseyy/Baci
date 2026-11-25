@@ -63,7 +63,7 @@ function firstNonEmptyTrimmed(
 }
 
 const DEFAULT_OGABASSEY_SOCIAL_LINKS: Record<string, string> = {
-  instagram: 'https://instagram.com/ogabasseyy',
+  instagram: 'https://www.instagram.com/ogabasseyy',
   facebook: 'https://www.facebook.com/ogabasseyyy',
   tiktok: 'https://www.tiktok.com/@ogabasseyy',
   twitter: 'https://x.com/ogabasseyy',

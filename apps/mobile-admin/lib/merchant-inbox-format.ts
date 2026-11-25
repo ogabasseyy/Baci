@@ -72,3 +72,56 @@ export function formatInboxDay(iso: string, now: Date = new Date()): string {
 export function isSameInboxDay(a: string, b: string): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
+
+/** The follow-up line on a row: "Follow up due" or "Follow up Tue 9:00 AM". */
+export function formatFollowUp(
+  snoozedUntil: string | null | undefined,
+  due: boolean,
+  now: Date = new Date()
+): string {
+  if (due) return 'Follow up due';
+  if (!snoozedUntil) return 'Follow up';
+  const at = new Date(snoozedUntil);
+  if (Number.isNaN(at.getTime())) return 'Follow up';
+  const day = formatInboxDay(snoozedUntil, now);
+  const time = at.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const dayLabel =
+    day === 'Today' || day === 'Yesterday'
+      ? day
+      : at.toLocaleDateString(undefined, { weekday: 'short' });
+  return `Follow up ${dayLabel} ${time}`;
+}
+
+/** "order-issue" -> "Order issue". */
+export function formatInboxTag(slug: string): string {
+  const text = slug.replace(/[-_]+/g, ' ').trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : slug;
+}
+
+/** Follow-up choices as ISO times, from `now`. Morning = 9:00 local. */
+export function followUpOptions(
+  now: Date = new Date()
+): { label: string; iso: string }[] {
+  const at = (days: number, hour: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(hour, 0, 0, 0);
+    return d;
+  };
+  const laterToday = new Date(now.getTime() + 3 * 3_600_000);
+  const options = [
+    { label: 'In 3 hours', date: laterToday },
+    { label: 'Tomorrow morning', date: at(1, 9) },
+    { label: 'In 3 days', date: at(3, 9) },
+    { label: 'Next week', date: at(7, 9) },
+  ];
+  return options
+    .filter((option) => option.date.getTime() > now.getTime())
+    .map((option) => ({
+      label: option.label,
+      iso: option.date.toISOString(),
+    }));
+}

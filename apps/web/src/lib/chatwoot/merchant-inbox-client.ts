@@ -13,6 +13,11 @@ import {
   projectMerchantInboxMessage,
 } from './merchant-inbox-projection';
 import { PROVIDER_MESSAGE_PAGE_SIZE } from './merchant-inbox-provider-limits';
+import {
+  type MerchantInboxView,
+  matchesView,
+  providerQueryForView,
+} from './merchant-inbox-views';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -25,7 +30,7 @@ type ProviderResponse =
   | { ok: true; body: unknown }
   | { ok: false; status: number | null };
 
-async function providerGet(
+export async function providerGet(
   binding: MerchantInboxBinding,
   path: string,
   query?: Record<string, string>
@@ -65,7 +70,9 @@ async function providerGet(
   }
 }
 
-function failure(response: { status: number | null }): MerchantInboxFailure {
+export function failure(response: {
+  status: number | null;
+}): MerchantInboxFailure {
   return {
     ok: false,
     code: response.status === 404 ? 'not_found' : 'unavailable',
@@ -78,17 +85,29 @@ export async function listMerchantInboxConversations(
   input: {
     page: number;
     status: 'open' | 'resolved' | 'pending' | 'snoozed' | 'all';
+    /** A smart view; it replaces `status` and narrows the rows. */
+    view?: MerchantInboxView;
   }
 ): Promise<
   | { ok: true; conversations: MerchantInboxConversation[]; hasMore: boolean }
   | MerchantInboxFailure
 > {
-  const response = await providerGet(binding, '/conversations', {
+  const viewQuery = input.view ? providerQueryForView(input.view) : null;
+  const query: Record<string, string> = {
     inbox_id: String(binding.inboxId),
     page: String(input.page),
     sort_by: 'last_activity_at_desc',
-    status: input.status,
-  });
+    status: viewQuery?.status ?? input.status,
+  };
+  // Label filter as the provider's array parameter; `matchesView` below
+  // applies the same rule again in case a build ignores it.
+  const response = await providerGet(
+    binding,
+    '/conversations',
+    viewQuery?.labels?.[0]
+      ? { ...query, 'labels[]': viewQuery.labels[0] }
+      : query
+  );
   if (!response.ok) return failure(response);
   const parsed = providerInboxConversationListSchema.safeParse(response.body);
   if (!parsed.success) return { ok: false, code: 'unavailable' };
@@ -96,6 +115,7 @@ export async function listMerchantInboxConversations(
   const conversations = payload
     .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
     .filter((value): value is MerchantInboxConversation => value !== null)
+    .filter((value) => !input.view || matchesView(value, input.view))
     // Ordering must not depend on the provider honouring `sort_by`.
     .sort(
       (a, b) =>

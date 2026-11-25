@@ -58,7 +58,7 @@ describe('buildMerchantTrustProfile', () => {
       supportEmail: 'support@ogabassey.com',
       supportPhone: '+2348000000000',
       socialLinks: {
-        instagram: 'https://instagram.com/ogabassey',
+        instagram: 'https://www.instagram.com/ogabassey',
         twitter: 'https://x.com/ogabasseyhq',
       },
       businessAddress: '12 Allen Avenue, Ikeja, Lagos',

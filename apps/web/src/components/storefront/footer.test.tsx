@@ -171,4 +171,38 @@ describe('StorefrontFooter', () => {
       '/ogabassey/shipping'
     );
   });
+
+  it('canonicalizes stored full social URLs to non-redirecting hosts', () => {
+    mockUseMerchant.mockReturnValue({
+      basePath: '/ogabassey',
+      merchant: {
+        business_name: 'Ogabassey',
+        social_media: {
+          instagram: 'https://instagram.com/ogabasseyy',
+          twitter: 'https://twitter.com/ogabasseyy',
+          facebook: 'https://facebook.com/ogabasseyyy',
+          youtube: 'channel/UC123',
+        },
+      },
+    });
+    mockBuildMerchantTrustProfile.mockReturnValue({
+      socialLinks: {},
+      derivedLinks: {},
+    });
+
+    render(<StorefrontFooter />);
+
+    expect(
+      screen.getByRole('link', { name: 'Follow us on Instagram' })
+    ).toHaveAttribute('href', 'https://www.instagram.com/ogabasseyy');
+    expect(
+      screen.getByRole('link', { name: 'Follow us on Twitter' })
+    ).toHaveAttribute('href', 'https://x.com/ogabasseyy');
+    expect(
+      screen.getByRole('link', { name: 'Follow us on Facebook' })
+    ).toHaveAttribute('href', 'https://www.facebook.com/ogabasseyyy');
+    expect(
+      screen.getByRole('link', { name: 'Follow us on YouTube' })
+    ).toHaveAttribute('href', 'https://www.youtube.com/channel/UC123');
+  });
 });

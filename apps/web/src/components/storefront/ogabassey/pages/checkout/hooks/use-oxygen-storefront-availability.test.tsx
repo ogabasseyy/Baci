@@ -11,7 +11,7 @@ describe('Oxygen storefront admission', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     await waitFor(() => expect(result.current).toBe(true));
   });
-  it('keeps a same-account selection during refresh but clears it on sign-out', async () => {
+  it('keeps a same-account selection during refresh, clears it on sign-out, and supports open guest availability', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ available: true }) }));
     const initial = { customerId: 'first', merchantId: 'merchant', revision: 1, authenticated: true, loading: false };
     const { result, rerender } = renderHook((props) => useOxygenStorefrontAvailability(props), { initialProps: initial });
@@ -20,6 +20,7 @@ describe('Oxygen storefront admission', () => {
     expect(result.current).toBe(true);
     rerender({ ...initial, revision: 2, authenticated: false, loading: false });
     expect(result.current).toBe(false);
+    await waitFor(() => expect(result.current).toBe(true));
   });
   it('clears the selection when a refreshed admission is denied', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ available: true }) }).mockResolvedValueOnce({ ok: true, json: async () => ({ available: false }) });

@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMerchant } from '@/hooks/useMerchant';
+import { inboxRefetchInterval } from '@/lib/inbox-paging';
 import { inboxViewKey } from '@/lib/inbox-query-keys';
 import { fetchInboxConversations } from '@/lib/merchant-inbox-api';
 import type {
@@ -19,7 +20,8 @@ export function useInboxConversations(view: InboxView = 'needs_reply') {
     queryFn: ({ pageParam }: { pageParam: number }) =>
       fetchInboxConversations(pageParam, view),
     queryKey: inboxViewKey(merchant?.id, view),
-    refetchInterval: 30_000,
+    refetchInterval: (query) =>
+      inboxRefetchInterval(query.state.data?.pages.length ?? 0),
     staleTime: 10_000,
   });
 }

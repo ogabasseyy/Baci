@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn(), merchant: vi.fn() }));
 
@@ -121,5 +121,51 @@ describe('useInboxConversations', () => {
     mocks.fetch.mockRejectedValue(new Error('down'));
     const { result } = renderHook(() => useInboxConversations(), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+/** Loads `pages` pages, then counts the requests made over the next waits. */
+async function pollingAfter(pages: number) {
+  vi.useFakeTimers();
+  mocks.fetch.mockImplementation((page: number) =>
+    Promise.resolve({ conversations: [chat(page)], hasMore: true, page })
+  );
+  const { result } = renderHook(() => useInboxConversations(), { wrapper });
+  const wait = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  await wait(10);
+  for (let page = 2; page <= pages; page += 1) {
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+  }
+  mocks.fetch.mockClear();
+  return async (ms: number) => {
+    await wait(ms);
+    return mocks.fetch.mock.calls.length;
+  };
+}
+
+describe('useInboxConversations polling', () => {
+  afterEach(() => {
+    client.clear();
+    vi.useRealTimers();
+  });
+
+  it('checks a one-page store every 30 seconds', async () => {
+    // Its chats and the empty page that ends them.
+    const requestsAfter = await pollingAfter(2);
+
+    expect(await requestsAfter(30_000)).toBe(2);
+  });
+
+  it('bugfix: polls less often the more pages a refresh has to ask for', async () => {
+    // A refresh asks for every loaded page again.
+    const requestsAfter = await pollingAfter(5);
+
+    expect(await requestsAfter(90_000)).toBe(0);
+    expect(await requestsAfter(30_000)).toBe(5);
   });
 });

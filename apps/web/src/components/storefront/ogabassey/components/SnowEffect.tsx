@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { useV2Theme } from '../providers/v2-theme-context';
 
 /*
@@ -25,20 +26,11 @@ export const SnowEffect: React.FC = () => {
   const { theme } = useV2Theme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(undefined);
-  const [reducedMotion, setReducedMotion] = useState(false);
-
-  // Respect the shopper's "reduce motion" setting (and follow live changes).
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (theme !== 'santa' || reducedMotion || !canvasRef.current) return;
-    // The state above lags one render behind on mount, so check the query directly too.
+    // During hydration the hook still reports false, so check the query directly too.
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const canvas = canvasRef.current;

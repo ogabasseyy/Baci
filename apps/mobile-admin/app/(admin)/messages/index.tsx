@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -16,6 +16,7 @@ import {
   FloatingSearchBar,
 } from '@/components/messages/FloatingSearchBar';
 import { InboxEmptyState } from '@/components/messages/InboxEmptyState';
+import { InboxListFooter } from '@/components/messages/InboxListFooter';
 import { InboxSearchResults } from '@/components/messages/InboxSearchResults';
 import { InboxViewChips } from '@/components/messages/InboxViewChips';
 import { AppHeaderKeyboardContainer } from '@/components/ui/AppHeaderKeyboardContainer';
@@ -91,6 +92,17 @@ export default function MessagesScreen() {
   // For the buttons: a tap can land after a refresh has started.
   const loadMore = () => {
     if (!query.isFetching) query.fetchNextPage();
+  };
+
+  // FlashList reports the end after any render, scrolled or not, so past the
+  // automatic pages each further one takes a scroll (or the footer button).
+  const capped = pages >= MAX_AUTO_PAGES;
+  const scrolled = useRef(false);
+  const onEndReached = () => {
+    if (pageFailed || !query.hasNextPage || query.isFetching) return;
+    if (capped && !scrolled.current) return;
+    scrolled.current = false;
+    query.fetchNextPage();
   };
 
   const onRefresh = async () => {
@@ -175,25 +187,24 @@ export default function MessagesScreen() {
                     </Text>
                   ) : null
                 }
+                keyboardShouldPersistTaps="handled"
                 ListFooterComponent={
-                  query.isFetchingNextPage ? (
-                    <ActivityIndicator color={colors.primary} />
-                  ) : query.isFetchNextPageError ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={loadMore}
-                      style={styles.retry}
-                    >
-                      <Text style={{ color: colors.primary }}>
-                        Could not load more chats. Tap to retry.
-                      </Text>
-                    </Pressable>
-                  ) : null
+                  <InboxListFooter
+                    canLookBack={
+                      capped &&
+                      !!query.hasNextPage &&
+                      !query.isFetching &&
+                      conversations.length > 0
+                    }
+                    colors={colors}
+                    failed={query.isFetchNextPageError}
+                    loading={query.isFetchingNextPage}
+                    onLoadMore={loadMore}
+                  />
                 }
-                onEndReached={() => {
-                  if (!pageFailed && query.hasNextPage && !query.isFetching) {
-                    query.fetchNextPage();
-                  }
+                onEndReached={onEndReached}
+                onScrollBeginDrag={() => {
+                  scrolled.current = true;
                 }}
                 refreshControl={
                   <RefreshControl

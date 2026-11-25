@@ -101,6 +101,24 @@ it('fails closed (503) when get_storefront_payment_settings fails in staging', a
   });
 });
 it.each([
+  { settingsRows: [] },
+  { settingsRows: [{ oxygen_enabled: true }, { oxygen_enabled: false }] },
+  { settingsRows: [{}] },
+])('fails closed (503) when get_storefront_payment_settings returns invalid row set %o in staging', async ({
+  settingsRows,
+}) => {
+  const rpc = mockStagingRpc(undefined, {
+    data: settingsRows,
+    error: null,
+  });
+  await expect(
+    readOxygenMobileCapabilities({ rpc }, 'test-store')
+  ).resolves.toEqual({
+    ok: false,
+    status: 503,
+  });
+});
+it.each([
   'false',
   'TRUE',
   '1',

@@ -91,13 +91,20 @@ export async function readOxygenMobileCapabilities(
         'get_storefront_payment_settings',
         { p_merchant_id: row.data.merchant_id }
       );
-      if (featureSettings.error || !Array.isArray(featureSettings.data)) {
+      if (
+        featureSettings.error ||
+        !Array.isArray(featureSettings.data) ||
+        featureSettings.data.length !== 1
+      ) {
         return { ok: false, status: 503 };
       }
       const settingsRow = featureSettings.data[0] as
         | { oxygen_enabled?: unknown }
         | undefined;
-      if (settingsRow?.oxygen_enabled !== true) {
+      if (typeof settingsRow?.oxygen_enabled !== 'boolean') {
+        return { ok: false, status: 503 };
+      }
+      if (!settingsRow.oxygen_enabled) {
         reason = 'Oxygen is disabled for this storefront.';
       }
     }

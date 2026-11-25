@@ -24,4 +24,5 @@ export const paymentSettings = {
   pay_on_delivery_enabled: true,
   juicyway_enabled: false,
   klump_enabled: true,
+  oxygen_enabled: false,
 };

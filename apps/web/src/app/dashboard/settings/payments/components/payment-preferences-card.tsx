@@ -102,6 +102,48 @@ export function PaymentPreferencesCard({
               />
             </div>
           </div>
+          <div
+            className={cn(
+              'p-4 rounded-lg border-2 transition-colors',
+              settings.oxygen_enabled
+                ? 'border-green-200 bg-green-50/50 dark:bg-green-900/10 dark:border-green-800'
+                : 'border-gray-200 dark:border-gray-800'
+            )}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <div className="size-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
+                  O2
+                </div>
+                <div>
+                  <h3 className="font-semibold">Oxygen</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Device &amp; order financing in installments for eligible
+                    customers. Requires an active Oxygen merchant account and
+                    rollout admission to appear at checkout.
+                  </p>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <span className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-0.5 rounded-full">
+                      Pay Later
+                    </span>
+                    <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 px-2 py-0.5 rounded-full">
+                      Installment Financing
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <Switch
+                aria-label="Toggle Oxygen"
+                checked={settings.oxygen_enabled}
+                onCheckedChange={(checked) =>
+                  onSettingsChange({
+                    ...settings,
+                    oxygen_enabled: checked,
+                  })
+                }
+              />
+            </div>
+          </div>
           <div className="p-4 rounded-lg bg-muted/50 border mt-4">
             <h4 className="font-medium mb-2">How BNPL Works</h4>
             <ul className="text-sm text-muted-foreground space-y-1">

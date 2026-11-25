@@ -8,6 +8,28 @@ const row = {
   environment: 'staging',
   binding_ready: true,
 };
+type RpcResponse = {
+  data: unknown;
+  error: { code?: string; message?: string } | null;
+};
+
+function mockStagingRpc(
+  readinessResult: RpcResponse = { data: [row], error: null },
+  settingsResult: RpcResponse = {
+    data: [{ oxygen_enabled: true }],
+    error: null,
+  }
+) {
+  return vi.fn((name: string): Promise<RpcResponse> => {
+    if (name === 'oxygen_mobile_staging_readiness') {
+      return Promise.resolve(readinessResult);
+    }
+    if (name === 'get_storefront_payment_settings') {
+      return Promise.resolve(settingsResult);
+    }
+    return Promise.resolve({ data: null, error: null });
+  });
+}
 beforeEach(() => {
   vi.unstubAllEnvs();
   vi.stubEnv('VERCEL_ENV', 'preview');
@@ -29,12 +51,14 @@ beforeEach(() => {
   vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'selfie.example.test');
 });
 it('reads only the owned readiness projection and returns safe metadata', async () => {
-  const rpc = vi.fn().mockResolvedValue({ data: [row], error: null });
+  const rpc = mockStagingRpc();
   const result = await readOxygenMobileCapabilities({ rpc }, 'test-store');
-  expect(rpc).toHaveBeenCalledExactlyOnceWith(
-    'oxygen_mobile_staging_readiness',
-    { p_merchant_slug: 'test-store' }
-  );
+  expect(rpc).toHaveBeenNthCalledWith(1, 'oxygen_mobile_staging_readiness', {
+    p_merchant_slug: 'test-store',
+  });
+  expect(rpc).toHaveBeenNthCalledWith(2, 'get_storefront_payment_settings', {
+    p_merchant_id: id,
+  });
   expect(result).toMatchObject({
     ok: true,
     capabilities: {
@@ -45,6 +69,53 @@ it('reads only the owned readiness projection and returns safe metadata', async 
       reason: null,
       selfieOrigins: ['https://selfie.example.test'],
     },
+  });
+});
+
+it('disables staging mobile capability when oxygen_enabled is false', async () => {
+  const rpc = mockStagingRpc(undefined, {
+    data: [{ oxygen_enabled: false }],
+    error: null,
+  });
+  await expect(
+    readOxygenMobileCapabilities({ rpc }, 'test-store')
+  ).resolves.toMatchObject({
+    ok: true,
+    capabilities: {
+      mobileEnabled: false,
+      reason: 'Oxygen is disabled for this storefront.',
+    },
+  });
+});
+
+it('fails closed (503) when get_storefront_payment_settings fails in staging', async () => {
+  const rpc = mockStagingRpc(undefined, {
+    data: null,
+    error: { message: 'rpc failed' },
+  });
+  await expect(
+    readOxygenMobileCapabilities({ rpc }, 'test-store')
+  ).resolves.toEqual({
+    ok: false,
+    status: 503,
+  });
+});
+it.each([
+  { settingsRows: [] },
+  { settingsRows: [{ oxygen_enabled: true }, { oxygen_enabled: false }] },
+  { settingsRows: [{}] },
+])('fails closed (503) when get_storefront_payment_settings returns invalid row set %o in staging', async ({
+  settingsRows,
+}) => {
+  const rpc = mockStagingRpc(undefined, {
+    data: settingsRows,
+    error: null,
+  });
+  await expect(
+    readOxygenMobileCapabilities({ rpc }, 'test-store')
+  ).resolves.toEqual({
+    ok: false,
+    status: 503,
   });
 });
 it.each([
@@ -158,7 +229,7 @@ it.each([
   vi.stubEnv('VERCEL_ENV', 'development');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', `http://${host}:3000/qa-backend`);
   const result = await readOxygenMobileCapabilities(
-    { rpc: vi.fn().mockResolvedValue({ data: [row], error: null }) },
+    { rpc: mockStagingRpc() },
     'test-store'
   );
   expect(result).toMatchObject({
@@ -172,10 +243,7 @@ it.each([
 });
 it('keeps secure root Auth configuration exact', async () => {
   expect(
-    await readOxygenMobileCapabilities(
-      { rpc: vi.fn().mockResolvedValue({ data: [row], error: null }) },
-      'test-store'
-    )
+    await readOxygenMobileCapabilities({ rpc: mockStagingRpc() }, 'test-store')
   ).toMatchObject({
     ok: true,
     capabilities: {
@@ -227,10 +295,7 @@ it('accepts preview metadata only in an explicit development or test loopback ru
   vi.stubEnv('NODE_ENV', 'development');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost:3000/qa-backend');
   expect(
-    await readOxygenMobileCapabilities(
-      { rpc: vi.fn().mockResolvedValue({ data: [row], error: null }) },
-      'test-store'
-    )
+    await readOxygenMobileCapabilities({ rpc: mockStagingRpc() }, 'test-store')
   ).toMatchObject({
     ok: true,
     capabilities: {

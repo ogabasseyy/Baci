@@ -544,6 +544,8 @@ const WalletDedicatedAccountSplitConfigObjectSchema = z
 
 const WalletDedicatedAccountResponseSchema = z.object({
   id: z.union([z.number(), z.string()]).nullable().optional(),
+  active: z.boolean(),
+  assigned: z.boolean(),
   bank: z.object({
     name: z.string().min(1),
     slug: z.string().min(1).nullable().optional(),
@@ -774,31 +776,78 @@ export async function createDedicatedAccountForWallet(
     };
   }
 
-  const walletAccount = parsed.data;
-  const providerSplitConfigSubaccount = extractPaystackSplitConfigSubaccount(
+  let walletAccount = parsed.data;
+  if (!walletAccount.active || !walletAccount.assigned) {
+    return {
+      success: false,
+      error: 'Wallet DVA response is not active and assigned',
+      code: 'VALIDATION_ERROR',
+    };
+  }
+  const providerCustomerCode = walletAccount.customer?.customer_code;
+  if (!providerCustomerCode || providerCustomerCode !== input.customerCode) {
+    return {
+      success: false,
+      error: 'Wallet DVA response returned a different Paystack customer',
+      code: 'VALIDATION_ERROR',
+    };
+  }
+  let providerSplitConfigSubaccount = extractPaystackSplitConfigSubaccount(
     walletAccount.split_config
   );
-  if (
-    providerSplitConfigSubaccount &&
-    providerSplitConfigSubaccount !== input.subaccount
-  ) {
+  // Paystack's create response omits split_config in its documented shape.
+  // If it is absent, confirm the exact created assignment through the
+  // provider's read endpoint. Never repeat create after an incomplete result.
+  if (!providerSplitConfigSubaccount && walletAccount.split_config == null) {
+    if (walletAccount.id === undefined || walletAccount.id === null) {
+      return {
+        success: false,
+        error: 'Wallet DVA response did not identify the created assignment',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+    const createdAccountId = String(walletAccount.id);
+    const createdAccountNumber = walletAccount.account_number;
+    const fetched = await getDedicatedAccount(createdAccountId);
+    if (!fetched.success) return fetched;
+    const verifiedParsed = WalletDedicatedAccountResponseSchema.safeParse(
+      fetched.data
+    );
+    if (!verifiedParsed.success) {
+      return {
+        success: false,
+        error: 'Wallet DVA assignment could not be verified',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+    walletAccount = verifiedParsed.data;
+    if (
+      !walletAccount.active ||
+      !walletAccount.assigned ||
+      String(walletAccount.id) !== createdAccountId ||
+      walletAccount.account_number !== createdAccountNumber ||
+      walletAccount.customer?.customer_code !== input.customerCode
+    ) {
+      return {
+        success: false,
+        error: 'Wallet DVA assignment could not be verified',
+        code: 'VALIDATION_ERROR',
+      };
+    }
+    providerSplitConfigSubaccount = extractPaystackSplitConfigSubaccount(
+      walletAccount.split_config
+    );
+  }
+  if (providerSplitConfigSubaccount !== input.subaccount) {
     return {
       success: false,
-      error: 'Wallet DVA response returned a different Paystack subaccount',
+      error:
+        'Wallet DVA response did not prove the requested Paystack subaccount',
       code: 'VALIDATION_ERROR',
     };
   }
 
-  const providerSubaccountCode =
-    providerSplitConfigSubaccount ?? input.subaccount;
-
-  if (!providerSubaccountCode) {
-    return {
-      success: false,
-      error: 'Wallet DVA response did not include a Paystack subaccount',
-      code: 'VALIDATION_ERROR',
-    };
-  }
+  const providerSubaccountCode = providerSplitConfigSubaccount;
 
   return {
     success: true,
@@ -807,8 +856,7 @@ export async function createDedicatedAccountForWallet(
         walletAccount.id === undefined || walletAccount.id === null
           ? null
           : String(walletAccount.id),
-      providerCustomerCode:
-        walletAccount.customer?.customer_code ?? input.customerCode,
+      providerCustomerCode: providerCustomerCode,
       providerSubaccountCode,
       accountNumber: walletAccount.account_number,
       accountName: walletAccount.account_name,
@@ -840,6 +888,25 @@ export async function getDedicatedAccounts(
   );
 
   return result;
+}
+
+/** Fetch one provider DVA for exact post-create verification. */
+export function getDedicatedAccount(
+  dedicatedAccountId: string,
+  init?: { signal?: AbortSignal }
+): Promise<PaystackResult<DedicatedAccountResponse>> {
+  if (!/^\d{1,20}$/.test(dedicatedAccountId)) {
+    return Promise.resolve({
+      success: false,
+      error: 'Invalid dedicated account ID',
+      code: 'VALIDATION_ERROR',
+    });
+  }
+
+  return paystackRequest<DedicatedAccountResponse>(
+    `/dedicated_account/${encodeURIComponent(dedicatedAccountId)}`,
+    init?.signal ? { signal: init.signal } : undefined
+  );
 }
 
 const PAYSTACK_DVA_ACCOUNT_PATTERN = /^\d{10}$/;

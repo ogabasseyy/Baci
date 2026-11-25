@@ -180,7 +180,7 @@ describe('GET /agent-trust.json', () => {
       expect(maxDuration).toBe(60);
       expect(response.headers.get('cache-control')).toBe('public, max-age=60');
       expect(response.headers.get('vercel-cdn-cache-control')).toBe(
-        'public, s-maxage=300, stale-while-revalidate=3600'
+        'public, s-maxage=1800, stale-while-revalidate=86400'
       );
       expect(body).toMatchObject({
         schema_version: '2026-05-20',

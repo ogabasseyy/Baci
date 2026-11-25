@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildChatwootInlineReviewResponse } from './chatwoot-inline-review-response';
 
 const snapshot = {
@@ -21,6 +21,18 @@ const snapshot = {
 };
 
 describe('buildChatwootInlineReviewResponse', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('offers instalments only for an NGN review on the local Oxygen staging backend', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:3451');
+    const buildReview = (currency: string) =>
+      buildChatwootInlineReviewResponse('req-1', { ...snapshot, currency }, 2_000, 1_000_000);
+    expect(buildReview('NGN')).toMatchObject({ paySmallSmallAvailable: true });
+    expect(buildReview('USD')).not.toHaveProperty('paySmallSmallAvailable');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://example.test');
+    expect(buildReview('NGN')).not.toHaveProperty('paySmallSmallAvailable');
+  });
   it('returns only the safe exact-total review projection and caps its TTL', () => {
     expect(buildChatwootInlineReviewResponse('req-1', snapshot, 3_000, 1_000_000)).toEqual({
       requestId: 'req-1',

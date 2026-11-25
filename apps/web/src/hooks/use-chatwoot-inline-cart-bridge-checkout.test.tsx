@@ -26,9 +26,23 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/cart', () => ({ useCart: () => mocks.cartState }));
-vi.mock('@/lib/csrf', () => ({ buildCsrfHeaders: mocks.buildCsrfHeaders }));
+vi.mock('@/lib/csrf', () => ({
+  CSRF_HEADER_NAME: 'x-csrf-token',
+  buildCsrfHeaders: mocks.buildCsrfHeaders,
+  getClientCsrfToken: () => 'csrf-token',
+}));
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({ merchant: { id: 'merchant-1' } }),
+}));
+vi.mock('@/config/oxygen-storefront-staging', () => ({
+  isOxygenStorefrontStagingEnabled: () => true,
+}));
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    auth: {
+      getUser: async () => ({ data: { user: { email: 'ada@example.com' } } }),
+    },
+  }),
 }));
 
 import {
@@ -38,8 +52,19 @@ import {
 } from './chatwoot-checkout-memory';
 import { useChatwootInlineCartBridge } from './use-chatwoot-inline-cart-bridge';
 
-function HookHarness({ checkoutEnabled }: { checkoutEnabled?: boolean }) {
-  useChatwootInlineCartBridge('store', origin, checkoutEnabled);
+function HookHarness({
+  checkoutEnabled,
+  openSecureApplication,
+}: {
+  checkoutEnabled?: boolean;
+  openSecureApplication?: (path: string) => void;
+}) {
+  useChatwootInlineCartBridge(
+    'store',
+    origin,
+    checkoutEnabled,
+    openSecureApplication
+  );
   return null;
 }
 
@@ -105,6 +130,49 @@ describe('ChatwootInlineCartBridge in-chat checkout', () => {
       return response(905);
     });
     vi.stubGlobal('fetch', fetchMock);
+  });
+
+  it('opens the secure card for an authorized Oxygen checkout replay', async () => {
+    resetChatwootCheckoutOrderMemory();
+    const orderId = '6974e8cc-4e90-4ca9-b2cf-aa2abaf461df';
+    rememberChatwootCheckoutOrder(
+      'saved-order',
+      { merchantId: 'merchant-1', conversationId: 905, cartId: 'cart-1' },
+      {
+        orderId,
+        orderNumber: 'ORD-1001',
+        trackingToken: null,
+        amountDueMajor: 42000,
+        currency: 'NGN',
+        paymentMethod: 'oxygen',
+      }
+    );
+    const { target, postMessage } = installFrame();
+    const openSecureApplication = vi.fn();
+    render(
+      <HookHarness
+        checkoutEnabled
+        openSecureApplication={openSecureApplication}
+      />
+    );
+    await act(async () => {
+      await establishWidgetContext(target, postMessage);
+      sendWidgetMessage(target, 'baci-checkout-place-request', {
+        ...placeData,
+        cartVersion: 8,
+        paymentMethod: 'oxygen',
+      });
+      await waitFor(
+        () =>
+          expect(openSecureApplication).toHaveBeenCalledWith(
+            `/payments/oxygen/${orderId}`
+          ),
+        { timeout: 10000 }
+      );
+    });
+    expect(
+      fetchMock.mock.calls.some(([path]) => String(path) === '/api/orders')
+    ).toBe(false);
   });
 
   it.each([

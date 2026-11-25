@@ -136,4 +136,16 @@ describe('createMenuSections', () => {
       'email-domain'
     );
   });
+
+  it('lists Messages in Business and opens the messages screen', () => {
+    const options = createOptions();
+    const messages = createMenuSections(options)
+      .find((section) => section.title === 'Business')
+      ?.items.find((item) => item.id === 'messages');
+
+    messages?.onPress();
+
+    expect(messages?.label).toBe('Messages');
+    expect(options.onNavigate).toHaveBeenCalledWith('/(admin)/messages');
+  });
 });

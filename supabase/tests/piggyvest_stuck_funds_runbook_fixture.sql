@@ -130,6 +130,8 @@ CREATE FUNCTION extensions.gen_random_uuid() RETURNS uuid LANGUAGE sql AS $$ SEL
 CREATE FUNCTION public.check_staff_permission(uuid, uuid, text, text) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION private.restock_order_items(uuid) RETURNS void LANGUAGE sql AS $$ SELECT $$;
 CREATE FUNCTION private.release_order_inventory_units(uuid, uuid, text) RETURNS void LANGUAGE sql AS $$ SELECT $$;
+-- No order here has an amendment, which is what the real helper reports for such orders.
+CREATE FUNCTION private.paid_order_amendment_cancel_funding_matches(uuid, numeric, numeric) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
 CREATE FUNCTION public.reverse_savings_redemption_for_order(uuid, uuid, uuid, text) RETURNS numeric LANGUAGE sql AS $$ SELECT 0::numeric $$;
 CREATE FUNCTION public.normalized_gateway_name_v1(text) RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT upper($1) $$;
 CREATE TABLE public.order_payment_accounts (order_id uuid, expires_at timestamptz);

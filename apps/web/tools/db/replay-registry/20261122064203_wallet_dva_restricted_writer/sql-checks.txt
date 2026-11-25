@@ -1,0 +1,1 @@
+supabase/tests/wallet_dva_restricted_writer.sql

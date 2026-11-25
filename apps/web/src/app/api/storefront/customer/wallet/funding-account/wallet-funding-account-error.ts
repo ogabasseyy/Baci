@@ -15,10 +15,14 @@ export function walletAccountErrorStatus(code: string) {
     code === 'WALLET_DVA_DISABLED_ACCOUNT' ||
     code === 'WALLET_DVA_ORDER_ALIAS_CONFLICT' ||
     code === 'WALLET_DVA_PENDING_REVIEW_CONFLICT' ||
+    code === 'WALLET_DVA_PROVIDER_CUSTOMER_CONFLICT' ||
+    code === 'WALLET_DVA_RECEIVER_CONFLICT' ||
     code === 'WALLET_DVA_SUBACCOUNT_CONFLICT'
   ) {
     return 409;
   }
+
+  if (code === 'WALLET_DVA_WRITER_UNAVAILABLE') return 503;
 
   if (code === 'PAYSTACK_CUSTOMER_ERROR' || code === 'PAYSTACK_DVA_ERROR') {
     return 502;

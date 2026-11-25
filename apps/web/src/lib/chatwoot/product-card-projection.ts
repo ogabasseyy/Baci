@@ -22,6 +22,7 @@ export type ChatwootProductCard = {
     id: string;
     attributes: Record<string, string>;
     price: number;
+    image?: string;
     availability: 'in_stock' | 'out_of_stock';
     condition?: 'new' | 'used' | 'open_box';
   }>;
@@ -140,8 +141,14 @@ export function projectChatwootProductCard(input: {
       }
       const variantCondition =
         normalizedVariantCondition ?? normalizedCondition(product.condition);
+      const variantImage =
+        toImage(candidate.primary_image) ??
+        (Array.isArray(candidate.images)
+          ? candidate.images.map(toImage).find(Boolean)
+          : undefined);
       variants.push({
         id: candidate.id as string,
+        ...(variantImage ? { image: variantImage } : {}),
         attributes,
         price: variantPrice,
         availability: available ? 'in_stock' : 'out_of_stock',

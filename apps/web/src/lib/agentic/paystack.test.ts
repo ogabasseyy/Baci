@@ -229,4 +229,106 @@ describe('agentic/paystack', () => {
       ).rejects.toThrow('Email contains invalid characters');
     });
   });
+
+  describe('createPaystackBankTransferCharge', () => {
+    const validInput = {
+      email: 'ada@example.com',
+      amountKobo: 38500000,
+      reference: 'ref_bt_123',
+      subaccount: 'ACCT_TESTMOCK1234567',
+      transactionChargeKobo: 120000,
+      metadata: { order_id: 'ord-1' },
+    };
+
+    it('fails closed when PAYSTACK_SECRET_KEY is not set', async () => {
+      vi.stubEnv('PAYSTACK_SECRET_KEY', '');
+      vi.resetModules();
+      const { createPaystackBankTransferCharge } = await import('./paystack');
+
+      await expect(
+        createPaystackBankTransferCharge(validInput)
+      ).rejects.toThrow('PAYSTACK_SECRET_KEY is not configured');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when subaccount code is invalid', async () => {
+      vi.stubEnv('PAYSTACK_SECRET_KEY', 'sk_test_123');
+      vi.resetModules();
+      const { createPaystackBankTransferCharge } = await import('./paystack');
+
+      await expect(
+        createPaystackBankTransferCharge({
+          ...validInput,
+          subaccount: 'BAD_SUBACCOUNT',
+        })
+      ).rejects.toThrow('Paystack subaccount is not configured');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('posts the bank_transfer charge payload and returns account details and expiry', async () => {
+      vi.stubEnv('PAYSTACK_SECRET_KEY', 'sk_test_123');
+      vi.resetModules();
+      const { createPaystackBankTransferCharge } = await import('./paystack');
+
+      mockFetch.mockResolvedValueOnce(
+        mockResponse(200, {
+          status: true,
+          data: {
+            reference: 'ref_bt_123',
+            account_number: '9988776655',
+            account_name: 'Ogabassey Checkout',
+            bank: { name: 'Test Bank' },
+            account_expires_at: '2026-11-23T12:00:00Z',
+          },
+        })
+      );
+
+      const result = await createPaystackBankTransferCharge(validInput);
+      expect(result).toEqual({
+        account_number: '9988776655',
+        account_name: 'Ogabassey Checkout',
+        bank_name: 'Test Bank',
+        account_expires_at: '2026-11-23T12:00:00Z',
+        reference: 'ref_bt_123',
+      });
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://api.paystack.co/charge');
+      expect(JSON.parse(String(init.body))).toMatchObject({
+        email: 'ada@example.com',
+        amount: '38500000',
+        reference: 'ref_bt_123',
+        subaccount: 'ACCT_TESTMOCK1234567',
+        transaction_charge: 120000,
+        bearer: 'account',
+        bank_transfer: { account_expires_at: null },
+        metadata: { order_id: 'ord-1' },
+      });
+    });
+
+    it('throws when provider rejects or omits required bank account fields', async () => {
+      vi.stubEnv('PAYSTACK_SECRET_KEY', 'sk_test_123');
+      vi.resetModules();
+      const { createPaystackBankTransferCharge } = await import('./paystack');
+
+      mockFetch.mockResolvedValueOnce(
+        mockResponse(200, {
+          status: false,
+          message: 'Charge rejected',
+        })
+      );
+      await expect(
+        createPaystackBankTransferCharge(validInput)
+      ).rejects.toThrow('Failed to initialize Paystack bank transfer');
+
+      mockFetch.mockResolvedValueOnce(
+        mockResponse(200, {
+          status: true,
+          data: { reference: 'ref_bt_123', account_number: '' },
+        })
+      );
+      await expect(
+        createPaystackBankTransferCharge(validInput)
+      ).rejects.toThrow('Failed to initialize Paystack bank transfer');
+    });
+  });
 });

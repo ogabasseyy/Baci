@@ -79,7 +79,10 @@ const intent = {
   targetOrderAmount: 18_000,
 };
 
-function postRequest(body: Record<string, unknown>) {
+const ORDER_ID = '11111111-1111-4111-8111-111111111111';
+const VALID_BODY = { merchantSlug: 'ogabassey', orderId: ORDER_ID };
+
+function postRequest(body: Record<string, unknown> = VALID_BODY) {
   return new NextRequest(
     'http://localhost:3000/api/storefront/customer/wallet/order-funding-intents',
     {
@@ -129,12 +132,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
       user: null,
     });
 
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
 
     expect(response.status).toBe(401);
     expect(mockCheckCsrfProtection).not.toHaveBeenCalled();
@@ -147,12 +145,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
       valid: false,
     });
 
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
 
     expect(response.status).toBe(403);
     expect(mockResolveWalletTopUpMerchant).not.toHaveBeenCalled();
@@ -160,11 +153,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
 
   it('rejects invalid input before resolving merchant context', async () => {
     const response = await POST(
-      postRequest({
-        amount: 15_000,
-        merchantSlug: 'ogabassey',
-        orderId: 'not-a-uuid',
-      })
+      postRequest({ amount: 15_000, merchantSlug: 'ogabassey', orderId: 'bad' })
     );
     const body = await response.json();
 
@@ -185,28 +174,19 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
   });
 
   it('creates a wallet-funded order intent and returns reusable account details', async () => {
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(mockCreateOrderWalletFundingIntent).toHaveBeenCalledWith(
       expect.objectContaining({
-        consent: undefined,
         customer,
         merchant,
-        orderId: '11111111-1111-4111-8111-111111111111',
+        orderId: ORDER_ID,
         supabase: mockAuthSupabase,
       })
     );
-    expect(body).toEqual({
-      account,
-      intent,
-    });
+    expect(body).toEqual({ account, intent });
   });
 
   it('maps disabled auto-debit to a typed 403 fallback', async () => {
@@ -215,12 +195,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
       kind: 'fallback',
     });
 
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(403);
@@ -233,12 +208,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
       kind: 'fallback',
     });
 
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(409);
@@ -255,12 +225,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
       kind: 'fallback',
     });
 
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(status);
@@ -271,10 +236,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
     mockResolveWalletTopUpMerchant.mockResolvedValue(null);
 
     const response = await POST(
-      postRequest({
-        merchantSlug: 'unknown',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
+      postRequest({ merchantSlug: 'unknown', orderId: ORDER_ID })
     );
 
     expect(response.status).toBe(404);
@@ -285,12 +247,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
   it('returns 409 for guest checkout customers', async () => {
     mockResolveVtuCustomer.mockResolvedValue(null);
 
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
     const body = await response.json();
 
     expect(response.status).toBe(409);
@@ -303,12 +260,7 @@ describe('/api/storefront/customer/wallet/order-funding-intents', () => {
       new Error('insert failed')
     );
 
-    const response = await POST(
-      postRequest({
-        merchantSlug: 'ogabassey',
-        orderId: '11111111-1111-4111-8111-111111111111',
-      })
-    );
+    const response = await POST(postRequest());
 
     expect(response.status).toBe(500);
   });

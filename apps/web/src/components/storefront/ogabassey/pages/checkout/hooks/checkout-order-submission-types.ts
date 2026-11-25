@@ -31,6 +31,7 @@ export interface CheckoutOrderSubmissionContext {
     password: string;
     user: AuthUser | null | undefined;
     waitForResolvedCustomerAuth: ReturnType<typeof useStorefrontCustomerSession>['waitForResolvedAuthenticated'];
+    openAuthModal?: () => void;
   };
   cart: {
     cart: CartItem[];

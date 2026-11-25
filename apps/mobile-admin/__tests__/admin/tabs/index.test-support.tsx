@@ -66,14 +66,19 @@ vi.mock('@/components/dashboard', async () => {
     InsightCard: () => <Text>insight-card</Text>,
     ProgressCard: () => <Text>progress-card</Text>,
     QuickActionButton: ({
+      badgeCount,
       label,
       onPress,
     }: {
+      badgeCount?: number;
       label: string;
       onPress?: () => void;
     }) => (
       <button type="button" onClick={onPress}>
         {label}
+        {badgeCount ? (
+          <span data-testid={`badge-${label}`}>{badgeCount}</span>
+        ) : null}
       </button>
     ),
     RevenueChart: () => <Text>revenue-chart</Text>,
@@ -91,6 +96,10 @@ vi.mock('@/components/dashboard', async () => {
     ),
   };
 });
+
+vi.mock('@/hooks/useWaitingChatCount', () => ({
+  useWaitingChatCount: () => 3,
+}));
 
 vi.mock('@/hooks/useDashboardStats', () => ({
   useDashboardStats: () => ({

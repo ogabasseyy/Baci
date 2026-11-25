@@ -84,4 +84,19 @@ describe('HomeScreen', () => {
 
     expect(router.push).toHaveBeenCalledWith('/(admin)/negotiations');
   });
+
+  it('opens Messages from the Messages quick action in place of Add Product', () => {
+    render(<HomeScreen />);
+
+    expect(screen.queryByRole('button', { name: 'Add Product' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^Messages/ }));
+
+    expect(router.push).toHaveBeenCalledWith('/(admin)/messages');
+  });
+
+  it('shows how many chats are waiting as a counter on Messages', () => {
+    render(<HomeScreen />);
+
+    expect(screen.getByTestId('badge-Messages').textContent).toBe('3');
+  });
 });

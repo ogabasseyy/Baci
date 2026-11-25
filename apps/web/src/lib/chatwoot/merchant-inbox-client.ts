@@ -12,6 +12,12 @@ import {
   projectMerchantInboxConversation,
   projectMerchantInboxMessage,
 } from './merchant-inbox-projection';
+import { PROVIDER_MESSAGE_PAGE_SIZE } from './merchant-inbox-provider-limits';
+import {
+  type MerchantInboxView,
+  matchesView,
+  providerQueryForView,
+} from './merchant-inbox-views';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -24,7 +30,7 @@ type ProviderResponse =
   | { ok: true; body: unknown }
   | { ok: false; status: number | null };
 
-async function providerGet(
+export async function providerGet(
   binding: MerchantInboxBinding,
   path: string,
   query?: Record<string, string>
@@ -64,7 +70,9 @@ async function providerGet(
   }
 }
 
-function failure(response: { status: number | null }): MerchantInboxFailure {
+export function failure(response: {
+  status: number | null;
+}): MerchantInboxFailure {
   return {
     ok: false,
     code: response.status === 404 ? 'not_found' : 'unavailable',
@@ -77,17 +85,29 @@ export async function listMerchantInboxConversations(
   input: {
     page: number;
     status: 'open' | 'resolved' | 'pending' | 'snoozed' | 'all';
+    /** A smart view; it replaces `status` and narrows the rows. */
+    view?: MerchantInboxView;
   }
 ): Promise<
   | { ok: true; conversations: MerchantInboxConversation[]; hasMore: boolean }
   | MerchantInboxFailure
 > {
-  const response = await providerGet(binding, '/conversations', {
+  const viewQuery = input.view ? providerQueryForView(input.view) : null;
+  const query: Record<string, string> = {
     inbox_id: String(binding.inboxId),
     page: String(input.page),
     sort_by: 'last_activity_at_desc',
-    status: input.status,
-  });
+    status: viewQuery?.status ?? input.status,
+  };
+  // Label filter as the provider's array parameter; `matchesView` below
+  // applies the same rule again in case a build ignores it.
+  const response = await providerGet(
+    binding,
+    '/conversations',
+    viewQuery?.labels?.[0]
+      ? { ...query, 'labels[]': viewQuery.labels[0] }
+      : query
+  );
   if (!response.ok) return failure(response);
   const parsed = providerInboxConversationListSchema.safeParse(response.body);
   if (!parsed.success) return { ok: false, code: 'unavailable' };
@@ -95,6 +115,7 @@ export async function listMerchantInboxConversations(
   const conversations = payload
     .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
     .filter((value): value is MerchantInboxConversation => value !== null)
+    .filter((value) => !input.view || matchesView(value, input.view))
     // Ordering must not depend on the provider honouring `sort_by`.
     .sort(
       (a, b) =>
@@ -182,9 +203,17 @@ export async function listMerchantInboxMessages(
       (id): id is number =>
         typeof id === 'number' && Number.isSafeInteger(id) && id > 0
     );
-  // As with conversations, no provider page size is assumed: any non-empty
-  // page may have an older one, and paging ends on an empty page.
-  const hasOlder = rawIds.length > 0;
+  // The chat engine's message finder returns at most 20 rows per page, hidden
+  // rows included (`limit(20)` in v4.19.1, verified in its source), so a page
+  // with fewer rows is the oldest one: a short chat must not offer "load
+  // earlier". A full page may have an older one, and paging still ends on an
+  // empty page. Re-check the size when the engine is upgraded.
+  // Fullness counts the rows the engine sent, not only those with a usable id:
+  // a full page holding a malformed row must still page on. The cursor needs
+  // at least one usable id, so without one paging ends.
+  const hasOlder =
+    parsed.data.payload.length >= PROVIDER_MESSAGE_PAGE_SIZE &&
+    rawIds.length > 0;
   return {
     ok: true,
     conversation: owned.conversation,

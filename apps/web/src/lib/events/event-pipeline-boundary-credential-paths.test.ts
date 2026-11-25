@@ -15,6 +15,7 @@ import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-imm
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
 import { eventPipelineManualOrderDocumentCredentialPaths } from './event-pipeline-manual-order-document-credential-paths';
 import { onboardingEmailWorkerAuthority } from './event-pipeline-onboarding-authority-paths';
+import { eventPipelinePaidOrderAmendmentCredentialPaths } from './event-pipeline-paid-order-amendment-paths';
 import { eventPipelinePaystackRefundCredentialPaths } from './event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
@@ -280,6 +281,7 @@ describe('event pipeline credential-path authority', () => {
       ...onboardingEmailWorkerAuthority.credentialPaths,
       ...eventPipelineChatPushCredentialPaths,
       ...eventPipelineChatDvaCredentialPaths,
+      ...eventPipelinePaidOrderAmendmentCredentialPaths,
       ...vpsCronWorkerAuthority.credentialPaths,
     ]);
   });

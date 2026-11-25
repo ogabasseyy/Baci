@@ -75,7 +75,8 @@ function normalizeCanonicalSocialUrl(
 
   try {
     const url = new URL(input);
-    if (url.hostname.toLowerCase() === hostRule.bare) {
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === hostRule.bare || hostname === hostRule.canonical) {
       url.protocol = 'https:';
       url.hostname = hostRule.canonical;
       return url.toString();

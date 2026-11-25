@@ -13,6 +13,7 @@ import {
 import Link from 'next/link';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
+import { normalizeSocialUrl, type SocialPlatform } from '@/lib/social';
 import {
   buildMerchantTrustProfile,
   hasPublishableReturnsPolicy,
@@ -93,55 +94,26 @@ export function StorefrontFooter() {
   ].filter((link): link is FooterLink => link !== null);
 
   // Social media configuration
-  const socialLinks = [
-    {
-      key: 'instagram',
-      icon: Instagram,
-      label: 'Instagram',
-      urlPrefix: 'https://www.instagram.com/',
-    },
-    {
-      key: 'twitter',
-      icon: Twitter,
-      label: 'Twitter',
-      urlPrefix: 'https://x.com/',
-    },
-    {
-      key: 'facebook',
-      icon: Facebook,
-      label: 'Facebook',
-      urlPrefix: 'https://www.facebook.com/',
-    },
-    {
-      key: 'tiktok',
-      icon: TikTokIcon,
-      label: 'TikTok',
-      urlPrefix: 'https://www.tiktok.com/@',
-    },
-    {
-      key: 'youtube',
-      icon: Youtube,
-      label: 'YouTube',
-      urlPrefix: 'https://youtube.com/',
-    },
-    {
-      key: 'linkedin',
-      icon: Linkedin,
-      label: 'LinkedIn',
-      urlPrefix: 'https://linkedin.com/company/',
-    },
-    {
-      key: 'pinterest',
-      icon: PinterestIcon,
-      label: 'Pinterest',
-      urlPrefix: 'https://pinterest.com/',
-    },
+  const socialLinks: Array<{
+    key: SocialPlatform;
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+  }> = [
+    { key: 'instagram', icon: Instagram, label: 'Instagram' },
+    { key: 'twitter', icon: Twitter, label: 'Twitter' },
+    { key: 'facebook', icon: Facebook, label: 'Facebook' },
+    { key: 'tiktok', icon: TikTokIcon, label: 'TikTok' },
+    { key: 'youtube', icon: Youtube, label: 'YouTube' },
+    { key: 'linkedin', icon: Linkedin, label: 'LinkedIn' },
+    { key: 'pinterest', icon: PinterestIcon, label: 'Pinterest' },
   ];
 
-  const availableSocialLinks = socialLinks.filter(
-    (link) =>
-      merchant.social_media?.[link.key as keyof typeof merchant.social_media]
-  );
+  const availableSocialLinks = socialLinks.flatMap((link) => {
+    const rawValue =
+      merchant.social_media?.[link.key as keyof typeof merchant.social_media];
+    const url = normalizeSocialUrl(rawValue, link.key);
+    return url ? [{ ...link, url }] : [];
+  });
 
   // Check if merchant has contact info
   const hasContactInfo =
@@ -250,18 +222,11 @@ export function StorefrontFooter() {
               <h3 className="text-lg font-semibold mb-4">Follow Us</h3>
               <div className="flex flex-wrap gap-3">
                 {availableSocialLinks.map((social) => {
-                  const handle =
-                    merchant.social_media?.[
-                      social.key as keyof typeof merchant.social_media
-                    ];
-                  const url = handle?.startsWith('http')
-                    ? handle
-                    : `${social.urlPrefix}${handle?.replace('@', '')}`;
                   const Icon = social.icon;
                   return (
                     <a
                       key={social.key}
-                      href={url}
+                      href={social.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Follow us on ${social.label}`}

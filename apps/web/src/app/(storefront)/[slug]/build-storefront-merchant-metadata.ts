@@ -91,7 +91,6 @@ export function buildStorefrontMerchantMetadata(
       title: merchant.site_title || merchant.business_name,
       description,
       type: 'website',
-      url: baseUrl || undefined,
       siteName: merchant.business_name,
       images: getStorefrontOpenGraphImages(
         baseUrl,

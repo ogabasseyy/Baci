@@ -151,6 +151,21 @@ describe('ImeiCheckPage', () => {
     expect(metadata.alternates).toEqual({
       canonical: 'https://ogabassey.com/imei-check',
     });
+    expect(metadata.openGraph).toMatchObject({
+      title: 'Free Phone IMEI Check & Verification',
+      url: 'https://ogabassey.com/imei-check',
+      type: 'website',
+      images: [
+        {
+          url: 'https://ogabassey.com/opengraph-image',
+          alt: 'Free Phone IMEI Check & Verification',
+        },
+      ],
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: 'summary_large_image',
+      images: ['https://ogabassey.com/opengraph-image'],
+    });
   });
 
   it('returns fallback metadata when store is not found or non-ogabassey', async () => {

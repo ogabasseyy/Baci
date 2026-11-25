@@ -65,6 +65,12 @@ describe('normalizeSocialUrl', () => {
     expect(
       normalizeSocialUrl('https://facebook.com/ogabasseyyy', 'facebook')
     ).toBe('https://www.facebook.com/ogabasseyyy');
+    expect(
+      normalizeSocialUrl('http://www.instagram.com/ogabasseyy', 'instagram')
+    ).toBe('https://www.instagram.com/ogabasseyy');
+    expect(
+      normalizeSocialUrl('http://www.facebook.com/ogabasseyyy', 'facebook')
+    ).toBe('https://www.facebook.com/ogabasseyyy');
     expect(normalizeSocialUrl('instagram.com/ogabasseyy', 'instagram')).toBe(
       'https://www.instagram.com/ogabasseyy'
     );

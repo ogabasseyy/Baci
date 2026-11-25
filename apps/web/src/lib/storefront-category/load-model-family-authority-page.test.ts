@@ -274,4 +274,55 @@ describe('model family authority page loader', () => {
       'Compare iPhone 17, iPhone 17e, iPhone 17 Air, iPhone 17 Pro, and iPhone 17 Pro Max options at Store.'
     );
   });
+
+  it('builds indexable Tecno Spark family pages at the 2-product threshold and rejects 1 product', async () => {
+    mockLoadBrandPage.mockResolvedValueOnce({
+      canonicalUrl: 'https://store.test/smartphones/brands/tecno',
+      categoryName: 'Smartphones',
+      merchant: {
+        id: 'merchant-id',
+        business_name: 'Store',
+        country: 'NG',
+        slug: 'store',
+        custom_domain: null,
+      },
+      brand: { brandKey: 'tecno', displayName: 'Tecno' },
+      products: [
+        { name: 'Tecno Spark 50', slug: 'tecno-spark-50' },
+        { name: 'Tecno Spark 50 Pro', slug: 'tecno-spark-50-pro' },
+      ],
+      breadcrumbItems: [],
+    });
+
+    const page = await modelFamilyAuthorityPageLoader.load({
+      merchantSlug: 'store',
+      categorySlug: 'smartphones',
+      brandSlug: 'tecno',
+      familySlug: 'spark',
+    });
+    expect(page?.products).toHaveLength(2);
+
+    mockLoadBrandPage.mockResolvedValueOnce({
+      canonicalUrl: 'https://store.test/smartphones/brands/tecno',
+      categoryName: 'Smartphones',
+      merchant: {
+        id: 'merchant-id',
+        business_name: 'Store',
+        country: 'NG',
+        slug: 'store',
+        custom_domain: null,
+      },
+      brand: { brandKey: 'tecno', displayName: 'Tecno' },
+      products: [{ name: 'Tecno Spark 50', slug: 'tecno-spark-50' }],
+      breadcrumbItems: [],
+    });
+    expect(
+      await modelFamilyAuthorityPageLoader.load({
+        merchantSlug: 'store',
+        categorySlug: 'smartphones',
+        brandSlug: 'tecno',
+        familySlug: 'spark',
+      })
+    ).toBeNull();
+  });
 });

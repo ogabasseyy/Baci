@@ -1364,7 +1364,7 @@ describe('generateOrganizationSchema', () => {
     });
 
     expect(schema.sameAs).toEqual([
-      'https://instagram.com/usebaci',
+      'https://www.instagram.com/usebaci',
       'https://x.com/usebaci',
       'https://linkedin.com/company/usebaci',
     ]);

@@ -532,4 +532,53 @@ describe('MerchantSetupChat', () => {
       );
     });
   });
+
+  it('clears rejectedSlug on Start over so the suggested link chip is not suppressed', async () => {
+    mocks.provisionMutateAsync.mockRejectedValueOnce(
+      new NetworkError(
+        'That store URL is unavailable. Please choose another.',
+        {
+          statusCode: 409,
+          data: { code: 'slug_unavailable' },
+        }
+      )
+    );
+
+    render(<MerchantSetupChat />);
+
+    fireEvent.click(screen.getByText(/Nigeria/));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByText('Fashion & Apparel'));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Kicks Hub' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Looks good!' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Launch my store' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Type another store link below:/)).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText('Custom store link input'), {
+      target: { value: 'kicks-hub-2' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+
+    fireEvent.click(screen.getByText(/Nigeria/));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByText('Fashion & Apparel'));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Kicks Hub' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Customize link' }));
+
+    expect(
+      screen.getByRole('button', { name: 'Use suggested link' })
+    ).toBeTruthy();
+  });
 });

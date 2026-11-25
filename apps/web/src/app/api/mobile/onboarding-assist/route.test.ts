@@ -39,14 +39,34 @@ function makeRequest(body: unknown, rawBody?: string): NextRequest {
   }) as unknown as NextRequest;
 }
 
+const mockMerchantMaybeSingle = vi.fn();
+
+function makeSupabaseMock() {
+  return {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            maybeSingle: mockMerchantMaybeSingle,
+          })),
+        })),
+      })),
+    })),
+  };
+}
+
 describe('POST /api/mobile/onboarding-assist', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.co');
+    mockMerchantMaybeSingle.mockResolvedValue({
+      data: { id: 'm-1' },
+      error: null,
+    });
     mockGetMobileBearerUser.mockResolvedValue({
       authenticated: true,
       user: { id: 'user-123' } as never,
-      supabase: {} as never,
+      supabase: makeSupabaseMock() as never,
     });
     mockApplyRateLimit.mockResolvedValue({
       allowed: true,
@@ -205,6 +225,28 @@ describe('POST /api/mobile/onboarding-assist', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: 'invalid_logo_url' });
+    expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when extract_colors targets another merchant media folder', async () => {
+    mockMerchantMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: null,
+    });
+
+    const response = await POST(
+      makeRequest({
+        task: 'extract_colors',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'black and gold',
+        logoUrl:
+          'https://project.supabase.co/storage/v1/object/public/media/other-merchant/logo.png',
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'forbidden_logo_url' });
     expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 

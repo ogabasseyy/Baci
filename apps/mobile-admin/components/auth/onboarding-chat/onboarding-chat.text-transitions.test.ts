@@ -186,4 +186,31 @@ describe('transitionFromTextInput slug handling', () => {
     });
     expect(typedFashion.nextStep).toBe('business_name');
   });
+
+  it('applies a directly typed store handle at the slug confirm prompt without discarding it', () => {
+    const result = transitionFromTextInput(
+      'slug',
+      'lagos-kicks',
+      BASE_DATA,
+      false
+    );
+
+    expect(result.nextData).toEqual({
+      slug: 'lagos-kicks',
+      slugIsCustom: true,
+    });
+    expect(result.nextStep).toBe('summary');
+    expect(result.customizingSlug).toBe(false);
+  });
+
+  it('returns a helpful guidance message for unrecognized free text on the summary step', () => {
+    const result = transitionFromTextInput(
+      'summary',
+      'wait a second',
+      BASE_DATA
+    );
+
+    expect(result.sideEffect).toBeUndefined();
+    expect(result.messages?.[1]?.text).toContain('Launch my store');
+  });
 });

@@ -88,6 +88,7 @@ export function useMerchantSetupChat() {
       setLogoDraft(null);
       setIsCustomizingSlug(false);
       setReturnToSummary(false);
+      setRejectedSlug(null);
     }
   }, [user]);
 
@@ -219,12 +220,10 @@ export function useMerchantSetupChat() {
       setSuggestedNames([]);
       setLogoDraft(null);
     }
-    if (result.customizingSlug !== undefined) {
+    if (result.customizingSlug !== undefined)
       setIsCustomizingSlug(result.customizingSlug);
-    }
-    if (result.returnToSummary !== undefined) {
+    if (result.returnToSummary !== undefined)
       setReturnToSummary(result.returnToSummary);
-    }
     if (result.messages?.length) appendMessages(...result.messages);
     if (result.nextStep) setStep(result.nextStep);
     if (result.sideEffect?.type === 'open_country_modal') {
@@ -247,6 +246,7 @@ export function useMerchantSetupChat() {
       setLogoDraft(null);
       setIsCustomizingSlug(false);
       setReturnToSummary(false);
+      setRejectedSlug(null);
     }
   };
 

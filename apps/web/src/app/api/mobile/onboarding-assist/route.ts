@@ -31,18 +31,26 @@ const MOBILE_ONBOARDING_IP_LOGO_LIMIT = {
   failClosedWithoutRedis: true,
 };
 
-function isAllowedOnboardingStorageLogoUrl(logoUrl: string): boolean {
+const MEDIA_STORAGE_PREFIX = '/storage/v1/object/public/media/';
+
+function extractOnboardingStorageMerchantId(logoUrl: string): string | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl) return false;
+  if (!supabaseUrl) return null;
   try {
     const allowedOrigin = new URL(supabaseUrl).origin;
     const candidate = new URL(logoUrl);
-    return (
-      candidate.origin === allowedOrigin &&
-      candidate.pathname.startsWith('/storage/v1/object/public/media/')
-    );
+    if (
+      candidate.origin !== allowedOrigin ||
+      !candidate.pathname.startsWith(MEDIA_STORAGE_PREFIX)
+    ) {
+      return null;
+    }
+    const relativePath = candidate.pathname.slice(MEDIA_STORAGE_PREFIX.length);
+    const [merchantId, ...rest] = relativePath.split('/').filter(Boolean);
+    if (!merchantId || rest.length === 0) return null;
+    return merchantId;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -76,18 +84,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (
-    parsed.data.task === 'extract_colors' &&
-    (!parsed.data.logoUrl ||
-      !isAllowedOnboardingStorageLogoUrl(parsed.data.logoUrl))
-  ) {
-    return NextResponse.json(
-      {
-        error: 'Logo URL must be a valid uploaded store logo.',
-        code: 'invalid_logo_url',
-      },
-      { status: 400 }
-    );
+  if (parsed.data.task === 'extract_colors') {
+    const logoMerchantId = parsed.data.logoUrl
+      ? extractOnboardingStorageMerchantId(parsed.data.logoUrl)
+      : null;
+    if (!logoMerchantId) {
+      return NextResponse.json(
+        {
+          error: 'Logo URL must be a valid uploaded store logo.',
+          code: 'invalid_logo_url',
+        },
+        { status: 400 }
+      );
+    }
+    const { data: ownedMerchant, error: ownershipError } = await auth.supabase
+      .from('merchants')
+      .select('id')
+      .eq('id', logoMerchantId)
+      .eq('user_id', auth.user.id)
+      .maybeSingle();
+    if (ownershipError || !ownedMerchant) {
+      return NextResponse.json(
+        {
+          error: 'Logo URL does not belong to your store.',
+          code: 'forbidden_logo_url',
+        },
+        { status: 403 }
+      );
+    }
   }
 
   const isImageTask =

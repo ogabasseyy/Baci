@@ -15,6 +15,22 @@ import {
   sanitizeSlugInput,
 } from './onboarding-chat.types';
 
+function skipLogoTextTransition(
+  userText: string,
+  slug: string
+): TransitionResult {
+  return {
+    nextData: { logoUrl: '', brandColors: DEFAULT_BRAND_COLORS },
+    nextStep: 'slug',
+    customizingSlug: false,
+    clearAiArtifacts: true,
+    messages: exchangeMessages(
+      userText,
+      `Your store link will be ${slug}.usebaci.com. Does that look good?`
+    ),
+  };
+}
+
 export function transitionFromTextInput(
   step: OnboardingChatStep,
   rawText: string,
@@ -174,16 +190,7 @@ export function transitionFromTextInput(
 
   if (step === 'logo') {
     if (lower.includes('skip')) {
-      return {
-        nextData: { logoUrl: '', brandColors: DEFAULT_BRAND_COLORS },
-        nextStep: 'slug',
-        customizingSlug: false,
-        clearAiArtifacts: true,
-        messages: exchangeMessages(
-          trimmed,
-          `Your store link will be ${data.slug}.usebaci.com. Does that look good?`
-        ),
-      };
+      return skipLogoTextTransition(trimmed, data.slug);
     }
     if (
       lower.includes('no') ||
@@ -218,16 +225,7 @@ export function transitionFromTextInput(
     if (lower.includes('yes') || lower.includes('generate')) {
       return { sideEffect: { type: 'generate_logo' } };
     }
-    return {
-      nextData: { logoUrl: '', brandColors: DEFAULT_BRAND_COLORS },
-      nextStep: 'slug',
-      customizingSlug: false,
-      clearAiArtifacts: true,
-      messages: exchangeMessages(
-        trimmed,
-        `Your store link will be ${data.slug}.usebaci.com. Does that look good?`
-      ),
-    };
+    return skipLogoTextTransition(trimmed, data.slug);
   }
 
   if (step === 'slug') {
@@ -241,14 +239,26 @@ export function transitionFromTextInput(
       return {
         nextStep: 'summary',
         customizingSlug: false,
-        messages: exchangeMessages(
-          `Use ${data.slug}.usebaci.com`,
-          "Everything's ready! Here's a quick recap of your store:",
-          { isSummary: true }
-        ),
+        messages: summaryRecapMessages(`Use ${data.slug}.usebaci.com`),
       };
     }
     if (!isCustomizingSlug) {
+      const isConversationalRejection =
+        /\s/.test(trimmed) ||
+        /^(no|nah|nope|change|custom|customize|edit|different|don't|dont)\b/.test(
+          lower
+        );
+      if (!isConversationalRejection) {
+        const directSlug = sanitizeSlugInput(trimmed);
+        if (directSlug) {
+          return {
+            nextData: { slug: directSlug, slugIsCustom: true },
+            nextStep: 'summary',
+            customizingSlug: false,
+            messages: summaryRecapMessages(`${directSlug}.usebaci.com`),
+          };
+        }
+      }
       return {
         customizingSlug: true,
         messages: exchangeMessages(
@@ -270,16 +280,20 @@ export function transitionFromTextInput(
       nextData: { slug: cleaned, slugIsCustom: true },
       nextStep: 'summary',
       customizingSlug: false,
-      messages: exchangeMessages(
-        `${cleaned}.usebaci.com`,
-        "Everything's ready! Here's a quick recap of your store:",
-        { isSummary: true }
-      ),
+      messages: summaryRecapMessages(`${cleaned}.usebaci.com`),
     };
   }
 
-  if (step === 'summary' && (lower.includes('launch') || lower === 'yes')) {
-    return { sideEffect: { type: 'launch_store' } };
+  if (step === 'summary') {
+    if (lower.includes('launch') || lower === 'yes') {
+      return { sideEffect: { type: 'launch_store' } };
+    }
+    return {
+      messages: exchangeMessages(
+        trimmed,
+        'Tap "Launch my store" to finish, or use "Change link", "Change store name", "Change phone", or "Start over" below.'
+      ),
+    };
   }
 
   return {};

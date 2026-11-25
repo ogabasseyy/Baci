@@ -36,7 +36,7 @@ async function persistLogoBytesToMerchant(params: {
   contentType: string;
   fileExt: string;
   merchantId: string;
-}): Promise<void> {
+}): Promise<string | null> {
   const { bytes, contentType, fileExt, merchantId } = params;
   const filePath = `${merchantId}/${Date.now()}.${fileExt}`;
 
@@ -48,17 +48,28 @@ async function persistLogoBytesToMerchant(params: {
     });
 
   if (uploadError) {
-    return;
+    console.warn('Onboarding logo storage upload failed:', uploadError.message);
+    return null;
   }
 
   const {
     data: { publicUrl },
   } = supabase.storage.from('media').getPublicUrl(filePath);
 
-  await supabase
+  const { error: updateError } = await supabase
     .from('merchants')
     .update({ logo_url: publicUrl })
     .eq('id', merchantId);
+
+  if (updateError) {
+    console.warn(
+      'Onboarding merchant logo_url update failed:',
+      updateError.message
+    );
+    return null;
+  }
+
+  return publicUrl;
 }
 
 export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
@@ -104,20 +115,21 @@ export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
 export async function uploadPickedLogoBestEffort(
   asset: PickedLogoAsset,
   merchantId: string
-): Promise<void> {
+): Promise<string | null> {
+  let persistedUrl: string | null = null;
   try {
     const fileExt =
       asset.fileName.split('.').pop()?.toLowerCase() ||
       extensionForImageMime(asset.mimeType);
     const bytes = await readUploadBytes(asset.uri);
-    await persistLogoBytesToMerchant({
+    persistedUrl = await persistLogoBytesToMerchant({
       bytes,
       contentType: asset.mimeType,
       fileExt,
       merchantId,
     });
-  } catch {
-    // Non-blocking: store is already provisioned and merchant can re-upload in settings.
+  } catch (error) {
+    console.warn('Onboarding logo upload failed:', error);
   }
 
   try {
@@ -134,6 +146,8 @@ export async function uploadPickedLogoBestEffort(
   } catch {
     // Non-blocking favicon generation.
   }
+
+  return persistedUrl;
 }
 
 /**
@@ -143,21 +157,54 @@ export async function uploadPickedLogoBestEffort(
 export async function uploadDataUriLogoBestEffort(
   dataUri: string,
   merchantId: string
-): Promise<void> {
+): Promise<string | null> {
   const match = DATA_URI_IMAGE_PATTERN.exec(dataUri.trim());
   if (!match) {
-    return;
+    return null;
   }
   const [, contentType, base64Payload] = match;
   try {
     const bytes = decodeBase64ToBytes(base64Payload);
-    await persistLogoBytesToMerchant({
+    return await persistLogoBytesToMerchant({
       bytes,
       contentType,
       fileExt: extensionForImageMime(contentType),
       merchantId,
     });
+  } catch (error) {
+    console.warn('Onboarding generated logo upload failed:', error);
+    return null;
+  }
+}
+
+export async function extractAndPersistUploadedLogoColors(params: {
+  logoUrl: string;
+  merchantId: string;
+  businessName: string;
+  businessType: string;
+}): Promise<void> {
+  try {
+    const result = await apiClient<{
+      brandColors?: { primary: string; background: string; accent: string };
+    }>('/api/mobile/onboarding-assist', {
+      method: 'POST',
+      body: JSON.stringify({
+        task: 'extract_colors',
+        logoUrl: params.logoUrl,
+        businessName: params.businessName,
+        businessType: params.businessType,
+        brandPreferences: 'Extract from uploaded logo',
+      }),
+    });
+    if (!result.brandColors) return;
+    const { error } = await supabase
+      .from('merchants')
+      .update({ brand_colors: result.brandColors })
+      .eq('id', params.merchantId);
+    if (error) {
+      console.warn('Onboarding brand_colors update failed:', error.message);
+    }
   } catch {
-    // Non-blocking: store is already provisioned and merchant can update logo in settings.
+    // Non-blocking color extraction.
   }
 }

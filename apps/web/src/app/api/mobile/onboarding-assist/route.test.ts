@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
-import { checkRateLimit } from '@/ai/provider';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { getMobileBearerUser } from '../merchant-provisioning/get-mobile-bearer-user';
 import { POST } from './route';
 
@@ -9,8 +9,8 @@ vi.mock('@/ai/flows/guide-business-onboarding.core', () => ({
   runGuideBusinessOnboarding: vi.fn(),
 }));
 
-vi.mock('@/ai/provider', () => ({
-  checkRateLimit: vi.fn(),
+vi.mock('@/lib/rate-limit', () => ({
+  applyRateLimit: vi.fn(),
 }));
 
 vi.mock('../merchant-provisioning/get-mobile-bearer-user', () => ({
@@ -24,7 +24,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 const mockGetMobileBearerUser = vi.mocked(getMobileBearerUser);
-const mockCheckRateLimit = vi.mocked(checkRateLimit);
+const mockApplyRateLimit = vi.mocked(applyRateLimit);
 const mockGuideBusinessOnboarding = vi.mocked(runGuideBusinessOnboarding);
 
 function makeRequest(body: unknown, rawBody?: string): NextRequest {
@@ -46,10 +46,11 @@ describe('POST /api/mobile/onboarding-assist', () => {
       user: { id: 'user-123' } as never,
       supabase: {} as never,
     });
-    mockCheckRateLimit.mockReturnValue({
+    mockApplyRateLimit.mockResolvedValue({
       allowed: true,
+      limit: 12,
       remaining: 11,
-      resetIn: 600_000,
+      resetTime: Date.now() + 600_000,
     });
   });
 
@@ -75,10 +76,11 @@ describe('POST /api/mobile/onboarding-assist', () => {
   });
 
   it('returns 429 when the user exceeds the rate limit', async () => {
-    mockCheckRateLimit.mockReturnValueOnce({
+    mockApplyRateLimit.mockResolvedValueOnce({
       allowed: false,
+      limit: 12,
       remaining: 0,
-      resetIn: 300_000,
+      resetTime: Date.now() + 300_000,
     });
 
     const response = await POST(

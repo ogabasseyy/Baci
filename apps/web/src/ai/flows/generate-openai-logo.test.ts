@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockImagesGenerate = vi.fn();
+const mockOpenAiConstructor = vi.fn();
 
 vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(function MockOpenAI() {
+  default: vi.fn().mockImplementation(function MockOpenAI(options: unknown) {
+    mockOpenAiConstructor(options);
     return {
       images: {
         generate: mockImagesGenerate,
@@ -49,6 +51,11 @@ describe('generateOpenAiLogo', () => {
     const result = await generateOpenAiLogo('minimalist coffee logo');
 
     expect(result).toBe('data:image/png;base64,iVBORw0KGgo=');
+    expect(mockOpenAiConstructor).toHaveBeenCalledWith({
+      apiKey: 'sk-test',
+      timeout: 20_000,
+      maxRetries: 0,
+    });
     expect(mockImagesGenerate).toHaveBeenCalledWith({
       model: 'gpt-image-1',
       prompt: 'minimalist coffee logo',

@@ -1,14 +1,14 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
-import { checkRateLimit } from '@/ai/provider';
 import { logger } from '@/lib/logger';
+import { applyRateLimit } from '@/lib/rate-limit';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
 import { getMobileBearerUser } from '../merchant-provisioning/get-mobile-bearer-user';
 
 export const maxDuration = 60;
 
 const MOBILE_ONBOARDING_ASSIST_LIMIT = {
-  requests: 12,
+  maxRequests: 12,
   windowMs: 10 * 60 * 1000,
 };
 
@@ -21,8 +21,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const rateLimit = checkRateLimit(
-    `mobile-onboarding-assist:${auth.user.id}`,
+  const rateLimit = await applyRateLimit(
+    `user:${auth.user.id}`,
+    '/api/mobile/onboarding-assist',
     MOBILE_ONBOARDING_ASSIST_LIMIT
   );
   if (!rateLimit.allowed) {

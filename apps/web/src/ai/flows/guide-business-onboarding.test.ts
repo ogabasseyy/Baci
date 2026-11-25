@@ -145,6 +145,11 @@ describe('guideBusinessOnboarding', () => {
 
     expect(result).toEqual({
       logos: ['data:image/png;base64,abc123'],
+      brandColors: {
+        primary: expect.stringMatching(/^#[0-9A-F]{6}$/i),
+        background: expect.stringMatching(/^#[0-9A-F]{6}$/i),
+        accent: expect.stringMatching(/^#[0-9A-F]{6}$/i),
+      },
     });
   });
 

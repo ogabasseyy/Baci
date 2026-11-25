@@ -118,6 +118,7 @@ vi.mock('@/components/ui/virtualized-list-props', () => ({
   getVirtualizedListProps: () => ({}),
 }));
 vi.mock('./onboarding-chat.logo-upload', () => ({
+  extractAndPersistUploadedLogoColors: vi.fn(async () => undefined),
   pickOnboardingLogo: vi.fn(async () => ({
     uri: 'file:///tmp/uploaded-logo.png',
     fileName: 'uploaded-logo.png',

@@ -13,6 +13,7 @@ import {
   runAiNameSuggestion,
 } from './onboarding-chat.ai-actions';
 import {
+  extractAndPersistUploadedLogoColors,
   type PickedLogoAsset,
   pickOnboardingLogo,
   uploadDataUriLogoBestEffort,
@@ -178,10 +179,18 @@ export function useMerchantSetupChat() {
           logoDraft?.pickedAsset &&
           data.logoUrl === logoDraft.pickedAsset.uri
         ) {
-          await uploadPickedLogoBestEffort(
+          const uploadedUrl = await uploadPickedLogoBestEffort(
             logoDraft.pickedAsset,
             provisioned.merchant.id
           );
+          if (uploadedUrl) {
+            await extractAndPersistUploadedLogoColors({
+              logoUrl: uploadedUrl,
+              merchantId: provisioned.merchant.id,
+              businessName: data.businessName.trim(),
+              businessType: data.businessType,
+            });
+          }
         } else if (data.logoUrl.startsWith('data:image/')) {
           await uploadDataUriLogoBestEffort(
             data.logoUrl,

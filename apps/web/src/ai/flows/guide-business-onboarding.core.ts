@@ -168,7 +168,11 @@ Please generate the logo image now.`;
         logger.info({
           message: 'Logo generated successfully with OpenAI',
         });
-        return { logos: [openAiLogoDataUri] };
+        const fallbackPalette = createFallbackLogo(
+          businessName,
+          businessType
+        ).brandColors;
+        return { logos: [openAiLogoDataUri], brandColors: fallbackPalette };
       }
 
       const result = await withRetry(async () => {
@@ -189,11 +193,15 @@ Please generate the logo image now.`;
       }
 
       const logoDataUri = `data:${imageFile.mediaType};base64,${imageFile.base64}`;
+      const fallbackPalette = createFallbackLogo(
+        businessName,
+        businessType
+      ).brandColors;
 
       logger.info({
         message: 'Logo generated successfully with Gemini 2.5 Flash Image',
       });
-      return { logos: [logoDataUri] };
+      return { logos: [logoDataUri], brandColors: fallbackPalette };
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

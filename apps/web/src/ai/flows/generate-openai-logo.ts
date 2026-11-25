@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { logger } from '@/lib/logger';
 
 const DEFAULT_OPENAI_IMAGE_MODEL = 'gpt-image-1-mini';
+const OPENAI_LOGO_TIMEOUT_MS = 20_000;
 
 export function getOpenAiImageModelName(): string {
   return process.env.OPENAI_IMAGE_MODEL?.trim() || DEFAULT_OPENAI_IMAGE_MODEL;
@@ -22,7 +23,11 @@ export async function generateOpenAiLogo(
 
   const model = getOpenAiImageModelName();
   try {
-    const client = new OpenAI({ apiKey });
+    const client = new OpenAI({
+      apiKey,
+      timeout: OPENAI_LOGO_TIMEOUT_MS,
+      maxRetries: 0,
+    });
     const response = await client.images.generate({
       model,
       prompt,

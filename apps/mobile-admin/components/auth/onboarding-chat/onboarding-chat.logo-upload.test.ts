@@ -41,6 +41,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
+  extractAndPersistUploadedLogoColors,
   uploadDataUriLogoBestEffort,
   uploadPickedLogoBestEffort,
 } from './onboarding-chat.logo-upload';
@@ -104,11 +105,12 @@ describe('uploadPickedLogoBestEffort', () => {
   });
 
   it('decodes and persists an AI-generated data URI logo to merchants.logo_url', async () => {
-    await uploadDataUriLogoBestEffort(
+    const persisted = await uploadDataUriLogoBestEffort(
       'data:image/png;base64,iVBORw0KGgo=',
       'm-2'
     );
 
+    expect(persisted).toBe('https://cdn.usebaci.com/media/m-1/logo.png');
     expect(mocks.storageUpload).toHaveBeenCalledWith(
       expect.stringMatching(/^m-2\/\d+\.png$/),
       expect.any(Uint8Array),
@@ -118,5 +120,60 @@ describe('uploadPickedLogoBestEffort', () => {
       logo_url: 'https://cdn.usebaci.com/media/m-1/logo.png',
     });
     expect(mocks.updateEq).toHaveBeenCalledWith('id', 'm-2');
+  });
+
+  it('returns null and logs a warning when merchants.logo_url update fails', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    mocks.updateEq.mockResolvedValueOnce({
+      error: { message: 'RLS violation' },
+    });
+
+    const persisted = await uploadPickedLogoBestEffort(
+      {
+        uri: 'file:///tmp/store-logo.png',
+        fileName: 'store-logo.png',
+        mimeType: 'image/png',
+      },
+      'm-3'
+    );
+
+    expect(persisted).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Onboarding merchant logo_url update failed:',
+      'RLS violation'
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('extracts and persists brand_colors for an uploaded logo URL', async () => {
+    mocks.apiClient.mockResolvedValueOnce({
+      brandColors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+
+    await extractAndPersistUploadedLogoColors({
+      logoUrl: 'https://cdn.usebaci.com/media/m-1/logo.png',
+      merchantId: 'm-1',
+      businessName: 'SoleLux',
+      businessType: 'fashion',
+    });
+
+    expect(mocks.apiClient).toHaveBeenCalledWith(
+      '/api/mobile/onboarding-assist',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(mocks.update).toHaveBeenCalledWith({
+      brand_colors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+    expect(mocks.updateEq).toHaveBeenCalledWith('id', 'm-1');
   });
 });

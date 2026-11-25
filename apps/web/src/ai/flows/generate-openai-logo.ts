@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { logger } from '@/lib/logger';
 
 const DEFAULT_OPENAI_IMAGE_MODEL = 'gpt-image-2.6-flare';
-const OPENAI_LOGO_TIMEOUT_MS = 20_000;
+const OPENAI_LOGO_TIMEOUT_MS = 14_000;
 
 export function getOpenAiImageModelName(): string {
   return process.env.OPENAI_IMAGE_MODEL?.trim() || DEFAULT_OPENAI_IMAGE_MODEL;
@@ -32,6 +32,7 @@ export async function generateOpenAiLogo(
       model,
       prompt,
       size: '1024x1024',
+      quality: 'low',
       n: 1,
     });
 

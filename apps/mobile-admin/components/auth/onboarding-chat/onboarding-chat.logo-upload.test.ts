@@ -7,6 +7,22 @@ const mocks = vi.hoisted(() => ({
   getPublicUrl: vi.fn(),
   updateEq: vi.fn(),
   update: vi.fn(),
+  tempFileWrite: vi.fn(),
+  tempFileDelete: vi.fn(),
+}));
+
+vi.mock('expo-file-system', () => ({
+  Paths: { cache: 'file:///cache/' },
+  File: vi.fn().mockImplementation(function MockFile(
+    base: string,
+    name: string
+  ) {
+    return {
+      uri: `${base}${name}`,
+      write: mocks.tempFileWrite,
+      delete: mocks.tempFileDelete,
+    };
+  }),
 }));
 
 vi.mock('expo-image-picker', () => ({
@@ -129,10 +145,12 @@ describe('uploadPickedLogoBestEffort', () => {
       logo_url: 'https://cdn.usebaci.com/media/m-1/logo.png',
     });
     expect(mocks.updateEq).toHaveBeenCalledWith('id', 'm-2');
+    expect(mocks.tempFileWrite).toHaveBeenCalledWith(expect.any(Uint8Array));
     expect(mocks.apiClient).toHaveBeenCalledWith(
       '/api/merchant/favicon',
       expect.objectContaining({ method: 'POST' })
     );
+    expect(mocks.tempFileDelete).toHaveBeenCalledTimes(1);
   });
 
   it('returns null and logs a warning when merchants.logo_url update fails', async () => {
@@ -191,6 +209,35 @@ describe('uploadPickedLogoBestEffort', () => {
       },
     });
     expect(mocks.updateEq).toHaveBeenCalledWith('id', 'm-1');
+  });
+
+  it('retries uploaded logo color extraction once on transient failure before persisting colors', async () => {
+    mocks.apiClient
+      .mockRejectedValueOnce(new Error('503 temporary outage'))
+      .mockResolvedValueOnce({
+        brandColors: {
+          primary: '#0F172A',
+          background: '#FFFFFF',
+          accent: '#10B981',
+        },
+      });
+
+    const ok = await extractAndPersistUploadedLogoColors({
+      logoUrl: 'https://cdn.usebaci.com/media/m-1/logo.png',
+      merchantId: 'm-1',
+      businessName: 'SoleLux',
+      businessType: 'fashion',
+    });
+
+    expect(ok).toBe(true);
+    expect(mocks.apiClient).toHaveBeenCalledTimes(2);
+    expect(mocks.update).toHaveBeenCalledWith({
+      brand_colors: {
+        primary: '#0F172A',
+        background: '#FFFFFF',
+        accent: '#10B981',
+      },
+    });
   });
 
   it('rejects picked SVG logos and alerts the user instead of returning an uploadable asset', async () => {

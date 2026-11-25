@@ -19,6 +19,12 @@ const MOBILE_ONBOARDING_LOGO_LIMIT = {
   failClosedWithoutRedis: true,
 };
 
+const MOBILE_ONBOARDING_COLOR_LIMIT = {
+  maxRequests: 10,
+  windowMs: 10 * 60 * 1000,
+  failClosedWithoutRedis: true,
+};
+
 const MOBILE_ONBOARDING_IP_TEXT_LIMIT = {
   maxRequests: 30,
   windowMs: 10 * 60 * 1000,
@@ -27,6 +33,12 @@ const MOBILE_ONBOARDING_IP_TEXT_LIMIT = {
 
 const MOBILE_ONBOARDING_IP_LOGO_LIMIT = {
   maxRequests: 15,
+  windowMs: 10 * 60 * 1000,
+  failClosedWithoutRedis: true,
+};
+
+const MOBILE_ONBOARDING_IP_COLOR_LIMIT = {
+  maxRequests: 30,
   windowMs: 10 * 60 * 1000,
   failClosedWithoutRedis: true,
 };
@@ -86,15 +98,26 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const isImageTask =
-    parsed.data.task === 'generate_logos' ||
-    parsed.data.task === 'extract_colors';
+  const task = parsed.data.task;
+  const userBucket =
+    task === 'generate_logos'
+      ? {
+          endpoint: '/api/mobile/onboarding-assist:logos',
+          config: MOBILE_ONBOARDING_LOGO_LIMIT,
+        }
+      : task === 'extract_colors'
+        ? {
+            endpoint: '/api/mobile/onboarding-assist:colors',
+            config: MOBILE_ONBOARDING_COLOR_LIMIT,
+          }
+        : {
+            endpoint: '/api/mobile/onboarding-assist',
+            config: MOBILE_ONBOARDING_TEXT_LIMIT,
+          };
   const userRateLimit = await applyRateLimit(
     `user:${auth.user.id}`,
-    isImageTask
-      ? '/api/mobile/onboarding-assist:logos'
-      : '/api/mobile/onboarding-assist',
-    isImageTask ? MOBILE_ONBOARDING_LOGO_LIMIT : MOBILE_ONBOARDING_TEXT_LIMIT
+    userBucket.endpoint,
+    userBucket.config
   );
   if (!userRateLimit.allowed) {
     return NextResponse.json(
@@ -109,14 +132,25 @@ export async function POST(request: NextRequest) {
 
   const clientIp = getTrustedClientIdentifier(request);
   if (clientIp) {
+    const ipBucket =
+      task === 'generate_logos'
+        ? {
+            endpoint: '/api/mobile/onboarding-assist:logos:ip',
+            config: MOBILE_ONBOARDING_IP_LOGO_LIMIT,
+          }
+        : task === 'extract_colors'
+          ? {
+              endpoint: '/api/mobile/onboarding-assist:colors:ip',
+              config: MOBILE_ONBOARDING_IP_COLOR_LIMIT,
+            }
+          : {
+              endpoint: '/api/mobile/onboarding-assist:ip',
+              config: MOBILE_ONBOARDING_IP_TEXT_LIMIT,
+            };
     const ipRateLimit = await applyRateLimit(
       `ip:${clientIp}`,
-      isImageTask
-        ? '/api/mobile/onboarding-assist:logos:ip'
-        : '/api/mobile/onboarding-assist:ip',
-      isImageTask
-        ? MOBILE_ONBOARDING_IP_LOGO_LIMIT
-        : MOBILE_ONBOARDING_IP_TEXT_LIMIT
+      ipBucket.endpoint,
+      ipBucket.config
     );
     if (!ipRateLimit.allowed) {
       return NextResponse.json(

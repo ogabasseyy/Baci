@@ -171,7 +171,7 @@ describe('POST /api/mobile/onboarding-assist', () => {
     expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
-  it('applies the stricter image rate-limit buckets to extract_colors for uploaded media URLs', async () => {
+  it('applies a dedicated color-extraction rate-limit bucket to extract_colors separate from generate_logos', async () => {
     mockGuideBusinessOnboarding.mockResolvedValueOnce({
       brandColors: {
         primary: '#111111',
@@ -195,18 +195,18 @@ describe('POST /api/mobile/onboarding-assist', () => {
     expect(mockApplyRateLimit).toHaveBeenNthCalledWith(
       1,
       'user:user-123',
-      '/api/mobile/onboarding-assist:logos',
+      '/api/mobile/onboarding-assist:colors',
       expect.objectContaining({
-        maxRequests: 5,
+        maxRequests: 10,
         failClosedWithoutRedis: true,
       })
     );
     expect(mockApplyRateLimit).toHaveBeenNthCalledWith(
       2,
       'ip:203.0.113.10',
-      '/api/mobile/onboarding-assist:logos:ip',
+      '/api/mobile/onboarding-assist:colors:ip',
       expect.objectContaining({
-        maxRequests: 15,
+        maxRequests: 30,
         failClosedWithoutRedis: true,
       })
     );

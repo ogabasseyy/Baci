@@ -53,13 +53,14 @@ describe('generateOpenAiLogo', () => {
     expect(result).toBe('data:image/png;base64,iVBORw0KGgo=');
     expect(mockOpenAiConstructor).toHaveBeenCalledWith({
       apiKey: 'sk-test',
-      timeout: 20_000,
+      timeout: 14_000,
       maxRetries: 0,
     });
     expect(mockImagesGenerate).toHaveBeenCalledWith({
       model: 'gpt-image-1',
       prompt: 'minimalist coffee logo',
       size: '1024x1024',
+      quality: 'low',
       n: 1,
     });
   });
@@ -79,6 +80,7 @@ describe('generateOpenAiLogo', () => {
       model: 'gpt-image-2.6-flare',
       prompt: 'minimalist coffee logo',
       size: '1024x1024',
+      quality: 'low',
       n: 1,
     });
   });

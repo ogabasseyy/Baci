@@ -118,6 +118,7 @@ describe('POST /api/storefront/chatwoot/customer-link', () => {
     ['an empty body', {}],
     ['an unknown key', { storeSlug: 'a', customerId: CUSTOMER }],
     ['an over-long slug', { storeSlug: 'x'.repeat(121) }],
+    ['an oversized body', { storeSlug: 'a', pad: 'x'.repeat(2048) }],
   ])('rejects %s', async (_name, body) => {
     expect((await call(body)).status).toBe(400);
     expect(mocks.issue).not.toHaveBeenCalled();

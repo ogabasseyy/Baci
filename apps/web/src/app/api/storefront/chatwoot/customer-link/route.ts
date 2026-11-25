@@ -1,13 +1,15 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
-import { readCartJsonBody } from '@/lib/cart/request-context';
 import { issueChatCustomerLinkToken } from '@/lib/chatwoot/chat-customer-link-token';
 import { getChatwootTenantBinding } from '@/lib/chatwoot/commerce-context-config';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { chatCustomerLinkRequestSchema } from '@/schemas/chat-customer-link';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'private, no-store' };
+/** The body is one store slug. */
+const MAX_BODY_BYTES = 1024;
 
 function reply(status: number, code: string) {
   return NextResponse.json(
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
     return reply(401, 'unauthorized');
   }
 
-  const rawBody = await readCartJsonBody(request);
+  const rawBody = await readBoundedJsonBody(request, MAX_BODY_BYTES);
   const body = chatCustomerLinkRequestSchema.safeParse(
     rawBody.ok ? rawBody.body : null
   );

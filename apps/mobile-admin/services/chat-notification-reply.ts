@@ -119,8 +119,18 @@ async function sendChatReply(
   const sendsNothing = (show: () => void) => {
     if (deps.firstSight(response)) show();
   };
+  // Said out loud, like every other reply that sends nothing. Any words are
+  // shown, so they can be written again.
   if (!hasChat || !text) {
-    sendsNothing(() => router.push(MESSAGES));
+    sendsNothing(() =>
+      deps.alert(
+        'Reply not sent',
+        text
+          ? `This notification cannot be answered from here. Your reply was not sent:\n\n${text}`
+          : 'No reply text came through, so nothing was sent.',
+        [openMessages, { text: 'OK' }]
+      )
+    );
     return;
   }
   if (text.length > INBOX_REPLY_MAX_LENGTH) {

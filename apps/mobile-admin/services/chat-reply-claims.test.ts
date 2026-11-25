@@ -122,6 +122,20 @@ describe('claimChatReply', () => {
     expect(stored).not.toContain('0801');
   });
 
+  it('bugfix: keeps two fingerprints of the text, so one hash clash cannot drop a reply', async () => {
+    const claim = await freshClaim();
+
+    await claim(reply('f2', 'Yes, it is in stock'));
+
+    const [stored] = JSON.parse(
+      store.data.get('@baci_chat_reply_handled') ?? '[]'
+    ) as string[];
+    const [first, second] = stored.split(':').at(-1)?.split('.') ?? [];
+    expect(first).toMatch(/^[0-9a-z]+$/);
+    expect(second).toMatch(/^[0-9a-z]+$/);
+    expect(second).not.toBe(first);
+  });
+
   it('keeps stored claims short however long the reply is', async () => {
     const claim = await freshClaim();
 

@@ -1,3 +1,4 @@
+import { CHAT_REPLY_MAX_LENGTH } from '@baci/shared';
 import { z } from 'zod';
 import { INBOX_PRIORITIES } from './merchant-inbox-manage';
 
@@ -86,7 +87,7 @@ export const merchantInboxConversationIdSchema = z.coerce
   .positive()
   .safe();
 
-export const MERCHANT_INBOX_REPLY_MAX_LENGTH = 2_000;
+export const MERCHANT_INBOX_REPLY_MAX_LENGTH = CHAT_REPLY_MAX_LENGTH;
 
 export const merchantInboxReplySchema = z.strictObject({
   content: z.string().trim().min(1).max(MERCHANT_INBOX_REPLY_MAX_LENGTH),

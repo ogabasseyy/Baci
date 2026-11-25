@@ -1,5 +1,7 @@
+import { CHAT_REPLY_MAX_LENGTH } from '@baci/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NetworkError } from '@/lib/api-errors';
+import { INBOX_REPLY_MAX_LENGTH } from '@/schemas/merchant-inbox';
 
 const mocks = vi.hoisted(() => ({ send: vi.fn() }));
 
@@ -47,13 +49,28 @@ beforeEach(() => {
 });
 
 describe('handleChatReplyResponse: replies that send nothing', () => {
-  it('opens the messages list and sends nothing for an empty reply', async () => {
+  it('bugfix: says nothing was sent for an empty reply, once, and offers the messages', async () => {
     const { router, deps } = setup(mocks.send);
+    const response = reply('   ');
 
-    await handleChatReplyResponse(router, reply('   '), deps);
+    await handleChatReplyResponse(router, response, deps);
+    await handleChatReplyResponse(router, response, deps);
 
     expect(mocks.send).not.toHaveBeenCalled();
+    expect(deps.alert).toHaveBeenCalledTimes(1);
+    expect(deps.alert).toHaveBeenCalledWith(
+      'Reply not sent',
+      'No reply text came through, so nothing was sent.',
+      expect.any(Array)
+    );
+    alertButtons(deps.alert)
+      .find((b) => b.text === 'Open messages')
+      ?.onPress?.();
     expect(router.push).toHaveBeenCalledWith('/(admin)/messages');
+  });
+
+  it('uses the one reply length limit the app and the server share', () => {
+    expect(INBOX_REPLY_MAX_LENGTH).toBe(CHAT_REPLY_MAX_LENGTH);
   });
 
   it('sends nothing for a reply that is too long and says so, once', async () => {
@@ -72,7 +89,7 @@ describe('handleChatReplyResponse: replies that send nothing', () => {
     );
   });
 
-  it('sends nothing and shows the list when the push does not name a chat', async () => {
+  it('bugfix: keeps the words on screen when the push does not name a chat', async () => {
     const { router, deps } = setup(mocks.send);
 
     await handleChatReplyResponse(
@@ -82,6 +99,14 @@ describe('handleChatReplyResponse: replies that send nothing', () => {
     );
 
     expect(mocks.send).not.toHaveBeenCalled();
+    expect(deps.alert).toHaveBeenCalledWith(
+      'Reply not sent',
+      expect.stringContaining('Hello'),
+      expect.any(Array)
+    );
+    alertButtons(deps.alert)
+      .find((b) => b.text === 'Open messages')
+      ?.onPress?.();
     expect(router.push).toHaveBeenCalledWith('/(admin)/messages');
   });
 

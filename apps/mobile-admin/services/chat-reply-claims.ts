@@ -25,11 +25,13 @@ function remember(keys: Set<string>, key: string): void {
 
 /**
  * A short fingerprint of the text (cyrb53), so storage never holds what the
- * owner typed. Enough to tell two replies to one notification apart.
+ * owner typed. Enough to tell two replies to one notification apart. The key
+ * holds two, with different seeds: a clash drops a reply without a word, so it
+ * must take both hashes clashing at once.
  */
-function fingerprint(text: string): string {
-  let h1 = 0xdeadbeef;
-  let h2 = 0x41c6ce57;
+function fingerprint(text: string, seed: number): string {
+  let h1 = 0xdeadbeef ^ seed;
+  let h2 = 0x41c6ce57 ^ seed;
   for (let i = 0; i < text.length; i += 1) {
     const code = text.charCodeAt(i);
     h1 = Math.imul(h1 ^ code, 2654435761);
@@ -58,7 +60,7 @@ function responseKey(response: NotificationResponse): string {
   const text = response.userText ?? '';
   return `${identifier}:${String(data.merchant_id ?? '')}:${String(
     data.conversation_id ?? ''
-  )}:${text.length}:${fingerprint(text)}`;
+  )}:${text.length}:${fingerprint(text, 0)}.${fingerprint(text, 1)}`;
 }
 
 function parseStored(raw: string | null): string[] {

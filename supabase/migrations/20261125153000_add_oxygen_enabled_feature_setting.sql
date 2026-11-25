@@ -135,6 +135,8 @@ BEGIN
 END
 $oxygen_backfill$;
 
+DROP FUNCTION IF EXISTS private.backfill_oxygen_enabled_v1();
+
 -- Require both the merchant admin toggle (`oxygen_enabled`) AND the existing
 -- runtime binding + production admission policy gates.
 CREATE OR REPLACE FUNCTION public.oxygen_storefront_pilot_available(p_merchant_id uuid)

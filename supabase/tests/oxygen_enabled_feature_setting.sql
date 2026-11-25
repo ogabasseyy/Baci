@@ -183,19 +183,19 @@ DO $$ BEGIN
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
 END $$;
 
--- Behavioral backfill verification: exercise private.backfill_oxygen_enabled_v1()
--- against enabled-production (with and without existing feature-settings row),
--- staging-only, and disabled-production runtime bindings, plus role confinement.
-DO $$ BEGIN
-  BEGIN
-    PERFORM private.backfill_oxygen_enabled_v1();
-    RAISE EXCEPTION 'authenticated role executed private.backfill_oxygen_enabled_v1()';
-  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-END $$;
-
+-- Behavioral backfill verification: confirm the one-time helper was dropped
+-- (cannot override future merchant opt-outs) and execute the exact backfill SQL
+-- with the service_role JWT shim against enabled-production (with and without an
+-- existing feature-settings row), staging-only, and disabled-production bindings.
 RESET ROLE;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 SELECT pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
+DO $$ BEGIN
+  IF to_regprocedure('private.backfill_oxygen_enabled_v1()') IS NOT NULL THEN
+    RAISE EXCEPTION 'One-time backfill helper private.backfill_oxygen_enabled_v1() must be dropped after migration backfill';
+  END IF;
+END $$;
 
 INSERT INTO auth.users(id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 VALUES
@@ -238,7 +238,14 @@ VALUES
  ('f2ab0000-0000-4000-8000-000000000203','f2ab0000-0000-4000-8000-000000000103','backfill-worker-3','staging',true),
  ('f2ab0000-0000-4000-8000-000000000204','f2ab0000-0000-4000-8000-000000000104','backfill-worker-4','production',false);
 
-SELECT private.backfill_oxygen_enabled_v1();
+INSERT INTO public.merchant_feature_settings (merchant_id, oxygen_enabled)
+SELECT b.merchant_id, true
+FROM oxygen_private.runtime_bindings AS b
+WHERE b.enabled IS TRUE
+  AND b.environment = 'production'
+ON CONFLICT (merchant_id) DO UPDATE
+  SET oxygen_enabled = true
+  WHERE public.merchant_feature_settings.oxygen_enabled IS DISTINCT FROM true;
 
 DO $$
 DECLARE

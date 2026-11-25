@@ -1,0 +1,227 @@
+import { describe, expect, it } from 'vitest';
+import worker from '../src/index';
+import type { OtaWorkerEnv, StoredReleaseRecord } from '../src/types';
+import { MockR2Bucket } from './helpers/mock-r2';
+import { parseMultipartMixed } from './helpers/multipart-parser';
+
+const UPDATE_ID = '11111111-1111-4111-8111-111111111111';
+const EMBEDDED_ID = '22222222-2222-4222-8222-222222222222';
+const RUNTIME = '2.1.663-ios-sdk58-rn0880-splashmotion1';
+
+function createBaseHeaders(overrides: Record<string, string> = {}) {
+  return {
+    'expo-protocol-version': '1',
+    'expo-platform': 'ios',
+    'expo-runtime-version': RUNTIME,
+    'expo-channel-name': 'production',
+    ...overrides,
+  };
+}
+
+async function seedRelease(bucket: MockR2Bucket, updateId = UPDATE_ID) {
+  const release: StoredReleaseRecord = {
+    id: updateId,
+    createdAt: '2026-11-25T15:00:00.000Z',
+    runtimeVersion: RUNTIME,
+    channel: 'production',
+    platform: 'ios',
+    launchAsset: {
+      hash: 'bundle-sha256-base64url',
+      key: 'bundle-key',
+      contentType: 'application/javascript',
+      fileExtension: '.hbc',
+      r2Key: 'bundles/ios/abc123.hbc',
+    },
+    assets: [
+      {
+        hash: 'img-sha256-base64url',
+        key: 'md5-logo',
+        contentType: 'image/png',
+        fileExtension: '.png',
+        r2Key: 'blobs/def456.png',
+      },
+    ],
+    metadata: {},
+    extra: {
+      expoClient: {
+        name: 'Ogabassey',
+        slug: 'ogabassey-store',
+      },
+    },
+  };
+  await bucket.put(
+    `releases/production/ios/${RUNTIME}/${updateId}.json`,
+    JSON.stringify(release)
+  );
+  await bucket.put(
+    `channels/production/ios/${RUNTIME}/current.json`,
+    JSON.stringify({
+      mode: 'update',
+      updateId,
+      updatedAt: '2026-11-25T15:00:00.000Z',
+    })
+  );
+}
+
+describe('GET /api/manifest (Expo Updates v1)', () => {
+  it('validates required protocol headers', async () => {
+    const env: OtaWorkerEnv = { OTA_BUCKET: new MockR2Bucket() };
+
+    const missingProto = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: { 'expo-platform': 'ios', 'expo-runtime-version': RUNTIME },
+      }),
+      env
+    );
+    expect(missingProto.status).toBe(400);
+
+    const wrongProto = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({ 'expo-protocol-version': '0' }),
+      }),
+      env
+    );
+    expect(wrongProto.status).toBe(406);
+
+    const badPlatform = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({ 'expo-platform': 'web' }),
+      }),
+      env
+    );
+    expect(badPlatform.status).toBe(400);
+
+    const badRuntime = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({ 'expo-runtime-version': '../evil' }),
+      }),
+      env
+    );
+    expect(badRuntime.status).toBe(400);
+  });
+
+  it('returns noUpdateAvailable directive when no release exists', async () => {
+    const env: OtaWorkerEnv = { OTA_BUCKET: new MockR2Bucket() };
+    const resp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('expo-protocol-version')).toBe('1');
+    expect(resp.headers.get('expo-sfv-version')).toBe('0');
+    expect(resp.headers.get('cache-control')).toBe('private, no-store');
+
+    const parts = parseMultipartMixed(
+      resp.headers.get('content-type'),
+      await resp.text()
+    );
+    expect(parts).toHaveLength(1);
+    expect(parts[0]?.name).toBe('directive');
+    expect(JSON.parse(parts[0]?.body ?? '')).toEqual({
+      type: 'noUpdateAvailable',
+    });
+  });
+
+  it('serves active manifest and returns noUpdateAvailable when client is already current', async () => {
+    const bucket = new MockR2Bucket();
+    await seedRelease(bucket);
+    const env: OtaWorkerEnv = { OTA_BUCKET: bucket };
+
+    const manifestResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(manifestResp.status).toBe(200);
+    expect(manifestResp.headers.get('cache-control')).toBe('private, no-store');
+    const parts = parseMultipartMixed(
+      manifestResp.headers.get('content-type'),
+      await manifestResp.text()
+    );
+    expect(parts).toHaveLength(1);
+    expect(parts[0]?.name).toBe('manifest');
+    const manifest = JSON.parse(parts[0]?.body ?? '') as {
+      id: string;
+      launchAsset: { url: string; r2Key?: string };
+      assets: { url: string; r2Key?: string }[];
+    };
+    expect(manifest.id).toBe(UPDATE_ID);
+    expect(manifest.launchAsset.url).toBe(
+      'https://ota.usebaci.com/api/assets/bundles/ios/abc123.hbc'
+    );
+    expect(manifest.launchAsset.r2Key).toBeUndefined();
+    expect(manifest.assets[0]?.url).toBe(
+      'https://ota.usebaci.com/api/assets/blobs/def456.png'
+    );
+
+    const sameUpdateResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          'expo-current-update-id': UPDATE_ID.toUpperCase(),
+        }),
+      }),
+      env
+    );
+    const sameParts = parseMultipartMixed(
+      sameUpdateResp.headers.get('content-type'),
+      await sameUpdateResp.text()
+    );
+    expect(sameParts[0]?.name).toBe('directive');
+    expect(JSON.parse(sameParts[0]?.body ?? '')).toEqual({
+      type: 'noUpdateAvailable',
+    });
+  });
+
+  it('serves rollBackToEmbedded directive and avoids loop when already embedded', async () => {
+    const bucket = new MockR2Bucket();
+    const commitTime = '2026-11-25T15:10:00.000Z';
+    await bucket.put(
+      `channels/production/ios/${RUNTIME}/current.json`,
+      JSON.stringify({
+        mode: 'rollback_to_embedded',
+        commitTime,
+        updatedAt: commitTime,
+      })
+    );
+    const env: OtaWorkerEnv = { OTA_BUCKET: bucket };
+
+    const rollbackResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          'expo-current-update-id': UPDATE_ID,
+          'expo-embedded-update-id': EMBEDDED_ID,
+        }),
+      }),
+      env
+    );
+    const rollbackParts = parseMultipartMixed(
+      rollbackResp.headers.get('content-type'),
+      await rollbackResp.text()
+    );
+    expect(rollbackParts[0]?.name).toBe('directive');
+    expect(JSON.parse(rollbackParts[0]?.body ?? '')).toEqual({
+      type: 'rollBackToEmbedded',
+      parameters: { commitTime },
+    });
+
+    const alreadyEmbeddedResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          'expo-current-update-id': EMBEDDED_ID,
+          'expo-embedded-update-id': EMBEDDED_ID,
+        }),
+      }),
+      env
+    );
+    const embeddedParts = parseMultipartMixed(
+      alreadyEmbeddedResp.headers.get('content-type'),
+      await alreadyEmbeddedResp.text()
+    );
+    expect(JSON.parse(embeddedParts[0]?.body ?? '')).toEqual({
+      type: 'noUpdateAvailable',
+    });
+  });
+});

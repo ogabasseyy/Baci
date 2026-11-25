@@ -7,6 +7,7 @@ import {
   GATE_RUNBOOK,
   gitRepository,
   OTA_GUARD_STEP,
+  OTA_PUBLISH_WORKFLOW,
   OTA_WORKFLOW,
   parseGateMarker,
   RELEASE_GUARD_STEP,
@@ -284,4 +285,13 @@ test('the gate fails when a workflow ships the storefront through a package scri
     failures.includes('.github/workflows/nightly-ship.yml builds or ships the storefront app but is not covered by the storefront release gate'),
     failures.join('\n')
   );
+});
+
+test('the OTA publish workflow keeps its release gate refusal guard', () => {
+  const publish = repository.readFile(OTA_PUBLISH_WORKFLOW);
+  assert.ok(publish, `${OTA_PUBLISH_WORKFLOW} must exist`);
+  const withoutGuard = publish.replace(`- name: ${OTA_GUARD_STEP}`, '- name: Renamed step');
+  assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: withoutGuard })), [
+    `${OTA_PUBLISH_WORKFLOW} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "Validate and select reviewed source" in its publish job`,
+  ]);
 });

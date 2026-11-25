@@ -118,6 +118,36 @@ const posthogHost =
 const merchantDomain =
   process.env.EXPO_PUBLIC_MERCHANT_DOMAIN?.trim() || 'ogabassey.com';
 const updateChannel = resolveUpdateChannel(process.env);
+const DEFAULT_OTA_UPDATES_URL =
+  'https://u.expo.dev/c6c1897b-cac8-49b0-85f9-3d277aecc379';
+const rawUpdatesUrl = process.env.EXPO_PUBLIC_OTA_UPDATES_URL?.trim();
+let updatesUrl = DEFAULT_OTA_UPDATES_URL;
+
+if (rawUpdatesUrl) {
+  let parsedUpdatesUrl;
+  try {
+    parsedUpdatesUrl = new URL(rawUpdatesUrl);
+  } catch {
+    throw new Error(
+      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be a valid https URL.`
+    );
+  }
+  if (parsedUpdatesUrl.protocol !== 'https:') {
+    throw new Error(
+      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must use https.`
+    );
+  }
+  updatesUrl = rawUpdatesUrl;
+}
+
+const codeSigningCertificate =
+  process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE?.trim() ||
+  process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE?.trim() ||
+  undefined;
+const codeSigningKeyId =
+  process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID?.trim() ||
+  process.env.EXPO_OTA_CODE_SIGNING_KEY_ID?.trim() ||
+  'main';
 
 const isContinuousIntegration =
   process.env.CI === 'true' || process.env.CI === '1';
@@ -281,12 +311,21 @@ const buildStorefrontConfig = ({ config }) => ({
     },
   },
   updates: {
-    url: 'https://u.expo.dev/c6c1897b-cac8-49b0-85f9-3d277aecc379',
-    checkAutomatically: 'ON_ERROR_RECOVERY',
+    url: updatesUrl,
+    checkAutomatically: 'ON_LOAD',
     fallbackToCacheTimeout: 0,
     requestHeaders: {
       'expo-channel-name': updateChannel,
     },
+    ...(codeSigningCertificate
+      ? {
+          codeSigningCertificate,
+          codeSigningMetadata: {
+            alg: 'rsa-v1_5-sha256',
+            keyid: codeSigningKeyId,
+          },
+        }
+      : {}),
   },
   runtimeVersion,
 });

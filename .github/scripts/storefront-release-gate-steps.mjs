@@ -57,19 +57,19 @@ function keepsOtaRefusal(run, marker) {
 }
 
 /** The iOS OTA export must refuse sources that carry `marker` before it selects one. */
-export function otaGuardFailures(workflow, text, marker) {
-  const job = readJob(text, 'export') ?? '';
+export function otaGuardFailures(workflow, text, marker, jobId = 'export') {
+  const job = readJob(text, jobId) ?? '';
   const names = readStepNames(job);
   const guardAt = names.indexOf(OTA_GUARD_STEP);
   const selectionAt = names.indexOf(OTA_SELECTION_STEP);
   // Counting unnamed steps too: nothing but the checkout may run before the guard.
   if (guardAt !== 1 || selectionAt === -1 || guardAt > selectionAt) {
-    return [`${workflow} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "${OTA_SELECTION_STEP}" in its export job`];
+    return [`${workflow} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "${OTA_SELECTION_STEP}" in its ${jobId} job`];
   }
   // Step zero must be the checkout itself, or work could run before the guard and not be undone by it.
   const first = job.split(/^ {6}- /m)[1] ?? '';
   if (!/^\s*uses:\s*actions\/checkout@/m.test(first)) {
-    return [`${workflow} must start its export job with an actions/checkout step: nothing may run before the guard`];
+    return [`${workflow} must start its ${jobId} job with an actions/checkout step: nothing may run before the guard`];
   }
   const guard = readStep(job, OTA_GUARD_STEP);
   const failures = [];

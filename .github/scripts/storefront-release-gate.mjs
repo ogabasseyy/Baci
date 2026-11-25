@@ -19,13 +19,14 @@ export { OTA_GUARD_STEP, RELEASE_GUARD_STEP } from './storefront-release-gate-st
 export const GATE_MARKER = '.github/storefront-release-gate.json';
 export const GATE_RUNBOOK = 'docs/runbooks/storefront-release-gate.md';
 export const OTA_WORKFLOW = '.github/workflows/storefront-ota-export.yml';
+export const OTA_PUBLISH_WORKFLOW = '.github/workflows/storefront-ota-publish.yml';
 export const RELEASE_WORKFLOWS = new Map([
   ['.github/workflows/ios-storefront-release.yml', { tags: ['v*-storefront-ios'], job: 'build-and-submit' }],
   ['.github/workflows/android-storefront-release.yml', { tags: ['v*-storefront'], job: 'build-and-deploy' }],
 ]);
 // Dispatch-only workflows that hold store credentials run the same on-main guard.
 const GUARDED_DISPATCH_WORKFLOWS = new Map([['.github/workflows/ios-storefront-submit.yml', { job: 'submit' }]]);
-const DISPATCH_ONLY_WORKFLOWS = ['.github/workflows/ios-storefront-submit.yml', OTA_WORKFLOW];
+const DISPATCH_ONLY_WORKFLOWS = ['.github/workflows/ios-storefront-submit.yml', OTA_WORKFLOW, OTA_PUBLISH_WORKFLOW];
 const GATED_WORKFLOWS = [...RELEASE_WORKFLOWS.keys(), ...DISPATCH_ONLY_WORKFLOWS];
 const CI_WORKFLOW = '.github/workflows/ci.yml';
 const GATE_TEST = /^\.github\/scripts\/storefront-release-gate(?:-[\w-]+)?\.test\.mjs$/;
@@ -69,8 +70,8 @@ function workflowFailures(repository) {
     failures.push(...dispatchOnlyFailures(workflow, text));
     const guarded = GUARDED_DISPATCH_WORKFLOWS.get(workflow);
     if (guarded) failures.push(...releaseGuardFailures(workflow, text, guarded.job));
-    // The OTA export is held by its own marker guard (otaGuardFailures).
-    else if (workflow !== OTA_WORKFLOW && storeSecretsUsed(text).length > 0) {
+    // The OTA export/publish workflows are held by their own marker guard (otaGuardFailures).
+    else if (workflow !== OTA_WORKFLOW && workflow !== OTA_PUBLISH_WORKFLOW && storeSecretsUsed(text).length > 0) {
       failures.push(`${workflow} uses store secrets (${storeSecretsUsed(text).join(', ')}) but has no on-main release guard`);
     }
   }
@@ -98,10 +99,12 @@ function workflowFailures(repository) {
 
 function stepFailures(repository) {
   const ota = repository.readFile(OTA_WORKFLOW);
+  const otaPublish = repository.readFile(OTA_PUBLISH_WORKFLOW);
   const ci = repository.readFile(CI_WORKFLOW);
   const gateTests = repository.listTracked('.github/scripts').filter((file) => GATE_TEST.test(file)).sort();
   return [
     ...(ota === undefined ? [] : otaGuardFailures(OTA_WORKFLOW, ota, GATE_MARKER)),
+    ...(otaPublish === undefined ? [] : otaGuardFailures(OTA_PUBLISH_WORKFLOW, otaPublish, GATE_MARKER, 'publish')),
     ...(ci === undefined ? [`${CI_WORKFLOW} is missing`] : ciGateFailures(CI_WORKFLOW, ci, gateTests)),
   ];
 }

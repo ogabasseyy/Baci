@@ -8,6 +8,11 @@ export function loadAppConfigWithEnv(env: {
   EXPO_PUBLIC_HOSTED_STOREFRONT?: string;
   EXPO_PUBLIC_LOCAL_STOREFRONT?: string;
   EXPO_PUBLIC_MERCHANT_DOMAIN?: string;
+  EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE?: string;
+  EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID?: string;
+  EXPO_PUBLIC_OTA_UPDATES_URL?: string;
+  EXPO_OTA_CODE_SIGNING_CERTIFICATE?: string;
+  EXPO_OTA_CODE_SIGNING_KEY_ID?: string;
   EXPO_PUBLIC_POSTHOG_API_KEY?: string;
   EXPO_PUBLIC_POSTHOG_HOST?: string;
   EXPO_PUBLIC_SUPABASE_ANON_KEY?: string;
@@ -23,6 +28,11 @@ export function loadAppConfigWithEnv(env: {
   delete process.env.EXPO_PUBLIC_HOSTED_STOREFRONT;
   delete process.env.EXPO_PUBLIC_LOCAL_STOREFRONT;
   delete process.env.EXPO_PUBLIC_MERCHANT_DOMAIN;
+  delete process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE;
+  delete process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID;
+  delete process.env.EXPO_PUBLIC_OTA_UPDATES_URL;
+  delete process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE;
+  delete process.env.EXPO_OTA_CODE_SIGNING_KEY_ID;
   delete process.env.EXPO_PUBLIC_POSTHOG_API_KEY;
   delete process.env.EXPO_PUBLIC_POSTHOG_HOST;
   delete process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;

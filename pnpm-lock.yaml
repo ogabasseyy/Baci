@@ -873,6 +873,8 @@ importers:
         specifier: npm:@typescript/typescript6@~6.0.2
         version: '@typescript/typescript6@6.0.2'
 
+  apps/ota-server: {}
+
   apps/quiz-room-prototype: {}
 
   apps/web:

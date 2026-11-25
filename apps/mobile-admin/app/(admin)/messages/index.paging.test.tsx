@@ -84,7 +84,7 @@ describe('MessagesScreen automatic paging', () => {
     render(<MessagesScreen />);
 
     expect(
-      screen.getByText('1+ chats are waiting for your reply')
+      screen.getByText('At least 1 chat is waiting for your reply')
     ).toBeInTheDocument();
   });
 

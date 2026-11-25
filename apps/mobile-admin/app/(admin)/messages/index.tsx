@@ -26,6 +26,8 @@ import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useInboxSearch } from '@/hooks/useInboxSearch';
 import { useTheme } from '@/hooks/useTheme';
 import { NetworkError } from '@/lib/api-client';
+import { MAX_AUTO_PAGES } from '@/lib/inbox-paging';
+import { inboxWaitingSummary } from '@/lib/inbox-waiting-summary';
 import { sortInbox } from '@/lib/merchant-inbox-sort';
 import { uniqueConversations } from '@/lib/merchant-inbox-unique';
 import type { InboxView } from '@/schemas/merchant-inbox';
@@ -36,7 +38,6 @@ import type { InboxView } from '@/schemas/merchant-inbox';
  * older chats join the ranking as more pages load on scroll.
  */
 const MIN_ROWS_BEFORE_PAUSE = 8;
-const MAX_AUTO_PAGES = 5;
 const RANKED_VIEWS: readonly InboxView[] = [
   'needs_reply',
   'unread',
@@ -80,6 +81,8 @@ export default function MessagesScreen() {
   // Pages still being loaded by themselves; false once the cap is reached, so
   // an empty narrowed view ends in its empty message instead of a spinner.
   const autoLoading =
+    // Nothing is preloaded behind search results.
+    !searching &&
     !pageFailed &&
     !!query.hasNextPage &&
     pages < MAX_AUTO_PAGES &&
@@ -89,7 +92,10 @@ export default function MessagesScreen() {
   // cancels a refresh of the cached pages that is still running, which would
   // throw the refreshed first page away.
   useEffect(() => {
-    if (autoLoading && !query.isFetching) query.fetchNextPage();
+    // The Home count loads this query too: join its fetch, never restart it.
+    if (autoLoading && !query.isFetching) {
+      query.fetchNextPage({ cancelRefetch: false });
+    }
   }, [autoLoading, query.isFetching, query.fetchNextPage, pages]);
 
   // For the buttons: a tap can land after a refresh has started.
@@ -117,14 +123,9 @@ export default function MessagesScreen() {
     setRefreshing(false);
   };
 
-  // Only the pages loaded so far are counted: with more to come it is "at least".
   const summary =
-    view === 'needs_reply' && conversations.length > 0
-      ? query.hasNextPage
-        ? `${conversations.length}+ chats are waiting for your reply`
-        : conversations.length === 1
-          ? '1 chat is waiting for your reply'
-          : `${conversations.length} chats are waiting for your reply`
+    view === 'needs_reply'
+      ? inboxWaitingSummary(conversations.length, !!query.hasNextPage)
       : null;
 
   return (

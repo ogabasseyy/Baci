@@ -71,6 +71,7 @@ export default {
       url.origin !== executionOrigin ||
       url.username ||
       url.password ||
+      // Inbound HTTP has no fragment, but a synthetic Request can carry one.
       url.hash ||
       url.pathname.length + url.search.length > 4096
     ) {

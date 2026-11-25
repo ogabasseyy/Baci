@@ -41,7 +41,7 @@ export async function runColocatedObserver(input: {
   const controller = join(input.directory, 'controller.mjs');
   await build({
     entryPoints: [
-      'tests/experience-commerce/public-observation-colocated.fixture.ts',
+      'tests/experience-commerce/public-observation-colocated-controller.test-support.ts',
     ],
     outfile: controller,
     bundle: true,

@@ -76,12 +76,6 @@ jobs:
         run: node --test .github/scripts/muse-comment-review-concurrency.test.mjs
       - name: Test builder execution proxy
         run: node --test apps/builder-execution-proxy/worker.test.mjs
-      - name: Install Cosign for the Caddy release signature
-        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
-        with:
-          cosign-release: v3.1.4
-      - name: Test builder execution HTTPS ingress
-        run: bash apps/builder-execution-proxy/ci-ingress.sh
       - name: Test loyalty replay binary discovery
         run: node --test tools/test/loyalty-postgres-bin.test.mjs
       - name: Test pnpm store action input hardening
@@ -152,6 +146,14 @@ jobs:
           BACI_REVIEW_FIRST_CI: ${{ vars.BACI_REVIEW_FIRST_CI }}
           BACI_CODEX_WAIT_TIMEOUT_MINUTES: ${{ vars.BACI_CODEX_WAIT_TIMEOUT_MINUTES }}
         run: bash .github/scripts/review-first-ci/launch-stage.sh
+      - name: Install Cosign for the Caddy release signature
+        if: (steps.stage_review.outputs.stage || steps.stage_full.outputs.stage) == 'full'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+      - name: Test builder execution HTTPS ingress
+        if: (steps.stage_review.outputs.stage || steps.stage_full.outputs.stage) == 'full'
+        run: bash apps/builder-execution-proxy/ci-ingress.sh
 
   cwv-runner-contracts:
     name: CWV Runner Contracts
@@ -321,9 +323,17 @@ jobs:
         run: |
           node --test .github/scripts/experience-runner-ci.test.mjs .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      - name: Install Chromium for portable experience runner units
+        if: steps.test-plan.outputs.mode != 'config-smoke'
+        run: pnpm --filter @baci/web exec playwright install --only-shell chromium
       - name: Run portable experience runner units
         if: steps.test-plan.outputs.mode != 'config-smoke'
         run: pnpm --filter @baci/web test:experience:runner
+      - name: Test builder operator entrypoint admission
+        if: steps.test-plan.outputs.mode != 'config-smoke'
+        run: >-
+          pnpm --filter @baci/web exec vitest run --config vitest.experience-authoring.config.ts
+          tests/experience-authoring/operator-entrypoints.test.ts
       - name: Verify authenticated shipping recovery in PostgreSQL
         id: shipping-recovery
         env:

@@ -73,6 +73,11 @@ class Backend(BaseHTTPRequestHandler):
             'referer': self.headers.get('Referer'),
             'authorization': self.headers.get('Authorization'),
             'key': self.headers.get(KEY_HEADER),
+            'forwarded': {
+                name: self.headers.get(name)
+                for name in ('Forwarded', 'X-Forwarded-For',
+                             'X-Forwarded-Host', 'X-Forwarded-Proto')
+            },
         }).encode())
 
     def log_message(self, *_args):
@@ -138,6 +143,10 @@ def smoke(root, backend_port, secret, dead=False):
             body, status = request(PATH, '-H', f'{KEY_HEADER}: {KEY}',
                                    '-H', 'Origin: null', '-H', 'Cookie: sensitive=x',
                                    '-H', 'Authorization: Bearer sensitive',
+                                   '-H', 'Forwarded: for=192.0.2.1',
+                                   '-H', 'X-Forwarded-For: 192.0.2.1',
+                                   '-H', 'X-Forwarded-Host: example.invalid',
+                                   '-H', 'X-Forwarded-Proto: http',
                                    '-H', 'Referer: https://usebaci.com/?value=synthetic')
             if not secret:
                 assert status == '404'
@@ -146,6 +155,8 @@ def smoke(root, backend_port, secret, dead=False):
             assert json.loads(body) == {
                 'path': PATH, 'host': EXECUTION, 'origin': 'null', 'cookie': None,
                 'authorization': None, 'key': None, 'referer': None,
+                'forwarded': dict.fromkeys(('Forwarded', 'X-Forwarded-For',
+                                            'X-Forwarded-Host', 'X-Forwarded-Proto')),
             }
             assert request('/internal/owner/preview', '-H', f'{KEY_HEADER}: {KEY}')[-1] == '404'
             assert request(PATH, '-H', f'{KEY_HEADER}: {KEY}', '-X', 'POST')[-1] == '404'

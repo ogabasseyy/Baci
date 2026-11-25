@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 
 it('imports the server-only stack in a real Node process with the dedicated operator configuration', () => {
@@ -60,7 +61,12 @@ it('starts and stops the combined service in a separate Node process', () => {
     [
       '--import',
       'tsx',
-      'tools/builder-preview-spike/production-stack-process.fixture.ts',
+      fileURLToPath(
+        new URL(
+          '../../../tools/builder-preview-spike/production-stack-process.fixture.ts',
+          import.meta.url
+        )
+      ),
     ],
     {
       cwd: process.cwd(),

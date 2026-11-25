@@ -14,6 +14,28 @@ test('portable experience units are in the existing required non-sharded web job
   assert.ok(workflow.jobs.quality.needs.includes('quality-test'));
   assert.equal(workflow.jobs['quality-test-web'].steps.filter(s=>s.run?.includes('test:experience:runner')).length,0);
 });
+test('installs the locked Chromium shell before running the portable suite', () => {
+  const steps = workflow.jobs['quality-test'].steps;
+  const browser = steps.findIndex(
+    (step) => step.run === 'pnpm --filter @baci/web exec playwright install --only-shell chromium'
+  );
+  const runner = steps.findIndex(
+    (step) => step.run === 'pnpm --filter @baci/web test:experience:runner'
+  );
+  assert.ok(browser >= 0 && browser < runner);
+  assert.equal(steps[browser].if, steps[runner].if);
+});
+test('only full CI downloads and verifies Caddy for the HTTPS test', () => {
+  const steps = workflow.jobs.changes.steps;
+  const ingress = steps.findIndex(
+    (step) => step.run === 'bash apps/builder-execution-proxy/ci-ingress.sh'
+  );
+  const cosign = steps.findIndex((step) => step.uses?.startsWith('sigstore/cosign-installer@'));
+  assert.ok(cosign > steps.findIndex((step) => step.id === 'stage_review'));
+  assert.ok(ingress > cosign);
+  assert.equal(steps[ingress].if, "(steps.stage_review.outputs.stage || steps.stage_full.outputs.stage) == 'full'");
+  assert.equal(steps[cosign].if, steps[ingress].if);
+});
 for (const file of ['apps/web/tools/experience-runner/bundle-source.ts','apps/web/vitest.experience-runner.config.ts','apps/web/experience-runtime/bootstrap.tsx','apps/web/tests/experience-browser/qualification.pw.ts']) {
   test(`runner/runtime change selects web tests: ${file}`, () => {
     const plan=resolveCiTestPlan({ baseRef:'origin/main', changedFiles:[file], eventName:'pull_request' });

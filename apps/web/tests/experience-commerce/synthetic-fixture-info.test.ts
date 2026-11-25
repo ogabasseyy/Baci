@@ -1,10 +1,30 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { expect, it } from 'vitest';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, it, vi } from 'vitest';
 import { createSyntheticFixtureInfo } from './synthetic-fixture-info';
 
-it('writes private synthetic metadata once and removes it idempotently', () => {
-  const path = `/Users/mac/.codex/tmp/baci-synthetic-${randomUUID()}.json`;
+it('writes private synthetic metadata once and removes it idempotently', ({
+  onTestFinished,
+}) => {
+  const home = mkdtempSync(join(tmpdir(), 'baci-fixture-home-'));
+  vi.stubEnv('HOME', home);
+  vi.stubEnv('USERPROFILE', home);
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+    rmSync(home, { recursive: true, force: true });
+  });
+  const directory = join(home, '.codex', 'tmp');
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const filename = `baci-synthetic-${randomUUID()}.json`;
+  const path = join(directory, filename);
   const cleanup = createSyntheticFixtureInfo(path, {
     url: 'http://127.0.0.1:12345',
     anonKey: 'synthetic',
@@ -23,6 +43,6 @@ it('writes private synthetic metadata once and removes it idempotently', () => {
   }
   expect(existsSync(path)).toBe(false);
   expect(() =>
-    createSyntheticFixtureInfo('/tmp/unowned', { url: 'x', anonKey: 'x' })
-  ).toThrow();
+    createSyntheticFixtureInfo(join(home, filename), { url: 'x', anonKey: 'x' })
+  ).toThrow('INVALID_SYNTHETIC_FIXTURE_INFO_PATH');
 });

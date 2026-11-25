@@ -134,6 +134,18 @@ it('rejects owner handler configuration on the public MCP listener', () => {
   ).toThrow('OWNER_ROUTES_FORBIDDEN');
 });
 
+it('allows unset owner options while rejecting inherited handlers', async () => {
+  const runtime = createBuilderMcpNodeServer({
+    ownerPreview: undefined,
+    ownerAttestation: undefined,
+    ownerPublicVerification: undefined,
+  } as never);
+  await runtime.close();
+  expect(() =>
+    createBuilderMcpNodeServer(Object.create({ ownerPreview: vi.fn() }))
+  ).toThrow('OWNER_ROUTES_FORBIDDEN');
+});
+
 it('routes the internal owner preview only when explicitly installed', async () => {
   const ownerPreview = vi.fn(async () => Response.json({ ok: true }));
   const runtime = createOwnerInternalNodeServer({

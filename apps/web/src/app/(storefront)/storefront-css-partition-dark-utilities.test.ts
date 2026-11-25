@@ -173,10 +173,8 @@ describe('storefront CSS partitioning (dark utilities)', () => {
       // cart.tsx delegates line-item cards and thumbnails to cart-page-card.tsx
       '../../components/storefront/ogabassey/pages/cart-page-card.tsx',
       '../../components/storefront/ogabassey/components/cart-sidebar-line-item.tsx',
-      // checkout-page.tsx renders its order-summary thumbnails through
-      // the mobile/desktop summary renderers since the desktop summary
-      // restore; it keeps no product thumbnail markup of its own.
-      '../../components/storefront/ogabassey/pages/checkout/components/DesktopOrderSummary.tsx',
+      // DesktopOrderSummary delegates its product thumbnails to its line renderer.
+      '../../components/storefront/ogabassey/pages/checkout/components/DesktopOrderSummaryLine.tsx',
       '../../components/storefront/ogabassey/components/MobileOrderSummary.tsx',
       '../../components/storefront/ogabassey/pages/receipts.tsx',
       '../../components/storefront/ogabassey/pages/order-details-item-row.tsx',
@@ -191,7 +189,7 @@ describe('storefront CSS partitioning (dark utilities)', () => {
     ];
 
     for (const fileName of imageSurfaceSourceFiles) {
-      expect(readStorefrontFile(fileName)).toContain(
+      expect(readStorefrontFile(fileName), fileName).toContain(
         'ogabassey-product-card-image-surface'
       );
     }

@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { expect, it } from 'vitest';
@@ -13,6 +13,7 @@ import { makeOCISpec } from '../../tools/experience-runner/oci-policy';
 import { runPublicObservationJob } from '../../tools/experience-runner/public-observation-executor';
 import { createPublicCartSession } from '../../tools/experience-verifier/public-cart-session';
 import { createPublicCommerceRelay } from '../../tools/experience-verifier/public-commerce-relay';
+import { assertSyntheticFixtureInfoPath } from './synthetic-fixture-info';
 
 const exec = promisify(execFile);
 
@@ -20,13 +21,7 @@ it.skipIf(process.env.BACI_LOCAL_SANDBOX_CHANNEL_TEST !== '1')(
   'runs the browser-to-host channel in a disposable network-disabled gVisor job',
   async () => {
     const fixturePath = process.env.BACI_LOCAL_FIXTURE_INFO;
-    if (
-      !fixturePath ||
-      !/^\/Users\/mac\/\.codex\/tmp\/baci-synthetic-[0-9a-f-]+\.json$/.test(
-        fixturePath
-      )
-    )
-      throw Error('INVALID_SYNTHETIC_FIXTURE_INFO_PATH');
+    assertSyntheticFixtureInfoPath(fixturePath);
     const info: unknown = JSON.parse(readFileSync(fixturePath, 'utf8'));
     if (
       !info ||
@@ -41,7 +36,7 @@ it.skipIf(process.env.BACI_LOCAL_SANDBOX_CHANNEL_TEST !== '1')(
     const fixtureUrl = info.url;
     const fixtureAnonKey = info.anonKey;
     const directory = mkdtempSync(
-      '/Users/mac/.codex/tmp/baci-browser-channel-'
+      join(dirname(fixturePath), 'baci-browser-channel-')
     );
     const worker = join(directory, 'worker.mjs');
     let prepared = false;

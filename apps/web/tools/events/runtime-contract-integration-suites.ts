@@ -1,6 +1,8 @@
+import { builderIntegrationSuites } from './runtime-contract-builder-integration-suites';
 import { oxygenIntegrationSuites } from './runtime-contract-oxygen-integration-suites';
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
+  ...builderIntegrationSuites,
   ...oxygenIntegrationSuites,
   'apps/web/src/lib/proxy/oxygen-payment-surface.ts':
     'apps/web/src/lib/proxy/response-headers.test.ts',

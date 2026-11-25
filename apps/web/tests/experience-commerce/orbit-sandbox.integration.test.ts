@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { expect, it } from 'vitest';
@@ -14,6 +14,7 @@ import { runPublicObservationJob } from '../../tools/experience-runner/public-ob
 import { createPublicCartSession } from '../../tools/experience-verifier/public-cart-session';
 import { createPublicCommerceRelay } from '../../tools/experience-verifier/public-commerce-relay';
 import { captureOrbitSnapshot } from './orbit-snapshot.test-support';
+import { assertSyntheticFixtureInfoPath } from './synthetic-fixture-info';
 
 const exec = promisify(execFile);
 
@@ -21,13 +22,7 @@ it.skipIf(process.env.BACI_LOCAL_ORBIT_SANDBOX_TEST !== '1')(
   'runs generated Orbit and synthetic Baci checkout review in network-disabled gVisor',
   async () => {
     const fixturePath = process.env.BACI_LOCAL_FIXTURE_INFO;
-    if (
-      !fixturePath ||
-      !/^\/Users\/mac\/\.codex\/tmp\/baci-synthetic-[0-9a-f-]+\.json$/.test(
-        fixturePath
-      )
-    )
-      throw Error('INVALID_SYNTHETIC_FIXTURE_INFO_PATH');
+    assertSyntheticFixtureInfoPath(fixturePath);
     const info: unknown = JSON.parse(readFileSync(fixturePath, 'utf8'));
     if (
       !info ||
@@ -42,7 +37,7 @@ it.skipIf(process.env.BACI_LOCAL_ORBIT_SANDBOX_TEST !== '1')(
     const fixtureUrl = info.url;
     const fixtureAnonKey = info.anonKey;
     const directory = mkdtempSync(
-      '/Users/mac/.codex/tmp/baci-browser-channel-'
+      join(dirname(fixturePath), 'baci-browser-channel-')
     );
     const worker = join(directory, 'worker.mjs');
     const snapshotPath = join(directory, 'snapshot.json');

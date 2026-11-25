@@ -43,17 +43,20 @@ it('installed HTTP GET is read-only; POST requires CSRF and confirms only the pa
     ).toBe(200);
     expect(confirm).not.toHaveBeenCalled();
     deps.csrf.mockResolvedValueOnce({ valid: false });
-    const post = () =>
-      POST(
-        new NextRequest('http://localhost/api', {
-          method: 'POST',
-          body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
-        })
-      );
-    expect((await post()).status).toBe(403);
+    const postRequest = () =>
+      new NextRequest('http://localhost/api', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
+      });
+    expect((await POST(postRequest())).status).toBe(403);
     expect(confirm).not.toHaveBeenCalled();
-    expect((await post()).status).toBe(200);
-    expect(confirm).toHaveBeenCalledWith(expect.anything(), id);
+    const request = postRequest();
+    expect((await POST(request)).status).toBe(200);
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ auth: { getUser: deps.auth } }),
+      id,
+      request.signal
+    );
   } finally {
     remove();
   }

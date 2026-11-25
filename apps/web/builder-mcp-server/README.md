@@ -98,7 +98,9 @@ Pass `--experience` before or after the port to advertise the full-code experien
 The default listener keeps those tools disabled. Discovery does not install the
 web gateway or the isolated runner.
 
-The standalone process has only public JWKS verification and an HTTPS forwarder.
+The standalone process has only public JWKS verification and an HTTPS forwarder. Serve
+only the MCP endpoint and its metadata on the allowlisted MCP origin. Serve
+merchant-authored pages on the separate execution origin.
 It accepts the dedicated outer builder token, never a normal Supabase token. The
 private gateway independently verifies issuer/audience/expiry and live canonical
 consent, then resolves the dedicated upstream user session and normal RLS client.

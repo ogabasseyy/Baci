@@ -29,6 +29,10 @@ builder-output-origin.usebaci.com {
 			header_up -Authorization
 			header_up -Cookie
 			header_up -Referer
+			header_up -Forwarded
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
 		}
 	}
 	handle {

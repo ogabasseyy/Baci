@@ -71,6 +71,33 @@ test('forwards private output and browser Origin without caller credentials', as
   assert.equal(await output.text(), 'widget');
 });
 
+test('preserves the declared MIME type and nosniff for scripts and styles', async (t) => {
+  for (const [file, mime] of [
+    ['app.js', 'application/javascript'],
+    ['app.css', 'text/css'],
+  ]) {
+    const fetch = t.mock.method(
+      globalThis,
+      'fetch',
+      async () =>
+        new Response('synthetic output', {
+          headers: {
+            'Content-Type': mime,
+            'X-Content-Type-Options': 'nosniff',
+          },
+        })
+    );
+    const response = await worker.fetch(
+      request(`/resource/${ticket}/${file}`),
+      env
+    );
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Content-Type'), mime);
+    assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+    fetch.mock.restore();
+  }
+});
+
 test('forwards a canonical route parameter only for a published document', async (t) => {
   const fetch = t.mock.method(
     globalThis,

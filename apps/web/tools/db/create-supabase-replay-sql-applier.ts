@@ -7,6 +7,8 @@ import { createSupabaseReplayDatabaseEnvironment } from './supabase-replay-contr
 const RETENTION_SOURCE = '20261004071812_connector_retention_one_year.sql';
 const RETENTION_SHA256 =
   '20f6c46c02d9d5924ffdf9bfe9571a51ce61d8c8e9e56bfcb3d8df8213c7fa20';
+const RENDERER_BUDGET_SOURCE =
+  '20261124072648_experience_renderer_pilot_budget.sql';
 
 /** Supplies a production-managed prerequisite only inside the owned local replay. */
 export function createSupabaseReplaySqlApplier(
@@ -46,6 +48,13 @@ export function createSupabaseReplaySqlApplier(
 ${bytes.toString('utf8')}
 SELECT cron.alter_job(jobid, active := false) FROM cron.job WHERE jobname = 'baci-connector-retention';
 COMMIT;`,
+      });
+    }
+    // Hold the write lock through the budget snapshot and trigger installation.
+    // Other migration files can require autocommit for concurrent indexes.
+    if (name === RENDERER_BUDGET_SOURCE) {
+      return run(psqlBin, [...args, '--single-transaction', '-f', sqlPath], {
+        env,
       });
     }
     return run(psqlBin, [...args, '-f', sqlPath], { env });

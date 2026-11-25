@@ -14,9 +14,9 @@ export function createBuilderMcpNodeServer(
   } = {}
 ) {
   if (
-    'ownerPreview' in options ||
-    'ownerAttestation' in options ||
-    'ownerPublicVerification' in options
+    Reflect.get(options, 'ownerPreview') !== undefined ||
+    Reflect.get(options, 'ownerAttestation') !== undefined ||
+    Reflect.get(options, 'ownerPublicVerification') !== undefined
   )
     throw Error('OWNER_ROUTES_FORBIDDEN');
   const handler = createBuilderMcpHttpHandler({

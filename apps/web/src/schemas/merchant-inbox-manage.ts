@@ -28,7 +28,10 @@ export const merchantInboxUpdateSchema = z
   .strictObject({
     /** `resolved` = Done; `open` = reopen. */
     status: z.enum(['open', 'resolved']).optional(),
-    /** ISO time to come back to this chat; null clears the follow-up. */
+    /**
+     * ISO time to come back to this chat; null clears the follow-up. UTC ('Z')
+     * only, which is what the app sends: an offset is refused, not converted.
+     */
     followUpAt: z.iso.datetime().nullable().optional(),
     priority: z.enum(INBOX_PRIORITIES).nullable().optional(),
     addTags: z.array(tagName).max(5).optional(),

@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 
-export const setCustomAttributes = vi.fn();
-export const deleteCustomAttribute = vi.fn();
+export const setNote = vi.fn();
+export const deleteNote = vi.fn();
 export const MARKER = 'baci-chat-link:ogabassey';
 
 export const json = (status: number, body: unknown = {}) => ({
@@ -43,8 +43,8 @@ export function installHarness(mocks: Mocks): void {
   // biome-ignore lint/suspicious/noDocumentCookie: test cleanup of the marker cookie
   document.cookie = 'baci_chat_link_ogabassey=; Path=/; Max-Age=0';
   (window as unknown as { $chatwoot: unknown }).$chatwoot = {
-    setCustomAttributes,
-    deleteCustomAttribute,
+    setConversationCustomAttributes: setNote,
+    deleteConversationCustomAttribute: deleteNote,
   };
   mocks.hint.mockReturnValue('1');
   mocks.live.mockReturnValue({

@@ -23,13 +23,13 @@ vi.mock('@/contexts/customer-session-hint', () => ({
 
 import { useChatwootCustomerLink } from './use-chatwoot-customer-link';
 import {
-  deleteCustomAttribute,
+  deleteNote,
   installHarness,
   json,
   listenerCounts,
   MARKER,
   notifyOtherTab,
-  setCustomAttributes,
+  setNote,
   uninstallHarness,
 } from './use-chatwoot-customer-link.test-support';
 
@@ -46,7 +46,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     mocks.hint.mockReturnValue('0');
     notifyOtherTab();
 
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
     expect(window.localStorage.getItem(MARKER)).toBeNull();
   });
 
@@ -57,7 +57,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     mocks.hint.mockReturnValue(null);
     notifyOtherTab();
 
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
   });
 
   it('bugfix: replaces the link when another tab switched to a different account', async () => {
@@ -68,7 +68,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
       .mockResolvedValueOnce(json(200, { token: 'account.b' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenCalledWith({
+      expect(setNote).toHaveBeenCalledWith({
         baci_customer_link: 'account.a',
       })
     );
@@ -78,7 +78,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     notifyOtherTab();
 
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenLastCalledWith({
+      expect(setNote).toHaveBeenLastCalledWith({
         baci_customer_link: 'account.b',
       })
     );
@@ -89,7 +89,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     vi.setSystemTime(2_000_000);
     mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
 
     vi.setSystemTime(2_001_000);
     notifyOtherTab();
@@ -109,7 +109,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
       .mockResolvedValueOnce(json(200, { token: 'account.b' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenCalledWith({
+      expect(setNote).toHaveBeenCalledWith({
         baci_customer_link: 'account.a',
       })
     );
@@ -122,7 +122,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
 
     await vi.advanceTimersByTimeAsync(10_000);
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenLastCalledWith({
+      expect(setNote).toHaveBeenLastCalledWith({
         baci_customer_link: 'account.b',
       })
     );
@@ -142,13 +142,13 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     finishA(json(200, { token: 'account.a' }));
     await Promise.resolve();
     await Promise.resolve();
-    expect(setCustomAttributes).not.toHaveBeenCalledWith({
+    expect(setNote).not.toHaveBeenCalledWith({
       baci_customer_link: 'account.a',
     });
 
     await vi.advanceTimersByTimeAsync(10_000);
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenCalledWith({
+      expect(setNote).toHaveBeenCalledWith({
         baci_customer_link: 'account.b',
       })
     );
@@ -159,7 +159,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     vi.setSystemTime(5_000_000);
     mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
 
     vi.setSystemTime(5_001_000);
     notifyOtherTab(); // throttled: a check is scheduled
@@ -168,7 +168,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     await vi.advanceTimersByTimeAsync(20_000);
 
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
   });
 
   it('cancels a scheduled check when the chat goes away', async () => {
@@ -178,7 +178,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     const { unmount } = renderHook(() =>
       useChatwootCustomerLink('ogabassey', true)
     );
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
 
     vi.setSystemTime(6_001_000);
     notifyOtherTab(); // throttled: a check is scheduled
@@ -199,7 +199,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
   });
 
   it('stops listening to other tabs when the chat goes away', () => {
@@ -216,7 +216,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     now.mockReturnValue(7_000_000);
     mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setNote).toHaveBeenCalledTimes(1));
 
     // A focus or cross-tab notice well after the last sync, hint unchanged.
     now.mockReturnValue(7_060_000);
@@ -224,7 +224,7 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     notifyOtherTab();
 
     await waitFor(() =>
-      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+      expect(deleteNote).toHaveBeenCalledWith('baci_customer_link')
     );
   });
 });

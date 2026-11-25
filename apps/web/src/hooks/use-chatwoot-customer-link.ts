@@ -6,13 +6,8 @@ import {
 } from '@/contexts/customer-live-identity';
 import { readCustomerSessionHint } from '@/contexts/customer-session-hint';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { CHAT_CUSTOMER_LINK_ATTRIBUTE } from '@/schemas/chat-customer-link';
+import { createConversationNote } from './chat-conversation-note';
 import { readLinkMarker, writeLinkMarker } from './chat-link-marker';
-
-type ChatwootContactApi = {
-  setCustomAttributes?: (attributes: Record<string, string>) => void;
-  deleteCustomAttribute?: (key: string) => void;
-};
 
 const LINK_ENDPOINT = '/api/storefront/chatwoot/customer-link';
 /** Focus and cross-tab notices come in bursts; resync at most this often. */
@@ -27,14 +22,11 @@ const RETRY_MS = 15_000;
  */
 const linkedThisSession = new Set<string>();
 
-function chatwoot(): ChatwootContactApi | undefined {
-  return (window as Window & { $chatwoot?: ChatwootContactApi }).$chatwoot;
-}
-
 /**
  * When a signed-in shopper has the store chat open, tells the chat who they
- * are with a server-signed note, so the owner sees their orders next to the
- * conversation. Guests cost nothing: with no session hint no request is made.
+ * are with a server-signed note on that conversation (see
+ * `chat-conversation-note`), so the owner sees their orders next to it. Guests
+ * cost nothing: with no session hint no request is made.
  *
  * It follows the shopper while the page stays open: signing in adds the note,
  * signing out removes it, switching accounts replaces it. A request still in
@@ -52,6 +44,7 @@ export function useChatwootCustomerLink(
     let generation = 0;
     let lastSyncAt = 0;
     let guestCleared = false;
+    const note = createConversationNote();
     let trailing: ReturnType<typeof setTimeout> | undefined;
     const cancelTrailing = () => {
       if (trailing !== undefined) clearTimeout(trailing);
@@ -79,24 +72,9 @@ export function useChatwootCustomerLink(
       ) {
         return;
       }
-      const widget = chatwoot();
-      try {
-        if (typeof widget?.deleteCustomAttribute === 'function') {
-          widget.deleteCustomAttribute(CHAT_CUSTOMER_LINK_ATTRIBUTE);
-        } else if (typeof widget?.setCustomAttributes === 'function') {
-          // A widget build without a delete call: overwrite the note with an
-          // empty value, which the inbox never accepts, instead of leaving the
-          // previous shopper's note in place.
-          widget.setCustomAttributes({ [CHAT_CUSTOMER_LINK_ATTRIBUTE]: '' });
-        } else {
-          // No widget to talk to yet: keep the record of the note, so a later
-          // check removes it, instead of forgetting a note that is still there.
-          return;
-        }
-      } catch {
-        // The widget may be mid-reload; the next load tries again.
-        return;
-      }
+      // No widget to talk to yet: keep the record of the note, so a later
+      // check removes it, instead of forgetting a note that is still there.
+      if (!note.remove()) return;
       linkedThisSession.delete(storeSlug);
       writeLinkMarker(storeSlug, false);
       pendingRemoval =
@@ -195,9 +173,7 @@ export function useChatwootCustomerLink(
           failClosed();
           return;
         }
-        chatwoot()?.setCustomAttributes?.({
-          [CHAT_CUSTOMER_LINK_ATTRIBUTE]: token,
-        });
+        note.set(token);
         linkedThisSession.add(storeSlug);
         writeLinkMarker(storeSlug, true);
         retried = false;
@@ -253,6 +229,7 @@ export function useChatwootCustomerLink(
       cancelled = true;
       cancelTrailing();
       cancelRetry();
+      note.dispose();
       window.removeEventListener('online', onOnline);
       unsubscribe();
       crossTab.unsubscribe();

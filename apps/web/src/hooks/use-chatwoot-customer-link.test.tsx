@@ -23,11 +23,11 @@ vi.mock('@/contexts/customer-session-hint', () => ({
 
 import { useChatwootCustomerLink } from './use-chatwoot-customer-link';
 import {
-  deleteCustomAttribute,
+  deleteNote,
   installHarness,
   json,
   MARKER,
-  setCustomAttributes,
+  setNote,
   uninstallHarness,
 } from './use-chatwoot-customer-link.test-support';
 
@@ -41,7 +41,7 @@ describe('useChatwootCustomerLink', () => {
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
 
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenCalledWith({
+      expect(setNote).toHaveBeenCalledWith({
         baci_customer_link: 'signed.token',
       })
     );
@@ -56,7 +56,7 @@ describe('useChatwootCustomerLink', () => {
     mocks.hint.mockReturnValue('0');
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
     expect(mocks.fetch).not.toHaveBeenCalled();
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
   });
 
   it('waits until the chat is ready', () => {
@@ -70,7 +70,7 @@ describe('useChatwootCustomerLink', () => {
 
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
 
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
     expect(window.localStorage.getItem(MARKER)).toBeNull();
   });
 
@@ -81,9 +81,9 @@ describe('useChatwootCustomerLink', () => {
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
 
     await waitFor(() =>
-      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+      expect(deleteNote).toHaveBeenCalledWith('baci_customer_link')
     );
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -95,14 +95,14 @@ describe('useChatwootCustomerLink', () => {
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
     await waitFor(() => expect(mocks.fetch).toHaveBeenCalled());
     await Promise.resolve();
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
   });
 
   it('does not throw when the request fails', async () => {
     mocks.fetch.mockRejectedValue(new Error('offline'));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
     await waitFor(() => expect(mocks.fetch).toHaveBeenCalled());
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
   });
 
   it('does nothing when the chat arrives after the page is left', async () => {
@@ -114,7 +114,7 @@ describe('useChatwootCustomerLink', () => {
     unmount();
     finish(json(200, { token: 'late.token' }));
     await Promise.resolve();
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
   });
 
   it('bugfix: removes a recorded link when the first check on page load cannot be confirmed', async () => {
@@ -125,7 +125,7 @@ describe('useChatwootCustomerLink', () => {
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
 
     await waitFor(() =>
-      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+      expect(deleteNote).toHaveBeenCalledWith('baci_customer_link')
     );
     expect(window.localStorage.getItem(MARKER)).toBeNull();
   });
@@ -136,14 +136,14 @@ describe('useChatwootCustomerLink', () => {
 
     await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
     await Promise.resolve();
-    expect(deleteCustomAttribute).not.toHaveBeenCalled();
+    expect(deleteNote).not.toHaveBeenCalled();
   });
 
   it('bugfix: a guest hint removes a leftover link even with no marker, once per page load', () => {
     mocks.hint.mockReturnValue('0');
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
 
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
@@ -152,7 +152,7 @@ describe('useChatwootCustomerLink', () => {
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
 
     await waitFor(() =>
-      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+      expect(deleteNote).toHaveBeenCalledWith('baci_customer_link')
     );
   });
 });

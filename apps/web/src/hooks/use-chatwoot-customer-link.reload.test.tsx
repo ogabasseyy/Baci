@@ -22,10 +22,10 @@ vi.mock('@/contexts/customer-session-hint', () => ({
 }));
 
 import {
-  deleteCustomAttribute,
+  deleteNote,
   installHarness,
   json,
-  setCustomAttributes,
+  setNote,
   uninstallHarness,
 } from './use-chatwoot-customer-link.test-support';
 
@@ -52,7 +52,7 @@ describe('useChatwootCustomerLink across page loads', () => {
     // Page load 1: a signed-in shopper is linked. Storage refuses the marker.
     const first = await freshHook();
     renderHook(() => first('ogabassey', true));
-    await vi.waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    await vi.waitFor(() => expect(setNote).toHaveBeenCalled());
     expect(window.localStorage.getItem('baci-chat-link:ogabassey')).toBeNull();
     expect(cookieMarker()).toBe(true);
 
@@ -61,7 +61,7 @@ describe('useChatwootCustomerLink across page loads', () => {
     const second = await freshHook();
     renderHook(() => second('ogabassey', true));
 
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
     expect(cookieMarker()).toBe(false);
   });
 
@@ -70,7 +70,7 @@ describe('useChatwootCustomerLink across page loads', () => {
     const hook = await freshHook();
     renderHook(() => hook('ogabassey', true));
 
-    expect(deleteCustomAttribute).not.toHaveBeenCalled();
+    expect(deleteNote).not.toHaveBeenCalled();
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
@@ -78,7 +78,7 @@ describe('useChatwootCustomerLink across page loads', () => {
     mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
     const hook = await freshHook();
     renderHook(() => hook('ogabassey', true));
-    await vi.waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    await vi.waitFor(() => expect(setNote).toHaveBeenCalled());
     expect(cookieMarker()).toBe(true);
 
     mocks.live.mockReturnValue({
@@ -88,7 +88,7 @@ describe('useChatwootCustomerLink across page loads', () => {
     });
     for (const call of mocks.subscribe.mock.calls) call[0]();
 
-    expect(deleteCustomAttribute).toHaveBeenCalled();
+    expect(deleteNote).toHaveBeenCalled();
     expect(cookieMarker()).toBe(false);
   });
 });

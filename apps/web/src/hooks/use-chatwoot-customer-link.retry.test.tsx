@@ -23,11 +23,11 @@ vi.mock('@/contexts/customer-session-hint', () => ({
 
 import { useChatwootCustomerLink } from './use-chatwoot-customer-link';
 import {
-  deleteCustomAttribute,
+  deleteNote,
   installHarness,
   json,
   publishIdentity,
-  setCustomAttributes,
+  setNote,
   uninstallHarness,
 } from './use-chatwoot-customer-link.test-support';
 
@@ -52,7 +52,7 @@ describe('bugfix: one passing error left a signed-in shopper unlinked', () => {
     await later(15_000);
 
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
-    expect(setCustomAttributes).toHaveBeenCalledWith({
+    expect(setNote).toHaveBeenCalledWith({
       baci_customer_link: 'signed.token',
     });
   });
@@ -66,7 +66,7 @@ describe('bugfix: one passing error left a signed-in shopper unlinked', () => {
     await later(120_000);
 
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
-    expect(deleteCustomAttribute).not.toHaveBeenCalled();
+    expect(deleteNote).not.toHaveBeenCalled();
   });
 
   it('does not ask again when the server says there is no session', async () => {

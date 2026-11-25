@@ -37,12 +37,7 @@ export const providerInboxConversationSchema = z.object({
   created_at: unixSeconds.nullish(),
   meta: z
     .object({
-      sender: z
-        .object({
-          name: z.string().nullish(),
-          custom_attributes: z.record(z.string(), z.unknown()).nullish(),
-        })
-        .nullish(),
+      sender: z.object({ name: z.string().nullish() }).nullish(),
     })
     .nullish(),
   last_non_activity_message: providerInboxMessageSchema.nullish(),

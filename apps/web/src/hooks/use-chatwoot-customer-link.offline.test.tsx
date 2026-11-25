@@ -23,12 +23,12 @@ vi.mock('@/contexts/customer-session-hint', () => ({
 
 import { useChatwootCustomerLink } from './use-chatwoot-customer-link';
 import {
-  deleteCustomAttribute,
+  deleteNote,
   installHarness,
   json,
   MARKER,
   publishIdentity,
-  setCustomAttributes,
+  setNote,
   uninstallHarness,
 } from './use-chatwoot-customer-link.test-support';
 
@@ -64,13 +64,13 @@ describe('bugfix: a sign-out while offline still removes the chat link', () => {
 
     setOnline(false);
     signOut();
-    expect(deleteCustomAttribute).toHaveBeenCalledTimes(1);
+    expect(deleteNote).toHaveBeenCalledTimes(1);
 
     // The request inside the widget was lost with the connection.
     setOnline(true);
     window.dispatchEvent(new Event('online'));
 
-    expect(deleteCustomAttribute).toHaveBeenCalledTimes(2);
+    expect(deleteNote).toHaveBeenCalledTimes(2);
   });
 
   it('does not repeat the removal when the sign-out went out online', () => {
@@ -79,7 +79,7 @@ describe('bugfix: a sign-out while offline still removes the chat link', () => {
     signOut();
     window.dispatchEvent(new Event('online'));
 
-    expect(deleteCustomAttribute).toHaveBeenCalledTimes(1);
+    expect(deleteNote).toHaveBeenCalledTimes(1);
   });
 
   it('does not remove the note of a shopper who signed in again meanwhile', () => {
@@ -91,7 +91,7 @@ describe('bugfix: a sign-out while offline still removes the chat link', () => {
     setOnline(true);
     window.dispatchEvent(new Event('online'));
 
-    expect(deleteCustomAttribute).toHaveBeenCalledTimes(1);
+    expect(deleteNote).toHaveBeenCalledTimes(1);
   });
 
   it('stops listening once the page is left', () => {
@@ -105,7 +105,7 @@ describe('bugfix: a sign-out while offline still removes the chat link', () => {
     setOnline(true);
     window.dispatchEvent(new Event('online'));
 
-    expect(deleteCustomAttribute).toHaveBeenCalledTimes(1);
+    expect(deleteNote).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -114,17 +114,17 @@ describe('bugfix: a shopper whose first link check failed offline is linked when
     mocks.fetch.mockRejectedValueOnce(new Error('offline'));
     renderHook(() => useChatwootCustomerLink('night-store', true));
     await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(1));
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
 
     window.dispatchEvent(new Event('online'));
 
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setNote).toHaveBeenCalledTimes(1));
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('does not ask again when the shopper is already linked', async () => {
     renderHook(() => useChatwootCustomerLink('linked-store', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setNote).toHaveBeenCalledTimes(1));
 
     window.dispatchEvent(new Event('online'));
 
@@ -145,17 +145,17 @@ describe('bugfix: a shopper whose first link check failed offline is linked when
 describe('bugfix: a sign-out always takes the previous note off', () => {
   it('overwrites the note with an empty value when the widget has no delete call', () => {
     (window as unknown as { $chatwoot: unknown }).$chatwoot = {
-      setCustomAttributes,
+      setConversationCustomAttributes: setNote,
     };
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    setCustomAttributes.mockClear();
+    setNote.mockClear();
 
     signOut();
 
-    expect(setCustomAttributes).toHaveBeenCalledWith({
+    expect(setNote).toHaveBeenCalledWith({
       baci_customer_link: '',
     });
-    expect(deleteCustomAttribute).not.toHaveBeenCalled();
+    expect(deleteNote).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(MARKER)).not.toBe('1');
   });
 

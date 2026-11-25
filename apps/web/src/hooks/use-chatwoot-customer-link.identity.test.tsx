@@ -23,13 +23,13 @@ vi.mock('@/contexts/customer-session-hint', () => ({
 
 import { useChatwootCustomerLink } from './use-chatwoot-customer-link';
 import {
-  deleteCustomAttribute,
+  deleteNote,
   installHarness,
   json,
   listenerCounts,
   MARKER,
   publishIdentity,
-  setCustomAttributes,
+  setNote,
   uninstallHarness,
 } from './use-chatwoot-customer-link.test-support';
 
@@ -47,7 +47,7 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     publishIdentity();
 
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenCalledWith({
+      expect(setNote).toHaveBeenCalledWith({
         baci_customer_link: 'new.token',
       })
     );
@@ -65,7 +65,7 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     });
     publishIdentity();
 
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
     expect(window.localStorage.getItem(MARKER)).toBeNull();
   });
 
@@ -84,7 +84,7 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(setCustomAttributes).not.toHaveBeenCalled();
+    expect(setNote).not.toHaveBeenCalled();
   });
 
   it('bugfix: replaces the link when the shopper switches account', async () => {
@@ -93,7 +93,7 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
       .mockResolvedValueOnce(json(200, { token: 'account.b' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenCalledWith({
+      expect(setNote).toHaveBeenCalledWith({
         baci_customer_link: 'account.a',
       })
     );
@@ -106,7 +106,7 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     publishIdentity();
 
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenLastCalledWith({
+      expect(setNote).toHaveBeenLastCalledWith({
         baci_customer_link: 'account.b',
       })
     );
@@ -127,7 +127,7 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     });
     mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
     expect(window.localStorage.getItem(MARKER)).toBeNull();
 
     mocks.live.mockReturnValue({
@@ -137,13 +137,13 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     });
     publishIdentity();
 
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
   });
 
   it('bugfix: removes the previous account link before asking for the new one', async () => {
     mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalled());
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
 
     let finishB: (value: unknown) => void = () => {};
     mocks.fetch.mockReturnValueOnce(
@@ -157,10 +157,10 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     publishIdentity();
 
     // Account A's note is already gone while B's request is still pending.
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
     finishB(json(200, { token: 'account.b' }));
     await waitFor(() =>
-      expect(setCustomAttributes).toHaveBeenLastCalledWith({
+      expect(setNote).toHaveBeenLastCalledWith({
         baci_customer_link: 'account.b',
       })
     );
@@ -172,7 +172,7 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
   ])('bugfix: leaves no link on the old account after %s on a switch', async (_name, answer) => {
     mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setNote).toHaveBeenCalledTimes(1));
 
     mocks.fetch.mockResolvedValueOnce(answer());
     mocks.live.mockReturnValue({
@@ -183,15 +183,15 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     publishIdentity();
 
     await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
-    expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link');
-    expect(setCustomAttributes).toHaveBeenCalledTimes(1);
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
+    expect(setNote).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem(MARKER)).toBeNull();
   });
 
   it('bugfix: leaves no link on the old account when the switch request fails to connect', async () => {
     mocks.fetch.mockResolvedValueOnce(json(200, { token: 'account.a' }));
     renderHook(() => useChatwootCustomerLink('ogabassey', true));
-    await waitFor(() => expect(setCustomAttributes).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setNote).toHaveBeenCalledTimes(1));
 
     mocks.fetch.mockRejectedValueOnce(new Error('offline'));
     mocks.live.mockReturnValue({
@@ -202,8 +202,8 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
     publishIdentity();
 
     await waitFor(() =>
-      expect(deleteCustomAttribute).toHaveBeenCalledWith('baci_customer_link')
+      expect(deleteNote).toHaveBeenCalledWith('baci_customer_link')
     );
-    expect(setCustomAttributes).toHaveBeenCalledTimes(1);
+    expect(setNote).toHaveBeenCalledTimes(1);
   });
 });

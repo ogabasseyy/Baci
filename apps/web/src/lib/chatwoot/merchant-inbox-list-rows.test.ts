@@ -15,14 +15,7 @@ const row = (
 });
 
 const withLink = (id: number, token: string) =>
-  row(id, {
-    meta: {
-      sender: {
-        name: `Shopper ${id}`,
-        custom_attributes: { baci_customer_link: token },
-      },
-    },
-  });
+  row(id, { custom_attributes: { baci_customer_link: token } });
 
 describe('buildMerchantInboxListRows', () => {
   it('keeps only chats of the bound inbox, newest activity first', () => {

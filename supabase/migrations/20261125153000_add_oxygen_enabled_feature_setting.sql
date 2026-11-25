@@ -20,37 +20,45 @@ GRANT SELECT (oxygen_enabled) ON TABLE public.merchant_feature_settings
 DO $audit$
 DECLARE
   v_definition text;
+  v_needle_list constant text := $needle$'loyalty_enabled', 'order_tracking_enabled'$needle$;
+  v_needle_old constant text := $needle$'order_tracking_enabled', OLD.order_tracking_enabled,$needle$;
+  v_needle_new constant text := $needle$'order_tracking_enabled', NEW.order_tracking_enabled,$needle$;
+  v_needle_changed constant text := $needle$CASE WHEN OLD.order_tracking_enabled IS DISTINCT FROM NEW.order_tracking_enabled THEN 'order_tracking_enabled' END,$needle$;
 BEGIN
   v_definition := pg_catalog.pg_get_functiondef(
     'private.audit_merchant_feature_settings_change_v1()'::pg_catalog.regprocedure
   );
-  IF position($needle$'loyalty_enabled', 'order_tracking_enabled'$needle$ IN v_definition) = 0
-     OR position($needle$'order_tracking_enabled', OLD.order_tracking_enabled,$needle$ IN v_definition) = 0
-     OR position($needle$'order_tracking_enabled', NEW.order_tracking_enabled,$needle$ IN v_definition) = 0
-     OR position($needle$CASE WHEN OLD.order_tracking_enabled IS DISTINCT FROM NEW.order_tracking_enabled THEN 'order_tracking_enabled' END,$needle$ IN v_definition) = 0 THEN
+  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_needle_list, '')))
+       / pg_catalog.length(v_needle_list) <> 1
+     OR (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_needle_old, '')))
+       / pg_catalog.length(v_needle_old) <> 1
+     OR (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_needle_new, '')))
+       / pg_catalog.length(v_needle_new) <> 1
+     OR (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_needle_changed, '')))
+       / pg_catalog.length(v_needle_changed) <> 1 THEN
     RAISE EXCEPTION 'feature audit classification contract changed';
   END IF;
 
-  v_definition := replace(
+  v_definition := pg_catalog.replace(
     v_definition,
-    $needle$'loyalty_enabled', 'order_tracking_enabled'$needle$,
+    v_needle_list,
     $replacement$'loyalty_enabled', 'order_tracking_enabled', 'oxygen_enabled'$replacement$
   );
-  v_definition := replace(
+  v_definition := pg_catalog.replace(
     v_definition,
-    $needle$'order_tracking_enabled', OLD.order_tracking_enabled,$needle$,
+    v_needle_old,
     $replacement$'order_tracking_enabled', OLD.order_tracking_enabled,
       'oxygen_enabled', OLD.oxygen_enabled,$replacement$
   );
-  v_definition := replace(
+  v_definition := pg_catalog.replace(
     v_definition,
-    $needle$'order_tracking_enabled', NEW.order_tracking_enabled,$needle$,
+    v_needle_new,
     $replacement$'order_tracking_enabled', NEW.order_tracking_enabled,
       'oxygen_enabled', NEW.oxygen_enabled,$replacement$
   );
-  v_definition := replace(
+  v_definition := pg_catalog.replace(
     v_definition,
-    $needle$CASE WHEN OLD.order_tracking_enabled IS DISTINCT FROM NEW.order_tracking_enabled THEN 'order_tracking_enabled' END,$needle$,
+    v_needle_changed,
     $replacement$CASE WHEN OLD.order_tracking_enabled IS DISTINCT FROM NEW.order_tracking_enabled THEN 'order_tracking_enabled' END,
       CASE WHEN OLD.oxygen_enabled IS DISTINCT FROM NEW.oxygen_enabled THEN 'oxygen_enabled' END,$replacement$
   );
@@ -65,16 +73,18 @@ $audit$;
 DO $cache_projection$
 DECLARE
   v_definition text;
+  v_needle constant text := $needle$'order_tracking_enabled','pay_on_delivery_enabled'$needle$;
 BEGIN
   v_definition := pg_catalog.pg_get_functiondef(
     'public.merchant_feature_settings_public_cache_projection(public.merchant_feature_settings)'::pg_catalog.regprocedure
   );
-  IF position($needle$'order_tracking_enabled','pay_on_delivery_enabled'$needle$ IN v_definition) = 0 THEN
+  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_needle, '')))
+       / pg_catalog.length(v_needle) <> 1 THEN
     RAISE EXCEPTION 'feature cache oxygen_enabled projection contract changed';
   END IF;
-  EXECUTE replace(
+  EXECUTE pg_catalog.replace(
     v_definition,
-    $needle$'order_tracking_enabled','pay_on_delivery_enabled'$needle$,
+    v_needle,
     $replacement$'order_tracking_enabled','oxygen_enabled','pay_on_delivery_enabled'$replacement$
   );
 END

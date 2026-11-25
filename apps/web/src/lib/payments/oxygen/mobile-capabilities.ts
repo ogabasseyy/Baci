@@ -83,6 +83,9 @@ export async function readOxygenMobileCapabilities(
         : !origins.hosted.length || !origins.selfie.length
           ? 'Hosted verification is not configured.'
           : null;
+    // Mobile staging admission requires `oxygen_enabled === true`. The local-only
+    // web checkout staging flag (`payment-step-availability.ts`) is wired in the
+    // follow-up checkout PR; `public.oxygen_start_workflow` still fails closed (42501).
     if (reason === null && environment === 'staging') {
       const featureSettings = await client.rpc(
         'get_storefront_payment_settings',

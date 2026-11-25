@@ -23,7 +23,7 @@ export type ChatFollowUpSweepSummary = {
   waiting: number;
   /** Left for the next sweep: the time budget ran out before its turn. */
   deferred: number;
-  /** Nothing reached the provider (no device either): put back. */
+  /** Nothing reached the provider (no device either): put back for later. */
   retrying: number;
   /** A step failed and the push is not retried (an unrecorded reminder is). */
   failed: number;
@@ -113,9 +113,10 @@ async function handleReminder(
  * the same claim-based push as other chat alerts. A reminder is taken before
  * the push so it can never go out twice. A push that provably never reached
  * the provider (including a store with no registered device) is put back for
- * the next sweep, and so is one whose run stopped before claiming it (the
- * database does that), three takes at most. Only a push that may have left is
- * given up. Never throws for one reminder's failure: the others still go out.
+ * a later sweep, and so is one whose run stopped before sending began (the
+ * database does that), three takes at most, spaced ten minutes then two hours
+ * apart. Only a push that may have left is given up. Never throws for one
+ * reminder's failure: the others still go out.
  *
  * Known limit: the chat is checked just before the take, not again while the
  * push is being sent, so a Done or a cleared follow-up landing in that moment

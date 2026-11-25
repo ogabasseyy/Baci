@@ -55,3 +55,13 @@ RETURNS boolean LANGUAGE sql AS $$
     encode(extensions.hmac(concat_ws('|', 'chat-follow-up-release:v1', extract(epoch FROM now())::bigint::text, p_merchant::text, p_reminder::text), p_secret, 'sha256'), 'hex'),
     extract(epoch FROM now())::bigint, p_merchant, p_reminder);
 $$;
+CREATE FUNCTION pg_temp.mark(p_key text, p_claim uuid) RETURNS boolean LANGUAGE sql AS $$
+  SELECT public.chat_event_mark_push_dispatch(pg_temp.push_proof(p_key, p_claim, 'dispatch'),
+    extract(epoch FROM now())::bigint, 'c4a73000-0000-4000-8000-0000000000b1', p_key, p_claim);
+$$;
+-- Ages a taken reminder as if its last take happened that long ago.
+CREATE FUNCTION pg_temp.age_take(p_reminder uuid, p_ago interval) RETURNS void LANGUAGE sql AS $$
+  UPDATE public.chat_follow_up_reminders
+  SET updated_at = now() - p_ago, processed_at = CASE WHEN processed_at IS NULL THEN NULL ELSE now() - p_ago END
+  WHERE id = p_reminder;
+$$;

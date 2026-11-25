@@ -20,7 +20,8 @@ export type ChatEventPushAction =
   | 'tokens'
   | 'tickets'
   | 'deactivate'
-  | 'attempt';
+  | 'attempt'
+  | 'dispatch';
 
 /**
  * The proof the database push wrappers recompute. Bound to the action, so a

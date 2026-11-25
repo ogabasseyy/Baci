@@ -1,4 +1,4 @@
--- Follow-up reminder sweep functions (part 2 of 3; the table and its row-level
+-- Follow-up reminder sweep functions (part 2 of 4; the table and its row-level
 -- security are in 20261124120000_chat_follow_up_reminders.sql).
 --
 -- Two narrow SECURITY DEFINER functions for the cron sweep, which has no user
@@ -47,14 +47,15 @@ REVOKE ALL ON FUNCTION private.chat_event_require_proof(text, text, bigint) FROM
 
 -- Puts a taken reminder back so a later sweep can push it, at most three takes
 -- in all and only inside the 24-hour window. The push event is removed first:
--- with p_only_unclaimed it must never have been claimed for a push (the claim
--- precedes any send, so nothing can have left the server), and a claim racing
--- this removal finds no event and sends nothing. A muted or stale reminder has
--- no notified event and is never put back.
+-- with p_only_undispatched sending must never have been marked as begun (the
+-- mark is written before anything is handed to the delivery provider, so
+-- nothing can have left the server), and a run marking it late finds no event
+-- and sends nothing. A muted or stale reminder has no notified event and is
+-- never put back. updated_at is left as the last take: it spaces the retries.
 CREATE OR REPLACE FUNCTION private.requeue_chat_follow_up_reminder(
   p_merchant_id uuid,
   p_reminder_id uuid,
-  p_only_unclaimed boolean
+  p_only_undispatched boolean
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
@@ -69,11 +70,11 @@ BEGIN
   WHERE e.merchant_id = p_merchant_id
     AND e.event_key = 'fu-' || pg_catalog.replace(p_reminder_id::text, '-', '')
     AND e.kind = 'follow_up' AND e.outcome = 'notified'
-    AND (NOT p_only_unclaimed OR e.push_claim IS NULL);
+    AND (NOT p_only_undispatched OR e.push_dispatch_started_at IS NULL);
   IF NOT FOUND THEN RETURN false; END IF;
 
   UPDATE public.chat_follow_up_reminders r
-  SET processed_at = NULL, updated_at = pg_catalog.now()
+  SET processed_at = NULL
   WHERE r.id = p_reminder_id;
   RETURN true;
 END;
@@ -113,7 +114,7 @@ BEGIN
     LIMIT 200
   );
 
-  -- A run stopped between taking a reminder and claiming its push sent
+  -- A run stopped between taking a reminder and starting to send sent
   -- nothing: after ten minutes (far longer than a run lasts) it is put back.
   PERFORM private.requeue_chat_follow_up_reminder(lost.merchant_id, lost.id, true)
   FROM (
@@ -125,7 +126,7 @@ BEGIN
     WHERE r.processed_at < pg_catalog.now() - interval '10 minutes'
       AND r.attempts < 3
       AND r.due_at > pg_catalog.now() - interval '24 hours'
-      AND e.kind = 'follow_up' AND e.outcome = 'notified' AND e.push_claim IS NULL
+      AND e.kind = 'follow_up' AND e.outcome = 'notified' AND e.push_dispatch_started_at IS NULL
     LIMIT 50
   ) lost;
 
@@ -140,6 +141,10 @@ BEGIN
     WHERE r.processed_at IS NULL
       AND r.due_at <= pg_catalog.now()
       AND r.due_at > pg_catalog.now() - interval '24 hours'
+      -- A retry waits ten minutes after the first take and two hours after the
+      -- second, so a phone registered later in the day still gets the reminder.
+      AND (r.attempts = 0 OR r.updated_at <= pg_catalog.now()
+        - CASE WHEN r.attempts = 1 THEN interval '10 minutes' ELSE interval '2 hours' END)
     ORDER BY r.last_listed_at NULLS FIRST, r.due_at
     LIMIT p_limit
     FOR UPDATE SKIP LOCKED

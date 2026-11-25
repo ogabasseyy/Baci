@@ -256,6 +256,8 @@ SELECT * FROM (VALUES
    'cron sweep; short-lived HMAC proof verified in the body, no service role'),
   ('public.release_chat_follow_up_reminder(text,bigint,uuid,uuid)',
    'cron sweep; short-lived HMAC proof verified in the body, no service role'),
+  ('public.chat_event_mark_push_dispatch(text,bigint,uuid,text,uuid)',
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
   ('public.oxygen_storefront_pilot_available(uuid)',
    'public storefront/feed read; anon-safe boolean display hint when mode=open')
 ) AS allowlist(signature, reason);

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { notifyMerchantWithStore } from '@/lib/expo-push-core';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
+import { markChatEventPushDispatch } from './chat-event-push-mark';
 import {
   chatEventPushArgs,
   createChatEventPushStore,
@@ -133,7 +134,13 @@ export async function sendChatEventPush(
       content.data,
       'general',
       {
-        onDeliveryStart: () => {
+        onDeliveryStart: async () => {
+          // A follow-up first records that sending is beginning, so a run
+          // stopped before this point can be retried safely. No record, no
+          // send.
+          if (input.kind === 'follow_up') {
+            await markChatEventPushDispatch(client, secret, scope);
+          }
           dispatched = true;
         },
       }

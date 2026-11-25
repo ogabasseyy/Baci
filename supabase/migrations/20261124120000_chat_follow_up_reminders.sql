@@ -1,5 +1,6 @@
--- Follow-up reminder pushes (part 1 of 3: the table, its row-level security and
--- the new event kind; part 2 is the sweep functions, part 3 the push log wording).
+-- Follow-up reminder pushes (part 1 of 4: the table, its row-level security,
+-- the send mark and the new event kind; part 2 is the sweep functions, part 3 the
+-- push log wording, part 4 the retry functions).
 --
 -- A store team member sets a follow-up on a chat in the mobile admin app
 -- (Messages > Follow up). When that time arrives the team's phones get one push
@@ -90,6 +91,12 @@ CREATE POLICY chat_follow_up_reminders_delete ON public.chat_follow_up_reminders
 
 COMMENT ON TABLE public.chat_follow_up_reminders IS
   'One pending push reminder per chat follow-up, recorded when the follow-up is set; swept by a cron that pushes it once.';
+
+-- Set just before a push is handed to the delivery provider (follow-ups only),
+-- so a sweep can tell a run that stopped before sending from one that may have
+-- sent.
+ALTER TABLE public.chat_message_events
+  ADD COLUMN IF NOT EXISTS push_dispatch_started_at timestamptz;
 
 -- A reminder is its own kind of chat event, next to messages and handovers.
 ALTER TABLE public.chat_message_events DROP CONSTRAINT IF EXISTS chat_message_events_kind_check;

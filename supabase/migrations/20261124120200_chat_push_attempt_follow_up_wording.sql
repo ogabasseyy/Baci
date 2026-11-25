@@ -1,4 +1,4 @@
--- Follow-up reminder push log wording (part 3 of 3).
+-- Follow-up reminder push log wording (part 3 of 4).
 --
 -- The push log keeps fixed wording (customer text and names never reach it); a
 -- reminder gets its own fixed wording next to the message and handover ones.

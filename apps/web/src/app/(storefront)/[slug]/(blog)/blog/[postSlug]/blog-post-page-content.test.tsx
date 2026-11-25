@@ -531,7 +531,7 @@ describe('BlogPostPageContent', () => {
       expect.objectContaining({
         publisher: expect.objectContaining({
           sameAs: [
-            'https://instagram.com/ogabassey',
+            'https://www.instagram.com/ogabassey',
             'https://www.tiktok.com/@ogabassey',
           ],
         }),

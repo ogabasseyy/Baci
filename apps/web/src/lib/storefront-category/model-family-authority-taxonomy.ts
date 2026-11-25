@@ -191,18 +191,26 @@ const MODEL_FAMILY_ENTRIES: readonly ModelFamilyAuthorityEntry[] = [
     /\bInfinix\s+Note\s+[0-9]+\b/i,
     /\bInfinix\s+Note\b/i,
   ]),
-  fam('tecno', 'spark', 'Tecno Spark', /^(?:Tecno )?Spark(?=\s|\d|$)/i, [
-    /\b(?:Tecno\s+)?Spark\s+[0-9]+\b/i,
-    /\bTecno\s+Spark\b/i,
-  ]),
+  fam(
+    'tecno',
+    'spark',
+    'Tecno Spark',
+    /^(?:Tecno )?Spark(?=\s|\d|$)/i,
+    [/\b(?:Tecno\s+)?Spark\s+[0-9]+\b/i, /\bTecno\s+Spark\b/i],
+    2
+  ),
   fam('tecno', 'camon', 'Tecno Camon', /^(?:Tecno )?Camon(?=\s|\d|$)/i, [
     /\b(?:Tecno\s+)?Camon\s+[0-9]+\b/i,
     /\bTecno\s+Camon\b/i,
   ]),
-  fam('tecno', 'pop', 'Tecno Pop', /^(?:Tecno )?Pop(?=\s|\d|$)/i, [
-    /\b(?:Tecno\s+)?Pop\s+[0-9]+\b/i,
-    /\bTecno\s+Pop\b/i,
-  ]),
+  fam(
+    'tecno',
+    'pop',
+    'Tecno Pop',
+    /^(?:Tecno )?Pop(?=\s|\d|$)/i,
+    [/\b(?:Tecno\s+)?Pop\s+[0-9]+\b/i, /\bTecno\s+Pop\b/i],
+    2
+  ),
   fam('tecno', 'phantom', 'Tecno Phantom', /^(?:Tecno )?Phantom(?=\s|\d|$)/i, [
     /\b(?:Tecno\s+)?Phantom\s+(?:X|V|[0-9])\b/i,
     /\bTecno\s+Phantom\b/i,

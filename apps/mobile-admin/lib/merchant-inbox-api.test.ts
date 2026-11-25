@@ -11,7 +11,9 @@ import {
   fetchInboxConversations,
   fetchInboxThread,
   isDefinitelyNotSent,
+  searchInbox,
   sendInboxReply,
+  updateInboxConversation,
 } from './merchant-inbox-api';
 
 const message = {
@@ -29,7 +31,7 @@ describe('merchant inbox api', () => {
     apiClient.mockResolvedValue({ conversations: [], hasMore: false, page: 2 });
     await fetchInboxConversations(2);
     expect(apiClient).toHaveBeenCalledWith(
-      '/api/merchant/inbox/conversations?page=2'
+      '/api/merchant/inbox/conversations?page=2&view=all'
     );
   });
 
@@ -98,5 +100,42 @@ describe('merchant inbox api', () => {
       isDefinitelyNotSent(new NetworkError('x', { isTimeout: true }))
     ).toBe(false);
     expect(isDefinitelyNotSent(new Error('boom'))).toBe(false);
+  });
+});
+
+describe('business tools', () => {
+  it('asks for one view of the list', async () => {
+    apiClient.mockResolvedValue({ conversations: [], hasMore: false, page: 1 });
+    await fetchInboxConversations(2, 'follow_up');
+    expect(apiClient).toHaveBeenCalledWith(
+      '/api/merchant/inbox/conversations?page=2&view=follow_up'
+    );
+  });
+
+  it('patches one chat with only the changes asked for', async () => {
+    apiClient.mockResolvedValue({
+      conversation: {
+        id: 7,
+        status: 'resolved',
+        unreadCount: 0,
+        customerName: 'Ada',
+        lastActivityAt: null,
+        lastMessage: null,
+      },
+    });
+    const result = await updateInboxConversation(7, { status: 'resolved' });
+    expect(result.status).toBe('resolved');
+    expect(apiClient).toHaveBeenCalledWith(
+      '/api/merchant/inbox/conversations/7',
+      { method: 'PATCH', body: JSON.stringify({ status: 'resolved' }) }
+    );
+  });
+
+  it('encodes the search term', async () => {
+    apiClient.mockResolvedValue({ results: [], hasMore: false, page: 1 });
+    await searchInbox('order #12 & more');
+    expect(apiClient).toHaveBeenCalledWith(
+      '/api/merchant/inbox/conversations/search?q=order%20%2312%20%26%20more&page=1'
+    );
   });
 });

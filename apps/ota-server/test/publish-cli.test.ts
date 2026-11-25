@@ -457,4 +457,44 @@ describe('publish-ota CLI', () => {
     expect(publishBodies[1]?.updateId).not.toBe(publishBodies[0]?.updateId);
     expect(publishBodies[1]?.createdAt).toBeUndefined();
   });
+
+  it('does not retry non-timestamp 409 conflicts during publish', async () => {
+    const { distDir, configPath } = await createExportFixture();
+    let publishCalls = 0;
+
+    const mockFetch: OtaFetch = async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'HEAD') {
+        return new Response(null, { status: 404 });
+      }
+      if (url.endsWith('/api/admin/publish')) {
+        publishCalls += 1;
+        return new Response(
+          JSON.stringify({
+            error: 'Release ID already exists with different payload',
+            code: 'RELEASE_CONFLICT',
+          }),
+          { status: 409 }
+        );
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    await expect(
+      publishOta(
+        {
+          distDir,
+          configPath,
+          platform: 'ios',
+          runtimeVersion: '2.1.663',
+          channel: 'production',
+          serverUrl: 'https://ota.usebaci.com',
+          token: 'secret-token',
+        },
+        mockFetch
+      )
+    ).rejects.toThrow(/409/);
+    expect(publishCalls).toBe(1);
+  });
 });

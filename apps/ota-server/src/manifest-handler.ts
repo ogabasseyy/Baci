@@ -1,5 +1,6 @@
 import { parseExpectSignatureHeader, signRsaSha256Sfv } from './crypto';
 import { buildMultipartMixedResponse } from './multipart';
+import { parseStoredPointer, parseStoredRelease } from './stored-record-parser';
 import type {
   ChannelCurrentState,
   ExpoDirective,
@@ -11,8 +12,6 @@ import type {
 } from './types';
 import {
   errorResponse,
-  parseStoredPointer,
-  parseStoredRelease,
   ValidationError,
   validateChannelName,
   validatePlatform,

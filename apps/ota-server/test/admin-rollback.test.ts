@@ -589,4 +589,54 @@ describe('admin payload validation and rollback safety', () => {
     );
     expect(mismatchEmbedded.status).toBe(409);
   });
+
+  it('returns controlled 500 JSON when pointer or source release JSON is corrupt on rollback', async () => {
+    const { bucket, env } = await setupChannelWithTwoReleases();
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+    const releaseKey = `releases/production/ios/${RUNTIME}/${UPDATE_A}.json`;
+
+    await bucket.put(releaseKey, '{corrupt-release-json');
+    const corruptReleaseResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+        }),
+      }),
+      env
+    );
+    expect(corruptReleaseResp.status).toBe(500);
+    expect(await corruptReleaseResp.json()).toMatchObject({
+      error: expect.stringMatching(/manifest/i),
+    });
+
+    await bucket.put(pointerKey, '{corrupt-pointer-json');
+    const corruptPointerResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          toEmbedded: true,
+        }),
+      }),
+      env
+    );
+    expect(corruptPointerResp.status).toBe(500);
+    expect(await corruptPointerResp.json()).toMatchObject({
+      error: expect.stringMatching(/pointer/i),
+    });
+  });
 });

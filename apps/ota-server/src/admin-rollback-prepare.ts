@@ -1,5 +1,6 @@
 import { nextMonotonicTimestamp, putImmutableRelease } from './admin-storage';
 import { deriveDeterministicUuid } from './crypto';
+import { readStoredReleaseOrError } from './stored-record-parser';
 import type {
   ChannelCurrentState,
   OtaWorkerEnv,
@@ -55,11 +56,14 @@ export async function prepareRollbackRelease(
   }
 
   const sourceReleaseKey = `releases/${channel}/${payload.platform}/${payload.runtimeVersion}/${sourceTargetId}.json`;
-  const sourceObj = await env.OTA_BUCKET.get(sourceReleaseKey);
-  if (!sourceObj) {
-    return errorResponse(`Target update not found: ${sourceTargetId}`, 404);
+  const sourceRelease = await readStoredReleaseOrError(
+    env,
+    sourceReleaseKey,
+    `Target update not found: ${sourceTargetId}`
+  );
+  if (sourceRelease instanceof Response) {
+    return sourceRelease;
   }
-  const sourceRelease = await sourceObj.json<StoredReleaseRecord>();
 
   let createdAt: string;
   try {

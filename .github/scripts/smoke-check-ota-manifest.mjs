@@ -1,7 +1,22 @@
+import { createPublicKey, createVerify } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-function extractMultipartJsonBodies(contentType, bodyText) {
+function parseSfvDictionaryStrings(rawHeader) {
+  const entries = new Map();
+  const memberRegex = /([a-z0-9_*-]+)="((?:[^"\\]|\\.)*)"/gi;
+  let match = memberRegex.exec(rawHeader);
+  while (match !== null) {
+    const key = match[1].toLowerCase();
+    const val = match[2].replace(/\\(.)/g, '$1');
+    entries.set(key, val);
+    match = memberRegex.exec(rawHeader);
+  }
+  return entries;
+}
+
+function extractMultipartParts(contentType, bodyText) {
   const boundaryMatch = /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType ?? '');
   const boundary = boundaryMatch?.[1] ?? boundaryMatch?.[2];
   if (!boundary) {
@@ -9,7 +24,7 @@ function extractMultipartJsonBodies(contentType, bodyText) {
   }
   const delimiter = `--${boundary}`;
   const rawParts = bodyText.split(delimiter).slice(1);
-  const payloads = [];
+  const parts = [];
   for (const part of rawParts) {
     if (part.startsWith('--')) break;
     const trimmed = part.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
@@ -17,12 +32,57 @@ function extractMultipartJsonBodies(contentType, bodyText) {
     const splitAt = sepIdx >= 0 ? sepIdx : trimmed.indexOf('\n\n');
     const splitLen = sepIdx >= 0 ? 4 : 2;
     if (splitAt < 0) continue;
-    const partBody = trimmed.slice(splitAt + splitLen).trim();
-    if (partBody) {
-      payloads.push(JSON.parse(partBody));
+    const headerBlock = trimmed.slice(0, splitAt);
+    const headers = {};
+    for (const line of headerBlock.split(/\r?\n/)) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx <= 0) continue;
+      const name = line.slice(0, colonIdx).trim().toLowerCase();
+      const value = line.slice(colonIdx + 1).trim();
+      headers[name] = value;
+    }
+    const rawBody = trimmed.slice(splitAt + splitLen);
+    if (rawBody.trim()) {
+      parts.push({
+        headers,
+        rawBody,
+        payload: JSON.parse(rawBody.trim()),
+      });
     }
   }
-  return payloads;
+  return parts;
+}
+
+function verifyPartSignature(part, expectSignatureKeyId, publicKeyOrCertPem) {
+  const signatureHeader = part.headers['expo-signature'];
+  if (!signatureHeader) {
+    throw new Error(
+      `Expected expo-signature header for keyid "${expectSignatureKeyId}", but none was returned`
+    );
+  }
+  const fields = parseSfvDictionaryStrings(signatureHeader);
+  const sig = fields.get('sig');
+  const keyid = fields.get('keyid');
+  const alg = fields.get('alg');
+  if (!sig || !/^[A-Za-z0-9+/=]+$/.test(sig)) {
+    throw new Error(`Malformed sig in expo-signature header: ${signatureHeader}`);
+  }
+  if (keyid !== expectSignatureKeyId) {
+    throw new Error(
+      `Expected expo-signature keyid "${expectSignatureKeyId}", got "${keyid ?? ''}"`
+    );
+  }
+  if (alg && alg !== 'rsa-v1_5-sha256') {
+    throw new Error(`Unsupported expo-signature alg "${alg}"`);
+  }
+  if (publicKeyOrCertPem) {
+    const key = createPublicKey(publicKeyOrCertPem);
+    const verifier = createVerify('RSA-SHA256');
+    verifier.update(part.rawBody, 'utf8');
+    if (!verifier.verify(key, Buffer.from(sig, 'base64'))) {
+      throw new Error('Cryptographic verification failed for expo-signature');
+    }
+  }
 }
 
 export async function smokeCheckManifestEndpoint(
@@ -34,6 +94,7 @@ export async function smokeCheckManifestEndpoint(
     expectedMode,
     expectedUpdateId,
     expectSignatureKeyId,
+    publicKeyOrCertPem,
   },
   fetchImpl = fetch
 ) {
@@ -66,10 +127,15 @@ export async function smokeCheckManifestEndpoint(
     throw new Error(`Expected multipart/mixed content-type, got: ${contentType}`);
   }
 
-  const payloads = extractMultipartJsonBodies(contentType, text);
-  const first = payloads[0];
-  if (!first || typeof first !== 'object') {
+  const parts = extractMultipartParts(contentType, text);
+  const firstPart = parts[0];
+  const first = firstPart?.payload;
+  if (!firstPart || !first || typeof first !== 'object') {
     throw new Error('Manifest smoke check returned no JSON payload part');
+  }
+
+  if (expectSignatureKeyId) {
+    verifyPartSignature(firstPart, expectSignatureKeyId, publicKeyOrCertPem);
   }
 
   if (expectedMode === 'rollback_to_embedded') {
@@ -94,6 +160,8 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const channel = process.env.CHANNEL;
   const resultJson = process.env.OTA_OPERATION_RESULT;
   const expectSignatureKeyId = process.env.OTA_SIGNING_KEY_ID || undefined;
+  const certPath = process.env.OTA_CODE_SIGNING_CERTIFICATE_PATH?.trim();
+  const publicKeyOrCertPem = certPath ? readFileSync(certPath, 'utf8') : undefined;
   if (!manifestUrl || !platform || !runtimeVersion || !channel || !resultJson) {
     throw new Error('Missing required env vars for OTA manifest smoke check');
   }
@@ -108,6 +176,7 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
     expectedMode,
     expectedUpdateId: opResult.updateId,
     expectSignatureKeyId,
+    publicKeyOrCertPem,
   });
   console.log(
     `Manifest smoke check passed (${expectedMode}${opResult.updateId ? ` ${opResult.updateId}` : ''}).`

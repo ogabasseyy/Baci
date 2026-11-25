@@ -535,4 +535,44 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       Date.parse(newerTimestamp)
     );
   });
+
+  it('returns controlled 500 JSON when channel pointer JSON is corrupt on publish', async () => {
+    const { bucket, env } = createEnv();
+    const bytes = new TextEncoder().encode('corrupt-ptr-bundle');
+    const shaHex = createHash('sha256').update(bytes).digest('hex');
+    const shaB64 = createHash('sha256').update(bytes).digest('base64url');
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+
+    await bucket.put(`bundles/ios/corrupt.hbc`, bytes, {
+      httpMetadata: { contentType: 'application/javascript' },
+      customMetadata: { sha256: shaHex },
+    });
+    await bucket.put(pointerKey, '{corrupt-pointer-json');
+
+    const resp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          launchAsset: {
+            hash: shaB64,
+            key: shaHex,
+            contentType: 'application/javascript',
+            r2Key: 'bundles/ios/corrupt.hbc',
+          },
+        }),
+      }),
+      env
+    );
+    expect(resp.status).toBe(500);
+    expect(await resp.json()).toMatchObject({
+      error: expect.stringMatching(/pointer/i),
+    });
+  });
 });

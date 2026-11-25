@@ -12,8 +12,8 @@ import {
   verifyAssetIntegrity,
 } from './admin-storage';
 import { sha256Base64Url, sha256Hex } from './crypto';
+import { readStoredPointerOrError } from './stored-record-parser';
 import type {
-  ChannelCurrentState,
   OtaWorkerEnv,
   PublishPayload,
   StoredReleaseRecord,
@@ -150,10 +150,11 @@ export async function handleAdminPublish(
     }
   }
 
-  const initialPointerObj = await env.OTA_BUCKET.get(pointerKey);
-  const initialPointer = initialPointerObj
-    ? await initialPointerObj.json<ChannelCurrentState>()
-    : null;
+  const pointerRead = await readStoredPointerOrError(env, pointerKey);
+  if (pointerRead instanceof Response) {
+    return pointerRead;
+  }
+  const initialPointer = pointerRead.state;
 
   if (
     payload.createdAt !== undefined &&

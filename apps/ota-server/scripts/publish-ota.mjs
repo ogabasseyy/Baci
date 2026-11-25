@@ -357,6 +357,21 @@ export async function publishOta(options, fetchImpl = fetch) {
     redirect: 'error',
   });
   if (publishResp.status === 409 && !options.updateId) {
+    const conflictBodyText = await publishResp.text();
+    let conflictCode;
+    try {
+      const parsed = JSON.parse(conflictBodyText);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        conflictCode = parsed.code;
+      }
+    } catch {
+      conflictCode = undefined;
+    }
+    if (conflictCode !== 'STALE_TIMESTAMP_CONFLICT') {
+      throw new Error(
+        `Publish OTA manifest failed (${publishResp.status}): ${conflictBodyText}`
+      );
+    }
     const { createdAt: _staleCreatedAt, ...retryPayload } = packaged.payload;
     const retryResp = await fetchImpl(`${baseUrl}/api/admin/publish`, {
       method: 'POST',

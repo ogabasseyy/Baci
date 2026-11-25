@@ -1,46 +1,4 @@
-import type {
-  ChannelCurrentState,
-  OtaPlatform,
-  StoredManifestAsset,
-  StoredReleaseRecord,
-} from './types';
-
-export function parseStoredPointer(raw: unknown): ChannelCurrentState | null {
-  if (!isPlainObject(raw)) {
-    return null;
-  }
-  if (
-    raw.mode === 'update' &&
-    typeof raw.updateId === 'string' &&
-    raw.updateId.trim().length > 0
-  ) {
-    return raw as ChannelCurrentState;
-  }
-  if (
-    raw.mode === 'rollback_to_embedded' &&
-    typeof raw.commitTime === 'string' &&
-    raw.commitTime.trim().length > 0
-  ) {
-    return raw as ChannelCurrentState;
-  }
-  return null;
-}
-
-export function parseStoredRelease(raw: unknown): StoredReleaseRecord | null {
-  if (!isPlainObject(raw)) {
-    return null;
-  }
-  if (
-    typeof raw.id !== 'string' ||
-    typeof raw.createdAt !== 'string' ||
-    typeof raw.runtimeVersion !== 'string' ||
-    !isPlainObject(raw.launchAsset) ||
-    !Array.isArray(raw.assets)
-  ) {
-    return null;
-  }
-  return raw as unknown as StoredReleaseRecord;
-}
+import type { OtaPlatform, StoredManifestAsset } from './types';
 
 export const MAX_ASSET_UPLOAD_BYTES = 50 * 1024 * 1024;
 export const MAX_PUBLISH_JSON_BYTES = 512 * 1024;

@@ -14,8 +14,8 @@ import {
   nextMonotonicTimestamp,
   updateChannelPointerCas,
 } from './admin-storage';
+import { readStoredPointerOrError } from './stored-record-parser';
 import type {
-  ChannelCurrentState,
   OtaWorkerEnv,
   RollbackOperationResult,
   RollbackPayload,
@@ -80,10 +80,11 @@ export async function handleAdminRollback(
   });
   const pointerKey = `channels/${channel}/${payload.platform}/${payload.runtimeVersion}/current.json`;
 
-  const initialObj = await env.OTA_BUCKET.get(pointerKey);
-  const initialState = initialObj
-    ? await initialObj.json<ChannelCurrentState>()
-    : null;
+  const pointerRead = await readStoredPointerOrError(env, pointerKey);
+  if (pointerRead instanceof Response) {
+    return pointerRead;
+  }
+  const { obj: initialObj, state: initialState } = pointerRead;
 
   const earlyRecorded = idempotencyKey
     ? findRecordedRollback(initialState, idempotencyKey, fingerprint)

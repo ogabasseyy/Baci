@@ -1,4 +1,5 @@
 import { sha256Base64Url } from './crypto';
+import { readStoredPointerOrError } from './stored-record-parser';
 import type {
   ChannelCurrentState,
   OtaWorkerEnv,
@@ -238,10 +239,11 @@ export async function updateChannelPointerCas(
   | Response
 > {
   for (let attempt = 0; attempt < MAX_POINTER_RETRIES; attempt += 1) {
-    const existingObj = await env.OTA_BUCKET.get(pointerKey);
-    const existingState = existingObj
-      ? await existingObj.json<ChannelCurrentState>()
-      : null;
+    const pointerRead = await readStoredPointerOrError(env, pointerKey);
+    if (pointerRead instanceof Response) {
+      return pointerRead;
+    }
+    const { obj: existingObj, state: existingState } = pointerRead;
     const action = await decideNext(existingState);
     if (action.kind === 'error') {
       return action.response;

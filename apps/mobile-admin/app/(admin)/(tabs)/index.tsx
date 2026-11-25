@@ -399,7 +399,8 @@ export default function HomeScreen() {
             <QuickActionButton
               icon="chatbox-ellipses-outline"
               label="Messages"
-              badgeCount={waitingChats}
+              badgeCount={waitingChats.count}
+              badgeAtLeast={waitingChats.hasMore}
               iconColor={colors.orange}
               backgroundColor={colors.orangeLight}
               onPress={() => router.push('/(admin)/messages')}

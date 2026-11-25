@@ -59,6 +59,27 @@ BEGIN
 END
 $audit$;
 
+-- Include `oxygen_enabled` in the storefront cache invalidation projection so
+-- direct `merchant_feature_settings` updates (e.g. mobile-admin toggles) trigger
+-- cache invalidation just like other public payment flags.
+DO $cache_projection$
+DECLARE
+  v_definition text;
+BEGIN
+  v_definition := pg_catalog.pg_get_functiondef(
+    'public.merchant_feature_settings_public_cache_projection(public.merchant_feature_settings)'::pg_catalog.regprocedure
+  );
+  IF position($needle$'order_tracking_enabled','pay_on_delivery_enabled'$needle$ IN v_definition) = 0 THEN
+    RAISE EXCEPTION 'feature cache oxygen_enabled projection contract changed';
+  END IF;
+  EXECUTE replace(
+    v_definition,
+    $needle$'order_tracking_enabled','pay_on_delivery_enabled'$needle$,
+    $replacement$'order_tracking_enabled','oxygen_enabled','pay_on_delivery_enabled'$replacement$
+  );
+END
+$cache_projection$;
+
 -- Backfill `oxygen_enabled = true` for merchants that currently have an enabled
 -- production row in `oxygen_private.runtime_bindings`.
 DO $oxygen_backfill$
@@ -119,6 +140,61 @@ $$;
 
 REVOKE ALL ON FUNCTION public.oxygen_storefront_pilot_available(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.oxygen_storefront_pilot_available(uuid) TO anon, authenticated;
+
+-- Enforce `oxygen_enabled` for new workflows at the public workflow entrypoint
+-- while keeping existing in-flight workflows recoverable after disabling Oxygen.
+-- Leaves `oxygen_private.start_workflow` untouched to avoid colliding with
+-- other runtime changes.
+CREATE OR REPLACE FUNCTION public.oxygen_start_workflow(
+  p_order_id uuid,
+  p_channel text DEFAULT 'web'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_merchant_id uuid;
+BEGIN
+  IF auth.uid() IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM public.oxygen_workflows AS w
+    JOIN public.customers AS c
+      ON c.id = w.customer_id
+     AND c.merchant_id = w.merchant_id
+    WHERE w.order_id = p_order_id
+      AND c.user_id = auth.uid()
+  ) THEN
+    RETURN oxygen_private.start_workflow(p_order_id, p_channel);
+  END IF;
+
+  SELECT o.merchant_id
+  INTO v_merchant_id
+  FROM public.orders AS o
+  JOIN public.customers AS c
+    ON c.id = o.customer_id
+   AND c.merchant_id = o.merchant_id
+  WHERE o.id = p_order_id
+    AND c.user_id = auth.uid()
+    AND o.payment_method = 'oxygen'
+  FOR SHARE OF o, c;
+
+  IF FOUND AND NOT EXISTS (
+    SELECT 1
+    FROM public.merchant_feature_settings AS s
+    WHERE s.merchant_id = v_merchant_id
+      AND s.oxygen_enabled IS TRUE
+  ) THEN
+    RAISE EXCEPTION 'Provider connection unavailable' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN oxygen_private.start_workflow(p_order_id, p_channel);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.oxygen_start_workflow(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.oxygen_start_workflow(uuid, text) TO authenticated;
 
 -- Extend `get_storefront_payment_settings` with `oxygen_enabled` appended at the
 -- end of RETURNS TABLE so existing positional callers remain unaffected.

@@ -64,6 +64,25 @@ describe('generateOpenAiLogo', () => {
     });
   });
 
+  it('defaults to gpt-image-1.5 when OPENAI_IMAGE_MODEL is unset', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    vi.stubEnv('OPENAI_IMAGE_MODEL', '');
+    mockImagesGenerate.mockResolvedValueOnce({
+      data: [{ b64_json: 'iVBORw0KGgo=' }],
+    });
+
+    const { generateOpenAiLogo } = await import('./generate-openai-logo');
+    const result = await generateOpenAiLogo('minimalist coffee logo');
+
+    expect(result).toBe('data:image/png;base64,iVBORw0KGgo=');
+    expect(mockImagesGenerate).toHaveBeenCalledWith({
+      model: 'gpt-image-1.5',
+      prompt: 'minimalist coffee logo',
+      size: '1024x1024',
+      n: 1,
+    });
+  });
+
   it('returns null on API error so callers fall back to Gemini', async () => {
     vi.stubEnv('OPENAI_API_KEY', 'sk-test');
     mockImagesGenerate.mockRejectedValueOnce(new Error('429 rate limited'));

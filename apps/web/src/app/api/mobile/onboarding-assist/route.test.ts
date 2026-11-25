@@ -318,6 +318,36 @@ describe('POST /api/mobile/onboarding-assist', () => {
     });
   });
 
+  it('strips non-raster SVG fallback logos for mobile clients while preserving brandColors', async () => {
+    mockGuideBusinessOnboarding.mockResolvedValueOnce({
+      logos: ['data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='],
+      brandColors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+
+    const response = await POST(
+      makeRequest({
+        task: 'generate_logos',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'black and gold',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      logos: [],
+      brandColors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+  });
+
   it('returns 503 with a safe message when AI generation throws', async () => {
     mockGuideBusinessOnboarding.mockRejectedValueOnce(
       new Error('upstream provider error with internal details')

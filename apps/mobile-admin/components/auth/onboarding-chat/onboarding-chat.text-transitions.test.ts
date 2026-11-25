@@ -231,4 +231,41 @@ describe('transitionFromTextInput slug handling', () => {
     expect(result.sideEffect).toBeUndefined();
     expect(result.messages?.[1]?.text).toContain('Launch my store');
   });
+
+  it('rejects slugs shorter than 3 chars, longer than 63 chars, or with invalid edge hyphens', () => {
+    const tooShort = transitionFromTextInput('slug', 'ab', BASE_DATA, true);
+    expect(tooShort.nextStep).toBeUndefined();
+    expect(tooShort.nextData).toBeUndefined();
+    expect(tooShort.messages?.[1]?.text).toContain('3–63 characters');
+
+    const tooLong = transitionFromTextInput(
+      'slug',
+      'a'.repeat(64),
+      BASE_DATA,
+      true
+    );
+    expect(tooLong.nextStep).toBeUndefined();
+    expect(tooLong.nextData).toBeUndefined();
+
+    const multiHyphenShort = transitionFromTextInput(
+      'slug',
+      '--ab--',
+      BASE_DATA,
+      true
+    );
+    expect(multiHyphenShort.nextStep).toBeUndefined();
+    expect(multiHyphenShort.nextData).toBeUndefined();
+
+    const multiHyphenValid = transitionFromTextInput(
+      'slug',
+      '--kicks--hub--',
+      BASE_DATA,
+      true
+    );
+    expect(multiHyphenValid.nextData).toEqual({
+      slug: 'kicks-hub',
+      slugIsCustom: true,
+    });
+    expect(multiHyphenValid.nextStep).toBe('summary');
+  });
 });

@@ -581,4 +581,50 @@ describe('MerchantSetupChat', () => {
       screen.getByRole('button', { name: 'Use suggested link' })
     ).toBeTruthy();
   });
+
+  it('handles an empty/SVG fallback logo response gracefully without triggering a save failure on launch', async () => {
+    mocks.assistMutateAsync.mockResolvedValueOnce({
+      logos: [],
+      brandColors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+
+    render(<MerchantSetupChat />);
+
+    fireEvent.click(screen.getByText(/Nigeria/));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByText('Fashion & Apparel'));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Kicks Hub' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+
+    fireEvent.click(screen.getByRole('button', { name: "I don't have one" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate a logo' }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/couldn't generate a logo right now/i)
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Looks good!' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Launch my store' }));
+
+    await waitFor(() => {
+      expect(mocks.provisionMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessName: 'Kicks Hub',
+          logoUrl: undefined,
+        })
+      );
+      expect(mocks.persistProvisionedStoreLogo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          logoUrl: '',
+        })
+      );
+    });
+  });
 });

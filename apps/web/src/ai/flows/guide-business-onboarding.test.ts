@@ -372,4 +372,28 @@ describe('guideBusinessOnboarding', () => {
     expect(mockFetchImageBytes).not.toHaveBeenCalled();
     expect(mockGenerateObject).not.toHaveBeenCalled();
   });
+
+  it('rejects invalid non-color strings returned by the vision chain during extract_colors', async () => {
+    mockFetchImageBytes.mockResolvedValueOnce({
+      bytes: new Uint8Array([1, 2, 3]),
+      mediaType: 'image/png',
+    });
+    mockGenerateObject.mockResolvedValueOnce({
+      object: {
+        primary: 'not-a-valid-color',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    } as Awaited<ReturnType<typeof generateObject>>);
+
+    await expect(
+      guideBusinessOnboarding({
+        businessName: 'Baci Meds',
+        businessType: 'pharmaceuticals',
+        brandPreferences: 'green',
+        logoUrl: 'https://example.com/logo.png',
+        task: 'extract_colors',
+      })
+    ).rejects.toThrow('Failed to extract brand colors.');
+  });
 });

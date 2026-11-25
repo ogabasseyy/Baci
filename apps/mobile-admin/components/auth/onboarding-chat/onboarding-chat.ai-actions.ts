@@ -83,11 +83,15 @@ export async function runAiLogoGeneration(
           : data.businessType,
       brandPreferences: 'Modern minimalist',
     });
-    const logoUri = result.logos?.[0] ?? null;
+    const rawLogoUri = result.logos?.[0] ?? null;
+    const logoUri =
+      rawLogoUri && /^data:image\/(png|jpeg|webp);base64,/i.test(rawLogoUri)
+        ? rawLogoUri
+        : null;
     if (!logoUri) {
       return {
         logoUri: null,
-        colors: DEFAULT_BRAND_COLORS,
+        colors: result.brandColors ?? DEFAULT_BRAND_COLORS,
         message: {
           role: 'system',
           text: "I couldn't generate a logo right now. You can try again or skip for now.",

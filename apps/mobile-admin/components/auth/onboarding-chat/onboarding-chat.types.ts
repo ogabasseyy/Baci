@@ -54,18 +54,30 @@ export const DEFAULT_BRAND_COLORS: OnboardingBrandColors = {
 
 export const TOP_COUNTRY_CODES = ['NG', 'GH', 'KE', 'ZA', 'GB', 'US'] as const;
 
-export function slugifyBusinessName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-}
+const STORE_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 export function sanitizeSlugInput(value: string): string {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '')
-    .replace(/(^-|-$)/g, '');
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function isValidStoreSlug(slug: string): boolean {
+  return slug.length >= 3 && slug.length <= 63 && STORE_SLUG_PATTERN.test(slug);
+}
+
+export function slugifyBusinessName(value: string): string {
+  const base = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63)
+    .replace(/-+$/g, '');
+  if (!base) return 'my-store';
+  if (base.length < 3) return `${base}-store`;
+  return base;
 }
 
 function metadataString(user: User, key: string): string {

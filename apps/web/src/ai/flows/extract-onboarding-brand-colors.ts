@@ -4,6 +4,7 @@ import { getVisionProviderChain } from '@/ai/vision-provider-chain';
 import { fetchImageBytes } from '@/lib/fetch-image-bytes';
 import { isPublicHttpUrl } from '@/lib/is-public-http-url';
 import { logger } from '@/lib/logger';
+import { parseBrandColors } from '@/schemas/brand-colors';
 import { createFallbackLogo } from './fallback-logo';
 
 export const BrandColorsSchema = z.object({
@@ -62,7 +63,14 @@ export async function extractBrandColorsFromDataUriBestEffort(
         },
       ],
     });
-    return object;
+    const validated = parseBrandColors(object);
+    return validated
+      ? {
+          primary: validated.primary,
+          background: validated.background,
+          accent: validated.accent,
+        }
+      : fallback;
   } catch {
     return fallback;
   }
@@ -125,8 +133,25 @@ export async function extractBrandColorsFromUrl(
       ],
     });
 
-    logger.info({ message: 'Colors extracted successfully', colors: object });
-    return object;
+    const validated = parseBrandColors(object);
+    if (!validated) {
+      logger.warn({
+        message: 'Vision model returned invalid brand color values.',
+        flow: 'guideBusinessOnboarding',
+      });
+      throw new Error('Failed to extract brand colors.');
+    }
+
+    const brandColors: OnboardingBrandColors = {
+      primary: validated.primary,
+      background: validated.background,
+      accent: validated.accent,
+    };
+    logger.info({
+      message: 'Colors extracted successfully',
+      colors: brandColors,
+    });
+    return brandColors;
   } catch (error) {
     logger.error({ message: 'Color extraction failed', error });
     throw new Error('Failed to extract brand colors.');

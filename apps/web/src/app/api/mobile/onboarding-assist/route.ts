@@ -31,6 +31,8 @@ const MOBILE_ONBOARDING_IP_LOGO_LIMIT = {
   failClosedWithoutRedis: true,
 };
 
+const RASTER_DATA_URI_PATTERN = /^data:image\/(png|jpeg|webp);base64,/i;
+
 const MEDIA_STORAGE_PREFIX = '/storage/v1/object/public/media/';
 
 function extractOnboardingStorageMerchantId(logoUrl: string): string | null {
@@ -160,6 +162,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await runGuideBusinessOnboarding(parsed.data);
+    if (parsed.data.task === 'generate_logos' && result.logos) {
+      const rasterLogos = result.logos.filter((uri) =>
+        RASTER_DATA_URI_PATTERN.test(uri.trim())
+      );
+      return NextResponse.json(
+        { ...result, logos: rasterLogos },
+        { status: 200 }
+      );
+    }
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

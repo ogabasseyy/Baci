@@ -34,7 +34,7 @@ describe('getTextProviderChain', () => {
     const chain = getOnboardingTextProviderChain();
 
     expect(chain.map((provider) => provider.name)).toEqual([
-      'openai:gpt-4.1-mini',
+      'openai:gpt-5-mini',
       'cerebras:gemma-4-31b',
       'groq:openai/gpt-oss-120b',
       'google:gemini-2.5-flash',

@@ -9,6 +9,7 @@ import {
 } from './onboarding-chat.transitions';
 import {
   DEFAULT_BRAND_COLORS,
+  isValidStoreSlug,
   type OnboardingChatData,
   type OnboardingChatStep,
   parseFullNameInput,
@@ -241,7 +242,7 @@ export function transitionFromTextInput(
         );
       if (!isConversationalRejection) {
         const directSlug = sanitizeSlugInput(trimmed);
-        if (directSlug) {
+        if (isValidStoreSlug(directSlug)) {
           return {
             nextData: { slug: directSlug, slugIsCustom: true },
             nextStep: 'summary',
@@ -249,6 +250,13 @@ export function transitionFromTextInput(
             messages: summaryRecapMessages(`${directSlug}.usebaci.com`),
           };
         }
+        return {
+          customizingSlug: true,
+          messages: exchangeMessages(
+            trimmed,
+            'Store links must be 3–63 characters using lowercase letters, numbers, and hyphens (for example, "kicks-hub").'
+          ),
+        };
       }
       return {
         customizingSlug: true,
@@ -259,11 +267,11 @@ export function transitionFromTextInput(
       };
     }
     const cleaned = sanitizeSlugInput(trimmed);
-    if (!cleaned) {
+    if (!isValidStoreSlug(cleaned)) {
       return {
         messages: exchangeMessages(
           trimmed,
-          'Use letters, numbers, or hyphens for your store link (for example, "kicks-hub").'
+          'Store links must be 3–63 characters using lowercase letters, numbers, and hyphens (for example, "kicks-hub").'
         ),
       };
     }

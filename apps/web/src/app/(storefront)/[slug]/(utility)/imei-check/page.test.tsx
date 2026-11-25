@@ -132,7 +132,9 @@ describe('ImeiCheckPage', () => {
       params: Promise.resolve({ slug: 'ogabassey' }),
     });
 
-    expect(metadata.title).toEqual({ absolute: 'IMEI Check' });
+    expect(metadata.title).toEqual({
+      absolute: 'Free Phone IMEI Check & Verification',
+    });
   });
 
   it('uses custom domain for canonical when available', async () => {

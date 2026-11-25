@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
+import { getStorefrontOpenGraphImages } from '@/lib/storefront-social-images';
 import { getStorefrontSeoDescription } from './seo-helpers';
 
 type StorefrontLayoutMerchant = NonNullable<
@@ -89,7 +90,14 @@ export function buildStorefrontMerchantMetadata(
     openGraph: {
       title: merchant.site_title || merchant.business_name,
       description,
-      images: merchant.logo_url ? [merchant.logo_url] : [],
+      type: 'website',
+      url: baseUrl || undefined,
+      siteName: merchant.business_name,
+      images: getStorefrontOpenGraphImages(
+        baseUrl,
+        merchant.site_title || merchant.business_name,
+        merchant.logo_url
+      ),
     },
     // Apple Smart App Banner — prompts iOS Safari users to open/install the app
     ...(other ? { other } : {}),

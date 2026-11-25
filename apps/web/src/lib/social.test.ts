@@ -63,7 +63,10 @@ describe('normalizeSocialUrl', () => {
 
   it('keeps platform-specific handle formats for other social networks', () => {
     expect(normalizeSocialUrl('@ogabassey', 'instagram')).toBe(
-      'https://instagram.com/ogabassey'
+      'https://www.instagram.com/ogabassey'
+    );
+    expect(normalizeSocialUrl('ogabassey', 'facebook')).toBe(
+      'https://www.facebook.com/ogabassey'
     );
     expect(normalizeSocialUrl('ogabassey', 'tiktok')).toBe(
       'https://www.tiktok.com/@ogabassey'
@@ -82,7 +85,7 @@ describe('normalizeSocialUrl', () => {
       'https://facebook.com:443/brand'
     );
     expect(normalizeSocialUrl('jane.doe', 'instagram')).toBe(
-      'https://instagram.com/jane.doe'
+      'https://www.instagram.com/jane.doe'
     );
   });
 });

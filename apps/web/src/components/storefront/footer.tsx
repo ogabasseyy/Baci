@@ -98,19 +98,19 @@ export function StorefrontFooter() {
       key: 'instagram',
       icon: Instagram,
       label: 'Instagram',
-      urlPrefix: 'https://instagram.com/',
+      urlPrefix: 'https://www.instagram.com/',
     },
     {
       key: 'twitter',
       icon: Twitter,
       label: 'Twitter',
-      urlPrefix: 'https://twitter.com/',
+      urlPrefix: 'https://x.com/',
     },
     {
       key: 'facebook',
       icon: Facebook,
       label: 'Facebook',
-      urlPrefix: 'https://facebook.com/',
+      urlPrefix: 'https://www.facebook.com/',
     },
     {
       key: 'tiktok',

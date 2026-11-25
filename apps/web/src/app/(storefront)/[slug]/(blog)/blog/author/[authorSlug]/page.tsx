@@ -7,6 +7,11 @@ import { getBlogAuthorBySlug, getBlogAuthorSlugs } from '@/lib/blog-authors';
 import { getCachedBlogAuthor } from '@/lib/cached-data';
 import { asRoute } from '@/lib/routes';
 import { buildStoreUrl } from '@/lib/store-url';
+import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
 import { BlogListingFallback } from '../../BlogListingFallback';
 import { parseBlogListingPage } from '../../blog-listing-page-params';
 import {
@@ -77,12 +82,16 @@ export async function generateMetadata({
   const roleLine = author.title
     ? `${author.title} at ${merchant.business_name}`
     : `Writer at ${merchant.business_name}`;
-  const title = `${author.name} — ${roleLine}`;
+  const { metadataTitle, title } = buildStorefrontMetadataTitle({
+    title: author.title ? `${author.name} — ${author.title}` : author.name,
+    suffix: merchant.business_name,
+    fallback: author.name,
+  });
   const description =
     author.bio || `Read the latest articles by ${author.name}, ${roleLine}.`;
 
   return {
-    title,
+    title: metadataTitle,
     description,
     openGraph: {
       title,
@@ -90,15 +99,22 @@ export async function generateMetadata({
       type: 'profile',
       url: canonicalUrl,
       siteName: merchant.business_name,
-      ...(author.imageUrl
-        ? { images: [{ url: author.imageUrl, alt: author.name }] }
-        : {}),
+      images: getStorefrontOpenGraphImages(
+        baseUrl,
+        author.name,
+        author.imageUrl,
+        merchant.logo_url
+      ),
     },
     twitter: {
       card: 'summary',
       title,
       description,
-      ...(author.imageUrl ? { images: [author.imageUrl] } : {}),
+      images: getStorefrontTwitterImages(
+        baseUrl,
+        author.imageUrl,
+        merchant.logo_url
+      ),
     },
     alternates: { canonical: canonicalUrl },
     robots:

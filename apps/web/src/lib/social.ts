@@ -89,9 +89,9 @@ export function normalizeSocialUrl(
 
   switch (platform) {
     case 'instagram':
-      return `https://instagram.com/${handle}`;
+      return `https://www.instagram.com/${handle}`;
     case 'facebook':
-      return `https://facebook.com/${handle}`;
+      return `https://www.facebook.com/${handle}`;
     case 'tiktok':
       return `https://www.tiktok.com/@${handle}`;
     case 'twitter':

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { getIndexableRobotsMetadata } from '@/lib/seo-utils';
+import { buildStoreUrl } from '@/lib/store-url';
 import { loadComparePage } from '@/lib/storefront-compare/load-compare-page';
 import {
   getStorefrontOpenGraphImages,
@@ -58,7 +59,7 @@ export async function generateMetadata({
   try {
     baseUrl = new URL(page.canonicalUrl).origin;
   } catch {
-    baseUrl = '';
+    baseUrl = page.merchant ? buildStoreUrl(page.merchant) : '';
   }
 
   const getProductImageCandidate = (

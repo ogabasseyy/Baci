@@ -55,10 +55,19 @@ describe('normalizeSocialUrl', () => {
     expect(normalizeSocialUrl('   ', 'twitter')).toBeUndefined();
   });
 
-  it('preserves already-normalized non-Twitter social URLs', () => {
+  it('canonicalizes stored bare Instagram and Facebook URLs to www hosts', () => {
     expect(
       normalizeSocialUrl('https://instagram.com/ogabasseyy', 'instagram')
-    ).toBe('https://instagram.com/ogabasseyy');
+    ).toBe('https://www.instagram.com/ogabasseyy');
+    expect(
+      normalizeSocialUrl('http://instagram.com/ogabasseyy', 'instagram')
+    ).toBe('https://www.instagram.com/ogabasseyy');
+    expect(
+      normalizeSocialUrl('https://facebook.com/ogabasseyyy', 'facebook')
+    ).toBe('https://www.facebook.com/ogabasseyyy');
+    expect(normalizeSocialUrl('instagram.com/ogabasseyy', 'instagram')).toBe(
+      'https://www.instagram.com/ogabasseyy'
+    );
   });
 
   it('keeps platform-specific handle formats for other social networks', () => {

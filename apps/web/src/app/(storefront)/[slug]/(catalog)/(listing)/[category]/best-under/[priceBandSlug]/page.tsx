@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { getIndexableRobotsMetadata } from '@/lib/seo-utils';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   getPriceBandStorefrontPathPrefix,
   loadPriceBandPage,
@@ -58,7 +59,7 @@ export async function generateMetadata(
   try {
     baseUrl = new URL(page.canonicalUrl).origin;
   } catch {
-    baseUrl = '';
+    baseUrl = page.merchant ? buildStoreUrl(page.merchant) : '';
   }
 
   const imageCandidates = [page.products?.[0]?.image, page.merchant?.logo_url];

@@ -53,6 +53,40 @@ function normalizeTwitterProfileUrl(input: string): string | undefined {
   }
 }
 
+const CANONICAL_WWW_SOCIAL_HOSTS: Partial<
+  Record<SocialPlatform, { bare: string; canonical: string }>
+> = {
+  instagram: { bare: 'instagram.com', canonical: 'www.instagram.com' },
+  facebook: { bare: 'facebook.com', canonical: 'www.facebook.com' },
+};
+
+function normalizeCanonicalSocialUrl(
+  input: string,
+  platform: SocialPlatform
+): string {
+  if (platform === 'twitter') {
+    return normalizeTwitterProfileUrl(input) ?? input;
+  }
+
+  const hostRule = CANONICAL_WWW_SOCIAL_HOSTS[platform];
+  if (!hostRule || /^https?:\/\/[^/?#]+:\d+/i.test(input)) {
+    return input;
+  }
+
+  try {
+    const url = new URL(input);
+    if (url.hostname.toLowerCase() === hostRule.bare) {
+      url.protocol = 'https:';
+      url.hostname = hostRule.canonical;
+      return url.toString();
+    }
+  } catch {
+    return input;
+  }
+
+  return input;
+}
+
 export function isSocialPlatform(platform: string): platform is SocialPlatform {
   return (SOCIAL_PLATFORMS as readonly string[]).includes(platform);
 }
@@ -66,18 +100,11 @@ export function normalizeSocialUrl(
   const cleanInput = input.trim();
 
   if (/^https?:\/\//i.test(cleanInput)) {
-    if (platform === 'twitter') {
-      return normalizeTwitterProfileUrl(cleanInput) ?? cleanInput;
-    }
-    return cleanInput;
+    return normalizeCanonicalSocialUrl(cleanInput, platform);
   }
 
   if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+|[/?#])/i.test(cleanInput)) {
-    const withHttps = `https://${cleanInput}`;
-    if (platform === 'twitter') {
-      return normalizeTwitterProfileUrl(withHttps) ?? withHttps;
-    }
-    return withHttps;
+    return normalizeCanonicalSocialUrl(`https://${cleanInput}`, platform);
   }
 
   if (/^[a-z][a-z0-9+.-]*:/i.test(cleanInput)) {

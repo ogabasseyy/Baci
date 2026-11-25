@@ -70,14 +70,20 @@ export async function fetchInboxThread(
   return inboxThreadResponseSchema.parse(data);
 }
 
-/** Sends a store reply. The server has no idempotency key: never auto-retry. */
+/**
+ * Sends a store reply. The server has no idempotency key: never auto-retry.
+ * `merchantId` is the store the reply was meant for (a notification reply
+ * names the store that pushed it): the server refuses it with 409 unless the
+ * signed-in store is the same one.
+ */
 export async function sendInboxReply(
   conversationId: number,
-  content: string
+  content: string,
+  merchantId?: string
 ): Promise<InboxMessage> {
   const data = await apiClient<unknown>(`${BASE}/${conversationId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(merchantId ? { content, merchantId } : { content }),
   });
   return inboxReplyResponseSchema.parse(data).message;
 }

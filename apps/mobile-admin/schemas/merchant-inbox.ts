@@ -1,4 +1,5 @@
 import {
+  CHAT_REPLY_MAX_LENGTH,
   merchantInboxCustomerBadgeSchema,
   merchantInboxCustomerProfileSchema,
 } from '@baci/shared';
@@ -71,7 +72,7 @@ export const inboxCustomerResponseSchema = z.object({
   customer: inboxCustomerProfileSchema.nullable(),
 });
 
-export const INBOX_REPLY_MAX_LENGTH = 2_000;
+export const INBOX_REPLY_MAX_LENGTH = CHAT_REPLY_MAX_LENGTH;
 
 export type InboxMessage = z.infer<typeof inboxMessageSchema>;
 export type InboxConversation = z.infer<typeof inboxConversationSchema>;

@@ -1,4 +1,5 @@
 import {
+  CHAT_REPLY_MAX_LENGTH,
   type MerchantInboxCustomerBadge,
   merchantInboxCustomerBadgeSchema,
 } from '@baci/shared';
@@ -90,10 +91,16 @@ export const merchantInboxConversationIdSchema = z.coerce
   .positive()
   .safe();
 
-export const MERCHANT_INBOX_REPLY_MAX_LENGTH = 2_000;
+export const MERCHANT_INBOX_REPLY_MAX_LENGTH = CHAT_REPLY_MAX_LENGTH;
 
 export const merchantInboxReplySchema = z.strictObject({
   content: z.string().trim().min(1).max(MERCHANT_INBOX_REPLY_MAX_LENGTH),
+  /**
+   * The store a reply was meant for (a notification reply names the store that
+   * pushed it). When given, the reply is refused unless the signed-in store is
+   * the same one, so it can never reach another store's customer.
+   */
+  merchantId: z.string().uuid().optional(),
 });
 
 export type MerchantInboxSender = 'customer' | 'store' | 'assistant' | 'system';

@@ -18,6 +18,9 @@ export interface GuestTrackingOrderRow {
   shipping_fee?: unknown;
   total: unknown;
   amount_paid?: unknown;
+  wallet_amount_used?: unknown;
+  wallet_ledger_used?: unknown;
+  savings_ledger_used?: unknown;
   customer_name?: unknown;
   customer_email?: unknown;
   customer_phone?: unknown;
@@ -59,6 +62,9 @@ export function buildGuestOrderResponse(input: GuestOrderResponseInput) {
     shipping_cost: order.shipping_cost ?? order.shipping_fee ?? 0,
     total: order.total,
     amount_paid: order.amount_paid,
+    wallet_amount_used: order.wallet_amount_used ?? 0,
+    wallet_ledger_used: order.wallet_ledger_used ?? 0,
+    savings_ledger_used: order.savings_ledger_used ?? 0,
     customer_name: order.customer_name,
     customer_email: order.customer_email,
     customer_phone: order.customer_phone,

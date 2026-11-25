@@ -15,6 +15,9 @@ describe('buildGuestOrderResponse', () => {
         shipping_cost: 10000,
         total: 255000,
         amount_paid: 255000,
+        wallet_amount_used: 15000,
+        wallet_ledger_used: 15000,
+        savings_ledger_used: 10000,
         customer_name: 'Ada',
         customer_email: 'ada@example.com',
         customer_phone: '0801',
@@ -40,6 +43,9 @@ describe('buildGuestOrderResponse', () => {
       notification_delivered: true,
       inventory_confirmed: true,
       shipping_cost: 10000,
+      wallet_amount_used: 15000,
+      wallet_ledger_used: 15000,
+      savings_ledger_used: 10000,
     });
   });
 
@@ -68,6 +74,9 @@ describe('buildGuestOrderResponse', () => {
       tracking_token: null,
       notification_delivered: false,
       inventory_confirmed: false,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 0,
+      savings_ledger_used: 0,
     });
   });
 

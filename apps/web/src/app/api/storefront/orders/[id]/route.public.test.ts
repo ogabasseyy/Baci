@@ -135,6 +135,9 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
           payment_method: 'payforme',
           total: 11000,
           amount_paid: 4000,
+          wallet_amount_used: 0,
+          wallet_ledger_used: 2500,
+          savings_ledger_used: 1500,
           items: [],
         },
       ],
@@ -147,7 +150,52 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data).toMatchObject({ total: 11000, amount_paid: 4000 });
+    expect(data).toMatchObject({
+      total: 11000,
+      amount_paid: 4000,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 2500,
+      savings_ledger_used: 1500,
+    });
+  });
+
+  it('includes proof-bound ledger credit fields on guest BNPL tracking-token lookups when order credit columns lag', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123?token=track-token-123&merchant_slug=test-store'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: null },
+    });
+    mockAnonClient.rpc.mockResolvedValue({
+      data: [
+        {
+          ...mockOrderData,
+          payment_status: 'unpaid',
+          payment_method: 'klump',
+          total: 50000,
+          amount_paid: 0,
+          wallet_amount_used: 0,
+          wallet_ledger_used: 12000,
+          savings_ledger_used: 8000,
+          items: [],
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toMatchObject({
+      total: 50000,
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 12000,
+      savings_ledger_used: 8000,
+    });
   });
 
   it('forwards the terminal notification-delivery flag for invoice gating', async () => {

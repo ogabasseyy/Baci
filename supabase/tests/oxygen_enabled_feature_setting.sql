@@ -159,4 +159,28 @@ BEGIN
   END IF;
 END $$;
 
+-- Resuming an existing workflow still delegates to oxygen_private.start_workflow,
+-- preserving its 22023 payment_method guard when an order payment_method changes.
+RESET ROLE;
+ALTER TABLE public.orders DISABLE TRIGGER oxygen_order_payment_method_fence;
+UPDATE public.orders
+SET payment_method = 'paystack'
+WHERE id = 'f2ab0000-0000-4000-8000-000000000031';
+ALTER TABLE public.orders ENABLE TRIGGER oxygen_order_payment_method_fence;
+
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.sub', 'f2ab0000-0000-4000-8000-000000000002', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claims',
+  '{"role":"authenticated","sub":"f2ab0000-0000-4000-8000-000000000002"}',
+  true
+);
+
+DO $$ BEGIN
+  BEGIN
+    PERFORM public.oxygen_start_workflow('f2ab0000-0000-4000-8000-000000000031', 'web');
+    RAISE EXCEPTION 'oxygen_start_workflow bypassed payment_method guard on resume';
+  EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+END $$;
+
 ROLLBACK;

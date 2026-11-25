@@ -77,7 +77,6 @@ const defaultMockPaymentSettings = {
   klump_max_amount: 0,
   klump_min_amount: 0,
   korapay_enabled: false,
-  oxygen_enabled: false,
   pay_on_delivery_enabled: false,
   paystack_enabled: true,
   shipping_insurance_enabled: false,

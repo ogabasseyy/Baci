@@ -259,3 +259,15 @@ describe('bugfix: a push skipped for missing configuration was not put back', ()
     await expect(summary()).resolves.toMatchObject({ retrying: 0, failed: 1 });
   });
 });
+
+describe('bugfix: one slow reminder could overrun the run time limit', () => {
+  it('starts no further reminder after half the 60-second limit', async () => {
+    mocks.list.mockResolvedValue({
+      ok: true,
+      reminders: [reminder(1), reminder(2)],
+    });
+    mocks.now.mockReturnValueOnce(0).mockReturnValue(35_000);
+    await expect(summary()).resolves.toMatchObject({ deferred: 2 });
+    expect(mocks.record).not.toHaveBeenCalled();
+  });
+});

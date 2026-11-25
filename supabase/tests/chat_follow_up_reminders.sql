@@ -152,4 +152,39 @@ END $$;
 RESET ROLE;
 DELETE FROM public.chat_follow_up_reminders WHERE conversation_id = 110;
 
+-- What the sweep did with a reminder is not the team's to change: staff with
+-- the edit permission, writing straight to the database, cannot make a handled
+-- reminder due again or choose its identity.
+INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, due_at, processed_at, last_listed_at, attempts)
+VALUES ('c4a73000-0000-4000-8000-000000000120', 'c4a73000-0000-4000-8000-0000000000b1', 120, now() - interval '5 minutes', now(), now(), 3);
+SELECT pg_temp.as_user('c4a73000-0000-4000-8000-0000000000a3');
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE old_id uuid := 'c4a73000-0000-4000-8000-000000000120'; r public.chat_follow_up_reminders;
+BEGIN
+  UPDATE public.chat_follow_up_reminders SET id = gen_random_uuid(), processed_at = NULL, last_listed_at = NULL, attempts = 0, updated_at = now() - interval '1 day'
+  WHERE conversation_id = 120;
+  SELECT * INTO r FROM public.chat_follow_up_reminders WHERE conversation_id = 120;
+  IF NOT FOUND THEN RAISE EXCEPTION 'reminder row 120 is missing'; END IF;
+  IF r.id <> old_id OR r.processed_at IS NULL OR r.last_listed_at IS NULL OR r.attempts <> 3 OR r.updated_at <> now() THEN
+    RAISE EXCEPTION 'edit staff made a handled reminder due again';
+  END IF;
+  -- A new time is a new follow-up: new identity, nothing handled.
+  UPDATE public.chat_follow_up_reminders SET due_at = now() + interval '1 day', attempts = 2, processed_at = now() WHERE conversation_id = 120;
+  SELECT * INTO r FROM public.chat_follow_up_reminders WHERE conversation_id = 120;
+  IF NOT FOUND THEN RAISE EXCEPTION 'reminder row 120 is missing'; END IF;
+  IF r.id = old_id OR r.processed_at IS NOT NULL OR r.last_listed_at IS NOT NULL OR r.attempts <> 0 THEN
+    RAISE EXCEPTION 'a new time did not start a new reminder';
+  END IF;
+  -- Nor can an insert reuse an identity or arrive already handled.
+  INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, due_at, processed_at, attempts)
+  VALUES (old_id, 'c4a73000-0000-4000-8000-0000000000b1', 121, now() + interval '1 day', now(), 3);
+  SELECT * INTO r FROM public.chat_follow_up_reminders WHERE conversation_id = 121;
+  IF NOT FOUND THEN RAISE EXCEPTION 'reminder row 121 is missing'; END IF;
+  IF r.id = old_id OR r.processed_at IS NOT NULL OR r.attempts <> 0 THEN
+    RAISE EXCEPTION 'an insert chose its identity or its history';
+  END IF;
+END $$;
+RESET ROLE;
+
 ROLLBACK;

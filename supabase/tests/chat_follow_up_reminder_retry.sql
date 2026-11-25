@@ -52,6 +52,8 @@ BEGIN
   -- Claimed but never dispatched: the server may still release it.
   PERFORM public.chat_event_claim_push(pg_temp.push_proof(key, claim, 'claim'), extract(epoch FROM now())::bigint, 'c4a73000-0000-4000-8000-0000000000b1', key, claim);
   IF NOT pg_temp.release(r) THEN RAISE EXCEPTION 'release refused'; END IF;
+  -- Asking again says the same: it is already back.
+  IF NOT pg_temp.release(r) THEN RAISE EXCEPTION 'an already put back reminder was reported as lost'; END IF;
   IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = key) THEN RAISE EXCEPTION 'the released event was kept'; END IF;
   -- Retries are spaced: ten minutes after the first take, two hours after the second.
   IF EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a first retry did not wait'; END IF;
@@ -80,6 +82,8 @@ BEGIN
   PERFORM pg_temp.take(r);
   PERFORM public.chat_event_claim_push(pg_temp.push_proof(key, claim, 'claim'), extract(epoch FROM now())::bigint, 'c4a73000-0000-4000-8000-0000000000b1', key, claim);
   PERFORM pg_temp.age_take(r, interval '121 minutes');
+  IF EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a push with a live claim was put back'; END IF;
+  UPDATE public.chat_message_events SET push_claimed_at = now() - interval '11 minutes' WHERE event_key = key;
   IF NOT EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a claimed push that never began sending was lost'; END IF;
   -- The stopped run waking up late finds no event and may not send.
   IF pg_temp.mark(key, claim) THEN RAISE EXCEPTION 'a stopped run could still send after the put back'; END IF;

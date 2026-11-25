@@ -20,10 +20,10 @@
 -- new kind 'follow_up'.
 BEGIN;
 
--- One pending reminder per chat. Setting another follow-up on the same chat
--- replaces the row under a NEW id (the id is the reminder's identity, and
+-- One pending reminder per chat. Setting another follow-up time on the same
+-- chat replaces the row under a NEW id (the id is the reminder's identity, and
 -- keys its push event), so a replaced reminder can never be sent by a sweep
--- that listed it earlier.
+-- that listed it earlier. The trigger below assigns it.
 CREATE TABLE IF NOT EXISTS public.chat_follow_up_reminders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
@@ -88,6 +88,42 @@ DROP POLICY IF EXISTS chat_follow_up_reminders_delete ON public.chat_follow_up_r
 CREATE POLICY chat_follow_up_reminders_delete ON public.chat_follow_up_reminders
   FOR DELETE TO authenticated
   USING (public.check_staff_permission((SELECT auth.uid()), merchant_id, 'customers', 'edit'));
+
+-- A signed-in writer chooses the chat, the time and the name only: the identity
+-- and what the sweep did with a reminder are the database's record. A new time
+-- is a new follow-up (new identity, nothing handled); the same time keeps its
+-- identity and history, so a handled reminder cannot be made due again. The
+-- sweep's own functions run as the owner and are not affected.
+CREATE OR REPLACE FUNCTION private.guard_chat_follow_up_reminder() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF current_user NOT IN ('anon', 'authenticated') THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.due_at = OLD.due_at
+    AND NEW.merchant_id = OLD.merchant_id AND NEW.conversation_id = OLD.conversation_id THEN
+    NEW.id := OLD.id;
+    NEW.processed_at := OLD.processed_at;
+    NEW.last_listed_at := OLD.last_listed_at;
+    NEW.attempts := OLD.attempts;
+    NEW.created_at := OLD.created_at;
+    NEW.updated_at := OLD.updated_at;
+  ELSE
+    NEW.id := pg_catalog.gen_random_uuid();
+    NEW.processed_at := NULL;
+    NEW.last_listed_at := NULL;
+    NEW.attempts := 0;
+    NEW.created_at := pg_catalog.now();
+    NEW.updated_at := pg_catalog.now();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.guard_chat_follow_up_reminder() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS chat_follow_up_reminders_guard ON public.chat_follow_up_reminders;
+CREATE TRIGGER chat_follow_up_reminders_guard
+  BEFORE INSERT OR UPDATE ON public.chat_follow_up_reminders
+  FOR EACH ROW EXECUTE FUNCTION private.guard_chat_follow_up_reminder();
 
 COMMENT ON TABLE public.chat_follow_up_reminders IS
   'One pending push reminder per chat follow-up, recorded when the follow-up is set; swept by a cron that pushes it once.';

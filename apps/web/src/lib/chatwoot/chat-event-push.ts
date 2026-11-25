@@ -137,7 +137,8 @@ export async function sendChatEventPush(
         onDeliveryStart: async () => {
           // A follow-up first records that sending is beginning, so a run
           // stopped before this point can be retried safely. No record, no
-          // send.
+          // send. At most once on purpose: a run killed after this record and
+          // before the request loses the push rather than risk two.
           if (input.kind === 'follow_up') {
             await markChatEventPushDispatch(client, secret, scope);
           }

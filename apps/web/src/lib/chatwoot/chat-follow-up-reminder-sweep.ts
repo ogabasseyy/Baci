@@ -29,8 +29,11 @@ export type ChatFollowUpSweepSummary = {
   failed: number;
 };
 
-/** Stop starting reminders after this long, so one sweep fits its time limit. */
-const SWEEP_BUDGET_MS = 40_000;
+/**
+ * Stop starting reminders after this long: half the route's 60-second limit,
+ * so the last one started (engine read and push) has room to finish.
+ */
+const SWEEP_BUDGET_MS = 30_000;
 
 type Dependencies = {
   now: () => number;
@@ -117,6 +120,11 @@ async function handleReminder(
  * database does that), three takes at most, spaced ten minutes then two hours
  * apart. Only a push that may have left is given up. Never throws for one
  * reminder's failure: the others still go out.
+ *
+ * Delivery is at most once on purpose. "May have left" starts at the mark
+ * written just before the request to the delivery provider, so a run killed
+ * between the two loses that one push: sending first would instead risk
+ * sending it twice.
  *
  * Known limit: the chat is checked just before the take, not again while the
  * push is being sent, so a Done or a cleared follow-up landing in that moment

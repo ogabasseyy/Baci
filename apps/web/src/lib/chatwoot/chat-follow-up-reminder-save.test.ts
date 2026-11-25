@@ -26,33 +26,14 @@ describe('saveChatFollowUpReminder', () => {
       Record<string, unknown>,
       unknown,
     ];
-    expect(row).toMatchObject({
+    // Identity and delivery history belong to the database, never to a writer.
+    expect(row).toEqual({
       merchant_id: MERCHANT,
       conversation_id: 7,
       due_at: '2026-11-25T09:00:00.000Z',
       customer_name: 'Ada',
-      processed_at: null,
-      last_listed_at: null,
-      attempts: 0,
     });
     expect(options).toEqual({ onConflict: 'merchant_id,conversation_id' });
-  });
-
-  it('gives a replaced reminder a new identity every time', async () => {
-    const { client, upsert } = upsertClient();
-    const input = {
-      merchantId: MERCHANT,
-      conversationId: 7,
-      dueAt: '2026-11-25T09:00:00.000Z',
-      customerName: '',
-    };
-    await saveChatFollowUpReminder(client, input);
-    await saveChatFollowUpReminder(client, input);
-
-    const ids = upsert.mock.calls.map(
-      (call) => (call as unknown as [{ id: string }])[0].id
-    );
-    expect(ids[0]).not.toBe(ids[1]);
   });
 
   it('reports a refused or failed write', async () => {

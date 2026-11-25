@@ -115,7 +115,8 @@ BEGIN
   );
 
   -- A run stopped between taking a reminder and starting to send sent
-  -- nothing: after ten minutes (far longer than a run lasts) it is put back.
+  -- nothing: after ten minutes (far longer than a run lasts) it is put back,
+  -- but not while its push claim is still live (ten minutes from the claim).
   PERFORM private.requeue_chat_follow_up_reminder(lost.merchant_id, lost.id)
   FROM (
     SELECT r.merchant_id, r.id
@@ -127,6 +128,7 @@ BEGIN
       AND r.attempts < 3
       AND r.due_at > pg_catalog.now() - interval '24 hours'
       AND e.kind = 'follow_up' AND e.outcome = 'notified' AND e.push_dispatch_started_at IS NULL
+      AND (e.push_claim IS NULL OR e.push_claimed_at <= pg_catalog.now() - interval '10 minutes')
     LIMIT 50
   ) lost;
 

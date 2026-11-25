@@ -28,6 +28,14 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('chat-events:' || p_merchant_id::text, 0)
   );
+  -- Already put back (by the list's own recovery): the retry stands.
+  IF EXISTS (
+    SELECT 1 FROM public.chat_follow_up_reminders r
+    WHERE r.id = p_reminder_id AND r.merchant_id = p_merchant_id
+      AND r.processed_at IS NULL AND r.attempts > 0
+  ) THEN
+    RETURN true;
+  END IF;
   RETURN private.requeue_chat_follow_up_reminder(p_merchant_id, p_reminder_id);
 END;
 $$;

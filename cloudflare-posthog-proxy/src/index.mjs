@@ -12,17 +12,21 @@ export const DEFAULT_ASSETS_HOST = 'https://eu-assets.i.posthog.com';
 
 const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'OPTIONS']);
 const STRIPPED_REQUEST_HEADERS = new Set([
+  'authorization',
   'connection',
   'cookie',
   'host',
   'keep-alive',
   'proxy-authenticate',
   'proxy-authorization',
+  'referer',
   'te',
   'trailer',
   'transfer-encoding',
   'upgrade',
+  'x-csrf-token',
   'x-forwarded-host',
+  'x-supabase-auth-token',
 ]);
 
 function normalizeOrigin(value, fallback) {

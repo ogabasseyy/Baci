@@ -129,6 +129,36 @@ describe('cloudflare-posthog-proxy fetch handler', () => {
     );
   });
 
+  it('strips authorization, referer, x-csrf-token, and x-supabase-auth-token before forwarding', async () => {
+    let capturedInit = null;
+    globalThis.fetch = (_url, init) => {
+      capturedInit = init;
+      return Promise.resolve(new Response('{"status":1}', { status: 200 }));
+    };
+
+    const req = new Request('https://posthog-proxy.usebaci.com/i/v0/e/', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer secret-token',
+        Referer: 'https://usebaci.com/dashboard?token=abc',
+        'x-csrf-token': 'csrf-secret',
+        'x-supabase-auth-token': 'sb-secret',
+        'Content-Type': 'application/json',
+        'cf-connecting-ip': '203.0.113.42',
+      },
+      body: JSON.stringify({ event: '$pageview' }),
+    });
+
+    const res = await worker.fetch(req, {});
+    assert.equal(res.status, 200);
+    assert.equal(capturedInit.headers.get('authorization'), null);
+    assert.equal(capturedInit.headers.get('referer'), null);
+    assert.equal(capturedInit.headers.get('x-csrf-token'), null);
+    assert.equal(capturedInit.headers.get('x-supabase-auth-token'), null);
+    assert.equal(capturedInit.headers.get('content-type'), 'application/json');
+    assert.equal(capturedInit.headers.get('x-forwarded-for'), '203.0.113.42');
+  });
+
   it('proxies /static/* requests to the assets host', async () => {
     let capturedUrl = '';
     globalThis.fetch = (url) => {

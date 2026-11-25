@@ -84,7 +84,7 @@ describe('GET /api/manifest RSA-SHA256 code signing', () => {
     const sigHeader = parts[0]?.headers['expo-signature'];
     expect(sigHeader).toBeDefined();
     const match =
-      /^sig=:([A-Za-z0-9+/=]+):,\s*keyid="([^"]+)",\s*alg="rsa-v1_5-sha256"$/.exec(
+      /^sig="([A-Za-z0-9+/=]+)",\s*keyid="([^"]+)",\s*alg="rsa-v1_5-sha256"$/.exec(
         sigHeader ?? ''
       );
     expect(match).not.toBeNull();
@@ -93,6 +93,43 @@ describe('GET /api/manifest RSA-SHA256 code signing', () => {
     const verifier = createVerify('RSA-SHA256');
     verifier.update(parts[0]?.body ?? '', 'utf8');
     expect(verifier.verify(publicKey, match?.[1] ?? '', 'base64')).toBe(true);
+
+    const boolTrueSig = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          'expo-expect-signature':
+            'sig=?1, keyid="baci-2026", alg="rsa-v1_5-sha256"',
+        }),
+      }),
+      env
+    );
+    expect(boolTrueSig.status).toBe(200);
+
+    const boolFalseSig = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          'expo-expect-signature': 'sig=?0, keyid="baci-2026"',
+        }),
+      }),
+      { OTA_BUCKET: bucket }
+    );
+    expect(boolFalseSig.status).toBe(200);
+
+    for (const malformedHeader of [
+      'keyid="baci-2026", alg="rsa-v1_5-sha256"',
+      'sig="yes", keyid="baci-2026"',
+      'sig, keyid="baci-2026',
+    ]) {
+      const badResp = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/manifest', {
+          headers: createBaseHeaders({
+            'expo-expect-signature': malformedHeader,
+          }),
+        }),
+        env
+      );
+      expect(badResp.status, `Expected 406 for ${malformedHeader}`).toBe(406);
+    }
 
     const mismatchKeyId = await worker.fetch(
       new Request('https://ota.usebaci.com/api/manifest', {

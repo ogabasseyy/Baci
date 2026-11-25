@@ -37,7 +37,7 @@ async function createExportFixture() {
     path.join(distDir, '_expo/static/js/ios/entry-1.hbc'),
     bundleBytes
   );
-  await writeFile(path.join(distDir, 'assets', assetMd5), pngBytes);
+  await writeFile(path.join(distDir, 'assets', `${assetMd5}.png`), pngBytes);
   await writeFile(
     path.join(distDir, 'metadata.json'),
     JSON.stringify({
@@ -46,7 +46,7 @@ async function createExportFixture() {
       fileMetadata: {
         ios: {
           bundle: '_expo/static/js/ios/entry-1.hbc',
-          assets: [{ path: `assets/${assetMd5}`, ext: 'png' }],
+          assets: [{ path: `assets/${assetMd5}.png`, ext: 'png' }],
         },
       },
     })

@@ -140,11 +140,7 @@ export async function handleGetManifest(
     .toLowerCase();
 
   if (current.mode === 'rollback_to_embedded') {
-    if (
-      currentUpdateId &&
-      embeddedUpdateId &&
-      currentUpdateId === embeddedUpdateId
-    ) {
+    if (!embeddedUpdateId || currentUpdateId === embeddedUpdateId) {
       return directiveResponse({ type: 'noUpdateAvailable' }, env);
     }
     return directiveResponse(

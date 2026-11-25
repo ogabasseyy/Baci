@@ -162,7 +162,7 @@ jobs:
           IOS_TIKTOK_CONFIGURED: ${{ inputs.ios_tiktok_configured }}
           EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}
           EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
-          EXPO_PUBLIC_OTA_UPDATES_URL: https://ota.usebaci.com/api/manifest
+          EXPO_PUBLIC_OTA_UPDATES_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.usebaci.com' }}/api/manifest
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
@@ -208,6 +208,17 @@ jobs:
           test ! -f .env
           mkdir -p "$RUNNER_TEMP/storefront-ota"
           pnpm exec expo config --type public --json > "$RUNNER_TEMP/storefront-ota/expo-config.json"
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const [configPath, platform, expected] = process.argv.slice(1);
+            const config = JSON.parse(readFileSync(configPath, "utf8"));
+            const actual = platform === "ios"
+              ? (config.ios?.runtimeVersion ?? config.runtimeVersion)
+              : (config.android?.runtimeVersion ?? config.runtimeVersion);
+            if (actual !== expected) {
+              throw new Error("Exported " + platform + " runtimeVersion (" + actual + ") does not match input runtime_version (" + expected + ").");
+            }
+          ' "$RUNNER_TEMP/storefront-ota/expo-config.json" "${{ inputs.platform }}" "${{ inputs.runtime_version }}"
           if [[ "${{ inputs.platform }}" == "ios" ]]; then
             node "$RUNNER_TEMP/prepare-storefront-ota-public-config.mjs" "$RUNNER_TEMP/storefront-ota/expo-config.json" "$IOS_TIKTOK_CONFIGURED"
           fi

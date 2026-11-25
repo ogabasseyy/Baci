@@ -26,6 +26,18 @@ const CONTENT_TYPES = {
   woff2: 'font/woff2',
 };
 
+const VALUE_FLAGS = {
+  '--dist': 'distDir',
+  '--config': 'configPath',
+  '--platform': 'platform',
+  '--runtime': 'runtimeVersion',
+  '--channel': 'channel',
+  '--source-sha': 'sourceSha',
+  '--update-id': 'updateId',
+  '--server': 'serverUrl',
+  '--token': 'token',
+};
+
 export function inferAssetContentType(ext) {
   const normalized = (ext ?? '').replace(/^\./, '').toLowerCase();
   return CONTENT_TYPES[normalized] ?? 'application/octet-stream';
@@ -43,55 +55,16 @@ export function parseCliArgs(argv) {
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    const next = argv[i + 1];
-    switch (arg) {
-      case '--dist':
-        options.distDir = next;
-        i += 1;
-        break;
-      case '--config':
-        options.configPath = next;
-        i += 1;
-        break;
-      case '--platform':
-        options.platform = next;
-        i += 1;
-        break;
-      case '--runtime':
-        options.runtimeVersion = next;
-        i += 1;
-        break;
-      case '--channel':
-        options.channel = next;
-        i += 1;
-        break;
-      case '--source-sha':
-        options.sourceSha = next;
-        i += 1;
-        break;
-      case '--update-id':
-        options.updateId = next;
-        i += 1;
-        break;
-      case '--server':
-        options.serverUrl = next;
-        i += 1;
-        break;
-      case '--token':
-        options.token = next;
-        i += 1;
-        break;
-      case '--rollback':
-        options.rollback = true;
-        break;
-      case '--to-embedded':
-        options.toEmbedded = true;
-        break;
-      case '--dry-run':
-        options.dryRun = true;
-        break;
-      default:
-        throw new Error(`Unknown CLI argument: ${arg}`);
+    if (arg in VALUE_FLAGS) {
+      options[VALUE_FLAGS[arg]] = argv[++i];
+    } else if (arg === '--rollback') {
+      options.rollback = true;
+    } else if (arg === '--to-embedded') {
+      options.toEmbedded = true;
+    } else if (arg === '--dry-run') {
+      options.dryRun = true;
+    } else {
+      throw new Error(`Unknown CLI argument: ${arg}`);
     }
   }
 
@@ -107,7 +80,6 @@ export function parseCliArgs(argv) {
   if (!options.dryRun && !options.token?.trim()) {
     throw new Error('OTA_ADMIN_TOKEN or --token is required');
   }
-
   return options;
 }
 
@@ -159,10 +131,9 @@ export async function packageExportDirectory({
     // assetmap.json is optional if --dump-assetmap was omitted
   }
 
-  let expoClient;
-  if (configPath) {
-    expoClient = JSON.parse(await readFile(configPath, 'utf8'));
-  }
+  const expoClient = configPath
+    ? JSON.parse(await readFile(configPath, 'utf8'))
+    : undefined;
 
   const uploads = new Map();
   const bundleBytes = await readContainedFile(distDir, platformMeta.bundle);
@@ -177,22 +148,18 @@ export async function packageExportDirectory({
     sha256Hex: bundleHashes.sha256Hex,
   });
 
-  const launchAsset = {
-    hash: bundleHashes.sha256Base64Url,
-    key: bundleHashes.sha256Hex,
-    contentType: 'application/javascript',
-    fileExtension: bundleExt,
-    r2Key: bundleR2Key,
-  };
-
   const assets = [];
   for (const item of platformMeta.assets ?? []) {
     const assetBytes = await readContainedFile(distDir, item.path);
     const assetHashes = hashBytes(assetBytes);
-    const rawBasename = path.posix.basename(item.path.replaceAll('\\', '/'));
-    const mapped = assetMap[rawBasename];
-    const assetKey = typeof mapped?.hash === 'string' ? mapped.hash : rawBasename;
     const ext = item.ext ? (item.ext.startsWith('.') ? item.ext : `.${item.ext}`) : '';
+    const rawBasename = path.posix.basename(item.path.replaceAll('\\', '/'));
+    const stem =
+      ext && rawBasename.endsWith(ext)
+        ? rawBasename.slice(0, -ext.length)
+        : rawBasename;
+    const mapped = assetMap[rawBasename] ?? assetMap[stem];
+    const assetKey = typeof mapped?.hash === 'string' ? mapped.hash : stem;
     const contentType = inferAssetContentType(ext);
     const r2Key = `blobs/${assetHashes.sha256Hex}${ext}`;
 
@@ -214,26 +181,32 @@ export async function packageExportDirectory({
     });
   }
 
-  const payload = {
-    channel,
-    platform,
-    runtimeVersion,
-    updateId: updateId ?? randomUUID().toLowerCase(),
-    createdAt: new Date().toISOString(),
-    ...(sourceSha ? { sourceSha } : {}),
-    launchAsset,
-    assets,
-    metadata: {},
-    extra: expoClient ? { expoClient } : {},
+  return {
+    payload: {
+      channel,
+      platform,
+      runtimeVersion,
+      updateId: updateId ?? randomUUID().toLowerCase(),
+      createdAt: new Date().toISOString(),
+      ...(sourceSha ? { sourceSha } : {}),
+      launchAsset: {
+        hash: bundleHashes.sha256Base64Url,
+        key: bundleHashes.sha256Hex,
+        contentType: 'application/javascript',
+        fileExtension: bundleExt,
+        r2Key: bundleR2Key,
+      },
+      assets,
+      metadata: {},
+      extra: expoClient ? { expoClient } : {},
+    },
+    uploads: [...uploads.values()],
   };
-
-  return { payload, uploads: [...uploads.values()] };
 }
 
 async function assertOkResponse(response, label) {
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`${label} failed (${response.status}): ${text}`);
+    throw new Error(`${label} failed (${response.status}): ${await response.text()}`);
   }
   return response.json();
 }
@@ -256,9 +229,7 @@ export async function publishOta(options, fetchImpl = fetch) {
     const headResp = await fetchImpl(`${baseUrl}/api/assets/${asset.r2Key}`, {
       method: 'HEAD',
     });
-    if (headResp.ok) {
-      continue;
-    }
+    if (headResp.ok) continue;
     const putResp = await fetchImpl(`${baseUrl}/api/admin/assets/${asset.r2Key}`, {
       method: 'PUT',
       headers: {
@@ -273,10 +244,7 @@ export async function publishOta(options, fetchImpl = fetch) {
 
   const publishResp = await fetchImpl(`${baseUrl}/api/admin/publish`, {
     method: 'POST',
-    headers: {
-      ...authHeaders,
-      'content-type': 'application/json',
-    },
+    headers: { ...authHeaders, 'content-type': 'application/json' },
     body: JSON.stringify(packaged.payload),
   });
   return assertOkResponse(publishResp, 'Publish OTA manifest');
@@ -290,11 +258,9 @@ export async function rollbackOta(options, fetchImpl = fetch) {
     ...(options.toEmbedded ? { toEmbedded: true } : {}),
     ...(options.updateId ? { targetUpdateId: options.updateId } : {}),
   };
-
   if (options.dryRun) {
     return { dryRun: true, payload: body };
   }
-
   const baseUrl = options.serverUrl.replace(/\/+$/, '');
   const resp = await fetchImpl(`${baseUrl}/api/admin/rollback`, {
     method: 'POST',
@@ -307,20 +273,15 @@ export async function rollbackOta(options, fetchImpl = fetch) {
   return assertOkResponse(resp, 'Rollback OTA release');
 }
 
-async function main() {
-  const options = parseCliArgs(process.argv.slice(2));
-  const result = options.rollback
-    ? await rollbackOta(options)
-    : await publishOta(options);
-  console.log(JSON.stringify(result, null, 2));
-}
-
 if (
   process.argv[1] &&
   pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url
 ) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  });
+  const options = parseCliArgs(process.argv.slice(2));
+  Promise.resolve(options.rollback ? rollbackOta(options) : publishOta(options))
+    .then((result) => console.log(JSON.stringify(result, null, 2)))
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    });
 }

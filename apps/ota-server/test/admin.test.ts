@@ -277,6 +277,8 @@ describe('admin publish and rollback endpoints', () => {
           'expo-platform': 'ios',
           'expo-runtime-version': RUNTIME,
           'expo-channel-name': 'production',
+          'expo-current-update-id': UPDATE_2,
+          'expo-embedded-update-id': '44444444-4444-4444-8444-444444444444',
         },
       }),
       env

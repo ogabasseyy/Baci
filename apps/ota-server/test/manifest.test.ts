@@ -223,5 +223,21 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
     expect(JSON.parse(embeddedParts[0]?.body ?? '')).toEqual({
       type: 'noUpdateAvailable',
     });
+
+    const missingEmbeddedResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          'expo-current-update-id': UPDATE_ID,
+        }),
+      }),
+      env
+    );
+    const missingEmbeddedParts = parseMultipartMixed(
+      missingEmbeddedResp.headers.get('content-type'),
+      await missingEmbeddedResp.text()
+    );
+    expect(JSON.parse(missingEmbeddedParts[0]?.body ?? '')).toEqual({
+      type: 'noUpdateAvailable',
+    });
   });
 });

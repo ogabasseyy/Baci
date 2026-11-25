@@ -31,7 +31,10 @@ export function timingSafeBearerMatch(
   return timingSafeEqual(providedDigest, expectedDigest);
 }
 
-function splitSfvDictionaryMembers(input: string): string[] {
+function splitSfvDictionaryMembers(input: string): {
+  members: string[];
+  error?: string;
+} {
   const members: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -62,10 +65,13 @@ function splitSfvDictionaryMembers(input: string): string[] {
     }
     current += ch;
   }
+  if (inQuotes || escaped) {
+    return { members: [], error: 'Malformed expo-expect-signature header' };
+  }
   if (current.trim().length > 0) {
     members.push(current.trim());
   }
-  return members;
+  return { members };
 }
 
 function unquoteSfvString(raw: string): string | null {
@@ -83,7 +89,12 @@ export function parseExpectSignatureHeader(
     return { expected: false };
   }
 
-  const members = splitSfvDictionaryMembers(headerValue);
+  const { members, error } = splitSfvDictionaryMembers(headerValue);
+  if (error) {
+    return { expected: true, error };
+  }
+
+  let sigState: 'unset' | 'true' | 'false' = 'unset';
   let keyid: string | undefined;
   let alg: string | undefined;
 
@@ -95,6 +106,17 @@ export function parseExpectSignatureHeader(
     const rawValue = eqIndex === -1 ? undefined : member.slice(eqIndex + 1);
 
     if (key === 'sig') {
+      const trimmedVal = rawValue?.trim();
+      if (trimmedVal === undefined || trimmedVal === '?1') {
+        sigState = 'true';
+      } else if (trimmedVal === '?0') {
+        sigState = 'false';
+      } else {
+        return {
+          expected: true,
+          error: 'Malformed sig in expo-expect-signature',
+        };
+      }
       continue;
     }
     if (key === 'alg' && rawValue !== undefined) {
@@ -123,6 +145,16 @@ export function parseExpectSignatureHeader(
       }
       keyid = parsed;
     }
+  }
+
+  if (sigState === 'false') {
+    return { expected: false };
+  }
+  if (sigState !== 'true') {
+    return {
+      expected: true,
+      error: 'Malformed sig in expo-expect-signature',
+    };
   }
 
   return {
@@ -155,7 +187,7 @@ export function signRsaSha256Sfv(
   signer.update(payload, 'utf8');
   const signatureBase64 = signer.sign(key).toString('base64');
   const safeKeyId = keyId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `sig=:${signatureBase64}:, keyid="${safeKeyId}", alg="rsa-v1_5-sha256"`;
+  return `sig="${signatureBase64}", keyid="${safeKeyId}", alg="rsa-v1_5-sha256"`;
 }
 
 export function sha256Base64Url(input: Uint8Array | string): string {

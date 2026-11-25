@@ -32,15 +32,17 @@ export type Routes = {
   message?: unknown;
   contactStatus?: number;
   messageStatus?: number;
-  /** Full conversation reads, by id. */
+  /** Full conversations the engine's filter knows, by id. */
   reads?: Record<number, unknown>;
-  /** A read that fails with this status instead of answering, by id. */
-  readStatus?: Record<number, number>;
+  /** The filtered read fails with this status instead of answering. */
+  readStatus?: number;
 };
 
 export function stub(routes: Routes) {
   const calls: URL[] = [];
-  const fetchMock = stubFetch((url) => {
+  /** Chat ids asked for, one list per filtered read. */
+  const asked: number[][] = [];
+  const fetchMock = stubFetch((url, init) => {
     calls.push(url);
     const path = url.pathname.replace('/api/v1/accounts/2', '');
     if (path === '/search/conversations') {
@@ -53,13 +55,15 @@ export function stub(routes: Routes) {
         ? { status: routes.messageStatus }
         : { body: routes.message ?? { meta: {}, payload: [] } };
     }
-    const id = Number(path.split('/')[2]);
-    const failing = routes.readStatus?.[id];
-    if (failing) return { status: failing };
-    const read = routes.reads?.[id];
-    return read ? { body: read } : { status: 404 };
+    if (path !== '/conversations/filter') return { status: 404 };
+    const ids: number[] = JSON.parse(String(init?.body)).payload[1].values;
+    asked.push(ids);
+    if (routes.readStatus) return { status: routes.readStatus };
+    // Like the engine: chats that are gone are simply not in the answer.
+    const payload = ids.flatMap((id) => routes.reads?.[id] ?? []);
+    return { body: { meta: {}, payload } };
   });
-  return { calls, fetchMock };
+  return { calls, asked, fetchMock };
 }
 
 export const named = (id: number, name: string, inboxId = 20) => ({

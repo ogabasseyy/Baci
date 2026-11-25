@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-25T18:02:45+00:00",
-  "source_revision": "ddcbd01e57c94eeb5357d6ea59dbb9dfcbb5e9e9",
-  "evidence_digest": "6d48ea4506921c6b9c72cc3ef8c760c2c383139744cee5cea1752aab261a262a",
-  "claims_digest": "01869442cccc81526866fd860cbdef966b851440e3dde12cf1f3c018b11ebe31",
+  "reviewed_at": "2026-11-25T18:10:22+00:00",
+  "source_revision": "29ef41735cce54811128d9c1b682a9299f5ba68d",
+  "evidence_digest": "2b6430570c887a739a4cab6d352524204b7e11a891937985b3336af8e7011b98",
+  "claims_digest": "95a984ca5ba3fc5fc8f5170aa062fad2b2f7e1e5dac7e9ab6e585f99c1e10e05",
   "review_scope": "Source evidence only. Re-reviewed payment configuration and the merchant Oxygen admin enablement toggle alongside storefront availability and workflow-start gates. Re-reviewed staff-entered mobile manual-order address preservation, rapid street edits, incomplete duplicate-customer drafts, pending Places details, and GIG quote/save concurrency after syncing to current main. Re-reviewed current-main customer checkout quote rejection, destination/state matching, and stale-quote recovery alongside the retained paid partner pickup and parcel-binding evidence. The previously reviewed expense evidence remains in scope. All claims remain code-evidenced only; no production capability promotion. Re-reviewed the dashboard order details, ordinary cancellation, and invoice document paths alongside the feature-gated paid-order item replacement flow. Paid-order replacement remains outside the published production capability claims.",
   "capabilities": [
     {

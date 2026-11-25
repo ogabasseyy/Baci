@@ -529,7 +529,7 @@ describe('guideBusinessOnboarding', () => {
     } as Awaited<ReturnType<typeof generateObject>>);
 
     mockSanitizePromptInput.mockImplementation(
-      (input: string, limit: number) => ({
+      (input: string, limit = 500) => ({
         value: input.replace(/ignore previous/gi, '[filtered]').slice(0, limit),
         metadata: {
           wasTruncated: input.length > limit,

@@ -1,7 +1,5 @@
-import { generateObject } from 'ai';
 import z from 'zod';
 import { generateObjectWithChain } from '@/ai/generate-object-with-chain';
-import { activeTextModel, withRetry } from '@/ai/provider';
 import { getVisionProviderChain } from '@/ai/vision-provider-chain';
 import { fetchImageBytes } from '@/lib/fetch-image-bytes';
 import { isPublicHttpUrl } from '@/lib/is-public-http-url';
@@ -99,39 +97,33 @@ export async function extractBrandColorsFromUrl(
 
   try {
     const imageBytes = await fetchImageBytes(logoUrl);
+    if (!imageBytes) {
+      logger.warn({
+        message:
+          'Guarded logo image fetch returned no bytes; failing closed without raw-URL fallback.',
+        flow: 'guideBusinessOnboarding',
+      });
+      throw new Error('Failed to extract brand colors.');
+    }
 
-    const { object } = imageBytes
-      ? await generateObjectWithChain({
-          chain: getVisionProviderChain(),
-          overallTimeoutMs: ONBOARDING_CHAIN_TIMEOUT_MS,
-          schema: BrandColorsSchema,
-          messages: [
-            { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
+    const { object } = await generateObjectWithChain({
+      chain: getVisionProviderChain(),
+      overallTimeoutMs: ONBOARDING_CHAIN_TIMEOUT_MS,
+      schema: BrandColorsSchema,
+      messages: [
+        { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: [
             {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  image: imageBytes.bytes,
-                  mediaType: imageBytes.mediaType,
-                },
-              ],
+              type: 'image',
+              image: imageBytes.bytes,
+              mediaType: imageBytes.mediaType,
             },
           ],
-        })
-      : await withRetry(async () => {
-          return await generateObject({
-            model: activeTextModel,
-            schema: BrandColorsSchema,
-            messages: [
-              { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
-              {
-                role: 'user',
-                content: [{ type: 'image', image: logoUrl }],
-              },
-            ],
-          });
-        });
+        },
+      ],
+    });
 
     logger.info({ message: 'Colors extracted successfully', colors: object });
     return object;

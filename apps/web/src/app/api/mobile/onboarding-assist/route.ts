@@ -31,6 +31,21 @@ const MOBILE_ONBOARDING_IP_LOGO_LIMIT = {
   failClosedWithoutRedis: true,
 };
 
+function isAllowedOnboardingStorageLogoUrl(logoUrl: string): boolean {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) return false;
+  try {
+    const allowedOrigin = new URL(supabaseUrl).origin;
+    const candidate = new URL(logoUrl);
+    return (
+      candidate.origin === allowedOrigin &&
+      candidate.pathname.startsWith('/storage/v1/object/public/media/')
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
   const auth = await getMobileBearerUser(request);
   if (!auth.authenticated) {
@@ -56,6 +71,20 @@ export async function POST(request: NextRequest) {
       {
         error: 'Please check the information you entered.',
         code: 'invalid_input',
+      },
+      { status: 400 }
+    );
+  }
+
+  if (
+    parsed.data.task === 'extract_colors' &&
+    (!parsed.data.logoUrl ||
+      !isAllowedOnboardingStorageLogoUrl(parsed.data.logoUrl))
+  ) {
+    return NextResponse.json(
+      {
+        error: 'Logo URL must be a valid uploaded store logo.',
+        code: 'invalid_logo_url',
       },
       { status: 400 }
     );

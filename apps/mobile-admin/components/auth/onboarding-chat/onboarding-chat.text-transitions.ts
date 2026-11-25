@@ -109,10 +109,31 @@ export function transitionFromTextInput(
   }
 
   if (step === 'business_type') {
-    const matched = BUSINESS_TYPES.find(
-      (item) => item.label.toLowerCase().includes(lower) || item.id === lower
-    );
-    if (matched && matched.id !== 'other') {
+    if (lower === 'other') {
+      return {
+        nextData: { businessType: 'other', otherBusinessType: '' },
+        nextStep: 'other_business_type',
+        messages: exchangeMessages(
+          trimmed,
+          'Tell me what kind of products or services you sell:'
+        ),
+      };
+    }
+    const matched =
+      lower.length >= 3
+        ? BUSINESS_TYPES.find((item) => {
+            if (item.id === 'other') return false;
+            const labelLower = item.label.toLowerCase();
+            if (item.id === lower || labelLower === lower) return true;
+            if (labelLower.startsWith(lower)) return true;
+            const words = labelLower.split(/[^a-z0-9]+/).filter(Boolean);
+            return words.some(
+              (word) =>
+                word === lower || (lower.length >= 4 && word.startsWith(lower))
+            );
+          })
+        : undefined;
+    if (matched) {
       return {
         nextData: { businessType: matched.id, otherBusinessType: '' },
         nextStep: 'business_name',

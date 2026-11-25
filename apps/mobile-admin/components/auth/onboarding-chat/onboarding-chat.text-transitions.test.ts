@@ -155,4 +155,35 @@ describe('transitionFromTextInput slug handling', () => {
     expect(skipped.clearAiArtifacts).toBe(true);
     expect(skipped.nextStep).toBe('slug');
   });
+
+  it('does not falsely match single-letter business categories and routes typed "other" to other_business_type', () => {
+    const shortInput = transitionFromTextInput('business_type', 'a', BASE_DATA);
+    expect(shortInput.nextData).toEqual({
+      businessType: 'other',
+      otherBusinessType: 'a',
+    });
+    expect(shortInput.nextStep).toBe('business_name');
+
+    const typedOther = transitionFromTextInput(
+      'business_type',
+      'other',
+      BASE_DATA
+    );
+    expect(typedOther.nextData).toEqual({
+      businessType: 'other',
+      otherBusinessType: '',
+    });
+    expect(typedOther.nextStep).toBe('other_business_type');
+
+    const typedFashion = transitionFromTextInput(
+      'business_type',
+      'fashion',
+      BASE_DATA
+    );
+    expect(typedFashion.nextData).toEqual({
+      businessType: 'fashion',
+      otherBusinessType: '',
+    });
+    expect(typedFashion.nextStep).toBe('business_name');
+  });
 });

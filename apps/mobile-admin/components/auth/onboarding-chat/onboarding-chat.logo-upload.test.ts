@@ -40,8 +40,12 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
+import * as ImagePicker from 'expo-image-picker';
+import { Alert } from 'react-native';
 import {
   extractAndPersistUploadedLogoColors,
+  persistProvisionedStoreLogo,
+  pickOnboardingLogo,
   uploadDataUriLogoBestEffort,
   uploadPickedLogoBestEffort,
 } from './onboarding-chat.logo-upload';
@@ -175,5 +179,60 @@ describe('uploadPickedLogoBestEffort', () => {
       },
     });
     expect(mocks.updateEq).toHaveBeenCalledWith('id', 'm-1');
+  });
+
+  it('rejects picked SVG logos and alerts the user instead of returning an uploadable asset', async () => {
+    vi.mocked(
+      ImagePicker.requestMediaLibraryPermissionsAsync
+    ).mockResolvedValueOnce({ granted: true } as never);
+    vi.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValueOnce({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///tmp/evil.svg',
+          fileName: 'evil.svg',
+          mimeType: 'image/svg+xml',
+        },
+      ],
+    } as never);
+
+    const picked = await pickOnboardingLogo();
+
+    expect(picked).toBeNull();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Unsupported Format',
+      expect.stringContaining('PNG, JPEG, or WebP')
+    );
+  });
+
+  it('rejects non-raster MIME types in uploadPickedLogoBestEffort without uploading', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+
+    const result = await uploadPickedLogoBestEffort(
+      {
+        uri: 'file:///tmp/evil.svg',
+        fileName: 'evil.svg',
+        mimeType: 'image/svg+xml',
+      },
+      'm-1'
+    );
+
+    expect(result).toBeNull();
+    expect(mocks.storageUpload).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('returns false in persistProvisionedStoreLogo for an unpersisted local URI without a matching picked asset', async () => {
+    const persisted = await persistProvisionedStoreLogo({
+      merchantId: 'm-1',
+      logoUrl: 'file:///tmp/orphan-logo.png',
+      pickedAsset: null,
+      businessName: 'SoleLux',
+      businessType: 'fashion',
+    });
+
+    expect(persisted).toBe(false);
   });
 });

@@ -484,4 +484,52 @@ describe('MerchantSetupChat', () => {
       );
     });
   });
+
+  it('preserves an uploaded logo pickedAsset after Change store name from the summary', async () => {
+    render(<MerchantSetupChat />);
+
+    fireEvent.click(screen.getByText(/Nigeria/));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByText('Fashion & Apparel'));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Kicks Hub' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Upload logo' }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Use this logo' })
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Use this logo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Looks good!' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change store name' }));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Lagos Kicks' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Launch my store' }));
+
+    await waitFor(() => {
+      expect(mocks.provisionMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessName: 'Lagos Kicks',
+          slug: 'lagos-kicks',
+        })
+      );
+      expect(mocks.persistProvisionedStoreLogo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          logoUrl: 'file:///tmp/uploaded-logo.png',
+          pickedAsset: {
+            uri: 'file:///tmp/uploaded-logo.png',
+            fileName: 'uploaded-logo.png',
+            mimeType: 'image/png',
+          },
+        })
+      );
+    });
+  });
 });

@@ -161,43 +161,23 @@ describe('guideBusinessOnboarding', () => {
     });
   });
 
-  it('extracts brand colors from a logo URL when bytes are unavailable (fallback)', async () => {
+  it('fails closed without invoking AI when guarded image byte fetch returns null', async () => {
     mockFetchImageBytes.mockResolvedValueOnce(null);
-    mockGenerateObject.mockResolvedValueOnce({
-      object: {
-        primary: '#111111',
-        background: '#FFFFFF',
-        accent: '#F59E0B',
-      },
-    } as Awaited<ReturnType<typeof generateObject>>);
 
-    const result = await guideBusinessOnboarding({
-      businessName: 'Baci Meds',
-      businessType: 'pharmaceuticals',
-      brandPreferences: 'green',
-      logoUrl: 'https://example.com/logo.png',
-      task: 'extract_colors',
-    });
+    await expect(
+      guideBusinessOnboarding({
+        businessName: 'Baci Meds',
+        businessType: 'pharmaceuticals',
+        brandPreferences: 'green',
+        logoUrl: 'https://example.com/logo.png',
+        task: 'extract_colors',
+      })
+    ).rejects.toThrow('Failed to extract brand colors.');
 
     expect(mockFetchImageBytes).toHaveBeenCalledWith(
       'https://example.com/logo.png'
     );
-    expect(result.brandColors).toEqual({
-      primary: '#111111',
-      background: '#FFFFFF',
-      accent: '#F59E0B',
-    });
-    expect(mockGenerateObject).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'test-text-model',
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            role: 'user',
-            content: [{ type: 'image', image: 'https://example.com/logo.png' }],
-          }),
-        ]),
-      })
-    );
+    expect(mockGenerateObject).not.toHaveBeenCalled();
   });
 
   it('extracts brand colors from fetched image bytes via the vision chain when bytes are available', async () => {

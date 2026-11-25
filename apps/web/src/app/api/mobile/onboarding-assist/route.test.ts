@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { getMobileBearerUser } from '../merchant-provisioning/get-mobile-bearer-user';
@@ -42,6 +42,7 @@ function makeRequest(body: unknown, rawBody?: string): NextRequest {
 describe('POST /api/mobile/onboarding-assist', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.co');
     mockGetMobileBearerUser.mockResolvedValue({
       authenticated: true,
       user: { id: 'user-123' } as never,
@@ -53,6 +54,10 @@ describe('POST /api/mobile/onboarding-assist', () => {
       remaining: 11,
       resetTime: Date.now() + 600_000,
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('returns 401 when bearer authentication fails', async () => {
@@ -146,7 +151,7 @@ describe('POST /api/mobile/onboarding-assist', () => {
     expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
-  it('applies the stricter image rate-limit buckets to extract_colors', async () => {
+  it('applies the stricter image rate-limit buckets to extract_colors for uploaded media URLs', async () => {
     mockGuideBusinessOnboarding.mockResolvedValueOnce({
       brandColors: {
         primary: '#111111',
@@ -161,7 +166,8 @@ describe('POST /api/mobile/onboarding-assist', () => {
         businessName: 'Kicks Hub',
         businessType: 'fashion',
         brandPreferences: 'black and gold',
-        logoUrl: 'https://cdn.usebaci.com/logo.png',
+        logoUrl:
+          'https://project.supabase.co/storage/v1/object/public/media/m-1/logo.png',
       })
     );
 
@@ -184,6 +190,22 @@ describe('POST /api/mobile/onboarding-assist', () => {
         failClosedWithoutRedis: true,
       })
     );
+  });
+
+  it('rejects extract_colors when logoUrl is outside the project media storage bucket', async () => {
+    const response = await POST(
+      makeRequest({
+        task: 'extract_colors',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'black and gold',
+        logoUrl: 'https://arbitrary.example.com/logo.png',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'invalid_logo_url' });
+    expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
   it('returns 400 for malformed JSON', async () => {

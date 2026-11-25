@@ -63,7 +63,6 @@ export function transitionFromBusinessName(
       },
       nextStep: 'summary',
       returnToSummary: false,
-      clearAiArtifacts: true,
       messages: summaryRecapMessages(trimmed),
     };
   }

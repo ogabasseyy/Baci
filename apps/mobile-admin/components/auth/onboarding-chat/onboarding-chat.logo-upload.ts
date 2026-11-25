@@ -14,6 +14,17 @@ export interface PickedLogoAsset {
 const DATA_URI_IMAGE_PATTERN =
   /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i;
 
+const ALLOWED_UPLOAD_IMAGE_MIMES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+]);
+
+function normalizeUploadImageMime(mimeType: string): string {
+  const lower = mimeType.trim().toLowerCase();
+  return lower === 'image/jpg' ? 'image/jpeg' : lower;
+}
+
 function decodeBase64ToBytes(base64: string): Uint8Array {
   const cleaned = base64.replace(/\s+/g, '');
   const binary = globalThis.atob(cleaned);
@@ -97,8 +108,17 @@ export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
   const uriExt = asset.uri.split('.').pop()?.toLowerCase();
   const fileNameExt = asset.fileName?.split('.').pop()?.toLowerCase();
   const fallbackExt = fileNameExt || uriExt || 'png';
-  const mimeType =
-    asset.mimeType || `image/${fallbackExt === 'jpg' ? 'jpeg' : fallbackExt}`;
+  const rawMime =
+    asset.mimeType ||
+    `image/${fallbackExt === 'jpg' ? 'jpeg' : fallbackExt === 'svg' ? 'svg+xml' : fallbackExt}`;
+  const mimeType = normalizeUploadImageMime(rawMime);
+  if (!ALLOWED_UPLOAD_IMAGE_MIMES.has(mimeType)) {
+    Alert.alert(
+      'Unsupported Format',
+      'Please choose a PNG, JPEG, or WebP image for your store logo.'
+    );
+    return null;
+  }
   const fileExt = extensionForImageMime(mimeType);
 
   return {
@@ -116,15 +136,19 @@ export async function uploadPickedLogoBestEffort(
   asset: PickedLogoAsset,
   merchantId: string
 ): Promise<string | null> {
+  const mimeType = normalizeUploadImageMime(asset.mimeType);
+  if (!ALLOWED_UPLOAD_IMAGE_MIMES.has(mimeType)) {
+    console.warn('Rejected unsupported onboarding logo MIME type:', mimeType);
+    return null;
+  }
+
   let persistedUrl: string | null = null;
   try {
-    const fileExt =
-      asset.fileName.split('.').pop()?.toLowerCase() ||
-      extensionForImageMime(asset.mimeType);
+    const fileExt = extensionForImageMime(mimeType);
     const bytes = await readUploadBytes(asset.uri);
     persistedUrl = await persistLogoBytesToMerchant({
       bytes,
-      contentType: asset.mimeType,
+      contentType: mimeType,
       fileExt,
       merchantId,
     });
@@ -236,5 +260,8 @@ export async function persistProvisionedStoreLogo(params: {
     const persistedUrl = await uploadDataUriLogoBestEffort(logoUrl, merchantId);
     return Boolean(persistedUrl);
   }
-  return true;
+  if (!logoUrl || /^https?:\/\//i.test(logoUrl)) {
+    return true;
+  }
+  return false;
 }

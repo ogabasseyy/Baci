@@ -1,3 +1,4 @@
+import { CHAT_REPLY_MAX_LENGTH } from '@baci/shared';
 import { z } from 'zod';
 
 /**
@@ -58,7 +59,7 @@ export const inboxSearchResponseSchema = z.object({
   page: z.number().int().positive(),
 });
 
-export const INBOX_REPLY_MAX_LENGTH = 2_000;
+export const INBOX_REPLY_MAX_LENGTH = CHAT_REPLY_MAX_LENGTH;
 
 export type InboxMessage = z.infer<typeof inboxMessageSchema>;
 export type InboxConversation = z.infer<typeof inboxConversationSchema>;

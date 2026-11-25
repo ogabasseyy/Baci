@@ -84,6 +84,7 @@ export * from './product-selection-params';
 export * from './product-selection-required';
 export * from './product-variant-media';
 export * from './product-variant-model';
+export * from './chat-reply-notification';
 export * from './push-notification-payloads';
 export * from './receipt-claim-url';
 export * from './redvault-eligibility';

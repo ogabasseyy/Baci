@@ -3,24 +3,18 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { resolveOxygenEnvironment } from '@/lib/payments/oxygen/environment';
 import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
+import { getTrustedClientIdentifier } from '@/lib/rate-limit-client';
 import { createClient } from '@/lib/supabase/server';
 import { oxygenStorefrontAvailabilityQuery } from '@/schemas/oxygen-storefront-availability';
-
-function readGuestRateLimitKey(request: NextRequest): string {
-  const forwarded = request.headers
-    .get('x-forwarded-for')
-    ?.split(',')[0]
-    ?.trim();
-  const realIp = request.headers.get('x-real-ip')?.trim();
-  return `guest:${forwarded || realIp || 'unknown'}`;
-}
 
 /** Display hint only. Workflow creation independently enforces the policy. */
 export async function GET(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
   const authenticated = !auth.error && Boolean(auth.user && auth.supabase);
   const rateLimitSubject =
-    authenticated && auth.user ? auth.user.id : readGuestRateLimitKey(request);
+    authenticated && auth.user
+      ? auth.user.id
+      : `guest:${getTrustedClientIdentifier(request)}`;
   try {
     if (
       !(

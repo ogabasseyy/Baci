@@ -34,6 +34,8 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
   );
   const merchantId = useAuthStore((state) => state.merchantId);
   const profile = getOxygenMobileProfile();
+  const profileApiOrigin = profile?.apiOrigin;
+  const profileMerchantId = profile?.merchantId;
   const usesLocalNetwork =
     profile?.environment === 'staging' && allowsLocalOxygenNetwork();
   const linked =
@@ -72,7 +74,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
 
   useEffect(() => {
     setReadiness(null);
-    if (!scope || !profile || !probeMode) return;
+    if (!scope || !profileApiOrigin || !profileMerchantId || !probeMode) return;
     let probe = 0;
     let delayedProbe: ReturnType<typeof setTimeout> | undefined;
     let previousState: 'unknown' | 'online' | 'offline' | undefined;
@@ -86,8 +88,8 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
               oxygenNativeSession().capabilities(true)
             )
           : checkGuestOxygenStorefrontAvailability(
-              profile.apiOrigin,
-              profile.merchantId
+              profileApiOrigin,
+              profileMerchantId
             ).then((available) => {
               if (!available) throw new Error(unavailable);
             });
@@ -141,7 +143,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
       clearTimeout(delayedProbe);
       unsubscribe();
     };
-  }, [probeMode, profile, scope, usesLocalNetwork]);
+  }, [probeMode, profileApiOrigin, profileMerchantId, scope, usesLocalNetwork]);
 
   if (!profile) return { visible: false, disabledReason: undefined };
   const disabledReason =

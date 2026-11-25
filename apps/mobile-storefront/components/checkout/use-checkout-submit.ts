@@ -68,10 +68,6 @@ export function useCheckoutSubmit({
   const merchantId = merchant?.id || CHECKOUT_MERCHANT_ID;
   const isMountedRef = useIsMountedRef();
   return async (address: ShippingAddressInput) => {
-    if (selectedPayment === 'oxygen' && !isAuthenticated) {
-      router.push('/auth/login?returnTo=/checkout');
-      return;
-    }
     const submittedCart = captureSubmittedCheckoutCart(selectedPayment);
     const { checkoutGenerationSnapshot, itemsSnapshot } = submittedCart;
     if (blockIfMixedPrizeCart(itemsSnapshot)) return;
@@ -95,6 +91,10 @@ export function useCheckoutSubmit({
       !paymentTab
     )
       return;
+    if (selectedPayment === 'oxygen' && !isAuthenticated) {
+      router.push('/auth/login?returnTo=/checkout');
+      return;
+    }
     // The REDVAULT fence holds the in-flight latch until completion.
     const submitFence = await acquireCheckoutSubmitFence({
       accountPassword,

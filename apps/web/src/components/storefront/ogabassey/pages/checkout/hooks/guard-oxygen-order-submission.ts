@@ -23,16 +23,23 @@ export async function guardOxygenOrderSubmission(
     context.processing.releaseSubmission();
     return true;
   }
+  if (context.payment.session.wallet.amountUsed > 0) {
+    toast({
+      title: 'Payment plan unavailable',
+      description: 'Wallet credit cannot be combined with Oxygen.',
+      variant: 'destructive',
+    });
+    context.processing.releaseSubmission();
+    return true;
+  }
   if (
     (!isOxygenStorefrontStagingEnabled() &&
       !(await checkOxygenStorefrontAvailability(merchantId))) ||
-    context.payment.currencyCode !== 'NGN' ||
-    context.payment.session.wallet.amountUsed > 0
+    context.payment.currencyCode !== 'NGN'
   ) {
     toast({
       title: 'Payment plan unavailable',
-      description:
-        'Oxygen is unavailable for this cart. Wallet credit cannot be combined with this payment plan.',
+      description: 'Oxygen is currently unavailable for this order.',
       variant: 'destructive',
     });
     context.processing.releaseSubmission();

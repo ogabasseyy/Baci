@@ -230,11 +230,11 @@ it.each([
   }
 });
 
-it('shows Oxygen in production for guests when storefront availability is open', async () => {
-  jest.mocked(getOxygenMobileProfile).mockReturnValue({
+it('shows Oxygen in production for guests when storefront availability is open without re-probing on fresh profile objects', async () => {
+  jest.mocked(getOxygenMobileProfile).mockImplementation(() => ({
     ...profile,
     environment: 'production',
-  });
+  }));
   const previousAuthImpl = jest.mocked(useAuthStore).getMockImplementation();
   jest.mocked(useAuthStore).mockImplementation((select) =>
     select({
@@ -244,17 +244,24 @@ it('shows Oxygen in production for guests when storefront availability is open',
     } as Parameters<typeof select>[0])
   );
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = jest.fn(
+  const fetchMock = jest.fn(
     async () =>
       ({
         ok: true,
         json: async () => ({ available: true }),
       }) as Response
   );
+  globalThis.fetch = fetchMock;
   try {
-    const { result } = renderHook(() => useOxygenCheckoutAvailability([]));
+    const { result, rerender } = renderHook(() =>
+      useOxygenCheckoutAvailability([])
+    );
     await waitFor(() => expect(result.current.visible).toBe(true));
+    rerender({});
+    await act(async () => {});
+    expect(result.current.visible).toBe(true);
     expect(result.current.disabledReason).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(mockCapabilities).not.toHaveBeenCalled();
   } finally {
     globalThis.fetch = originalFetch;

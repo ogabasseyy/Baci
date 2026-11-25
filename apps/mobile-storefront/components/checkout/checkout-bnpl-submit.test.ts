@@ -518,4 +518,39 @@ describe('submitBnplCheckout', () => {
       expect.objectContaining({ amount: 16500 })
     );
   });
+
+  it('returns fallback order completion context instead of throwing when server amountDueToGateway is zero', async () => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+      liveWalletSelection: { use: true, amount: 5000 },
+    };
+    const zeroDueResponse = {
+      amountDueToGateway: 0,
+      order: {
+        created_at: '2026-05-30T12:00:00.000Z',
+        id: 'order-zero-due',
+        order_number: 'BAC-ZERO',
+        payment_status: 'paid',
+        shipping_status: 'pending',
+        total: 21500,
+        tracking_token: 'tracking-token',
+      },
+      savings: null,
+      wallet: { amountUsed: 5000, newBalance: 0, transactionId: null },
+    };
+    mockCreateOrder.mockResolvedValueOnce(zeroDueResponse);
+    mockBuildCheckoutOrderRequest.mockReturnValueOnce({
+      payment_method: 'klump',
+    });
+
+    const result = await submitBnplCheckout(params);
+
+    expect(result).toEqual({
+      creditFields: { use_wallet_credit: true, wallet_amount: 5000 },
+      fallbackOrderResponse: zeroDueResponse,
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
 });

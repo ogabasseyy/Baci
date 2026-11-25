@@ -8,7 +8,6 @@ import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { captureSubmittedCheckoutCart } from './capture-submitted-checkout-cart';
-import { submitBnplCheckout } from './checkout-bnpl-submit';
 import { createCheckoutSnapshot } from './checkout-order-builders';
 import {
   blockIfMixedPrizeCart,
@@ -22,7 +21,7 @@ import { tryCaptureCheckoutSubmitRollbackState } from './checkout-submit-rollbac
 import { validateCheckoutSubmission } from './checkout-submit-validation';
 import { completeOxygenCheckout } from './complete-oxygen-checkout';
 import { completeSubmittedOrder } from './complete-submitted-order';
-import { createSubmittedCheckoutOrder } from './create-submitted-checkout-order';
+import { createOrSubmitCheckoutOrder } from './create-or-submit-checkout-order';
 import { isBnplPayment } from './is-bnpl-payment';
 import { resolveSharedCartCheckoutBinding } from './resolve-shared-cart-checkout-binding';
 import { restoreEmptiedCheckoutCart } from './restore-emptied-checkout-cart';
@@ -155,7 +154,6 @@ export function useCheckoutSubmit({
           walletBalance,
           walletSelection,
         });
-      trackCheckoutStep('review');
       const creditCoverage =
         (liveWalletSelection?.amount ?? 0) +
         (liveSavingsSelection?.amount ?? 0);
@@ -167,60 +165,39 @@ export function useCheckoutSubmit({
         (isZeroBalanceOrder && (selectedPayment === 'oxygen' || isBNPL))
           ? 'card'
           : selectedPayment;
-      if (isBNPL && !isZeroBalanceOrder) {
-        await submitBnplCheckout({
-          address,
-          appliedDiscountCode,
-          customerEmail,
-          customerName,
-          customerPhone,
-          deliveryMethod,
-          getShippingProvider,
-          isOrderInFlight,
-          itemsSnapshot: boundItemsSnapshot,
-          sharedCartBinding,
-          liveSavingsSelection,
-          liveWalletSelection,
-          checkoutGeneration: checkoutGenerationSnapshot,
-          mobileCheckoutIdempotencyRef,
-          onOrderCreated: orderIdentity.captureCreatedOrder,
-          paymentMethodForOrder,
-          paymentSettings,
-          selectedPayment,
-          selectedQuote,
-          setIsProcessing,
-          snapshot,
-        });
+      trackCheckoutStep('review');
+      const submittedOrder = await createOrSubmitCheckoutOrder({
+        address,
+        appliedDiscountCode,
+        boundItemsSnapshot,
+        checkoutGeneration: checkoutGenerationSnapshot,
+        customerEmail,
+        customerName,
+        customerPhone,
+        deliveryMethod,
+        getShippingProvider,
+        isAuthenticated,
+        isBNPL,
+        isOrderInFlight,
+        isVoucherOnlyCart,
+        isZeroBalanceOrder,
+        liveSavingsSelection,
+        liveWalletSelection,
+        mobileCheckoutIdempotencyRef,
+        onOrderCreated: orderIdentity.captureCreatedOrder,
+        paymentMethodForOrder,
+        paymentSettings,
+        selectedPayment,
+        selectedQuote,
+        setIsProcessing,
+        sharedCartBinding,
+        snapshot,
+        walletSelection,
+      });
+      if (!submittedOrder) {
         return;
       }
-      const { creditFields, orderResponse } =
-        await createSubmittedCheckoutOrder(
-          {
-            address,
-            appliedDiscountCode,
-            customerEmail,
-            customerName,
-            customerPhone,
-            deliveryMethod,
-            itemsSnapshot: boundItemsSnapshot,
-            liveSavingsSelection,
-            liveWalletSelection,
-            paymentMethodForOrder,
-            selectedQuote,
-            shippingProvider: getShippingProvider(),
-            snapshot,
-            sharedCartBinding,
-          },
-          {
-            checkoutGeneration: checkoutGenerationSnapshot,
-            isAuthenticated,
-            hasVoucher: isVoucherOnlyCart,
-            hasCredits:
-              walletSelection?.use === true ||
-              liveSavingsSelection?.use === true,
-          }
-        );
-      orderIdentity.captureCreatedOrder(orderResponse.order.id);
+      const { creditFields, orderResponse } = submittedOrder;
       submittedGeneration.track(orderResponse);
       const rollbackCapture = await tryCaptureCheckoutSubmitRollbackState(
         submittedGeneration.current(),

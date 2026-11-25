@@ -48,6 +48,11 @@ export function sumPositiveLedgerAmounts(rows: unknown): number {
   }, 0);
 }
 
+export function isOxygenPreGatewayStatus(status?: string | null): boolean {
+  const normalized = (status ?? 'unpaid').trim().toLowerCase();
+  return normalized === 'unpaid' || normalized === 'pending';
+}
+
 export function getOxygenOrderPreGatewayPaid(
   order: Pick<
     z.infer<typeof oxygenCheckoutOrderSchema>,
@@ -62,7 +67,7 @@ export function getOxygenOrderPreGatewayPaid(
   const walletColumn = Math.max(order.wallet_amount_used ?? 0, 0);
   const walletLedger = Math.max(order.wallet_ledger_used ?? 0, 0);
   const savingsLedger = Math.max(order.savings_ledger_used ?? 0, 0);
-  if ((order.payment_status ?? 'unpaid') !== 'unpaid') {
+  if (!isOxygenPreGatewayStatus(order.payment_status)) {
     return Math.min(
       Math.max(walletColumn, walletLedger) + savingsLedger,
       order.total

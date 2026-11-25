@@ -1,15 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sumPositiveLedgerAmounts } from '@/schemas/oxygen-checkout-order';
 
+export type StorefrontOrderLedgerCreditResult =
+  | { ok: true; walletLedgerUsed: number; savingsLedgerUsed: number }
+  | { ok: false };
+
 /**
  * Sums pre-gateway wallet and device-savings ledger redemptions for a signed-in
  * storefront order lookup so BNPL launchers use the authoritative net balance
  * even if the best-effort orders.amount_paid/wallet_amount_used sync lags.
+ * Fails closed so callers never fabricate zero credit on lookup errors.
  */
 export async function fetchStorefrontOrderLedgerCredit(
   supabase: Pick<SupabaseClient, 'from'>,
   orderId: string
-): Promise<{ walletLedgerUsed: number; savingsLedgerUsed: number }> {
+): Promise<StorefrontOrderLedgerCreditResult> {
   const [
     { data: walletRows, error: walletError },
     { data: savingsRows, error: savingsError },
@@ -31,10 +36,11 @@ export async function fetchStorefrontOrderLedgerCredit(
       walletError,
       savingsError,
     });
-    return { walletLedgerUsed: 0, savingsLedgerUsed: 0 };
+    return { ok: false };
   }
 
   return {
+    ok: true,
     walletLedgerUsed: sumPositiveLedgerAmounts(walletRows),
     savingsLedgerUsed: sumPositiveLedgerAmounts(savingsRows),
   };

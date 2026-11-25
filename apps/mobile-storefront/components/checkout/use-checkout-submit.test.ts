@@ -1160,4 +1160,46 @@ describe('useCheckoutSubmit', () => {
       })
     );
   });
+
+  it('completes a BNPL submit through standard zero-balance finalization when server amountDueToGateway is zero', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
+    const fallbackOrderResponse = {
+      ...createOrderResponseFixture({
+        orderId: 'order-bnpl-zero',
+        orderNumber: 'ORD-BZ',
+      }),
+      amountDueToGateway: 0,
+    };
+    mockSubmitBnplCheckout.mockResolvedValueOnce({
+      creditFields: { use_wallet_credit: true, wallet_amount: 5000 },
+      fallbackOrderResponse,
+    });
+    const { finalizeCheckoutPayment } = jest.requireMock(
+      './checkout-payment-finalization'
+    ) as { finalizeCheckoutPayment: jest.Mock };
+    const params = createParams({
+      isAuthenticated: true,
+      selectedPayment: 'klump',
+      user: { id: 'auth-user-1' },
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+    await act(async () => {
+      await result.current(address);
+    });
+    expect(finalizeCheckoutPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderResponse: fallbackOrderResponse,
+        selectedPayment: 'klump',
+      })
+    );
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+  });
 });

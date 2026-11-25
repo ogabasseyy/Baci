@@ -587,3 +587,57 @@ it('subtracts device savings ledger credit on settled bnpl_approved orders', asy
   expect(summary).toHaveTextContent('₦250,000.00');
   expect(screen.getByText('Plan amount: 250000')).toBeVisible();
 });
+
+it('rejects a pending Oxygen order covered 100% by store credit', async () => {
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+        payment_status: 'pending',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'customer',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 400000,
+        wallet_amount_used: 400000,
+        order_items: [],
+      },
+      error: null,
+    });
+  await expect(
+    OxygenStorefrontCheckout({
+      orderId: id,
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+    })
+  ).rejects.toThrow('not found');
+});

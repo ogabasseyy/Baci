@@ -160,6 +160,12 @@ export async function GET(
         const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null, email ?? null);
         // biome-ignore format: compact call preserves the 300-line route gate.
         const ledgerCredit = await fetchStorefrontOrderLedgerCredit(supabase, order.id);
+        if (!ledgerCredit.ok) {
+          return NextResponse.json(
+            { error: 'Failed to verify order store credit' },
+            { status: 500 }
+          );
+        }
 
         return NextResponse.json(
           sanitizePublicOrder({

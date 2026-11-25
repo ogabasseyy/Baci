@@ -510,4 +510,55 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       'wallet_amount_used'
     );
   });
+
+  it('returns 500 when the store-credit ledger lookup fails instead of zeroing credit', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          payment_status: 'unpaid',
+          amount_paid: 0,
+          wallet_amount_used: 0,
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    const failingLedgerQuery = Object.assign(
+      Promise.resolve({ data: null, error: { message: 'ledger error' } }),
+      {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+      }
+    );
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+        customer_savings_redemptions: failingLedgerQuery,
+      })
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to verify order store credit');
+    expect(data.savings_ledger_used).toBeUndefined();
+    expect(data.wallet_ledger_used).toBeUndefined();
+  });
 });

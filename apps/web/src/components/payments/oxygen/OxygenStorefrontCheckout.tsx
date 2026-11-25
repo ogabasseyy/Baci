@@ -7,6 +7,7 @@ import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-ori
 import { createClient } from '@/lib/supabase/server';
 import {
   getOxygenOrderNetPayable,
+  isOxygenPreGatewayStatus,
   oxygenCheckoutOrderSchema,
   sumPositiveLedgerAmounts,
 } from '@/schemas/oxygen-checkout-order';
@@ -104,7 +105,7 @@ export async function OxygenStorefrontCheckout({
     savings_ledger_used: sumPositiveLedgerAmounts(savingsLedgerRows),
   };
   const netPayable = getOxygenOrderNetPayable(order);
-  if ((order.payment_status ?? 'unpaid') === 'unpaid' && netPayable <= 0) {
+  if (isOxygenPreGatewayStatus(order.payment_status) && netPayable <= 0) {
     notFound();
   }
   const names = order.customer_name?.trim().split(/\s+/) ?? [];

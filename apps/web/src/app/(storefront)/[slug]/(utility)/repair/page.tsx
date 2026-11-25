@@ -11,6 +11,10 @@ import { isRepairsCatalogEnabled } from '@/lib/repairs/repairs-feature';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
+import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
@@ -91,15 +95,32 @@ export async function generateMetadata({
   }
 
   const baseUrl = buildStoreUrl(merchant);
+  const canonicalUrl = `${baseUrl}/repair`;
+  const { metadataTitle, title } = buildStorefrontMetadataTitle({
+    title: `Book a Repair - ${merchant.business_name}`,
+    fallback: 'Book a Repair',
+  });
+  const description = `Book phone, laptop, console and gadget repairs with ${merchant.business_name}. Check diagnosis, fault details, service expectations and support before submitting a repair request.`;
 
   return {
-    title: buildStorefrontMetadataTitle({
-      title: `Book a Repair - ${merchant.business_name}`,
-      fallback: 'Book a Repair',
-    }).metadataTitle,
-    description: `Book phone, laptop, console and gadget repairs with ${merchant.business_name}. Check diagnosis, fault details, service expectations and support before submitting a repair request.`,
+    title: metadataTitle,
+    description,
     alternates: {
-      canonical: `${baseUrl}/repair`,
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      type: 'website',
+      siteName: merchant.business_name,
+      images: getStorefrontOpenGraphImages(baseUrl, title, merchant.logo_url),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: getStorefrontTwitterImages(baseUrl, merchant.logo_url),
     },
   };
 }

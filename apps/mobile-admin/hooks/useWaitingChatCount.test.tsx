@@ -63,6 +63,7 @@ describe('useWaitingChatCount', () => {
   it('bugfix: says the count may be higher while more pages are still to load', () => {
     mocks.conversations.mockReturnValue({
       data: { pages: [{ conversations: [chat(1), chat(2)] }] },
+      fetchNextPage: vi.fn(),
       hasNextPage: true,
     });
 
@@ -70,5 +71,53 @@ describe('useWaitingChatCount', () => {
       count: 2,
       hasMore: true,
     });
+  });
+
+  it('bugfix: counts a chat once when it shows up on two pages', () => {
+    mocks.conversations.mockReturnValue({
+      data: {
+        pages: [
+          { conversations: [chat(1), chat(2)] },
+          { conversations: [chat(2)] },
+        ],
+      },
+    });
+
+    expect(renderHook(() => useWaitingChatCount()).result.current.count).toBe(
+      2
+    );
+  });
+});
+
+/** A query with more pages behind the ones loaded. */
+const morePages = (pages: number, state: Record<string, boolean> = {}) => {
+  const fetchNextPage = vi.fn();
+  mocks.conversations.mockReturnValue({
+    data: {
+      pages: Array.from({ length: pages }, () => ({ conversations: [] })),
+    },
+    fetchNextPage,
+    hasNextPage: true,
+    isError: false,
+    isFetching: false,
+    ...state,
+  });
+  renderHook(() => useWaitingChatCount());
+  return fetchNextPage;
+};
+
+describe('useWaitingChatCount reaching an exact count', () => {
+  it('bugfix: follows the pages to their end instead of stopping at the first', () => {
+    // A non-empty page always reports more, even when nothing else is waiting.
+    expect(morePages(1)).toHaveBeenCalledWith({ cancelRefetch: false });
+  });
+
+  it('stops after the same number of pages as the list', () => {
+    expect(morePages(5)).not.toHaveBeenCalled();
+  });
+
+  it('waits for a running fetch and does not repeat a failed one', () => {
+    expect(morePages(1, { isFetching: true })).not.toHaveBeenCalled();
+    expect(morePages(1, { isError: true })).not.toHaveBeenCalled();
   });
 });

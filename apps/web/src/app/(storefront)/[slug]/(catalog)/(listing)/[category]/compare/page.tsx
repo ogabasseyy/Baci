@@ -11,10 +11,15 @@ import {
   generateMetaDescription,
   getIndexableRobotsMetadata,
 } from '@/lib/seo-utils';
+import { buildStoreUrl } from '@/lib/store-url';
 import {
   getStorefrontPathPrefix,
   resolveStorefrontPathHref,
 } from '@/lib/storefront-path-prefix';
+import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
 import { buildCategoryCompareHubLinks } from './category-compare-hub-links';
 import { CompareIndexPageContent } from './compare-index-page-content';
 import { loadCategoryCompareHubData } from './load-category-compare-hub-data';
@@ -146,6 +151,8 @@ export async function generateMetadata({
     }
   );
 
+  const baseUrl = buildStoreUrl(data.merchant);
+
   return {
     title,
     description,
@@ -168,11 +175,17 @@ export async function generateMetadata({
       url: data.canonicalUrl,
       type: 'website',
       siteName: data.merchant.business_name,
+      images: getStorefrontOpenGraphImages(
+        baseUrl,
+        title,
+        data.merchant.logo_url
+      ),
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
+      images: getStorefrontTwitterImages(baseUrl, data.merchant.logo_url),
     },
   };
 }

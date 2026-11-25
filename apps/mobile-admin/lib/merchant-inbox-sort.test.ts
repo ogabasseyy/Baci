@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 import { isFollowUpDue, sortInbox } from './merchant-inbox-sort';
 
@@ -45,6 +45,8 @@ describe('sortInbox', () => {
   });
 
   it('shows due follow-ups before ones still snoozed, soonest first', () => {
+    // Both snooze times are still ahead.
+    vi.useFakeTimers({ now: new Date('2026-11-22T12:00:00.000Z') });
     const sorted = sortInbox(
       [
         chat(1, {
@@ -61,6 +63,7 @@ describe('sortInbox', () => {
       ],
       'follow_up'
     );
+    vi.useRealTimers();
     expect(ids(sorted)).toEqual([3, 2, 1]);
   });
 
@@ -100,6 +103,17 @@ describe('isFollowUpDue', () => {
       false
     );
     expect(isFollowUpDue(chat(1))).toBe(false);
+  });
+
+  it('bugfix: is due once the snooze time passes, before the chat reopens', () => {
+    // The chat engine reopens a snoozed chat a little after its time.
+    const now = new Date('2026-11-25T12:00:00.000Z');
+    const snoozed = (snoozedUntil: string) =>
+      chat(1, { followUp: true, status: 'snoozed', snoozedUntil });
+
+    expect(isFollowUpDue(snoozed('2026-11-25T11:59:00.000Z'), now)).toBe(true);
+    expect(isFollowUpDue(snoozed('2026-11-25T12:00:00.000Z'), now)).toBe(true);
+    expect(isFollowUpDue(snoozed('2026-11-25T12:01:00.000Z'), now)).toBe(false);
   });
 });
 

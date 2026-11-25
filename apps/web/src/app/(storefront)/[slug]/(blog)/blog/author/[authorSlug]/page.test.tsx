@@ -113,9 +113,9 @@ describe('blog author page metadata', () => {
       searchParams: Promise.resolve({}),
     });
 
-    expect(metadata.title).toBe(
-      'Bassey John — Performance Marketing Specialist at Ogabassey'
-    );
+    expect(metadata.title).toEqual({
+      absolute: 'Bassey John — Performance Marketing Specialist | Ogabassey',
+    });
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/blog/author/bassey-john'
     );

@@ -83,7 +83,12 @@ export function TagSheet({
       <Text style={[styles.title, { color: colors.text }]}>Tags</Text>
       <Text style={[styles.hint, { color: colors.textSecondary }]}>
         {full
-          ? 'This chat has 5 tags. Remove one to add another.'
+          ? // Tags added outside the app can take a chat past the limit.
+            `This chat has ${selected.length} tags. Remove ${
+              selected.length === MAX_TAGS
+                ? 'one'
+                : selected.length - MAX_TAGS + 1
+            } to add another.`
           : 'Tap to add or remove. Tags help you find chats later.'}
       </Text>
       <View style={styles.chips}>

@@ -8,6 +8,9 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 export function AppKeyboardProvider({ children }: { children: ReactNode }) {
   // Controller 1.22.7 preloads by focusing a hidden iOS text field, which can
   // stall launch or flash over Spotlight. Let the first input open it.
+  // The translucent and edge-to-edge props state the layout the app already has
+  // (edgeToEdgeEnabled=true): on Android the library then turns them on
+  // whatever is passed, so they change no other screen.
   return (
     <KeyboardProvider
       navigationBarTranslucent

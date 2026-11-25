@@ -25,6 +25,7 @@ function createValidFeatureSettings() {
     klump_enabled: false,
     klump_min_amount: 10000,
     klump_max_amount: 500000,
+    oxygen_enabled: false,
     preferred_local_gateway: 'paystack' as const,
     preferred_international_gateway: 'paystack' as const,
     // Shipping
@@ -182,6 +183,7 @@ describe('merchantFeatureSettingsSchema', () => {
         klump_enabled,
         klump_min_amount,
         klump_max_amount,
+        oxygen_enabled,
         ...withoutKlumpSettings
       } = settings;
 
@@ -193,7 +195,23 @@ describe('merchantFeatureSettingsSchema', () => {
         expect(result.data.klump_enabled).toBe(false);
         expect(result.data.klump_min_amount).toBe(10_000);
         expect(result.data.klump_max_amount).toBe(1_000_000);
+        expect(result.data.oxygen_enabled).toBe(false);
       }
+    });
+
+    it('accepts oxygen_enabled = true and oxygen_enabled = false', () => {
+      expect(
+        merchantFeatureSettingsSchema.safeParse({
+          ...createValidFeatureSettings(),
+          oxygen_enabled: true,
+        }).success
+      ).toBe(true);
+      expect(
+        merchantFeatureSettingsSchema.safeParse({
+          ...createValidFeatureSettings(),
+          oxygen_enabled: false,
+        }).success
+      ).toBe(true);
     });
 
     it('accepts empty arrays for shipping_providers', () => {

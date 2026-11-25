@@ -83,6 +83,21 @@ export async function readOxygenMobileCapabilities(
         : !origins.hosted.length || !origins.selfie.length
           ? 'Hosted verification is not configured.'
           : null;
+    if (reason === null && environment === 'staging') {
+      const featureSettings = await client.rpc(
+        'get_storefront_payment_settings',
+        { p_merchant_id: row.data.merchant_id }
+      );
+      if (featureSettings.error || !Array.isArray(featureSettings.data)) {
+        return { ok: false, status: 503 };
+      }
+      const settingsRow = featureSettings.data[0] as
+        | { oxygen_enabled?: unknown }
+        | undefined;
+      if (settingsRow?.oxygen_enabled !== true) {
+        reason = 'Oxygen is disabled for this storefront.';
+      }
+    }
     if (reason === null && environment === 'production') {
       const admission = await client.rpc('oxygen_storefront_pilot_available', {
         p_merchant_id: row.data.merchant_id,

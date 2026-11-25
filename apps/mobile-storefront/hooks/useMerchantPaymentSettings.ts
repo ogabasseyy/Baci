@@ -19,6 +19,7 @@ export interface PaymentSettings {
   credpal_enabled: boolean;
   credit_direct_enabled: boolean;
   klump_enabled: boolean;
+  oxygen_enabled: boolean;
   klump_min_amount: number;
   klump_max_amount: number;
   pay_on_delivery_enabled: boolean;
@@ -71,6 +72,7 @@ export function normalizePaymentSettings(
     credpal_enabled: false,
     credit_direct_enabled: row?.credit_direct_enabled === true,
     klump_enabled: row?.klump_enabled === true,
+    oxygen_enabled: row?.oxygen_enabled === true,
     klump_min_amount: safeNumber(row?.klump_min_amount, 0),
     klump_max_amount: safeNumber(row?.klump_max_amount, 0),
     pay_on_delivery_enabled: row?.pay_on_delivery_enabled === true,

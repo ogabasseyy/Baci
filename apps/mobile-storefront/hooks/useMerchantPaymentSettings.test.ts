@@ -77,10 +77,28 @@ describe('normalizePaymentSettings', () => {
     expect(normalizePaymentSettings(settings as never)).toMatchObject({
       klump_max_amount: 0,
       klump_min_amount: 0,
+      oxygen_enabled: false,
       paystack_enabled: true,
       vat_rate: DEFAULT_FALLBACK_VAT_RATE_PERCENT,
       wallet_order_auto_debit_enabled: false,
       wallet_paystack_dva_enabled: false,
+    });
+  });
+
+  it('normalizes oxygen_enabled to true only when explicitly enabled', () => {
+    expect(
+      normalizePaymentSettings({
+        oxygen_enabled: true,
+      })
+    ).toMatchObject({
+      oxygen_enabled: true,
+    });
+    expect(
+      normalizePaymentSettings({
+        oxygen_enabled: false,
+      })
+    ).toMatchObject({
+      oxygen_enabled: false,
     });
   });
 

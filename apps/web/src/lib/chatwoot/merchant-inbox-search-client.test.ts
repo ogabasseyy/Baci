@@ -88,7 +88,7 @@ describe('searchMerchantInboxConversations', () => {
   });
 
   it('drops other stores chats without reading them', async () => {
-    const { calls } = stub({
+    const { asked } = stub({
       contact: {
         payload: { conversations: [contactRow(1, 20), contactRow(9, 99)] },
       },
@@ -103,9 +103,7 @@ describe('searchMerchantInboxConversations', () => {
     expect(result.ok && result.results.map((r) => r.conversation.id)).toEqual([
       1,
     ]);
-    expect(calls.some((u) => u.pathname.endsWith('/conversations/9'))).toBe(
-      false
-    );
+    expect(asked).toEqual([[1]]);
   });
 
   it('never shows a chat whose full read says it is in another inbox', async () => {
@@ -125,7 +123,7 @@ describe('searchMerchantInboxConversations', () => {
   });
 
   it('merges both searches, shows a chat once and keeps the shopper snippet', async () => {
-    const { calls } = stub({
+    const { asked } = stub({
       contact: { payload: { conversations: [contactRow(1, 20)] } },
       message: {
         meta: {},
@@ -144,10 +142,8 @@ describe('searchMerchantInboxConversations', () => {
     expect(result).toMatchObject({
       results: [{ conversation: { id: 1 }, snippet: 'Is it in stock' }],
     });
-    // One full read, not two.
-    expect(
-      calls.filter((u) => u.pathname.endsWith('/conversations/1'))
-    ).toHaveLength(1);
+    // Asked for once, not once per search.
+    expect(asked).toEqual([[1]]);
   });
 
   it('never quotes staff messages: private notes look like public replies in search', async () => {

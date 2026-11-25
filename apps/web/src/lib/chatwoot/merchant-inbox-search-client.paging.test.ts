@@ -30,7 +30,7 @@ describe('searchMerchantInboxConversations paging and volume', () => {
     ).resolves.toEqual({ ok: true, results: [], hasMore: false });
   });
 
-  it('reads at most the providers own page size, never an unbounded fan-out', async () => {
+  it('reads at most the providers own page size, in two requests not forty', async () => {
     // An answer far larger than Chatwoot ever sends (25 and 15 per page).
     const contact = Array.from({ length: 100 }, (_, i) =>
       contactRow(i + 1, 20)
@@ -42,7 +42,7 @@ describe('searchMerchantInboxConversations paging and volume', () => {
     for (const row of [...contact, ...message]) {
       reads[row.id] = { ...named(row.id, `Shopper ${row.id}`) };
     }
-    const { calls } = stub({
+    const { asked, fetchMock } = stub({
       contact: { payload: { conversations: contact } },
       message: { meta: {}, payload: message },
       reads,
@@ -53,16 +53,15 @@ describe('searchMerchantInboxConversations paging and volume', () => {
       page: 1,
     });
 
-    const reads_ = calls.filter((u) =>
-      /\/conversations\/\d+$/.test(u.pathname)
-    );
-    expect(reads_).toHaveLength(40);
+    expect(asked.map((ids) => ids.length)).toEqual([25, 15]);
+    // The two searches and the two filtered reads: nothing per chat.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(result.ok && result.results).toHaveLength(40);
   });
 
   it('makes no conversation reads for a page made only of other stores chats', async () => {
     const other = Array.from({ length: 100 }, (_, i) => contactRow(i + 1, 99));
-    const { calls } = stub({
+    const { asked } = stub({
       contact: { payload: { conversations: other } },
       message: { meta: {}, payload: other.map((r) => messageRow(r.id, 99)) },
     });
@@ -72,9 +71,7 @@ describe('searchMerchantInboxConversations paging and volume', () => {
       page: 1,
     });
 
-    expect(
-      calls.filter((u) => /\/conversations\/\d+$/.test(u.pathname))
-    ).toHaveLength(0);
+    expect(asked).toEqual([]);
     // Nothing for this store here, but the provider has more pages to look at.
     expect(result).toEqual({ ok: true, results: [], hasMore: true });
   });
@@ -130,11 +127,11 @@ describe('searchMerchantInboxConversations paging and volume', () => {
 describe('bugfix: a page must not silently lose a match', () => {
   const rows = [contactRow(1, 20), contactRow(2, 20)];
 
-  it('reports unavailable when one match could not be read, so the page can be asked for again', async () => {
+  it('reports unavailable when the matches could not be read, so the page can be asked for again', async () => {
     stub({
       contact: { payload: { conversations: rows } },
       reads: { 1: named(1, 'Ada') },
-      readStatus: { 2: 503 },
+      readStatus: 503,
     });
 
     await expect(
@@ -143,7 +140,7 @@ describe('bugfix: a page must not silently lose a match', () => {
   });
 
   it('still leaves out a chat that is gone while keeping the others', async () => {
-    // Chat 2 was deleted or moved: a plain 404, not an engine problem.
+    // Chat 2 was deleted or moved: simply not in the engine's answer.
     stub({
       contact: { payload: { conversations: rows } },
       reads: { 1: named(1, 'Ada') },
@@ -162,7 +159,7 @@ describe('bugfix: a page must not silently lose a match', () => {
 
 describe('bugfix: a page of chats that are all gone is an empty page, not an error', () => {
   it('lets paging move past hits that no longer exist', async () => {
-    // Every hit is a plain 404: deleted or moved since the search indexed it.
+    // Every hit was deleted or moved since the search indexed it.
     stub({
       contact: {
         payload: { conversations: [contactRow(1, 20), contactRow(2, 20)] },

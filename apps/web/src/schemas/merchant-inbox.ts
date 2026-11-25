@@ -65,6 +65,11 @@ export const providerInboxConversationListSchema = z.object({
   }),
 });
 
+/** `POST /conversations/filter`: the list's rows, without its `data` wrapper. */
+export const providerInboxFilteredListSchema = z.object({
+  payload: z.array(z.unknown()).max(MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE),
+});
+
 export const providerInboxMessageListSchema = z.object({
   payload: z.array(z.unknown()).max(200),
 });

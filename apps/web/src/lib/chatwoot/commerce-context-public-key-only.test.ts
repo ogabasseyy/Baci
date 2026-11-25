@@ -37,6 +37,31 @@ async function issueSessionToken() {
   return verified;
 }
 
+describe('bugfix: a verify-only configuration spent the one-time challenge', () => {
+  it('fails with invalid_config before consuming the nonce when the signing key is missing', async () => {
+    const challengeToken = await makeChallenge();
+    const { [PRIVATE_KEY_VAR]: _privateKey, ...withoutPrivate } = env;
+    const publicOnlyEnv: NodeJS.ProcessEnv = {
+      ...withoutPrivate,
+      [PUBLIC_KEY_VAR]: await exportSPKI(challengePublicKey),
+    };
+    const consume = vi.fn(async () => undefined);
+
+    await expect(
+      verifyChatwootCommerceContext({
+        challengeToken,
+        contextToken: await makeContextToken(challengeToken),
+        state,
+        binding: getChatwootTenantBinding(merchantId, publicOnlyEnv),
+        env: publicOnlyEnv,
+        now: new Date(fixedTime.getTime() + 2_000),
+        consume,
+      })
+    ).rejects.toMatchObject({ code: 'invalid_config' });
+    expect(consume).not.toHaveBeenCalled();
+  });
+});
+
 describe('bugfix: reading a chat session needed the private signing key', () => {
   it('verifies a privately signed session token with only the public key configured', async () => {
     const verified = await issueSessionToken();

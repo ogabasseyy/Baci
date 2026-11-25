@@ -185,6 +185,9 @@ export async function verifyChatwootCommerceContext(input: {
     throw new ChatwootCommerceContextError('invalid_context');
   }
 
+  // Load the signing key before spending the one-time nonce: verification can
+  // succeed with only the public key, and that must not burn the challenge.
+  const privateKey = await importPKCS8(challengePrivateKeyPem(env), 'RS256');
   const ttl = challenge.exp - nowSeconds;
   await (input.consume ?? consumeNonce)(
     input.state.merchantId,
@@ -192,7 +195,6 @@ export async function verifyChatwootCommerceContext(input: {
     ttl
   );
   const sessionExpiresAt = nowSeconds + CHATWOOT_SESSION_TTL_SECONDS;
-  const privateKey = await importPKCS8(challengePrivateKeyPem(env), 'RS256');
   const sessionToken = await new SignJWT({
     cart_id: input.state.cartId,
     cart_session_sha256: input.state.cartSessionSha256,

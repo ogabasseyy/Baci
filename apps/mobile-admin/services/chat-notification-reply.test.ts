@@ -36,7 +36,11 @@ vi.mock('./push-notifications', () => ({
   },
 }));
 
-import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
+import {
+  inboxConversationsKey,
+  inboxSearchPrefix,
+  inboxThreadKey,
+} from '@/lib/inbox-query-keys';
 import {
   handleChatReplyResponse,
   registerChatReplyCategory,
@@ -90,7 +94,7 @@ describe('handleChatReplyResponse: a reply that is sent', () => {
     expect(deps.alert).not.toHaveBeenCalled();
   });
 
-  it("bugfix: refreshes only that store's chat and list, using the real keys", async () => {
+  it("bugfix: refreshes only that store's chat, list and search results, using the real keys", async () => {
     const { router, deps } = setup(mocks.send);
 
     await handleChatReplyResponse(router, reply('Hello'), deps);
@@ -98,7 +102,9 @@ describe('handleChatReplyResponse: a reply that is sent', () => {
     const filters = deps.invalidate.mock.calls.map((c) => c[0]);
     expect(filters).toContainEqual({ queryKey: inboxThreadKey(STORE, 21) });
     expect(filters).toContainEqual({ queryKey: inboxConversationsKey(STORE) });
-    expect(filters).toHaveLength(2);
+    // Cached search results hold whole chat snapshots, so they go stale too.
+    expect(filters).toContainEqual({ queryKey: inboxSearchPrefix(STORE) });
+    expect(filters).toHaveLength(3);
   });
 
   it('bugfix: an upper-case store id in the push is sent and refreshed in lower case', async () => {

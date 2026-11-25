@@ -7,7 +7,11 @@ import type * as NotificationsType from 'expo-notifications';
 import type { Href } from 'expo-router';
 import { Alert } from 'react-native';
 import { NetworkError } from '@/lib/api-errors';
-import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
+import {
+  inboxConversationsKey,
+  inboxSearchPrefix,
+  inboxThreadKey,
+} from '@/lib/inbox-query-keys';
 import { isDefinitelyNotSent, sendInboxReply } from '@/lib/merchant-inbox-api';
 import { queryClient } from '@/lib/query-client';
 import { INBOX_REPLY_MAX_LENGTH } from '@/schemas/merchant-inbox';
@@ -204,6 +208,8 @@ async function sendChatReply(
   try {
     deps.invalidate({ queryKey: inboxThreadKey(merchantId, conversationId) });
     deps.invalidate({ queryKey: inboxConversationsKey(merchantId) });
+    // Cached search results hold whole chat snapshots, so they go stale too.
+    deps.invalidate({ queryKey: inboxSearchPrefix(merchantId) });
   } catch {
     // The chat refreshes when it opens anyway.
   }

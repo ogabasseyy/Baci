@@ -14,22 +14,10 @@ const patchPath = join(
 
 // Swift 6.4.2 (Xcode 27.2) crashes in SILGen on a cast pattern inside a `switch consume` over a
 // noncopyable `Result` payload. The crash hits Debug and Release (-O) builds of ExpoModulesCore.
+// Both Expo apps share the one hoisted, root-patched copy, so this also covers mobile-storefront.
 const CAST_PATTERN_IN_FAILURE_CASE = /case \.failure\(let \w+ as any Error\)/;
 
 describe('bugfix: expo-modules-core AsyncFunctionDefinition crashes the Swift 6.4.2 compiler', () => {
-  it('flags the upstream cast pattern that crashes the compiler', () => {
-    const upstreamSnippet = [
-      'switch consume result {',
-      'case .success(let value):',
-      '  promise.resolve(value)',
-      'case .failure(let error as any Error):',
-      '  promise.reject(error)',
-      '}',
-    ].join('\n');
-
-    expect(upstreamSnippet).toMatch(CAST_PATTERN_IN_FAILURE_CASE);
-  });
-
   it('keeps the installed async function builder free of the redundant `as any Error` cast pattern', () => {
     const source = readFileSync(asyncFunctionSourcePath, 'utf8');
 
@@ -42,11 +30,13 @@ describe('bugfix: expo-modules-core AsyncFunctionDefinition crashes the Swift 6.
 
   it('carries the fix in the pnpm patch so a fresh install reproduces it', () => {
     const patch = readFileSync(patchPath, 'utf8');
+    // pnpm applies the patch only if its `-` lines match the published file: this is upstream's text.
+    const removedUpstreamLine = patch.match(/^-\s+case \.failure\(.*$/m)?.[0];
 
     expect(patch).toContain(
       'diff --git a/ios/Core/Functions/AsyncFunctionDefinition.swift'
     );
-    expect(patch).toMatch(/^-\s+case \.failure\(let error as any Error\):$/m);
+    expect(removedUpstreamLine).toMatch(CAST_PATTERN_IN_FAILURE_CASE);
     expect(patch).toMatch(/^\+\s+case \.failure\(let error\):$/m);
   });
 });

@@ -80,8 +80,11 @@ BEGIN
 END
 $cache_projection$;
 
--- Backfill `oxygen_enabled = true` for merchants that currently have an enabled
--- production row in `oxygen_private.runtime_bindings`.
+-- Backfill `oxygen_enabled = true` only for merchants that currently have an
+-- enabled production row in `oxygen_private.runtime_bindings` (preserving live
+-- production merchants such as Ogabassey with zero regression). Staging-only
+-- runtime bindings intentionally stay fail-closed (`false`) until toggled on
+-- in merchant admin Payments settings.
 DO $oxygen_backfill$
 DECLARE
   v_claims text := pg_catalog.current_setting('request.jwt.claims', true);
@@ -180,13 +183,16 @@ BEGIN
     AND o.payment_method = 'oxygen'
   FOR SHARE OF o, c;
 
-  IF FOUND AND NOT EXISTS (
-    SELECT 1
+  IF FOUND THEN
+    PERFORM 1
     FROM public.merchant_feature_settings AS s
     WHERE s.merchant_id = v_merchant_id
       AND s.oxygen_enabled IS TRUE
-  ) THEN
-    RAISE EXCEPTION 'Provider connection unavailable' USING ERRCODE = '42501';
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Provider connection unavailable' USING ERRCODE = '42501';
+    END IF;
   END IF;
 
   RETURN oxygen_private.start_workflow(p_order_id, p_channel);

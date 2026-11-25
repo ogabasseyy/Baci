@@ -74,6 +74,10 @@ export async function handleAdminRollback(
   }
 
   const channel = payload.channel ?? 'production';
+  const fingerprint = JSON.stringify({
+    targetUpdateId: payload.targetUpdateId ?? null,
+    toEmbedded: Boolean(payload.toEmbedded),
+  });
   const pointerKey = `channels/${channel}/${payload.platform}/${payload.runtimeVersion}/current.json`;
 
   const initialObj = await env.OTA_BUCKET.get(pointerKey);
@@ -82,10 +86,17 @@ export async function handleAdminRollback(
     : null;
 
   const earlyRecorded = idempotencyKey
-    ? findRecordedRollback(initialState, idempotencyKey)
+    ? findRecordedRollback(initialState, idempotencyKey, fingerprint)
     : undefined;
-  if (earlyRecorded) {
-    return jsonResponse(earlyRecorded);
+  if (earlyRecorded?.status === 'mismatch') {
+    return errorResponse(
+      'Idempotency-Key was already used with a different rollback payload',
+      409,
+      'IDEMPOTENCY_KEY_MISMATCH'
+    );
+  }
+  if (earlyRecorded?.status === 'match') {
+    return jsonResponse(earlyRecorded.response);
   }
 
   let prepared: PreparedRollbackRelease | null = null;
@@ -106,10 +117,20 @@ export async function handleAdminRollback(
 
   const result = await updateChannelPointerCas(env, pointerKey, (existing) => {
     const recorded = idempotencyKey
-      ? findRecordedRollback(existing, idempotencyKey)
+      ? findRecordedRollback(existing, idempotencyKey, fingerprint)
       : undefined;
-    if (recorded) {
-      return { kind: 'idempotent', result: recorded };
+    if (recorded?.status === 'mismatch') {
+      return {
+        kind: 'error',
+        response: errorResponse(
+          'Idempotency-Key was already used with a different rollback payload',
+          409,
+          'IDEMPOTENCY_KEY_MISMATCH'
+        ),
+      };
+    }
+    if (recorded?.status === 'match') {
+      return { kind: 'idempotent', result: recorded.response };
     }
 
     const priorActiveId =
@@ -139,7 +160,7 @@ export async function handleAdminRollback(
         commitTime: now,
       };
       const entry = idempotencyKey
-        ? { key: idempotencyKey, response }
+        ? { key: idempotencyKey, fingerprint, response }
         : undefined;
       return {
         kind: 'write',
@@ -206,7 +227,7 @@ export async function handleAdminRollback(
       rolledBackToUpdateId: prepared.sourceTargetId,
     };
     const entry = idempotencyKey
-      ? { key: idempotencyKey, response }
+      ? { key: idempotencyKey, fingerprint, response }
       : undefined;
     return {
       kind: 'write',

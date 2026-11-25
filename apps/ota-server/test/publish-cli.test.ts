@@ -124,6 +124,28 @@ describe('publish-ota CLI', () => {
         '--dry-run',
       ])
     ).toThrow(/--channel/);
+    expect(() =>
+      parseCliArgs([
+        '--platform',
+        'ios',
+        '--runtime',
+        '2.1.663',
+        '--rollback',
+        '--dry-run',
+      ])
+    ).toThrow(/--idempotency-key is required/);
+
+    const keyedTargetless = parseCliArgs([
+      '--platform',
+      'ios',
+      '--runtime',
+      '2.1.663',
+      '--rollback',
+      '--idempotency-key',
+      'ops-rollback-2026-1',
+      '--dry-run',
+    ]);
+    expect(keyedTargetless.idempotencyKey).toBe('ops-rollback-2026-1');
 
     const rollbackArgs = parseCliArgs([
       '--platform',
@@ -227,12 +249,38 @@ describe('publish-ota CLI', () => {
         {
           platform: 'ios',
           runtimeVersion: '2.1.663',
+          toEmbedded: true,
           serverUrl: 'http://ota.usebaci.com',
           token: 'secret-token',
         },
         spyFetch
       )
     ).rejects.toThrow(/https:\/\//);
+
+    await expect(
+      rollbackOta(
+        {
+          platform: 'ios',
+          runtimeVersion: '2.1.663',
+          toEmbedded: true,
+          serverUrl: 'https://ota.usebaci.com/subpath',
+          token: 'secret-token',
+        },
+        spyFetch
+      )
+    ).rejects.toThrow(/root origin/);
+
+    await expect(
+      rollbackOta(
+        {
+          platform: 'ios',
+          runtimeVersion: '2.1.663',
+          serverUrl: 'https://ota.usebaci.com',
+          token: 'secret-token',
+        },
+        spyFetch
+      )
+    ).rejects.toThrow(/idempotencyKey is required/);
 
     expect(fetchCount).toBe(0);
 
@@ -332,13 +380,27 @@ describe('publish-ota CLI', () => {
       'https://ota.usebaci.com/api/admin/rollback'
     );
     expect(rollbackCalls[0]?.redirect).toBe('error');
-    expect(rollbackCalls[0]?.idempotencyKey).toBeTruthy();
     expect(JSON.parse(rollbackCalls[0]?.body ?? '')).toEqual({
       channel: 'production',
       platform: 'ios',
       runtimeVersion: '2.1.663',
       toEmbedded: true,
     });
+
+    // Repeat identical targetless invocations reuse the exact Idempotency-Key header.
+    const targetlessOpts = {
+      platform: 'ios' as const,
+      runtimeVersion: '2.1.663',
+      channel: 'production',
+      idempotencyKey: 'cli-targetless-retry-1',
+      serverUrl: 'https://ota.usebaci.com',
+      token: 'secret-token',
+    };
+    await rollbackOta(targetlessOpts, rollbackFetch);
+    await rollbackOta(targetlessOpts, rollbackFetch);
+    expect(rollbackCalls).toHaveLength(3);
+    expect(rollbackCalls[1]?.idempotencyKey).toBe('cli-targetless-retry-1');
+    expect(rollbackCalls[2]?.idempotencyKey).toBe('cli-targetless-retry-1');
   });
 
   it('retries publish with a fresh updateId and server-managed createdAt after a 409 timestamp conflict', async () => {

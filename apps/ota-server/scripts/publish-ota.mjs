@@ -126,6 +126,16 @@ export function parseCliArgs(argv) {
   if (options.rollback && options.toEmbedded && options.updateId) {
     throw new Error('Specify either --update-id or --to-embedded, not both');
   }
+  if (
+    options.rollback &&
+    !options.toEmbedded &&
+    !options.updateId &&
+    !options.idempotencyKey?.trim()
+  ) {
+    throw new Error(
+      '--idempotency-key is required for targetless --rollback (without --update-id or --to-embedded)'
+    );
+  }
   if (!options.rollback && !options.distDir?.trim()) {
     throw new Error('--dist is required when publishing');
   }
@@ -292,7 +302,12 @@ function normalizeServerBaseUrl(serverUrl) {
   const normalizedPath = parsed.pathname
     .replace(/\/+$/, '')
     .replace(/\/api\/manifest$/, '');
-  return `${parsed.origin}${normalizedPath}`;
+  if (normalizedPath !== '') {
+    throw new Error(
+      `OTA server URL must target the root origin without a path prefix: ${serverUrl}`
+    );
+  }
+  return parsed.origin;
 }
 
 export async function publishOta(options, fetchImpl = fetch) {
@@ -358,6 +373,12 @@ export async function publishOta(options, fetchImpl = fetch) {
 }
 
 export async function rollbackOta(options, fetchImpl = fetch) {
+  const idempotencyKey = options.idempotencyKey?.trim();
+  if (!options.toEmbedded && !options.updateId && !idempotencyKey) {
+    throw new Error(
+      'idempotencyKey is required for targetless rollback (without updateId or toEmbedded)'
+    );
+  }
   const body = {
     channel: options.channel,
     platform: options.platform,
@@ -369,9 +390,6 @@ export async function rollbackOta(options, fetchImpl = fetch) {
     return { dryRun: true, payload: body };
   }
   const baseUrl = normalizeServerBaseUrl(options.serverUrl);
-  const idempotencyKey =
-    options.idempotencyKey?.trim() ||
-    (!options.updateId ? randomUUID().toLowerCase() : undefined);
   const resp = await fetchImpl(`${baseUrl}/api/admin/rollback`, {
     method: 'POST',
     headers: {

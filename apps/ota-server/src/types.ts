@@ -53,8 +53,7 @@ export interface StoredManifestAsset {
   key: string;
   contentType: string;
   fileExtension?: string;
-  r2Key?: string;
-  url?: string;
+  r2Key: string;
 }
 
 export interface ExpoManifestAsset {
@@ -107,6 +106,7 @@ export interface RollbackOperationResult {
 
 export interface RollbackHistoryEntry {
   key: string;
+  fingerprint?: string;
   response: RollbackOperationResult;
 }
 

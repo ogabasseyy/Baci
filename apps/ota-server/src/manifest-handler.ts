@@ -21,19 +21,6 @@ function resolveAssetForManifest(
   asset: StoredManifestAsset,
   requestUrl: string
 ): ExpoManifestAsset {
-  let url = asset.url;
-  if (asset.r2Key) {
-    const parsed = new URL(requestUrl);
-    const basePath = parsed.pathname
-      .replace(/\/api\/manifest\/?$/, '')
-      .replace(/\/+$/, '');
-    url = `${parsed.origin}${basePath}/api/assets/${asset.r2Key}`;
-  }
-
-  if (!url) {
-    throw new Error('Asset record has neither r2Key nor url');
-  }
-
   return {
     hash: asset.hash,
     key: asset.key,
@@ -41,7 +28,7 @@ function resolveAssetForManifest(
     ...(asset.fileExtension !== undefined
       ? { fileExtension: asset.fileExtension }
       : {}),
-    url,
+    url: new URL(`/api/assets/${asset.r2Key}`, requestUrl).toString(),
   };
 }
 

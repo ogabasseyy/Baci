@@ -528,4 +528,65 @@ describe('admin payload validation and rollback safety', () => {
     }>();
     expect(pointer?.updateId).toBe(UPDATE_C);
   });
+
+  it('rejects replaying an Idempotency-Key with a different rollback payload (409)', async () => {
+    const { env } = await setupChannelWithTwoReleases();
+
+    const firstResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'shared-key-mismatch-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+        }),
+      }),
+      env
+    );
+    expect(firstResp.status).toBe(200);
+
+    const mismatchTarget = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'shared-key-mismatch-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_B,
+        }),
+      }),
+      env
+    );
+    expect(mismatchTarget.status).toBe(409);
+
+    const mismatchEmbedded = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'shared-key-mismatch-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          toEmbedded: true,
+        }),
+      }),
+      env
+    );
+    expect(mismatchEmbedded.status).toBe(409);
+  });
 });

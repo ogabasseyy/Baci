@@ -217,7 +217,7 @@ export function validateStoredAsset(
   if (!isPlainObject(raw)) {
     throw new ValidationError(`${label} must be an object`);
   }
-  const { hash, key, contentType, fileExtension, r2Key, url } = raw;
+  const { hash, key, contentType, fileExtension, r2Key } = raw;
   if (typeof hash !== 'string' || !SHA256_BASE64URL_REGEX.test(hash.trim())) {
     throw new ValidationError(
       `${label}.hash must be an unpadded base64url SHA-256 digest`
@@ -237,42 +237,16 @@ export function validateStoredAsset(
     throw new ValidationError(`${label}.fileExtension must start with "."`);
   }
 
-  let validatedR2Key: string | undefined;
-  let validatedUrl: string | undefined;
-
-  if (r2Key !== undefined) {
-    if (typeof r2Key !== 'string') {
-      throw new ValidationError(`${label}.r2Key must be a string`);
-    }
-    validatedR2Key = validateAssetKey(r2Key);
+  if (typeof r2Key !== 'string' || r2Key.trim().length === 0) {
+    throw new ValidationError(`${label}.r2Key is required`);
   }
-
-  if (url !== undefined) {
-    if (typeof url !== 'string') {
-      throw new ValidationError(`${label}.url must be a string`);
-    }
-    try {
-      const parsed = new URL(url);
-      if (parsed.protocol !== 'https:') {
-        throw new ValidationError(`${label}.url must use https`);
-      }
-      validatedUrl = parsed.toString();
-    } catch (err) {
-      if (err instanceof ValidationError) throw err;
-      throw new ValidationError(`${label}.url must be a valid https URL`);
-    }
-  }
-
-  if (!validatedR2Key && !validatedUrl) {
-    throw new ValidationError(`${label} must provide r2Key or url`);
-  }
+  const validatedR2Key = validateAssetKey(r2Key);
 
   return {
     hash: hash.trim(),
     key: key.trim(),
     contentType: contentType.trim(),
     ...(fileExtension !== undefined ? { fileExtension } : {}),
-    ...(validatedR2Key !== undefined ? { r2Key: validatedR2Key } : {}),
-    ...(validatedUrl !== undefined ? { url: validatedUrl } : {}),
+    r2Key: validatedR2Key,
   };
 }

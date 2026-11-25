@@ -13,15 +13,28 @@ const MAX_POINTER_RETRIES = 5;
 const MAX_ROLLBACK_HISTORY = 20;
 const MAX_SAFE_TIMESTAMP_MS = 253_402_300_799_000;
 
+export type RecordedRollbackLookup =
+  | { status: 'match'; response: RollbackOperationResult }
+  | { status: 'mismatch' };
+
 export function findRecordedRollback(
   state: ChannelCurrentState | null | undefined,
-  key: string
-): RollbackOperationResult | undefined {
+  key: string,
+  expectedFingerprint: string
+): RecordedRollbackLookup | undefined {
   if (!state) return undefined;
-  if (state.lastRollback?.key === key) {
-    return state.lastRollback.response;
+  const entry =
+    state.lastRollback?.key === key
+      ? state.lastRollback
+      : state.recentRollbacks?.find((item) => item.key === key);
+  if (!entry) return undefined;
+  if (
+    entry.fingerprint !== undefined &&
+    entry.fingerprint !== expectedFingerprint
+  ) {
+    return { status: 'mismatch' };
   }
-  return state.recentRollbacks?.find((entry) => entry.key === key)?.response;
+  return { status: 'match', response: entry.response };
 }
 
 export function mergeRollbackHistory(

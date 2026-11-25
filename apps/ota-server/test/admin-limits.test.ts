@@ -97,15 +97,37 @@ describe('admin payload size and count limits', () => {
     expect(oversizedRouteResp.status).toBe(413);
   });
 
-  it('rejects oversized publish body, excessive asset counts, and oversized extra object with 413', async () => {
+  it('rejects oversized publish body, excessive asset counts, oversized extra object, and external URL assets', async () => {
     const { env } = createEnv();
     const dummyB64 = createHash('sha256').update('x').digest('base64url');
     const baseAsset = {
       hash: dummyB64,
       key: 'x',
       contentType: 'application/javascript',
-      url: 'https://cdn.usebaci.com/a.hbc',
+      r2Key: 'bundles/ios/a.hbc',
     };
+
+    const externalUrlResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          launchAsset: {
+            hash: dummyB64,
+            key: 'x',
+            contentType: 'application/javascript',
+            url: 'https://cdn.usebaci.com/a.hbc',
+          },
+        }),
+      }),
+      env
+    );
+    expect(externalUrlResp.status).toBe(400);
 
     const bigJsonResp = await worker.fetch(
       new Request('https://ota.usebaci.com/api/admin/publish', {
@@ -171,12 +193,31 @@ describe('admin payload size and count limits', () => {
     vi.setSystemTime(new Date('2026-11-25T15:00:00.000Z'));
     try {
       const { env } = createEnv();
-      const dummyB64 = createHash('sha256').update('m').digest('base64url');
+      const dummyBytes = new TextEncoder().encode('m');
+      const dummyHex = createHash('sha256').update(dummyBytes).digest('hex');
+      const dummyB64 = createHash('sha256')
+        .update(dummyBytes)
+        .digest('base64url');
+      await worker.fetch(
+        new Request(
+          'https://ota.usebaci.com/api/admin/assets/bundles/ios/m.hbc',
+          {
+            method: 'PUT',
+            headers: {
+              authorization: `Bearer ${TOKEN}`,
+              'content-type': 'application/javascript',
+              'x-asset-sha256': dummyHex,
+            },
+            body: dummyBytes,
+          }
+        ),
+        env
+      );
       const baseAsset = {
         hash: dummyB64,
-        key: 'm',
+        key: dummyHex,
         contentType: 'application/javascript',
-        url: 'https://cdn.usebaci.com/m.hbc',
+        r2Key: 'bundles/ios/m.hbc',
       };
 
       const farFuture = await worker.fetch(

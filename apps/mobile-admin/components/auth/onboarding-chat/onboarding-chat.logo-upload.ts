@@ -11,6 +11,56 @@ export interface PickedLogoAsset {
   mimeType: string;
 }
 
+const DATA_URI_IMAGE_PATTERN =
+  /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i;
+
+function decodeBase64ToBytes(base64: string): Uint8Array {
+  const cleaned = base64.replace(/\s+/g, '');
+  const binary = globalThis.atob(cleaned);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function extensionForImageMime(mimeType: string): string {
+  const subtype = mimeType.split('/')[1]?.toLowerCase() ?? 'png';
+  if (subtype === 'jpeg') return 'jpg';
+  if (subtype === 'svg+xml') return 'svg';
+  return subtype;
+}
+
+async function persistLogoBytesToMerchant(params: {
+  bytes: ArrayBuffer | Uint8Array;
+  contentType: string;
+  fileExt: string;
+  merchantId: string;
+}): Promise<void> {
+  const { bytes, contentType, fileExt, merchantId } = params;
+  const filePath = `${merchantId}/${Date.now()}.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('media')
+    .upload(filePath, bytes, {
+      contentType,
+      upsert: true,
+    });
+
+  if (uploadError) {
+    return;
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from('media').getPublicUrl(filePath);
+
+  await supabase
+    .from('merchants')
+    .update({ logo_url: publicUrl })
+    .eq('id', merchantId);
+}
+
 export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
@@ -38,8 +88,7 @@ export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
   const fallbackExt = fileNameExt || uriExt || 'png';
   const mimeType =
     asset.mimeType || `image/${fallbackExt === 'jpg' ? 'jpeg' : fallbackExt}`;
-  const mimeExt = mimeType.split('/')[1]?.toLowerCase();
-  const fileExt = mimeExt === 'jpeg' ? 'jpg' : mimeExt || fallbackExt;
+  const fileExt = extensionForImageMime(mimeType);
 
   return {
     uri: asset.uri,
@@ -50,8 +99,7 @@ export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
 
 /**
  * Persists a locally picked onboarding logo to Supabase Storage (`media` bucket)
- * and updates `merchants.logo_url` (matching `LogoPicker`), then triggers
- * favicon variant generation as a best-effort follow-up.
+ * and updates `merchants.logo_url`, then triggers favicon variant generation.
  */
 export async function uploadPickedLogoBestEffort(
   asset: PickedLogoAsset,
@@ -60,28 +108,14 @@ export async function uploadPickedLogoBestEffort(
   try {
     const fileExt =
       asset.fileName.split('.').pop()?.toLowerCase() ||
-      asset.uri.split('.').pop()?.toLowerCase() ||
-      'png';
-    const filePath = `${merchantId}/${Date.now()}.${fileExt}`;
-    const fileBytes = await readUploadBytes(asset.uri);
-
-    const { error: uploadError } = await supabase.storage
-      .from('media')
-      .upload(filePath, fileBytes, {
-        contentType: asset.mimeType,
-        upsert: true,
-      });
-
-    if (!uploadError) {
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('media').getPublicUrl(filePath);
-
-      await supabase
-        .from('merchants')
-        .update({ logo_url: publicUrl })
-        .eq('id', merchantId);
-    }
+      extensionForImageMime(asset.mimeType);
+    const bytes = await readUploadBytes(asset.uri);
+    await persistLogoBytesToMerchant({
+      bytes,
+      contentType: asset.mimeType,
+      fileExt,
+      merchantId,
+    });
   } catch {
     // Non-blocking: store is already provisioned and merchant can re-upload in settings.
   }
@@ -99,5 +133,31 @@ export async function uploadPickedLogoBestEffort(
     });
   } catch {
     // Non-blocking favicon generation.
+  }
+}
+
+/**
+ * Decodes an accepted AI-generated `data:image/...;base64,...` logo, uploads it
+ * to Supabase Storage (`media` bucket), and persists `merchants.logo_url`.
+ */
+export async function uploadDataUriLogoBestEffort(
+  dataUri: string,
+  merchantId: string
+): Promise<void> {
+  const match = DATA_URI_IMAGE_PATTERN.exec(dataUri.trim());
+  if (!match) {
+    return;
+  }
+  const [, contentType, base64Payload] = match;
+  try {
+    const bytes = decodeBase64ToBytes(base64Payload);
+    await persistLogoBytesToMerchant({
+      bytes,
+      contentType,
+      fileExt: extensionForImageMime(contentType),
+      merchantId,
+    });
+  } catch {
+    // Non-blocking: store is already provisioned and merchant can update logo in settings.
   }
 }

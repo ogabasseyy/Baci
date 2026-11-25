@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   signOut: vi.fn(async () => undefined),
   provisionMutateAsync: vi.fn(),
   assistMutateAsync: vi.fn(),
+  uploadDataUriLogoBestEffort: vi.fn(async () => undefined),
+  uploadPickedLogoBestEffort: vi.fn(async () => undefined),
   user: {
     id: 'user-1',
     email: 'ada@example.com',
@@ -121,7 +123,8 @@ vi.mock('./onboarding-chat.logo-upload', () => ({
     fileName: 'uploaded-logo.png',
     mimeType: 'image/png',
   })),
-  uploadPickedLogoBestEffort: vi.fn(async () => undefined),
+  uploadDataUriLogoBestEffort: mocks.uploadDataUriLogoBestEffort,
+  uploadPickedLogoBestEffort: mocks.uploadPickedLogoBestEffort,
 }));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -274,6 +277,10 @@ describe('MerchantSetupChat', () => {
             accent: '#F59E0B',
           },
         })
+      );
+      expect(mocks.uploadDataUriLogoBestEffort).toHaveBeenCalledWith(
+        'data:image/png;base64,iVBORw0KGgo=',
+        'm-1'
       );
     });
   });

@@ -40,7 +40,10 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
-import { uploadPickedLogoBestEffort } from './onboarding-chat.logo-upload';
+import {
+  uploadDataUriLogoBestEffort,
+  uploadPickedLogoBestEffort,
+} from './onboarding-chat.logo-upload';
 
 describe('uploadPickedLogoBestEffort', () => {
   beforeEach(() => {
@@ -98,5 +101,22 @@ describe('uploadPickedLogoBestEffort', () => {
     );
 
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('decodes and persists an AI-generated data URI logo to merchants.logo_url', async () => {
+    await uploadDataUriLogoBestEffort(
+      'data:image/png;base64,iVBORw0KGgo=',
+      'm-2'
+    );
+
+    expect(mocks.storageUpload).toHaveBeenCalledWith(
+      expect.stringMatching(/^m-2\/\d+\.png$/),
+      expect.any(Uint8Array),
+      { contentType: 'image/png', upsert: true }
+    );
+    expect(mocks.update).toHaveBeenCalledWith({
+      logo_url: 'https://cdn.usebaci.com/media/m-1/logo.png',
+    });
+    expect(mocks.updateEq).toHaveBeenCalledWith('id', 'm-2');
   });
 });

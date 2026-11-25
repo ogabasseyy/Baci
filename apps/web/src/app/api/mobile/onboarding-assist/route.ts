@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { guideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding';
+import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
 import { checkRateLimit } from '@/ai/provider';
 import { logger } from '@/lib/logger';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await guideBusinessOnboarding(parsed.data);
+    const result = await runGuideBusinessOnboarding(parsed.data);
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

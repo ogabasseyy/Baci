@@ -16,7 +16,8 @@ import {
 export function transitionFromTextInput(
   step: OnboardingChatStep,
   rawText: string,
-  data: OnboardingChatData
+  data: OnboardingChatData,
+  isCustomizingSlug = false
 ): TransitionResult {
   const trimmed = rawText.trim();
   if (!trimmed) return {};
@@ -158,7 +159,13 @@ export function transitionFromTextInput(
   }
 
   if (step === 'slug') {
-    if (lower === 'yes' || lower === 'looks good' || lower === 'ok') {
+    if (
+      !isCustomizingSlug &&
+      (lower === 'yes' ||
+        lower === 'looks good' ||
+        lower === 'ok' ||
+        lower === 'confirm')
+    ) {
       return {
         nextStep: 'summary',
         customizingSlug: false,
@@ -166,6 +173,15 @@ export function transitionFromTextInput(
           `Use ${data.slug}.usebaci.com`,
           "Everything's ready! Here's a quick recap of your store:",
           { isSummary: true }
+        ),
+      };
+    }
+    if (!isCustomizingSlug) {
+      return {
+        customizingSlug: true,
+        messages: exchangeMessages(
+          trimmed,
+          'No problem! Type the store link handle you want (letters, numbers, and hyphens):'
         ),
       };
     }

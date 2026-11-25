@@ -1,12 +1,12 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { guideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding';
+import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
 import { checkRateLimit } from '@/ai/provider';
 import { getMobileBearerUser } from '../merchant-provisioning/get-mobile-bearer-user';
 import { POST } from './route';
 
-vi.mock('@/ai/flows/guide-business-onboarding', () => ({
-  guideBusinessOnboarding: vi.fn(),
+vi.mock('@/ai/flows/guide-business-onboarding.core', () => ({
+  runGuideBusinessOnboarding: vi.fn(),
 }));
 
 vi.mock('@/ai/provider', () => ({
@@ -25,7 +25,7 @@ vi.mock('@/lib/logger', () => ({
 
 const mockGetMobileBearerUser = vi.mocked(getMobileBearerUser);
 const mockCheckRateLimit = vi.mocked(checkRateLimit);
-const mockGuideBusinessOnboarding = vi.mocked(guideBusinessOnboarding);
+const mockGuideBusinessOnboarding = vi.mocked(runGuideBusinessOnboarding);
 
 function makeRequest(body: unknown, rawBody?: string): NextRequest {
   return new Request('https://usebaci.com/api/mobile/onboarding-assist', {

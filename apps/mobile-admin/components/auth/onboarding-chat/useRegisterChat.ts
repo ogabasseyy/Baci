@@ -23,10 +23,13 @@ interface RegisterChatData {
   password: string;
 }
 
-function sentenceCaseWord(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+function normalizePersonName(value: string): string {
+  const collapsed = value.trim().replace(/\s+/g, ' ');
+  if (!collapsed) return '';
+  return collapsed.replace(
+    /(^|[\s'-])([a-z])/g,
+    (_, separator: string, char: string) => `${separator}${char.toUpperCase()}`
+  );
 }
 
 export function useRegisterChat() {
@@ -69,8 +72,8 @@ export function useRegisterChat() {
     setIsSubmitting(true);
 
     const email = payload.email.trim().toLowerCase();
-    const firstName = sentenceCaseWord(payload.firstName);
-    const lastName = sentenceCaseWord(payload.lastName);
+    const firstName = normalizePersonName(payload.firstName);
+    const lastName = normalizePersonName(payload.lastName);
 
     try {
       const result = await signUp({
@@ -165,7 +168,7 @@ export function useRegisterChat() {
         { role: 'user', text: trimmed },
         {
           role: 'assistant',
-          text: `Nice to meet you, ${sentenceCaseWord(parsed.firstName)}! What's your email address?`,
+          text: `Nice to meet you, ${normalizePersonName(parsed.firstName)}! What's your email address?`,
         }
       );
       setStep('email');

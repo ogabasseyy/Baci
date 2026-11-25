@@ -15,6 +15,7 @@ import {
 import {
   type PickedLogoAsset,
   pickOnboardingLogo,
+  uploadDataUriLogoBestEffort,
   uploadPickedLogoBestEffort,
 } from './onboarding-chat.logo-upload';
 import { transitionFromTextInput } from './onboarding-chat.text-transitions';
@@ -172,15 +173,21 @@ export function useMerchantSetupChat() {
         logoUrl: /^https?:\/\//i.test(data.logoUrl) ? data.logoUrl : undefined,
         brandColors: data.brandColors,
       });
-      if (
-        logoDraft?.pickedAsset &&
-        data.logoUrl === logoDraft.pickedAsset.uri &&
-        provisioned?.merchant?.id
-      ) {
-        await uploadPickedLogoBestEffort(
-          logoDraft.pickedAsset,
-          provisioned.merchant.id
-        );
+      if (provisioned?.merchant?.id) {
+        if (
+          logoDraft?.pickedAsset &&
+          data.logoUrl === logoDraft.pickedAsset.uri
+        ) {
+          await uploadPickedLogoBestEffort(
+            logoDraft.pickedAsset,
+            provisioned.merchant.id
+          );
+        } else if (data.logoUrl.startsWith('data:image/')) {
+          await uploadDataUriLogoBestEffort(
+            data.logoUrl,
+            provisioned.merchant.id
+          );
+        }
       }
       router.replace('/(admin)/(tabs)');
     } catch (error) {
@@ -258,7 +265,9 @@ export function useMerchantSetupChat() {
       if (!inputText.trim() || isBusy) return;
       const text = inputText;
       setInputText('');
-      applyTransition(transitionFromTextInput(step, text, data));
+      applyTransition(
+        transitionFromTextInput(step, text, data, isCustomizingSlug)
+      );
     },
     inputText,
     isBusy,

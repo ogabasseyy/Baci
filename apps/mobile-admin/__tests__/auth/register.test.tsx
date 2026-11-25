@@ -69,7 +69,7 @@ describe('RegisterScreen', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send response' }));
 
     fireEvent.change(screen.getByLabelText('Full name'), {
-      target: { value: ' mary   van buren ' },
+      target: { value: ' mary   McDonald ' },
     });
     send();
     fireEvent.change(screen.getByLabelText('Email address'), {
@@ -90,8 +90,8 @@ describe('RegisterScreen', () => {
         email: 'person@example.com',
         password: ' Strong P@ss123! ',
         firstName: 'Mary',
-        lastName: 'Van buren',
-        fullName: 'Mary Van buren',
+        lastName: 'McDonald',
+        fullName: 'Mary McDonald',
         signupFlow: 'merchant',
       })
     );

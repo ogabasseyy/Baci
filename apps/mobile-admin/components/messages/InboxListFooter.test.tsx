@@ -5,9 +5,15 @@ import { LIGHT_COLORS } from '@/constants/theme';
 import { InboxListFooter } from './InboxListFooter';
 
 function renderFooter(
-  state: { loading?: boolean; failed?: boolean; canLookBack?: boolean } = {}
+  state: {
+    loading?: boolean;
+    failed?: boolean;
+    stale?: boolean;
+    canLookBack?: boolean;
+  } = {}
 ) {
   const onLoadMore = vi.fn();
+  const onRefresh = vi.fn();
   const view = render(
     <InboxListFooter
       canLookBack={state.canLookBack ?? false}
@@ -15,9 +21,11 @@ function renderFooter(
       failed={state.failed ?? false}
       loading={state.loading ?? false}
       onLoadMore={onLoadMore}
+      onRefresh={onRefresh}
+      stale={state.stale ?? false}
     />
   );
-  return { ...view, onLoadMore };
+  return { ...view, onLoadMore, onRefresh };
 }
 
 describe('InboxListFooter', () => {
@@ -39,6 +47,20 @@ describe('InboxListFooter', () => {
       })
     );
     expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers to refresh again after a failed refresh', () => {
+    const { onLoadMore, onRefresh } = renderFooter({
+      stale: true,
+      canLookBack: true,
+    });
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Could not update chats. Tap to retry.',
+      })
+    );
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onLoadMore).not.toHaveBeenCalled();
   });
 
   it('offers older chats on request', () => {

@@ -9,6 +9,9 @@ interface InboxListFooterProps {
   failed: boolean;
   loading: boolean;
   onLoadMore: () => void;
+  onRefresh: () => void;
+  /** Refreshing the chats failed, which also stops older ones loading. */
+  stale: boolean;
 }
 
 /** What sits under the last chat: progress, a retry, or older chats on request. */
@@ -18,20 +21,24 @@ export function InboxListFooter({
   failed,
   loading,
   onLoadMore,
+  onRefresh,
+  stale,
 }: InboxListFooterProps) {
   if (loading) return <ActivityIndicator color={colors.primary} />;
-  if (!failed && !canLookBack) return null;
+  if (!failed && !stale && !canLookBack) return null;
+  // A failed page also reads as stale: asking for that page again comes first.
+  const [label, onPress] = failed
+    ? ['Could not load more chats. Tap to retry.', onLoadMore]
+    : stale
+      ? ['Could not update chats. Tap to retry.', onRefresh]
+      : ['Look further back', onLoadMore];
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onLoadMore}
+      onPress={() => onPress()}
       style={styles.button}
     >
-      <Text style={{ color: colors.primary }}>
-        {failed
-          ? 'Could not load more chats. Tap to retry.'
-          : 'Look further back'}
-      </Text>
+      <Text style={{ color: colors.primary }}>{label}</Text>
     </Pressable>
   );
 }

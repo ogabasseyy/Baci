@@ -27,6 +27,7 @@ import { useInboxSearch } from '@/hooks/useInboxSearch';
 import { useTheme } from '@/hooks/useTheme';
 import { NetworkError } from '@/lib/api-client';
 import { sortInbox } from '@/lib/merchant-inbox-sort';
+import { uniqueConversations } from '@/lib/merchant-inbox-unique';
 import type { InboxView } from '@/schemas/merchant-inbox';
 
 /**
@@ -64,7 +65,9 @@ export default function MessagesScreen() {
   const search = useInboxSearch(term);
   const searching = term.length > 0;
   const conversations = sortInbox(
-    query.data?.pages.flatMap((p) => p.conversations) ?? [],
+    uniqueConversations(
+      query.data?.pages.flatMap((p) => p.conversations) ?? []
+    ),
     view
   );
   const pages = query.data?.pages.length ?? 0;
@@ -92,6 +95,9 @@ export default function MessagesScreen() {
   // For the buttons: a tap can land after a refresh has started.
   const loadMore = () => {
     if (!query.isFetching) query.fetchNextPage();
+  };
+  const refreshAgain = () => {
+    if (!query.isFetching) query.refetch();
   };
 
   // FlashList reports the end after any render, scrolled or not, so past the
@@ -200,6 +206,8 @@ export default function MessagesScreen() {
                     failed={query.isFetchNextPageError}
                     loading={query.isFetchingNextPage}
                     onLoadMore={loadMore}
+                    onRefresh={refreshAgain}
+                    stale={query.isError}
                   />
                 }
                 onEndReached={onEndReached}

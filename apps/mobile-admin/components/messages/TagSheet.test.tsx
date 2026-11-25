@@ -110,6 +110,14 @@ describe('TagSheet', () => {
     expect(onAdd).not.toHaveBeenCalled();
   });
 
+  it('bugfix: states the real count when a chat carries more than five tags', () => {
+    // Tags added outside the app: removing one is not enough to add another.
+    renderSheet(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+    expect(
+      screen.getByText('This chat has 8 tags. Remove 4 to add another.')
+    ).toBeInTheDocument();
+  });
+
   it('bugfix: ignores the keyboard submit while a save is pending', () => {
     const { onAdd } = renderSheet([], true);
     const input = screen.getByLabelText('New tag');

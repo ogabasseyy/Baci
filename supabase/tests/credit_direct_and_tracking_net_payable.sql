@@ -34,7 +34,8 @@ INSERT INTO public.customer_savings_goals(
   ('cd710000-0000-4000-8000-000000000006', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial', 5000, 5000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
   ('cd710000-0000-4000-8000-000000000007', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Full', 20000, 20000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
   ('cd710000-0000-4000-8000-000000000008', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Reversed', 15000, 15000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
-  ('cd710000-0000-4000-8000-000000000009', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial Paid Rev', 15000, 15000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now());
+  ('cd710000-0000-4000-8000-000000000009', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial Paid Rev', 15000, 15000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
+  ('cd710000-0000-4000-8000-00000000000a', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial Paid', 5000, 5000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now());
 
 -- Orders with stale amount_paid = 0 / wallet_amount_used = 0 while ledger credit exists.
 INSERT INTO public.orders(id, merchant_id, customer_id, order_number, subtotal, total, currency, payment_status, payment_method, shipping_fee, discount_amount, amount_paid, wallet_amount_used, customer_email, tracking_token)
@@ -42,7 +43,8 @@ VALUES
   ('cd710000-0000-4000-8000-000000000010', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-LEDGER-PARTIAL', 50000, 50000, 'NGN', 'unpaid', 'credit_direct', 0, 0, 0, 0, 'guest@example.test', 'cd-track-partial'),
   ('cd710000-0000-4000-8000-000000000011', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-LEDGER-ZERO', 50000, 50000, 'NGN', 'pending', 'credit_direct', 0, 0, 0, 0, 'guest@example.test', 'cd-track-zero'),
   ('cd710000-0000-4000-8000-000000000012', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-LEDGER-REV', 50000, 50000, 'NGN', 'unpaid', 'credit_direct', 0, 0, 20000, 20000, 'guest@example.test', 'cd-track-rev'),
-  ('cd710000-0000-4000-8000-000000000013', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID-REV', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 35000, 20000, 'guest@example.test', 'cd-track-pp-rev');
+  ('cd710000-0000-4000-8000-000000000013', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID-REV', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 35000, 20000, 'guest@example.test', 'cd-track-pp-rev'),
+  ('cd710000-0000-4000-8000-000000000014', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 30000, 10000, 'guest@example.test', 'cd-track-pp');
 
 INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, status, amount, balance_after, source_type, source_id)
 VALUES
@@ -53,14 +55,16 @@ VALUES
   ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'credit', 'completed', 20000, 20000, 'order_reversal', 'cd710000-0000-4000-8000-000000000012'),
   ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'credit', 'pending', 10000, 10000, 'order_reversal', 'cd710000-0000-4000-8000-000000000010'),
   ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'redemption', 'completed', 20000, 0, 'order_redemption', 'cd710000-0000-4000-8000-000000000013'),
-  ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'credit', 'completed', 20000, 20000, 'order_reversal', 'cd710000-0000-4000-8000-000000000013');
+  ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'credit', 'completed', 20000, 20000, 'order_reversal', 'cd710000-0000-4000-8000-000000000013'),
+  ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'redemption', 'completed', 10000, 0, 'order_redemption', 'cd710000-0000-4000-8000-000000000014');
 
 INSERT INTO public.customer_savings_redemptions(goal_id, merchant_id, customer_id, order_id, amount, idempotency_key, metadata)
 VALUES
   ('cd710000-0000-4000-8000-000000000006', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000010', 5000, 'cd-ledger-partial', '{}'::jsonb),
   ('cd710000-0000-4000-8000-000000000007', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000011', 20000, 'cd-ledger-zero', '{}'::jsonb),
   ('cd710000-0000-4000-8000-000000000008', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000012', 15000, 'cd-ledger-rev', '{"reversed_at":"2026-11-25T10:00:00Z"}'::jsonb),
-  ('cd710000-0000-4000-8000-000000000009', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000013', 15000, 'cd-pp-rev', '{}'::jsonb);
+  ('cd710000-0000-4000-8000-000000000009', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000013', 15000, 'cd-pp-rev', '{}'::jsonb),
+  ('cd710000-0000-4000-8000-00000000000a', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000014', 5000, 'cd-pp-active', '{}'::jsonb);
 
 SET LOCAL ROLE anon;
 DO $test$
@@ -150,6 +154,20 @@ BEGIN
   );
   IF v_issued.signed_amount IS DISTINCT FROM 35000 THEN
     RAISE EXCEPTION 'Expected partially_paid reversed signed_amount 35000, got %', v_issued.signed_amount;
+  END IF;
+
+  -- 6. partially_paid order with non-unpaid amount_paid (30,000) ignores amount_paid and subtracts
+  -- only wallet (10,000) + savings (5,000), signing 35,000 in parity with shared TS computeOrderNetPayable.
+  SELECT * INTO v_issued
+  FROM public.issue_credit_direct_checkout_token(
+    'cd710000-0000-4000-8000-000000000014',
+    'guest@example.test',
+    'cd710000-0000-4000-8000-000000000002',
+    'cd-sess-pp',
+    'cd-track-pp'
+  );
+  IF v_issued.signed_amount IS DISTINCT FROM 35000 THEN
+    RAISE EXCEPTION 'Expected partially_paid active signed_amount 35000, got %', v_issued.signed_amount;
   END IF;
 END $test$;
 

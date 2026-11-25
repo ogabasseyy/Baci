@@ -24,7 +24,6 @@ DECLARE
   v_wallet_ledger numeric := 0;
   v_effective_wallet numeric := 0;
   v_savings_ledger numeric := 0;
-  v_effective_amount_paid numeric := 0;
   v_pre_gateway_credit numeric := 0;
 BEGIN
   IF p_total IS NULL
@@ -65,16 +64,19 @@ BEGIN
     AND r.merchant_id = p_merchant_id
     AND NOT (COALESCE(r.metadata, '{}'::jsonb) ? 'reversed_at');
 
-  v_effective_amount_paid := CASE
-    WHEN v_has_wallet_reversal THEN 0
-    ELSE COALESCE(p_amount_paid, 0)
-  END;
-
-  v_pre_gateway_credit := GREATEST(
-    v_effective_amount_paid,
-    v_effective_wallet + v_savings_ledger,
-    0
-  );
+  IF COALESCE(p_payment_status, 'unpaid') IN ('unpaid', 'pending')
+     AND NOT v_has_wallet_reversal THEN
+    v_pre_gateway_credit := GREATEST(
+      COALESCE(p_amount_paid, 0),
+      v_effective_wallet + v_savings_ledger,
+      0
+    );
+  ELSE
+    v_pre_gateway_credit := GREATEST(
+      v_effective_wallet + v_savings_ledger,
+      0
+    );
+  END IF;
 
   RETURN GREATEST(pg_catalog.round(p_total - v_pre_gateway_credit, 2), 0);
 END;

@@ -77,10 +77,10 @@ describe('buildGuestOrderResponse', () => {
       notification_delivered: false,
       inventory_confirmed: false,
       wallet_amount_used: 0,
-      wallet_ledger_used: 0,
-      savings_ledger_used: 0,
       wallet_reversal_completed: false,
     });
+    expect(response.wallet_ledger_used).toBeUndefined();
+    expect(response.savings_ledger_used).toBeUndefined();
   });
 
   it('falls back to the legacy shipping fee for shipping cost', () => {

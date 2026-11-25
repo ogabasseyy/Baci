@@ -155,17 +155,17 @@ DECLARE
   v_order uuid;
 BEGIN
   IF TG_TABLE_NAME = 'customer_wallet_transactions' THEN
-    IF TG_OP = 'UPDATE' AND (OLD.source_id, OLD.source_type, OLD.type, OLD.amount) IS NOT DISTINCT FROM (NEW.source_id, NEW.source_type, NEW.type, NEW.amount) THEN
+    IF TG_OP = 'UPDATE' AND (OLD.source_id, OLD.source_type, OLD.type, OLD.amount, OLD.status) IS NOT DISTINCT FROM (NEW.source_id, NEW.source_type, NEW.type, NEW.amount, NEW.status) THEN
       RETURN NEW;
     END IF;
-    IF TG_OP = 'UPDATE' AND OLD.source_type = 'order_redemption' AND OLD.type = 'redemption' THEN
+    IF TG_OP = 'UPDATE' AND ((OLD.source_type = 'order_redemption' AND OLD.type = 'redemption') OR OLD.source_type = 'order_reversal') THEN
       v_old := OLD.source_id;
     END IF;
-    IF NEW.source_type = 'order_redemption' AND NEW.type = 'redemption' THEN
+    IF (NEW.source_type = 'order_redemption' AND NEW.type = 'redemption') OR NEW.source_type = 'order_reversal' THEN
       v_new := NEW.source_id;
     END IF;
   ELSE
-    IF TG_OP = 'UPDATE' AND (OLD.order_id, OLD.amount) IS NOT DISTINCT FROM (NEW.order_id, NEW.amount) THEN
+    IF TG_OP = 'UPDATE' AND (OLD.order_id, OLD.amount, OLD.metadata) IS NOT DISTINCT FROM (NEW.order_id, NEW.amount, NEW.metadata) THEN
       RETURN NEW;
     END IF;
     IF TG_OP = 'UPDATE' THEN
@@ -188,6 +188,16 @@ BEGIN
 END;
 $$;
 REVOKE ALL ON FUNCTION oxygen_private.guard_local_credit_for_oxygen() FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS oxygen_local_wallet_credit_guard ON public.customer_wallet_transactions;
+CREATE TRIGGER oxygen_local_wallet_credit_guard
+  BEFORE INSERT OR UPDATE OF source_id, source_type, type, amount, status ON public.customer_wallet_transactions
+  FOR EACH ROW EXECUTE FUNCTION oxygen_private.guard_local_credit_for_oxygen();
+
+DROP TRIGGER IF EXISTS oxygen_local_savings_credit_guard ON public.customer_savings_redemptions;
+CREATE TRIGGER oxygen_local_savings_credit_guard
+  BEFORE INSERT OR UPDATE OF order_id, amount, metadata ON public.customer_savings_redemptions
+  FOR EACH ROW EXECUTE FUNCTION oxygen_private.guard_local_credit_for_oxygen();
 
 CREATE OR REPLACE FUNCTION oxygen_private.guard_order_wallet_for_oxygen()
 RETURNS trigger

@@ -217,6 +217,27 @@ BEGIN
     IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 35000 THEN
       RAISE EXCEPTION 'Expected pending reversal not to reduce credit on order 12, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid');
     END IF;
+
+    -- Status-only wallet transitions and metadata-only savings reversals are blocked once an Oxygen workflow exists on order 12.
+    BEGIN
+      UPDATE public.customer_wallet_transactions
+         SET status = 'completed'
+       WHERE source_id = 'ec310000-0000-4000-8000-000000000012'
+         AND source_type = 'order_reversal'
+         AND status = 'pending';
+      RAISE EXCEPTION 'Post-workflow wallet status update bypassed freeze guard';
+    EXCEPTION WHEN check_violation THEN
+      IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
+    END;
+
+    BEGIN
+      UPDATE public.customer_savings_redemptions
+         SET metadata = '{"reversed_at":"2026-11-25T12:00:00Z"}'::jsonb
+       WHERE order_id = 'ec310000-0000-4000-8000-000000000012';
+      RAISE EXCEPTION 'Post-workflow savings metadata reversal bypassed freeze guard';
+    EXCEPTION WHEN check_violation THEN
+      IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
+    END;
   END IF;
 END $test$;
 RESET ROLE;

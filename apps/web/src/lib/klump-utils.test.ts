@@ -199,5 +199,27 @@ describe('klump-utils', () => {
         wallet_reversal_completed: true,
       })
     ).toBe(45_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'partially_paid',
+        amount_paid: 15_000,
+        wallet_amount_used: 0,
+        wallet_ledger_used: null,
+        savings_ledger_used: null,
+      })
+    ).toBe(35_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'partially_paid',
+        amount_paid: 30_000,
+        wallet_amount_used: 10_000,
+        wallet_ledger_used: 10_000,
+        savings_ledger_used: 5_000,
+      })
+    ).toBe(35_000);
   });
 });

@@ -139,4 +139,18 @@ describe('summarizeWalletLedgerCredit & computeOrderNetPayable', () => {
       })
     ).toBe(45000);
   });
+
+  it('ignores non-unpaid amountPaid on partially_paid orders and subtracts only active wallet/savings credit', () => {
+    expect(
+      computeOrderNetPayable({
+        total: 50000,
+        amountPaid: 30000,
+        walletAmountUsed: 10000,
+        walletLedgerUsed: 10000,
+        savingsLedgerUsed: 5000,
+        paymentStatus: 'partially_paid',
+        walletReversalCompleted: false,
+      })
+    ).toBe(35000);
+  });
 });

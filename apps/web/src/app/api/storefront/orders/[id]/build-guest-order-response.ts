@@ -64,8 +64,14 @@ export function buildGuestOrderResponse(input: GuestOrderResponseInput) {
     total: order.total,
     amount_paid: order.amount_paid,
     wallet_amount_used: order.wallet_amount_used ?? 0,
-    wallet_ledger_used: order.wallet_ledger_used ?? 0,
-    savings_ledger_used: order.savings_ledger_used ?? 0,
+    ...(order.wallet_ledger_used !== undefined &&
+    order.wallet_ledger_used !== null
+      ? { wallet_ledger_used: order.wallet_ledger_used }
+      : {}),
+    ...(order.savings_ledger_used !== undefined &&
+    order.savings_ledger_used !== null
+      ? { savings_ledger_used: order.savings_ledger_used }
+      : {}),
     wallet_reversal_completed: Boolean(order.wallet_reversal_completed),
     customer_name: order.customer_name,
     customer_email: order.customer_email,

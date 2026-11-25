@@ -84,6 +84,16 @@ export function getBnplRemainingAmount(
     | 'payment_status'
   >
 ) {
+  const hasLedgerProjection =
+    order.wallet_ledger_used != null || order.savings_ledger_used != null;
+  const normalizedStatus = (order.payment_status ?? 'unpaid')
+    .trim()
+    .toLowerCase();
+  const isTerminalPaid =
+    normalizedStatus === 'paid' || normalizedStatus === 'refunded';
+  const effectiveStatus =
+    !hasLedgerProjection && !isTerminalPaid ? 'unpaid' : order.payment_status;
+
   return toCurrencyAmount(
     computeOrderNetPayable({
       total: toCurrencyAmount(order.total),
@@ -92,7 +102,7 @@ export function getBnplRemainingAmount(
       walletLedgerUsed: toCurrencyAmount(order.wallet_ledger_used),
       savingsLedgerUsed: toCurrencyAmount(order.savings_ledger_used),
       walletReversalCompleted: order.wallet_reversal_completed === true,
-      paymentStatus: order.payment_status,
+      paymentStatus: effectiveStatus,
     })
   );
 }

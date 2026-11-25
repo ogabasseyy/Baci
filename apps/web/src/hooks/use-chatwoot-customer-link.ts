@@ -17,6 +17,8 @@ type ChatwootContactApi = {
 const LINK_ENDPOINT = '/api/storefront/chatwoot/customer-link';
 /** Focus and cross-tab notices come in bursts; resync at most this often. */
 const RESYNC_MIN_MS = 10_000;
+/** A check that failed for a passing reason is tried once more after this. */
+const RETRY_MS = 15_000;
 
 /**
  * Stores whose chat link was set during this page's life. The persisted marker
@@ -54,6 +56,12 @@ export function useChatwootCustomerLink(
     const cancelTrailing = () => {
       if (trailing !== undefined) clearTimeout(trailing);
       trailing = undefined;
+    };
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let retried = false;
+    const cancelRetry = () => {
+      if (retry !== undefined) clearTimeout(retry);
+      retry = undefined;
     };
     let lastHint = readCustomerSessionHint();
     // The widget removes the note with a request of its own and gives no answer
@@ -125,6 +133,9 @@ export function useChatwootCustomerLink(
      */
     const sync = async (mode: 'initial' | 'identity-change' | 'recheck') => {
       const mine = ++generation;
+      cancelRetry();
+      // A different account gets its own second try.
+      if (mode === 'identity-change') retried = false;
       lastSyncAt = Date.now();
       const stale = () => cancelled || mine !== generation;
       const hint = readCustomerSessionHint();
@@ -132,7 +143,10 @@ export function useChatwootCustomerLink(
         // An explicit guest hint means the shopper signed out (or never was
         // one): remove any note even if the "linked" marker was lost, once per
         // page load. With no hint at all, only a recorded link is removed, so a
-        // visitor who was never linked costs no request.
+        // visitor who was never linked costs no request. Accepted gap: a browser
+        // that loses both copies of the marker (cookie and local storage) yet
+        // keeps its chat identity, after the guest hint has expired, keeps the
+        // old note until the next sign-in or sign-out.
         if (hint === '0' && !guestCleared) {
           guestCleared = true;
           clearLink(true);
@@ -144,8 +158,17 @@ export function useChatwootCustomerLink(
       if (mode === 'identity-change') clearLink(true);
       // A note that cannot be confirmed may belong to a previous account, so it
       // is removed. After the first check only a recorded link is touched.
+      // One passing error must not leave the shopper unlinked until a reload,
+      // so the check is also asked again once.
       const failClosed = () => {
-        if (!stale()) clearLink(mode !== 'initial');
+        if (stale()) return;
+        clearLink(mode !== 'initial');
+        if (retried) return;
+        retried = true;
+        retry = setTimeout(() => {
+          retry = undefined;
+          void sync(mode === 'initial' ? 'initial' : 'recheck');
+        }, RETRY_MS);
       };
       try {
         const response = await fetchWithCsrf(LINK_ENDPOINT, {
@@ -177,6 +200,7 @@ export function useChatwootCustomerLink(
         });
         linkedThisSession.add(storeSlug);
         writeLinkMarker(storeSlug, true);
+        retried = false;
       } catch {
         // Linking is a convenience; the chat works the same without it.
         failClosed();
@@ -189,6 +213,7 @@ export function useChatwootCustomerLink(
       if (!live.userId && !live.customerId) {
         // Signed out: drop any request in flight and remove the note now.
         generation++;
+        cancelRetry();
         clearLink(true);
         return;
       }
@@ -202,6 +227,7 @@ export function useChatwootCustomerLink(
       lastHint = hint;
       if (hint !== '1') {
         cancelTrailing();
+        cancelRetry();
         generation++;
         clearLink(true);
         return;
@@ -226,6 +252,7 @@ export function useChatwootCustomerLink(
     return () => {
       cancelled = true;
       cancelTrailing();
+      cancelRetry();
       window.removeEventListener('online', onOnline);
       unsubscribe();
       crossTab.unsubscribe();

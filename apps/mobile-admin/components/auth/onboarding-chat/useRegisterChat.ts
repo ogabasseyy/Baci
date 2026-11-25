@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { validatePassword } from '@/lib/password-utils';
 import { getEmailError } from '@/lib/sanitize';
 import {
+  normalizePersonName,
   type OnboardingChatMessage,
   parseFullNameInput,
   type QuickReplyOption,
@@ -42,15 +43,6 @@ const REGISTER_QUICK_REPLIES: Record<RegisterChatStep, QuickReplyOption[]> = {
     { id: 'edit_name', label: 'Change name' },
   ],
 };
-
-function normalizePersonName(value: string): string {
-  const collapsed = value.trim().replace(/\s+/g, ' ');
-  if (!collapsed) return '';
-  return collapsed.replace(
-    /(^|[\s'-])([a-z])/g,
-    (_, separator: string, char: string) => `${separator}${char.toUpperCase()}`
-  );
-}
 
 export function useRegisterChat() {
   const router = useRouter();

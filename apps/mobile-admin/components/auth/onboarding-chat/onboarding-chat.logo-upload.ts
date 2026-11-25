@@ -131,6 +131,23 @@ export async function pickOnboardingLogo(): Promise<PickedLogoAsset | null> {
   };
 }
 
+async function postFaviconBestEffort(file: {
+  uri: string;
+  name: string;
+  type: string;
+}): Promise<void> {
+  try {
+    const formData = new FormData() as unknown as RNFormData;
+    formData.append('file', file);
+    await apiClient('/api/merchant/favicon', {
+      method: 'POST',
+      body: formData as unknown as FormData,
+    });
+  } catch {
+    // Non-blocking favicon generation.
+  }
+}
+
 /**
  * Persists a locally picked onboarding logo to Supabase Storage (`media` bucket)
  * and updates `merchants.logo_url`, then triggers favicon variant generation.
@@ -159,27 +176,19 @@ export async function uploadPickedLogoBestEffort(
     console.warn('Onboarding logo upload failed:', error);
   }
 
-  try {
-    const formData = new FormData() as unknown as RNFormData;
-    formData.append('file', {
-      uri: asset.uri,
-      name: asset.fileName,
-      type: asset.mimeType,
-    });
-    await apiClient('/api/merchant/favicon', {
-      method: 'POST',
-      body: formData as unknown as FormData,
-    });
-  } catch {
-    // Non-blocking favicon generation.
-  }
+  await postFaviconBestEffort({
+    uri: asset.uri,
+    name: asset.fileName,
+    type: asset.mimeType,
+  });
 
   return persistedUrl;
 }
 
 /**
  * Decodes an accepted AI-generated `data:image/...;base64,...` logo, uploads it
- * to Supabase Storage (`media` bucket), and persists `merchants.logo_url`.
+ * to Supabase Storage (`media` bucket), persists `merchants.logo_url`, and
+ * triggers favicon variant generation + merchant cache revalidation.
  */
 export async function uploadDataUriLogoBestEffort(
   dataUri: string,
@@ -199,13 +208,22 @@ export async function uploadDataUriLogoBestEffort(
     return null;
   }
   try {
+    const fileExt = extensionForImageMime(contentType);
     const bytes = decodeBase64ToBytes(base64Payload);
-    return await persistLogoBytesToMerchant({
+    const persistedUrl = await persistLogoBytesToMerchant({
       bytes,
       contentType,
-      fileExt: extensionForImageMime(contentType),
+      fileExt,
       merchantId,
     });
+    if (persistedUrl) {
+      await postFaviconBestEffort({
+        uri: dataUri.trim(),
+        name: `store-logo.${fileExt}`,
+        type: contentType,
+      });
+    }
+    return persistedUrl;
   } catch (error) {
     console.warn('Onboarding generated logo upload failed:', error);
     return null;

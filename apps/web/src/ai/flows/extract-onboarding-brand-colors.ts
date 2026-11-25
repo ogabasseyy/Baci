@@ -1,6 +1,9 @@
 import z from 'zod';
 import { generateObjectWithChain } from '@/ai/generate-object-with-chain';
-import { getVisionProviderChain } from '@/ai/vision-provider-chain';
+import {
+  getOnboardingVisionProviderChain,
+  getVisionProviderChain,
+} from '@/ai/vision-provider-chain';
 import { fetchImageBytes } from '@/lib/fetch-image-bytes';
 import { isPublicHttpUrl } from '@/lib/is-public-http-url';
 import { logger } from '@/lib/logger';
@@ -41,7 +44,8 @@ export async function extractBrandColorsFromDataUriBestEffort(
   dataUri: string,
   businessName: string,
   businessType: string,
-  timeoutMs: number = COLOR_EXTRACT_TIMEOUT_MS
+  timeoutMs: number = COLOR_EXTRACT_TIMEOUT_MS,
+  allowPaidOpenAi = false
 ): Promise<OnboardingBrandColors> {
   const fallback = createFallbackLogo(businessName, businessType).brandColors;
   const effectiveTimeoutMs = Math.min(COLOR_EXTRACT_TIMEOUT_MS, timeoutMs);
@@ -55,7 +59,9 @@ export async function extractBrandColorsFromDataUriBestEffort(
     const [, mediaType, base64] = match;
     const bytes = new Uint8Array(Buffer.from(base64, 'base64'));
     const { object } = await generateObjectWithChain({
-      chain: getVisionProviderChain(),
+      chain: allowPaidOpenAi
+        ? getOnboardingVisionProviderChain()
+        : getVisionProviderChain(),
       overallTimeoutMs: effectiveTimeoutMs,
       schema: BrandColorsSchema,
       messages: [
@@ -80,7 +86,8 @@ export async function extractBrandColorsFromDataUriBestEffort(
 }
 
 export async function extractBrandColorsFromUrl(
-  logoUrl: string
+  logoUrl: string,
+  allowPaidOpenAi = false
 ): Promise<OnboardingBrandColors> {
   let parsedLogoUrl: URL;
   try {
@@ -118,7 +125,9 @@ export async function extractBrandColorsFromUrl(
     }
 
     const { object } = await generateObjectWithChain({
-      chain: getVisionProviderChain(),
+      chain: allowPaidOpenAi
+        ? getOnboardingVisionProviderChain()
+        : getVisionProviderChain(),
       overallTimeoutMs: ONBOARDING_CHAIN_TIMEOUT_MS,
       schema: BrandColorsSchema,
       messages: [

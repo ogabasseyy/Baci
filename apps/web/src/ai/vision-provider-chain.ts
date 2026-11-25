@@ -1,4 +1,8 @@
-import { getTextProviderChain, type TextProvider } from './text-provider-chain';
+import {
+  getOnboardingTextProviderChain,
+  getTextProviderChain,
+  type TextProvider,
+} from './text-provider-chain';
 
 /**
  * Provider chain for image-INPUT tasks (OCR, logo color extraction, photo
@@ -15,6 +19,17 @@ import { getTextProviderChain, type TextProvider } from './text-provider-chain';
  */
 export function getVisionProviderChain(): TextProvider[] {
   return getTextProviderChain().filter(
+    (provider) => provider.vision && !provider.opportunistic
+  );
+}
+
+/**
+ * Onboarding-scoped vision chain for authenticated, paid-OpenAI-authorized
+ * callers: places OpenAI first when `OPENAI_API_KEY` is configured and falls
+ * back to the platform vision chain.
+ */
+export function getOnboardingVisionProviderChain(): TextProvider[] {
+  return getOnboardingTextProviderChain().filter(
     (provider) => provider.vision && !provider.opportunistic
   );
 }

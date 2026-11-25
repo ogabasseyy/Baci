@@ -558,4 +558,41 @@ describe('guideBusinessOnboarding', () => {
     expect(systemPrompt).not.toContain('Ignore previous');
     expect(systemPrompt).toContain('[filtered]');
   });
+
+  it('uses OpenAI first in the vision chain for extract_colors when allowPaidOpenAi is true', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    mockFetchImageBytes.mockResolvedValueOnce({
+      bytes: new Uint8Array([1, 2, 3]),
+      mediaType: 'image/png',
+    });
+    mockGenerateObject.mockResolvedValueOnce({
+      object: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    } as Awaited<ReturnType<typeof generateObject>>);
+
+    const result = await runGuideBusinessOnboarding(
+      {
+        businessName: 'Baci Meds',
+        businessType: 'pharmaceuticals',
+        brandPreferences: 'green',
+        logoUrl: 'https://example.com/logo.png',
+        task: 'extract_colors',
+      },
+      { allowPaidOpenAi: true }
+    );
+
+    expect(result.brandColors).toEqual({
+      primary: '#1E293B',
+      background: '#FFFFFF',
+      accent: '#F59E0B',
+    });
+    const usedModel = (
+      mockGenerateObject.mock.calls[0]?.[0] as { model?: unknown }
+    )?.model;
+    expect(usedModel).not.toBe('test-text-model');
+    expect(usedModel).toMatchObject({ provider: 'openai.chat' });
+  });
 });

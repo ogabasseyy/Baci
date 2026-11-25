@@ -82,7 +82,10 @@ export async function runGuideBusinessOnboarding(
     if (!input.logoUrl) {
       throw new Error('logoUrl is required for color extraction.');
     }
-    const brandColors = await extractBrandColorsFromUrl(input.logoUrl);
+    const brandColors = await extractBrandColorsFromUrl(
+      input.logoUrl,
+      allowPaidOpenAi
+    );
     return { brandColors };
   }
 
@@ -127,7 +130,8 @@ Please generate the logo image now.`;
           openAiLogoDataUri,
           businessName,
           businessType,
-          Math.max(0, logoDeadline - Date.now())
+          Math.max(0, logoDeadline - Date.now()),
+          allowPaidOpenAi
         );
         return { logos: [openAiLogoDataUri], brandColors };
       }
@@ -161,7 +165,8 @@ Please generate the logo image now.`;
         logoDataUri,
         businessName,
         businessType,
-        Math.max(0, logoDeadline - Date.now())
+        Math.max(0, logoDeadline - Date.now()),
+        allowPaidOpenAi
       );
 
       logger.info({

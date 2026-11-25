@@ -166,6 +166,31 @@ export function parseFullNameInput(
   };
 }
 
+/**
+ * Collapses whitespace in a person's name while preserving intentionally mixed
+ * casing (e.g. "McDonald", "O'Brien", "DeLaCruz"). Only all-lowercase or
+ * all-uppercase tokens are title-cased.
+ */
+export function normalizePersonName(value: string): string {
+  const collapsed = value.trim().replace(/\s+/g, ' ');
+  if (!collapsed) return '';
+  return collapsed
+    .split(' ')
+    .map((word) => {
+      if (word !== word.toLowerCase() && word !== word.toUpperCase()) {
+        return word;
+      }
+      return word
+        .toLowerCase()
+        .replace(
+          /(^|['-])([a-z])/g,
+          (_, separator: string, char: string) =>
+            `${separator}${char.toUpperCase()}`
+        );
+    })
+    .join(' ');
+}
+
 export function createInitialConversation(user: User | null): {
   data: OnboardingChatData;
   step: OnboardingChatStep;

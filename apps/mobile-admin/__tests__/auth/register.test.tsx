@@ -97,6 +97,40 @@ describe('RegisterScreen', () => {
     );
   });
 
+  it('normalizes all-caps names while preserving mixed-case surnames like oBrien', async () => {
+    render(<RegisterScreen />);
+    const send = () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Send response' }));
+
+    fireEvent.change(screen.getByLabelText('Full name'), {
+      target: { value: 'ADA oBrien-SMITH' },
+    });
+    send();
+    fireEvent.change(screen.getByLabelText('Email address'), {
+      target: { value: 'ada@example.com' },
+    });
+    send();
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'StrongP@ss123!' },
+    });
+    send();
+    fireEvent.change(screen.getByLabelText('Confirm Password'), {
+      target: { value: 'StrongP@ss123!' },
+    });
+    send();
+
+    await waitFor(() =>
+      expect(mocks.signUp).toHaveBeenCalledWith({
+        email: 'ada@example.com',
+        password: 'StrongP@ss123!',
+        firstName: 'Ada',
+        lastName: 'oBrien-SMITH',
+        fullName: 'Ada oBrien-SMITH',
+        signupFlow: 'merchant',
+      })
+    );
+  });
+
   it('routes a returned session to authenticated profile completion', async () => {
     render(<RegisterScreen />);
     fillFormAndSubmit();

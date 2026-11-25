@@ -129,6 +129,10 @@ describe('uploadPickedLogoBestEffort', () => {
       logo_url: 'https://cdn.usebaci.com/media/m-1/logo.png',
     });
     expect(mocks.updateEq).toHaveBeenCalledWith('id', 'm-2');
+    expect(mocks.apiClient).toHaveBeenCalledWith(
+      '/api/merchant/favicon',
+      expect.objectContaining({ method: 'POST' })
+    );
   });
 
   it('returns null and logs a warning when merchants.logo_url update fails', async () => {

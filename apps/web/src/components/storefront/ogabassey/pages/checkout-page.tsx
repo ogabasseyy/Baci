@@ -196,6 +196,7 @@ export const CheckoutPage: React.FC<
       session: checkoutFormState,
       account,
       user,
+      openAuthModal: checkoutFormSession.auth.open,
     },
     cart: {
       cart,

@@ -8,6 +8,8 @@ export function FlashListMock({
   ListHeaderComponent,
   ListFooterComponent,
   onEndReached,
+  onScrollBeginDrag,
+  keyboardShouldPersistTaps,
   renderItem,
 }: {
   data?: unknown[];
@@ -16,10 +18,15 @@ export function FlashListMock({
   ListHeaderComponent?: ReactNode;
   ListFooterComponent?: ReactNode;
   onEndReached?: () => void;
+  onScrollBeginDrag?: () => void;
+  keyboardShouldPersistTaps?: string;
   renderItem: (input: { index: number; item: unknown }) => ReactNode;
 }) {
   return (
-    <div>
+    <div
+      data-keyboard-taps={keyboardShouldPersistTaps ?? 'never'}
+      data-testid="flash-list"
+    >
       {ListHeaderComponent}
       {data.length === 0
         ? ListEmptyComponent
@@ -33,6 +40,11 @@ export function FlashListMock({
             </div>
           ))}
       {ListFooterComponent}
+      {onScrollBeginDrag ? (
+        <button onClick={onScrollBeginDrag} type="button">
+          List dragged (test)
+        </button>
+      ) : null}
       {onEndReached ? (
         <button onClick={onEndReached} type="button">
           List end reached (test)

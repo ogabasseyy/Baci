@@ -30,11 +30,13 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { page } = await brandAuthorityPageRuntime.loadIndexablePage(props);
 
-  let baseUrl = '';
-  try {
-    baseUrl = new URL(page.canonicalUrl).origin;
-  } catch {
-    baseUrl = page.merchant ? buildStoreUrl(page.merchant) : '';
+  let baseUrl = page.merchant ? buildStoreUrl(page.merchant) : '';
+  if (!baseUrl) {
+    try {
+      baseUrl = new URL(page.canonicalUrl).origin;
+    } catch {
+      baseUrl = '';
+    }
   }
 
   const imageCandidates = [page.products?.[0]?.image];

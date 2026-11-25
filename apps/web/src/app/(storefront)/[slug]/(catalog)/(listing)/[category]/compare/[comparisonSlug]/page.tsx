@@ -55,11 +55,13 @@ export async function generateMetadata({
     return COMPARE_NOT_FOUND_METADATA;
   }
 
-  let baseUrl = '';
-  try {
-    baseUrl = new URL(page.canonicalUrl).origin;
-  } catch {
-    baseUrl = page.merchant ? buildStoreUrl(page.merchant) : '';
+  let baseUrl = page.merchant ? buildStoreUrl(page.merchant) : '';
+  if (!baseUrl) {
+    try {
+      baseUrl = new URL(page.canonicalUrl).origin;
+    } catch {
+      baseUrl = '';
+    }
   }
 
   const getProductImageCandidate = (

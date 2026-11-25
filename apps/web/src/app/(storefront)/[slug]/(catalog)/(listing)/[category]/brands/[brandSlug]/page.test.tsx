@@ -25,7 +25,7 @@ const pageModel = {
   canonicalUrl: 'https://ogabassey.com/smartphones/brands/samsung',
   metaTitle: 'Samsung Phones and Prices in Nigeria | Ogabassey',
   metaDescription: 'Compare active Samsung phones and prices.',
-  merchant: { slug: 'ogabassey' },
+  merchant: { slug: 'ogabassey', custom_domain: 'ogabassey.com' },
 };
 
 describe('brand authority page metadata', () => {

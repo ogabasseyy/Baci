@@ -2,11 +2,13 @@ import { BUSINESS_TYPES } from '@/constants/business-types';
 import { COUNTRIES } from '@/constants/countries';
 import {
   exchangeMessages,
+  summaryRecapMessages,
   type TransitionResult,
   transitionFromBusinessName,
   transitionFromCountry,
 } from './onboarding-chat.transitions';
 import {
+  DEFAULT_BRAND_COLORS,
   type OnboardingChatData,
   type OnboardingChatStep,
   parseFullNameInput,
@@ -17,7 +19,8 @@ export function transitionFromTextInput(
   step: OnboardingChatStep,
   rawText: string,
   data: OnboardingChatData,
-  isCustomizingSlug = false
+  isCustomizingSlug = false,
+  returnToSummary = false
 ): TransitionResult {
   const trimmed = rawText.trim();
   if (!trimmed) return {};
@@ -58,6 +61,14 @@ export function transitionFromTextInput(
 
   if (step === 'phone') {
     if (lower === 'skip' || lower === 'skip for now') {
+      if (returnToSummary) {
+        return {
+          nextData: { phone: '' },
+          nextStep: 'summary',
+          returnToSummary: false,
+          messages: summaryRecapMessages(trimmed),
+        };
+      }
       return {
         nextStep: 'business_type',
         messages: exchangeMessages(
@@ -77,6 +88,14 @@ export function transitionFromTextInput(
           trimmed,
           'Please enter a valid phone number (7–15 digits) or tap "Skip for now".'
         ),
+      };
+    }
+    if (returnToSummary) {
+      return {
+        nextData: { phone: trimmed },
+        nextStep: 'summary',
+        returnToSummary: false,
+        messages: summaryRecapMessages(trimmed),
       };
     }
     return {
@@ -124,7 +143,9 @@ export function transitionFromTextInput(
     };
   }
 
-  if (step === 'business_name') return transitionFromBusinessName(trimmed);
+  if (step === 'business_name') {
+    return transitionFromBusinessName(trimmed, { data, returnToSummary });
+  }
 
   if (step === 'ai_name_description') {
     return { sideEffect: { type: 'generate_names', description: trimmed } };
@@ -133,8 +154,10 @@ export function transitionFromTextInput(
   if (step === 'logo') {
     if (lower.includes('skip')) {
       return {
+        nextData: { logoUrl: '', brandColors: DEFAULT_BRAND_COLORS },
         nextStep: 'slug',
         customizingSlug: false,
+        clearAiArtifacts: true,
         messages: exchangeMessages(
           trimmed,
           `Your store link will be ${data.slug}.usebaci.com. Does that look good?`
@@ -175,8 +198,10 @@ export function transitionFromTextInput(
       return { sideEffect: { type: 'generate_logo' } };
     }
     return {
+      nextData: { logoUrl: '', brandColors: DEFAULT_BRAND_COLORS },
       nextStep: 'slug',
       customizingSlug: false,
+      clearAiArtifacts: true,
       messages: exchangeMessages(
         trimmed,
         `Your store link will be ${data.slug}.usebaci.com. Does that look good?`

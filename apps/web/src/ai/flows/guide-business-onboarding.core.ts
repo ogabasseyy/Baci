@@ -1,36 +1,25 @@
-import { generateObject, generateText } from 'ai';
+import { generateText } from 'ai';
 import z from 'zod';
 import { generateObjectWithChain } from '@/ai/generate-object-with-chain';
 import {
   activeImageModel,
-  activeTextModel,
   sanitizePromptInput,
   withRetry,
 } from '@/ai/provider';
 import { getOnboardingTextProviderChain } from '@/ai/text-provider-chain';
-import { getVisionProviderChain } from '@/ai/vision-provider-chain';
-import { fetchImageBytes } from '@/lib/fetch-image-bytes';
-import { isPublicHttpUrl } from '@/lib/is-public-http-url';
 import { logger } from '@/lib/logger';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
+import {
+  BrandColorsSchema,
+  extractBrandColorsFromDataUriBestEffort,
+  extractBrandColorsFromUrl,
+} from './extract-onboarding-brand-colors';
 import { createFallbackLogo } from './fallback-logo';
 import { generateOpenAiLogo } from './generate-openai-logo';
 
 export type GuideBusinessOnboardingInput = z.infer<
   typeof guideBusinessOnboardingInputSchema
 >;
-
-const BrandColorsSchema = z.object({
-  primary: z.string().describe('The primary color, most dominant in the logo.'),
-  background: z
-    .string()
-    .describe(
-      'The background color, should be light and suitable for a page background. Prefer white or off-white.'
-    ),
-  accent: z
-    .string()
-    .describe('An accent color for highlights and calls-to-action.'),
-});
 
 const AI_LOGO_RETRY_CONFIG = Object.freeze({
   maxRetries: 0,
@@ -40,52 +29,6 @@ const AI_LOGO_RETRY_CONFIG = Object.freeze({
 });
 
 const ONBOARDING_CHAIN_TIMEOUT_MS = 40_000;
-const COLOR_EXTRACT_TIMEOUT_MS = 12_000;
-
-async function extractBrandColorsFromDataUriBestEffort(
-  dataUri: string,
-  businessName: string,
-  businessType: string
-): Promise<z.infer<typeof BrandColorsSchema>> {
-  const fallback = createFallbackLogo(businessName, businessType).brandColors;
-  const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i.exec(
-    dataUri.trim()
-  );
-  if (!match) return fallback;
-
-  try {
-    const [, mediaType, base64] = match;
-    const bytes = new Uint8Array(Buffer.from(base64, 'base64'));
-    const { object } = await generateObjectWithChain({
-      chain: getVisionProviderChain(),
-      overallTimeoutMs: COLOR_EXTRACT_TIMEOUT_MS,
-      schema: BrandColorsSchema,
-      messages: [
-        { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [{ type: 'image', image: bytes, mediaType }],
-        },
-      ],
-    });
-    return object;
-  } catch {
-    return fallback;
-  }
-}
-
-const EXTRACT_COLORS_SYSTEM_PROMPT = `You are a professional brand designer analyzing a logo image.
-TASK: Extract exactly 3 brand colors from this logo in hex format.
-INSTRUCTIONS:
-1. Primary color = The MOST DOMINANT color in the logo (usually the main brand color).
-2. Background color = A LIGHT, neutral color. Prefer pure white (#FFFFFF) or a very light off-white/grey from the logo that is suitable for a page background.
-3. Accent color = A complementary or highlight color that stands out from the primary color.
-IMPORTANT:
-- Look at the actual colors IN THE LOGO IMAGE.
-- Return colors as they appear in the logo, unless a background color must be generated.
-- Ensure the background color is very light for good readability.
-OUTPUT: Return JSON only, in exactly this shape (hex strings, no extra keys):
-{"primary": "#RRGGBB", "background": "#RRGGBB", "accent": "#RRGGBB"}`;
 
 const _GuideBusinessOnboardingOutputSchema = z.object({
   logos: z
@@ -122,71 +65,8 @@ export async function runGuideBusinessOnboarding(
     if (!input.logoUrl) {
       throw new Error('logoUrl is required for color extraction.');
     }
-    const logoUrl = input.logoUrl;
-    let parsedLogoUrl: URL;
-    try {
-      parsedLogoUrl = new URL(logoUrl);
-    } catch {
-      logger.warn({
-        message: 'Rejected malformed logoUrl for color extraction.',
-        flow: 'guideBusinessOnboarding',
-      });
-      throw new Error('Failed to extract brand colors.');
-    }
-    if (!(await isPublicHttpUrl(parsedLogoUrl))) {
-      logger.warn({
-        message: 'Rejected non-public logoUrl for color extraction.',
-        flow: 'guideBusinessOnboarding',
-      });
-      throw new Error('Failed to extract brand colors.');
-    }
-    logger.info({
-      message: 'Extracting colors from logo.',
-      flow: 'guideBusinessOnboarding',
-    });
-
-    try {
-      const imageBytes = await fetchImageBytes(logoUrl);
-
-      const { object } = imageBytes
-        ? await generateObjectWithChain({
-            chain: getVisionProviderChain(),
-            overallTimeoutMs: ONBOARDING_CHAIN_TIMEOUT_MS,
-            schema: BrandColorsSchema,
-            messages: [
-              { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'image',
-                    image: imageBytes.bytes,
-                    mediaType: imageBytes.mediaType,
-                  },
-                ],
-              },
-            ],
-          })
-        : await withRetry(async () => {
-            return await generateObject({
-              model: activeTextModel,
-              schema: BrandColorsSchema,
-              messages: [
-                { role: 'system', content: EXTRACT_COLORS_SYSTEM_PROMPT },
-                {
-                  role: 'user',
-                  content: [{ type: 'image', image: logoUrl }],
-                },
-              ],
-            });
-          });
-
-      logger.info({ message: 'Colors extracted successfully', colors: object });
-      return { brandColors: object };
-    } catch (error) {
-      logger.error({ message: 'Color extraction failed', error });
-      throw new Error('Failed to extract brand colors.');
-    }
+    const brandColors = await extractBrandColorsFromUrl(input.logoUrl);
+    return { brandColors };
   }
 
   if (input.task === 'generate_logos') {

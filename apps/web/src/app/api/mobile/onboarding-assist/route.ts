@@ -61,13 +61,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const isLogoTask = parsed.data.task === 'generate_logos';
+  const isImageTask =
+    parsed.data.task === 'generate_logos' ||
+    parsed.data.task === 'extract_colors';
   const userRateLimit = await applyRateLimit(
     `user:${auth.user.id}`,
-    isLogoTask
+    isImageTask
       ? '/api/mobile/onboarding-assist:logos'
       : '/api/mobile/onboarding-assist',
-    isLogoTask ? MOBILE_ONBOARDING_LOGO_LIMIT : MOBILE_ONBOARDING_TEXT_LIMIT
+    isImageTask ? MOBILE_ONBOARDING_LOGO_LIMIT : MOBILE_ONBOARDING_TEXT_LIMIT
   );
   if (!userRateLimit.allowed) {
     return NextResponse.json(
@@ -84,10 +86,10 @@ export async function POST(request: NextRequest) {
   if (clientIp) {
     const ipRateLimit = await applyRateLimit(
       `ip:${clientIp}`,
-      isLogoTask
+      isImageTask
         ? '/api/mobile/onboarding-assist:logos:ip'
         : '/api/mobile/onboarding-assist:ip',
-      isLogoTask
+      isImageTask
         ? MOBILE_ONBOARDING_IP_LOGO_LIMIT
         : MOBILE_ONBOARDING_IP_TEXT_LIMIT
     );

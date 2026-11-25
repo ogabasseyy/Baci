@@ -373,4 +373,115 @@ describe('MerchantSetupChat', () => {
       );
     });
   });
+
+  it('returns straight to summary after Change phone without losing custom slug or accepted logo', async () => {
+    mocks.assistMutateAsync.mockResolvedValueOnce({
+      logos: ['data:image/png;base64,iVBORw0KGgo='],
+      brandColors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+
+    render(<MerchantSetupChat />);
+
+    fireEvent.click(screen.getByText(/Nigeria/));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByText('Fashion & Apparel'));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Kicks Hub' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+
+    fireEvent.click(screen.getByRole('button', { name: "I don't have one" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate a logo' }));
+    await waitFor(() => {
+      expect(screen.getByAltText('Generated store logo preview')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Use this logo' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customize link' }));
+    fireEvent.change(screen.getByLabelText('Custom store link input'), {
+      target: { value: 'custom-kicks' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change phone' }));
+    fireEvent.change(screen.getByLabelText('Phone number input'), {
+      target: { value: '+234 801 234 5678' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Launch my store' }));
+
+    await waitFor(() => {
+      expect(mocks.provisionMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: '+234 801 234 5678',
+          slug: 'custom-kicks',
+          slugIsCustom: true,
+          brandColors: {
+            primary: '#1E293B',
+            background: '#FFFFFF',
+            accent: '#F59E0B',
+          },
+        })
+      );
+      expect(mocks.persistProvisionedStoreLogo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          logoUrl: 'data:image/png;base64,iVBORw0KGgo=',
+        })
+      );
+    });
+  });
+
+  it('clears generated logo draft and colors if user skips after generating', async () => {
+    mocks.assistMutateAsync.mockResolvedValueOnce({
+      logos: ['data:image/png;base64,iVBORw0KGgo='],
+      brandColors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+
+    render(<MerchantSetupChat />);
+
+    fireEvent.click(screen.getByText(/Nigeria/));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
+    fireEvent.click(screen.getByText('Fashion & Apparel'));
+    fireEvent.change(screen.getByLabelText('Store name input'), {
+      target: { value: 'Kicks Hub' },
+    });
+    fireEvent.click(screen.getByLabelText('Send response'));
+
+    fireEvent.click(screen.getByRole('button', { name: "I don't have one" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate a logo' }));
+    await waitFor(() => {
+      expect(screen.getByAltText('Generated store logo preview')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Skip logo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Looks good!' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Launch my store' }));
+
+    await waitFor(() => {
+      expect(mocks.provisionMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          logoUrl: undefined,
+          brandColors: {
+            primary: '#000000',
+            background: '#ffffff',
+            accent: '#f59e0b',
+          },
+        })
+      );
+      expect(mocks.persistProvisionedStoreLogo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          logoUrl: '',
+          pickedAsset: null,
+        })
+      );
+    });
+  });
 });

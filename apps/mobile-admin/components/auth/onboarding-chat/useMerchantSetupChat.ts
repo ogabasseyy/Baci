@@ -56,6 +56,7 @@ export function useMerchantSetupChat() {
   const [logoDraft, setLogoDraft] = useState<LogoDraft | null>(null);
   const [isCountryModalOpen, setIsCountryModalOpen] = useState(false);
   const [isCustomizingSlug, setIsCustomizingSlug] = useState(false);
+  const [returnToSummary, setReturnToSummary] = useState(false);
   const [rejectedSlug, setRejectedSlug] = useState<string | null>(null);
 
   const messageCounterRef = useRef(1);
@@ -86,6 +87,7 @@ export function useMerchantSetupChat() {
       setSuggestedNames([]);
       setLogoDraft(null);
       setIsCustomizingSlug(false);
+      setReturnToSummary(false);
     }
   }, [user]);
 
@@ -220,6 +222,9 @@ export function useMerchantSetupChat() {
     if (result.customizingSlug !== undefined) {
       setIsCustomizingSlug(result.customizingSlug);
     }
+    if (result.returnToSummary !== undefined) {
+      setReturnToSummary(result.returnToSummary);
+    }
     if (result.messages?.length) appendMessages(...result.messages);
     if (result.nextStep) setStep(result.nextStep);
     if (result.sideEffect?.type === 'open_country_modal') {
@@ -241,6 +246,7 @@ export function useMerchantSetupChat() {
       setSuggestedNames([]);
       setLogoDraft(null);
       setIsCustomizingSlug(false);
+      setReturnToSummary(false);
     }
   };
 
@@ -254,6 +260,7 @@ export function useMerchantSetupChat() {
           data,
           previewLogoUri: logoDraft?.uri ?? null,
           previewColors: logoDraft?.colors ?? null,
+          returnToSummary,
         })
       );
     },
@@ -266,7 +273,13 @@ export function useMerchantSetupChat() {
       const text = inputText;
       setInputText('');
       applyTransition(
-        transitionFromTextInput(step, text, data, isCustomizingSlug)
+        transitionFromTextInput(
+          step,
+          text,
+          data,
+          isCustomizingSlug,
+          returnToSummary
+        )
       );
     },
     hasRejectedSlug: Boolean(rejectedSlug && rejectedSlug === data.slug),

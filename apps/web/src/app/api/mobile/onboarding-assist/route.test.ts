@@ -146,6 +146,46 @@ describe('POST /api/mobile/onboarding-assist', () => {
     expect(mockGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
+  it('applies the stricter image rate-limit buckets to extract_colors', async () => {
+    mockGuideBusinessOnboarding.mockResolvedValueOnce({
+      brandColors: {
+        primary: '#111111',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+
+    const response = await POST(
+      makeRequest({
+        task: 'extract_colors',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'black and gold',
+        logoUrl: 'https://cdn.usebaci.com/logo.png',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockApplyRateLimit).toHaveBeenNthCalledWith(
+      1,
+      'user:user-123',
+      '/api/mobile/onboarding-assist:logos',
+      expect.objectContaining({
+        maxRequests: 5,
+        failClosedWithoutRedis: true,
+      })
+    );
+    expect(mockApplyRateLimit).toHaveBeenNthCalledWith(
+      2,
+      'ip:203.0.113.10',
+      '/api/mobile/onboarding-assist:logos:ip',
+      expect.objectContaining({
+        maxRequests: 15,
+        failClosedWithoutRedis: true,
+      })
+    );
+  });
+
   it('returns 400 for malformed JSON', async () => {
     const response = await POST(makeRequest(null, '{invalid-json'));
 

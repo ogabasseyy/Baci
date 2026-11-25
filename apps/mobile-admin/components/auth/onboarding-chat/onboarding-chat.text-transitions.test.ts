@@ -83,7 +83,7 @@ describe('transitionFromTextInput slug handling', () => {
     expect(result.nextData).toEqual({ phone: '+234 801 234 5678' });
   });
 
-  it('allows editing store name and phone from the summary step', () => {
+  it('allows editing store name and phone from the summary step and returning straight to summary', () => {
     const editName = transitionFromQuickReply({
       option: { id: 'summary:edit_name', label: 'Change store name' },
       data: BASE_DATA,
@@ -91,13 +91,68 @@ describe('transitionFromTextInput slug handling', () => {
       previewColors: null,
     });
     expect(editName.nextStep).toBe('business_name');
+    expect(editName.returnToSummary).toBe(true);
+
+    const customSlugData: OnboardingChatData = {
+      ...BASE_DATA,
+      slug: 'my-custom-handle',
+      slugIsCustom: true,
+    };
+    const renamed = transitionFromTextInput(
+      'business_name',
+      'New Store Name',
+      customSlugData,
+      false,
+      true
+    );
+    expect(renamed.nextStep).toBe('summary');
+    expect(renamed.returnToSummary).toBe(false);
+    expect(renamed.nextData).toEqual({ businessName: 'New Store Name' });
 
     const editPhone = transitionFromQuickReply({
       option: { id: 'summary:edit_phone', label: 'Change phone' },
-      data: BASE_DATA,
+      data: customSlugData,
       previewLogoUri: null,
       previewColors: null,
     });
     expect(editPhone.nextStep).toBe('phone');
+    expect(editPhone.returnToSummary).toBe(true);
+
+    const updatedPhone = transitionFromTextInput(
+      'phone',
+      '+234 801 234 5678',
+      customSlugData,
+      false,
+      true
+    );
+    expect(updatedPhone.nextStep).toBe('summary');
+    expect(updatedPhone.returnToSummary).toBe(false);
+    expect(updatedPhone.nextData).toEqual({ phone: '+234 801 234 5678' });
+  });
+
+  it('clears previously accepted logoUrl and brandColors when skipping logo setup', () => {
+    const withLogo: OnboardingChatData = {
+      ...BASE_DATA,
+      logoUrl: 'data:image/png;base64,abc123',
+      brandColors: {
+        primary: '#1E293B',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    };
+
+    const skipped = transitionFromQuickReply({
+      option: { id: 'logo:skip', label: 'Skip for now' },
+      data: withLogo,
+      previewLogoUri: 'data:image/png;base64,abc123',
+      previewColors: withLogo.brandColors,
+    });
+
+    expect(skipped.nextData).toEqual({
+      logoUrl: '',
+      brandColors: DEFAULT_BRAND_COLORS,
+    });
+    expect(skipped.clearAiArtifacts).toBe(true);
+    expect(skipped.nextStep).toBe('slug');
   });
 });

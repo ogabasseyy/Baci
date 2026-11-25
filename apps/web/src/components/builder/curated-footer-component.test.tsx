@@ -57,7 +57,7 @@ it('renders valid external social links with native anchors and drops unsafe sch
   });
   expect(instagramLink).toHaveAttribute(
     'href',
-    'https://instagram.com/northstar'
+    'https://www.instagram.com/northstar'
   );
   expect(instagramLink).toHaveAttribute('target', '_blank');
   expect(instagramLink).toHaveAttribute('rel', 'noopener noreferrer');

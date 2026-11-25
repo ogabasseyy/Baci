@@ -57,7 +57,13 @@ export function ConversationListItem({
   snippet,
 }: ConversationListItemProps) {
   const waiting = needsReply(conversation);
-  const overdue = waiting && isWaitingLong(conversation.lastActivityAt);
+  // Waiting runs from the shopper's message: labels or assignment move the
+  // chat's activity time without answering them.
+  const overdue =
+    waiting &&
+    isWaitingLong(
+      conversation.lastMessage?.createdAt ?? conversation.lastActivityAt
+    );
   const unread = conversation.unreadCount > 0;
   const preview = snippet || previewText(conversation);
 

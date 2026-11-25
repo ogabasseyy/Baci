@@ -199,8 +199,30 @@ describe('ConversationListItem', () => {
   });
 
   it('does not use amber for a shopper who only just wrote', () => {
-    renderItem(chat({ lastActivityAt: new Date().toISOString() }));
+    const now = new Date().toISOString();
+    renderItem(
+      chat({
+        lastActivityAt: now,
+        lastMessage: { ...message('customer'), createdAt: now },
+      })
+    );
     expect(screen.getByText('Just now')).not.toHaveStyle({
+      color: LIGHT_COLORS.gold,
+    });
+  });
+
+  it('bugfix: stays amber when someone touches a chat that has waited long', () => {
+    // Labels, priority or assignment move the activity time, not the wait.
+    renderItem(
+      chat({
+        lastActivityAt: new Date().toISOString(),
+        lastMessage: {
+          ...message('customer'),
+          createdAt: '2020-01-01T10:00:00Z',
+        },
+      })
+    );
+    expect(screen.getByText('Just now')).toHaveStyle({
       color: LIGHT_COLORS.gold,
     });
   });

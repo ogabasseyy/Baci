@@ -119,7 +119,8 @@ export function PaymentPreferencesCard({
                   <h3 className="font-semibold">Oxygen</h3>
                   <p className="text-sm text-muted-foreground">
                     Device &amp; order financing in installments for eligible
-                    customers.
+                    customers. Requires an active Oxygen merchant account and
+                    rollout admission to appear at checkout.
                   </p>
                   <div className="flex gap-2 mt-2 flex-wrap">
                     <span className="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 px-2 py-0.5 rounded-full">

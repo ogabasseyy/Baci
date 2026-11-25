@@ -51,6 +51,12 @@ describe('PaymentPreferencesCard', () => {
       />
     );
 
+    expect(
+      screen.getByText(
+        /requires an active oxygen merchant account and rollout admission/i
+      )
+    ).toBeInTheDocument();
+
     await user.click(screen.getByRole('switch', { name: /toggle oxygen/i }));
 
     expect(onSettingsChange).toHaveBeenCalledWith({

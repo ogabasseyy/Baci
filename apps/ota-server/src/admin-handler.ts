@@ -18,6 +18,9 @@ import type {
 import {
   errorResponse,
   jsonResponse,
+  MAX_ASSET_UPLOAD_BYTES,
+  MAX_PUBLISH_JSON_BYTES,
+  readBodyBytesWithLimit,
   ValidationError,
   validateAssetKey,
 } from './validation';
@@ -56,12 +59,19 @@ export async function handleAdminUploadAsset(
     );
   }
 
-  const buffer = await request.arrayBuffer();
-  if (buffer.byteLength === 0) {
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBodyBytesWithLimit(request, MAX_ASSET_UPLOAD_BYTES);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return errorResponse(err.message, err.status);
+    }
+    throw err;
+  }
+  if (bytes.byteLength === 0) {
     return errorResponse('Asset body cannot be empty', 400);
   }
 
-  const bytes = new Uint8Array(buffer);
   const actualSha256 = sha256Hex(bytes);
   if (expectedSha256.toLowerCase() !== actualSha256.toLowerCase()) {
     return errorResponse('Uploaded asset SHA-256 mismatch', 400);
@@ -109,7 +119,9 @@ export async function handleAdminPublish(
 
   let payload: PublishPayload;
   try {
-    payload = parsePublishPayload(await parseJsonBody(request));
+    payload = parsePublishPayload(
+      await parseJsonBody(request, MAX_PUBLISH_JSON_BYTES)
+    );
   } catch (err) {
     if (err instanceof ValidationError) {
       return errorResponse(err.message, err.status);

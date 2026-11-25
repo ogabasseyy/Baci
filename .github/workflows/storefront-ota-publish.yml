@@ -127,6 +127,11 @@ jobs:
           cp .github/scripts/storefront-ota-secret-scan.mjs "$RUNNER_TEMP/"
           cp .github/scripts/storefront-ota-public-config.mjs "$RUNNER_TEMP/"
           cp .github/scripts/prepare-storefront-ota-public-config.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-constants.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-digest-collection.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-sha256.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/verify-storefront-self-hosted-ota-export.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/verify-storefront-self-hosted-ota-export.test.mjs "$RUNNER_TEMP/"
           cp apps/ota-server/scripts/publish-ota.mjs "$RUNNER_TEMP/"
           git checkout --detach "$SOURCE_SHA"
 
@@ -237,27 +242,26 @@ jobs:
           fi
           pnpm exec expo export --platform "$BACI_MOBILE_BUILD_PLATFORM" --dump-assetmap --source-maps external --max-workers 2 --output-dir "$RUNNER_TEMP/storefront-ota/dist"
 
-      - name: Reject private secrets in OTA export
+      - name: Verify export parity, digests, and reject private secrets
         if: inputs.action == 'publish'
         env:
+          PLATFORM: ${{ inputs.platform }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           STOREFRONT_TIKTOK_APP_SECRET: ${{ secrets.STOREFRONT_TIKTOK_APP_SECRET }}
           OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
         run: |
           set -euo pipefail
-          node --input-type=module -e '
-            import { pathToFileURL } from "node:url";
-            import path from "node:path";
-            const tempDir = process.env.RUNNER_TEMP;
-            const { assertNoPrivateValues } = await import(
-              pathToFileURL(path.join(tempDir, "storefront-ota-secret-scan.mjs")).href
-            );
-            await assertNoPrivateValues(path.join(tempDir, "storefront-ota"), {
-              SENTRY_AUTH_TOKEN: process.env.SENTRY_AUTH_TOKEN,
-              STOREFRONT_TIKTOK_APP_SECRET: process.env.STOREFRONT_TIKTOK_APP_SECRET,
-              OTA_ADMIN_TOKEN: process.env.OTA_ADMIN_TOKEN,
-            });
-          '
+          node --test "$RUNNER_TEMP/verify-storefront-self-hosted-ota-export.test.mjs"
+          node "$RUNNER_TEMP/verify-storefront-self-hosted-ota-export.mjs" \
+            "$RUNNER_TEMP/storefront-ota" \
+            "$PLATFORM" \
+            "$RUNTIME_VERSION" \
+            "$CHANNEL" \
+            "$SOURCE_SHA" \
+            "$OTA_MANIFEST_URL"
 
       - name: Publish OTA update to ota.usebaci.com
         if: inputs.action == 'publish'

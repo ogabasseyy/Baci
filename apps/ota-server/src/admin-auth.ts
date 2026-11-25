@@ -3,6 +3,11 @@ import type { OtaWorkerEnv, PublishPayload, RollbackPayload } from './types';
 import {
   errorResponse,
   isPlainObject,
+  MAX_EXTRA_BYTES,
+  MAX_MANIFEST_ASSETS,
+  MAX_METADATA_BYTES,
+  MAX_PUBLISH_JSON_BYTES,
+  readBodyBytesWithLimit,
   ValidationError,
   validateChannelName,
   validateCommitSha,
@@ -11,6 +16,12 @@ import {
   validateStoredAsset,
   validateUpdateId,
 } from './validation';
+
+const UTF8_ENCODER = new TextEncoder();
+const UTF8_DECODER = new TextDecoder('utf-8', {
+  fatal: true,
+  ignoreBOM: false,
+});
 
 export function authenticateAdmin(
   request: Request,
@@ -30,9 +41,13 @@ export function authenticateAdmin(
   return null;
 }
 
-export async function parseJsonBody(request: Request): Promise<unknown> {
+export async function parseJsonBody(
+  request: Request,
+  maxBytes = MAX_PUBLISH_JSON_BYTES
+): Promise<unknown> {
+  const bytes = await readBodyBytesWithLimit(request, maxBytes);
   try {
-    return await request.json();
+    return JSON.parse(UTF8_DECODER.decode(bytes)) as unknown;
   } catch {
     throw new ValidationError('Malformed JSON request body', 400);
   }
@@ -121,12 +136,27 @@ export function parsePublishPayload(body: unknown): PublishPayload {
     if (!Array.isArray(body.assets)) {
       throw new ValidationError('assets must be an array');
     }
+    if (body.assets.length > MAX_MANIFEST_ASSETS) {
+      throw new ValidationError(
+        `assets exceeds maximum of ${MAX_MANIFEST_ASSETS} entries`,
+        413
+      );
+    }
     assets = body.assets.map((item, idx) =>
       validateStoredAsset(item, `assets[${idx}]`)
     );
   }
 
   const metadata = validateMetadataRecord(body.metadata);
+  if (
+    UTF8_ENCODER.encode(JSON.stringify(metadata)).byteLength >
+    MAX_METADATA_BYTES
+  ) {
+    throw new ValidationError(
+      `metadata exceeds maximum of ${MAX_METADATA_BYTES} bytes`,
+      413
+    );
+  }
 
   const extra =
     body.extra === undefined
@@ -136,6 +166,12 @@ export function parsePublishPayload(body: unknown): PublishPayload {
         : (() => {
             throw new ValidationError('extra must be an object');
           })();
+  if (UTF8_ENCODER.encode(JSON.stringify(extra)).byteLength > MAX_EXTRA_BYTES) {
+    throw new ValidationError(
+      `extra exceeds maximum of ${MAX_EXTRA_BYTES} bytes`,
+      413
+    );
+  }
 
   return {
     channel,

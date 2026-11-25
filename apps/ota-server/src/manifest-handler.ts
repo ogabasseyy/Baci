@@ -21,9 +21,14 @@ function resolveAssetForManifest(
   asset: StoredManifestAsset,
   requestUrl: string
 ): ExpoManifestAsset {
-  const url = asset.r2Key
-    ? new URL(`/api/assets/${asset.r2Key}`, requestUrl).toString()
-    : asset.url;
+  let url = asset.url;
+  if (asset.r2Key) {
+    const parsed = new URL(requestUrl);
+    const basePath = parsed.pathname
+      .replace(/\/api\/manifest\/?$/, '')
+      .replace(/\/+$/, '');
+    url = `${parsed.origin}${basePath}/api/assets/${asset.r2Key}`;
+  }
 
   if (!url) {
     throw new Error('Asset record has neither r2Key nor url');

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import type { ExpoUpdateManifest, OtaWorkerEnv } from '../src/types';
 import { MockR2Bucket } from './helpers/mock-r2';
@@ -99,7 +99,7 @@ async function setupChannelWithTwoReleases() {
     env
   );
 
-  return { env, b64A };
+  return { bucket, env, b64A };
 }
 
 describe('admin payload validation and rollback safety', () => {
@@ -310,5 +310,137 @@ describe('admin payload validation and rollback safety', () => {
     expect(Date.parse(manifest.createdAt)).toBeGreaterThan(
       Date.parse('2026-11-25T12:00:00.000Z')
     );
+  });
+
+  it('keeps rollback CAS pure without creating orphan releases under pointer contention', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T14:00:00.000Z'));
+    try {
+      const { bucket, env } = await setupChannelWithTwoReleases();
+      const UPDATE_C = '33333333-3333-4333-8333-333333333333';
+      const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+      const releasePrefix = `releases/production/ios/${RUNTIME}/`;
+
+      const releasesBefore = [...bucket.store.keys()].filter((k) =>
+        k.startsWith(releasePrefix)
+      ).length;
+
+      let injected = false;
+      bucket.onBeforePut = (key) => {
+        if (!injected && key === pointerKey) {
+          injected = true;
+          const entry = bucket.store.get(pointerKey);
+          if (entry) {
+            bucket.store.set(pointerKey, {
+              ...entry,
+              etag: '"concurrent-publish-c"',
+              bytes: new TextEncoder().encode(
+                JSON.stringify({
+                  mode: 'update',
+                  updateId: UPDATE_C,
+                  activeSourceUpdateId: UPDATE_C,
+                  previousUpdateId: UPDATE_B,
+                  updatedAt: '2026-11-25T13:00:00.000Z',
+                })
+              ),
+            });
+          }
+        }
+      };
+
+      const rbResp = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/rollback', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+            'idempotency-key': 'cas-contention-rb-1',
+          },
+          body: JSON.stringify({
+            channel: 'production',
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            targetUpdateId: UPDATE_A,
+          }),
+        }),
+        env
+      );
+      expect(rbResp.status).toBe(200);
+      const rbJson = (await rbResp.json()) as {
+        updateId: string;
+        rolledBackToUpdateId: string;
+      };
+      expect(rbJson.rolledBackToUpdateId).toBe(UPDATE_A);
+
+      const releasesAfter = [...bucket.store.keys()].filter((k) =>
+        k.startsWith(releasePrefix)
+      ).length;
+      // Exactly 1 new release created despite CAS retry.
+      expect(releasesAfter - releasesBefore).toBe(1);
+
+      const pointerObj = await bucket.get(pointerKey);
+      const pointer = await pointerObj?.json<{
+        updateId: string;
+        previousUpdateId: string;
+      }>();
+      expect(pointer?.updateId).toBe(rbJson.updateId);
+      expect(pointer?.previousUpdateId).toBe(UPDATE_C);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects rollback with 409 when a concurrent publish advances timestamp past prepared rollback', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T12:30:00.000Z'));
+    try {
+      const { bucket, env } = await setupChannelWithTwoReleases();
+      const UPDATE_C = '33333333-3333-4333-8333-333333333333';
+      const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+
+      let injected = false;
+      bucket.onBeforePut = (key) => {
+        if (!injected && key === pointerKey) {
+          injected = true;
+          const entry = bucket.store.get(pointerKey);
+          if (entry) {
+            bucket.store.set(pointerKey, {
+              ...entry,
+              etag: '"newer-concurrent-c"',
+              bytes: new TextEncoder().encode(
+                JSON.stringify({
+                  mode: 'update',
+                  updateId: UPDATE_C,
+                  activeSourceUpdateId: UPDATE_C,
+                  previousUpdateId: UPDATE_B,
+                  updatedAt: '2026-11-25T13:00:00.000Z',
+                })
+              ),
+            });
+          }
+        }
+      };
+
+      const rbResp = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/rollback', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+            'idempotency-key': 'cas-timestamp-conflict-1',
+          },
+          body: JSON.stringify({
+            channel: 'production',
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            targetUpdateId: UPDATE_A,
+          }),
+        }),
+        env
+      );
+      expect(rbResp.status).toBe(409);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

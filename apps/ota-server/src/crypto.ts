@@ -197,3 +197,13 @@ export function sha256Base64Url(input: Uint8Array | string): string {
 export function sha256Hex(input: Uint8Array | string): string {
   return createHash('sha256').update(input).digest('hex');
 }
+
+export function deriveDeterministicUuid(seed: string): string {
+  const hex = sha256Hex(seed);
+  const versionNibbles = `4${hex.slice(13, 16)}`;
+  const variantNibble = (
+    8 |
+    (Number.parseInt(hex.slice(16, 17), 16) & 0x3)
+  ).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${versionNibbles}-${variantNibble}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}

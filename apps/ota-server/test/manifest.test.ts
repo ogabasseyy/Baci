@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import worker from '../src/index';
-import type { OtaWorkerEnv, StoredReleaseRecord } from '../src/types';
+import { handleGetManifest } from '../src/manifest-handler';
+import type {
+  ExpoUpdateManifest,
+  OtaWorkerEnv,
+  StoredReleaseRecord,
+} from '../src/types';
 import { MockR2Bucket } from './helpers/mock-r2';
 import { parseMultipartMixed } from './helpers/multipart-parser';
 
@@ -239,5 +244,30 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
     expect(JSON.parse(missingEmbeddedParts[0]?.body ?? '')).toEqual({
       type: 'noUpdateAvailable',
     });
+  });
+
+  it('preserves URL path prefix when resolving asset URLs from prefixed manifest requests', async () => {
+    const bucket = new MockR2Bucket();
+    await seedRelease(bucket);
+    const env: OtaWorkerEnv = { OTA_BUCKET: bucket };
+
+    const resp = await handleGetManifest(
+      new Request('https://proxy.usebaci.com/mobile-ota/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(resp.status).toBe(200);
+    const parts = parseMultipartMixed(
+      resp.headers.get('content-type'),
+      await resp.text()
+    );
+    const manifest = JSON.parse(parts[0]?.body ?? '') as ExpoUpdateManifest;
+    expect(manifest.launchAsset.url).toBe(
+      'https://proxy.usebaci.com/mobile-ota/api/assets/bundles/ios/abc123.hbc'
+    );
+    expect(manifest.assets[0]?.url).toBe(
+      'https://proxy.usebaci.com/mobile-ota/api/assets/blobs/def456.png'
+    );
   });
 });

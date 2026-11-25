@@ -63,6 +63,11 @@ export function TagSheet({
     const name = custom.trim();
     // No letters or numbers (say "!!!"): the server would refuse it.
     if (!tagWords(name) || full || busy) return;
+    // Already on the chat: nothing to send. Typing never removes a tag.
+    if (selected.some((slug) => sameTag(slug, name))) {
+      setCustom('');
+      return;
+    }
     const saved = await onAdd(name);
     // A failed save keeps what was typed, so it can be tried again as it is;
     // text typed since the tap is never wiped.

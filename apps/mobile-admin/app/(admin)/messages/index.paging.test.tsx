@@ -124,4 +124,36 @@ describe('MessagesScreen automatic paging', () => {
 
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
   });
+
+  it('bugfix: the retry for older chats does not cancel a refresh that is running', () => {
+    mocks.query.mockReturnValue({
+      ...withMorePages(true),
+      isFetchNextPageError: true,
+    });
+    render(<MessagesScreen />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Could not load more chats. Tap to retry.',
+      })
+    );
+
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it('retries older chats once nothing is being fetched', () => {
+    mocks.query.mockReturnValue({
+      ...withMorePages(false),
+      isFetchNextPageError: true,
+    });
+    render(<MessagesScreen />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Could not load more chats. Tap to retry.',
+      })
+    );
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
 });

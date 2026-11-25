@@ -15,7 +15,10 @@ import { buildGuestOrderResponse } from './build-guest-order-response';
 import { fetchAuthenticatedDeliveryFlag } from './fetch-authenticated-delivery-flag';
 import { fetchOrderInventoryProof } from './fetch-inventory-proof';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
-import { fetchStorefrontOrderLedgerCredit } from './fetch-storefront-order-ledger-credit';
+import {
+  fetchStorefrontOrderLedgerCredit,
+  requiresStorefrontOrderLedgerCredit,
+} from './fetch-storefront-order-ledger-credit';
 import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
 import { mapTrackingPaymentAccounts } from './map-tracking-payment-accounts';
 import { orderDetailSelect } from './order-detail-select';
@@ -159,7 +162,9 @@ export async function GET(
         // biome-ignore format: compact call preserves the 300-line route gate.
         const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null, email ?? null);
         // biome-ignore format: compact call preserves the 300-line route gate.
-        const ledgerCredit = await fetchStorefrontOrderLedgerCredit(supabase, order.id);
+        const ledgerCredit = requiresStorefrontOrderLedgerCredit(order.payment_method)
+          ? await fetchStorefrontOrderLedgerCredit(supabase, order.id)
+          : { ok: true as const, walletLedgerUsed: 0, savingsLedgerUsed: 0 };
         if (!ledgerCredit.ok) {
           return NextResponse.json(
             { error: 'Failed to verify order store credit' },

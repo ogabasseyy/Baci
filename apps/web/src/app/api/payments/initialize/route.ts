@@ -9,6 +9,10 @@
  * - Proper separation of concerns
  */
 
+import {
+  sumActiveSavingsLedgerCredit,
+  sumNetWalletLedgerCredit,
+} from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -1358,11 +1362,9 @@ export async function POST(request: NextRequest) {
 
       const { data: walletRows, error: walletError } = await paymentDataClient
         .from('customer_wallet_transactions')
-        .select('amount')
+        .select('amount, status, source_type, type')
         .eq('source_id', data.order_id)
-        .eq('merchant_id', merchantId)
-        .eq('source_type', 'order_redemption')
-        .eq('type', 'redemption');
+        .eq('merchant_id', merchantId);
 
       if (walletError) {
         return createErrorResponse(
@@ -1380,22 +1382,24 @@ export async function POST(request: NextRequest) {
         ),
         0
       );
-      const walletFromLedgerRows = Array.isArray(walletRows)
-        ? walletRows.reduce((sum, row) => {
-            const amount =
-              row && typeof row === 'object'
-                ? (row as { amount?: unknown }).amount
-                : 0;
-            return sum + Math.max(numberOrDefault(amount, 0), 0);
-          }, 0)
-        : 0;
+      const walletFromLedgerRows = sumNetWalletLedgerCredit(walletRows);
+      const hasWalletReversal =
+        Array.isArray(walletRows) &&
+        walletRows.some(
+          (row) =>
+            Boolean(row) &&
+            typeof row === 'object' &&
+            (row as { source_type?: unknown }).source_type === 'order_reversal'
+        );
 
-      walletAmountUsed = Math.max(walletFromOrderRow, walletFromLedgerRows);
+      walletAmountUsed = hasWalletReversal
+        ? walletFromLedgerRows
+        : Math.max(walletFromOrderRow, walletFromLedgerRows);
     }
 
     const { data: savingsRows, error: savingsError } = await paymentDataClient
       .from('customer_savings_redemptions')
-      .select('amount')
+      .select('amount, metadata')
       .eq('order_id', data.order_id)
       .eq('merchant_id', merchantId);
 
@@ -1407,15 +1411,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const savingsAmountUsed = Array.isArray(savingsRows)
-      ? savingsRows.reduce((sum, row) => {
-          const amount =
-            row && typeof row === 'object'
-              ? (row as { amount?: unknown }).amount
-              : 0;
-          return sum + Math.max(numberOrDefault(amount, 0), 0);
-        }, 0)
-      : 0;
+    const savingsAmountUsed = sumActiveSavingsLedgerCredit(savingsRows);
 
     const pilotFundingRejection = rejectInvalidRedvaultLivePilotFunding({
       redvaultRequested,

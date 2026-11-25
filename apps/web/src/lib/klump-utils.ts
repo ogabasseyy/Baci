@@ -1,3 +1,5 @@
+import { isPreGatewayCreditStatus } from '@baci/shared/lib';
+
 export interface BnplOrderItem {
   name?: string;
   product_name?: string;
@@ -84,8 +86,7 @@ export function getBnplRemainingAmount(
   const walletColumn = toCurrencyAmount(order.wallet_amount_used);
   const walletLedger = toCurrencyAmount(order.wallet_ledger_used);
   const savingsLedger = toCurrencyAmount(order.savings_ledger_used);
-  const isUnpaid = (order.payment_status ?? 'unpaid') === 'unpaid';
-  const preGatewayPaid = isUnpaid
+  const preGatewayPaid = isPreGatewayCreditStatus(order.payment_status)
     ? Math.max(
         toCurrencyAmount(order.amount_paid),
         walletColumn + savingsLedger,

@@ -105,11 +105,7 @@ function createMockAdminClient() {
         return {
           select: () => ({
             eq: () => ({
-              eq: () => ({
-                eq: () => ({
-                  eq: () => Promise.resolve(walletTransactionsResult),
-                }),
-              }),
+              eq: () => Promise.resolve(walletTransactionsResult),
             }),
           }),
         };

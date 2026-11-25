@@ -1,3 +1,7 @@
+import {
+  sumActiveSavingsLedgerCredit,
+  sumNetWalletLedgerCredit,
+} from '@baci/shared/lib';
 import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import { CheckoutStepCard } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutStepCard';
@@ -9,7 +13,6 @@ import {
   getOxygenOrderNetPayable,
   isOxygenPreGatewayStatus,
   oxygenCheckoutOrderSchema,
-  sumPositiveLedgerAmounts,
 } from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
 import { OxygenApplicationDialog } from './OxygenApplicationDialog';
@@ -84,15 +87,13 @@ export async function OxygenStorefrontCheckout({
   ] = await Promise.all([
     client
       .from('customer_wallet_transactions')
-      .select('amount')
+      .select('amount, status, source_type, type')
       .eq('source_id', orderId)
       .eq('customer_id', customerId)
-      .eq('merchant_id', merchantId)
-      .eq('source_type', 'order_redemption')
-      .eq('type', 'redemption'),
+      .eq('merchant_id', merchantId),
     client
       .from('customer_savings_redemptions')
-      .select('amount')
+      .select('amount, metadata')
       .eq('order_id', orderId)
       .eq('customer_id', customerId)
       .eq('merchant_id', merchantId),
@@ -101,8 +102,8 @@ export async function OxygenStorefrontCheckout({
   if (walletLedgerError || savingsLedgerError) notFound();
   const order = {
     ...parsed.data,
-    wallet_ledger_used: sumPositiveLedgerAmounts(walletLedgerRows),
-    savings_ledger_used: sumPositiveLedgerAmounts(savingsLedgerRows),
+    wallet_ledger_used: sumNetWalletLedgerCredit(walletLedgerRows),
+    savings_ledger_used: sumActiveSavingsLedgerCredit(savingsLedgerRows),
   };
   const netPayable = getOxygenOrderNetPayable(order);
   if (isOxygenPreGatewayStatus(order.payment_status) && netPayable <= 0) {

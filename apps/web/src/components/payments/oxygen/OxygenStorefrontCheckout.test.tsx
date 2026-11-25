@@ -464,11 +464,18 @@ it('does not treat settled gateway amount_paid as store credit for paid or bnpl_
 
 it('falls back to wallet and savings ledger rows when order credit columns are zero', async () => {
   mocks.walletLedger.mockResolvedValueOnce({
-    data: [{ amount: 100000 }],
+    data: [
+      {
+        amount: 100000,
+        source_type: 'order_redemption',
+        type: 'redemption',
+        status: 'completed',
+      },
+    ],
     error: null,
   });
   mocks.savingsLedger.mockResolvedValueOnce({
-    data: [{ amount: 50000 }],
+    data: [{ amount: 50000, metadata: {} }],
     error: null,
   });
   mocks.one
@@ -640,4 +647,90 @@ it('rejects a pending Oxygen order covered 100% by store credit', async () => {
       merchantSlug: 'shop',
     })
   ).rejects.toThrow('not found');
+});
+
+it('ignores reversed or non-completed wallet/savings ledger rows on Oxygen resume', async () => {
+  mocks.walletLedger.mockResolvedValueOnce({
+    data: [
+      {
+        amount: 100000,
+        source_type: 'order_redemption',
+        type: 'redemption',
+        status: 'completed',
+      },
+      {
+        amount: 50000,
+        source_type: 'order_redemption',
+        type: 'redemption',
+        status: 'pending',
+      },
+      {
+        amount: 100000,
+        source_type: 'order_reversal',
+        type: 'credit',
+        status: 'completed',
+      },
+    ],
+    error: null,
+  });
+  mocks.savingsLedger.mockResolvedValueOnce({
+    data: [
+      {
+        amount: 50000,
+        metadata: { reversed_at: '2026-11-25T10:00:00Z' },
+      },
+    ],
+    error: null,
+  });
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+        payment_status: 'unpaid',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'customer',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 0,
+        wallet_amount_used: 0,
+        order_items: [],
+      },
+      error: null,
+    });
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  render(checkout);
+  expect(screen.getByText('Plan amount: 400000')).toBeVisible();
 });

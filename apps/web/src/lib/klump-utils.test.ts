@@ -178,5 +178,14 @@ describe('klump-utils', () => {
         savings_ledger_used: 5_000,
       })
     ).toBe(35_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'pending',
+        amount_paid: 15_000,
+        wallet_amount_used: 0,
+      })
+    ).toBe(35_000);
   });
 });

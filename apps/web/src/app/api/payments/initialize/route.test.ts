@@ -247,11 +247,7 @@ function createMockAdminClient() {
         return {
           select: () => ({
             eq: () => ({
-              eq: () => ({
-                eq: () => ({
-                  eq: () => Promise.resolve(walletTransactionsResult),
-                }),
-              }),
+              eq: () => Promise.resolve(walletTransactionsResult),
             }),
           }),
         };
@@ -1690,7 +1686,14 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       walletTransactionsResult = {
-        data: [{ amount: 25_000 }],
+        data: [
+          {
+            amount: 25_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'completed',
+          },
+        ],
         error: null,
       };
       featureSettingsResult = {
@@ -1740,11 +1743,18 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       walletTransactionsResult = {
-        data: [{ amount: 30_000 }],
+        data: [
+          {
+            amount: 30_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'completed',
+          },
+        ],
         error: null,
       };
       savingsRedemptionsResult = {
-        data: [{ amount: 20_000 }],
+        data: [{ amount: 20_000, metadata: {} }],
         error: null,
       };
       featureSettingsResult = {
@@ -1770,6 +1780,83 @@ describe('POST /api/payments/initialize', () => {
       expect(
         rpcCalls.some((call) => call.name === 'create_payment_transaction')
       ).toBe(false);
+    });
+
+    it('does not subtract reversed or non-completed wallet/savings ledger credit from Klump gateway charge', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { wallet_amount_used: 20_000 },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 20_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'completed',
+          },
+          {
+            amount: 10_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'pending',
+          },
+          {
+            amount: 20_000,
+            source_type: 'order_reversal',
+            type: 'credit',
+            status: 'completed',
+          },
+        ],
+        error: null,
+      };
+      savingsRedemptionsResult = {
+        data: [
+          {
+            amount: 15_000,
+            metadata: { reversed_at: '2026-11-25T10:00:00Z' },
+          },
+        ],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 50_000, gateway: 'klump' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      const txCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(txCall?.args).toMatchObject({
+        p_amount: 50_000,
+        p_merchant_amount: 50_000,
+        p_gateway: 'klump',
+      });
     });
 
     it('rejects Klump when store credits cover 100% of the order', async () => {

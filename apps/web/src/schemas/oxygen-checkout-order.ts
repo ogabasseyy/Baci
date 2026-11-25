@@ -1,3 +1,4 @@
+import { isPreGatewayCreditStatus } from '@baci/shared/lib';
 import { z } from 'zod';
 
 const amount = z
@@ -36,22 +37,7 @@ export const oxygenCheckoutOrderSchema = z.object({
   ),
 });
 
-export function sumPositiveLedgerAmounts(rows: unknown): number {
-  if (!Array.isArray(rows)) return 0;
-  return rows.reduce((sum: number, row) => {
-    const raw =
-      row && typeof row === 'object'
-        ? (row as { amount?: unknown }).amount
-        : undefined;
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? sum + value : sum;
-  }, 0);
-}
-
-export function isOxygenPreGatewayStatus(status?: string | null): boolean {
-  const normalized = (status ?? 'unpaid').trim().toLowerCase();
-  return normalized === 'unpaid' || normalized === 'pending';
-}
+export const isOxygenPreGatewayStatus = isPreGatewayCreditStatus;
 
 export function getOxygenOrderPreGatewayPaid(
   order: Pick<

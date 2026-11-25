@@ -176,6 +176,44 @@ BEGIN
   IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000015', 50000, 50000, 15000, 'bnpl_approved') IS DISTINCT FROM 35000 THEN
     RAISE EXCEPTION 'Expected bnpl_approved order net payable 35000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000015', 50000, 50000, 15000, 'bnpl_approved');
   END IF;
+
+  -- Pending pre-gateway order with partial amount_paid subtracts pre-gateway store credit consistently with TS.
+  IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 15000, 0, 'pending') IS DISTINCT FROM 35000 THEN
+    RAISE EXCEPTION 'Expected pending order net payable 35000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 15000, 0, 'pending');
+  END IF;
+
+  -- Reversed wallet redemptions, non-completed wallet rows, and reversed savings rows do not reduce net payable.
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'customer_wallet_transactions'
+      AND column_name = 'wallet_id'
+  ) THEN
+    INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
+    VALUES ('ec310000-0000-4000-8000-000000000016','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-REVERSED',50000,50000,'NGN','unpaid','oxygen',0,0,0,0);
+
+    INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
+    VALUES
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','completed',20000,0,'order_redemption','ec310000-0000-4000-8000-000000000016'),
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','pending',10000,0,'order_redemption','ec310000-0000-4000-8000-000000000016'),
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',20000,20000,'order_reversal','ec310000-0000-4000-8000-000000000016');
+
+    INSERT INTO public.customer_savings_goals(
+      id,merchant_id,customer_id,product_id,title,target_amount,current_amount,contribution_amount,
+      contribution_frequency,start_date,maturity_date,source_mode,status,completed_at,
+      terms_accepted_at,non_withdrawable_accepted_at
+    ) VALUES
+      ('ec310000-0000-4000-8000-000000000034','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000031','Goal Reversed',15000,15000,1000,'daily',current_date,current_date,'manual','completed',now(),now(),now());
+
+    INSERT INTO public.customer_savings_redemptions(goal_id,merchant_id,customer_id,order_id,amount,idempotency_key,metadata)
+    VALUES
+      ('ec310000-0000-4000-8000-000000000034','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000016',15000,'oxy-ledger-reversed','{"reversed_at":"2026-11-25T10:00:00Z"}'::jsonb);
+
+    IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 50000 THEN
+      RAISE EXCEPTION 'Expected reversed ledger order net payable 50000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 0, 0, 'unpaid');
+    END IF;
+  END IF;
 END $test$;
 RESET ROLE;
 ROLLBACK;

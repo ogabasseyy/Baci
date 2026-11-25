@@ -10,8 +10,16 @@ const merchantId = '3adf89f9-67ec-4dda-9037-e691eec1ff9b';
 function mockOrderQuery(
   data: Record<string, unknown>,
   ledger?: {
-    walletRows?: Array<{ amount: number }>;
-    savingsRows?: Array<{ amount: number }>;
+    walletRows?: Array<{
+      amount: number;
+      source_type?: string;
+      type?: string;
+      status?: string;
+    }>;
+    savingsRows?: Array<{
+      amount: number;
+      metadata?: Record<string, unknown> | null;
+    }>;
   }
 ) {
   const orderQuery = {
@@ -19,9 +27,9 @@ function mockOrderQuery(
     eq: jest.fn().mockReturnThis(),
     single: jest.fn().mockResolvedValue({ data, error: null }),
   };
-  const createLedgerQuery = (rows: Array<{ amount: number }>) => {
+  const createLedgerQuery = (rows: Record<string, unknown>[]) => {
     interface LedgerChain
-      extends Promise<{ data: Array<{ amount: number }>; error: null }> {
+      extends Promise<{ data: Record<string, unknown>[]; error: null }> {
       select: jest.Mock<LedgerChain>;
       eq: jest.Mock<LedgerChain>;
     }
@@ -71,6 +79,7 @@ it.each([
 
 it.each([
   'unpaid',
+  'pending',
   'paid',
   'bnpl_approved',
 ])('allows an owned %s order to load its canonical confirmation state', async (status) => {
@@ -172,8 +181,15 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
       shipping_status: 'pending',
     },
     {
-      walletRows: [{ amount: 30000 }],
-      savingsRows: [{ amount: 18000 }],
+      walletRows: [
+        {
+          amount: 30000,
+          source_type: 'order_redemption',
+          type: 'redemption',
+          status: 'completed',
+        },
+      ],
+      savingsRows: [{ amount: 18000, metadata: {} }],
     }
   );
   await expect(
@@ -191,7 +207,7 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
       shipping_status: 'pending',
     },
     {
-      savingsRows: [{ amount: 48000 }],
+      savingsRows: [{ amount: 48000, metadata: {} }],
     }
   );
   await expect(
@@ -209,11 +225,76 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
       shipping_status: 'pending',
     },
     {
-      walletRows: [{ amount: 150000 }],
-      savingsRows: [{ amount: 48000 }],
+      walletRows: [
+        {
+          amount: 150000,
+          source_type: 'order_redemption',
+          type: 'redemption',
+          status: 'completed',
+        },
+      ],
+      savingsRows: [{ amount: 48000, metadata: {} }],
     }
   );
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
   ).rejects.toThrow('zero-balance order');
+});
+
+it('subtracts partial pre-gateway amount_paid on pending orders and ignores reversed ledger credit', async () => {
+  mockOrderQuery({
+    id: orderId,
+    total: 198000,
+    amount_paid: 48000,
+    wallet_amount_used: 0,
+    payment_method: 'oxygen',
+    payment_status: 'pending',
+    shipping_status: 'pending',
+  });
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({ total: 150000 });
+
+  mockOrderQuery(
+    {
+      id: orderId,
+      total: 198000,
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      payment_method: 'oxygen',
+      payment_status: 'unpaid',
+      shipping_status: 'pending',
+    },
+    {
+      walletRows: [
+        {
+          amount: 30000,
+          source_type: 'order_redemption',
+          type: 'redemption',
+          status: 'completed',
+        },
+        {
+          amount: 20000,
+          source_type: 'order_redemption',
+          type: 'redemption',
+          status: 'pending',
+        },
+        {
+          amount: 30000,
+          source_type: 'order_reversal',
+          type: 'credit',
+          status: 'completed',
+        },
+      ],
+      savingsRows: [
+        {
+          amount: 18000,
+          metadata: { reversed_at: '2026-11-25T10:00:00Z' },
+        },
+      ],
+    }
+  );
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({ total: 198000 });
 });

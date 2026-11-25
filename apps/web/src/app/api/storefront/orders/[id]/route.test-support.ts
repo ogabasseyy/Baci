@@ -51,7 +51,13 @@ export const mockAnonClient = {
 };
 
 export function createLedgerQueryMock(
-  rows: Array<{ amount: number }> = [],
+  rows: Array<{
+    amount: number;
+    source_type?: string;
+    type?: string;
+    status?: string;
+    metadata?: Record<string, unknown> | null;
+  }> = [],
   error: unknown = null
 ) {
   const chain = Object.assign(Promise.resolve({ data: rows, error }), {
@@ -64,8 +70,16 @@ export function createLedgerQueryMock(
 export function createStorefrontFromMock(
   overrides: Record<string, unknown>,
   ledger?: {
-    walletRows?: Array<{ amount: number }>;
-    savingsRows?: Array<{ amount: number }>;
+    walletRows?: Array<{
+      amount: number;
+      source_type?: string;
+      type?: string;
+      status?: string;
+    }>;
+    savingsRows?: Array<{
+      amount: number;
+      metadata?: Record<string, unknown> | null;
+    }>;
   }
 ) {
   return (table: string) => {

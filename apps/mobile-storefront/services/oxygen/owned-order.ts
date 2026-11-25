@@ -1,3 +1,8 @@
+import {
+  isPreGatewayCreditStatus,
+  sumActiveSavingsLedgerCredit,
+  sumNetWalletLedgerCredit,
+} from '@baci/shared/lib';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import { oxygenOrderPrefill } from './order-prefill';
@@ -16,18 +21,6 @@ const orderSchema = z.object({
   shipping_address: z.unknown().optional(),
   delivery_method: z.unknown().optional(),
 });
-function sumPositiveAmounts(rows: unknown): number {
-  if (!Array.isArray(rows)) return 0;
-  return rows.reduce((sum: number, row) => {
-    const raw =
-      row && typeof row === 'object'
-        ? (row as { amount?: unknown }).amount
-        : undefined;
-    const value = Number(raw);
-    return Number.isFinite(value) && value > 0 ? sum + value : sum;
-  }, 0);
-}
-
 export async function readOwnedOxygenOrder(
   orderId: string,
   customerId: string,
@@ -52,15 +45,13 @@ export async function readOwnedOxygenOrder(
       .single(),
     supabase
       .from('customer_wallet_transactions')
-      .select('amount')
+      .select('amount, status, source_type, type')
       .eq('source_id', orderId)
       .eq('customer_id', customerId)
-      .eq('merchant_id', merchantId)
-      .eq('source_type', 'order_redemption')
-      .eq('type', 'redemption'),
+      .eq('merchant_id', merchantId),
     supabase
       .from('customer_savings_redemptions')
-      .select('amount')
+      .select('amount, metadata')
       .eq('order_id', orderId)
       .eq('customer_id', customerId)
       .eq('merchant_id', merchantId),
@@ -77,31 +68,33 @@ export async function readOwnedOxygenOrder(
   if (
     isClosedOxygenShippingStatus(order.shipping_status) ||
     // Funded orders can be read back for the standard confirmation screen.
-    !['unpaid', 'paid', 'bnpl_approved'].includes(order.payment_status)
+    !['unpaid', 'pending', 'paid', 'bnpl_approved'].includes(
+      order.payment_status
+    )
   )
     throw new Error(
       'This order is closed. Open your order history for details.'
     );
-  const walletLedgerUsed = sumPositiveAmounts(walletLedgerRows);
-  const savingsLedgerUsed = sumPositiveAmounts(savingsLedgerRows);
-  const preGatewayPaid =
-    order.payment_status === 'unpaid'
-      ? Math.max(
-          order.amount_paid ?? 0,
-          (order.wallet_amount_used ?? 0) + savingsLedgerUsed,
-          walletLedgerUsed + savingsLedgerUsed,
-          0
-        )
-      : Math.min(
-          Math.max(order.wallet_amount_used ?? 0, walletLedgerUsed, 0) +
-            savingsLedgerUsed,
-          order.total
-        );
+  const walletLedgerUsed = sumNetWalletLedgerCredit(walletLedgerRows);
+  const savingsLedgerUsed = sumActiveSavingsLedgerCredit(savingsLedgerRows);
+  const isPreGateway = isPreGatewayCreditStatus(order.payment_status);
+  const preGatewayPaid = isPreGateway
+    ? Math.max(
+        order.amount_paid ?? 0,
+        (order.wallet_amount_used ?? 0) + savingsLedgerUsed,
+        walletLedgerUsed + savingsLedgerUsed,
+        0
+      )
+    : Math.min(
+        Math.max(order.wallet_amount_used ?? 0, walletLedgerUsed, 0) +
+          savingsLedgerUsed,
+        order.total
+      );
   const payableTotal = Math.max(
     Number((order.total - preGatewayPaid).toFixed(2)),
     0
   );
-  if (order.payment_status === 'unpaid' && payableTotal <= 0) {
+  if (isPreGateway && payableTotal <= 0) {
     throw new Error(
       'Choose another payment option for this zero-balance order.'
     );

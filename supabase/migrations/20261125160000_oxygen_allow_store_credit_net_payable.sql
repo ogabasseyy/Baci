@@ -59,20 +59,29 @@ BEGIN
   END IF;
 
   IF p_order_id IS NOT NULL THEN
-    SELECT COALESCE(SUM(GREATEST(t.amount, 0)), 0)
+    SELECT GREATEST(
+      COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
+        WHERE t.source_type = 'order_redemption'
+          AND t.type = 'redemption'
+          AND t.status = 'completed'
+      ), 0) - COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
+        WHERE t.source_type = 'order_reversal'
+      ), 0),
+      0
+    )
       INTO v_wallet_ledger
     FROM public.customer_wallet_transactions t
-    WHERE t.source_type = 'order_redemption'
-      AND t.type = 'redemption'
-      AND t.source_id = p_order_id;
+    WHERE t.source_id = p_order_id
+      AND t.source_type IN ('order_redemption', 'order_reversal');
 
     SELECT COALESCE(SUM(GREATEST(r.amount, 0)), 0)
       INTO v_savings_ledger
     FROM public.customer_savings_redemptions r
-    WHERE r.order_id = p_order_id;
+    WHERE r.order_id = p_order_id
+      AND NOT (COALESCE(r.metadata, '{}'::jsonb) ? 'reversed_at');
   END IF;
 
-  IF COALESCE(p_payment_status, 'unpaid') = 'unpaid' THEN
+  IF COALESCE(p_payment_status, 'unpaid') IN ('unpaid', 'pending') THEN
     v_pre_gateway_credit := GREATEST(
       COALESCE(p_amount_paid, 0),
       COALESCE(p_wallet_amount_used, 0) + COALESCE(v_savings_ledger, 0),
@@ -177,8 +186,8 @@ AS $$
 DECLARE
   v_wallet_changed boolean := NEW.wallet_amount_used IS DISTINCT FROM OLD.wallet_amount_used;
   v_unpaid_amount_paid_changed boolean :=
-    OLD.payment_status = 'unpaid'
-    AND NEW.payment_status = 'unpaid'
+    OLD.payment_status IN ('unpaid', 'pending')
+    AND NEW.payment_status IN ('unpaid', 'pending')
     AND NEW.amount_paid IS DISTINCT FROM OLD.amount_paid;
 BEGIN
   IF NOT v_wallet_changed AND NOT v_unpaid_amount_paid_changed THEN

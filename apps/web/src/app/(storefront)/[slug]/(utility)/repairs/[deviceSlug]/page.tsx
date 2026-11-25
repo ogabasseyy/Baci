@@ -16,6 +16,10 @@ import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import { getStorefrontPathPrefix } from '@/lib/storefront-path-prefix';
 import { buildRepairsDeviceSchema } from '@/lib/storefront-repairs/repairs-schema';
 import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
+import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
@@ -107,15 +111,39 @@ export async function generateMetadata({
 
   const { title, description } = buildDeviceMetaTitle(resolved);
   const baseUrl = buildStoreUrl(resolved.merchant);
+  const canonicalUrl = `${baseUrl}/repairs/${resolved.detail.device.slug}`;
+  const { metadataTitle, title: resolvedTitle } = buildStorefrontMetadataTitle({
+    fallback: `Fix ${resolved.detail.device.brand} ${resolved.detail.device.model}`,
+    title,
+  });
+  const imageCandidates = [
+    resolved.detail.device.imageUrl,
+    resolved.merchant.logo_url,
+  ];
 
   return {
-    title: buildStorefrontMetadataTitle({
-      fallback: `Fix ${resolved.detail.device.brand} ${resolved.detail.device.model}`,
-      title,
-    }).metadataTitle,
+    title: metadataTitle,
     description,
     alternates: {
-      canonical: `${baseUrl}/repairs/${resolved.detail.device.slug}`,
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: resolvedTitle,
+      description,
+      url: canonicalUrl,
+      type: 'website',
+      siteName: resolved.merchant.business_name,
+      images: getStorefrontOpenGraphImages(
+        baseUrl,
+        resolvedTitle,
+        ...imageCandidates
+      ),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: resolvedTitle,
+      description,
+      images: getStorefrontTwitterImages(baseUrl, ...imageCandidates),
     },
   };
 }

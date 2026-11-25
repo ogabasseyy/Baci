@@ -25,7 +25,7 @@ describe('OgabasseyFooter', () => {
     render(<OgabasseyFooter storeSlug="/ogabassey" />);
 
     const expectedProfiles = {
-      Instagram: 'https://instagram.com/ogabasseyy',
+      Instagram: 'https://www.instagram.com/ogabasseyy',
       Facebook: 'https://www.facebook.com/ogabasseyyy',
       TikTok: 'https://www.tiktok.com/@ogabasseyy',
       'X (formerly Twitter)': 'https://x.com/ogabasseyy',

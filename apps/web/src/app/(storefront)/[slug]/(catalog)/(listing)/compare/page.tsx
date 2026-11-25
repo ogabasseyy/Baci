@@ -17,6 +17,10 @@ import {
 import { buildStoreUrl } from '@/lib/store-url';
 import { canonicalizeCategorySlug } from '@/lib/storefront-canonical-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
+import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import CategoryPageRoute, {
   generateMetadata as generateCategoryMetadata,
@@ -171,11 +175,17 @@ export async function generateMetadata({
       url: `${storeUrl}/compare`,
       type: 'website',
       siteName: merchant.business_name,
+      images: getStorefrontOpenGraphImages(
+        storeUrl,
+        compareTitle,
+        merchant.logo_url
+      ),
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title: compareTitle,
       description,
+      images: getStorefrontTwitterImages(storeUrl, merchant.logo_url),
     },
   };
 }

@@ -36,6 +36,22 @@ describe('model family authority page', () => {
         canonical:
           'https://store.test/smartphones/brands/samsung/families/galaxy-s',
       },
+      openGraph: {
+        title: 'Samsung Galaxy S Phones and Prices in Nigeria | Store',
+        description: 'Compare Galaxy S phones.',
+        url: 'https://store.test/smartphones/brands/samsung/families/galaxy-s',
+        type: 'website',
+        images: [
+          {
+            url: 'https://store.test/opengraph-image',
+            alt: 'Samsung Galaxy S Phones and Prices in Nigeria | Store',
+          },
+        ],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        images: ['https://store.test/opengraph-image'],
+      },
     });
   });
 });

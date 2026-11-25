@@ -1,13 +1,14 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
-import { ONBOARDING_ASSIST_TIMEOUT_MS } from '@/hooks/useOnboardingAssist';
-import { apiClient } from '@/lib/api-client';
 import { supabase } from '@/lib/supabase';
 import { readUploadBytes } from '@/lib/upload/readUploadBytes';
 import {
+  extractAndPersistUploadedLogoColors,
   postBytesFaviconBestEffort,
   postFaviconBestEffort,
 } from './onboarding-chat.favicon-upload';
+
+export { extractAndPersistUploadedLogoColors };
 
 export interface PickedLogoAsset {
   uri: string;
@@ -214,51 +215,6 @@ export async function uploadDataUriLogoBestEffort(
     console.warn('Onboarding generated logo upload failed:', error);
     return null;
   }
-}
-
-export async function extractAndPersistUploadedLogoColors(params: {
-  logoUrl: string;
-  merchantId: string;
-  businessName: string;
-  businessType: string;
-}): Promise<boolean> {
-  const payload = JSON.stringify({
-    task: 'extract_colors',
-    logoUrl: params.logoUrl,
-    businessName: params.businessName,
-    businessType: params.businessType,
-    brandPreferences: 'Extract from uploaded logo',
-  });
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const result = await apiClient<{
-        brandColors?: { primary: string; background: string; accent: string };
-      }>('/api/mobile/onboarding-assist', {
-        method: 'POST',
-        timeout: ONBOARDING_ASSIST_TIMEOUT_MS,
-        body: payload,
-      });
-      if (!result.brandColors) return false;
-      const { error } = await supabase
-        .from('merchants')
-        .update({ brand_colors: result.brandColors })
-        .eq('id', params.merchantId);
-      if (error) {
-        console.warn('Onboarding brand_colors update failed:', error.message);
-        return false;
-      }
-      return true;
-    } catch (error) {
-      if (attempt === 1) {
-        console.warn(
-          'Onboarding uploaded logo color extraction failed after retry:',
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-    }
-  }
-  return false;
 }
 
 export async function persistProvisionedStoreLogo(params: {

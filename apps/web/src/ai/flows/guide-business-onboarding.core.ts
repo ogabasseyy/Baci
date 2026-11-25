@@ -33,6 +33,7 @@ const AI_LOGO_RETRY_CONFIG = Object.freeze({
 
 const ONBOARDING_CHAIN_TIMEOUT_MS = 40_000;
 const LOGO_GENERATION_TOTAL_BUDGET_MS = 45_000;
+const OPENAI_LOGO_BUDGET_MS = 14_000;
 const LOGO_COLOR_EXTRACT_RESERVE_MS = 10_000;
 const MIN_GEMINI_LOGO_BUDGET_MS = 3_000;
 
@@ -119,9 +120,17 @@ Requirements:
 Please generate the logo image now.`;
 
       const logoDeadline = Date.now() + LOGO_GENERATION_TOTAL_BUDGET_MS;
-      const openAiLogoDataUri = allowPaidOpenAi
-        ? await generateOpenAiLogo(prompt)
-        : null;
+      const openAiBudgetMs = Math.min(
+        OPENAI_LOGO_BUDGET_MS,
+        Math.max(0, logoDeadline - Date.now() - LOGO_COLOR_EXTRACT_RESERVE_MS)
+      );
+      const openAiLogoDataUri =
+        allowPaidOpenAi && openAiBudgetMs >= 1_000
+          ? await generateOpenAiLogo(prompt, {
+              timeoutMs: openAiBudgetMs,
+              signal: AbortSignal.timeout(openAiBudgetMs),
+            })
+          : null;
       if (openAiLogoDataUri) {
         logger.info({
           message: 'Logo generated successfully with OpenAI',

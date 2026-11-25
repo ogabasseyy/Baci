@@ -56,13 +56,16 @@ describe('generateOpenAiLogo', () => {
       timeout: 14_000,
       maxRetries: 0,
     });
-    expect(mockImagesGenerate).toHaveBeenCalledWith({
-      model: 'gpt-image-1',
-      prompt: 'minimalist coffee logo',
-      size: '1024x1024',
-      quality: 'low',
-      n: 1,
-    });
+    expect(mockImagesGenerate).toHaveBeenCalledWith(
+      {
+        model: 'gpt-image-1',
+        prompt: 'minimalist coffee logo',
+        size: '1024x1024',
+        quality: 'low',
+        n: 1,
+      },
+      undefined
+    );
   });
 
   it('defaults to gpt-image-2.6-flare when OPENAI_IMAGE_MODEL is unset', async () => {
@@ -76,13 +79,40 @@ describe('generateOpenAiLogo', () => {
     const result = await generateOpenAiLogo('minimalist coffee logo');
 
     expect(result).toBe('data:image/png;base64,iVBORw0KGgo=');
-    expect(mockImagesGenerate).toHaveBeenCalledWith({
-      model: 'gpt-image-2.6-flare',
-      prompt: 'minimalist coffee logo',
-      size: '1024x1024',
-      quality: 'low',
-      n: 1,
+    expect(mockImagesGenerate).toHaveBeenCalledWith(
+      {
+        model: 'gpt-image-2.6-flare',
+        prompt: 'minimalist coffee logo',
+        size: '1024x1024',
+        quality: 'low',
+        n: 1,
+      },
+      undefined
+    );
+  });
+
+  it('forwards caller-supplied deadline timeoutMs and AbortSignal to OpenAI', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'sk-test');
+    mockImagesGenerate.mockResolvedValueOnce({
+      data: [{ b64_json: 'iVBORw0KGgo=' }],
     });
+    const controller = new AbortController();
+
+    const { generateOpenAiLogo } = await import('./generate-openai-logo');
+    await generateOpenAiLogo('minimalist coffee logo', {
+      timeoutMs: 9_000,
+      signal: controller.signal,
+    });
+
+    expect(mockOpenAiConstructor).toHaveBeenCalledWith({
+      apiKey: 'sk-test',
+      timeout: 9_000,
+      maxRetries: 0,
+    });
+    expect(mockImagesGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'minimalist coffee logo' }),
+      { signal: controller.signal }
+    );
   });
 
   it('returns null on API error so callers fall back to Gemini', async () => {

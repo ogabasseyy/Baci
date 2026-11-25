@@ -240,6 +240,28 @@ describe('uploadPickedLogoBestEffort', () => {
     });
   });
 
+  it('does not retry deterministic 400/403 color extraction errors', async () => {
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const forbiddenError = Object.assign(new Error('Forbidden'), {
+      statusCode: 403,
+    });
+    mocks.apiClient.mockRejectedValueOnce(forbiddenError);
+
+    const ok = await extractAndPersistUploadedLogoColors({
+      logoUrl: 'https://cdn.usebaci.com/media/other/logo.png',
+      merchantId: 'm-1',
+      businessName: 'SoleLux',
+      businessType: 'fashion',
+    });
+
+    expect(ok).toBe(false);
+    expect(mocks.apiClient).toHaveBeenCalledTimes(1);
+    expect(mocks.update).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   it('rejects picked SVG logos and alerts the user instead of returning an uploadable asset', async () => {
     vi.mocked(
       ImagePicker.requestMediaLibraryPermissionsAsync

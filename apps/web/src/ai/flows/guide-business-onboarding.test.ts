@@ -484,7 +484,15 @@ describe('guideBusinessOnboarding', () => {
       { allowPaidOpenAi: true }
     );
 
-    expect(timeoutSpy).toHaveBeenCalledWith(15_000);
+    expect(timeoutSpy).toHaveBeenNthCalledWith(1, 14_000);
+    expect(timeoutSpy).toHaveBeenNthCalledWith(2, 15_000);
+    expect(mockGenerateOpenAiLogo).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        timeoutMs: 14_000,
+        signal: expect.any(AbortSignal),
+      })
+    );
     expect(mockGenerateText).toHaveBeenCalledWith(
       expect.objectContaining({
         maxRetries: 0,

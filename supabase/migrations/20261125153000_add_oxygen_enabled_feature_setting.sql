@@ -67,25 +67,56 @@ BEGIN
 END
 $audit$;
 
--- Include `oxygen_enabled` in the storefront cache invalidation projection so
--- direct `merchant_feature_settings` updates (e.g. mobile-admin toggles) trigger
--- cache invalidation just like other public payment flags.
+-- Include `oxygen_enabled` in the storefront cache invalidation and public
+-- snapshot projections so direct `merchant_feature_settings` updates trigger
+-- cache invalidation and `resolve_storefront_public_snapshot_v2` /
+-- `resolve_storefront_cached_merchant` surface `oxygen_enabled`.
 DO $cache_projection$
 DECLARE
   v_definition text;
-  v_needle constant text := $needle$'order_tracking_enabled','pay_on_delivery_enabled'$needle$;
+  v_cache_needle constant text := $needle$'order_tracking_enabled','pay_on_delivery_enabled'$needle$;
+  v_cached_merchant_needle constant text := $needle$'order_tracking_enabled', fs.order_tracking_enabled,$needle$;
+  v_snapshot_needle constant text := $needle$'order_tracking_enabled',$needle$;
 BEGIN
   v_definition := pg_catalog.pg_get_functiondef(
     'public.merchant_feature_settings_public_cache_projection(public.merchant_feature_settings)'::pg_catalog.regprocedure
   );
-  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_needle, '')))
-       / pg_catalog.length(v_needle) <> 1 THEN
+  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_cache_needle, '')))
+       / pg_catalog.length(v_cache_needle) <> 1 THEN
     RAISE EXCEPTION 'feature cache oxygen_enabled projection contract changed';
   END IF;
   EXECUTE pg_catalog.replace(
     v_definition,
-    v_needle,
+    v_cache_needle,
     $replacement$'order_tracking_enabled','oxygen_enabled','pay_on_delivery_enabled'$replacement$
+  );
+
+  v_definition := pg_catalog.pg_get_functiondef(
+    'public.resolve_storefront_cached_merchant(text)'::pg_catalog.regprocedure
+  );
+  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_cached_merchant_needle, '')))
+       / pg_catalog.length(v_cached_merchant_needle) <> 1 THEN
+    RAISE EXCEPTION 'cached merchant oxygen_enabled projection contract changed';
+  END IF;
+  EXECUTE pg_catalog.replace(
+    v_definition,
+    v_cached_merchant_needle,
+    $replacement$'order_tracking_enabled', fs.order_tracking_enabled,
+          'oxygen_enabled', fs.oxygen_enabled,$replacement$
+  );
+
+  v_definition := pg_catalog.pg_get_functiondef(
+    'public.resolve_storefront_public_snapshot_v2(text)'::pg_catalog.regprocedure
+  );
+  IF (pg_catalog.length(v_definition) - pg_catalog.length(pg_catalog.replace(v_definition, v_snapshot_needle, '')))
+       / pg_catalog.length(v_snapshot_needle) <> 1 THEN
+    RAISE EXCEPTION 'public snapshot oxygen_enabled projection contract changed';
+  END IF;
+  EXECUTE pg_catalog.replace(
+    v_definition,
+    v_snapshot_needle,
+    $replacement$'order_tracking_enabled',
+              'oxygen_enabled',$replacement$
   );
 END
 $cache_projection$;

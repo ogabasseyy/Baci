@@ -9,8 +9,8 @@ VALUES
 SELECT pg_catalog.set_config('request.jwt.claim.sub', 'f2ab0000-0000-4000-8000-000000000001', true);
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
-INSERT INTO public.merchants(id, user_id, email, business_name, slug)
-VALUES ('f2ab0000-0000-4000-8000-000000000011','f2ab0000-0000-4000-8000-000000000001','oxygen-toggle-merchant@example.test','Oxygen Toggle Store','oxygen-toggle-store');
+INSERT INTO public.merchants(id, user_id, email, business_name, slug, is_published)
+VALUES ('f2ab0000-0000-4000-8000-000000000011','f2ab0000-0000-4000-8000-000000000001','oxygen-toggle-merchant@example.test','Oxygen Toggle Store','oxygen-toggle-store',true);
 
 INSERT INTO public.customers(id, merchant_id, user_id, first_name, last_name, email)
 VALUES ('f2ab0000-0000-4000-8000-000000000021','f2ab0000-0000-4000-8000-000000000011','f2ab0000-0000-4000-8000-000000000002','Oxygen','Customer','oxygen-toggle-customer@example.test');
@@ -94,7 +94,11 @@ END $$;
 
 RESET ROLE;
 DO $$
-DECLARE v_row public.merchant_feature_settings%ROWTYPE; v_proj jsonb;
+DECLARE
+  v_row public.merchant_feature_settings%ROWTYPE;
+  v_proj jsonb;
+  v_cached record;
+  v_snapshot record;
 BEGIN
   SELECT * INTO STRICT v_row
   FROM public.merchant_feature_settings
@@ -102,6 +106,18 @@ BEGIN
   v_proj := public.merchant_feature_settings_public_cache_projection(v_row);
   IF NOT (v_proj ? 'oxygen_enabled') OR (v_proj ->> 'oxygen_enabled')::boolean IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'merchant_feature_settings_public_cache_projection omitted oxygen_enabled: %', v_proj;
+  END IF;
+
+  SELECT * INTO STRICT v_cached
+  FROM public.resolve_storefront_cached_merchant('oxygen-toggle-store');
+  IF (v_cached.feature_settings ->> 'oxygen_enabled')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'resolve_storefront_cached_merchant omitted oxygen_enabled: %', v_cached.feature_settings;
+  END IF;
+
+  SELECT * INTO STRICT v_snapshot
+  FROM public.resolve_storefront_public_snapshot_v2('oxygen-toggle-store');
+  IF (v_snapshot.feature_settings ->> 'oxygen_enabled')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'resolve_storefront_public_snapshot_v2 omitted oxygen_enabled: %', v_snapshot.feature_settings;
   END IF;
 END $$;
 SET LOCAL ROLE authenticated;

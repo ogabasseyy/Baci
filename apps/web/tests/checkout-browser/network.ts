@@ -221,6 +221,7 @@ export const test = base.extend<{
               },
             ],
           },
+          '/api/payments/oxygen/storefront-availability': { available: false },
           '/api/payments/redvault/availability': {
             enabled: false,
             available: false,

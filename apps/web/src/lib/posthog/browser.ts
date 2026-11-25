@@ -1,6 +1,7 @@
 import posthog from 'posthog-js';
 import { markPostHogBrowserInitialized } from '@/lib/posthog/browser-state';
 import { connectClientEventSink } from '@/lib/posthog/capture-client-event';
+import { isCheckoutPathname } from '@/lib/posthog/checkout-path';
 import { buildPostHogClientConfig } from '@/lib/posthog/client-config';
 import type { PostHogEnv } from '@/lib/posthog/config';
 import { pendingClientExceptionQueue } from '@/lib/posthog/pending-client-exception-queue';
@@ -21,6 +22,7 @@ const POSTHOG_LOADED_STATE_CHECK_ATTEMPTS = 40;
 
 let hasInitializedPostHogBrowser = false;
 let lastConfiguredPostHogLightweight: boolean | undefined;
+let lastConfiguredPostHogSessionRecording: boolean | undefined;
 let isPostHogReadyForCapture = false;
 let isPostHogBrowserDisabled = false;
 let lastCapturedPostHogPageviewUrl: string | undefined;
@@ -46,6 +48,18 @@ export interface InitializePostHogBrowserOptions {
   hostname?: string;
 }
 
+function resolveSurfaceLocation(options: InitializePostHogBrowserOptions = {}) {
+  const location =
+    typeof globalThis.location === 'undefined'
+      ? undefined
+      : globalThis.location;
+
+  return {
+    pathname: options.pathname || location?.pathname,
+    hostname: options.hostname || location?.hostname,
+  };
+}
+
 function isLightweightPostHogSurface(
   options: InitializePostHogBrowserOptions = {}
 ): boolean {
@@ -53,23 +67,33 @@ function isLightweightPostHogSurface(
     return options.lightweight;
   }
 
-  const pathname =
-    options.pathname ||
-    (typeof globalThis.location === 'undefined'
-      ? undefined
-      : globalThis.location.pathname);
+  const { pathname, hostname } = resolveSurfaceLocation(options);
+  return pathname ? isPublicBlogPathname(pathname, { hostname }) : false;
+}
 
-  if (!pathname) {
-    return false;
+function isCheckoutPostHogSurface(
+  options: InitializePostHogBrowserOptions = {}
+): boolean {
+  const { pathname, hostname } = resolveSurfaceLocation(options);
+  return pathname ? isCheckoutPathname(pathname, { hostname }) : false;
+}
+
+function syncPostHogSessionRecording(
+  previousSessionRecording: boolean | undefined,
+  nextSessionRecording: boolean
+) {
+  if (previousSessionRecording !== true && nextSessionRecording === true) {
+    posthog.startSessionRecording?.({ sampling: true });
+    return;
   }
 
-  return isPublicBlogPathname(pathname, {
-    hostname:
-      options.hostname ||
-      (typeof globalThis.location === 'undefined'
-        ? undefined
-        : globalThis.location.hostname),
-  });
+  if (
+    previousSessionRecording === true &&
+    nextSessionRecording === false &&
+    posthog.sessionRecordingStarted?.()
+  ) {
+    posthog.stopSessionRecording?.();
+  }
 }
 
 type PostHogBrowserClientConfig = ReturnType<typeof buildPostHogClientConfig>;
@@ -146,16 +170,24 @@ export function initializePostHogBrowser(
   isPostHogBrowserDisabled = false;
 
   const lightweight = isLightweightPostHogSurface(options);
+  const sessionRecording = !lightweight && isCheckoutPostHogSurface(options);
 
   if (hasInitializedPostHogBrowser) {
-    if (lastConfiguredPostHogLightweight !== lightweight) {
+    if (
+      lastConfiguredPostHogLightweight !== lightweight ||
+      lastConfiguredPostHogSessionRecording !== sessionRecording
+    ) {
       const clientConfig = buildPostHogClientConfig(env, projectToken, {
         lightweight,
+        sessionRecording,
       });
       const { loaded: _loaded, ...runtimeConfig } = clientConfig;
       const previousLightweight = lastConfiguredPostHogLightweight;
+      const previousSessionRecording = lastConfiguredPostHogSessionRecording;
       posthog.set_config(runtimeConfig);
       lastConfiguredPostHogLightweight = lightweight;
+      lastConfiguredPostHogSessionRecording = sessionRecording;
+      syncPostHogSessionRecording(previousSessionRecording, sessionRecording);
       maybeReloadPostHogRemoteConfig(previousLightweight, lightweight);
       maybeReloadPostHogFeatureFlags(previousLightweight, lightweight);
     }
@@ -164,6 +196,7 @@ export function initializePostHogBrowser(
 
   const clientConfig = buildPostHogClientConfig(env, projectToken, {
     lightweight,
+    sessionRecording,
   });
   const { advancedDisableFlags, initConfig } =
     splitPostHogInitConfig(clientConfig);
@@ -171,6 +204,7 @@ export function initializePostHogBrowser(
 
   try {
     lastConfiguredPostHogLightweight = lightweight;
+    lastConfiguredPostHogSessionRecording = sessionRecording;
     posthog.init(projectToken, {
       ...initConfig,
       loaded(posthogInstance) {
@@ -200,6 +234,7 @@ export function initializePostHogBrowser(
   } catch (error) {
     isPostHogReadyForCapture = false;
     lastConfiguredPostHogLightweight = undefined;
+    lastConfiguredPostHogSessionRecording = undefined;
     throw error;
   }
 }

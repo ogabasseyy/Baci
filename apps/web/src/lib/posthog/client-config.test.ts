@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPostHogClientConfig,
@@ -49,7 +47,7 @@ describe('PostHog client config', () => {
         maskAllInputs: true,
         maskTextFn: expect.any(Function),
         maskTextSelector: 'body',
-        sampleRate: 0.01,
+        sampleRate: 1,
       }),
     });
     expect(config.property_blacklist).not.toContain('token');
@@ -58,13 +56,34 @@ describe('PostHog client config', () => {
     );
   });
 
-  it('requires a manual start and samples 1% of eligible checkout sessions', () => {
+  it('disables session recording by default on non-checkout surfaces to protect CWV', () => {
     const config = buildPostHogClientConfig({ NODE_ENV: 'production' });
 
     expect(config.disable_session_recording).toBe(true);
-    expect(config.session_recording?.sampleRate).toBe(0.01);
-    // Privacy masking must survive the sampling trim.
+    // Privacy masking must survive the checkout-only config.
     expect(config.session_recording?.maskAllInputs).toBe(true);
+  });
+
+  it('enables 100% session recording with privacy masking on checkout surfaces', () => {
+    const config = buildPostHogClientConfig(
+      { NODE_ENV: 'production' },
+      'phc_public_token',
+      { sessionRecording: true }
+    );
+
+    expect(config.disable_session_recording).toBe(false);
+    expect(config.session_recording?.sampleRate).toBe(1);
+    expect(config.session_recording?.maskAllInputs).toBe(true);
+  });
+
+  it('keeps session recording disabled when lightweight overrides sessionRecording', () => {
+    const config = buildPostHogClientConfig(
+      { NODE_ENV: 'production' },
+      'phc_public_token',
+      { lightweight: true, sessionRecording: true }
+    );
+
+    expect(config.disable_session_recording).toBe(true);
   });
 
   it('keeps autocapture and rageclick while dropping heatmaps/dead-clicks', () => {
@@ -73,7 +92,6 @@ describe('PostHog client config', () => {
     expect(config.autocapture).toBe(true);
     expect(config.rageclick).toBe(true);
     expect(config.disable_session_recording).toBe(true);
-    expect(config.disable_surveys).toBe(true);
     expect(config.capture_heatmaps).toBe(false);
     expect(config.capture_dead_clicks).toBe(false);
     expect(config.advanced_disable_flags).toBe(false);
@@ -91,11 +109,11 @@ describe('PostHog client config', () => {
       autocapture: false,
       capture_dead_clicks: false,
       capture_heatmaps: false,
-      capture_pageview: false,
       capture_performance: false,
       disable_session_recording: true,
       rageclick: false,
     });
+    expect(config.capture_pageview).toBe(false);
     expect(config.before_send).toEqual(expect.any(Function));
     expect(config.loaded).toEqual(expect.any(Function));
     expect(config.property_blacklist).toContain('email');

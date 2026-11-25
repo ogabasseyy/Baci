@@ -12,9 +12,16 @@ const mocks = vi.hoisted(() => {
   const posthogReloadFeatureFlags = vi.fn();
   const posthogRemoteConfigLoad = vi.fn();
   const posthogSetConfig = vi.fn();
+  const posthogStartSessionRecording = vi.fn();
+  const posthogStopSessionRecording = vi.fn();
+  const posthogSessionRecordingStarted = vi.fn(() => false);
   const webVitalsStartIfEnabled = vi.fn();
   const buildPostHogClientConfig = vi.fn(
-    (_env: unknown, _token: unknown, options?: { lightweight?: boolean }) => ({
+    (
+      _env: unknown,
+      _token: unknown,
+      options?: { lightweight?: boolean; sessionRecording?: boolean }
+    ) => ({
       advanced_disable_flags: options?.lightweight === true,
       api_host: '/baci-relay',
       loaded: clientConfigLoaded,
@@ -26,7 +33,10 @@ const mocks = vi.hoisted(() => {
     captureException: posthogCaptureException,
     init: posthogInit,
     reloadFeatureFlags: posthogReloadFeatureFlags,
+    sessionRecordingStarted: posthogSessionRecordingStarted,
     set_config: posthogSetConfig,
+    startSessionRecording: posthogStartSessionRecording,
+    stopSessionRecording: posthogStopSessionRecording,
     _remoteConfigLoader: {
       load: posthogRemoteConfigLoad,
     },
@@ -44,7 +54,10 @@ const mocks = vi.hoisted(() => {
     posthogInit,
     posthogReloadFeatureFlags,
     posthogRemoteConfigLoad,
+    posthogSessionRecordingStarted,
     posthogSetConfig,
+    posthogStartSessionRecording,
+    posthogStopSessionRecording,
     webVitalsStartIfEnabled,
   };
 });
@@ -110,7 +123,7 @@ describe('initializePostHogBrowser', () => {
     expect(mocks.buildPostHogClientConfig).toHaveBeenLastCalledWith(
       env,
       'ph_project_token',
-      { lightweight: false }
+      { lightweight: false, sessionRecording: false }
     );
     expect(mocks.posthogInit).toHaveBeenCalledOnce();
     expect(mocks.posthogInit).toHaveBeenCalledWith(
@@ -198,7 +211,7 @@ describe('initializePostHogBrowser', () => {
     expect(mocks.buildPostHogClientConfig).toHaveBeenCalledWith(
       env,
       'ph_project_token',
-      { lightweight: true }
+      { lightweight: true, sessionRecording: false }
     );
     expect(mocks.posthogInit).toHaveBeenCalledOnce();
     expect(mocks.posthogInit.mock.calls[0]?.[1]).not.toHaveProperty(
@@ -279,7 +292,7 @@ describe('initializePostHogBrowser', () => {
     expect(mocks.buildPostHogClientConfig).toHaveBeenLastCalledWith(
       env,
       'ph_project_token',
-      { lightweight: true }
+      { lightweight: true, sessionRecording: false }
     );
     expect(mocks.posthogSetConfig).toHaveBeenCalledOnce();
     expect(mocks.posthogSetConfig).toHaveBeenCalledWith({
@@ -317,7 +330,7 @@ describe('initializePostHogBrowser', () => {
     expect(mocks.buildPostHogClientConfig).toHaveBeenLastCalledWith(
       env,
       'ph_project_token',
-      { lightweight: false }
+      { lightweight: false, sessionRecording: false }
     );
     expect(mocks.posthogSetConfig).toHaveBeenCalledTimes(2);
     expect(mocks.posthogSetConfig).toHaveBeenNthCalledWith(1, {
@@ -340,6 +353,82 @@ describe('initializePostHogBrowser', () => {
     expect(mocks.webVitalsStartIfEnabled).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
+  });
+
+  it('starts and stops session recording only on checkout route transitions', async () => {
+    const env = {
+      NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_project_token',
+    };
+    try {
+      vi.stubGlobal('location', {
+        hostname: 'ogabassey.com',
+        pathname: '/products/iphone',
+        href: 'https://ogabassey.com/products/iphone',
+      });
+      const { initializePostHogBrowser } = await importBrowserInitializer();
+
+      initializePostHogBrowser(env);
+      expect(mocks.buildPostHogClientConfig).toHaveBeenLastCalledWith(
+        env,
+        'ph_project_token',
+        { lightweight: false, sessionRecording: false }
+      );
+      expect(mocks.posthogStartSessionRecording).not.toHaveBeenCalled();
+
+      initializePostHogBrowser(env, console, {
+        lightweight: false,
+        pathname: '/checkout',
+        hostname: 'ogabassey.com',
+      });
+      expect(mocks.buildPostHogClientConfig).toHaveBeenLastCalledWith(
+        env,
+        'ph_project_token',
+        { lightweight: false, sessionRecording: true }
+      );
+      expect(mocks.posthogStartSessionRecording).toHaveBeenCalledWith({
+        sampling: true,
+      });
+
+      mocks.posthogSessionRecordingStarted.mockReturnValue(true);
+      initializePostHogBrowser(env, console, {
+        lightweight: false,
+        pathname: '/orders',
+        hostname: 'ogabassey.com',
+      });
+      expect(mocks.buildPostHogClientConfig).toHaveBeenLastCalledWith(
+        env,
+        'ph_project_token',
+        { lightweight: false, sessionRecording: false }
+      );
+      expect(mocks.posthogStopSessionRecording).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('enables session recording on initial load of a checkout route', async () => {
+    const env = {
+      NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: 'ph_project_token',
+    };
+    try {
+      vi.stubGlobal('location', {
+        hostname: 'ogabassey.com',
+        pathname: '/checkout',
+        href: 'https://ogabassey.com/checkout',
+      });
+      const { initializePostHogBrowser } = await importBrowserInitializer();
+
+      initializePostHogBrowser(env);
+
+      expect(mocks.buildPostHogClientConfig).toHaveBeenCalledOnce();
+      expect(mocks.buildPostHogClientConfig).toHaveBeenCalledWith(
+        env,
+        'ph_project_token',
+        { lightweight: false, sessionRecording: true }
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('queues pageviews until PostHog finishes loading', async () => {

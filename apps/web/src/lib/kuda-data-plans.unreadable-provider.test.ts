@@ -237,4 +237,45 @@ describe('bugfix: an unreadable provider list let a different plan be sold', () 
       })
     ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
   });
+
+  it('refuses an exact plan when another provider on the network sent a malformed list', async () => {
+    mockGetDataProviders.mockResolvedValue(
+      mapKudaBillersAnswer(
+        {
+          billers: [
+            {
+              id: 'mtn',
+              name: 'MTN NG DATA',
+              description: 'Internet Data',
+              billTypeId: 'data',
+              billItems: [
+                {
+                  itemCode: 'MTN-1GB-MONTHLY',
+                  itemName: 'Plan',
+                  amount: 100000,
+                  isFixedPrice: true,
+                },
+              ],
+            },
+            {
+              id: 'mtn-sme',
+              name: 'MTN SME DATA',
+              description: 'Internet Data',
+              billTypeId: 'data',
+              billItems: {},
+            },
+          ],
+        },
+        'Internet Data'
+      ).billers
+    );
+
+    await expect(
+      resolveKudaDataPlanForPurchase({
+        amount: 1000,
+        dataPlanCode: 'MTN-1GB-MONTHLY',
+        networkProvider: NetworkProvider.MTN,
+      })
+    ).rejects.toThrow(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
+  });
 });

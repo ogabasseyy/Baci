@@ -47,11 +47,14 @@ export function chosenListings<T extends { biller: Biller }>(
   };
   // Each tier scores a listed biller: 0 = no match, higher = more specific;
   // among decorated matches only the longest listed name counts.
+  // Exact names (plain, then provider-stripped) are resolved before any
+  // decorated prefix, so "DSTV - PREMIUM (Kuda)" shown as "DSTV - PREMIUM"
+  // is never captured as a "PREMIUM" path under a plain "DSTV".
   const tiers: Array<(listed: Biller) => number> = [
     (listed) => (plainOf(listed) === sentPlain ? 1 : 0),
-    (listed) => decorated(listed, plainOf(listed), sentPlain),
     (listed) =>
       normOf(listed) !== '' && normOf(listed) === sentNormalized ? 1 : 0,
+    (listed) => decorated(listed, plainOf(listed), sentPlain),
     (listed) => decorated(listed, normOf(listed), sentNormalized),
   ];
   for (const score of tiers) {

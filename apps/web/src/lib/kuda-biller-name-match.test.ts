@@ -38,4 +38,12 @@ describe('chosenListings', () => {
   it('never treats a shared word prefix as a match', () => {
     expect(pick(['DSTV'], 'DSTVX')).toEqual([]);
   });
+
+  it('prefers an exact provider-tagged biller over a decorated shorter one', () => {
+    // "DSTV - PREMIUM (Kuda)" is shown as "DSTV - PREMIUM"; the plain "DSTV"
+    // must not capture it as a "PREMIUM" path.
+    expect(pick(['DSTV', 'DSTV - PREMIUM (Kuda)'], 'DSTV - PREMIUM')).toEqual([
+      'DSTV - PREMIUM (Kuda)',
+    ]);
+  });
 });

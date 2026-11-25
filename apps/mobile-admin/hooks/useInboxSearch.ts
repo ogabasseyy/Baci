@@ -98,8 +98,10 @@ export function useInboxSearch(rawTerm: string) {
      * ask for the one that failed, so that case is checked first.
      */
     retry: () => {
-      if (query.isError && !query.isFetchNextPageError) query.refetch();
-      else query.fetchNextPage();
+      // The tap can land as a refresh starts: join it, never cancel it.
+      const join = { cancelRefetch: false };
+      if (query.isError && !query.isFetchNextPageError) query.refetch(join);
+      else query.fetchNextPage(join);
     },
   };
 }

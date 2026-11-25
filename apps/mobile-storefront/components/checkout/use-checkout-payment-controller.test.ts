@@ -256,7 +256,7 @@ describe('useCheckoutPaymentController selection', () => {
     expect(result.current.selectedPayment).toBeNull();
   });
 
-  it('clears full-payment credits when the customer chooses Oxygen', () => {
+  it('preserves store credits when the customer chooses Oxygen', () => {
     mockOxygen = { visible: true };
     const { result } = renderHook(() =>
       useCheckoutPaymentController(checkoutParams)
@@ -269,8 +269,8 @@ describe('useCheckoutPaymentController selection', () => {
     expect(result.current.walletSelection?.use).toBe(true);
     act(() => result.current.setSelectedPayment('oxygen'));
     expect(result.current.selectedPayment).toBe('oxygen');
-    expect(result.current.walletSelection).toBeUndefined();
-    expect(mockSetSavingsSelection).toHaveBeenCalledWith(undefined);
+    expect(result.current.walletSelection).toEqual({ amount: 1000, use: true });
+    expect(mockSetSavingsSelection).not.toHaveBeenCalledWith(undefined);
   });
 
   it('collapses an intent when none of its instruments remain available', () => {

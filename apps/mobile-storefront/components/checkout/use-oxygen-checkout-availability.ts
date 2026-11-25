@@ -5,7 +5,6 @@ import { allowsLocalOxygenNetwork } from '@/lib/api-core';
 import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
 import { useAuthStore } from '@/stores/auth-store';
-import { hasVoucherIdentifier } from '@/stores/cart-line';
 import type { CartItem } from '@/stores/cart-store';
 
 const unavailable =
@@ -25,7 +24,7 @@ async function checkGuestOxygenStorefrontAvailability(
   return body.available === true;
 }
 
-export function useOxygenCheckoutAvailability(items: CartItem[]) {
+export function useOxygenCheckoutAvailability(_items: CartItem[]) {
   const userId = useAuthStore((state) => state.user?.id);
   const customerId = useAuthStore((state) => state.customer?.id);
   const customerUserId = useAuthStore((state) => state.customer?.user_id);
@@ -44,15 +43,13 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     customerMerchantId === profile?.merchantId &&
     merchantId === profile?.merchantId;
   const isGuest = !userId;
-  const hasVoucher = items.some(hasVoucherIdentifier);
-  const probeMode: 'linked' | 'guest' | null =
-    profile && !hasVoucher
-      ? linked
-        ? 'linked'
-        : isGuest && profile.environment === 'production'
-          ? 'guest'
-          : null
-      : null;
+  const probeMode: 'linked' | 'guest' | null = profile
+    ? linked
+      ? 'linked'
+      : isGuest && profile.environment === 'production'
+        ? 'guest'
+        : null
+    : null;
   const scope =
     profile && probeMode
       ? JSON.stringify([
@@ -149,11 +146,9 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
   const disabledReason =
     !linked && !probeMode
       ? 'Sign in with your linked customer account'
-      : hasVoucher
-        ? 'Oxygen is unavailable for voucher carts'
-        : readiness?.scope !== scope
-          ? 'Checking Oxygen availability'
-          : readiness.reason;
+      : readiness?.scope !== scope
+        ? 'Checking Oxygen availability'
+        : readiness.reason;
   return {
     visible: profile.environment === 'staging' || disabledReason === undefined,
     disabledReason,

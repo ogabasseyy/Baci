@@ -1612,7 +1612,7 @@ describe('POST /api/payments/initialize', () => {
       ).toBe(false);
     });
 
-    it('rejects Klump when store credits already reduced the payable total', async () => {
+    it('initializes Klump for the net remaining payable amount when store credits reduce order total', async () => {
       rpcResult = {
         data: [
           {
@@ -1645,8 +1645,55 @@ describe('POST /api/payments/initialize', () => {
       );
       const json = await res.json();
 
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.gateway).toBe('klump');
+      const txCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(txCall).toBeDefined();
+      expect(txCall?.args).toMatchObject({
+        p_amount: 25_000,
+        p_merchant_amount: 25_000,
+        p_gateway: 'klump',
+      });
+    });
+
+    it('rejects Klump when store credits cover 100% of the order', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { wallet_amount_used: 50_000 },
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 0, gateway: 'klump' })
+      );
+      const json = await res.json();
+
       expect(res.status).toBe(400);
-      expect(json.code).toBe('AMOUNT_COMPOSITION_UNSUPPORTED');
+      expect(json.code).toBe('NO_PAYABLE_AMOUNT');
       expect(
         rpcCalls.some((call) => call.name === 'create_payment_transaction')
       ).toBe(false);

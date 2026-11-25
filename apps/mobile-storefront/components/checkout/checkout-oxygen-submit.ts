@@ -13,58 +13,14 @@ type Dependencies = {
   createOrder: typeof createOrder;
 };
 
-type OxygenOrderItem = CreateOrderRequest['items'][number] & {
-  voucherToken?: unknown;
-  voucherAwardId?: unknown;
-};
-
-function prepareOxygenOrderItem({
-  voucher_token,
-  voucher_award_id,
-  voucherToken,
-  voucherAwardId,
-  ...item
-}: OxygenOrderItem) {
-  for (const [voucherField, value] of Object.entries({
-    voucher_token,
-    voucher_award_id,
-    voucherToken,
-    voucherAwardId,
-  })) {
-    if (value === undefined || value === null) continue;
-    // The field name helps diagnose malformed carts without logging the code.
-    const options = { cause: voucherField };
-    if (typeof value !== 'string')
-      throw new Error('Invalid voucher identifier', options);
-    if (value.trim())
-      throw new Error(
-        'Oxygen requires a cart without vouchers or store credit',
-        options
-      );
-  }
-  return item;
-}
-
 export async function submitOxygenCheckout(
   input: Input,
   dependencies?: Dependencies
 ) {
   // This client check provides early feedback. POST /api/orders enforces admission.
-  if (
-    !input.isAuthenticated ||
-    input.hasVoucher ||
-    input.hasCredits ||
-    input.request.payment_method !== 'oxygen' ||
-    input.request.use_wallet_credit ||
-    input.request.use_savings_credit ||
-    (input.request.wallet_amount ?? 0) > 0 ||
-    (input.request.savings_amount ?? 0) > 0
-  ) {
-    throw new Error(
-      'Oxygen requires a signed-in customer and a cart without vouchers or store credit'
-    );
+  if (!input.isAuthenticated || input.request.payment_method !== 'oxygen') {
+    throw new Error('Oxygen requires a signed-in customer');
   }
-  const items = input.request.items.map(prepareOxygenOrderItem);
   const deps = dependencies ?? {
     readOwner: async () => {
       const { oxygenNativeSession } = await import(
@@ -78,18 +34,12 @@ export async function submitOxygenCheckout(
   // Scope the send to the current owner. The API admits new orders and can
   // still return an exact previously accepted order during a rollout pause.
   const { merchantId, userId } = await deps.readOwner();
-  const result = await deps.createOrder(
-    {
-      ...input.request,
-      items,
-    },
-    {
-      checkoutGeneration: input.checkoutGeneration,
-      analyticsPaymentMethod: 'oxygen',
-      expectedMerchantId: merchantId,
-      expectedOwner: userId,
-    }
-  );
+  const result = await deps.createOrder(input.request, {
+    checkoutGeneration: input.checkoutGeneration,
+    analyticsPaymentMethod: 'oxygen',
+    expectedMerchantId: merchantId,
+    expectedOwner: userId,
+  });
   // A receipt must be usable by the owned-order screen before we hand off
   // and clear the cart. The generic order decoder accepts string order IDs.
   const { order } = result;
@@ -102,7 +52,7 @@ export async function submitOxygenCheckout(
     throw new Error(
       'Could not confirm the saved Oxygen order. Please try again.'
     );
-  if (order.total <= 0)
+  if (order.total <= 0 || (result.amountDueToGateway ?? order.total) <= 0)
     throw new Error(
       'Choose another payment option for this zero-balance order.'
     );

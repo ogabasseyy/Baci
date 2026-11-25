@@ -5,7 +5,10 @@ import { CheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-p
 import { readOxygenCustomerPrefill } from '@/lib/payments/oxygen/customer-prefill';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { createClient } from '@/lib/supabase/server';
-import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
+import {
+  getOxygenOrderNetPayable,
+  oxygenCheckoutOrderSchema,
+} from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
 import { OxygenApplicationDialog } from './OxygenApplicationDialog';
 import { OxygenMobileOrderSummary } from './OxygenMobileOrderSummary';
@@ -57,7 +60,7 @@ export async function OxygenStorefrontCheckout({
   const { data, error } = await client
     .from('orders')
     .select(
-      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
+      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, amount_paid, wallet_amount_used, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -73,6 +76,7 @@ export async function OxygenStorefrontCheckout({
   )
     notFound();
   const order = parsed.data;
+  const netPayable = getOxygenOrderNetPayable(order);
   const prefill = await readOxygenCustomerPrefill(client, orderId, user.id);
   const names = order.customer_name?.trim().split(/\s+/) ?? [];
   const checkoutContact = oxygenCustomerPrefillSchema.safeParse({
@@ -107,7 +111,7 @@ export async function OxygenStorefrontCheckout({
               selfieOrigins={selfieOrigins}
               hostedOrigins={hostedOrigins}
               prefill={contact}
-              productAmount={order.total}
+              productAmount={netPayable}
               products={order.order_items.map((item) => ({
                 ...item,
                 imageUrl: oxygenOrderItemImage(item),

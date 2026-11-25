@@ -102,4 +102,37 @@ describe('launchCreditDirectCheckout', () => {
       'Payment cancelled. Please try again.'
     );
   });
+
+  it('passes the net remaining amount to Credit Direct when store credit was applied', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 15_000,
+      tracking_token: 'tok-1',
+      items: [{ product_name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchCreditDirectCheckout(ctx);
+
+    expect(mockOpenCreditDirectCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 35_000 })
+    );
+  });
+
+  it('rejects Credit Direct launch when store credit covers 100% of the order', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 50_000,
+      tracking_token: 'tok-1',
+      items: [{ product_name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await expect(launchCreditDirectCheckout(ctx)).rejects.toThrow(
+      'Invalid order total for Credit Direct checkout.'
+    );
+    expect(mockOpenCreditDirectCheckout).not.toHaveBeenCalled();
+  });
 });

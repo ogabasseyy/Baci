@@ -8,6 +8,8 @@ export interface BnplOrderItem {
 export interface BnplOrder {
   id: string;
   total: number | string;
+  amount_paid?: number | string | null;
+  wallet_amount_used?: number | string | null;
   currency?: string | null;
   order_number?: string | null;
   shipping_cost?: number | string | null;
@@ -58,6 +60,21 @@ export function toCurrencyAmount(value: number | string | null | undefined) {
   }
 
   return Math.round(amount * 100) / 100;
+}
+
+/**
+ * Net remaining amount due to the BNPL gateway after subtracting any pre-gateway
+ * store credit (wallet or device savings) recorded on the order.
+ */
+export function getBnplRemainingAmount(
+  order: Pick<BnplOrder, 'total' | 'amount_paid' | 'wallet_amount_used'>
+) {
+  const total = toCurrencyAmount(order.total);
+  const preGatewayPaid = Math.max(
+    toCurrencyAmount(order.amount_paid),
+    toCurrencyAmount(order.wallet_amount_used)
+  );
+  return toCurrencyAmount(Math.max(total - preGatewayPaid, 0));
 }
 
 export function toKlumpIntegerAmount(
@@ -114,7 +131,7 @@ export function buildKlumpItems(order: BnplOrder) {
     });
   }
 
-  const targetTotal = toKlumpIntegerAmount(order.total);
+  const targetTotal = toKlumpIntegerAmount(getBnplRemainingAmount(order));
   let excess = itemsTotal() - targetTotal;
   for (let index = items.length - 1; index >= 0 && excess > 0; index -= 1) {
     const item = items[index];

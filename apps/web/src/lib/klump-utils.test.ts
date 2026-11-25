@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildKlumpItems,
+  getBnplRemainingAmount,
   getUnmaskedValue,
   normalizeKlumpPhone,
   toCurrencyAmount,
@@ -148,5 +149,24 @@ describe('klump-utils', () => {
         ],
       })
     ).toEqual([{ name: 'First tiny item', quantity: 1, unit_price: 1 }]);
+  });
+
+  it('computes net remaining payable amount and balances Klump items to it when pre-gateway credit was applied', () => {
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        amount_paid: 15_000,
+        wallet_amount_used: 15_000,
+      })
+    ).toBe(35_000);
+
+    expect(
+      buildKlumpItems({
+        id: 'order-1',
+        total: 50_000,
+        amount_paid: 15_000,
+        items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+      })
+    ).toEqual([{ name: 'Phone', quantity: 1, unit_price: 35_000 }]);
   });
 });

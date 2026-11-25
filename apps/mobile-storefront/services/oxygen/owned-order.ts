@@ -7,6 +7,8 @@ const orderSchema = z.object({
   id: z.uuid(),
   order_number: z.string().nullish(),
   total: z.coerce.number().positive(),
+  amount_paid: z.coerce.number().finite().nonnegative().optional(),
+  wallet_amount_used: z.coerce.number().finite().nonnegative().optional(),
   payment_method: z.string(),
   payment_status: z.string(),
   shipping_status: z.string(),
@@ -25,7 +27,7 @@ export async function readOwnedOxygenOrder(
   const { data, error } = await supabase
     .from('orders')
     .select(
-      'id,order_number,total,payment_method,payment_status,shipping_status,customer_email,shipping_address,delivery_method'
+      'id,order_number,total,amount_paid,wallet_amount_used,payment_method,payment_status,shipping_status,customer_email,shipping_address,delivery_method'
     )
     .eq('id', orderId)
     .eq('customer_id', customerId)
@@ -48,5 +50,18 @@ export async function readOwnedOxygenOrder(
     throw new Error(
       'This order is closed. Open your order history for details.'
     );
-  return { ...order, prefill: oxygenOrderPrefill(order) };
+  const preGatewayPaid = Math.max(
+    order.amount_paid ?? 0,
+    order.wallet_amount_used ?? 0
+  );
+  const payableTotal = Math.max(
+    Number((order.total - preGatewayPaid).toFixed(2)),
+    0
+  );
+  if (order.payment_status === 'unpaid' && payableTotal <= 0) {
+    throw new Error(
+      'Choose another payment option for this zero-balance order.'
+    );
+  }
+  return { ...order, total: payableTotal, prefill: oxygenOrderPrefill(order) };
 }

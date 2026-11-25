@@ -13,6 +13,8 @@ export const oxygenCheckoutOrderSchema = z.object({
   shipping_fee: amount,
   tax_amount: amount,
   total: amount,
+  amount_paid: amount.optional(),
+  wallet_amount_used: amount.optional(),
   order_items: z.array(
     z.object({
       id: z.uuid(),
@@ -30,3 +32,24 @@ export const oxygenCheckoutOrderSchema = z.object({
     })
   ),
 });
+
+export function getOxygenOrderPreGatewayPaid(
+  order: Pick<
+    z.infer<typeof oxygenCheckoutOrderSchema>,
+    'amount_paid' | 'wallet_amount_used'
+  >
+): number {
+  return Math.max(order.amount_paid ?? 0, order.wallet_amount_used ?? 0, 0);
+}
+
+export function getOxygenOrderNetPayable(
+  order: Pick<
+    z.infer<typeof oxygenCheckoutOrderSchema>,
+    'total' | 'amount_paid' | 'wallet_amount_used'
+  >
+): number {
+  return Math.max(
+    Number((order.total - getOxygenOrderPreGatewayPaid(order)).toFixed(2)),
+    0
+  );
+}

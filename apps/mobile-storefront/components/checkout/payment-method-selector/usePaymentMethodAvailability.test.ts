@@ -18,7 +18,7 @@ describe('usePaymentMethodAvailability', () => {
     expect(klump?.disabledReason).toContain('Minimum order');
   });
 
-  it('disables klump when wallet credit is active', () => {
+  it('keeps klump enabled when partial wallet credit leaves net payable within bounds', () => {
     const result = usePaymentMethodAvailability({
       enabledMethods: ['klump'],
       methodDisabledReasons: {},
@@ -31,13 +31,12 @@ describe('usePaymentMethodAvailability', () => {
     const klump = result.filteredMethods.find(
       (method) => method.id === 'klump'
     );
-    expect(klump?.disabled).toBe(true);
-    expect(klump?.disabledReason).toBe(
-      'Wallet credit cannot be combined with Klump'
-    );
+    expect(result.isBNPLEligible).toBe(true);
+    expect(klump?.disabled).toBeUndefined();
+    expect(klump?.disabledReason).toBeUndefined();
   });
 
-  it('disables klump when savings credit is active', () => {
+  it('keeps klump enabled when partial savings credit leaves net payable within bounds', () => {
     const result = usePaymentMethodAvailability({
       enabledMethods: ['klump'],
       methodDisabledReasons: {},
@@ -54,9 +53,28 @@ describe('usePaymentMethodAvailability', () => {
     const klump = result.filteredMethods.find(
       (method) => method.id === 'klump'
     );
+    expect(result.isBNPLEligible).toBe(true);
+    expect(klump?.disabled).toBeUndefined();
+    expect(klump?.disabledReason).toBeUndefined();
+  });
+
+  it('disables installment financing when wallet credit covers 100% of the order', () => {
+    const result = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      methodDisabledReasons: {},
+      orderTotal: 100000,
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 100000, use: true },
+    });
+
+    const klump = result.filteredMethods.find(
+      (method) => method.id === 'klump'
+    );
+    expect(result.isBNPLEligible).toBe(false);
     expect(klump?.disabled).toBe(true);
     expect(klump?.disabledReason).toBe(
-      'Device savings cannot be combined with Klump'
+      'No payable balance remains for installment financing'
     );
   });
 

@@ -1,7 +1,11 @@
 import { ShoppingBag } from 'lucide-react';
 import type { z } from 'zod';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
-import type { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
+import {
+  getOxygenOrderNetPayable,
+  getOxygenOrderPreGatewayPaid,
+  type oxygenCheckoutOrderSchema,
+} from '@/schemas/oxygen-checkout-order';
 import { oxygenOrderItemImage } from './oxygen-order-item-image';
 
 export function OxygenSavedOrderSummary({
@@ -9,6 +13,8 @@ export function OxygenSavedOrderSummary({
 }: {
   order: z.infer<typeof oxygenCheckoutOrderSchema>;
 }) {
+  const preGatewayPaid = getOxygenOrderPreGatewayPaid(order);
+  const netPayable = getOxygenOrderNetPayable(order);
   const money = (amount: number) =>
     new Intl.NumberFormat('en-NG', {
       style: 'currency',
@@ -65,9 +71,15 @@ export function OxygenSavedOrderSummary({
           <dt>Tax</dt>
           <dd>{money(order.tax_amount)}</dd>
         </div>
+        {preGatewayPaid > 0 && (
+          <div className="flex justify-between text-store-primary">
+            <dt>Store credit</dt>
+            <dd>-{money(preGatewayPaid)}</dd>
+          </div>
+        )}
         <div className="flex justify-between text-lg font-bold">
-          <dt>Order total</dt>
-          <dd>{money(order.total)}</dd>
+          <dt>{preGatewayPaid > 0 ? 'Amount due' : 'Order total'}</dt>
+          <dd>{money(netPayable)}</dd>
         </div>
       </dl>
     </section>

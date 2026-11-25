@@ -204,7 +204,7 @@ describe('PaymentMethodSelector', () => {
     expect(onSelectMethod).not.toHaveBeenCalled();
   });
 
-  it('disables Klump when wallet credit is already active', () => {
+  it('keeps Klump selectable when partial wallet credit is active', () => {
     const onSelectMethod = jest.fn();
 
     render(
@@ -220,19 +220,19 @@ describe('PaymentMethodSelector', () => {
     );
 
     const klumpRow = screen.getByLabelText(
-      'Klump. Wallet credit cannot be combined with Klump'
+      'Klump. Buy now, pay in installments'
     );
 
     expect(
-      screen.getByText('Wallet credit cannot be combined with Klump')
-    ).toBeTruthy();
+      screen.queryByText('Wallet credit cannot be combined with Klump')
+    ).toBeNull();
 
     fireEvent.press(klumpRow);
 
-    expect(onSelectMethod).not.toHaveBeenCalled();
+    expect(onSelectMethod).toHaveBeenCalledWith('klump');
   });
 
-  it('disables Klump when device savings credit is already active', () => {
+  it('keeps Klump selectable when partial device savings credit is active', () => {
     const onSelectMethod = jest.fn();
 
     render(
@@ -252,16 +252,16 @@ describe('PaymentMethodSelector', () => {
     );
 
     const klumpRow = screen.getByLabelText(
-      'Klump. Device savings cannot be combined with Klump'
+      'Klump. Buy now, pay in installments'
     );
 
     expect(
-      screen.getByText('Device savings cannot be combined with Klump')
-    ).toBeTruthy();
+      screen.queryByText('Device savings cannot be combined with Klump')
+    ).toBeNull();
 
     fireEvent.press(klumpRow);
 
-    expect(onSelectMethod).not.toHaveBeenCalled();
+    expect(onSelectMethod).toHaveBeenCalledWith('klump');
   });
 
   it('can show Paystack as an unselected alternate card option when a saved card owns the selection', () => {

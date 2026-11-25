@@ -122,10 +122,6 @@ export function useCheckoutPaymentController({
 
   const transferMode = useTransferModeAtSelection(setSelectedPaymentState);
   const handleSelectPaymentMethod = (method: PaymentMethodType) => {
-    if (method === 'oxygen') {
-      setWalletSelection(undefined);
-      savings.setSavingsSelection(undefined);
-    }
     transferMode.capture(method, walletFundedBankTransferOptionEnabled);
     setSelectedPaymentState(method);
     setPaymentTab(getPaymentTabForMethod(method));
@@ -253,16 +249,26 @@ export function useCheckoutPaymentController({
     0
   );
 
+  const netPayableForKlumpGate = Math.max(
+    total -
+      (liveWalletSelectionForKlumpGate?.amount ?? 0) -
+      (liveSavingsSelectionForKlumpGate?.amount ?? 0),
+    0
+  );
+
   return {
     availablePaymentMethods,
     displayTotal: stepDisplayTotal,
     handleSelectPaymentTab,
-    hiddenPaymentMethods: shouldHideKlumpPaymentMethod(paymentSettings, total)
+    hiddenPaymentMethods: shouldHideKlumpPaymentMethod(
+      paymentSettings,
+      netPayableForKlumpGate
+    )
       ? (['klump'] satisfies PaymentMethodType[])
       : [],
     klumpDisabledReason: getKlumpDisabledReason(
       paymentSettings,
-      total,
+      netPayableForKlumpGate,
       liveWalletSelectionForKlumpGate,
       liveSavingsSelectionForKlumpGate
     ),

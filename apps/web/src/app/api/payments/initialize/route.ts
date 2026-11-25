@@ -1581,10 +1581,10 @@ export async function POST(request: NextRequest) {
 
     const chargeCurrency = currencyResolution.currency;
 
-    const payableAmount =
-      gateway === 'klump'
-        ? snapshotTotal
-        : Math.max(snapshotTotal - walletAmountUsed - savingsAmountUsed, 0);
+    const payableAmount = Math.max(
+      snapshotTotal - walletAmountUsed - savingsAmountUsed,
+      0
+    );
 
     if (payableAmount <= 0) {
       return createErrorResponse(
@@ -1616,7 +1616,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const klumpChargeAmount = toKlumpIntegerAmount(snapshotTotal);
+    const klumpChargeAmount = toKlumpIntegerAmount(payableAmount);
 
     if (gateway === 'klump') {
       if (!gatewaySettings.klump_enabled) {
@@ -1633,14 +1633,6 @@ export async function POST(request: NextRequest) {
         return createErrorResponse(
           'Klump only supports NGN payments',
           'UNSUPPORTED_CURRENCY',
-          400
-        );
-      }
-
-      if (walletAmountUsed > 0 || savingsAmountUsed > 0) {
-        return createErrorResponse(
-          'Klump requires the full order total; wallet-composed Klump payments are not supported',
-          'AMOUNT_COMPOSITION_UNSUPPORTED',
           400
         );
       }
@@ -2119,7 +2111,7 @@ export async function POST(request: NextRequest) {
       {
         p_merchant_id: merchantId,
         p_order_id: paymentData.order_id,
-        p_amount: gateway === 'klump' ? snapshotTotal : paymentData.amount, // Klump keeps decimal total; p_merchant_amount stores rounded integer.
+        p_amount: paymentData.amount, // Klump keeps net decimal payable; p_merchant_amount stores rounded integer.
         p_currency: paymentData.currency,
         p_gateway: gateway,
         p_reference: paymentResult.reference,

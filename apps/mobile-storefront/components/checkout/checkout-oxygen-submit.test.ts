@@ -22,6 +22,7 @@ describe('native Oxygen order admission', () => {
       userId: 'buyer-one',
     });
     createOrder.mockResolvedValue({
+      amountDueToGateway: 20000,
       order: receipt,
     });
   });
@@ -45,18 +46,48 @@ describe('native Oxygen order admission', () => {
     });
     expect(response.order.id).toBe('aebdc237-5363-4e2b-b0ee-5be12ea9edab');
   });
-  it.each([
-    { isAuthenticated: false, hasVoucher: false, hasCredits: false },
-    { isAuthenticated: true, hasVoucher: true, hasCredits: false },
-    { isAuthenticated: true, hasVoucher: false, hasCredits: true },
-  ])('blocks unsupported checkout before creating an order: %p', async (flags) => {
+  it('blocks unauthenticated checkout before creating an order', async () => {
     await expect(
       submitOxygenCheckout(
-        { request, checkoutGeneration: 'g', ...flags },
+        {
+          request,
+          checkoutGeneration: 'g',
+          isAuthenticated: false,
+          hasVoucher: false,
+          hasCredits: false,
+        },
         { readOwner, createOrder }
       )
     ).rejects.toThrow();
     expect(createOrder).not.toHaveBeenCalled();
+  });
+  it.each([
+    { hasVoucher: true, hasCredits: false },
+    { hasVoucher: false, hasCredits: true },
+  ])('allows vouchers and partial store credit when positive net payable remains: %p', async (flags) => {
+    const creditedRequest = {
+      ...request,
+      use_wallet_credit: flags.hasCredits,
+      wallet_amount: flags.hasCredits ? 5000 : 0,
+    };
+    createOrder.mockResolvedValueOnce({
+      amountDueToGateway: 15000,
+      order: receipt,
+    });
+    const result = await submitOxygenCheckout(
+      {
+        request: creditedRequest,
+        checkoutGeneration: 'g',
+        isAuthenticated: true,
+        ...flags,
+      },
+      { readOwner, createOrder }
+    );
+    expect(createOrder).toHaveBeenCalledWith(
+      creditedRequest,
+      expect.anything()
+    );
+    expect(result.amountDueToGateway).toBe(15000);
   });
   it('does not create without a scoped owner', async () => {
     readOwner.mockRejectedValue(new Error('Owner unavailable'));
@@ -74,78 +105,36 @@ describe('native Oxygen order admission', () => {
     ).rejects.toThrow('Owner unavailable');
     expect(createOrder).not.toHaveBeenCalled();
   });
-  it.each([
-    ['voucherToken', ' id '],
-    ['voucherAwardId', 'id'],
-    ['voucher_token', 'id'],
-    ['voucher_award_id', 'id'],
-  ])('rejects voucher field %s with value %j before sending the order', async (key, value) => {
-    await expect(
-      submitOxygenCheckout(
-        {
-          request: {
-            ...request,
-            items: request.items.map((item) => ({ ...item, [key]: value })),
-          },
-          checkoutGeneration: 'g',
-          isAuthenticated: true,
-          hasVoucher: false,
-          hasCredits: false,
-        },
-        { readOwner, createOrder }
-      )
-    ).rejects.toThrow(/without vouchers/);
-    expect(readOwner).not.toHaveBeenCalled();
-    expect(createOrder).not.toHaveBeenCalled();
-  });
-  it.each([
-    0,
-    false,
-    {},
-  ])('rejects a malformed voucher identifier %j', async (voucherToken) => {
-    await expect(
-      submitOxygenCheckout(
-        {
-          request: {
-            ...request,
-            items: request.items.map((item) => ({ ...item, voucherToken })),
-          },
-          checkoutGeneration: 'g',
-          isAuthenticated: true,
-          hasVoucher: false,
-          hasCredits: false,
-        },
-        { readOwner, createOrder }
-      )
-    ).rejects.toThrow('Invalid voucher identifier');
-    expect(readOwner).not.toHaveBeenCalled();
-    expect(createOrder).not.toHaveBeenCalled();
-  });
-  it('omits whitespace-only voucher identifiers from the order request', async () => {
-    const input = {
+  it('preserves voucher identifiers on mixed Oxygen cart items', async () => {
+    const mixedRequest = {
       ...request,
-      items: request.items.map((item) => ({
-        ...item,
-        voucherToken: '  ',
-        voucherAwardId: '\t',
-        voucher_token: '\n',
-        voucher_award_id: ' ',
-      })),
+      items: [
+        ...request.items,
+        {
+          id: 'v',
+          name: 'Prize Item',
+          quantity: 1,
+          price: 0,
+          voucher_token: 'v-tok',
+          voucher_award_id: 'v-award',
+        },
+      ],
     };
     await submitOxygenCheckout(
       {
-        request: input,
+        request: mixedRequest,
         checkoutGeneration: 'g',
         isAuthenticated: true,
-        hasVoucher: false,
+        hasVoucher: true,
         hasCredits: false,
       },
       { readOwner, createOrder }
     );
-    expect(createOrder).toHaveBeenCalledWith(request, expect.anything());
+    expect(createOrder).toHaveBeenCalledWith(mixedRequest, expect.anything());
   });
-  it('keeps an old zero-balance order out of the financing handoff', async () => {
+  it('keeps an old zero-balance or 100%-credit order out of the financing handoff', async () => {
     createOrder.mockResolvedValueOnce({
+      amountDueToGateway: 0,
       order: { ...receipt, total: 0 },
     });
     await expect(
@@ -156,6 +145,23 @@ describe('native Oxygen order admission', () => {
           isAuthenticated: true,
           hasVoucher: false,
           hasCredits: false,
+        },
+        { readOwner, createOrder }
+      )
+    ).rejects.toThrow('zero-balance order');
+
+    createOrder.mockResolvedValueOnce({
+      amountDueToGateway: 0,
+      order: receipt,
+    });
+    await expect(
+      submitOxygenCheckout(
+        {
+          request,
+          checkoutGeneration: 'g',
+          isAuthenticated: true,
+          hasVoucher: false,
+          hasCredits: true,
         },
         { readOwner, createOrder }
       )

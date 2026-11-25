@@ -44,3 +44,26 @@ it('uses the native expandable checkout summary with saved order amounts', () =>
     screen.getByText('Saved phone').closest('[aria-hidden]')
   ).toHaveAttribute('aria-hidden', 'false');
 });
+
+it('shows net remaining amount when store credit was pre-applied on the Oxygen order', () => {
+  const id = '6974e8cc-4e90-4ca9-b2cf-aa2abaf461df';
+  render(
+    <OxygenMobileOrderSummary
+      order={{
+        id,
+        customer_name: 'Test buyer',
+        customer_email: 'test@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 100000,
+        wallet_amount_used: 100000,
+        order_items: [{ id, name: 'Saved phone', price: 400000, quantity: 1 }],
+      }}
+    />
+  );
+  const toggle = screen.getByRole('button', { name: /show order summary/i });
+  expect(toggle).toHaveTextContent('₦300,000');
+});

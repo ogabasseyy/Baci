@@ -155,15 +155,18 @@ export function useCheckoutSubmit({
           walletSelection,
         });
       trackCheckoutStep('review');
-      // Preserve Pay-for-me identity for its documents and server dispatch.
-      const paymentMethodForOrder =
-        selectedPayment === 'oxygen'
-          ? 'oxygen'
-          : isVoucherOnlyCart
-            ? 'card'
-            : selectedPayment;
+      const creditCoverage =
+        (liveWalletSelection?.amount ?? 0) +
+        (liveSavingsSelection?.amount ?? 0);
+      const isZeroBalanceOrder =
+        isVoucherOnlyCart || snapshot.total - creditCoverage <= 0;
       const isBNPL = isBnplPayment(selectedPayment);
-      if (isBNPL && !isVoucherOnlyCart) {
+      const paymentMethodForOrder =
+        isVoucherOnlyCart ||
+        (isZeroBalanceOrder && (selectedPayment === 'oxygen' || isBNPL))
+          ? 'card'
+          : selectedPayment;
+      if (isBNPL && !isZeroBalanceOrder) {
         await submitBnplCheckout({
           address,
           appliedDiscountCode,
@@ -232,7 +235,11 @@ export function useCheckoutSubmit({
       submitCreditFields = rollbackCapture.creditFields;
       submitHadSortMarker = rollbackCapture.hadSortMarker;
       const { order } = orderResponse;
-      if (selectedPayment === 'oxygen') {
+      if (
+        selectedPayment === 'oxygen' &&
+        !isZeroBalanceOrder &&
+        orderResponse.amountDueToGateway > 0
+      ) {
         await completeOxygenCheckout({
           clearCart,
           generation: submittedGeneration.current(),

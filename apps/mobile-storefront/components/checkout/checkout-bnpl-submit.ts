@@ -21,16 +21,14 @@ import type {
 import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
 import { createOrder, OrderError } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
-import {
-  buildCheckoutOrderRequest,
-  type CheckoutSnapshot,
-} from './checkout-order-builders';
+import type { CheckoutSnapshot } from './checkout-order-builders';
 import {
   CHECKOUT_API_BASE_URL,
   CHECKOUT_MERCHANT_DOMAIN,
   CHECKOUT_MERCHANT_ID,
   CHECKOUT_MERCHANT_SLUG,
 } from './checkout-screen.constants';
+import { buildCheckoutSubmitOrderRequest } from './checkout-submit-order-request';
 import {
   type PaymentInitializeData,
   toPaymentInitializeData,
@@ -87,11 +85,28 @@ export async function submitBnplCheckout({
   snapshot,
   sharedCartBinding,
 }: SubmitBnplCheckoutParams) {
+  const netPayableAmount = Math.max(
+    snapshot.total -
+      (liveWalletSelection?.amount ?? 0) -
+      (liveSavingsSelection?.amount ?? 0),
+    0
+  );
+  if (netPayableAmount <= 0) {
+    Alert.alert(
+      'Financing unavailable',
+      'No payable balance remains after applying store credit.',
+      [{ text: 'OK' }]
+    );
+    isOrderInFlight.current = false;
+    setIsProcessing(false);
+    return;
+  }
+
   const klumpSubmitDisabledReason =
     selectedPayment === 'klump'
       ? getKlumpDisabledReason(
           paymentSettings,
-          snapshot.total,
+          netPayableAmount,
           liveWalletSelection,
           liveSavingsSelection
         )
@@ -106,14 +121,16 @@ export async function submitBnplCheckout({
     return;
   }
 
-  const orderRequest = buildCheckoutOrderRequest({
+  const { orderRequest } = buildCheckoutSubmitOrderRequest({
     address,
+    appliedDiscountCode,
     customerEmail,
     customerName,
     customerPhone,
     deliveryMethod,
-    discountCode: appliedDiscountCode,
     itemsSnapshot,
+    liveSavingsSelection,
+    liveWalletSelection,
     paymentMethodForOrder,
     selectedQuote,
     shippingProvider: getShippingProvider(),
@@ -128,13 +145,20 @@ export async function submitBnplCheckout({
   });
   onOrderCreated?.(orderResponse.order.id);
 
+  if (orderResponse.amountDueToGateway <= 0) {
+    throw new OrderError(
+      'No payable balance remains for installment financing.',
+      'NO_PAYABLE_AMOUNT'
+    );
+  }
+
   if (selectedPayment === 'klump') {
     await initializeKlumpAndRoute({
       customerEmail,
       customerName,
       customerPhone,
       orderId: orderResponse.order.id,
-      orderTotal: Number(orderResponse.order.total),
+      payableAmount: Number(orderResponse.amountDueToGateway),
       setIsProcessing,
       trackingToken: orderResponse.order.tracking_token,
     });
@@ -190,7 +214,7 @@ async function initializeKlumpAndRoute({
   customerName,
   customerPhone,
   orderId,
-  orderTotal,
+  payableAmount,
   setIsProcessing,
   trackingToken,
 }: {
@@ -198,7 +222,7 @@ async function initializeKlumpAndRoute({
   customerName: string;
   customerPhone: string;
   orderId: string;
-  orderTotal: number;
+  payableAmount: number;
   setIsProcessing: (value: boolean) => void;
   trackingToken?: string | null;
 }) {
@@ -266,7 +290,7 @@ async function initializeKlumpAndRoute({
   router.push({
     pathname: '/bnpl-checkout',
     params: buildKlumpBnplRouteParams({
-      amount: orderTotal,
+      amount: payableAmount,
       authorizationUrl: initData.authorization_url,
       customerEmail,
       customerName,

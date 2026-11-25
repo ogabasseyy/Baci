@@ -273,3 +273,55 @@ it('allows sign-in before checkout without reading private order data', async ()
   expect(screen.getByText('Sign in to resume')).toBeVisible();
   expect(mocks.from).not.toHaveBeenCalled();
 });
+it('passes net payable amount after store credit to OxygenApplicationDialog', async () => {
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'customer',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        amount_paid: 150000,
+        wallet_amount_used: 150000,
+        order_items: [],
+      },
+      error: null,
+    });
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  render(checkout);
+  expect(screen.getByText('Plan amount: 250000')).toBeVisible();
+});

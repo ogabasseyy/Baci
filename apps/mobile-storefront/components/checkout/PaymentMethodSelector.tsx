@@ -111,7 +111,6 @@ export function PaymentMethodSelector({
     Boolean(savingsGoalId) &&
     savingsBalance > 0 &&
     orderTotal > 0 &&
-    selectedTab === 'full' &&
     supportsPartialPayment;
   const savingsCoversFully =
     savingsShouldRender && savingsBalance >= orderTotal;

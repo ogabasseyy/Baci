@@ -1028,4 +1028,98 @@ describe('useCheckoutSubmit', () => {
     );
     expect(mockCreateOrder).not.toHaveBeenCalled();
   });
+
+  it('settles a 100% voucher-only cart via standard completion even when oxygen is selected', async () => {
+    cartItems = [
+      {
+        ...cartItem,
+        price: 0,
+        voucher_token: 'voucher-1',
+        voucher_award_id: 'award-1',
+      } as CartItem,
+    ];
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
+    mockBuildCheckoutOrderRequest.mockReturnValue({
+      payment_method: 'card',
+    });
+    mockCreateOrder.mockResolvedValue({
+      ...createOrderResponseFixture({
+        orderId: 'order-voucher-oxy',
+        orderNumber: 'ORD-VO',
+      }),
+      amountDueToGateway: 0,
+    });
+    const params = createParams({
+      isAuthenticated: true,
+      selectedPayment: 'oxygen',
+      user: { id: 'auth-user-1' },
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+    await act(async () => {
+      await result.current(address);
+    });
+    expect(mockBuildCheckoutOrderRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethodForOrder: 'card' })
+    );
+    expect(mockCreateOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_method: 'card' }),
+      expect.anything()
+    );
+    expect(mockRouterPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/oxygen-checkout' })
+    );
+  });
+
+  it('settles 100%-wallet-covered oxygen and bnpl orders without opening financing', async () => {
+    mockRepriceCartItems.mockResolvedValue({
+      changes: [],
+      priceById: {},
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
+    });
+    mockBuildCheckoutOrderRequest.mockReturnValue({
+      payment_method: 'oxygen',
+    });
+    mockCreateOrder.mockResolvedValue({
+      ...createOrderResponseFixture({
+        orderId: 'order-wallet-oxy',
+        orderNumber: 'ORD-WO',
+      }),
+      amountDueToGateway: 0,
+    });
+    const { resolveCheckoutStoreCreditSelections } = jest.requireMock(
+      './checkout-store-credit'
+    ) as { resolveCheckoutStoreCreditSelections: jest.Mock };
+    resolveCheckoutStoreCreditSelections.mockReturnValueOnce({
+      liveSavingsSelection: undefined,
+      liveWalletSelection: { use: true, amount: 1201500 },
+    });
+    const params = createParams({
+      isAuthenticated: true,
+      selectedPayment: 'oxygen',
+      user: { id: 'auth-user-1' },
+      walletBalance: 1201500,
+      walletSelection: { use: true, amount: 1201500 },
+    });
+    const { result } = renderHook(() => useCheckoutSubmit(params));
+    await act(async () => {
+      await result.current(address);
+    });
+    expect(mockCreateOrder).toHaveBeenCalled();
+    expect(mockSubmitBnplCheckout).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: '/oxygen-checkout' })
+    );
+  });
 });

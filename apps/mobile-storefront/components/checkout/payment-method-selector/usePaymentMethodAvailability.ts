@@ -49,10 +49,22 @@ export function usePaymentMethodAvailability(
 
   const hasValidTotal =
     orderTotal != null && Number.isFinite(orderTotal) && orderTotal > 0;
+  const activeWalletAmount =
+    walletSelection?.use === true
+      ? Math.max(0, walletSelection.amount ?? 0)
+      : 0;
+  const activeSavingsAmount =
+    savingsSelection?.use === true
+      ? Math.max(0, savingsSelection.amount ?? 0)
+      : 0;
+  const netPayableAmount = hasValidTotal
+    ? Math.max(orderTotal - activeWalletAmount - activeSavingsAmount, 0)
+    : 0;
   const isBNPLEligible =
     hasValidTotal &&
-    orderTotal >= BNPL_MIN_AMOUNT &&
-    orderTotal <= BNPL_MAX_AMOUNT;
+    netPayableAmount > 0 &&
+    netPayableAmount >= BNPL_MIN_AMOUNT &&
+    netPayableAmount <= BNPL_MAX_AMOUNT;
 
   const enabledCandidates = PAYMENT_METHODS.filter(
     (method) =>
@@ -81,30 +93,6 @@ export function usePaymentMethodAvailability(
   const filteredMethods = candidateMethods
     .filter((method) => method.tab === selectedTab)
     .map((method) => {
-      const walletDisablesKlump =
-        method.id === 'klump' &&
-        walletSelection?.use === true &&
-        (walletSelection.amount ?? 0) > 0;
-      if (walletDisablesKlump) {
-        return {
-          ...method,
-          disabled: true,
-          disabledReason: 'Wallet credit cannot be combined with Klump',
-        };
-      }
-
-      const savingsDisablesKlump =
-        method.id === 'klump' &&
-        savingsSelection?.use === true &&
-        (savingsSelection.amount ?? 0) > 0;
-      if (savingsDisablesKlump) {
-        return {
-          ...method,
-          disabled: true,
-          disabledReason: 'Device savings cannot be combined with Klump',
-        };
-      }
-
       const disabledReason = methodDisabledReasons[method.id];
       if (disabledReason) {
         return {
@@ -116,9 +104,11 @@ export function usePaymentMethodAvailability(
 
       if (method.tab === 'installments' && !isBNPLEligible) {
         const reason =
-          hasValidTotal && orderTotal > BNPL_MAX_AMOUNT
-            ? `Maximum order: ${formatPrice(BNPL_MAX_AMOUNT)}`
-            : `Minimum order: ${formatPrice(BNPL_MIN_AMOUNT)}`;
+          hasValidTotal && netPayableAmount <= 0
+            ? 'No payable balance remains for installment financing'
+            : hasValidTotal && netPayableAmount > BNPL_MAX_AMOUNT
+              ? `Maximum order: ${formatPrice(BNPL_MAX_AMOUNT)}`
+              : `Minimum order: ${formatPrice(BNPL_MIN_AMOUNT)}`;
         return {
           ...method,
           disabled: true,

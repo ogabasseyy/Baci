@@ -71,3 +71,49 @@ it.each([
     readOwnedOxygenOrder(orderId, customerId, merchantId)
   ).rejects.toThrow('This order is closed');
 });
+
+it('returns net payable total after subtracting pre-gateway store credit', async () => {
+  const query = {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    single: jest.fn().mockResolvedValue({
+      data: {
+        id: orderId,
+        total: 198000,
+        amount_paid: 48000,
+        wallet_amount_used: 48000,
+        payment_method: 'oxygen',
+        payment_status: 'unpaid',
+        shipping_status: 'pending',
+      },
+      error: null,
+    }),
+  };
+  jest.mocked(supabase.from).mockReturnValue(query as never);
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({ total: 150000 });
+});
+
+it('rejects an unpaid zero-balance Oxygen order covered 100% by store credit', async () => {
+  const query = {
+    select: jest.fn().mockReturnThis(),
+    eq: jest.fn().mockReturnThis(),
+    single: jest.fn().mockResolvedValue({
+      data: {
+        id: orderId,
+        total: 198000,
+        amount_paid: 198000,
+        wallet_amount_used: 198000,
+        payment_method: 'oxygen',
+        payment_status: 'unpaid',
+        shipping_status: 'pending',
+      },
+      error: null,
+    }),
+  };
+  jest.mocked(supabase.from).mockReturnValue(query as never);
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).rejects.toThrow('zero-balance order');
+});

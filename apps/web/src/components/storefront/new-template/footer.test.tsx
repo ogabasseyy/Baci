@@ -64,7 +64,7 @@ describe('gadgets-pro Footer', () => {
 
     expect(screen.getByRole('link', { name: 'Instagram' })).toHaveAttribute(
       'href',
-      'https://instagram.com/techhub'
+      'https://www.instagram.com/techhub'
     );
     expect(screen.getByRole('link', { name: 'YouTube' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Facebook' })).toBeNull();
@@ -85,11 +85,11 @@ describe('gadgets-pro Footer', () => {
     // A handle must never render as a relative storefront href.
     expect(screen.getByRole('link', { name: 'Instagram' })).toHaveAttribute(
       'href',
-      'https://instagram.com/techhub'
+      'https://www.instagram.com/techhub'
     );
     expect(screen.getByRole('link', { name: 'Facebook' })).toHaveAttribute(
       'href',
-      'https://facebook.com/techhubng'
+      'https://www.facebook.com/techhubng'
     );
   });
 

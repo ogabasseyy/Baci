@@ -47,7 +47,7 @@ describe('Footer', () => {
     const socialLink = screen.getByRole('link', { name: 'instagram' });
     expect(socialLink).toHaveAttribute(
       'href',
-      'https://instagram.com/ogabassey'
+      'https://www.instagram.com/ogabassey'
     );
     expect(socialLink).toHaveAttribute('target', '_blank');
     expect(socialLink).toHaveAttribute('rel', 'noopener noreferrer');

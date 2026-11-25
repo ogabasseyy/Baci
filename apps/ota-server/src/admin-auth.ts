@@ -22,6 +22,7 @@ const UTF8_DECODER = new TextDecoder('utf-8', {
   fatal: true,
   ignoreBOM: false,
 });
+const MAX_SAFE_TIMESTAMP_MS = 253_402_300_799_000;
 
 export function authenticateAdmin(
   request: Request,
@@ -113,13 +114,20 @@ export function parsePublishPayload(body: unknown): PublishPayload {
 
   let createdAt: string | undefined;
   if (body.createdAt !== undefined) {
-    if (
-      typeof body.createdAt !== 'string' ||
-      Number.isNaN(Date.parse(body.createdAt))
-    ) {
+    if (typeof body.createdAt !== 'string') {
       throw new ValidationError('createdAt must be a valid ISO-8601 timestamp');
     }
-    createdAt = new Date(body.createdAt).toISOString();
+    const parsedMs = Date.parse(body.createdAt);
+    if (
+      Number.isNaN(parsedMs) ||
+      parsedMs < 0 ||
+      parsedMs > MAX_SAFE_TIMESTAMP_MS
+    ) {
+      throw new ValidationError(
+        'createdAt must be a valid ISO-8601 timestamp in safe operational range'
+      );
+    }
+    createdAt = new Date(parsedMs).toISOString();
   }
 
   const sourceSha =

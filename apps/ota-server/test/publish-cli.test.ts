@@ -340,4 +340,59 @@ describe('publish-ota CLI', () => {
       toEmbedded: true,
     });
   });
+
+  it('retries publish with a fresh updateId and server-managed createdAt after a 409 timestamp conflict', async () => {
+    const { distDir, configPath } = await createExportFixture();
+    const publishBodies: Record<string, unknown>[] = [];
+
+    const mockFetch: OtaFetch = async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'HEAD') {
+        return new Response(null, { status: 404 });
+      }
+      if (url.endsWith('/api/admin/publish')) {
+        const parsedUnknown: unknown = JSON.parse(String(init?.body ?? '{}'));
+        if (
+          typeof parsedUnknown !== 'object' ||
+          parsedUnknown === null ||
+          Array.isArray(parsedUnknown)
+        ) {
+          throw new Error('Expected JSON object body');
+        }
+        const record: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(parsedUnknown)) {
+          record[key] = value;
+        }
+        publishBodies.push(record);
+        if (publishBodies.length === 1) {
+          return new Response(
+            JSON.stringify({
+              error: 'Concurrent conflict',
+              code: 'STALE_TIMESTAMP_CONFLICT',
+            }),
+            { status: 409 }
+          );
+        }
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const res = await publishOta(
+      {
+        distDir,
+        configPath,
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        serverUrl: 'https://ota.usebaci.com',
+        token: 'secret-token',
+      },
+      mockFetch
+    );
+    expect(res).toEqual({ ok: true });
+    expect(publishBodies).toHaveLength(2);
+    expect(publishBodies[1]?.updateId).not.toBe(publishBodies[0]?.updateId);
+    expect(publishBodies[1]?.createdAt).toBeUndefined();
+  });
 });

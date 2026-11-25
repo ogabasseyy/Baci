@@ -5,6 +5,7 @@ export interface R2HttpMetadata {
 export interface R2ObjectLike {
   key: string;
   size: number;
+  etag?: string;
   httpEtag?: string;
   httpMetadata?: R2HttpMetadata;
   customMetadata?: Record<string, string>;
@@ -35,6 +36,7 @@ export interface OtaR2Bucket {
     value: ArrayBuffer | ArrayBufferView | string | ReadableStream<Uint8Array>,
     options?: R2PutOptionsLike
   ): Promise<R2ObjectLike | null>;
+  delete?(key: string): Promise<void>;
 }
 
 export interface OtaWorkerEnv {
@@ -103,6 +105,11 @@ export interface RollbackOperationResult {
   unchanged?: boolean;
 }
 
+export interface RollbackHistoryEntry {
+  key: string;
+  response: RollbackOperationResult;
+}
+
 export type ChannelCurrentState =
   | {
       mode: 'update';
@@ -110,20 +117,16 @@ export type ChannelCurrentState =
       activeSourceUpdateId?: string;
       previousUpdateId?: string;
       updatedAt: string;
-      lastRollback?: {
-        key: string;
-        response: RollbackOperationResult;
-      };
+      lastRollback?: RollbackHistoryEntry;
+      recentRollbacks?: RollbackHistoryEntry[];
     }
   | {
       mode: 'rollback_to_embedded';
       commitTime: string;
       previousUpdateId?: string;
       updatedAt: string;
-      lastRollback?: {
-        key: string;
-        response: RollbackOperationResult;
-      };
+      lastRollback?: RollbackHistoryEntry;
+      recentRollbacks?: RollbackHistoryEntry[];
     };
 
 export interface PublishPayload {

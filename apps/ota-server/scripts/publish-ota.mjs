@@ -341,6 +341,19 @@ export async function publishOta(options, fetchImpl = fetch) {
     body: JSON.stringify(packaged.payload),
     redirect: 'error',
   });
+  if (publishResp.status === 409 && !options.updateId) {
+    const { createdAt: _staleCreatedAt, ...retryPayload } = packaged.payload;
+    const retryResp = await fetchImpl(`${baseUrl}/api/admin/publish`, {
+      method: 'POST',
+      headers: { ...authHeaders, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...retryPayload,
+        updateId: randomUUID().toLowerCase(),
+      }),
+      redirect: 'error',
+    });
+    return assertOkResponse(retryResp, 'Publish OTA manifest');
+  }
   return assertOkResponse(publishResp, 'Publish OTA manifest');
 }
 

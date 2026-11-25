@@ -270,4 +270,58 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
       'https://proxy.usebaci.com/mobile-ota/api/assets/blobs/def456.png'
     );
   });
+
+  it('negotiates Accept header and returns 406 when multipart/mixed is excluded', async () => {
+    const bucket = new MockR2Bucket();
+    await seedRelease(bucket);
+    const env: OtaWorkerEnv = { OTA_BUCKET: bucket };
+
+    const jsonOnlyResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({ accept: 'application/json' }),
+      }),
+      env
+    );
+    expect(jsonOnlyResp.status).toBe(406);
+
+    const zeroQResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          accept: 'multipart/mixed;q=0, application/json',
+        }),
+      }),
+      env
+    );
+    expect(zeroQResp.status).toBe(406);
+
+    const exactExclusionOverWildcard = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          accept: 'multipart/mixed;q=0, */*;q=1',
+        }),
+      }),
+      env
+    );
+    expect(exactExclusionOverWildcard.status).toBe(406);
+
+    const wildcardOnlyResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          accept: '*/*',
+        }),
+      }),
+      env
+    );
+    expect(wildcardOnlyResp.status).toBe(200);
+
+    const mixedAcceptResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          accept: 'application/json, multipart/mixed;q=0.9',
+        }),
+      }),
+      env
+    );
+    expect(mixedAcceptResp.status).toBe(200);
+  });
 });

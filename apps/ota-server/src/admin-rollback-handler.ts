@@ -5,17 +5,20 @@ import {
   parseRollbackPayload,
 } from './admin-auth';
 import {
+  type PreparedRollbackRelease,
+  prepareRollbackRelease,
+} from './admin-rollback-prepare';
+import {
+  findRecordedRollback,
+  mergeRollbackHistory,
   nextMonotonicTimestamp,
-  putImmutableRelease,
   updateChannelPointerCas,
 } from './admin-storage';
-import { deriveDeterministicUuid } from './crypto';
 import type {
   ChannelCurrentState,
   OtaWorkerEnv,
   RollbackOperationResult,
   RollbackPayload,
-  StoredReleaseRecord,
 } from './types';
 import {
   errorResponse,
@@ -78,91 +81,35 @@ export async function handleAdminRollback(
     ? await initialObj.json<ChannelCurrentState>()
     : null;
 
-  if (idempotencyKey && initialState?.lastRollback?.key === idempotencyKey) {
-    return jsonResponse(initialState.lastRollback.response);
+  const earlyRecorded = idempotencyKey
+    ? findRecordedRollback(initialState, idempotencyKey)
+    : undefined;
+  if (earlyRecorded) {
+    return jsonResponse(earlyRecorded);
   }
 
-  let preparedRollback: {
-    releaseId: string;
-    createdAt: string;
-    sourceTargetId: string;
-  } | null = null;
-
+  let prepared: PreparedRollbackRelease | null = null;
   if (!payload.toEmbedded) {
-    const sourceTargetId =
-      payload.targetUpdateId ?? initialState?.previousUpdateId;
-    if (!sourceTargetId) {
-      return errorResponse(
-        'No targetUpdateId provided and no previousUpdateId recorded for rollback',
-        400
-      );
-    }
-
-    if (
-      payload.targetUpdateId &&
-      initialState?.mode === 'update' &&
-      (initialState.updateId === payload.targetUpdateId ||
-        initialState.activeSourceUpdateId === payload.targetUpdateId)
-    ) {
-      return jsonResponse({
-        ok: true,
-        mode: 'update',
-        channel,
-        platform: payload.platform,
-        runtimeVersion: payload.runtimeVersion,
-        updateId: initialState.updateId,
-        ...(initialState.activeSourceUpdateId &&
-        initialState.activeSourceUpdateId !== initialState.updateId
-          ? { rolledBackToUpdateId: initialState.activeSourceUpdateId }
-          : {}),
-      });
-    }
-
-    const sourceReleaseKey = `releases/${channel}/${payload.platform}/${payload.runtimeVersion}/${sourceTargetId}.json`;
-    const sourceObj = await env.OTA_BUCKET.get(sourceReleaseKey);
-    if (!sourceObj) {
-      return errorResponse(`Target update not found: ${sourceTargetId}`, 404);
-    }
-    const sourceRelease = await sourceObj.json<StoredReleaseRecord>();
-
-    const createdAt = nextMonotonicTimestamp(
-      initialState?.updatedAt,
-      sourceRelease.createdAt
-    );
-    const rollbackReleaseId = idempotencyKey
-      ? deriveDeterministicUuid(
-          `rollback:${channel}:${payload.platform}:${payload.runtimeVersion}:${initialObj?.httpEtag ?? 'none'}:${initialState?.updatedAt ?? 'initial'}:${sourceTargetId}:${idempotencyKey}`
-        )
-      : crypto.randomUUID().toLowerCase();
-
-    const rollbackRelease: StoredReleaseRecord = {
-      ...sourceRelease,
-      id: rollbackReleaseId,
-      createdAt,
-      rollbackOfUpdateId: sourceTargetId,
-    };
-    const rollbackReleaseKey = `releases/${channel}/${payload.platform}/${payload.runtimeVersion}/${rollbackReleaseId}.json`;
-    const releaseResult = await putImmutableRelease(
+    const prepOrResponse = await prepareRollbackRelease(
       env,
-      rollbackReleaseKey,
-      rollbackRelease,
-      { ignoreCreatedAtOnMatch: Boolean(idempotencyKey) }
+      channel,
+      payload,
+      initialObj,
+      initialState,
+      idempotencyKey
     );
-    if (releaseResult.status === 'conflict') {
-      return errorResponse('Rollback release ID collision; retry', 409);
+    if (prepOrResponse instanceof Response) {
+      return prepOrResponse;
     }
-
-    preparedRollback = {
-      releaseId: rollbackReleaseId,
-      createdAt: releaseResult.createdAt,
-      sourceTargetId,
-    };
+    prepared = prepOrResponse;
   }
 
-  // Pure CAS callback: zero storage writes or non-deterministic ID generation inside retries.
   const result = await updateChannelPointerCas(env, pointerKey, (existing) => {
-    if (idempotencyKey && existing?.lastRollback?.key === idempotencyKey) {
-      return { kind: 'idempotent', result: existing.lastRollback.response };
+    const recorded = idempotencyKey
+      ? findRecordedRollback(existing, idempotencyKey)
+      : undefined;
+    if (recorded) {
+      return { kind: 'idempotent', result: recorded };
     }
 
     const priorActiveId =
@@ -171,7 +118,18 @@ export async function handleAdminRollback(
         : existing?.previousUpdateId;
 
     if (payload.toEmbedded) {
-      const now = nextMonotonicTimestamp(existing?.updatedAt);
+      let now: string;
+      try {
+        now = nextMonotonicTimestamp(existing?.updatedAt);
+      } catch (err) {
+        if (err instanceof ValidationError) {
+          return {
+            kind: 'error',
+            response: errorResponse(err.message, err.status),
+          };
+        }
+        throw err;
+      }
       const response: RollbackOperationResult = {
         ok: true,
         mode: 'rollback_to_embedded',
@@ -180,6 +138,9 @@ export async function handleAdminRollback(
         runtimeVersion: payload.runtimeVersion,
         commitTime: now,
       };
+      const entry = idempotencyKey
+        ? { key: idempotencyKey, response }
+        : undefined;
       return {
         kind: 'write',
         state: {
@@ -187,14 +148,13 @@ export async function handleAdminRollback(
           commitTime: now,
           ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
           updatedAt: now,
-          ...(idempotencyKey
-            ? { lastRollback: { key: idempotencyKey, response } }
-            : {}),
+          ...(entry ? { lastRollback: entry } : {}),
+          recentRollbacks: mergeRollbackHistory(existing, entry),
         },
       };
     }
 
-    if (!preparedRollback) {
+    if (!prepared) {
       return {
         kind: 'error',
         response: errorResponse('Rollback release preparation missing', 500),
@@ -203,7 +163,7 @@ export async function handleAdminRollback(
 
     if (
       !payload.targetUpdateId &&
-      existing?.previousUpdateId !== preparedRollback.sourceTargetId
+      existing?.previousUpdateId !== prepared.sourceTargetId
     ) {
       return {
         kind: 'error',
@@ -225,7 +185,7 @@ export async function handleAdminRollback(
 
     if (
       existing?.updatedAt &&
-      Date.parse(existing.updatedAt) >= Date.parse(preparedRollback.createdAt)
+      Date.parse(existing.updatedAt) >= Date.parse(prepared.createdAt)
     ) {
       return {
         kind: 'error',
@@ -242,23 +202,40 @@ export async function handleAdminRollback(
       channel,
       platform: payload.platform,
       runtimeVersion: payload.runtimeVersion,
-      updateId: preparedRollback.releaseId,
-      rolledBackToUpdateId: preparedRollback.sourceTargetId,
+      updateId: prepared.releaseId,
+      rolledBackToUpdateId: prepared.sourceTargetId,
     };
+    const entry = idempotencyKey
+      ? { key: idempotencyKey, response }
+      : undefined;
     return {
       kind: 'write',
       state: {
         mode: 'update',
-        updateId: preparedRollback.releaseId,
-        activeSourceUpdateId: preparedRollback.sourceTargetId,
+        updateId: prepared.releaseId,
+        activeSourceUpdateId: prepared.sourceTargetId,
         ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
-        updatedAt: preparedRollback.createdAt,
-        ...(idempotencyKey
-          ? { lastRollback: { key: idempotencyKey, response } }
-          : {}),
+        updatedAt: prepared.createdAt,
+        ...(entry ? { lastRollback: entry } : {}),
+        recentRollbacks: mergeRollbackHistory(existing, entry),
       },
     };
   });
+
+  if (prepared && env.OTA_BUCKET.delete) {
+    const committedThisRelease =
+      !(result instanceof Response) &&
+      'state' in result &&
+      result.state.mode === 'update' &&
+      result.state.updateId === prepared.releaseId;
+    if (committedThisRelease) {
+      await env.OTA_BUCKET.delete(prepared.preparedKey);
+    } else if (!idempotencyKey && prepared.createdByRequest) {
+      // Only non-keyed random releases are exclusive to this request and safe to reap on abort.
+      await env.OTA_BUCKET.delete(prepared.releaseKey);
+      await env.OTA_BUCKET.delete(prepared.preparedKey);
+    }
+  }
 
   if (result instanceof Response) {
     return result;

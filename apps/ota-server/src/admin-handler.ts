@@ -4,6 +4,8 @@ import {
   parsePublishPayload,
 } from './admin-auth';
 import {
+  mergeRollbackHistory,
+  nextMonotonicTimestamp,
   putImmutableAsset,
   putImmutableRelease,
   updateChannelPointerCas,
@@ -11,6 +13,7 @@ import {
 } from './admin-storage';
 import { sha256Base64Url, sha256Hex } from './crypto';
 import type {
+  ChannelCurrentState,
   OtaWorkerEnv,
   PublishPayload,
   StoredReleaseRecord,
@@ -27,6 +30,7 @@ import {
 
 const ADMIN_ASSETS_PREFIX = '/api/admin/assets/';
 const SHA256_HEX_REGEX = /^[0-9a-f]{64}$/i;
+const MAX_FUTURE_PUBLISH_SKEW_MS = 5 * 60 * 1000;
 
 export async function handleAdminUploadAsset(
   request: Request,
@@ -132,7 +136,50 @@ export async function handleAdminPublish(
   const channel = payload.channel ?? 'production';
   const updateId = payload.updateId ?? crypto.randomUUID().toLowerCase();
   const callerProvidedCreatedAt = payload.createdAt !== undefined;
-  const createdAt = payload.createdAt ?? new Date().toISOString();
+  const pointerKey = `channels/${channel}/${payload.platform}/${payload.runtimeVersion}/current.json`;
+
+  if (payload.createdAt !== undefined) {
+    if (
+      Date.parse(payload.createdAt) >
+      Date.now() + MAX_FUTURE_PUBLISH_SKEW_MS
+    ) {
+      return errorResponse(
+        'Publish createdAt cannot be more than 5 minutes in the future',
+        400
+      );
+    }
+  }
+
+  const initialPointerObj = await env.OTA_BUCKET.get(pointerKey);
+  const initialPointer = initialPointerObj
+    ? await initialPointerObj.json<ChannelCurrentState>()
+    : null;
+
+  if (
+    payload.createdAt !== undefined &&
+    initialPointer?.updatedAt &&
+    !(
+      initialPointer.mode === 'update' && initialPointer.updateId === updateId
+    ) &&
+    Date.parse(payload.createdAt) <= Date.parse(initialPointer.updatedAt)
+  ) {
+    return errorResponse(
+      'Publish createdAt must be strictly newer than the active release timestamp; retry with a new updateId',
+      409,
+      'STALE_TIMESTAMP_CONFLICT'
+    );
+  }
+
+  let createdAt: string;
+  try {
+    createdAt =
+      payload.createdAt ?? nextMonotonicTimestamp(initialPointer?.updatedAt);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return errorResponse(err.message, err.status);
+    }
+    throw err;
+  }
   const assets = payload.assets ?? [];
 
   for (const asset of [payload.launchAsset, ...assets]) {
@@ -170,12 +217,26 @@ export async function handleAdminPublish(
   }
   const effectiveCreatedAt = releaseResult.createdAt;
 
-  const pointerKey = `channels/${channel}/${payload.platform}/${payload.runtimeVersion}/current.json`;
   const result = await updateChannelPointerCas(env, pointerKey, (existing) => {
+    if (
+      existing?.updatedAt &&
+      !(existing.mode === 'update' && existing.updateId === updateId) &&
+      Date.parse(effectiveCreatedAt) <= Date.parse(existing.updatedAt)
+    ) {
+      return {
+        kind: 'error',
+        response: errorResponse(
+          'Concurrent publish recorded a newer release timestamp; retry with a new updateId',
+          409,
+          'STALE_TIMESTAMP_CONFLICT'
+        ),
+      };
+    }
     const previousUpdateId =
       existing?.mode === 'update' && existing.updateId !== updateId
         ? existing.updateId
         : existing?.previousUpdateId;
+    const recentRollbacks = mergeRollbackHistory(existing);
     return {
       kind: 'write',
       state: {
@@ -184,11 +245,18 @@ export async function handleAdminPublish(
         activeSourceUpdateId: updateId,
         ...(previousUpdateId ? { previousUpdateId } : {}),
         updatedAt: effectiveCreatedAt,
+        ...(existing?.lastRollback
+          ? { lastRollback: existing.lastRollback }
+          : {}),
+        ...(recentRollbacks ? { recentRollbacks } : {}),
       },
     };
   });
 
   if (result instanceof Response) {
+    if (releaseResult.status === 'created' && env.OTA_BUCKET.delete) {
+      await env.OTA_BUCKET.delete(releaseKey);
+    }
     return result;
   }
   if ('idempotentResult' in result) {

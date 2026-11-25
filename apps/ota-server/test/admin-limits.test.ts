@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
 import type { OtaWorkerEnv } from '../src/types';
 import {
@@ -8,6 +8,7 @@ import {
   readBodyBytesWithLimit,
 } from '../src/validation';
 import { MockR2Bucket } from './helpers/mock-r2';
+import { parseMultipartMixed } from './helpers/multipart-parser';
 
 const TOKEN = 'super-secret-ota-admin-token-12345';
 const RUNTIME = '2.1.663-ios-sdk58-rn0880-splashmotion1';
@@ -49,16 +50,51 @@ describe('admin payload size and count limits', () => {
         controller.close();
       },
     });
-    const streamedReq = new Request('https://ota.usebaci.com/upload', {
+    const streamedInit: RequestInit & { duplex: 'half' } = {
       method: 'PUT',
       body: stream,
       duplex: 'half',
-    } as RequestInit);
+    };
+    const streamedReq = new Request(
+      'https://ota.usebaci.com/upload',
+      streamedInit
+    );
     await expect(
       readBodyBytesWithLimit(streamedReq, 1024)
     ).rejects.toMatchObject({
       status: 413,
     });
+
+    // Headerless oversized stream directly against the PUT upload route.
+    let emitted = 0;
+    const oneMb = new Uint8Array(1024 * 1024);
+    const oversizedRouteStream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (emitted > 50) {
+          controller.close();
+          return;
+        }
+        emitted += 1;
+        controller.enqueue(oneMb);
+      },
+    });
+    const routeInit: RequestInit & { duplex: 'half' } = {
+      method: 'PUT',
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        'x-asset-sha256': '0'.repeat(64),
+      },
+      body: oversizedRouteStream,
+      duplex: 'half',
+    };
+    const oversizedRouteResp = await worker.fetch(
+      new Request(
+        'https://ota.usebaci.com/api/admin/assets/bundles/ios/stream-huge.hbc',
+        routeInit
+      ),
+      env
+    );
+    expect(oversizedRouteResp.status).toBe(413);
   });
 
   it('rejects oversized publish body, excessive asset counts, and oversized extra object with 413', async () => {
@@ -128,5 +164,149 @@ describe('admin payload size and count limits', () => {
       env
     );
     expect(bigExtraResp.status).toBe(413);
+  });
+
+  it('enforces monotonic publish createdAt and rejects stale or far-future timestamps', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T15:00:00.000Z'));
+    try {
+      const { env } = createEnv();
+      const dummyB64 = createHash('sha256').update('m').digest('base64url');
+      const baseAsset = {
+        hash: dummyB64,
+        key: 'm',
+        contentType: 'application/javascript',
+        url: 'https://cdn.usebaci.com/m.hbc',
+      };
+
+      const farFuture = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/publish', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            updateId: '11111111-1111-4111-8111-111111111111',
+            createdAt: '2026-11-25T15:10:00.000Z',
+            launchAsset: baseAsset,
+          }),
+        }),
+        env
+      );
+      expect(farFuture.status).toBe(400);
+
+      // Publish with +2m future skew (allowed within 5m).
+      const pub1 = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/publish', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            updateId: '11111111-1111-4111-8111-111111111111',
+            createdAt: '2026-11-25T15:02:00.000Z',
+            launchAsset: baseAsset,
+          }),
+        }),
+        env
+      );
+      expect(pub1.status).toBe(200);
+
+      // Older explicit createdAt for a new updateId must be rejected with 409.
+      const staleExplicit = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/publish', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            updateId: '22222222-2222-4222-8222-222222222222',
+            createdAt: '2026-11-25T15:01:00.000Z',
+            launchAsset: baseAsset,
+          }),
+        }),
+        env
+      );
+      expect(staleExplicit.status).toBe(409);
+
+      // Publish without explicit createdAt clamps monotonically above 15:02:00.000Z.
+      const pub2 = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/publish', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            updateId: '33333333-3333-4333-8333-333333333333',
+            launchAsset: baseAsset,
+          }),
+        }),
+        env
+      );
+      expect(pub2.status).toBe(200);
+
+      const manifestResp = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/manifest', {
+          headers: {
+            'expo-protocol-version': '1',
+            'expo-platform': 'ios',
+            'expo-runtime-version': RUNTIME,
+            'expo-channel-name': 'production',
+          },
+        }),
+        env
+      );
+      const parts = parseMultipartMixed(
+        manifestResp.headers.get('content-type'),
+        await manifestResp.text()
+      );
+      const parsedManifest: unknown = JSON.parse(parts[0]?.body ?? '');
+      if (
+        typeof parsedManifest !== 'object' ||
+        parsedManifest === null ||
+        !('createdAt' in parsedManifest) ||
+        typeof parsedManifest.createdAt !== 'string'
+      ) {
+        throw new Error(
+          'Expected manifest response to include string createdAt'
+        );
+      }
+      expect(Date.parse(parsedManifest.createdAt)).toBeGreaterThan(
+        Date.parse('2026-11-25T15:02:00.000Z')
+      );
+
+      // Extreme future date beyond safe operational cap must be rejected at parse time.
+      const maxDatePublish = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/publish', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            createdAt: '+275760-09-13T00:00:00.000Z',
+            launchAsset: baseAsset,
+          }),
+        }),
+        env
+      );
+      expect(maxDatePublish.status).toBe(400);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

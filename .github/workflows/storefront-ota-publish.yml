@@ -76,6 +76,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$ACTION" == "rollback" ]]; then
+            if [[ "$ROLLBACK_TO_EMBEDDED" == "true" && -n "$ROLLBACK_UPDATE_ID" ]]; then
+              echo '::error::Specify either rollback_to_embedded=true or rollback_update_id, not both.' >&2
+              exit 1
+            fi
             if [[ "$ROLLBACK_TO_EMBEDDED" != "true" && -z "$ROLLBACK_UPDATE_ID" ]]; then
               echo '::error::rollback requires either rollback_to_embedded=true or rollback_update_id.' >&2
               exit 1

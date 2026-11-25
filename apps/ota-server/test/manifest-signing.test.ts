@@ -162,4 +162,65 @@ describe('GET /api/manifest RSA-SHA256 code signing', () => {
     );
     expect(unconfiguredSigning.status).toBe(500);
   });
+
+  it('returns controlled 500 JSON instead of throwing when OTA_SIGNING_PRIVATE_KEY is malformed', async () => {
+    const bucket = new MockR2Bucket();
+    const malformedEnv: OtaWorkerEnv = {
+      OTA_BUCKET: bucket,
+      OTA_SIGNING_PRIVATE_KEY: 'not-a-valid-private-key',
+      OTA_SIGNING_KEY_ID: 'baci-2026',
+    };
+
+    // Directive path (no active release)
+    const directiveResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      malformedEnv
+    );
+    expect(directiveResp.status).toBe(500);
+    expect(await directiveResp.json()).toMatchObject({
+      error: expect.stringMatching(/signing key/i),
+    });
+
+    // Manifest path (active release present)
+    await bucket.put(
+      `releases/production/ios/${RUNTIME}/${UPDATE_ID}.json`,
+      JSON.stringify({
+        id: UPDATE_ID,
+        createdAt: '2026-11-25T15:00:00.000Z',
+        runtimeVersion: RUNTIME,
+        channel: 'production',
+        platform: 'ios',
+        launchAsset: {
+          hash: 'bundle-hash',
+          key: 'bundle-key',
+          contentType: 'application/javascript',
+          r2Key: 'bundles/ios/signed.hbc',
+        },
+        assets: [],
+        metadata: {},
+        extra: {},
+      })
+    );
+    await bucket.put(
+      `channels/production/ios/${RUNTIME}/current.json`,
+      JSON.stringify({
+        mode: 'update',
+        updateId: UPDATE_ID,
+        updatedAt: '2026-11-25T15:00:00.000Z',
+      })
+    );
+
+    const manifestResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      malformedEnv
+    );
+    expect(manifestResp.status).toBe(500);
+    expect(await manifestResp.json()).toMatchObject({
+      error: expect.stringMatching(/signing key/i),
+    });
+  });
 });

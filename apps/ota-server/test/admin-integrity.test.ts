@@ -218,7 +218,7 @@ describe('admin upload integrity and concurrent publish CAS', () => {
         if (entry) {
           bucket.store.set(pointerKey, {
             ...entry,
-            etag: '"concurrent-etag-99"',
+            etag: 'concurrent-etag-99',
             bytes: new TextEncoder().encode(
               JSON.stringify({
                 mode: 'update',
@@ -384,5 +384,155 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       env
     );
     expect(pubConflict.status).toBe(409);
+
+    // JSON representation comparison: -0 serializes as 0 on retry and must still match.
+    const negZeroBody = JSON.stringify({
+      ...basePublishBody,
+      updateId: UPDATE_2,
+      createdAt: '2026-11-25T12:05:00.000Z',
+      extra: { score: -0 },
+    });
+    expect(
+      (
+        await worker.fetch(
+          new Request('https://ota.usebaci.com/api/admin/publish', {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${TOKEN}`,
+              'content-type': 'application/json',
+            },
+            body: negZeroBody.replace('"score":0', '"score":-0'),
+          }),
+          env
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      (
+        await worker.fetch(
+          new Request('https://ota.usebaci.com/api/admin/publish', {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${TOKEN}`,
+              'content-type': 'application/json',
+            },
+            body: negZeroBody.replace('"score":0', '"score":-0'),
+          }),
+          env
+        )
+      ).status
+    ).toBe(200);
+  });
+
+  it('prevents publish CAS retry from moving channel updatedAt backward after a newer concurrent publish', async () => {
+    const { bucket, env } = createEnv();
+    const bytes = new TextEncoder().encode('monotonic-cas-bundle');
+    const shaHex = createHash('sha256').update(bytes).digest('hex');
+    const shaB64 = createHash('sha256').update(bytes).digest('base64url');
+    await worker.fetch(
+      new Request(
+        'https://ota.usebaci.com/api/admin/assets/bundles/ios/mono.hbc',
+        {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'x-asset-sha256': shaHex,
+          },
+          body: bytes,
+        }
+      ),
+      env
+    );
+
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+    const newerTimestamp = '2026-11-25T16:30:00.000Z';
+    let injected = false;
+    bucket.onBeforePut = (key) => {
+      if (!injected && key === pointerKey) {
+        injected = true;
+        bucket.store.set(pointerKey, {
+          etag: 'newer-concurrent-pub',
+          bytes: new TextEncoder().encode(
+            JSON.stringify({
+              mode: 'update',
+              updateId: UPDATE_2,
+              activeSourceUpdateId: UPDATE_2,
+              updatedAt: newerTimestamp,
+            })
+          ),
+        });
+      }
+    };
+
+    const staleRetryResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          updateId: UPDATE_1,
+          createdAt: '2026-11-25T16:00:00.000Z',
+          launchAsset: {
+            hash: shaB64,
+            key: shaHex,
+            contentType: 'application/javascript',
+            r2Key: 'bundles/ios/mono.hbc',
+          },
+        }),
+      }),
+      env
+    );
+    expect(staleRetryResp.status).toBe(409);
+    expect(await staleRetryResp.json()).toMatchObject({
+      code: 'STALE_TIMESTAMP_CONFLICT',
+    });
+
+    const pointer = await (
+      await bucket.get(pointerKey)
+    )?.json<ChannelCurrentState>();
+    expect(pointer).toMatchObject({
+      mode: 'update',
+      updateId: UPDATE_2,
+      updatedAt: newerTimestamp,
+    });
+
+    // Retrying with a fresh attempt (omitted updateId and createdAt) succeeds cleanly after T2.
+    const recoveryResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          launchAsset: {
+            hash: shaB64,
+            key: shaHex,
+            contentType: 'application/javascript',
+            r2Key: 'bundles/ios/mono.hbc',
+          },
+        }),
+      }),
+      env
+    );
+    expect(recoveryResp.status).toBe(200);
+    const recoveredPointer = await (
+      await bucket.get(pointerKey)
+    )?.json<ChannelCurrentState>();
+    expect(recoveredPointer).toMatchObject({
+      mode: 'update',
+      previousUpdateId: UPDATE_2,
+    });
+    expect(Date.parse(recoveredPointer?.updatedAt ?? '')).toBeGreaterThan(
+      Date.parse(newerTimestamp)
+    );
   });
 });

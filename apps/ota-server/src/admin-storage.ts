@@ -2,13 +2,48 @@ import { sha256Base64Url } from './crypto';
 import type {
   ChannelCurrentState,
   OtaWorkerEnv,
+  RollbackHistoryEntry,
   RollbackOperationResult,
   StoredManifestAsset,
   StoredReleaseRecord,
 } from './types';
-import { errorResponse, isPlainObject } from './validation';
+import { errorResponse, isPlainObject, ValidationError } from './validation';
 
 const MAX_POINTER_RETRIES = 5;
+const MAX_ROLLBACK_HISTORY = 20;
+const MAX_SAFE_TIMESTAMP_MS = 253_402_300_799_000;
+
+export function findRecordedRollback(
+  state: ChannelCurrentState | null | undefined,
+  key: string
+): RollbackOperationResult | undefined {
+  if (!state) return undefined;
+  if (state.lastRollback?.key === key) {
+    return state.lastRollback.response;
+  }
+  return state.recentRollbacks?.find((entry) => entry.key === key)?.response;
+}
+
+export function mergeRollbackHistory(
+  existing: ChannelCurrentState | null | undefined,
+  nextEntry?: RollbackHistoryEntry
+): RollbackHistoryEntry[] | undefined {
+  const existingEntries = existing?.recentRollbacks
+    ? [...existing.recentRollbacks]
+    : existing?.lastRollback
+      ? [existing.lastRollback]
+      : [];
+  if (nextEntry) {
+    const filtered = existingEntries.filter(
+      (entry) => entry.key !== nextEntry.key
+    );
+    filtered.push(nextEntry);
+    return filtered.slice(-MAX_ROLLBACK_HISTORY);
+  }
+  return existingEntries.length > 0
+    ? existingEntries.slice(-MAX_ROLLBACK_HISTORY)
+    : undefined;
+}
 
 export function nextMonotonicTimestamp(
   ...priorIsoTimestamps: (string | undefined)[]
@@ -18,8 +53,17 @@ export function nextMonotonicTimestamp(
     if (!ts) continue;
     const parsed = Date.parse(ts);
     if (!Number.isNaN(parsed) && parsed >= maxMs) {
+      if (parsed >= MAX_SAFE_TIMESTAMP_MS) {
+        throw new ValidationError(
+          'Stored channel timestamp exceeds safe operational range',
+          422
+        );
+      }
       maxMs = parsed + 1;
     }
+  }
+  if (maxMs > MAX_SAFE_TIMESTAMP_MS) {
+    throw new ValidationError('Timestamp exceeds safe operational range', 422);
   }
   return new Date(maxMs).toISOString();
 }
@@ -157,9 +201,10 @@ export async function putImmutableRelease(
   }
   try {
     const existingRecord = await existing.json<StoredReleaseRecord>();
+    const serializedCandidate = JSON.parse(serialized) as StoredReleaseRecord;
     const candidate = options?.ignoreCreatedAtOnMatch
-      ? { ...releaseRecord, createdAt: existingRecord.createdAt }
-      : releaseRecord;
+      ? { ...serializedCandidate, createdAt: existingRecord.createdAt }
+      : serializedCandidate;
     return canonicalDeepEqual(existingRecord, candidate)
       ? { status: 'matched', createdAt: existingRecord.createdAt }
       : { status: 'conflict' };
@@ -195,13 +240,18 @@ export async function updateChannelPointerCas(
       return { idempotentResult: action.result };
     }
 
+    const etagMatchValue =
+      existingObj?.etag ??
+      (existingObj?.httpEtag
+        ? existingObj.httpEtag.replace(/^"(.*)"$/, '$1')
+        : undefined);
     const written = await env.OTA_BUCKET.put(
       pointerKey,
       JSON.stringify(action.state),
       {
         httpMetadata: { contentType: 'application/json; charset=utf-8' },
-        onlyIf: existingObj?.httpEtag
-          ? { etagMatches: existingObj.httpEtag }
+        onlyIf: etagMatchValue
+          ? { etagMatches: etagMatchValue }
           : { etagDoesNotMatch: '*' },
       }
     );

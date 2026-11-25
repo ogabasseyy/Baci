@@ -45,16 +45,22 @@ function resolveAssetForManifest(
   };
 }
 
-function signBodyIfConfigured(
+function signBodyOrError(
   body: string,
   env: OtaWorkerEnv
-): string | undefined {
+): { signature?: string; error?: Response } {
   const privateKey = env.OTA_SIGNING_PRIVATE_KEY?.trim();
   if (!privateKey) {
-    return undefined;
+    return {};
   }
   const keyId = env.OTA_SIGNING_KEY_ID?.trim() || 'main';
-  return signRsaSha256Sfv(body, privateKey, keyId);
+  try {
+    return { signature: signRsaSha256Sfv(body, privateKey, keyId) };
+  } catch {
+    return {
+      error: errorResponse('Configured manifest signing key is invalid', 500),
+    };
+  }
 }
 
 function directiveResponse(
@@ -62,7 +68,10 @@ function directiveResponse(
   env: OtaWorkerEnv
 ): Response {
   const body = JSON.stringify(directive);
-  const signature = signBodyIfConfigured(body, env);
+  const { signature, error } = signBodyOrError(body, env);
+  if (error) {
+    return error;
+  }
   return buildMultipartMixedResponse([
     {
       name: 'directive',
@@ -72,12 +81,60 @@ function directiveResponse(
   ]);
 }
 
+function acceptsMultipartMixed(acceptHeader: string | null): boolean {
+  if (!acceptHeader || acceptHeader.trim().length === 0) {
+    return true;
+  }
+  let bestSpecificity = 0;
+  let bestQ = 0;
+  for (const rawRange of acceptHeader.split(',')) {
+    const [mediaTypePart, ...params] = rawRange.trim().toLowerCase().split(';');
+    const mediaType = mediaTypePart?.trim();
+    const specificity =
+      mediaType === 'multipart/mixed'
+        ? 3
+        : mediaType === 'multipart/*'
+          ? 2
+          : mediaType === '*/*'
+            ? 1
+            : 0;
+    if (specificity === 0) {
+      continue;
+    }
+    let q = 1;
+    for (const param of params) {
+      const [key, value] = param.trim().split('=');
+      if (key?.trim() === 'q' && value !== undefined) {
+        const parsedQ = Number(value.trim());
+        if (!Number.isNaN(parsedQ)) {
+          q = parsedQ;
+        }
+      }
+    }
+    if (
+      specificity > bestSpecificity ||
+      (specificity === bestSpecificity && q > bestQ)
+    ) {
+      bestSpecificity = specificity;
+      bestQ = q;
+    }
+  }
+  return bestSpecificity > 0 && bestQ > 0;
+}
+
 export async function handleGetManifest(
   request: Request,
   env: OtaWorkerEnv
 ): Promise<Response> {
   if (request.method !== 'GET') {
     return errorResponse('Method not allowed', 405);
+  }
+
+  if (!acceptsMultipartMixed(request.headers.get('accept'))) {
+    return errorResponse(
+      'Not Acceptable: multipart/mixed response required',
+      406
+    );
   }
 
   const protocolVersion = request.headers.get('expo-protocol-version');
@@ -184,7 +241,10 @@ export async function handleGetManifest(
   };
 
   const manifestJson = JSON.stringify(manifest);
-  const signature = signBodyIfConfigured(manifestJson, env);
+  const { signature, error } = signBodyOrError(manifestJson, env);
+  if (error) {
+    return error;
+  }
 
   return buildMultipartMixedResponse([
     {

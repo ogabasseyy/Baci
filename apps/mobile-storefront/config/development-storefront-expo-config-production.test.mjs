@@ -24,9 +24,9 @@ function loadProductionConfigWithEnv(overrides = {}) {
   delete process.env.EXPO_PUBLIC_ENV;
   delete process.env.EAS_BUILD_PROFILE;
   delete process.env.EXPO_PUBLIC_OTA_UPDATES_URL;
-  delete process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE;
+  delete process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH;
   delete process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID;
-  delete process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE;
+  delete process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE_PATH;
   delete process.env.EXPO_OTA_CODE_SIGNING_KEY_ID;
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {
@@ -144,10 +144,10 @@ test('production updates default to ON_LOAD and fallback EAS URL when no OTA ove
   });
 });
 
-test('supports EXPO_PUBLIC_OTA_UPDATES_URL and optional code signing metadata', () => {
+test('supports EXPO_PUBLIC_OTA_UPDATES_URL and optional code signing certificate path', () => {
   const config = loadProductionConfigWithEnv({
     EXPO_PUBLIC_OTA_UPDATES_URL: '  https://ota.usebaci.com/api/manifest  ',
-    EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE: './certs/ota-cert.pem',
+    EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: './certs/ota-cert.pem',
     EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: 'baci-2026',
   });
   assert.deepEqual(config.updates, {
@@ -163,6 +163,32 @@ test('supports EXPO_PUBLIC_OTA_UPDATES_URL and optional code signing metadata', 
       keyid: 'baci-2026',
     },
   });
+});
+
+test('rejects inline PEM contents or missing build-time certificate path', () => {
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH:
+          '-----BEGIN CERTIFICATE-----\nMIIB...',
+      }),
+    /not inline PEM contents/
+  );
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: '/abs/cert.pem',
+      }),
+    /relative \.pem\/\.crt\/\.cer path/
+  );
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EAS_BUILD: 'true',
+        EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: './certs/missing.pem',
+      }),
+    /does not exist on disk/
+  );
 });
 
 test('rejects invalid or non-HTTPS EXPO_PUBLIC_OTA_UPDATES_URL', () => {

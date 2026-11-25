@@ -7,6 +7,8 @@
 // env would silently reuse the first load's values. Release usage evaluates
 // once per process; tests needing fresh env must reset the require cache
 // (jest.resetModules) before re-requiring, as the app-config suites do.
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   buildStorefrontAndroidIntentFilters,
 } = require('./android-intent-filters.js');
@@ -140,10 +142,41 @@ if (rawUpdatesUrl) {
   updatesUrl = rawUpdatesUrl;
 }
 
-const codeSigningCertificate =
-  process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE?.trim() ||
-  process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE?.trim() ||
+const codeSigningCertificatePath =
+  process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH?.trim() ||
+  process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE_PATH?.trim() ||
   undefined;
+if (codeSigningCertificatePath) {
+  if (
+    codeSigningCertificatePath.includes('-----BEGIN') ||
+    /[\r\n]/.test(codeSigningCertificatePath)
+  ) {
+    throw new Error(
+      '[app.config] EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH must be a file path to a PEM certificate, not inline PEM contents.'
+    );
+  }
+  if (
+    path.isAbsolute(codeSigningCertificatePath) ||
+    codeSigningCertificatePath.split(/[/\\]/).includes('..') ||
+    !/\.(pem|crt|cer)$/i.test(codeSigningCertificatePath)
+  ) {
+    throw new Error(
+      `[app.config] Invalid EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH="${codeSigningCertificatePath}". Expected a relative .pem/.crt/.cer path.`
+    );
+  }
+  if (process.env.EAS_BUILD === 'true') {
+    const resolvedCertPath = path.resolve(
+      __dirname,
+      '..',
+      codeSigningCertificatePath
+    );
+    if (!fs.existsSync(resolvedCertPath)) {
+      throw new Error(
+        `[app.config] EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH="${codeSigningCertificatePath}" does not exist on disk.`
+      );
+    }
+  }
+}
 const codeSigningKeyId =
   process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID?.trim() ||
   process.env.EXPO_OTA_CODE_SIGNING_KEY_ID?.trim() ||
@@ -317,9 +350,9 @@ const buildStorefrontConfig = ({ config }) => ({
     requestHeaders: {
       'expo-channel-name': updateChannel,
     },
-    ...(codeSigningCertificate
+    ...(codeSigningCertificatePath
       ? {
-          codeSigningCertificate,
+          codeSigningCertificate: codeSigningCertificatePath,
           codeSigningMetadata: {
             alg: 'rsa-v1_5-sha256',
             keyid: codeSigningKeyId,

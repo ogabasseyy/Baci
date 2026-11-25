@@ -256,13 +256,24 @@ describe('admin payload validation and rollback safety', () => {
       env
     );
     expect(firstRb.status).toBe(200);
-    const firstJson = (await firstRb.json()) as {
-      updateId: string;
-      rolledBackToUpdateId: string;
-    };
-    expect(firstJson.rolledBackToUpdateId).toBe(UPDATE_A);
-    expect(firstJson.updateId).not.toBe(UPDATE_A);
-    expect(firstJson.updateId).not.toBe(UPDATE_B);
+    const firstJsonUnknown: unknown = await firstRb.json();
+    if (
+      typeof firstJsonUnknown !== 'object' ||
+      firstJsonUnknown === null ||
+      !('updateId' in firstJsonUnknown) ||
+      typeof firstJsonUnknown.updateId !== 'string' ||
+      !('rolledBackToUpdateId' in firstJsonUnknown) ||
+      typeof firstJsonUnknown.rolledBackToUpdateId !== 'string'
+    ) {
+      throw new Error('Expected rollback response to include string updateId');
+    }
+    const rollbackId = firstJsonUnknown.updateId;
+    expect(rollbackId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+    expect(firstJsonUnknown.rolledBackToUpdateId).toBe(UPDATE_A);
+    expect(rollbackId).not.toBe(UPDATE_A);
+    expect(rollbackId).not.toBe(UPDATE_B);
 
     // Retry with same idempotency-key must NOT flip back to UPDATE_B.
     const secondRb = await worker.fetch(
@@ -282,7 +293,7 @@ describe('admin payload validation and rollback safety', () => {
       env
     );
     expect(secondRb.status).toBe(200);
-    expect(await secondRb.json()).toEqual(firstJson);
+    expect(await secondRb.json()).toEqual(firstJsonUnknown);
 
     // Client currently running UPDATE_B (createdAt 2026-11-25T12:00:00.000Z)
     // must receive a new update ID with A's content and createdAt > B's createdAt.
@@ -304,7 +315,7 @@ describe('admin payload validation and rollback safety', () => {
       await manifestResp.text()
     );
     const manifest = JSON.parse(parts[0]?.body ?? '') as ExpoUpdateManifest;
-    expect(manifest.id).toBe(firstJson.updateId);
+    expect(manifest.id).toBe(rollbackId);
     expect(manifest.launchAsset.hash).toBe(b64A);
     expect(manifest.metadata).toEqual({ release: 'a' });
     expect(Date.parse(manifest.createdAt)).toBeGreaterThan(
@@ -333,7 +344,7 @@ describe('admin payload validation and rollback safety', () => {
           if (entry) {
             bucket.store.set(pointerKey, {
               ...entry,
-              etag: '"concurrent-publish-c"',
+              etag: 'concurrent-publish-c',
               bytes: new TextEncoder().encode(
                 JSON.stringify({
                   mode: 'update',
@@ -406,7 +417,7 @@ describe('admin payload validation and rollback safety', () => {
           if (entry) {
             bucket.store.set(pointerKey, {
               ...entry,
-              etag: '"newer-concurrent-c"',
+              etag: 'newer-concurrent-c',
               bytes: new TextEncoder().encode(
                 JSON.stringify({
                   mode: 'update',
@@ -442,5 +453,79 @@ describe('admin payload validation and rollback safety', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('preserves keyed rollback idempotency even after subsequent publishes move the channel', async () => {
+    const { bucket, env, b64A } = await setupChannelWithTwoReleases();
+    const UPDATE_C = '33333333-3333-4333-8333-333333333333';
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+
+    const rb1 = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'survives-intervening-publish-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+        }),
+      }),
+      env
+    );
+    expect(rb1.status).toBe(200);
+    const rb1Body = await rb1.json();
+
+    const pubC = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          updateId: UPDATE_C,
+          launchAsset: {
+            hash: b64A,
+            key: 'k',
+            contentType: 'application/javascript',
+            r2Key: 'bundles/ios/a.hbc',
+          },
+        }),
+      }),
+      env
+    );
+    expect(pubC.status).toBe(200);
+
+    // Retrying old rollback key must return original result and leave UPDATE_C active.
+    const rbReplayAfterC = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'survives-intervening-publish-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+        }),
+      }),
+      env
+    );
+    expect(rbReplayAfterC.status).toBe(200);
+    expect(await rbReplayAfterC.json()).toEqual(rb1Body);
+
+    const pointer = await (await bucket.get(pointerKey))?.json<{
+      updateId: string;
+    }>();
+    expect(pointer?.updateId).toBe(UPDATE_C);
   });
 });

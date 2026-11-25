@@ -55,7 +55,8 @@ export class MockR2Bucket implements OtaR2Bucket {
     return Promise.resolve({
       key,
       size: entry.bytes.byteLength,
-      httpEtag: entry.etag,
+      etag: entry.etag,
+      httpEtag: `"${entry.etag}"`,
       httpMetadata: entry.httpMetadata,
       customMetadata: entry.customMetadata,
     });
@@ -68,7 +69,8 @@ export class MockR2Bucket implements OtaR2Bucket {
     return Promise.resolve({
       key,
       size: bytes.byteLength,
-      httpEtag: entry.etag,
+      etag: entry.etag,
+      httpEtag: `"${entry.etag}"`,
       httpMetadata: entry.httpMetadata,
       customMetadata: entry.customMetadata,
       body: new ReadableStream<Uint8Array>({
@@ -93,23 +95,31 @@ export class MockR2Bucket implements OtaR2Bucket {
     value: ArrayBuffer | ArrayBufferView | string | ReadableStream<Uint8Array>,
     options?: R2PutOptionsLike
   ): Promise<R2ObjectLike | null> {
+    // Buffer before condition checks so concurrent puts on the same key remain atomic after await.
+    const bytes = await toBytes(value);
     this.onBeforePut?.(key, options);
     const existing = this.store.get(key);
     if (options?.onlyIf) {
       if (options.onlyIf.etagDoesNotMatch === '*' && existing) {
         return null;
       }
-      if (
-        options.onlyIf.etagMatches !== undefined &&
-        existing?.etag !== options.onlyIf.etagMatches
-      ) {
-        return null;
+      if (options.onlyIf.etagMatches !== undefined) {
+        if (
+          options.onlyIf.etagMatches.startsWith('"') ||
+          options.onlyIf.etagMatches.endsWith('"')
+        ) {
+          throw new Error(
+            'R2 conditional etagMatches requires unquoted etag, not httpEtag'
+          );
+        }
+        if (existing?.etag !== options.onlyIf.etagMatches) {
+          return null;
+        }
       }
     }
 
-    const bytes = await toBytes(value);
     this.writeCounter += 1;
-    const etag = `"${createHash('sha256').update(bytes).digest('hex').slice(0, 12)}-${this.writeCounter}"`;
+    const etag = `${createHash('sha256').update(bytes).digest('hex').slice(0, 12)}-${this.writeCounter}`;
     this.store.set(key, {
       bytes: new Uint8Array(bytes),
       etag,
@@ -119,9 +129,15 @@ export class MockR2Bucket implements OtaR2Bucket {
     return {
       key,
       size: bytes.byteLength,
-      httpEtag: etag,
+      etag,
+      httpEtag: `"${etag}"`,
       httpMetadata: options?.httpMetadata,
       customMetadata: options?.customMetadata,
     };
+  }
+
+  delete(key: string): Promise<void> {
+    this.store.delete(key);
+    return Promise.resolve();
   }
 }

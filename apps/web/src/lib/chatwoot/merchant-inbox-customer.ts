@@ -137,7 +137,7 @@ export async function loadCustomerProfile(input: {
           )
           .eq('merchant_id', input.merchantId)
           .eq('customer_id', customer.id)
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false, nullsFirst: false })
           .limit(5)
           .then(({ data, error: ordersError }) => {
             // An unreadable order history must not read as "no orders yet".

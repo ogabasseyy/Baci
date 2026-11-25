@@ -31,6 +31,28 @@ beforeEach(() => {
   }));
 });
 
+describe('bugfix: an undated order could push a recent one off the card', () => {
+  it('asks for undated orders last', async () => {
+    const { client, seen } = db({
+      customers: { data: { id: A, full_name: 'Ada' } },
+      orders: { data: [] },
+    });
+
+    await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'token',
+      includeOrders: true,
+    });
+
+    expect(seen.flatMap((entry) => entry.filters)).toContainEqual([
+      'order',
+      'created_at',
+      { ascending: false, nullsFirst: false },
+    ]);
+  });
+});
+
 describe('bugfix: order facts were read for staff without order access', () => {
   it('reads only the id for a badge', async () => {
     const { client, seen } = db({ customers: { data: [{ id: A }] } });

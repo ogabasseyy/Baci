@@ -136,4 +136,17 @@ describe('TagSheet', () => {
     await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(2));
     expect(onAdd).toHaveBeenLastCalledWith('Wholesale');
   });
+
+  it('bugfix: does not send a typed tag the chat already has', () => {
+    const { onAdd, onRemove } = renderSheet(['order-issue']);
+    const input = screen.getByLabelText('New tag');
+
+    fireEvent.change(input, { target: { value: ' Order  Issue! ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add tag' }));
+
+    // Adding never removes: the tag stays on, and the box is cleared.
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(input).toHaveValue('');
+  });
 });

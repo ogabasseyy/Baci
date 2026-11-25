@@ -181,6 +181,7 @@ describe('StorefrontFooter', () => {
           instagram: 'https://instagram.com/ogabasseyy',
           twitter: 'https://twitter.com/ogabasseyy',
           facebook: 'https://facebook.com/ogabasseyyy',
+          youtube: 'channel/UC123',
         },
       },
     });
@@ -200,5 +201,8 @@ describe('StorefrontFooter', () => {
     expect(
       screen.getByRole('link', { name: 'Follow us on Facebook' })
     ).toHaveAttribute('href', 'https://www.facebook.com/ogabasseyyy');
+    expect(
+      screen.getByRole('link', { name: 'Follow us on YouTube' })
+    ).toHaveAttribute('href', 'https://www.youtube.com/channel/UC123');
   });
 });

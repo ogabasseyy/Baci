@@ -111,7 +111,13 @@ export function StorefrontFooter() {
   const availableSocialLinks = socialLinks.flatMap((link) => {
     const rawValue =
       merchant.social_media?.[link.key as keyof typeof merchant.social_media];
-    const url = normalizeSocialUrl(rawValue, link.key);
+    const trimmed = rawValue?.trim();
+    const url =
+      link.key === 'youtube' &&
+      trimmed &&
+      /^(?:channel|c|user)\/[^/?#]+/i.test(trimmed)
+        ? `https://www.youtube.com/${trimmed}`
+        : normalizeSocialUrl(rawValue, link.key);
     return url ? [{ ...link, url }] : [];
   });
 

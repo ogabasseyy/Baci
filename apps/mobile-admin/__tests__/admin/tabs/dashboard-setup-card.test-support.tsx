@@ -115,7 +115,7 @@ vi.mock('@/components/dashboard', async () => {
 });
 
 vi.mock('@/hooks/useWaitingChatCount', () => ({
-  useWaitingChatCount: () => 3,
+  useWaitingChatCount: () => ({ count: 3, hasMore: false }),
 }));
 
 vi.mock('@/hooks/useDashboardStats', () => ({

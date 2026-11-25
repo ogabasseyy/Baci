@@ -20,6 +20,7 @@ import {
   firstSightThisLaunch,
   type ReplyClaim,
 } from './chat-reply-claims';
+import { forgetChatReplyResponse } from './chat-reply-forget';
 import { getNotificationNavigationParams } from './push-notifications';
 
 interface ReplyRouter {
@@ -58,6 +59,10 @@ export interface ReplyDeps {
   ) => Promise<ReplyClaim>;
   /** True the first time this launch sees a reply that sends nothing. */
   firstSight: (response: NotificationsType.NotificationResponse) => boolean;
+  /** Stops the next app start from reading this reply again. */
+  forget: (
+    response: NotificationsType.NotificationResponse
+  ) => Promise<void> | void;
   invalidate: (filters: InvalidateQueryFilters) => void;
   send: typeof sendInboxReply;
 }
@@ -66,6 +71,7 @@ const defaultDeps: ReplyDeps = {
   alert: (title, message, buttons) => Alert.alert(title, message, buttons),
   claim: claimChatReply,
   firstSight: firstSightThisLaunch,
+  forget: forgetChatReplyResponse,
   invalidate: (filters) => {
     // Not awaited by the caller, so a rejection is caught here or it would go
     // unhandled.
@@ -84,6 +90,10 @@ const STORE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MESSAGES = '/(admin)/messages' as Href;
 
+/** Keeps the typed words on screen, so they can be written or checked again. */
+const withWords = (message: string, text: string) =>
+  text ? `${message}\n\nYou wrote:\n\n${text}` : message;
+
 /** The store that pushed the notification, if the push names one. */
 function pushedByStore(
   response: NotificationsType.NotificationResponse
@@ -98,11 +108,15 @@ function pushedByStore(
     : null;
 }
 
+/**
+ * False only for a repeat delivery: the first one is still dealing with the
+ * reply, so the device must not forget it yet.
+ */
 async function sendChatReply(
   router: ReplyRouter,
   response: NotificationsType.NotificationResponse,
   deps: ReplyDeps
-): Promise<void> {
+): Promise<boolean> {
   const target = getNotificationNavigationParams(response);
   const conversationId =
     target?.screen === 'message' ? Number(target.params?.id) : Number.NaN;
@@ -135,43 +149,52 @@ async function sendChatReply(
         [openMessages, { text: 'OK' }]
       )
     );
-    return;
+    return true;
   }
   if (text.length > INBOX_REPLY_MAX_LENGTH) {
     sendsNothing(() =>
       deps.alert(
         'Reply too long',
-        `Replies can be up to ${INBOX_REPLY_MAX_LENGTH} characters. Nothing was sent.`,
+        withWords(
+          `Replies can be up to ${INBOX_REPLY_MAX_LENGTH} characters. Nothing was sent.`,
+          text
+        ),
         [openMessages]
       )
     );
-    return;
+    return true;
   }
   // Without the store, the reply could end up in another store's chat.
   if (!merchantId) {
     sendsNothing(() =>
       deps.alert(
         'Open your messages to reply',
-        'This notification cannot be answered from here. Open your messages to write the reply.',
+        withWords(
+          'This notification cannot be answered from here. Open your messages to write the reply.',
+          text
+        ),
         [openMessages]
       )
     );
-    return;
+    return true;
   }
 
   const claim = await deps.claim(response);
   // Handled a moment ago in this launch: the first delivery already did it.
-  if (claim === 'repeat') return;
+  if (claim === 'repeat') return false;
   // Handled before the app restarted: it may or may not have been sent (the
   // app may have stopped half way), so it is never sent again, and the owner is
   // told to check instead of assuming either way.
   if (claim === 'replay') {
     deps.alert(
       'Could not confirm your reply',
-      'This reply was handled before the app restarted, so it may or may not have been sent. Open your messages to check before sending it again.',
+      withWords(
+        'This reply was handled before the app restarted, so it may or may not have been sent. Open your messages to check before sending it again.',
+        text
+      ),
       [openMessages]
     );
-    return;
+    return true;
   }
 
   try {
@@ -181,7 +204,10 @@ async function sendChatReply(
       // The signed-in store is not the one the notification was for.
       deps.alert(
         'Reply not sent',
-        'This message was for another store. Switch to that store to reply. Nothing was sent.',
+        withWords(
+          'This message was for another store. Switch to that store to reply. Nothing was sent.',
+          text
+        ),
         [openMessages, { text: 'OK' }]
       );
     } else if (isDefinitelyNotSent(error)) {
@@ -195,11 +221,14 @@ async function sendChatReply(
     } else {
       deps.alert(
         'Could not confirm your reply',
-        'The connection dropped, so it may or may not have been sent. Open your messages to check before sending it again.',
+        withWords(
+          'The connection dropped, so it may or may not have been sent. Open your messages to check before sending it again.',
+          text
+        ),
         [openMessages]
       );
     }
-    return;
+    return true;
   }
   // The server accepted it, so it is that store's chat: refresh it and show it.
   // Best effort, each on its own: the reply is already sent, so neither may
@@ -218,6 +247,7 @@ async function sendChatReply(
   } catch {
     // Nothing more can be done.
   }
+  return true;
 }
 
 /**
@@ -231,15 +261,19 @@ export async function handleChatReplyResponse(
   response: NotificationsType.NotificationResponse,
   deps: ReplyDeps = defaultDeps
 ): Promise<void> {
+  let dealtWith = true;
   try {
-    await sendChatReply(router, response, deps);
+    dealtWith = await sendChatReply(router, response, deps);
   } catch {
     // Unexpected, and before anything was sent: failures after a successful
     // send are swallowed above, so this never claims "not sent" for a sent reply.
     try {
       deps.alert(
         'Reply not sent',
-        'Something went wrong, so your reply was not sent. Open your messages and write it again.',
+        withWords(
+          'Something went wrong, so your reply was not sent. Open your messages and write it again.',
+          (response.userText ?? '').trim()
+        ),
         [
           { text: 'Open messages', onPress: () => router.push(MESSAGES) },
           { text: 'OK' },
@@ -248,5 +282,13 @@ export async function handleChatReplyResponse(
     } catch {
       // Nothing more can be done.
     }
+  }
+  // Only now: if the app stops while sending, the next start still reads the
+  // reply and says it could not be confirmed.
+  if (!dealtWith) return;
+  try {
+    await deps.forget(response);
+  } catch {
+    // Best effort: the stored claim still stops it being sent twice.
   }
 }

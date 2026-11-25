@@ -36,6 +36,7 @@ export function setup(send: (...args: never[]) => unknown) {
     claim: claimChatReply,
     firstSight: firstSightThisLaunch,
     invalidate: vi.fn(),
+    forget: vi.fn(),
     send: send as never,
   };
   return { router, deps };

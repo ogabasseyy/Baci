@@ -239,6 +239,100 @@ BEGIN
       IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
     END;
   END IF;
+
+  -- Patched Oxygen helper/activation functions evaluate partial-credit orders without
+  -- missing-column errors and respect net payable (35,000 rather than 50,000).
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+  IF public.oxygen_nin_attempt_status(v_wf_id, (v_wf->>'version')::integer) IS DISTINCT FROM 'blocked' THEN
+    RAISE EXCEPTION 'Expected blocked NIN status for fresh partial-credit workflow';
+  END IF;
+
+  RESET ROLE;
+  IF oxygen_private.nin_retry_proof(v_wf_id, (v_wf->>'version')::integer) IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Expected nin_retry_proof false without diagnostic';
+  END IF;
+
+  BEGIN
+    PERFORM oxygen_private.authorize_staging_approval_retry(
+      v_wf_id,
+      gen_random_uuid(),
+      gen_random_uuid(),
+      (v_wf->>'version')::integer,
+      'test-provider-authorization-string-123456'
+    );
+    RAISE EXCEPTION 'Expected Staging approval recovery unavailable';
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    IF SQLERRM <> 'Staging approval recovery unavailable' THEN RAISE; END IF;
+  END;
+
+  -- Verify reconcile_activation, general_activation, and general_activation_reconcile_conflict
+  -- on partial-credit order ec310000-...-0010 (total 50,000, pre-gateway credit 15,000 -> net 35,000).
+  DECLARE
+    v_wf_partial uuid;
+    v_app_ref uuid := 'ec310000-0000-4000-8000-000000000040';
+    v_book_ref uuid := 'ec310000-0000-4000-8000-000000000041';
+    v_rec jsonb;
+  BEGIN
+    SELECT id INTO v_wf_partial
+    FROM public.oxygen_workflows
+    WHERE order_id = 'ec310000-0000-4000-8000-000000000010';
+
+    INSERT INTO oxygen_private.provider_states(workflow_id, state)
+    VALUES (
+      v_wf_partial,
+      jsonb_build_object(
+        'applicationReference', v_app_ref,
+        'bookingReference', v_book_ref,
+        'booking', jsonb_build_object(
+          'loan_reference', v_book_ref,
+          'status', 'APPROVED',
+          'product_amount', 35000
+        )
+      )
+    )
+    ON CONFLICT (workflow_id) DO UPDATE SET state = excluded.state;
+
+    INSERT INTO oxygen_private.activation_trials(workflow_id, booking_reference, status, result)
+    VALUES (
+      v_wf_partial,
+      v_book_ref,
+      'activated',
+      jsonb_build_object('loan_reference', v_book_ref, 'status', 'ACTIVATED')
+    )
+    ON CONFLICT (workflow_id) DO UPDATE SET booking_reference = excluded.booking_reference, status = excluded.status, result = excluded.result;
+
+    INSERT INTO oxygen_private.general_activations(
+      workflow_id, merchant_id, customer_id, order_id, environment,
+      application_reference, booking_reference, amount, status, ciphertext
+    ) VALUES (
+      v_wf_partial,
+      'ec310000-0000-4000-8000-000000000003',
+      'ec310000-0000-4000-8000-000000000004',
+      'ec310000-0000-4000-8000-000000000010',
+      'staging',
+      v_app_ref,
+      v_book_ref,
+      35000,
+      'activated',
+      'v1.testheadervalue12345.testpayloadvalue12345.testsigvalue123456'
+    );
+
+    IF oxygen_private.general_activation_reconcile_conflict(v_wf_partial) IS DISTINCT FROM false THEN
+      RAISE EXCEPTION 'Expected no reconcile conflict for partial-credit net payable 35000';
+    END IF;
+
+    SET LOCAL ROLE authenticated;
+    PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000002',true);
+    v_rec := oxygen_private.reconcile_activation(v_wf_partial, v_book_ref);
+    IF (v_rec->>'orderConfirmed')::boolean IS DISTINCT FROM true THEN
+      RAISE EXCEPTION 'Expected reconcile_activation orderConfirmed=true, got %', v_rec;
+    END IF;
+
+    v_rec := oxygen_private.general_activation('reconcile', v_wf_partial, '{}'::jsonb);
+    IF (v_rec->>'orderConfirmed')::boolean IS DISTINCT FROM true THEN
+      RAISE EXCEPTION 'Expected general_activation reconcile orderConfirmed=true, got %', v_rec;
+    END IF;
+  END;
 END $test$;
 RESET ROLE;
 ROLLBACK;

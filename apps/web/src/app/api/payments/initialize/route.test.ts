@@ -152,6 +152,7 @@ let redvaultAttemptInitializeResult: { data: unknown; error: unknown };
 let redvaultAttemptClaimResults: Array<{ data: unknown; error: unknown }>;
 let redvaultAttemptReserveResults: Array<{ data: unknown; error: unknown }>;
 let rpcTokenProofResult: { data: unknown; error: unknown };
+let onAmendmentClaim: (() => void) | undefined;
 const rpcCalls: Array<{ args?: unknown; name: string }> = [];
 
 function createMockSupabase() {
@@ -173,8 +174,10 @@ function createMockSupabase() {
         });
       if (name === 'get_order_paystack_split_retained_shipping_kobo')
         return Promise.resolve({ data: 0, error: null });
-      if (name === 'claim_checkout_for_paid_order_amendment')
+      if (name === 'claim_checkout_for_paid_order_amendment') {
+        onAmendmentClaim?.();
         return Promise.resolve(amendmentCheckoutClaimResult);
+      }
       if (name === 'create_payment_transaction')
         return Promise.resolve(rpcTransactionResult);
       if (name === 'reserve_paystack_order_payment_account')
@@ -2755,6 +2758,59 @@ describe('POST /api/payments/initialize', () => {
         expect.objectContaining({ currency: 'GHS' })
       );
       expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED when concurrent ledger credit changes before gateway initialization', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      // Simulate concurrent wallet reversal while claim_checkout_for_paid_order_amendment
+      // runs: pre-claim read sees 1k wallet credit (4k payable on 5k order), then post-claim
+      // re-verification sees reversal (5k payable) and aborts before charging Paystack.
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 1000,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      onAmendmentClaim = () => {
+        walletTransactionsResult = {
+          data: [
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_redemption',
+              type: 'redemption',
+            },
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_reversal',
+              type: 'credit',
+            },
+          ],
+          error: null,
+        };
+      };
+
+      try {
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(409);
+        expect(json.code).toBe('CHECKOUT_PAYMENT_DETAILS_CHANGED');
+        expect(mockInitializePaystack).not.toHaveBeenCalled();
+        expect(
+          rpcCalls.some((call) => call.name === 'create_payment_transaction')
+        ).toBe(false);
+      } finally {
+        onAmendmentClaim = undefined;
+      }
     });
   });
 });

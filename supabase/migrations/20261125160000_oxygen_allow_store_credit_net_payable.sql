@@ -3,35 +3,6 @@
 -- Oxygen server-side calculations and validations use the net payable amount
 -- (total - pre-gateway store credit) rather than pre-credit order.total.
 
-CREATE FUNCTION oxygen_private.order_net_payable(
-  p_total numeric,
-  p_amount_paid numeric,
-  p_wallet_amount_used numeric
-) RETURNS numeric
-LANGUAGE sql
-IMMUTABLE
-SECURITY INVOKER
-SET search_path = ''
-AS $$
-  SELECT CASE
-    WHEN p_total IS NULL
-      OR p_total IN ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)
-    THEN 0
-    ELSE GREATEST(
-      round(
-        p_total - GREATEST(
-          COALESCE(p_amount_paid, 0),
-          COALESCE(p_wallet_amount_used, 0),
-          0
-        ),
-        2
-      ),
-      0
-    )
-  END;
-$$;
-REVOKE ALL ON FUNCTION oxygen_private.order_net_payable(numeric, numeric, numeric) FROM PUBLIC, anon, authenticated, service_role;
-
 -- Authoritative net payable calculation including pre-gateway ledger debits
 -- (wallet + device savings redemptions) so Oxygen never over-finances if
 -- best-effort orders.amount_paid / wallet_amount_used updates fail or lag.
@@ -530,12 +501,16 @@ DECLARE
 BEGIN
   definition := pg_catalog.pg_get_functiondef('oxygen_private.reconcile_activation(uuid,uuid)'::regprocedure);
 
-  needle := 'SELECT o1.id,o1.total,o1.currency';
+  needle := 'SELECT o1.id,o1.total,o1.currency,o1.payment_method,o1.cancelled_at,o1.payment_status INTO o';
   occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
   IF occurrences <> 1 THEN
     RAISE EXCEPTION 'Unexpected reconcile_activation projection count: %', occurrences;
   END IF;
-  definition := replace(definition, needle, 'SELECT o1.id,o1.total,o1.amount_paid,o1.wallet_amount_used,o1.currency');
+  definition := replace(
+    definition,
+    needle,
+    'SELECT o1.id,o1.total,o1.amount_paid,o1.wallet_amount_used,o1.currency,o1.payment_method,o1.cancelled_at,o1.payment_status INTO o'
+  );
 
   needle := '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM o.total';
   occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);

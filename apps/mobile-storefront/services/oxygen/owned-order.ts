@@ -93,5 +93,9 @@ export async function readOwnedOxygenOrder(
       'Choose another payment option for this zero-balance order.'
     );
   }
-  return { ...order, total: payableTotal, prefill: oxygenOrderPrefill(order) };
+  return {
+    ...order,
+    payableTotal,
+    prefill: oxygenOrderPrefill(order),
+  };
 }

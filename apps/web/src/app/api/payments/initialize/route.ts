@@ -9,11 +9,6 @@
  * - Proper separation of concerns
  */
 
-import {
-  computeOrderNetPayable,
-  sumActiveSavingsLedgerCredit,
-  summarizeWalletLedgerCredit,
-} from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -72,6 +67,7 @@ import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 import { initializeBankCardOfferRequest } from './initialize-bank-card-offer-request';
+import { readOrderPayableState } from './read-order-payable-state';
 import { retiredGatewayResponse } from './retired-gateway';
 
 // Types & Constants
@@ -1330,109 +1326,25 @@ export async function POST(request: NextRequest) {
         ? orderSnapshot.currency.trim().toUpperCase()
         : 'NGN';
 
-    // REDVAULT requests run through the scoped storefront client
-    // (authenticated role with no sub for guests), which has no grant on
-    // public.orders. Read the wallet amount from the bounded SECURITY DEFINER
-    // snapshot instead of a direct table lookup that RLS would hide.
-    let walletAmountUsed = 0;
-    let walletLedgerUsed = 0;
-    let amountPaidFromOrderRow = 0;
-    let orderPaymentStatus = 'unpaid';
-    let hasWalletReversal = false;
-    if (redvaultRequested) {
-      walletAmountUsed = Math.max(
-        numberOrDefault(
-          (orderSnapshot as { wallet_amount_used?: unknown })
-            .wallet_amount_used,
-          0
-        ),
-        0
-      );
-      amountPaidFromOrderRow = Math.max(
-        numberOrDefault(
-          (orderSnapshot as { amount_paid?: unknown }).amount_paid,
-          0
-        ),
-        0
-      );
-      orderPaymentStatus =
-        typeof (orderSnapshot as { payment_status?: unknown })
-          .payment_status === 'string'
-          ? (orderSnapshot as { payment_status: string }).payment_status
-          : 'unpaid';
-    } else {
-      const { data: orderPaymentRow, error: orderPaymentError } =
-        await paymentDataClient
-          .from('orders')
-          .select('wallet_amount_used, amount_paid, payment_status')
-          .eq('id', data.order_id)
-          .eq('merchant_id', merchantId)
-          .single();
-
-      if (orderPaymentError || !orderPaymentRow) {
-        return createErrorResponse(
-          'Unable to verify order payment amount',
-          'ORDER_AMOUNT_LOOKUP_FAILED',
-          500
-        );
-      }
-
-      const { data: walletRows, error: walletError } = await paymentDataClient
-        .from('customer_wallet_transactions')
-        .select('amount, status, source_type, type')
-        .eq('source_id', data.order_id)
-        .eq('merchant_id', merchantId);
-
-      if (walletError) {
-        return createErrorResponse(
-          'Unable to verify order wallet amount',
-          'ORDER_WALLET_LOOKUP_FAILED',
-          500
-        );
-      }
-
-      const typedOrderPaymentRow = orderPaymentRow as {
-        wallet_amount_used?: unknown;
-        amount_paid?: unknown;
-        payment_status?: unknown;
-      };
-      amountPaidFromOrderRow = Math.max(
-        numberOrDefault(typedOrderPaymentRow.amount_paid, 0),
-        0
-      );
-      orderPaymentStatus =
-        typeof typedOrderPaymentRow.payment_status === 'string'
-          ? typedOrderPaymentRow.payment_status
-          : 'unpaid';
-
-      const walletFromOrderRow = Math.max(
-        numberOrDefault(typedOrderPaymentRow.wallet_amount_used, 0),
-        0
-      );
-      const walletSummary = summarizeWalletLedgerCredit(walletRows);
-      walletLedgerUsed = walletSummary.netCredit;
-      hasWalletReversal = walletSummary.hasCompletedReversal;
-
-      walletAmountUsed = hasWalletReversal
-        ? walletLedgerUsed
-        : Math.max(walletFromOrderRow, walletLedgerUsed);
-    }
-
-    const { data: savingsRows, error: savingsError } = await paymentDataClient
-      .from('customer_savings_redemptions')
-      .select('amount, metadata')
-      .eq('order_id', data.order_id)
-      .eq('merchant_id', merchantId);
-
-    if (savingsError) {
+    const initialPayableState = await readOrderPayableState({
+      paymentDataClient,
+      orderId: data.order_id,
+      merchantId,
+      customerEmail: data.customer_email,
+      redvaultRequested,
+      initialOrderSnapshot: orderSnapshot,
+      snapshotTotal,
+    });
+    if (!initialPayableState.ok) {
       return createErrorResponse(
-        'Unable to verify order savings amount',
-        'ORDER_SAVINGS_LOOKUP_FAILED',
-        500
+        initialPayableState.message,
+        initialPayableState.code,
+        initialPayableState.status
       );
     }
 
-    const savingsAmountUsed = sumActiveSavingsLedgerCredit(savingsRows);
+    const { payableAmount, walletAmountUsed, savingsAmountUsed } =
+      initialPayableState;
 
     const pilotFundingRejection = rejectInvalidRedvaultLivePilotFunding({
       redvaultRequested,
@@ -1624,16 +1536,6 @@ export async function POST(request: NextRequest) {
     }
 
     const chargeCurrency = currencyResolution.currency;
-
-    const payableAmount = computeOrderNetPayable({
-      total: snapshotTotal,
-      amountPaid: amountPaidFromOrderRow,
-      walletAmountUsed,
-      walletLedgerUsed: redvaultRequested ? walletAmountUsed : walletLedgerUsed,
-      savingsLedgerUsed: savingsAmountUsed,
-      paymentStatus: orderPaymentStatus,
-      walletReversalCompleted: hasWalletReversal,
-    });
 
     if (payableAmount <= 0) {
       return createErrorResponse(
@@ -1831,6 +1733,36 @@ export async function POST(request: NextRequest) {
     }
 
     const integrationWalletCheckout = amendmentClaim === 'claimed_integration';
+
+    // Re-verify live store credit immediately before charging any external gateway
+    // so a concurrent wallet redemption or reversal cannot initialize a stale net amount.
+    const reverifiedPayableState = await readOrderPayableState({
+      paymentDataClient,
+      orderId: data.order_id,
+      merchantId,
+      customerEmail: data.customer_email,
+      redvaultRequested,
+      recheckSnapshot: true,
+      initialOrderSnapshot: orderSnapshot,
+      snapshotTotal,
+    });
+    if (!reverifiedPayableState.ok) {
+      return createErrorResponse(
+        reverifiedPayableState.message,
+        reverifiedPayableState.code,
+        reverifiedPayableState.status
+      );
+    }
+    if (
+      reverifiedPayableState.payableAmount !== payableAmount ||
+      reverifiedPayableState.payableAmount <= 0
+    ) {
+      return createErrorResponse(
+        'The order payment details changed. Please try again.',
+        'CHECKOUT_PAYMENT_DETAILS_CHANGED',
+        409
+      );
+    }
 
     // Initialize payment based on gateway
     let paymentResult: PaymentResult;

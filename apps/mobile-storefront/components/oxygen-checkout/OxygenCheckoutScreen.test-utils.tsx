@@ -94,6 +94,7 @@ export function savedCheckoutFixture() {
     jest.mocked(readOwnedOxygenOrder).mockResolvedValue({
       id: 'order',
       total: 100,
+      payableTotal: 100,
       order_number: 'ORD-STAGING-1',
       payment_method: 'oxygen',
       payment_status: 'pending',

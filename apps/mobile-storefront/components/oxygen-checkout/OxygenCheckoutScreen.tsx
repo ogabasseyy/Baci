@@ -63,6 +63,7 @@ function CheckoutSession({
   const [context, setContext] = useState<{
     session: NativeSession;
     total: number;
+    payableTotal?: number;
     orderNumber?: string;
     orderPaymentStatus: string;
     prefill?: OxygenFields;
@@ -95,6 +96,7 @@ function CheckoutSession({
         setContext({
           session,
           total: order.total,
+          payableTotal: order.payableTotal,
           orderNumber: order.order_number ?? undefined,
           orderPaymentStatus: order.payment_status,
           prefill: oxygenLinkedCustomerPrefill(

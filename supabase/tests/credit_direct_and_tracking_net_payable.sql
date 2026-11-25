@@ -172,4 +172,51 @@ BEGIN
 END $test$;
 
 RESET ROLE;
+
+-- 7. create_payment_transaction enforces the locked net-payable bound (35,000, not 50,000).
+DO $tx_test$
+DECLARE
+  v_tx_id uuid;
+BEGIN
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+  BEGIN
+    PERFORM public.create_payment_transaction(
+      'cd710000-0000-4000-8000-000000000002',
+      'cd710000-0000-4000-8000-000000000010',
+      50000,
+      'NGN',
+      'klump',
+      'BAC-CD-OVER-001',
+      0,
+      50000,
+      'guest@example.test',
+      'Credit Guest',
+      NULL,
+      '{}'::jsonb
+    );
+    RAISE EXCEPTION 'Pre-credit 50000 transaction was allowed on partial-credit order';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amount_exceeds_total' THEN RAISE; END IF;
+  END;
+
+  v_tx_id := public.create_payment_transaction(
+    'cd710000-0000-4000-8000-000000000002',
+    'cd710000-0000-4000-8000-000000000010',
+    35000,
+    'NGN',
+    'klump',
+    'BAC-CD-NET-001',
+    0,
+    35000,
+    'guest@example.test',
+    'Credit Guest',
+    NULL,
+    '{}'::jsonb
+  );
+  IF v_tx_id IS NULL THEN
+    RAISE EXCEPTION 'Expected net-payable create_payment_transaction to return transaction id';
+  END IF;
+END $tx_test$;
+
 ROLLBACK;

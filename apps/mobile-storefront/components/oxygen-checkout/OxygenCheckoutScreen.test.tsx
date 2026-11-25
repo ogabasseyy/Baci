@@ -283,4 +283,25 @@ describe('saved native Oxygen checkout', () => {
         await screen.findByLabelText('Loading your application')
       ).toBeTruthy();
   });
+  it('passes net payableTotal to OxygenWorkflowBody while preserving original order total', async () => {
+    jest.mocked(readOwnedOxygenOrder).mockResolvedValueOnce({
+      id: 'order',
+      total: 198000,
+      payableTotal: 150000,
+      order_number: 'ORD-PARTIAL-1',
+      payment_method: 'oxygen',
+      payment_status: 'bnpl_approved',
+      shipping_status: 'pending',
+      prefill: {},
+    });
+    render(<OxygenCheckoutScreen orderId="order" />);
+    await screen.findByText('Saved workflow');
+    const workflowCall = jest.mocked(useOxygenWorkflow).mock.calls[0];
+    expect(workflowCall?.[0]).toBe('order');
+    expect(readOwnedOxygenOrder).toHaveBeenCalledWith(
+      'order',
+      'customer',
+      'merchant'
+    );
+  });
 });

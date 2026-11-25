@@ -85,11 +85,21 @@ $cache_projection$;
 -- production merchants such as Ogabassey with zero regression). Staging-only
 -- runtime bindings intentionally stay fail-closed (`false`) until toggled on
 -- in merchant admin Payments settings.
-DO $oxygen_backfill$
+CREATE OR REPLACE FUNCTION private.backfill_oxygen_enabled_v1()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
 DECLARE
   v_claims text := pg_catalog.current_setting('request.jwt.claims', true);
   v_role text := pg_catalog.current_setting('request.jwt.claim.role', true);
 BEGIN
+  IF pg_catalog.current_setting('request.jwt.claim.role', true) IS DISTINCT FROM 'service_role'
+     AND COALESCE(NULLIF(pg_catalog.current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'Unauthorized' USING ERRCODE = '42501';
+  END IF;
+
   PERFORM pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
   PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
@@ -101,6 +111,24 @@ BEGIN
   ON CONFLICT (merchant_id) DO UPDATE
     SET oxygen_enabled = true
     WHERE public.merchant_feature_settings.oxygen_enabled IS DISTINCT FROM true;
+
+  PERFORM pg_catalog.set_config('request.jwt.claims', COALESCE(v_claims, ''), true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', COALESCE(v_role, ''), true);
+END
+$$;
+
+REVOKE ALL ON FUNCTION private.backfill_oxygen_enabled_v1() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.backfill_oxygen_enabled_v1() TO service_role;
+
+DO $oxygen_backfill$
+DECLARE
+  v_claims text := pg_catalog.current_setting('request.jwt.claims', true);
+  v_role text := pg_catalog.current_setting('request.jwt.claim.role', true);
+BEGIN
+  PERFORM pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+  PERFORM private.backfill_oxygen_enabled_v1();
 
   PERFORM pg_catalog.set_config('request.jwt.claims', COALESCE(v_claims, ''), true);
   PERFORM pg_catalog.set_config('request.jwt.claim.role', COALESCE(v_role, ''), true);

@@ -183,4 +183,81 @@ DO $$ BEGIN
   EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
 END $$;
 
+-- Behavioral backfill verification: exercise private.backfill_oxygen_enabled_v1()
+-- against enabled-production (with and without existing feature-settings row),
+-- staging-only, and disabled-production runtime bindings, plus role confinement.
+DO $$ BEGIN
+  BEGIN
+    PERFORM private.backfill_oxygen_enabled_v1();
+    RAISE EXCEPTION 'authenticated role executed private.backfill_oxygen_enabled_v1()';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
+RESET ROLE;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+SELECT pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
+INSERT INTO auth.users(id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+VALUES
+ ('f2ab0000-0000-4000-8000-000000000101','00000000-0000-4000-8000-000000000000','authenticated','authenticated','backfill-prod-norow@example.test','test',now(),now(),now(),'{}','{}'),
+ ('f2ab0000-0000-4000-8000-000000000102','00000000-0000-4000-8000-000000000000','authenticated','authenticated','backfill-prod-existing@example.test','test',now(),now(),now(),'{}','{}'),
+ ('f2ab0000-0000-4000-8000-000000000103','00000000-0000-4000-8000-000000000000','authenticated','authenticated','backfill-staging@example.test','test',now(),now(),now(),'{}','{}'),
+ ('f2ab0000-0000-4000-8000-000000000104','00000000-0000-4000-8000-000000000000','authenticated','authenticated','backfill-disabled@example.test','test',now(),now(),now(),'{}','{}');
+
+INSERT INTO public.merchants(id, user_id, email, business_name, slug)
+VALUES
+ ('f2ab0000-0000-4000-8000-000000000201','f2ab0000-0000-4000-8000-000000000101','backfill-prod-norow@example.test','Prod No Row','backfill-prod-norow'),
+ ('f2ab0000-0000-4000-8000-000000000202','f2ab0000-0000-4000-8000-000000000102','backfill-prod-existing@example.test','Prod Existing','backfill-prod-existing'),
+ ('f2ab0000-0000-4000-8000-000000000203','f2ab0000-0000-4000-8000-000000000103','backfill-staging@example.test','Staging Only','backfill-staging'),
+ ('f2ab0000-0000-4000-8000-000000000204','f2ab0000-0000-4000-8000-000000000104','backfill-disabled@example.test','Disabled Prod','backfill-disabled');
+
+-- Remove the auto-seeded row for merchant 201 to exercise the INSERT backfill path
+-- through the closed-world audit trigger.
+DELETE FROM public.merchant_feature_settings
+WHERE merchant_id = 'f2ab0000-0000-4000-8000-000000000201';
+
+UPDATE public.merchant_feature_settings
+SET oxygen_enabled = false
+WHERE merchant_id IN (
+  'f2ab0000-0000-4000-8000-000000000202',
+  'f2ab0000-0000-4000-8000-000000000203',
+  'f2ab0000-0000-4000-8000-000000000204'
+);
+
+INSERT INTO oxygen_private.partner_workers(partner_reference, worker_user_id)
+VALUES
+ ('backfill-worker-1', 'f2ab0000-0000-4000-8000-000000000101'),
+ ('backfill-worker-2', 'f2ab0000-0000-4000-8000-000000000102'),
+ ('backfill-worker-3', 'f2ab0000-0000-4000-8000-000000000103'),
+ ('backfill-worker-4', 'f2ab0000-0000-4000-8000-000000000104');
+
+INSERT INTO oxygen_private.runtime_bindings(merchant_id, worker_user_id, partner_reference, environment, enabled)
+VALUES
+ ('f2ab0000-0000-4000-8000-000000000201','f2ab0000-0000-4000-8000-000000000101','backfill-worker-1','production',true),
+ ('f2ab0000-0000-4000-8000-000000000202','f2ab0000-0000-4000-8000-000000000102','backfill-worker-2','production',true),
+ ('f2ab0000-0000-4000-8000-000000000203','f2ab0000-0000-4000-8000-000000000103','backfill-worker-3','staging',true),
+ ('f2ab0000-0000-4000-8000-000000000204','f2ab0000-0000-4000-8000-000000000104','backfill-worker-4','production',false);
+
+SELECT private.backfill_oxygen_enabled_v1();
+
+DO $$
+DECLARE
+  v_201 boolean;
+  v_202 boolean;
+  v_203 boolean;
+  v_204 boolean;
+BEGIN
+  SELECT oxygen_enabled INTO STRICT v_201 FROM public.merchant_feature_settings WHERE merchant_id = 'f2ab0000-0000-4000-8000-000000000201';
+  SELECT oxygen_enabled INTO STRICT v_202 FROM public.merchant_feature_settings WHERE merchant_id = 'f2ab0000-0000-4000-8000-000000000202';
+  SELECT oxygen_enabled INTO STRICT v_203 FROM public.merchant_feature_settings WHERE merchant_id = 'f2ab0000-0000-4000-8000-000000000203';
+  SELECT oxygen_enabled INTO STRICT v_204 FROM public.merchant_feature_settings WHERE merchant_id = 'f2ab0000-0000-4000-8000-000000000204';
+
+  IF v_201 IS DISTINCT FROM true OR v_202 IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Backfill failed to enable production merchants: %, %', v_201, v_202;
+  END IF;
+  IF v_203 IS DISTINCT FROM false OR v_204 IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'Backfill enabled non-production or disabled merchant: %, %', v_203, v_204;
+  END IF;
+END $$;
+
 ROLLBACK;

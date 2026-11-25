@@ -7,10 +7,17 @@ const MIGRATION_PATH = path.join(
   REPO_ROOT,
   'supabase/migrations/20261125153000_add_oxygen_enabled_feature_setting.sql'
 );
+const SQL_CHECKS_PATH = path.join(
+  REPO_ROOT,
+  'apps/web/tools/db/replay-registry/20261125153000_add_oxygen_enabled_feature_setting/sql-checks.txt'
+);
 
 describe('20261125153000_add_oxygen_enabled_feature_setting backfill contract', () => {
-  it('defaults oxygen_enabled to false and backfills only enabled production runtime bindings', async () => {
-    const sql = await readFile(MIGRATION_PATH, 'utf8');
+  it('defaults oxygen_enabled to false, confines backfill helper to service_role, and exercises it in sql-checks', async () => {
+    const [sql, sqlChecks] = await Promise.all([
+      readFile(MIGRATION_PATH, 'utf8'),
+      readFile(SQL_CHECKS_PATH, 'utf8'),
+    ]);
 
     expect(sql).toMatch(
       /ADD COLUMN IF NOT EXISTS oxygen_enabled boolean NOT NULL DEFAULT false;/
@@ -18,21 +25,15 @@ describe('20261125153000_add_oxygen_enabled_feature_setting backfill contract', 
     expect(sql).toMatch(
       /GRANT SELECT \(oxygen_enabled\) ON TABLE public\.merchant_feature_settings\s+TO authenticated;/
     );
-
-    const backfillMatch = sql.match(
-      /DO \$oxygen_backfill\$([\s\S]*?)END\s+\$oxygen_backfill\$;/
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION private\.backfill_oxygen_enabled_v1\(\) FROM PUBLIC, anon, authenticated;/
     );
-    expect(backfillMatch).not.toBeNull();
-    const backfillBody = backfillMatch?.[1] ?? '';
-
-    expect(backfillBody).toMatch(
-      /INSERT INTO public\.merchant_feature_settings \(merchant_id, oxygen_enabled\)/
+    expect(sql).toMatch(
+      /GRANT EXECUTE ON FUNCTION private\.backfill_oxygen_enabled_v1\(\) TO service_role;/
     );
-    expect(backfillBody).toMatch(/FROM oxygen_private\.runtime_bindings AS b/);
-    expect(backfillBody).toMatch(/WHERE b\.enabled IS TRUE/);
-    expect(backfillBody).toMatch(/AND b\.environment = 'production'/);
-    expect(backfillBody).toMatch(
-      /ON CONFLICT \(merchant_id\) DO UPDATE\s+SET oxygen_enabled = true/
+    expect(sql).toMatch(/PERFORM private\.backfill_oxygen_enabled_v1\(\);/);
+    expect(sqlChecks.trim()).toBe(
+      'supabase/tests/oxygen_enabled_feature_setting.sql'
     );
   });
 

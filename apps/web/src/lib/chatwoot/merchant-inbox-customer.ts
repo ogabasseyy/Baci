@@ -15,6 +15,19 @@ type Resolved = Extract<
 >;
 type Db = Resolved['supabase'];
 
+type BadgeRow = {
+  id: string;
+  total_orders?: number | null;
+  total_spent?: number | null;
+};
+type ProfileRow = BadgeRow & {
+  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  created_at?: string | null;
+  loyalty_points?: number | null;
+};
+
 const toNumber = (value: unknown): number => {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -51,15 +64,20 @@ export async function loadCustomerBadges(input: {
   ];
   if (customerIds.length === 0) return {};
 
+  // Without order access the order columns are not even read.
+  const columns: string = input.includeOrderData
+    ? 'id, total_orders, total_spent'
+    : 'id';
   const { data, error } = await input.supabase
     .from('customers')
-    .select('id, total_orders, total_spent')
+    .select(columns)
     .eq('merchant_id', input.merchantId)
     .in('id', customerIds)
     .is('deleted_at', null);
   if (error || !data) return null;
 
-  const byId = new Map(data.map((row) => [row.id, row]));
+  const rows = data as unknown as BadgeRow[];
+  const byId = new Map(rows.map((row) => [row.id, row]));
   const badges: Record<number, MerchantInboxCustomerBadge> = {};
   for (const { conversationId, link } of verified) {
     const row = link ? byId.get(link.customerId) : undefined;
@@ -95,17 +113,19 @@ export async function loadCustomerProfile(input: {
   const link = verify ? await verify(input.token) : null;
   if (!link) return null;
 
-  const { data: customer, error } = await input.supabase
+  const profileColumns: string = input.includeOrders
+    ? 'id, full_name, first_name, last_name, created_at, total_orders, total_spent, loyalty_points'
+    : 'id, full_name, first_name, last_name';
+  const { data, error } = await input.supabase
     .from('customers')
-    .select(
-      'id, full_name, first_name, last_name, created_at, total_orders, total_spent, loyalty_points'
-    )
+    .select(profileColumns)
     .eq('id', link.customerId)
     .eq('merchant_id', input.merchantId)
     .is('deleted_at', null)
     .maybeSingle();
   // A failed read is not "no such customer": say so instead of showing no card.
   if (error) throw new MerchantInboxCustomerUnavailableError();
+  const customer = data as unknown as ProfileRow | null;
   if (!customer) return null;
 
   const [orders, merchantCurrency] = await Promise.all([
@@ -140,7 +160,7 @@ export async function loadCustomerProfile(input: {
     name: name.slice(0, 120),
     currency: storeCurrency,
     // Account age is customer data the order permission also covers.
-    memberSince: input.includeOrders ? customer.created_at : null,
+    memberSince: (input.includeOrders && customer.created_at) || null,
     // Counts and spend are order data, gated like the order list itself.
     orderCount: input.includeOrders
       ? Math.trunc(toNumber(customer.total_orders))

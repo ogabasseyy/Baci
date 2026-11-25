@@ -422,6 +422,57 @@ describe('Ekaette staging product research', () => {
     });
   });
 
+  it('captures a name after the initial review_checkout prompt and falls through for non-name questions', async () => {
+    vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'true');
+    mocks.generate.mockResolvedValueOnce({
+      object: {
+        checkoutName: { firstName: 'Ada', lastName: 'Obi' },
+      },
+    });
+    await expect(
+      generateChatAutoReply({
+        ...input,
+        history: [
+          {
+            role: 'assistant',
+            content: 'I can help you check out here.',
+            checkoutNameRequested: true,
+          },
+        ],
+        question: 'Ada Obi',
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      checkoutName: { firstName: 'Ada', lastName: 'Obi' },
+      reply: { reply: 'Thanks. I’ve added your name to the checkout here.' },
+    });
+
+    mocks.generate
+      .mockResolvedValueOnce({ object: { checkoutName: null } })
+      .mockResolvedValueOnce({
+        object: {
+          ...reply,
+          reply: 'The iPhone 16 starts from ₦621,600.',
+        },
+      });
+    await expect(
+      generateChatAutoReply({
+        ...input,
+        history: [
+          {
+            role: 'assistant',
+            content: 'I can help you check out here.',
+            checkoutNameRequested: true,
+          },
+        ],
+        question: 'Wait, how much is iPhone 16?',
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      reply: { reply: 'The iPhone 16 starts from ₦621,600.' },
+    });
+  });
+
   it('offers help for a payment question without issuing a cart action', async () => {
     vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'true');
     mocks.generate.mockResolvedValue({
@@ -686,5 +737,74 @@ describe('Ekaette staging product research', () => {
       question: 'Does the iPhone 13 have MagSafe?',
     });
     expect(mocks.generate).toHaveBeenCalledOnce();
+  });
+
+  it('enables Pay-in-Full product cards and checkout in production when EKAETTE_CHATWOOT_CHECKOUT_ENABLED=true without Pay Small Small guidance', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VERCEL_ENV', 'production');
+    vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'true');
+    mocks.generate.mockResolvedValueOnce({
+      object: {
+        ...reply,
+        intent: 'add_to_cart',
+        cartProductQuery: 'iPhone 13',
+        cartAdd: false,
+      },
+    });
+    const result = await generateChatAutoReply({
+      ...input,
+      question: 'Can I add an iPhone 13 to my cart?',
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      cards: [{ slug: 'iphone-13' }],
+    });
+    const systemPrompt = String(mocks.generate.mock.calls[0]?.[0]?.system);
+    expect(systemPrompt).toContain('cartProductQuery');
+    expect(systemPrompt).not.toContain('Pay Small Small checkout guidance');
+  });
+
+  it('falls back to extracted product terms when full-sentence catalog search returns no matches', async () => {
+    vi.stubEnv('OXYGEN_STOREFRONT_STAGING_ENABLED', 'false');
+    vi.stubEnv('EKAETTE_CHATWOOT_CHECKOUT_ENABLED', 'true');
+    mocks.search
+      .mockResolvedValueOnce({ products: [], total: 0 })
+      .mockResolvedValueOnce({
+        products: [
+          {
+            id: 'p-16',
+            name: 'iPhone 16',
+            slug: 'iphone-16',
+            price: 1_200_000,
+            category: 'smartphones',
+            brand: 'Apple',
+            has_variants: true,
+            has_condition_offers: false,
+            image_url: 'https://cdn.example.test/iphone16.avif',
+          },
+        ],
+        total: 1,
+      });
+    mocks.generate.mockResolvedValueOnce({
+      object: {
+        ...reply,
+        intent: 'recommend',
+        productSlugs: ['iphone-16'],
+      },
+    });
+    const result = await generateChatAutoReply({
+      ...input,
+      question:
+        '[SYNTHETIC QA TEST] Hi Ekaette, what iPhone 16 options do you have in stock?',
+    });
+    expect(mocks.search).toHaveBeenNthCalledWith(1, {
+      query:
+        '[SYNTHETIC QA TEST] Hi Ekaette, what iPhone 16 options do you have in stock?',
+    });
+    expect(mocks.search).toHaveBeenNthCalledWith(2, { query: 'iPhone 16' });
+    expect(result).toMatchObject({
+      ok: true,
+      cards: [{ slug: 'iphone-16' }],
+    });
   });
 });

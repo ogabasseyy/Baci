@@ -87,6 +87,25 @@ describe('MessagesScreen search and paging', () => {
     expect(screen.queryByRole('button', { name: 'Follow-up' })).toBeNull();
   });
 
+  it('bugfix: stops preloading the hidden list while search results are shown', () => {
+    // A refresh is running at first, so nothing is preloaded before the search.
+    const query = {
+      ...ready([conversation(1, 'Ada Test', 'customer')]),
+      hasNextPage: true,
+    };
+    mocks.query.mockReturnValue({ ...query, isFetching: true });
+    render(<MessagesScreen />);
+    mocks.query.mockReturnValue({ ...query, isFetching: false });
+
+    fireEvent.change(screen.getByLabelText('Search chats'), {
+      target: { value: 'order' },
+    });
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
   it('says so when a search finds nothing, and clears back to the list', () => {
     mocks.query.mockReturnValue(
       ready([conversation(1, 'Ada Test', 'customer')])

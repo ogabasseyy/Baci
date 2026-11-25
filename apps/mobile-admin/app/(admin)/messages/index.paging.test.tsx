@@ -84,7 +84,7 @@ describe('MessagesScreen automatic paging', () => {
     render(<MessagesScreen />);
 
     expect(
-      screen.getByText('1+ chats are waiting for your reply')
+      screen.getByText('At least 1 chat is waiting for your reply')
     ).toBeInTheDocument();
   });
 
@@ -155,6 +155,43 @@ describe('MessagesScreen automatic paging', () => {
     );
 
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('bugfix: lists a chat once when it shows up on two pages', () => {
+    // New activity between two page requests shifts a chat onto the next page.
+    const query = withMorePages(false);
+    const [first] = query.data.pages;
+    mocks.query.mockReturnValue({
+      ...query,
+      data: { pages: [first, { ...first, page: 2 }] },
+      hasNextPage: false,
+    });
+    render(<MessagesScreen />);
+
+    expect(screen.getAllByText('Ada Test')).toHaveLength(1);
+    expect(
+      screen.getByText('1 chat is waiting for your reply')
+    ).toBeInTheDocument();
+  });
+
+  it('bugfix: offers a retry when a background refresh fails with chats on screen', () => {
+    // Paging stops on any error, so the list has to say so.
+    mocks.query.mockReturnValue({ ...withMorePages(false), isError: true });
+    render(<MessagesScreen />);
+
+    press('Could not update chats. Tap to retry.');
+
+    expect(mocks.refetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it('does not restart a refresh that is already running', () => {
+    mocks.query.mockReturnValue({ ...withMorePages(true), isError: true });
+    render(<MessagesScreen />);
+
+    press('Could not update chats. Tap to retry.');
+
+    expect(mocks.refetch).not.toHaveBeenCalled();
   });
 });
 

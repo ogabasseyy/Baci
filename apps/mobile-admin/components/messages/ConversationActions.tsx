@@ -93,7 +93,9 @@ export function ConversationActions({
     setPicker(null);
     if (kind === 'followUp') {
       // The times were worked out when the sheet opened; one left open too
-      // long may have passed since, which the server would refuse.
+      // long may have passed since, which the server would refuse. They came
+      // from this device's clock and are checked against the same clock, so a
+      // clock that runs fast or slow does not turn a fresh choice away.
       if (value !== 'clear' && Date.parse(value) <= Date.now()) {
         Alert.alert('That time has passed', 'Choose a new follow-up time.');
         return;

@@ -89,6 +89,11 @@ export default function MessagesScreen() {
     if (autoLoading && !query.isFetching) query.fetchNextPage();
   }, [autoLoading, query.isFetching, query.fetchNextPage, pages]);
 
+  // For the buttons: a tap can land after a refresh has started.
+  const loadMore = () => {
+    if (!query.isFetching) query.fetchNextPage();
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await query.refetch();
@@ -158,9 +163,7 @@ export default function MessagesScreen() {
                     canLoadMore={!!query.hasNextPage && !query.isFetching}
                     colors={colors}
                     loading={autoLoading || query.isFetchingNextPage}
-                    onLoadMore={() => {
-                      query.fetchNextPage();
-                    }}
+                    onLoadMore={loadMore}
                     view={view}
                   />
                 }
@@ -179,9 +182,7 @@ export default function MessagesScreen() {
                   ) : query.isFetchNextPageError ? (
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => {
-                        query.fetchNextPage();
-                      }}
+                      onPress={loadMore}
                       style={styles.retry}
                     >
                       <Text style={{ color: colors.primary }}>

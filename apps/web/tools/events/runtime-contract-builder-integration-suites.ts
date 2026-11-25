@@ -63,8 +63,6 @@ export const builderIntegrationSuites: Readonly<Record<string, string>> = {
     'apps/web/tests/experience-authoring/verifier-build-handler.test.ts',
   'apps/web/tools/experience-verifier/build-recorder.ts':
     'apps/web/tests/experience-authoring/verified-renderer-storage.test.ts',
-  'apps/web/tools/experience-verifier/build-verifier.ts':
-    'apps/web/tests/experience-authoring/independent-build-verifier.test.ts',
   'apps/web/tools/experience-verifier/capture-client.ts':
     'apps/web/tests/experience-authoring/verifier-capture-client.test.ts',
   'apps/web/tools/experience-verifier/capture-handler.ts':

@@ -21,10 +21,10 @@ vi.mock('@/schemas/experience-manifest', () => ({
   parseExperienceManifest: f.parse,
 }));
 vi.mock('@baci/shared/experience', () => ({ sourceDigest: f.sourceDigest }));
-vi.mock('../../tools/experience-runner/prerender-artifacts', () => ({
+vi.mock('../experience-runner/prerender-artifacts', () => ({
   unpackPrerenderBuild: f.unpack,
 }));
-vi.mock('../../tools/experience-runner/private-build-payload', () => ({
+vi.mock('../experience-runner/private-build-payload', () => ({
   packPrivateBuild: vi.fn(() => ({})),
 }));
 vi.mock('@/lib/experience/qualify-build-render', () => ({
@@ -37,7 +37,7 @@ vi.mock('@/lib/experience/candidate-performance-budget', () => ({
   assertCandidatePerformanceBudget: f.budget,
 }));
 
-import { createIndependentBuildVerifier } from '../../tools/experience-verifier/build-verifier';
+import { createIndependentBuildVerifier } from './build-verifier';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const digest = 'a'.repeat(64);

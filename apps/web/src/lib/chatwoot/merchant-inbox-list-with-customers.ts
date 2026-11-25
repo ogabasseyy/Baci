@@ -26,8 +26,9 @@ const RETURNING_MAX_PROVIDER_PAGES = 4;
 /**
  * The reads are one after another, each allowed several seconds, while the app
  * gives a request 20 seconds. No new engine page is started once this much time
- * has passed, so the answer (the last page read, with more to come) always
- * arrives before the app gives up and starts the same scan again.
+ * has passed. The worst case is then that budget plus one engine read (8s) and
+ * one badge read (4s), still inside the app's limit, so the answer arrives
+ * before the app gives up and starts the same scan again.
  */
 const RETURNING_SCAN_BUDGET_MS = 5_000;
 

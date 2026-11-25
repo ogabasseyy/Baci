@@ -28,6 +28,9 @@ type ProfileRow = BadgeRow & {
   loyalty_points?: number | null;
 };
 
+/** The badge read's own limit, so a page of the inbox cannot hang on it. */
+const BADGE_READ_TIMEOUT_MS = 4_000;
+
 const toNumber = (value: unknown): number => {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -73,7 +76,8 @@ export async function loadCustomerBadges(input: {
     .select(columns)
     .eq('merchant_id', input.merchantId)
     .in('id', customerIds)
-    .is('deleted_at', null);
+    .is('deleted_at', null)
+    .abortSignal(AbortSignal.timeout(BADGE_READ_TIMEOUT_MS));
   if (error || !data) return null;
 
   const rows = data as unknown as BadgeRow[];

@@ -16,12 +16,20 @@ export function db(
         const result = () =>
           Promise.resolve({ error: null, ...answers[table] });
         const builder: Record<string, unknown> = { maybeSingle: result };
-        for (const name of ['select', 'eq', 'in', 'is', 'order', 'limit']) {
+        for (const name of [
+          'select',
+          'eq',
+          'in',
+          'is',
+          'order',
+          'limit',
+          'abortSignal',
+        ]) {
           builder[name] = (...args: unknown[]) => {
             entry.filters.push([name, ...args]);
             // The last call of a chain may be awaited directly, so those
             // return a real promise that still offers the rest of the chain.
-            return name === 'is' || name === 'limit'
+            return name === 'is' || name === 'limit' || name === 'abortSignal'
               ? Object.assign(result(), builder)
               : builder;
           };

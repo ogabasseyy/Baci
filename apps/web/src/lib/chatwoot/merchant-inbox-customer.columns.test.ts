@@ -53,6 +53,24 @@ describe('bugfix: an undated order could push a recent one off the card', () => 
   });
 });
 
+describe('bugfix: the badge read could outlast the Customers scan', () => {
+  it('gives the customer read a time limit of its own', async () => {
+    const { client, seen } = db({ customers: { data: [{ id: A }] } });
+
+    await loadCustomerBadges({
+      supabase: client,
+      merchantId: MERCHANT,
+      links: { 1: 'token' },
+      includeOrderData: false,
+    });
+
+    expect(seen.flatMap((entry) => entry.filters)).toContainEqual([
+      'abortSignal',
+      expect.any(AbortSignal),
+    ]);
+  });
+});
+
 describe('bugfix: order facts were read for staff without order access', () => {
   it('reads only the id for a badge', async () => {
     const { client, seen } = db({ customers: { data: [{ id: A }] } });

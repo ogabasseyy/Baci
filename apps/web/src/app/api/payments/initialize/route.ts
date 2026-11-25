@@ -10,6 +10,7 @@
  */
 
 import {
+  isPreGatewayCreditStatus,
   sumActiveSavingsLedgerCredit,
   sumNetWalletLedgerCredit,
 } from '@baci/shared/lib';
@@ -1334,6 +1335,9 @@ export async function POST(request: NextRequest) {
     // public.orders. Read the wallet amount from the bounded SECURITY DEFINER
     // snapshot instead of a direct table lookup that RLS would hide.
     let walletAmountUsed: number;
+    let amountPaidFromOrderRow = 0;
+    let orderPaymentStatus = 'unpaid';
+    let hasWalletReversal = false;
     if (redvaultRequested) {
       walletAmountUsed = Math.max(
         numberOrDefault(
@@ -1343,11 +1347,23 @@ export async function POST(request: NextRequest) {
         ),
         0
       );
+      amountPaidFromOrderRow = Math.max(
+        numberOrDefault(
+          (orderSnapshot as { amount_paid?: unknown }).amount_paid,
+          0
+        ),
+        0
+      );
+      orderPaymentStatus =
+        typeof (orderSnapshot as { payment_status?: unknown })
+          .payment_status === 'string'
+          ? (orderSnapshot as { payment_status: string }).payment_status
+          : 'unpaid';
     } else {
       const { data: orderPaymentRow, error: orderPaymentError } =
         await paymentDataClient
           .from('orders')
-          .select('wallet_amount_used')
+          .select('wallet_amount_used, amount_paid, payment_status')
           .eq('id', data.order_id)
           .eq('merchant_id', merchantId)
           .single();
@@ -1374,16 +1390,26 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const typedOrderPaymentRow = orderPaymentRow as {
+        wallet_amount_used?: unknown;
+        amount_paid?: unknown;
+        payment_status?: unknown;
+      };
+      amountPaidFromOrderRow = Math.max(
+        numberOrDefault(typedOrderPaymentRow.amount_paid, 0),
+        0
+      );
+      orderPaymentStatus =
+        typeof typedOrderPaymentRow.payment_status === 'string'
+          ? typedOrderPaymentRow.payment_status
+          : 'unpaid';
+
       const walletFromOrderRow = Math.max(
-        numberOrDefault(
-          (orderPaymentRow as { wallet_amount_used?: unknown })
-            .wallet_amount_used,
-          0
-        ),
+        numberOrDefault(typedOrderPaymentRow.wallet_amount_used, 0),
         0
       );
       const walletFromLedgerRows = sumNetWalletLedgerCredit(walletRows);
-      const hasWalletReversal =
+      hasWalletReversal =
         Array.isArray(walletRows) &&
         walletRows.some((row) => {
           if (!row || typeof row !== 'object') return false;
@@ -1606,10 +1632,16 @@ export async function POST(request: NextRequest) {
 
     const chargeCurrency = currencyResolution.currency;
 
-    const payableAmount = Math.max(
-      snapshotTotal - walletAmountUsed - savingsAmountUsed,
-      0
-    );
+    const preGatewayCredit =
+      isPreGatewayCreditStatus(orderPaymentStatus) && !hasWalletReversal
+        ? Math.max(
+            amountPaidFromOrderRow,
+            walletAmountUsed + savingsAmountUsed,
+            0
+          )
+        : walletAmountUsed + savingsAmountUsed;
+
+    const payableAmount = Math.max(snapshotTotal - preGatewayCredit, 0);
 
     if (payableAmount <= 0) {
       return createErrorResponse(

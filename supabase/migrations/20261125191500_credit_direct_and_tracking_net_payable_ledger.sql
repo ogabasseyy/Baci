@@ -66,7 +66,7 @@ BEGIN
     AND NOT (COALESCE(r.metadata, '{}'::jsonb) ? 'reversed_at');
 
   v_effective_amount_paid := CASE
-    WHEN v_has_wallet_reversal AND COALESCE(p_payment_status, 'unpaid') <> 'partially_paid' THEN 0
+    WHEN v_has_wallet_reversal THEN 0
     ELSE COALESCE(p_amount_paid, 0)
   END;
 

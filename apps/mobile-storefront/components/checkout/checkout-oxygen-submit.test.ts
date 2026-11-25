@@ -166,6 +166,22 @@ describe('native Oxygen order admission', () => {
         { readOwner, createOrder }
       )
     ).rejects.toThrow('zero-balance order');
+
+    createOrder.mockResolvedValueOnce({
+      order: receipt,
+    });
+    await expect(
+      submitOxygenCheckout(
+        {
+          request,
+          checkoutGeneration: 'g',
+          isAuthenticated: true,
+          hasVoucher: false,
+          hasCredits: true,
+        },
+        { readOwner, createOrder }
+      )
+    ).rejects.toThrow('Could not confirm the saved Oxygen order');
   });
 
   it.each([

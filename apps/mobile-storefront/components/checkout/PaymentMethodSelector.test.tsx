@@ -264,6 +264,48 @@ describe('PaymentMethodSelector', () => {
     expect(onSelectMethod).toHaveBeenCalledWith('klump');
   });
 
+  it('renders device savings on full and installments tabs but not on pay_later', () => {
+    const props = {
+      onSelectMethod: () => {},
+      onSelectTab: () => {},
+      orderTotal: 120000,
+      savingsGoalId: '123e4567-e89b-12d3-a456-426614174555',
+      savingsBalance: 20000,
+      savingsGoalTitle: 'Laptop Goal',
+      onSavingsToggle: () => {},
+    };
+
+    const { rerender } = render(
+      <PaymentMethodSelector
+        {...props}
+        selectedMethod="klump"
+        selectedTab="installments"
+        enabledMethods={['klump']}
+      />
+    );
+    expect(screen.getByText(/Laptop Goal/)).toBeTruthy();
+
+    rerender(
+      <PaymentMethodSelector
+        {...props}
+        selectedMethod="paystack"
+        selectedTab="full"
+        enabledMethods={['paystack']}
+      />
+    );
+    expect(screen.getByText(/Laptop Goal/)).toBeTruthy();
+
+    rerender(
+      <PaymentMethodSelector
+        {...props}
+        selectedMethod="invoice"
+        selectedTab="pay_later"
+        enabledMethods={['invoice', 'payforme']}
+      />
+    );
+    expect(screen.queryByText(/Laptop Goal/)).toBeNull();
+  });
+
   it('can show Paystack as an unselected alternate card option when a saved card owns the selection', () => {
     const onSelectMethod = jest.fn();
 

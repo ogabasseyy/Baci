@@ -52,6 +52,14 @@ export async function submitOxygenCheckout(
     throw new Error(
       'Could not confirm the saved Oxygen order. Please try again.'
     );
+  if (
+    (input.hasVoucher || input.hasCredits) &&
+    result.amountDueToGateway === undefined
+  ) {
+    throw new Error(
+      'Could not confirm the saved Oxygen order. Please try again.'
+    );
+  }
   if (order.total <= 0 || (result.amountDueToGateway ?? order.total) <= 0)
     throw new Error(
       'Choose another payment option for this zero-balance order.'

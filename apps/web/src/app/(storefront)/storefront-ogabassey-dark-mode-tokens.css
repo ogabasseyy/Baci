@@ -52,15 +52,35 @@
     body:has(.storefront-variant-ogabassey.storefront-mode-system),
     body:has([data-ogabassey-home-lcp-shell]),
     body:has([data-ogabassey-home-hero-reserve-fallback]),
+    body:has([data-ogabassey-pdp-critical-shell]),
+    body:has([data-blog-lcp-hero]),
     .storefront-ppr-static-shell:has(
         .storefront-variant-ogabassey.storefront-mode-system
       ),
     .storefront-ppr-static-shell:has([data-ogabassey-home-lcp-shell]),
     .storefront-ppr-static-shell:has(
         [data-ogabassey-home-hero-reserve-fallback]
-      ) {
+      ),
+    .storefront-ppr-static-shell:has([data-ogabassey-pdp-critical-shell]),
+    .storefront-ppr-static-shell:has([data-blog-lcp-hero]),
+    .storefront-ppr-static-shell:has(
+        [data-ogabassey-home-lcp-shell],
+        [data-ogabassey-home-hero-reserve-fallback],
+        [data-ogabassey-pdp-critical-shell],
+        [data-blog-lcp-hero]
+      )
+      .storefront-light {
       background-color: #0a0a0a;
       color-scheme: dark;
+      --background: 0 0% 4% !important;
+      --foreground: 210 40% 98% !important;
+      --card: 0 0% 10% !important;
+      --card-foreground: 210 40% 98% !important;
+      --popover: 0 0% 10% !important;
+      --popover-foreground: 210 40% 98% !important;
+      --muted: 0 0% 15% !important;
+      --muted-foreground: 216 12% 84% !important;
+      --border: 215 28% 17% !important;
       --store-background: #0a0a0a !important;
       --store-background-text: #f9fafb !important;
       --store-foreground: #f9fafb !important;

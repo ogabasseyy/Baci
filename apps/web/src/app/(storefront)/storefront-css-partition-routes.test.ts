@@ -62,12 +62,9 @@ describe('storefront CSS partitioning (route sheets)', () => {
     );
   });
 
-  it('validates OgaBassey category PDP route imports critical CSS in page, shares PDP CSS across renderer and loading, and excludes PDP CSS from client', () => {
+  it('validates OgaBassey category PDP route imports critical CSS in page, excludes PDP loading boundary, and keeps full PDP CSS on fallback renderer only', () => {
     const categoryPdpPage = readStorefrontFile(
       '[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx'
-    );
-    const categoryPdpLoading = readStorefrontFile(
-      '[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx'
     );
     const defaultRenderer = readStorefrontFile(
       '[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-page-renderer.tsx'
@@ -79,12 +76,22 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(categoryPdpPage).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-critical\.css['"];?/
     );
-    expect(categoryPdpLoading).toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
-    );
-    expect(categoryPdpLoading).not.toMatch(
-      /storefront-ogabassey-pdp-loading\.css/
-    );
+    expect(
+      existsSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          '[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx'
+        )
+      )
+    ).toBe(false);
+    expect(
+      existsSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          '[slug]/(catalog)/loading.tsx'
+        )
+      )
+    ).toBe(false);
     // The deduplicated loading sheet must stay deleted, not just unimported.
     expect(
       existsSync(
@@ -100,6 +107,9 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(defaultDetailClient).not.toMatch(/storefront-pdp\.css/);
 
     const pdpCss = readStorefrontFile('storefront-pdp.css');
+    expect(pdpCss).not.toContain(
+      '[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx'
+    );
     expect(pdpCss).toContain('@source "./[slug]/storefront-loading-ui.tsx";');
     expect(pdpCss).toContain(
       '@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";'

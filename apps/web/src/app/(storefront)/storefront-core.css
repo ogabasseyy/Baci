@@ -1058,9 +1058,46 @@
   .storefront-ppr-static-shell__content:has(
       .ogabassey-storefront-shell,
       #main-content,
-      main
+      main,
+      section,
+      [role="status"],
+      .storefront-route-body > *
     )
     ~ .storefront-ppr-static-shell__fallback {
+    display: none;
+  }
+
+  .storefront-ppr-static-shell:has(
+      [data-ogabassey-home-lcp-shell],
+      [data-ogabassey-home-hero-reserve-fallback],
+      [data-blog-lcp-hero]
+    )
+    .storefront-header-slot:not([data-hide-navigation="true"]):not(
+      :has(header, nav)
+    ) {
+    background: var(--storefront-shell-background, #0f0f0f);
+    min-height: 132px;
+  }
+
+  @media (min-width: 768px) {
+    .storefront-ppr-static-shell:has(
+        [data-ogabassey-home-lcp-shell],
+        [data-ogabassey-home-hero-reserve-fallback],
+        [data-blog-lcp-hero]
+      )
+      .storefront-header-slot:not([data-hide-navigation="true"]):not(
+        :has(header, nav)
+      ) {
+      min-height: 128px;
+    }
+  }
+
+  body:has([data-storefront-unpublished-gate]) .storefront-header-slot,
+  body:has([data-storefront-unpublished-gate]) .storefront-route-body,
+  body:has([data-storefront-unpublished-gate]) .ogabassey-storefront-main,
+  body:has([data-storefront-unpublished-gate]) .storefront-footer-slot,
+  body:has([data-storefront-unpublished-gate])
+    .storefront-ppr-static-shell__fallback {
     display: none;
   }
 }

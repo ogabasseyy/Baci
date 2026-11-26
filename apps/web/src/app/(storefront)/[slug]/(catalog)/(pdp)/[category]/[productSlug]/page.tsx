@@ -17,7 +17,9 @@ import { OgabasseyPdpCriticalCommerce } from '@/components/storefront/ogabassey/
 import {
   OgabasseyPdpCriticalCommerceProvider,
   OgabasseyPdpCriticalCommerceSummary,
+  OgabasseyPdpCriticalQuerySync,
 } from '@/components/storefront/ogabassey/pdp/critical-commerce.client';
+import type { InitialCriticalVariantSelection } from '@/components/storefront/ogabassey/pdp/critical-commerce-selection';
 import { buildOgabasseyPdpCriticalProduct } from '@/components/storefront/ogabassey/pdp/critical-product';
 import { OgabasseyPdpCriticalShell } from '@/components/storefront/ogabassey/pdp/critical-shell';
 import { GenericProductRouteSummary } from '@/components/storefront/ogabassey/pdp/generic-product-route-summary';
@@ -266,10 +268,84 @@ function startKnownOgaBasseyPdpProductPreload(
   };
 }
 
+const EMPTY_SEARCH_PARAMS: Record<string, string | string[] | undefined> = {};
+
+function hasExplicitVariantOrOfferQuery(
+  queryRouteOffer: ReturnType<typeof resolveCriticalRouteOffer>,
+  querySelection: InitialCriticalVariantSelection | undefined,
+  canonicalSelection: InitialCriticalVariantSelection | undefined
+): boolean {
+  if (queryRouteOffer.offerId || queryRouteOffer.missing) {
+    return true;
+  }
+
+  return (
+    querySelection?.variantId !== canonicalSelection?.variantId ||
+    querySelection?.condition !== canonicalSelection?.condition ||
+    JSON.stringify(querySelection?.attributes ?? {}) !==
+      JSON.stringify(canonicalSelection?.attributes ?? {})
+  );
+}
+
+async function CategoryProductQuerySynchronizer({
+  basePreloadImage,
+  canonicalSelection,
+  commerceProduct,
+  searchParams,
+  slug,
+}: {
+  basePreloadImage: string | null;
+  canonicalSelection: InitialCriticalVariantSelection | undefined;
+  commerceProduct: Product;
+  searchParams: PageProps['searchParams'];
+  slug: string;
+}) {
+  const resolvedSearchParams = await searchParams;
+  redirectInvalidVariantSelectionParams(
+    slug,
+    commerceProduct,
+    resolvedSearchParams
+  );
+
+  const queryRouteOffer = resolveCriticalRouteOffer({
+    offers: commerceProduct.offers,
+    searchParams: resolvedSearchParams,
+  });
+  const queryVariantSelection = seedCriticalRouteOfferCondition(
+    getInitialCriticalVariantSelection(commerceProduct, resolvedSearchParams),
+    queryRouteOffer
+  );
+  const queryVariantImage = getInitialCriticalVariantSelectionPrimaryImage(
+    commerceProduct,
+    queryVariantSelection
+  );
+
+  if (queryVariantImage && queryVariantImage !== basePreloadImage) {
+    preloadOgabasseyPdpProductResources({ src: queryVariantImage });
+  }
+
+  if (
+    !hasExplicitVariantOrOfferQuery(
+      queryRouteOffer,
+      queryVariantSelection,
+      canonicalSelection
+    )
+  ) {
+    return null;
+  }
+
+  return (
+    <OgabasseyPdpCriticalQuerySync
+      initialOfferId={queryRouteOffer.offerId}
+      initialVariantSelection={queryVariantSelection}
+      routeOfferMissing={queryRouteOffer.missing}
+    />
+  );
+}
+
 async function resolveKnownOgaBasseyPdpProductPreload(
   preload: StartedKnownOgaBasseyPdpProductPreload,
-  routeControlPromise: Promise<CategoryProductRouteControl | null>,
-  searchParamsPromise?: PageProps['searchParams']
+  routeControlPromise: Promise<CategoryProductRouteControl | null>
 ): Promise<string | null> {
   const { isKnownOgaBasseyCustomDomain, knownOgaBasseyImageLcpHintPromise } =
     preload;
@@ -279,20 +355,11 @@ async function resolveKnownOgaBasseyPdpProductPreload(
   }
 
   const earlyPreloadResult = await Promise.race([
-    Promise.all([
-      knownOgaBasseyImageLcpHintPromise,
-      searchParamsPromise
-        ? searchParamsPromise.catch(() => undefined)
-        : Promise.resolve(undefined),
-    ])
-      .then(([cachedProduct, resolvedSearchParams]) => ({
+    knownOgaBasseyImageLcpHintPromise
+      .then((cachedProduct) => ({
         cachedProduct,
         kind: 'lcp-hint' as const,
-        primaryImage: getCachedProductRoutePrimaryImage(
-          cachedProduct,
-          undefined,
-          resolvedSearchParams
-        ),
+        primaryImage: getCachedProductRoutePrimaryImage(cachedProduct),
       }))
       .catch(() => ({
         cachedProduct: null,
@@ -610,8 +677,7 @@ export default async function CategoryProductPage({
   const preloadedProductResourceKeyPromise =
     resolveKnownOgaBasseyPdpProductPreload(
       knownOgaBasseyProductPreload,
-      routeControlPromise,
-      searchParams
+      routeControlPromise
     );
   const routeControl = await routeControlPromise;
 
@@ -626,9 +692,9 @@ export default async function CategoryProductPage({
   }
 
   const { result: productResult, loadProductResult } = routeControl;
-  const resolvedSearchParams = await searchParams;
 
   if (!('product' in productResult)) {
+    const resolvedSearchParams = await searchParams;
     permanentRedirect(
       getRedirectTargetPath(
         slug,
@@ -642,6 +708,7 @@ export default async function CategoryProductPage({
     productResult;
 
   if (categoryMismatch || needsValuesRedirect) {
+    const resolvedSearchParams = await searchParams;
     permanentRedirect(
       getRedirectTargetPath(slug, product, resolvedSearchParams)
     );
@@ -691,22 +758,12 @@ export default async function CategoryProductPage({
     ? resolveMerchantCurrencyConfig(merchant)
     : null;
   const commerceProduct = buildCriticalCommerceRouteProduct(product);
-  // Exact-offer deep links (?offer_id=) resolve against the hydrated
-  // active offers: the critical buy box prices from the matched offer
-  // and the server shell fallback converges on the same price so the
-  // two surfaces never diverge.
   const criticalRouteOffer = resolveCriticalRouteOffer({
     offers: commerceProduct.offers,
-    searchParams: resolvedSearchParams,
+    searchParams: EMPTY_SEARCH_PARAMS,
   });
   const criticalInitialVariantSelection = criticalProduct
-    ? seedCriticalRouteOfferCondition(
-        getInitialCriticalVariantSelection(
-          commerceProduct,
-          resolvedSearchParams
-        ),
-        criticalRouteOffer
-      )
+    ? getInitialCriticalVariantSelection(commerceProduct, EMPTY_SEARCH_PARAMS)
     : undefined;
   const selectedVariantProductImage = criticalProduct
     ? getInitialCriticalVariantSelectionPrimaryImage(
@@ -744,12 +801,6 @@ export default async function CategoryProductPage({
     : Promise.resolve<'' | `/${string}`>('');
   const productResultPromise = loadProductResult();
 
-  redirectInvalidVariantSelectionParams(
-    slug,
-    commerceProduct,
-    resolvedSearchParams
-  );
-  const resolvedSearchParamsPromise = Promise.resolve(resolvedSearchParams);
   const criticalCommerceContext = criticalProduct
     ? (() => {
         const rawVariantAttributes = (
@@ -767,14 +818,6 @@ export default async function CategoryProductPage({
           initialVariantSelection: criticalInitialVariantSelection,
           product: {
             ...criticalProduct,
-            // Converge the shell's static price/condition fallback on
-            // the pinned route offer (mirrors the client override).
-            ...(criticalRouteOffer.offerPrice != null
-              ? { price: criticalRouteOffer.offerPrice }
-              : null),
-            ...(criticalRouteOffer.offerCondition
-              ? { condition: criticalRouteOffer.offerCondition }
-              : null),
             variantCount,
           },
           variantAxes: getFirstViewportVariantAxes(
@@ -803,6 +846,15 @@ export default async function CategoryProductPage({
           variantAxisOptions={criticalCommerceContext.variantAxisOptions}
           variantCount={criticalCommerceContext.variantCount}
         >
+          <Suspense fallback={null}>
+            <CategoryProductQuerySynchronizer
+              basePreloadImage={pagePreloadProductImage}
+              canonicalSelection={criticalInitialVariantSelection}
+              commerceProduct={commerceProduct}
+              searchParams={searchParams}
+              slug={slug}
+            />
+          </Suspense>
           <OgabasseyPdpCriticalShell
             basePath={getCategoryProductBasePath(slug)}
             basePathPromise={criticalBasePathPromise}
@@ -820,7 +872,7 @@ export default async function CategoryProductPage({
             <CategoryProductPageContent
               renderMode="belowFold"
               slug={slug}
-              searchParams={resolvedSearchParamsPromise}
+              searchParams={searchParams}
               productResultPromise={productResultPromise}
             />
           </Suspense>
@@ -842,7 +894,7 @@ export default async function CategoryProductPage({
           <CategoryProductPageContent
             renderMode="full"
             slug={slug}
-            searchParams={resolvedSearchParamsPromise}
+            searchParams={searchParams}
             productResultPromise={productResultPromise}
           />
         </Suspense>

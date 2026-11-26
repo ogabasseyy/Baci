@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import CatalogRouteLoading from '@/app/(storefront)/[slug]/(catalog)/loading';
+import { CatalogListingLoading as CatalogRouteLoading } from '@/components/storefront/ogabassey/storefront-loading-ui';
 import postcss from 'postcss';
 
 const mocks = vi.hoisted(() => ({

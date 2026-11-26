@@ -6,7 +6,13 @@ import {
   resolveVariantDisplaySelection,
   resolveVariantSelection,
 } from '@baci/shared/lib/product-default-variant';
-import { useEffect, useState } from 'react';
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { useCart } from '@/hooks/cart';
 import { useCriticalAddToCartBlocker } from './critical-add-to-cart-blocker.client';
@@ -24,6 +30,8 @@ import { useCriticalRouteOfferState } from './critical-commerce-route-offer';
 import {
   OgabasseyPdpCriticalCommerceContext,
   type OgabasseyPdpCriticalCommerceProviderProps,
+  type OgabasseyPdpCriticalQuerySelectionSync,
+  OgabasseyPdpCriticalQuerySyncContext,
 } from './critical-commerce-state-context.client';
 import { getRenderableCriticalVariantAxes } from './critical-variant-selector-options';
 
@@ -88,6 +96,11 @@ export function OgabasseyPdpCriticalCommerceProvider({
   const [explicitSelectedAxes, setExplicitSelectedAxes] = useState<string[]>(
     () => initialVariantIntent.explicitSelectedAxes
   );
+  const [queryRouteOfferOverride, setQueryRouteOfferOverride] = useState<{
+    initialOfferId?: string | null;
+    routeOfferMissing?: boolean;
+  } | null>(null);
+  const hasUserInteractedRef = useRef(false);
   const selectedVariantCondition = selectedAttributes.condition;
   const resolverSelectedAttributes = Object.fromEntries(
     Object.entries(selectedAttributes).filter(([axis]) => axis !== 'condition')
@@ -113,14 +126,20 @@ export function OgabasseyPdpCriticalCommerceProvider({
     (requiresVariantSelection ? null : defaultVariantSelection);
   const selectedVariantSelection =
     effectivePurchasableVariantSelection ?? displayVariantSelection;
+  const effectiveOfferId =
+    queryRouteOfferOverride?.initialOfferId !== undefined
+      ? queryRouteOfferOverride.initialOfferId
+      : initialOfferId;
+  const effectiveRouteOfferMissing =
+    queryRouteOfferOverride?.routeOfferMissing ?? routeOfferMissing;
   const {
     activeRouteOffer,
     dismissRouteOffer,
     productForCart,
     routeOfferMissingActive,
   } = useCriticalRouteOfferState({
-    routeOfferMissing,
-    initialOfferId,
+    routeOfferMissing: effectiveRouteOfferMissing,
+    initialOfferId: effectiveOfferId,
     selectionCartProduct,
     selectedVariantSelection,
     hasPurchasableVariantSelection: Boolean(
@@ -238,6 +257,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
     if (!normalizedAxis) {
       return;
     }
+    hasUserInteractedRef.current = true;
     if (normalizedAxis === 'condition') {
       dismissRouteOffer();
     }
@@ -266,32 +286,122 @@ export function OgabasseyPdpCriticalCommerceProvider({
     setSelectedAttributes(nextSelection);
   }
 
+  function handleQuerySelectionSync(
+    nextSelection: OgabasseyPdpCriticalQuerySelectionSync
+  ) {
+    if (hasUserInteractedRef.current) {
+      return;
+    }
+
+    setQueryRouteOfferOverride((current) => {
+      if (
+        current?.initialOfferId === nextSelection.initialOfferId &&
+        current?.routeOfferMissing === nextSelection.routeOfferMissing
+      ) {
+        return current;
+      }
+
+      return {
+        initialOfferId: nextSelection.initialOfferId,
+        routeOfferMissing: nextSelection.routeOfferMissing,
+      };
+    });
+
+    if (nextSelection.initialVariantSelection) {
+      const nextIntent = buildCriticalInitialVariantIntent({
+        attributes: nextSelection.initialVariantSelection.attributes,
+        condition: nextSelection.initialVariantSelection.condition,
+        requiredAxes: [...requiredVariantAxes, ...renderableVariantAxes],
+      });
+      const { initialDisplayVariantSelection: nextDisplaySelection } =
+        resolveCriticalDefaultAndDisplaySelection({
+          explicitVariantCondition: nextIntent.explicitCondition,
+          initialResolverAttributes: nextIntent.resolverAttributes,
+          initialVariantSelection: nextSelection.initialVariantSelection,
+          selectionCartProduct,
+          variants,
+        });
+
+      setSelectedVariantId(nextSelection.initialVariantSelection.variantId);
+      setExplicitSelectedAxes(nextIntent.explicitSelectedAxes);
+      setSelectedAttributes(
+        pickInitialSelectedAttributes({
+          explicitAttributes: nextIntent.selectedAttributes,
+          fallbackAxisOptions: variantAxisOptions,
+          renderableVariantAxes,
+          selection: nextDisplaySelection,
+        })
+      );
+    }
+  }
+
   return (
-    <OgabasseyPdpCriticalCommerceContext.Provider
-      value={{
-        ...addToCartControls,
-        canAddToCart,
-        currency,
-        explicitSelectedAxes,
-        handleAttributeSelection,
-        handleDecrementCartQuantity,
-        handleIncrementCartQuantity,
-        isAtMaxQuantity,
-        isAtMinCartQuantity,
-        maxQuantity,
-        productForCart,
-        quantity,
-        quantityInCart,
-        renderableVariantAxes,
-        routeOfferMissingActive,
-        selectedAttributes,
-        setQuantity,
-        variantAxisOptions,
-        variantCount,
-        variants,
-      }}
+    <OgabasseyPdpCriticalQuerySyncContext.Provider
+      value={handleQuerySelectionSync}
     >
-      {children}
-    </OgabasseyPdpCriticalCommerceContext.Provider>
+      <OgabasseyPdpCriticalCommerceContext.Provider
+        value={{
+          ...addToCartControls,
+          canAddToCart,
+          currency,
+          explicitSelectedAxes,
+          handleAttributeSelection,
+          handleDecrementCartQuantity,
+          handleIncrementCartQuantity,
+          isAtMaxQuantity,
+          isAtMinCartQuantity,
+          maxQuantity,
+          productForCart,
+          quantity,
+          quantityInCart,
+          renderableVariantAxes,
+          routeOfferMissingActive,
+          selectedAttributes,
+          setQuantity,
+          variantAxisOptions,
+          variantCount,
+          variants,
+        }}
+      >
+        {children}
+      </OgabasseyPdpCriticalCommerceContext.Provider>
+    </OgabasseyPdpCriticalQuerySyncContext.Provider>
   );
+}
+
+export function OgabasseyPdpCriticalQuerySync({
+  initialOfferId,
+  initialVariantSelection,
+  routeOfferMissing,
+}: OgabasseyPdpCriticalQuerySelectionSync) {
+  const syncQuerySelection = useContext(OgabasseyPdpCriticalQuerySyncContext);
+  const lastSyncedKeyRef = useRef<string | null>(null);
+  const syncKey = JSON.stringify({
+    attributes: initialVariantSelection?.attributes ?? null,
+    condition: initialVariantSelection?.condition ?? null,
+    initialOfferId: initialOfferId ?? null,
+    routeOfferMissing: Boolean(routeOfferMissing),
+    variantId: initialVariantSelection?.variantId ?? null,
+  });
+
+  useLayoutEffect(() => {
+    if (!syncQuerySelection || lastSyncedKeyRef.current === syncKey) {
+      return;
+    }
+
+    lastSyncedKeyRef.current = syncKey;
+    syncQuerySelection({
+      initialOfferId,
+      initialVariantSelection,
+      routeOfferMissing,
+    });
+  }, [
+    initialOfferId,
+    initialVariantSelection,
+    routeOfferMissing,
+    syncKey,
+    syncQuerySelection,
+  ]);
+
+  return null;
 }

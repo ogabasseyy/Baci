@@ -67,6 +67,16 @@ export interface OgabasseyPdpCriticalCommerceState {
   variants: CartProduct['variants'];
 }
 
+export interface OgabasseyPdpCriticalQuerySelectionSync {
+  initialVariantSelection?: InitialCriticalVariantSelection;
+  initialOfferId?: string | null;
+  routeOfferMissing?: boolean;
+}
+
+export const OgabasseyPdpCriticalQuerySyncContext = createContext<
+  ((selection: OgabasseyPdpCriticalQuerySelectionSync) => void) | null
+>(null);
+
 export const OgabasseyPdpCriticalCommerceContext =
   createContext<OgabasseyPdpCriticalCommerceState | null>(null);
 

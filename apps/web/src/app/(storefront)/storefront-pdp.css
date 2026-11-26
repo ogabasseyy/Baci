@@ -15,7 +15,6 @@
 @source "./[slug]/(catalog)/(pdp)/products/[productSlug]/loading.tsx";
 @source "./[slug]/(catalog)/(pdp)/products/[productSlug]/product-detail-*.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx";
-@source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-detail-client.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-page-renderer.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/ogabassey-pdp-semantic-sections.tsx";

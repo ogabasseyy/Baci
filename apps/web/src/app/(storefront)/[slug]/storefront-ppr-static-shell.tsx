@@ -7,10 +7,12 @@ import {
 
 export function StorefrontPprStaticShell({
   children,
+  dynamicSlot,
   loadingFallback,
   appearance,
 }: {
   children: React.ReactNode;
+  dynamicSlot?: React.ReactNode;
   loadingFallback: React.ReactNode;
   appearance: StorefrontAppearance;
 }) {
@@ -22,14 +24,13 @@ export function StorefrontPprStaticShell({
       className={`storefront-ppr-static-shell ${appearanceClassName}`}
       data-storefront-shell=""
     >
-      <Suspense fallback={null}>
-        <div className="storefront-ppr-static-shell__content">{children}</div>
-      </Suspense>
+      <div className="storefront-ppr-static-shell__content">{children}</div>
       {loadingFallback ? (
         <div className="storefront-ppr-static-shell__fallback">
           {loadingFallback}
         </div>
       ) : null}
+      {dynamicSlot ? <Suspense fallback={null}>{dynamicSlot}</Suspense> : null}
     </div>
   );
 }

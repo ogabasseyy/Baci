@@ -194,6 +194,7 @@ export interface MerchantProviderProps {
   initialMerchant?: MerchantData | null;
   initialStaffAccess?: StaffAccess;
   initialRoutingMode?: RoutingMode;
+  loading?: boolean;
   navigationCategories?: CategoryNavItem[];
   shellSnapshot?: StorefrontShellSnapshot | null;
 }

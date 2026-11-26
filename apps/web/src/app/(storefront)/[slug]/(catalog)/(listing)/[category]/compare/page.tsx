@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
-import { cache } from 'react';
+import { cache, Suspense } from 'react';
 import type { BreadcrumbList, ItemList } from 'schema-dts';
+import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { JsonLd, type JsonLdData } from '@/components/seo/json-ld';
 import { STOREFRONT_METADATA_CACHE_BUCKET_QUERY_PARAM } from '@/config/storefront-metadata-cache-bots';
 import { asRoute } from '@/lib/routes';
@@ -190,7 +191,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function CategoryCompareIndexPage({
+export async function CategoryCompareIndexRuntime({
   params,
 }: CategoryCompareIndexPageProps) {
   const { slug, category } = await params;
@@ -245,5 +246,15 @@ export default async function CategoryCompareIndexPage({
         pathPrefix={pathPrefix}
       />
     </>
+  );
+}
+
+export default function CategoryCompareIndexPage(
+  props: CategoryCompareIndexPageProps
+) {
+  return (
+    <Suspense fallback={<CatalogListingLoading />}>
+      <CategoryCompareIndexRuntime {...props} />
+    </Suspense>
   );
 }

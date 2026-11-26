@@ -2,6 +2,7 @@ import '@/app/(storefront)/storefront-cart-drawer.css';
 import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import type React from 'react';
+import { Suspense } from 'react';
 import { ShellChromeLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
 import {
@@ -28,7 +29,18 @@ import {
   isOgabasseyHomeIdentifier,
 } from './(home)/is-ogabassey-home-identifier';
 import { buildStorefrontMerchantMetadata } from './build-storefront-merchant-metadata';
+import {
+  StorefrontClientShell,
+  StorefrontShellBridgeSync,
+  StorefrontShellUnpublishedSync,
+} from './storefront-client-shell';
 import { StorefrontPprStaticShell } from './storefront-ppr-static-shell';
+import {
+  resolveBridgeChatwootConfig,
+  resolveBridgeExperienceRoutes,
+  StorefrontBridgeHeadEffects,
+  StorefrontOgabasseyHeaderBridge,
+} from './storefront-shell-bridge-chrome';
 import { StorefrontShellFrame } from './storefront-shell-frame';
 import {
   getStorefrontShellSnapshot,
@@ -79,15 +91,14 @@ export function generateViewport(): Viewport {
   };
 }
 
-export async function StorefrontLayoutContent(props: {
-  children: React.ReactNode;
-  params: Promise<{ slug: string }>;
-}) {
+async function resolveStorefrontLayoutTenant(
+  params: Promise<{ slug: string }>
+) {
   const isHomeRequestBeforeSlug = isStorefrontHomeRequest();
   const settledStateBox = isHomeRequestBeforeSlug
-    ? getSettledCanonicalOgabasseyHomeStateBox(props.params)
+    ? getSettledCanonicalOgabasseyHomeStateBox(params)
     : null;
-  const { slug } = await props.params;
+  const { slug } = await params;
 
   if (!isValidMerchantIdentifier(slug)) {
     notFound();
@@ -103,8 +114,7 @@ export async function StorefrontLayoutContent(props: {
     clearSettledCanonicalOgabasseyHomeState();
   }
   const activeSettledStateBox = isHomeRequest
-    ? (settledStateBox ??
-      getSettledCanonicalOgabasseyHomeStateBox(props.params))
+    ? (settledStateBox ?? getSettledCanonicalOgabasseyHomeStateBox(params))
     : null;
   const canonicalHomeHeroShellPromise = isHomeRequest
     ? resolveOgabasseyHomeHeroShell()
@@ -133,15 +143,11 @@ export async function StorefrontLayoutContent(props: {
 
   const isDevelopment = process.env.NODE_ENV === 'development';
   if (!shellSnapshotBase.merchant.is_published && !isDevelopment) {
-    const StoreNotPublished = await loadUnpublishedStorefront();
-
-    return (
-      <StorefrontThemeFrame appearance={appearance}>
-        <StoreNotPublished
-          businessName={shellSnapshotBase.merchant.business_name}
-        />
-      </StorefrontThemeFrame>
-    );
+    return {
+      kind: 'unpublished' as const,
+      appearance,
+      businessName: shellSnapshotBase.merchant.business_name,
+    };
   }
 
   const shellSnapshot = await getStorefrontShellSnapshot(
@@ -162,23 +168,114 @@ export async function StorefrontLayoutContent(props: {
       box: activeSettledStateBox,
       heroShell: heroShell ?? null,
       merchant: resolvedMerchant ?? null,
-      params: props.params,
+      params,
       shareAcrossRequestTree: true,
       slug,
     });
   }
 
+  return {
+    kind: 'ready' as const,
+    appearance,
+    shellSnapshot,
+  };
+}
+
+export async function StorefrontLayoutContent(props: {
+  children: React.ReactNode;
+  params: Promise<{ slug: string }>;
+}) {
+  const resolution = await resolveStorefrontLayoutTenant(props.params);
+
+  if (resolution.kind === 'unpublished') {
+    const StoreNotPublished = await loadUnpublishedStorefront();
+
+    return (
+      <StorefrontThemeFrame appearance={resolution.appearance}>
+        <StoreNotPublished businessName={resolution.businessName} />
+      </StorefrontThemeFrame>
+    );
+  }
+
   return (
-    <StorefrontThemeFrame appearance={appearance}>
+    <StorefrontThemeFrame appearance={resolution.appearance}>
       <StorefrontShellFrame
         // Page-level resource hints own LCP preloads. Keeping the shared
         // layout disabled prevents home hero hints from leaking onto nested routes.
         preloadHeroLcpImages={false}
-        shellSnapshot={shellSnapshot}
+        shellSnapshot={resolution.shellSnapshot}
       >
         {props.children}
       </StorefrontShellFrame>
     </StorefrontThemeFrame>
+  );
+}
+
+async function StorefrontHeaderSlot({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  if (!isValidMerchantIdentifier(slug)) {
+    return null;
+  }
+
+  const shellSnapshotBase = await getStorefrontShellSnapshotBase(slug);
+  if (!shellSnapshotBase) {
+    return null;
+  }
+
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  if (!shellSnapshotBase.merchant.is_published && !isDevelopment) {
+    return null;
+  }
+
+  return (
+    <StorefrontOgabasseyHeaderBridge
+      merchant={shellSnapshotBase.merchant}
+      routingMode={shellSnapshotBase.routingMode}
+    />
+  );
+}
+
+async function StorefrontLayoutDynamicBridge({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const resolution = await resolveStorefrontLayoutTenant(params);
+
+  if (resolution.kind === 'unpublished') {
+    const StoreNotPublished = await loadUnpublishedStorefront();
+
+    return (
+      <>
+        <div data-storefront-unpublished-gate="" hidden />
+        <StorefrontShellUnpublishedSync appearance={resolution.appearance} />
+        <div data-storefront-unpublished-ssr-fallback="">
+          <StoreNotPublished businessName={resolution.businessName} />
+        </div>
+      </>
+    );
+  }
+
+  const experienceRoutes = await resolveBridgeExperienceRoutes(
+    resolution.shellSnapshot.merchant
+  );
+
+  return (
+    <>
+      <StorefrontShellBridgeSync
+        appearance={resolution.appearance}
+        chatwootConfig={resolveBridgeChatwootConfig(
+          resolution.shellSnapshot.merchant
+        )}
+        experienceRoutes={experienceRoutes}
+        shellSnapshot={resolution.shellSnapshot}
+      />
+      <StorefrontBridgeHeadEffects shellSnapshot={resolution.shellSnapshot} />
+    </>
   );
 }
 
@@ -210,19 +307,31 @@ export default function StorefrontLayout(props: {
       */}
       <AdAttributionCapture />
       {/*
-        Keep params and tenant reads inside the null Suspense resume slot so
-        the neutral shell can be prerendered before dynamic params resolve.
-        Next 16.2/PPR can resume Googlebot's blocking metadata boundary into
-        the dynamic slot when that slot owns a visible fallback, so the visual
-        shell remains a static sibling instead.
+        Render route children directly inside the static shell (never trapped
+        behind `B:0` / hidden `S:0`), while header resolution and tenant shell
+        hydration stream in sibling null-fallback Suspense slots so Next 16/PPR
+        keeps metadata boundaries intact (E936-safe) and first-paint LCP heroes
+        commit immediately.
       */}
       <StorefrontPprStaticShell
         appearance={fallbackAppearance}
         loadingFallback={fallbackContent}
       >
-        <StorefrontLayoutContent params={props.params}>
+        <StorefrontClientShell
+          dynamicSlot={
+            <Suspense fallback={null}>
+              <StorefrontLayoutDynamicBridge params={props.params} />
+            </Suspense>
+          }
+          fallbackAppearance={fallbackAppearance}
+          headerSlot={
+            <Suspense fallback={null}>
+              <StorefrontHeaderSlot params={props.params} />
+            </Suspense>
+          }
+        >
           {props.children}
-        </StorefrontLayoutContent>
+        </StorefrontClientShell>
       </StorefrontPprStaticShell>
     </>
   );

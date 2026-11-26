@@ -94,7 +94,9 @@ describe('bugfix: a tied arrival scan owns the snapshot location even when the l
     const withLater = run([
       { Status: 'MSVC', DateTimeUtc: '2026-11-09T12:00:00.000Z' },
     ]);
-    expect(without).toContain('WUSE ABUJA');
+    // A tied delivered scan fences the arrival, so its hub location is not
+    // copied onto the location-less delivered snapshot.
+    expect(without).toBeUndefined();
     expect(withLater).toBe(without);
   });
 });

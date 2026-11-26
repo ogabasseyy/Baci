@@ -30,4 +30,31 @@ describe('bugfix: no arrival update after a terminal outcome', () => {
       GIGL_ARRIVED_IN_CITY_RAW_STATUS
     );
   });
+
+  it.each([
+    ['SHD', 'terminal first'],
+    ['SHD', 'arrival first'],
+    ['MSCP', 'terminal first'],
+    ['MSCP', 'arrival first'],
+  ])('fences an arrival tied with %s (%s)', (terminal, order) => {
+    const DateTimeUtc = '2026-11-09T10:00:00.000Z';
+    const scans = [
+      { Status: terminal, DateTimeUtc },
+      { Status: 'ARF', DateTimeUtc, Location: 'WUSE ABUJA' },
+    ];
+    const result = normalizeGiglTrackingShipment(
+      {
+        Waybill: 'W95',
+        Destination: 'ABUJA',
+        MobileShipmentTrackings:
+          order === 'arrival first' ? scans.reverse() : scans,
+      },
+      'W95',
+      OBSERVED_AT
+    );
+
+    expect(result.events.map((e) => e.rawStatus)).not.toContain(
+      GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+  });
 });

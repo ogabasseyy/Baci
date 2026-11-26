@@ -23,8 +23,10 @@ describe('arrived-in-city policy rows', () => {
     const sql = readFileSync(MIGRATION, 'utf8');
     expect(sql).toContain("skip_reason = 'covered_by_arrival_push'");
     expect(sql).toContain("transit.notification_kind = 'transit_started'");
+    expect(sql).toContain('arrival.shipment_id = transit.shipment_id');
+    // Runs before suppress_late_*, which would delete an older transit row.
     expect(sql).toContain(
-      'arrival.tracking_event_id = transit.tracking_event_id'
+      'CREATE TRIGGER aa_skip_gigl_transit_push_covered_by_arrival'
     );
     // Statement-level, so the row-level shipped-email trigger runs first.
     expect(sql).toContain('REFERENCING NEW TABLE AS inserted_outbox');

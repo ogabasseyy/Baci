@@ -91,6 +91,12 @@ function awayFromDestination(
     : 0;
 }
 
+function isTerminal({ recognizedStatus }: Guardable): number {
+  return recognizedStatus === 'delivered' || recognizedStatus === 'cancelled'
+    ? 1
+    : 0;
+}
+
 /**
  * GIG fires the generic "SHIPMENT ENROUTE DELIVERY" (MSHC) during the pickup
  * run, and an arrival scan also marks the parcel reaching its destination.
@@ -122,6 +128,8 @@ export function applyLifecycleGuards(
       isSdr(b) - isSdr(a) ||
       // A same-time return scan is processed before any arrival so it fences it.
       isReturnFlow(b) - isReturnFlow(a) ||
+      // Likewise a same-time delivered or cancelled scan.
+      isTerminal(b) - isTerminal(a) ||
       isMshc(a) - isMshc(b) ||
       // Tied scans: movement away from the destination first, so the result
       // does not depend on payload order.
@@ -176,12 +184,7 @@ export function applyLifecycleGuards(
     if (raw === 'SDR') destroyed = true;
     if (startsReturnFlow(candidate)) returning = true;
     if (candidate.recognizedStatus === 'failed') closed = false;
-    if (
-      candidate.recognizedStatus === 'delivered' ||
-      candidate.recognizedStatus === 'cancelled'
-    ) {
-      closed = true;
-    }
+    if (isTerminal(candidate)) closed = true;
     if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {

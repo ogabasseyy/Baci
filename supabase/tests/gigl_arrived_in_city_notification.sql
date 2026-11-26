@@ -52,25 +52,34 @@ SELECT is(
   'the arrival raw status maps to both customer kinds'
 );
 
--- One statement, as the apply RPC queues them.
+-- A catch-up poll, as the apply RPC queues it in one statement: an earlier
+-- in-transit scan owns the transit_started row, the arrival scan the other.
 WITH event AS (
   INSERT INTO public.shipment_tracking_events (
     shipment_id, tracking_epoch_id, tracking_number, provider,
     provider_event_key, raw_status, normalized_status, description, occurred_at
   )
-  SELECT shipment_id, epoch_id, 'GIGL-ARR-001', 'GIGL', 'arrival-event',
-    'ARRIVED IN DESTINATION CITY', 'in_transit', 'Arrived', now()
-  FROM gigl_arrival_fixture
-  RETURNING id
+  SELECT f.shipment_id, f.epoch_id, 'GIGL-ARR-001', 'GIGL', scan.key,
+    scan.raw, 'in_transit', scan.raw, now() - scan.age
+  FROM gigl_arrival_fixture AS f,
+    (VALUES
+      ('departed-event', 'DPC', interval '2 hours'),
+      ('arrival-event', 'ARRIVED IN DESTINATION CITY', interval '1 hour')
+    ) AS scan(key, raw, age)
+  RETURNING id, raw_status
 )
 INSERT INTO public.shipment_tracking_notification_outbox (
   shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
   audience, notification_kind
 )
 SELECT f.shipment_id, f.epoch_id, f.order_id, f.merchant_id, event.id,
-  'customer', kind
-FROM gigl_arrival_fixture AS f, event,
-  unnest(ARRAY['arrived_in_city', 'transit_started']) AS kind;
+  'customer', queued.kind
+FROM gigl_arrival_fixture AS f
+JOIN (VALUES
+  ('DPC', 'transit_started'),
+  ('ARRIVED IN DESTINATION CITY', 'arrived_in_city')
+) AS queued(raw, kind) ON true
+JOIN event ON event.raw_status = queued.raw;
 
 SELECT is(
   (SELECT status FROM public.shipment_tracking_notification_outbox
@@ -85,7 +94,7 @@ SELECT is(
    WHERE shipment_id = (SELECT shipment_id FROM gigl_arrival_fixture)
      AND audience = 'customer' AND notification_kind = 'transit_started'),
   'skipped/covered_by_arrival_push',
-  'the in-transit push from the same scan is skipped'
+  'the in-transit push from the same poll is skipped, not deleted'
 );
 SELECT is(
   (SELECT count(*)::int FROM public.order_notification_outbox

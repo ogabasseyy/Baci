@@ -3,7 +3,16 @@ import {
   summaryRecapMessages,
   type TransitionResult,
 } from './transitions';
-import { isValidStoreSlug, sanitizeSlugInput } from './types';
+import {
+  isReservedStoreSlug,
+  isValidStoreSlug,
+  sanitizeSlugInput,
+} from './types';
+
+const INVALID_SLUG_MESSAGE =
+  'Store links must be 3–63 characters using lowercase letters, numbers, and hyphens (for example, "kicks-hub").';
+const RESERVED_SLUG_MESSAGE =
+  'That store link is reserved. Please choose a different link (for example, "kicks-hub").';
 
 export function transitionFromSlugText(
   trimmed: string,
@@ -30,6 +39,12 @@ export function transitionFromSlugText(
       );
     if (!isConversationalRejection) {
       const directSlug = sanitizeSlugInput(trimmed);
+      if (isReservedStoreSlug(directSlug)) {
+        return {
+          customizingSlug: true,
+          messages: exchangeMessages(trimmed, RESERVED_SLUG_MESSAGE),
+        };
+      }
       if (isValidStoreSlug(directSlug)) {
         return {
           nextData: { slug: directSlug, slugIsCustom: true },
@@ -40,10 +55,7 @@ export function transitionFromSlugText(
       }
       return {
         customizingSlug: true,
-        messages: exchangeMessages(
-          trimmed,
-          'Store links must be 3–63 characters using lowercase letters, numbers, and hyphens (for example, "kicks-hub").'
-        ),
+        messages: exchangeMessages(trimmed, INVALID_SLUG_MESSAGE),
       };
     }
     return {
@@ -55,12 +67,14 @@ export function transitionFromSlugText(
     };
   }
   const cleaned = sanitizeSlugInput(trimmed);
+  if (isReservedStoreSlug(cleaned)) {
+    return {
+      messages: exchangeMessages(trimmed, RESERVED_SLUG_MESSAGE),
+    };
+  }
   if (!isValidStoreSlug(cleaned)) {
     return {
-      messages: exchangeMessages(
-        trimmed,
-        'Store links must be 3–63 characters using lowercase letters, numbers, and hyphens (for example, "kicks-hub").'
-      ),
+      messages: exchangeMessages(trimmed, INVALID_SLUG_MESSAGE),
     };
   }
   return {

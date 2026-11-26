@@ -211,6 +211,14 @@ export async function runWebStoreLaunch(
       formData
     );
     if (result.success) {
+      const assignedSlug = result.merchantSlug?.trim();
+      if (assignedSlug && assignedSlug !== ctx.data.slug) {
+        ctx.setData((prev) => ({ ...prev, slug: assignedSlug }));
+        ctx.appendMessages({
+          role: 'assistant',
+          text: `Your store is live at ${assignedSlug}.usebaci.com! Redirecting to your dashboard…`,
+        });
+      }
       if (result.merchantId) {
         trackMerchantSignupCompleted(result.merchantId, {
           business_name: result.businessName ?? ctx.data.businessName.trim(),

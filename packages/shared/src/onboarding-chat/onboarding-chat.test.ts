@@ -41,6 +41,10 @@ describe('@baci/shared/onboarding-chat', () => {
     expect(isValidStoreSlug('kicks-hub')).toBe(true);
     expect(isValidStoreSlug('ab')).toBe(false);
     expect(isValidStoreSlug('a'.repeat(64))).toBe(false);
+    expect(isValidStoreSlug('admin')).toBe(false);
+    expect(isValidStoreSlug('api')).toBe(false);
+    expect(isValidStoreSlug('chat')).toBe(false);
+    expect(isValidStoreSlug('onboarding')).toBe(false);
     expect(slugifyBusinessName('AB')).toBe('ab-store');
     expect(slugifyBusinessName('Admin')).toBe('admin-store');
     expect(slugifyBusinessName('Chat')).toBe('chat-store');
@@ -119,5 +123,45 @@ describe('@baci/shared/onboarding-chat', () => {
       });
       expect(result.sideEffect).toEqual({ type: 'launch_store' });
     }
+  });
+
+  it('rejects reserved custom slugs and <2-char store names or custom categories', () => {
+    for (const reserved of ['admin', 'api', 'chat', 'onboarding']) {
+      for (const isCustomizingSlug of [false, true]) {
+        const result = transitionFromTextInput({
+          step: 'slug',
+          rawText: reserved,
+          data: BASE_DATA,
+          countries: COUNTRIES,
+          businessTypes: BUSINESS_TYPES,
+          isCustomizingSlug,
+        });
+        expect(result.nextStep).toBeUndefined();
+        expect(result.nextData).toBeUndefined();
+        expect(result.messages?.[1]?.text).toContain('reserved');
+      }
+    }
+
+    const shortName = transitionFromTextInput({
+      step: 'business_name',
+      rawText: 'A',
+      data: BASE_DATA,
+      countries: COUNTRIES,
+      businessTypes: BUSINESS_TYPES,
+    });
+    expect(shortName.nextStep).toBeUndefined();
+    expect(shortName.messages?.[1]?.text).toContain('at least 2 characters');
+
+    const shortCategory = transitionFromTextInput({
+      step: 'other_business_type',
+      rawText: 'X',
+      data: BASE_DATA,
+      countries: COUNTRIES,
+      businessTypes: BUSINESS_TYPES,
+    });
+    expect(shortCategory.nextStep).toBeUndefined();
+    expect(shortCategory.messages?.[1]?.text).toContain(
+      'at least 2 characters'
+    );
   });
 });

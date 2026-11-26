@@ -6,6 +6,7 @@ export type ServerActionState = {
   code?: string;
   businessName?: string;
   merchantId?: string;
+  merchantSlug?: string;
   errors?: { fieldErrors: Record<string, string[] | undefined> };
 };
 

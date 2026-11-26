@@ -131,8 +131,17 @@ export function sanitizeSlugInput(value: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+export function isReservedStoreSlug(slug: string): boolean {
+  return RESERVED_ONBOARDING_SLUGS.has(slug.trim().toLowerCase());
+}
+
 export function isValidStoreSlug(slug: string): boolean {
-  return slug.length >= 3 && slug.length <= 63 && STORE_SLUG_PATTERN.test(slug);
+  return (
+    slug.length >= 3 &&
+    slug.length <= 63 &&
+    STORE_SLUG_PATTERN.test(slug) &&
+    !isReservedStoreSlug(slug)
+  );
 }
 
 export function slugifyBusinessName(value: string): string {

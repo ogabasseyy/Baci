@@ -117,12 +117,13 @@ describe('web-onboarding-store-actions', () => {
     expect(trackMerchantSignupCompleted).not.toHaveBeenCalled();
   });
 
-  it('fires signup started and completed analytics on successful store launch', async () => {
+  it('fires signup started and completed analytics and notifies when server de-dupes the assigned slug', async () => {
     vi.mocked(submitOnboarding).mockResolvedValueOnce({
       success: true,
       message: 'Store created!',
       merchantId: 'merchant-42',
       businessName: 'Kicks Hub',
+      merchantSlug: 'kicks-hub-2',
     });
     const originalLocation = window.location;
     Object.defineProperty(window, 'location', {
@@ -133,6 +134,13 @@ describe('web-onboarding-store-actions', () => {
       const ctx = makeCtx();
       await runWebStoreLaunch(ctx);
 
+      expect(ctx.setData).toHaveBeenCalledOnce();
+      expect(ctx.appendMessages).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'assistant',
+          text: expect.stringContaining('kicks-hub-2.usebaci.com'),
+        })
+      );
       expect(trackMerchantSignupStarted).toHaveBeenCalledWith({
         business_name: 'Kicks Hub',
         business_type: 'fashion',

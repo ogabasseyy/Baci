@@ -51,6 +51,14 @@ export function transitionFromBusinessName(
 ): TransitionResult {
   const trimmed = name.trim();
   if (!trimmed) return {};
+  if (trimmed.length < 2) {
+    return {
+      messages: exchangeMessages(
+        trimmed,
+        'Please enter a store name with at least 2 characters.'
+      ),
+    };
+  }
   const generatedSlug = slugifyBusinessName(trimmed) || 'my-store';
   if (options?.returnToSummary) {
     const keepCustomSlug = Boolean(

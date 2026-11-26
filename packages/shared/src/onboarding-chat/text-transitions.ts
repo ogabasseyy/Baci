@@ -184,6 +184,14 @@ export function transitionFromTextInput(
   }
 
   if (step === 'other_business_type') {
+    if (trimmed.length < 2) {
+      return {
+        messages: exchangeMessages(
+          trimmed,
+          'Please describe your business type with at least 2 characters.'
+        ),
+      };
+    }
     return {
       nextData: { otherBusinessType: trimmed },
       nextStep: 'business_name',

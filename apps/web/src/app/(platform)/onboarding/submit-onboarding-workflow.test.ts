@@ -192,6 +192,7 @@ describe('runSubmitOnboardingWorkflow', () => {
       message: 'Store created!',
       businessName: 'Kicks Hub',
       merchantId: 'merchant-1',
+      merchantSlug: 'kicks-hub-ng',
     });
   });
 
@@ -228,6 +229,7 @@ describe('runSubmitOnboardingWorkflow', () => {
       message: 'Welcome back! Redirecting to your dashboard...',
       businessName: 'Kicks Hub',
       merchantId: 'merchant-1',
+      merchantSlug: 'old-live-slug',
     });
   });
 

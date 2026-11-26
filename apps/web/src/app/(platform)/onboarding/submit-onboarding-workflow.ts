@@ -231,6 +231,7 @@ export async function runSubmitOnboardingWorkflow(
           : 'Store created!',
       businessName: persisted.businessName,
       merchantId: merchant.id,
+      merchantSlug,
     };
   } catch (error) {
     if (error instanceof OnboardingSlugUnavailableError) {

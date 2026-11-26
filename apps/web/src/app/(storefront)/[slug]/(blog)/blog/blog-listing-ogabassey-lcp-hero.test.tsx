@@ -9,12 +9,18 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    prefetch,
     ...props
   }: {
     children: ReactNode;
     href: string;
+    prefetch?: boolean;
   }) => (
-    <a href={href} {...props}>
+    <a
+      href={href}
+      data-prefetch={prefetch === undefined ? undefined : String(prefetch)}
+      {...props}
+    >
       {children}
     </a>
   ),
@@ -81,6 +87,7 @@ describe('BlogListingOgabasseyLcpHero', () => {
       'href',
       'https://ogabassey.com/blog/featured-listing-post'
     );
+    expect(featuredLink).toHaveAttribute('data-prefetch', 'false');
     expect(featuredLink).toHaveClass('ogabassey-blog-lcp-hero__frame');
     expect(document.querySelector('.ogabassey-blog-lcp-hero')?.tagName).toBe(
       'DIV'

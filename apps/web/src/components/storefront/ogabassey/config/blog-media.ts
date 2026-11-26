@@ -51,6 +51,24 @@ export const BLOG_LISTING_FEATURED_IMAGE_SIZES =
 /** Fallback preload width for the blog listing featured-story hero. */
 export const BLOG_LISTING_FEATURED_IMAGE_PRELOAD_WIDTH = 750;
 
-/** Responsive `sizes` for blog listing cards (1/2/3 columns as width grows). */
+/**
+ * Responsive `sizes` for blog listing grid cards (1/2/3 columns inside the
+ * `max-w-[1400px]` `px-4 md:px-6` container with `gap-8`):
+ * - Mobile (<768px): 1 column -> `calc(100vw - 2rem)` (358px at 390px)
+ * - Tablet (768px - 1023px): 2 columns -> `calc(50vw - 2.5rem)`
+ * - Desktop (1024px - 1399px): 3 columns -> `33vw` (~304-429px)
+ * - Wide desktop (>=1400px): capped by container -> `430px`
+ */
 export const BLOG_LISTING_CARD_IMAGE_SIZES =
-  '(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw';
+  '(max-width: 767px) calc(100vw - 2rem), (max-width: 1023px) calc(50vw - 2.5rem), (max-width: 1399px) 33vw, 430px';
+
+/**
+ * Width bounds for blog listing grid card `srcSet` candidates.
+ *
+ * Matches the prewarmed `384 / 640 / 750` blog card buckets in
+ * `ogabassey-image-prewarm-pairs.ts` so `390px DPR 3` phones and high-DPR
+ * desktops do not fetch `1080w+` candidates for `h-64` (256px-tall) cards and
+ * contend with the AVIF hero on Slow-4G.
+ */
+export const BLOG_LISTING_CARD_MIN_SRCSET_WIDTH = 384;
+export const BLOG_LISTING_CARD_MAX_SRCSET_WIDTH = 750;

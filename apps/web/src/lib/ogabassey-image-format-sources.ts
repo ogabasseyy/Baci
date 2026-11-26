@@ -25,7 +25,13 @@ import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loa
 
 type GetImagePropsInput = Parameters<typeof getImageProps>[0];
 
-export type OgabasseyImageFormatPropsInput = Omit<GetImagePropsInput, 'loader'>;
+export type OgabasseyImageFormatPropsInput = Omit<
+  GetImagePropsInput,
+  'loader'
+> & {
+  maxSrcSetWidth?: number;
+  minSrcSetWidth?: number;
+};
 
 export interface OgabasseyAvifSourceProps {
   sizes?: string;
@@ -35,6 +41,99 @@ export interface OgabasseyAvifSourceProps {
 export interface OgabasseyImageFormatProps {
   avifSource: OgabasseyAvifSourceProps | null;
   imgProps: ReturnType<typeof getImageProps>['props'];
+}
+
+interface ParsedSrcSetCandidate {
+  raw: string;
+  url: string;
+  width: number;
+}
+
+function parseWidthSrcSetCandidates(
+  srcSet: string
+): ParsedSrcSetCandidate[] | null {
+  const candidates: ParsedSrcSetCandidate[] = [];
+  for (const entry of srcSet.split(/,\s+/)) {
+    const trimmed = entry.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const match = trimmed.match(/^(\S+)\s+(\d+)w$/i);
+    if (!match) {
+      return null;
+    }
+    candidates.push({
+      raw: trimmed,
+      url: match[1],
+      width: Number.parseInt(match[2], 10),
+    });
+  }
+  return candidates.length > 0 ? candidates : null;
+}
+
+function clampCandidateToMaxWidth(
+  candidate: ParsedSrcSetCandidate,
+  maxWidth: number
+): ParsedSrcSetCandidate {
+  const url = candidate.url
+    .replace(/\bwidth=\d+/i, `width=${maxWidth}`)
+    .replace(/([?&]w=)\d+/i, `$1${maxWidth}`);
+  return {
+    raw: `${url} ${maxWidth}w`,
+    url,
+    width: maxWidth,
+  };
+}
+
+function normalizeWidthBound(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function boundImageFormatImgProps(
+  imgProps: ReturnType<typeof getImageProps>['props'],
+  minSrcSetWidth?: number,
+  maxSrcSetWidth?: number,
+  hasOverrideSrc = false
+): ReturnType<typeof getImageProps>['props'] {
+  const minWidth = normalizeWidthBound(minSrcSetWidth);
+  const maxWidth = normalizeWidthBound(maxSrcSetWidth);
+  if ((minWidth === undefined && maxWidth === undefined) || !imgProps.srcSet) {
+    return imgProps;
+  }
+
+  const parsed = parseWidthSrcSetCandidates(imgProps.srcSet);
+  if (!parsed) {
+    return imgProps;
+  }
+
+  const sorted = [...parsed].sort((a, b) => a.width - b.width);
+  const underMax =
+    maxWidth !== undefined
+      ? sorted.filter((candidate) => candidate.width <= maxWidth)
+      : sorted;
+  const boundedMax =
+    underMax.length > 0
+      ? underMax
+      : maxWidth !== undefined
+        ? [clampCandidateToMaxWidth(sorted[0], maxWidth)]
+        : sorted;
+  const aboveMin =
+    minWidth !== undefined
+      ? boundedMax.filter((candidate) => candidate.width >= minWidth)
+      : boundedMax;
+  const bounded = aboveMin.length > 0 ? aboveMin : boundedMax;
+  const wasTopCapped =
+    !hasOverrideSrc &&
+    maxWidth !== undefined &&
+    sorted[sorted.length - 1].width > maxWidth;
+
+  return {
+    ...imgProps,
+    src: wasTopCapped ? bounded[bounded.length - 1].url : imgProps.src,
+    srcSet: bounded.map((candidate) => candidate.raw).join(', '),
+  };
 }
 
 /**
@@ -81,10 +180,17 @@ export function buildOgabasseyAvifSrcSet(
 export function getOgabasseyImageFormatProps(
   input: OgabasseyImageFormatPropsInput
 ): OgabasseyImageFormatProps {
-  const { props: imgProps } = getImageProps({
-    ...input,
+  const { maxSrcSetWidth, minSrcSetWidth, ...imageInput } = input;
+  const { props: rawImgProps } = getImageProps({
+    ...imageInput,
     loader: ogabasseyFallbackImageLoader,
   } as GetImagePropsInput);
+  const imgProps = boundImageFormatImgProps(
+    rawImgProps,
+    minSrcSetWidth,
+    maxSrcSetWidth,
+    Boolean(imageInput.overrideSrc)
+  );
 
   const avifSrcSet = buildOgabasseyAvifSrcSet(imgProps.srcSet);
 

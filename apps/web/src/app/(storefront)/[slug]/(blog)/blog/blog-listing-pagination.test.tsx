@@ -6,12 +6,18 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    prefetch,
     ...rest
   }: {
     children: React.ReactNode;
     href: string;
+    prefetch?: boolean;
   } & Record<string, unknown>) => (
-    <a href={href} {...rest}>
+    <a
+      href={href}
+      data-prefetch={prefetch === undefined ? undefined : String(prefetch)}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -169,5 +175,17 @@ describe('BlogListingPagination', () => {
     expect(
       screen.queryByText('Browse blog archive pages')
     ).not.toBeInTheDocument();
+  });
+
+  it('disables eager prefetch on every pagination link', () => {
+    render(
+      <BlogListingPagination storeBasePath="" currentPage={3} totalPages={36} />
+    );
+
+    const links = screen.getAllByRole('link');
+    expect(links.length).toBeGreaterThanOrEqual(5);
+    for (const link of links) {
+      expect(link).toHaveAttribute('data-prefetch', 'false');
+    }
   });
 });

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import { BLOG_LISTING_CARD_IMAGE_SIZES } from '../config/blog-media';
 import { OgabasseyV2Blog, type BlogPost } from './blog';
 
 interface MockNextImageProps {
@@ -96,19 +97,12 @@ describe('OgabasseyV2Blog', () => {
   it('renders grid posts with lazy low-priority images', () => {
     render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
 
-    const gridImage = screen
-      .getAllByTestId('next-image')
-      .find((img) => img.getAttribute('src') === 'https://example.com/regular.jpg');
+    const gridImage = screen.getByRole('img', { name: 'Regular Post' });
 
-    expect(gridImage).toBeInTheDocument();
-    expect(gridImage).toHaveAttribute('data-loading', 'lazy');
-    expect(gridImage).toHaveAttribute('data-fetchpriority', 'low');
-    expect(gridImage).toHaveAttribute('data-fill', 'true');
-    expect(gridImage).toHaveAttribute(
-      'data-sizes',
-      '(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw'
-    );
-    expect(gridImage).toHaveAttribute('quality', '50');
+    expect(gridImage).toHaveAttribute('src', 'https://example.com/regular.jpg');
+    expect(gridImage).toHaveAttribute('loading', 'lazy');
+    expect(gridImage).toHaveAttribute('fetchpriority', 'low');
+    expect(gridImage).toHaveAttribute('sizes', BLOG_LISTING_CARD_IMAGE_SIZES);
   });
 
   it('falls back before rendering Next Image when blog image URLs are malformed', () => {

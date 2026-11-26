@@ -241,4 +241,144 @@ describe('POST /api/onboarding/assist', () => {
       },
     });
   });
+
+  it('preserves valid raster logos on generate_logos', async () => {
+    const pngLogo = 'data:image/png;base64,iVBORw0KGgo=';
+    vi.mocked(runGuideBusinessOnboarding).mockResolvedValueOnce({
+      logos: [pngLogo, 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='],
+      brandColors: {
+        primary: '#111111',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+
+    const response = await POST(
+      makeRequest({
+        task: 'generate_logos',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'minimal',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      logos: [pngLogo],
+      brandColors: {
+        primary: '#111111',
+        background: '#FFFFFF',
+        accent: '#F59E0B',
+      },
+    });
+  });
+
+  it.each([
+    {
+      task: 'generate_names',
+      extra: { description: 'Sneakers in Lagos' },
+      ipEndpoint: '/api/onboarding/assist:ip',
+      userEndpoint: '/api/onboarding/assist',
+      userMax: 12,
+    },
+    {
+      task: 'generate_logos',
+      extra: {},
+      ipEndpoint: '/api/onboarding/assist:logos:ip',
+      userEndpoint: '/api/onboarding/assist:logos',
+      userMax: 5,
+    },
+    {
+      task: 'extract_colors',
+      extra: {
+        logoUrl:
+          'https://project.supabase.co/storage/v1/object/public/images/onboarding/user-123/logo.png',
+      },
+      ipEndpoint: '/api/onboarding/assist:colors:ip',
+      userEndpoint: '/api/onboarding/assist:colors',
+      userMax: 10,
+    },
+  ])('enforces per-user 429 on $task after IP bucket allows', async ({
+    task,
+    extra,
+    ipEndpoint,
+    userEndpoint,
+    userMax,
+  }) => {
+    vi.mocked(applyRateLimit)
+      .mockResolvedValueOnce({
+        allowed: true,
+        limit: 30,
+        remaining: 29,
+        resetTime: Date.now() + 600_000,
+      })
+      .mockResolvedValueOnce({
+        allowed: false,
+        limit: userMax,
+        remaining: 0,
+        resetTime: Date.now() + 600_000,
+      });
+
+    const response = await POST(
+      makeRequest({
+        task,
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        brandPreferences: 'modern',
+        ...extra,
+      })
+    );
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ code: 'rate_limited' });
+    expect(applyRateLimit).toHaveBeenNthCalledWith(
+      1,
+      'ip:203.0.113.10',
+      ipEndpoint,
+      expect.objectContaining({ failClosedWithoutRedis: true })
+    );
+    expect(applyRateLimit).toHaveBeenNthCalledWith(
+      2,
+      'user:user-123',
+      userEndpoint,
+      expect.objectContaining({
+        maxRequests: userMax,
+        failClosedWithoutRedis: true,
+      })
+    );
+    expect(runGuideBusinessOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('maps AI rate-limit errors to 429 and unexpected AI errors to 503 ai_unavailable', async () => {
+    vi.mocked(runGuideBusinessOnboarding).mockRejectedValueOnce(
+      new Error('Too many AI onboarding requests for this account')
+    );
+
+    const rateLimited = await POST(
+      makeRequest({
+        task: 'generate_names',
+        businessName: '',
+        businessType: 'fashion',
+        brandPreferences: 'modern',
+        description: 'Sneakers in Lagos',
+      })
+    );
+    expect(rateLimited.status).toBe(429);
+    expect(await rateLimited.json()).toMatchObject({ code: 'rate_limited' });
+
+    vi.mocked(runGuideBusinessOnboarding).mockRejectedValueOnce(
+      new Error('Upstream Gemini timeout')
+    );
+    const unavailable = await POST(
+      makeRequest({
+        task: 'generate_names',
+        businessName: '',
+        businessType: 'fashion',
+        brandPreferences: 'modern',
+        description: 'Sneakers in Lagos',
+      })
+    );
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.json()).toMatchObject({ code: 'ai_unavailable' });
+  });
 });

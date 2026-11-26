@@ -8,6 +8,7 @@ import { OnboardingPuckPreview } from '@/components/onboarding-puck-preview';
 import { PasswordStrengthIndicator } from '@/components/password-strength-indicator';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { getRootDomain } from '@/env';
 import { checkPasswordStrength } from '@/lib/utils';
 import { ChatMessageBubble } from './ChatMessageBubble';
 import { CountryPickerDialog } from './CountryPickerDialog';
@@ -232,7 +233,8 @@ export default function WebOnboardingChat() {
           <div className="flex items-center gap-2 border-b border-border bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
             <Globe className="size-3.5 shrink-0 text-primary" />
             <span className="truncate font-mono">
-              https://{chat.data.slug || 'your-store'}.usebaci.com
+              https://{chat.data.slug || 'your-store'}.
+              {getRootDomain() || 'usebaci.com'}
             </span>
           </div>
           <div className="flex-1 overflow-y-auto p-3">

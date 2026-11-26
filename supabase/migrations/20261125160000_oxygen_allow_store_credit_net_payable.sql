@@ -368,39 +368,27 @@ BEGIN
 END $migration$;
 
 -- 3. oxygen_saved_plans & oxygen_accept_saved_plan: key plans against net payable.
-CREATE OR REPLACE FUNCTION public.oxygen_saved_plans(p_workflow_id uuid,p_booking_reference uuid DEFAULT NULL)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
-DECLARE amount numeric; chosen uuid; answer jsonb;
+DO $migration$
+DECLARE
+  definition text;
+  needle text;
+  occurrences integer;
 BEGIN
- IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
- SELECT oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status) INTO amount FROM public.oxygen_workflows w
- JOIN public.orders o ON o.id=w.order_id AND o.merchant_id=w.merchant_id AND o.customer_id=w.customer_id
- JOIN public.customers c ON c.id=w.customer_id AND c.merchant_id=w.merchant_id
- WHERE w.id=p_workflow_id AND c.user_id=auth.uid() AND w.environment='staging'
- FOR UPDATE OF w;
- IF NOT FOUND THEN RAISE EXCEPTION 'Unavailable' USING ERRCODE='42501'; END IF;
- IF p_booking_reference IS NOT NULL THEN
-  IF NOT EXISTS(SELECT 1 FROM oxygen_private.saved_plans WHERE workflow_id=p_workflow_id AND booking_reference=p_booking_reference AND product_amount=amount) THEN
-   RAISE EXCEPTION 'Plan unavailable' USING ERRCODE='22023';
+  definition := pg_catalog.pg_get_functiondef('public.oxygen_saved_plans(uuid,uuid)'::regprocedure);
+
+  needle := 'SELECT o.total INTO amount';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected oxygen_saved_plans total selection count: %', occurrences;
   END IF;
-  INSERT INTO oxygen_private.plan_selections(workflow_id,booking_reference) VALUES(p_workflow_id,p_booking_reference)
-  ON CONFLICT(workflow_id) DO UPDATE SET booking_reference=excluded.booking_reference;
- END IF;
- SELECT s.booking_reference INTO chosen FROM oxygen_private.plan_selections s
- JOIN oxygen_private.saved_plans p USING(workflow_id,booking_reference)
- WHERE s.workflow_id=p_workflow_id AND p.product_amount=amount;
- IF chosen IS NULL THEN
-  SELECT p.booking_reference INTO chosen FROM oxygen_private.saved_plans p
-  LEFT JOIN oxygen_private.provider_states s ON s.workflow_id=p.workflow_id
-  WHERE p.workflow_id=p_workflow_id AND p.product_amount=amount
-  ORDER BY (p.booking_reference::text=s.state->>'bookingReference') DESC,p.updated_at DESC LIMIT 1;
- END IF;
- SELECT coalesce(jsonb_agg(jsonb_build_object('bookingReference',booking_reference,
-  'productAmount',product_amount,'equityPercentage',equity_percentage,'tenure',tenure,
-  'state',state,'updatedAt',updated_at) ORDER BY equity_percentage,tenure),'[]'::jsonb)
- INTO answer FROM oxygen_private.saved_plans WHERE workflow_id=p_workflow_id AND product_amount=amount;
- RETURN jsonb_build_object('plans',answer,'selectedReference',chosen);
-END $$;
+  definition := replace(
+    definition,
+    needle,
+    'SELECT oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status) INTO amount'
+  );
+
+  EXECUTE definition;
+END $migration$;
 
 DO $migration$
 DECLARE

@@ -21,7 +21,7 @@ import {
   waitFor,
 } from './checkout-page-test-support';
 
-it('hides Klump when wallet credit is auto-applied', async () => {
+it('keeps Klump available when partial wallet credit reduces the payable balance', async () => {
   vi.mocked(useAuthSafe).mockReturnValue({
     user: {
       id: 'customer-1',
@@ -105,7 +105,7 @@ it('hides Klump when wallet credit is auto-applied', async () => {
       ).toBe(true);
     });
     await waitFor(() => {
-      expect(screen.queryByText('Klump')).not.toBeInTheDocument();
+      expect(screen.getByText('Klump')).toBeInTheDocument();
     });
   } finally {
     fetchMock.mockRestore();

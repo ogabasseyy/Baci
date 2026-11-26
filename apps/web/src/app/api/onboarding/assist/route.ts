@@ -145,9 +145,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Check IP bucket BEFORE per-user bucket so a shared-IP throttle does not
-  // burn the caller's personal quota.
+  // burn the caller's personal quota. Skip the IP bucket when no trusted IP is
+  // available ('unknown') so callers never collapse into one shared bucket.
   const clientIp = getTrustedClientIdentifier(request);
-  if (clientIp) {
+  if (clientIp && clientIp !== 'unknown') {
     const ipBucket =
       task === 'generate_logos'
         ? {

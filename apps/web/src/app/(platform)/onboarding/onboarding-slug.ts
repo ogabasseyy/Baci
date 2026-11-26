@@ -46,10 +46,7 @@ export function isRenameSlugUnavailableError(error: {
 }): boolean {
   const key = (error.message ?? '').trim();
   return (
-    error.code === '23505' ||
-    key === 'slug_taken' ||
-    key === 'reserved_slug' ||
-    key === 'invalid_slug'
+    key === 'slug_taken' || key === 'reserved_slug' || key === 'invalid_slug'
   );
 }
 

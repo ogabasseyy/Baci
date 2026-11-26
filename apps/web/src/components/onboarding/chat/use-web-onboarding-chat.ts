@@ -128,11 +128,23 @@ export function useWebOnboardingChat() {
   useEffect(() => {
     let active = true;
     const supabase = createClient();
-    supabase.auth
-      .getUser()
-      .then(({ data: authData }) => {
+    const hydrate = async () => {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
         if (!active || !authData.user) return;
         const nextUser = authData.user;
+        if (typeof supabase.from === 'function') {
+          const { data: existingMerchant } = await supabase
+            .from('merchants')
+            .select('business_name')
+            .eq('user_id', nextUser.id)
+            .maybeSingle();
+          if (!active) return;
+          if (existingMerchant?.business_name) {
+            window.location.href = '/dashboard';
+            return;
+          }
+        }
         const nextData = initialStoreData(nextUser);
         const needsName = !nextData.firstName || !nextData.lastName;
         setUser(nextUser);
@@ -152,10 +164,11 @@ export function useWebOnboardingChat() {
               : `Welcome to Baci, ${nextData.firstName}! Let's set up your store together. Where is your business based?`,
           },
         ]);
-      })
-      .finally(() => {
+      } finally {
         if (active) setIsHydrating(false);
-      });
+      }
+    };
+    void hydrate();
     return () => {
       active = false;
     };

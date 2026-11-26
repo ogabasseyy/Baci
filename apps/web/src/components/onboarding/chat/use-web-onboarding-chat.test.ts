@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWebOnboardingChat } from './use-web-onboarding-chat';
 
 const mockGetUser = vi.fn();
+const mockMaybeSingle = vi.fn();
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: vi.fn(() => ({
@@ -11,6 +12,13 @@ vi.mock('@/lib/supabase/client', () => ({
       signInWithOAuth: vi.fn(),
       signUp: vi.fn(),
     },
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: mockMaybeSingle,
+        })),
+      })),
+    })),
   })),
 }));
 
@@ -22,6 +30,7 @@ vi.mock('@/app/(platform)/onboarding/actions', () => ({
 describe('useWebOnboardingChat', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
   });
 
   it('starts in auth_choice when unauthenticated', async () => {
@@ -55,5 +64,38 @@ describe('useWebOnboardingChat', () => {
     });
     expect(result.current.step).toBe('phone');
     expect(result.current.data.country).toBe('NG');
+  });
+
+  it('redirects already-completed merchants to /dashboard during hydration', async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'user-completed',
+          email: 'live@example.com',
+          user_metadata: { first_name: 'Ada', last_name: 'Okafor' },
+        },
+      },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { business_name: 'Existing Store' },
+      error: null,
+    });
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: '' },
+    });
+    try {
+      const { result } = renderHook(() => useWebOnboardingChat());
+      await waitFor(() => {
+        expect(window.location.href).toBe('/dashboard');
+      });
+      expect(result.current.step).toBe('auth_choice');
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
   });
 });

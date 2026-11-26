@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   hasEstablishedOnboardingSlug,
+  isRenameSlugUnavailableError,
   resolveOnboardingMerchantSlug,
 } from './onboarding-slug';
 
@@ -22,5 +23,24 @@ describe('resolveOnboardingMerchantSlug', () => {
     await expect(
       resolveOnboardingMerchantSlug({ rpc }, 'Baci Food')
     ).resolves.toBe('baci-food-2');
+  });
+
+  it('classifies only explicit rename_merchant_slug unavailable error keys and not arbitrary 23505s', () => {
+    expect(
+      isRenameSlugUnavailableError({ code: '23505', message: 'slug_taken' })
+    ).toBe(true);
+    expect(
+      isRenameSlugUnavailableError({ code: '22023', message: 'reserved_slug' })
+    ).toBe(true);
+    expect(
+      isRenameSlugUnavailableError({ code: '22023', message: 'invalid_slug' })
+    ).toBe(true);
+    expect(
+      isRenameSlugUnavailableError({
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "domains_pkey"',
+      })
+    ).toBe(false);
   });
 });

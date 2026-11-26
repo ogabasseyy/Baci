@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { applyRateLimit } from '@/lib/rate-limit';
+import { applyRateLimit, getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { POST } from './route';
 
 const mockGetUser = vi.fn();
@@ -139,6 +139,31 @@ describe('POST /api/onboarding/assist', () => {
       'ip:203.0.113.10',
       '/api/onboarding/assist:ip',
       expect.objectContaining({ maxRequests: 30, failClosedWithoutRedis: true })
+    );
+  });
+
+  it('skips the IP bucket when getTrustedClientIdentifier returns unknown and still enforces per-user limit', async () => {
+    vi.mocked(getTrustedClientIdentifier).mockReturnValueOnce('unknown');
+    vi.mocked(runGuideBusinessOnboarding).mockResolvedValueOnce({
+      businessNames: ['Lagos Lace'],
+    });
+
+    const response = await POST(
+      makeRequest({
+        task: 'generate_names',
+        businessName: '',
+        businessType: 'fashion',
+        brandPreferences: 'modern',
+        description: 'Sneakers in Lagos',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(applyRateLimit).toHaveBeenCalledTimes(1);
+    expect(applyRateLimit).toHaveBeenCalledWith(
+      'user:user-123',
+      '/api/onboarding/assist',
+      expect.objectContaining({ maxRequests: 12, failClosedWithoutRedis: true })
     );
   });
 

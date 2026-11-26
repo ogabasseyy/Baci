@@ -17,12 +17,11 @@ const submitLane = code.slice(code.indexOf('lane :submit do'));
 interface Store {
   review?: string;
   pastSubmissions?: string[];
-  editable?: boolean;
-  latest?: string;
+  versions?: string[];
 }
 
 // Runs the real Ruby guard against a stubbed App Store Connect.
-function runGuard({ review, pastSubmissions = [], editable, latest }: Store) {
+function runGuard({ review, pastSubmissions = [], versions = [] }: Store) {
   const ruby = (value?: string) => (value ? `"${value}"` : 'nil');
   const script = `
     module UI
@@ -44,11 +43,10 @@ function runGuard({ review, pastSubmissions = [], editable, latest }: Store) {
             raise "do not filter by state" if filter.key?(:state)
             %w[${pastSubmissions.join(' ')}].map { |s| Submission.new(s) }
           end
-          def get_edit_app_store_version(platform:)
-            ${editable ? 'Version.new("PREPARE_FOR_SUBMISSION")' : 'nil'}
-          end
-          def get_latest_app_store_version(platform:)
-            ${ruby(latest)} && Version.new(${ruby(latest)})
+          def get_app_store_versions(filter:)
+            # An approved version must be found even beside an editable one.
+            raise "do not filter by state" if filter.key?(:appVersionState)
+            %w[${versions.join(' ')}].map { |s| Version.new(s) }
           end
         end
       end
@@ -98,11 +96,15 @@ describe('admin iOS submit lane', () => {
   });
 
   it('submits when the store version can still be edited', () => {
-    expect(runGuard({ editable: true })).toContain('blocked=false');
+    expect(
+      runGuard({
+        versions: ['READY_FOR_DISTRIBUTION', 'PREPARE_FOR_SUBMISSION'],
+      })
+    ).toContain('blocked=false');
   });
 
   it('submits the next version after the last one was published', () => {
-    expect(runGuard({ latest: 'READY_FOR_DISTRIBUTION' })).toContain(
+    expect(runGuard({ versions: ['READY_FOR_DISTRIBUTION'] })).toContain(
       'blocked=false'
     );
   });
@@ -111,7 +113,7 @@ describe('admin iOS submit lane', () => {
     'WAITING_FOR_REVIEW',
     'IN_REVIEW',
   ])('skips with a visible warning while a version is %s', (review) => {
-    const output = runGuard({ review, editable: true });
+    const output = runGuard({ review, versions: ['PREPARE_FOR_SUBMISSION'] });
     expect(output).toContain(warning);
     expect(output).toContain('blocked=true');
   });
@@ -128,7 +130,10 @@ describe('admin iOS submit lane', () => {
 
   it('is not blocked by submissions that finished long ago', () => {
     expect(
-      runGuard({ pastSubmissions: ['COMPLETE'], editable: true })
+      runGuard({
+        pastSubmissions: ['COMPLETE'],
+        versions: ['PREPARE_FOR_SUBMISSION'],
+      })
     ).toContain('blocked=false');
   });
 
@@ -137,11 +142,14 @@ describe('admin iOS submit lane', () => {
     'PENDING_DEVELOPER_RELEASE',
     'PENDING_APPLE_RELEASE',
     'PROCESSING_FOR_DISTRIBUTION',
-  ])('skips while an approved version is still %s', (latest) => {
-    const output = runGuard({ latest });
-    expect(output).toContain(warning);
-    expect(output).toContain(latest);
-    expect(output).toContain('blocked=true');
+  ])('skips while an approved version is still %s', (state) => {
+    // Also when an editable successor sits beside it.
+    for (const versions of [[state], ['PREPARE_FOR_SUBMISSION', state]]) {
+      const output = runGuard({ versions });
+      expect(output).toContain(warning);
+      expect(output).toContain(state);
+      expect(output).toContain('blocked=true');
+    }
   });
 
   it('fails the run when Apple rejected the last submission', () => {

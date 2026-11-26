@@ -49,8 +49,10 @@ def occupied_slot_state(app, platform)
                  .map(&:state)
                  .find { |state| UNSETTLED_SUBMISSION_STATES.include?(state) }
   return unsettled if unsettled
-  return nil if app.get_edit_app_store_version(platform: platform)
 
-  latest = app.get_latest_app_store_version(platform: platform)&.app_version_state
-  APPROVED_UNRELEASED_VERSION_STATES.include?(latest) ? latest : nil
+  # Every version is read, not only the editable or latest one, so an approved
+  # version is found even when a successor already exists beside it.
+  app.get_app_store_versions(filter: { platform: platform })
+     .map(&:app_version_state)
+     .find { |state| APPROVED_UNRELEASED_VERSION_STATES.include?(state) }
 end

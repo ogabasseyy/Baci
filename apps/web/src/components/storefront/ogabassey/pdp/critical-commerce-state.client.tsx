@@ -376,8 +376,11 @@ export function OgabasseyPdpCriticalQuerySync({
 }: OgabasseyPdpCriticalQuerySelectionSync) {
   const syncQuerySelection = useContext(OgabasseyPdpCriticalQuerySyncContext);
   const lastSyncedKeyRef = useRef<string | null>(null);
+  const sortedAttributes = Object.entries(
+    initialVariantSelection?.attributes ?? {}
+  ).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
   const syncKey = JSON.stringify({
-    attributes: initialVariantSelection?.attributes ?? null,
+    attributes: sortedAttributes,
     condition: initialVariantSelection?.condition ?? null,
     initialOfferId: initialOfferId ?? null,
     routeOfferMissing: Boolean(routeOfferMissing),

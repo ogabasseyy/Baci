@@ -80,6 +80,7 @@ import {
 import {
   getInitialCriticalVariantSelection,
   getInitialCriticalVariantSelectionPrimaryImage,
+  hasExplicitVariantOrOfferQuery,
   shouldRedirectVariantSelectionParams,
 } from './critical-variant-selection';
 import { OgabasseyPdpRequestScopedSemanticSections } from './ogabassey-pdp-request-scoped-semantic-sections';
@@ -269,23 +270,6 @@ function startKnownOgaBasseyPdpProductPreload(
 }
 
 const EMPTY_SEARCH_PARAMS: Record<string, string | string[] | undefined> = {};
-
-function hasExplicitVariantOrOfferQuery(
-  queryRouteOffer: ReturnType<typeof resolveCriticalRouteOffer>,
-  querySelection: InitialCriticalVariantSelection | undefined,
-  canonicalSelection: InitialCriticalVariantSelection | undefined
-): boolean {
-  if (queryRouteOffer.offerId || queryRouteOffer.missing) {
-    return true;
-  }
-
-  return (
-    querySelection?.variantId !== canonicalSelection?.variantId ||
-    querySelection?.condition !== canonicalSelection?.condition ||
-    JSON.stringify(querySelection?.attributes ?? {}) !==
-      JSON.stringify(canonicalSelection?.attributes ?? {})
-  );
-}
 
 async function CategoryProductQuerySynchronizer({
   basePreloadImage,

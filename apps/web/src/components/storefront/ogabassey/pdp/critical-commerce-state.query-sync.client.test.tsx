@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { OgabasseyPdpCriticalQuerySyncContext } from './critical-commerce-state-context.client';
 import { formatCriticalPrice } from './critical-commerce-selection';
 import {
   OgabasseyPdpCriticalCommerceProvider,
@@ -203,6 +204,102 @@ describe('OgabasseyPdpCriticalQuerySync', () => {
     });
 
     expect(screen.getByTestId('missing-offer')).toHaveTextContent('true');
+  });
+
+  it('treats attributes in different insertion orders as equivalent without overwriting explicit picks', () => {
+    const { rerender } = render(
+      <OgabasseyPdpCriticalCommerceProvider
+        cartProduct={multiVariantProduct}
+        variantAxes={['storage']}
+        variantAxisOptions={{ storage: ['256GB', '512GB'] }}
+        variantCount={2}
+      >
+        <OgabasseyPdpCriticalQuerySync
+          initialVariantSelection={{
+            attributes: { storage: '512GB', color: 'Black' },
+            condition: 'used',
+            variantId: 'var-used-512',
+          }}
+        />
+        <Probe />
+      </OgabasseyPdpCriticalCommerceProvider>
+    );
+
+    expect(screen.getByTestId('selected-storage')).toHaveTextContent('512GB');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pick 256GB' }));
+    expect(screen.getByTestId('selected-storage')).toHaveTextContent('256GB');
+
+    act(() => {
+      rerender(
+        <OgabasseyPdpCriticalCommerceProvider
+          cartProduct={multiVariantProduct}
+          variantAxes={['storage']}
+          variantAxisOptions={{ storage: ['256GB', '512GB'] }}
+          variantCount={2}
+        >
+          <OgabasseyPdpCriticalQuerySync
+            initialVariantSelection={{
+              attributes: { color: 'Black', storage: '512GB' },
+              condition: 'used',
+              variantId: 'var-used-512',
+            }}
+          />
+          <Probe />
+        </OgabasseyPdpCriticalCommerceProvider>
+      );
+    });
+
+    expect(screen.getByTestId('selected-storage')).toHaveTextContent('256GB');
+  });
+
+  it('skips duplicate synchronization delivery when only attribute key order changes', () => {
+    const syncSpy = vi.fn();
+    const { rerender } = render(
+      <OgabasseyPdpCriticalQuerySyncContext.Provider value={syncSpy}>
+        <OgabasseyPdpCriticalQuerySync
+          initialVariantSelection={{
+            attributes: { storage: '512GB', color: 'Black' },
+            condition: 'used',
+            variantId: 'var-used-512',
+          }}
+        />
+      </OgabasseyPdpCriticalQuerySyncContext.Provider>
+    );
+
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      rerender(
+        <OgabasseyPdpCriticalQuerySyncContext.Provider value={syncSpy}>
+          <OgabasseyPdpCriticalQuerySync
+            initialVariantSelection={{
+              attributes: { color: 'Black', storage: '512GB' },
+              condition: 'used',
+              variantId: 'var-used-512',
+            }}
+          />
+        </OgabasseyPdpCriticalQuerySyncContext.Provider>
+      );
+    });
+
+    expect(syncSpy).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      rerender(
+        <OgabasseyPdpCriticalQuerySyncContext.Provider value={syncSpy}>
+          <OgabasseyPdpCriticalQuerySync
+            initialVariantSelection={{
+              attributes: { color: 'Black', storage: '256GB' },
+              condition: 'new',
+              variantId: 'var-new-256',
+            }}
+          />
+        </OgabasseyPdpCriticalQuerySyncContext.Provider>
+      );
+    });
+
+    expect(syncSpy).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces missing route offer without overriding an explicit shopper interaction', () => {

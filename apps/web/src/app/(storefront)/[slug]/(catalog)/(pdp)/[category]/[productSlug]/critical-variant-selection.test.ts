@@ -3,6 +3,7 @@ import type { Product } from '@/lib/products';
 import {
   getInitialCriticalVariantSelection,
   getInitialCriticalVariantSelectionPrimaryImage,
+  hasExplicitVariantOrOfferQuery,
   resolveServerPdpRouteSelectionStatus,
   shouldRedirectVariantSelectionParams,
 } from './critical-variant-selection';
@@ -211,6 +212,42 @@ describe('critical variant selection helpers', () => {
         missingOfferId: false,
         hasMissingRouteSelection: false,
       });
+    });
+  });
+
+  describe('hasExplicitVariantOrOfferQuery', () => {
+    it('treats attributes in different insertion orders as equal', () => {
+      expect(
+        hasExplicitVariantOrOfferQuery(
+          { offerId: null, missing: false },
+          {
+            variantId: 'variant-1',
+            condition: 'used',
+            attributes: { storage: '128GB', color: 'Black' },
+          },
+          {
+            variantId: 'variant-1',
+            condition: 'used',
+            attributes: { color: 'Black', storage: '128GB' },
+          }
+        )
+      ).toBe(false);
+
+      expect(
+        hasExplicitVariantOrOfferQuery(
+          { offerId: null, missing: false },
+          {
+            variantId: 'variant-1',
+            condition: 'used',
+            attributes: { storage: '256GB', color: 'Black' },
+          },
+          {
+            variantId: 'variant-1',
+            condition: 'used',
+            attributes: { color: 'Black', storage: '128GB' },
+          }
+        )
+      ).toBe(true);
     });
   });
 });

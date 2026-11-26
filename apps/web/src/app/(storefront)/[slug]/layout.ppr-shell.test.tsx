@@ -75,9 +75,11 @@ describe('storefront layout PPR shell', () => {
     unmount();
   });
 
-  it('upgrades to OgaBassey shell chrome and document theme scoping once tenant resolution settles', async () => {
-    vi.mocked(getStorefrontShellSnapshotBase).mockResolvedValue(
-      baseShellSnapshotWithoutCategories
+  it('upgrades to OgaBassey shell chrome and document theme scoping without remounting the committed route node', async () => {
+    const deferredBaseSnapshot =
+      createDeferred<BaseShellSnapshotWithoutCategories>();
+    vi.mocked(getStorefrontShellSnapshotBase).mockReturnValue(
+      deferredBaseSnapshot.promise
     );
     vi.mocked(getStorefrontShellSnapshot).mockResolvedValue(baseShellSnapshot);
 
@@ -94,6 +96,14 @@ describe('storefront layout PPR shell', () => {
       await Promise.resolve();
     });
 
+    const initialMainElement = screen.getByRole('main');
+    expect(themeProviderDocumentScopes).toEqual([false]);
+
+    await act(async () => {
+      deferredBaseSnapshot.resolve(baseShellSnapshotWithoutCategories);
+      await deferredBaseSnapshot.promise;
+    });
+
     await waitFor(() => {
       expect(themeProviderDocumentScopes.at(-1)).toBe(true);
     });
@@ -106,8 +116,8 @@ describe('storefront layout PPR shell', () => {
       container?.querySelector('.ogabassey-storefront-shell')
     ).toBeTruthy();
     expect(
-      container?.querySelector('#main-content.ogabassey-storefront-main')
-    ).toContainElement(screen.getByText('Storefront content'));
+      container?.querySelector('#main-content.ogabassey-storefront-main > main')
+    ).toBe(initialMainElement);
 
     unmount();
   });

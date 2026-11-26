@@ -1,6 +1,7 @@
 default_platform(:ios)
 
 require "English"
+require_relative "pending_review_guard"
 
 WORKSPACE = "ios/BaciTheEcommerceBuilder.xcworkspace"
 SCHEME = "BaciTheEcommerceBuilder"
@@ -257,7 +258,8 @@ platform :ios do
       submit_for_review: true,
       automatic_release: true,
       force: true,
-      reject_if_possible: true,
+      # Never withdraw a review that is already queued; see pending_review_guard.
+      reject_if_possible: false,
       precheck_include_in_app_purchases: false,
       # IDFA: the admin app uses the advertiser identifier for ad-attribution of
       # Baci's own acquisition marketing (TikTok Business SDK install/action
@@ -296,6 +298,9 @@ platform :ios do
       app_version: app_version,
       build_number: build_number
     )
+
+    # Before set_changelog, which would rename a version Apple is still holding.
+    next if pending_review_blocks_submission?(app_id: BUNDLE_ID)
 
     changelog_opts = { api_key: api_key, changelog: release_notes_text }
     changelog_opts[:version] = app_version unless app_version.empty?

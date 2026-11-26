@@ -348,6 +348,7 @@ web:
   - '.github/scripts/web-build-timeout-contract.test.mjs'
   - '.github/scripts/web-test-checkout-contract.test.mjs'
   - '.github/scripts/ci-lint-gate-contract.test.mjs'
+  - '.github/scripts/ci-mobile-test-gate-contract.test.mjs'
   - '.github/scripts/ci-typecheck-runner-contract.test.mjs'
   - '.github/scripts/production-build-typecheck-scope.mjs'
   - '.github/scripts/production-typecheck-scope.test.mjs'

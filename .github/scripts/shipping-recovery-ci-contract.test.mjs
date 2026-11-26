@@ -21,7 +21,8 @@ test('the quality gate enables real recovery PostgreSQL tests before test-plan s
   assert.ok(index >= 0, 'missing real PostgreSQL recovery step');
   const step = steps[index];
   assert.equal(step.env.BACI_SHIPPING_QUOTE_POSTGRES, '1');
-  assert.equal(step.if, undefined, 'the actor permission suite must not depend on test-plan shortcuts');
+  // The only allowed limit is the web flag: mobile-only runs of this job skip it.
+  assert.equal(step.if, "needs.changes.outputs.web == 'true'", 'the actor permission suite must not depend on test-plan shortcuts');
   assert.ok(index < steps.findIndex((candidate) => candidate.name === 'Run Tests'));
   for (const suite of [
     'customer-checkout-shipping-recovery-acl.postgres.test.ts',

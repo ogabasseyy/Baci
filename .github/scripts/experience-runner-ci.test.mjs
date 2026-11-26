@@ -10,7 +10,7 @@ test('portable experience units are in the existing required non-sharded web job
   assert.equal(steps.length, 1);
   assert.equal(job.strategy, undefined);
   assert.equal(steps[0]['continue-on-error'], undefined);
-  assert.equal(steps[0].if, "steps.test-plan.outputs.mode != 'config-smoke'");
+  assert.equal(steps[0].if, "needs.changes.outputs.web == 'true' && steps.test-plan.outputs.mode != 'config-smoke'");
   assert.ok(workflow.jobs.quality.needs.includes('quality-test'));
   assert.equal(workflow.jobs['quality-test-web'].steps.filter(s=>s.run?.includes('test:experience:runner')).length,0);
 });

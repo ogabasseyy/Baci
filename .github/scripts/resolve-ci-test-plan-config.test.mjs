@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ciTestPlanConfig } from './resolve-ci-test-plan-config.mjs';
 import './ci-lint-gate-contract.test.mjs';
+import './ci-mobile-test-gate-contract.test.mjs';
 import './ci-typecheck-runner-contract.test.mjs';
 import './ci-web-shard-runner-contract.test.mjs';
 import './ci-non-web-runner-contract.test.mjs';

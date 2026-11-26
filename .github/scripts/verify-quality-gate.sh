@@ -26,6 +26,13 @@ if [[ ( "$WEB_CHANGED" == "true" || "$MOBILE_ADMIN_CHANGED" == "true" || "$MOBIL
   exit 1
 fi
 
+# Same rule for unit tests: quality-test holds the mobile tests too, so a skip
+# is never success when web or mobile paths changed (it runs in config-smoke).
+if [[ ( "$WEB_CHANGED" == "true" || "$MOBILE_ADMIN_CHANGED" == "true" || "$MOBILE_STOREFRONT_CHANGED" == "true" ) && "$TEST_RESULT" == "skipped" ]]; then
+  echo "Web or mobile paths changed but the test gate was skipped"
+  exit 1
+fi
+
 for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "${TYPECHECK_BUILD_RESULT:-skipped}" "$TEST_RESULT" "${REPO_SCANS_RESULT:-skipped}" "${MIGRATION_APPLIER_RESULT:-skipped}" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT" "$QUIZ_APPROVAL_RESULT"; do
   case "$result" in
     success|skipped)

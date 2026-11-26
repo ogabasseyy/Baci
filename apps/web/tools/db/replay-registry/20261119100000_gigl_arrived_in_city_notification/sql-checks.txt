@@ -1,0 +1,1 @@
+supabase/tests/gigl_arrived_in_city_notification.sql

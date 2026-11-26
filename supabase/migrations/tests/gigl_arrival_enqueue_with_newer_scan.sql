@@ -69,6 +69,13 @@ BEGIN
     RAISE EXCEPTION 'a new arrival beside an already-recorded delivery run must still be queued, got % / %',
       v_status, v_kinds;
   END IF;
+  SELECT array_agg(notification_kind ORDER BY notification_kind) INTO v_kinds
+  FROM public.shipment_tracking_notification_outbox
+  WHERE shipment_id = v_shipment_id AND audience = 'customer'
+    AND status = 'pending';
+  IF v_kinds IS DISTINCT FROM ARRAY['arrived_in_city'] THEN
+    RAISE EXCEPTION 'only the arrival is pushed, got %', v_kinds;
+  END IF;
 END;
 $test$;
 
@@ -115,9 +122,12 @@ BEGIN
     )
   );
 
+  -- The arrival's transit_started row stays as a skipped milestone (no push),
+  -- so only pending rows are what the customer receives.
   SELECT array_agg(notification_kind ORDER BY notification_kind) INTO v_kinds
   FROM public.shipment_tracking_notification_outbox
-  WHERE shipment_id = v_shipment_id AND audience = 'customer';
+  WHERE shipment_id = v_shipment_id AND audience = 'customer'
+    AND status = 'pending';
   IF v_kinds IS DISTINCT FROM ARRAY['out_for_delivery'] THEN
     RAISE EXCEPTION 'in one poll the newer delivery run must supersede the older arrival, got %', v_kinds;
   END IF;

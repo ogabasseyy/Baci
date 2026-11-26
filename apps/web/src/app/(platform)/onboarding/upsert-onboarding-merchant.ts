@@ -165,7 +165,8 @@ export async function upsertOnboardingMerchant({
   let merchant: OnboardingMerchant | null;
   const normalizedRequestedSlug =
     requestedSlug?.trim().toLowerCase() || undefined;
-  const customSlug = slugIsCustom ? normalizedRequestedSlug : undefined;
+  const customSlug =
+    slugIsCustom !== false ? normalizedRequestedSlug : undefined;
   if (customSlug && isReservedMerchantSlug(customSlug)) {
     throw new OnboardingSlugUnavailableError();
   }
@@ -181,7 +182,7 @@ export async function upsertOnboardingMerchant({
     if (draftRenameTarget) {
       let targetSlug = draftRenameTarget;
       if (isReservedMerchantSlug(targetSlug)) {
-        if (slugIsCustom) {
+        if (customSlug) {
           throw new OnboardingSlugUnavailableError();
         }
         targetSlug = await resolveOnboardingMerchantSlug(
@@ -197,7 +198,7 @@ export async function upsertOnboardingMerchant({
       });
       if (
         renameAttempt.error &&
-        !slugIsCustom &&
+        !customSlug &&
         isRenameSlugUnavailableError(renameAttempt.error)
       ) {
         targetSlug = await resolveOnboardingMerchantSlug(

@@ -173,6 +173,14 @@ export function transitionFromTextInput(
         ),
       };
     }
+    if (trimmed.length < 2) {
+      return {
+        messages: exchangeMessages(
+          trimmed,
+          'Please describe your business type with at least 2 characters, or pick a category above.'
+        ),
+      };
+    }
     return {
       nextData: { businessType: 'other', otherBusinessType: trimmed },
       nextStep: 'business_name',

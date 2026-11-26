@@ -166,7 +166,8 @@ export async function runSubmitOnboardingWorkflow(
       slug: merchantSlug,
       rootDomain,
     });
-    const candidateSlug = slugIsCustom ? slug?.trim().toLowerCase() : undefined;
+    const candidateSlug =
+      slugIsCustom !== false ? slug?.trim().toLowerCase() : undefined;
     // Only rename a completed merchant when its persisted slug failed at the
     // domain stage (conflict). Never silently rename an already-live store
     // whose domain already exists while other onboarding edits are ignored.

@@ -450,6 +450,44 @@ describe('upsertOnboardingMerchant', () => {
     );
   });
 
+  it('treats an omitted slugIsCustom with a provided slug as explicit (legacy contract)', async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: { id: 'merchant-1', slug: 'legacy-explicit' },
+      error: null,
+    });
+    const insert = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({ single }),
+    });
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const rpc = vi.fn();
+    const supabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({ maybeSingle }),
+        }),
+        insert,
+      }),
+      rpc,
+    };
+
+    await upsertOnboardingMerchant({
+      supabase: supabase as never,
+      user: { id: 'user-1' } as never,
+      email: 'merchant@example.com',
+      businessName: 'Kicks Hub',
+      businessType: 'fashion',
+      country: 'NG',
+      slug: 'legacy-explicit',
+      brandColors: null,
+      brandColorsParsed: false,
+    });
+
+    expect(rpc).not.toHaveBeenCalled();
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'legacy-explicit' })
+    );
+  });
+
   it.each([
     'admin',
     'chat',

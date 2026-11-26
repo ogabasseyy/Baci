@@ -163,5 +163,17 @@ describe('@baci/shared/onboarding-chat', () => {
     expect(shortCategory.messages?.[1]?.text).toContain(
       'at least 2 characters'
     );
+
+    const shortFreeTextType = transitionFromTextInput({
+      step: 'business_type',
+      rawText: 'x',
+      data: BASE_DATA,
+      countries: COUNTRIES,
+      businessTypes: BUSINESS_TYPES,
+    });
+    expect(shortFreeTextType.nextStep).toBeUndefined();
+    expect(shortFreeTextType.messages?.[1]?.text).toContain(
+      'at least 2 characters'
+    );
   });
 });

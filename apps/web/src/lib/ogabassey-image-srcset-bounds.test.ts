@@ -3,11 +3,28 @@ import { boundImageFormatImgProps } from './ogabassey-image-srcset-bounds';
 
 const CDN = 'https://cdn.ogabassey.com';
 
+type ImageProps = Parameters<typeof boundImageFormatImgProps>[0];
+
+function imgProps(overrides: {
+  alt: string;
+  src: string;
+  srcSet: string;
+}): ImageProps {
+  return {
+    height: undefined,
+    loading: undefined,
+    sizes: undefined,
+    style: {},
+    width: undefined,
+    ...overrides,
+  };
+}
+
 describe('boundImageFormatImgProps', () => {
   it('caps w-descriptor srcSet candidates to [minSrcSetWidth, maxSrcSetWidth] and updates src', () => {
     const cover = '/core-assets/blog/post/cover.jpg';
     const bounded = boundImageFormatImgProps(
-      {
+      imgProps({
         alt: 'Blog card',
         src: `${CDN}/image/width=1080,quality=50,format=jpeg${cover}`,
         srcSet: [256, 384, 640, 750, 828, 1080]
@@ -16,7 +33,7 @@ describe('boundImageFormatImgProps', () => {
               `${CDN}/image/width=${w},quality=50,format=jpeg${cover} ${w}w`
           )
           .join(', '),
-      },
+      }),
       384,
       750
     );
@@ -35,11 +52,11 @@ describe('boundImageFormatImgProps', () => {
 
   it('preserves an explicit overrideSrc when top candidates are trimmed', () => {
     const bounded = boundImageFormatImgProps(
-      {
+      imgProps({
         alt: 'Blog card',
         src: '/legacy-cover.jpg',
         srcSet: `${CDN}/image/width=384,quality=50,format=jpeg/cover.jpg 384w, ${CDN}/image/width=828,quality=50,format=jpeg/cover.jpg 828w`,
-      },
+      }),
       384,
       750,
       true
@@ -53,12 +70,12 @@ describe('boundImageFormatImgProps', () => {
 
   it('reads query w= and preserves width= segments inside asset paths', () => {
     const capped = boundImageFormatImgProps(
-      {
+      imgProps({
         alt: 'Path token test',
         src: '/images/width=1200/cover.jpg?w=1080&q=75',
         srcSet:
           '/images/width=1200/cover.jpg?w=640&q=75 1x, /images/width=1200/cover.jpg?w=1080&q=75 2x',
-      },
+      }),
       undefined,
       750
     );
@@ -67,12 +84,12 @@ describe('boundImageFormatImgProps', () => {
     expect(capped.src).toBe('/images/width=1200/cover.jpg?w=640&q=75');
 
     const clampedBelowMinCandidate = boundImageFormatImgProps(
-      {
+      imgProps({
         alt: 'Clamped query test',
         src: '/images/width=1200/cover.jpg?w=1080&q=75',
         srcSet:
           '/images/width=1200/cover.jpg?w=640&q=75 1x, /images/width=1200/cover.jpg?w=1080&q=75 2x',
-      },
+      }),
       undefined,
       500
     );
@@ -88,11 +105,11 @@ describe('boundImageFormatImgProps', () => {
   it('rewrites only the CDN transform options width= token and leaves path width= intact', () => {
     const asset = '/core-assets/blog/width=1200/cover.jpg';
     const clamped = boundImageFormatImgProps(
-      {
+      imgProps({
         alt: 'CDN nested width token',
         src: `${CDN}/image/width=1080,quality=50,format=jpeg${asset}`,
         srcSet: `${CDN}/image/width=1080,quality=50,format=jpeg${asset} 1x, ${CDN}/image/width=1920,quality=50,format=jpeg${asset} 2x`,
-      },
+      }),
       undefined,
       750
     );
@@ -107,12 +124,12 @@ describe('boundImageFormatImgProps', () => {
 
   it('bounds descriptorless CDN transform candidates and leaves unparameterized density srcSets untouched', () => {
     const descriptorless = boundImageFormatImgProps(
-      {
+      imgProps({
         alt: 'Same origin proxy',
         src: '/cdn-image/width=1080,quality=50,format=jpeg/core-assets/blog/cover.jpg',
         srcSet:
           '/cdn-image/width=1080,quality=50,format=jpeg/core-assets/blog/cover.jpg',
-      },
+      }),
       undefined,
       750
     );
@@ -121,11 +138,11 @@ describe('boundImageFormatImgProps', () => {
     );
 
     const staticDensity = boundImageFormatImgProps(
-      {
+      imgProps({
         alt: 'Static density',
         src: '/static/cover@2x.jpg',
         srcSet: '/static/cover.jpg 1x, /static/cover@2x.jpg 2x',
-      },
+      }),
       384,
       750
     );

@@ -1,0 +1,464 @@
+name: Publish storefront OTA update
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: OTA action to perform (publish new export or rollback)
+        required: true
+        default: publish
+        type: choice
+        options: ['publish', 'rollback']
+      platform:
+        description: Target native platform
+        required: true
+        default: ios
+        type: choice
+        options: ['ios', 'android']
+      runtime_version:
+        description: Target native runtimeVersion (e.g. 2.1.663-ios-sdk58-rn0880-splashmotion1)
+        required: true
+        type: string
+      channel:
+        description: Target OTA update channel
+        required: true
+        default: production
+        type: choice
+        options: ['production', 'preview', 'development']
+      source_sha:
+        description: Reviewed main-branch commit to export (required for publish)
+        required: false
+        type: string
+      ios_tiktok_configured:
+        description: Verified existing TikTok capability for this iOS runtime
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+      rollback_update_id:
+        description: Specific update UUID to roll back to (leave empty with rollback_to_embedded=true for embedded)
+        required: false
+        type: string
+      rollback_to_embedded:
+        description: Emit rollBackToEmbedded directive when action is rollback
+        required: false
+        default: false
+        type: boolean
+      allow_unsigned:
+        description: Explicitly allow unsigned OTA publish/rollback when no signing cert is configured (only safe for runtimes with no code-signed binaries)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: storefront-ota-publish-${{ inputs.platform }}-${{ inputs.channel }}-${{ inputs.runtime_version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ inputs.channel == 'production' && 'Production' || 'Preview' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out main history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Storefront release gate: a source that carries the gate marker holds
+      # client work that reaches devices only in the deliberate owner release,
+      # so it must never go out as an OTA update. Rollbacks do not export source.
+      - name: Refuse sources held by the storefront release gate
+        env:
+          ACTION: ${{ inputs.action }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          ROLLBACK_UPDATE_ID: ${{ inputs.rollback_update_id }}
+          ROLLBACK_TO_EMBEDDED: ${{ inputs.rollback_to_embedded }}
+        run: |
+          set -euo pipefail
+          if [[ "$ACTION" == "rollback" ]]; then
+            if [[ "$ROLLBACK_TO_EMBEDDED" == "true" && -n "$ROLLBACK_UPDATE_ID" ]]; then
+              echo '::error::Specify either rollback_to_embedded=true or rollback_update_id, not both.' >&2
+              exit 1
+            fi
+            if [[ "$ROLLBACK_TO_EMBEDDED" != "true" && -z "$ROLLBACK_UPDATE_ID" ]]; then
+              echo '::error::rollback requires either rollback_to_embedded=true or rollback_update_id.' >&2
+              exit 1
+            fi
+            echo 'Rollback action verified; skipping source export gate check.'
+            exit 0
+          fi
+          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::source_sha must be a full 40-character commit SHA.' >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${SOURCE_SHA}^{commit}" 2>/dev/null; then
+            echo '::error::source_sha is not a commit in this repository.' >&2
+            exit 1
+          fi
+          held="$(git ls-tree --full-tree --name-only "$SOURCE_SHA" -- .github/storefront-release-gate.json)"
+          if [[ -n "$held" ]]; then
+            echo '::error::This source is held by the storefront release gate (.github/storefront-release-gate.json). It ships only in the deliberate owner store release; see docs/runbooks/storefront-release-gate.md.' >&2
+            exit 1
+          fi
+
+      - name: Validate and select reviewed source
+        if: inputs.action == 'publish'
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          PLATFORM: ${{ inputs.platform }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
+          if ! git grep -q -F 'process.env.EXPO_PUBLIC_BUILD_SHA' "$SOURCE_SHA" -- apps/mobile-storefront; then
+            echo 'Selected source does not embed the build SHA. Create a reviewed forward revert instead of exporting this older revision.' >&2
+            exit 1
+          fi
+          if [[ "$PLATFORM" == "ios" ]]; then
+            if ! [[ "$RUNTIME_VERSION" =~ ^([0-9]+\.[0-9]+\.([0-9]+))(-ios-sdk[0-9]+-rn[0-9]+(-splashmotion[0-9]+)?)?$ ]]; then
+              echo "::error::Invalid iOS runtime_version: $RUNTIME_VERSION" >&2
+              exit 1
+            fi
+            echo "IOS_APP_VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+            echo "IOS_BUILD_NUMBER=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
+          else
+            if ! [[ "$RUNTIME_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-android-sdk[0-9]+-rn[0-9]+(-splashmotion[0-9]+)?)?$ ]]; then
+              echo "::error::Invalid Android runtime_version: $RUNTIME_VERSION" >&2
+              exit 1
+            fi
+          fi
+          cp .github/scripts/storefront-ota-secret-scan.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-public-config.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/prepare-storefront-ota-public-config.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-constants.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-digest-collection.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-sha256.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/verify-storefront-self-hosted-ota-export.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/verify-storefront-self-hosted-ota-export.test.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/smoke-check-ota-manifest.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/smoke-check-ota-manifest.test.mjs "$RUNNER_TEMP/"
+          cp apps/ota-server/scripts/publish-ota-args.mjs "$RUNNER_TEMP/"
+          cp apps/ota-server/scripts/publish-ota-sanitize.mjs "$RUNNER_TEMP/"
+          cp apps/ota-server/scripts/publish-ota.mjs "$RUNNER_TEMP/"
+          git checkout --detach "$SOURCE_SHA"
+
+      - name: Setup pnpm
+        if: inputs.action == 'publish'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Normalize OTA server URL
+        env:
+          RAW_OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.usebaci.com' }}
+        run: |
+          set -euo pipefail
+          base_url="$RAW_OTA_SERVER_URL"
+          while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
+          base_url="${base_url%/api/manifest}"
+          while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
+          if [[ "$base_url" != "https://ota.usebaci.com" ]]; then
+            echo "::error::OTA_SERVER_URL must target https://ota.usebaci.com (got: ${base_url})." >&2
+            exit 1
+          fi
+          echo "OTA_BASE_URL=${base_url}" >> "$GITHUB_ENV"
+          echo "OTA_MANIFEST_URL=${base_url}/api/manifest" >> "$GITHUB_ENV"
+
+      - name: Derive OTA code signing configuration
+        env:
+          ACTION: ${{ inputs.action }}
+          CHANNEL: ${{ inputs.channel }}
+          ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
+          KEY_ID: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID || vars.OTA_SIGNING_KEY_ID || '' }}
+          CERT_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH || '' }}
+          CERT_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$CERT_PATH" || -n "$CERT_PEM" || -n "$KEY_ID" ]]; then
+            effective_key_id="${KEY_ID:-main}"
+            if [[ -z "$CERT_PATH" ]]; then
+              echo '::error::OTA code signing is configured, but EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH is missing. A client-embeddable certificate path is required so shipped builds verify signatures.' >&2
+              exit 1
+            fi
+            if [[ ! -f "apps/mobile-storefront/$CERT_PATH" ]]; then
+              echo "::error::Configured code-signing certificate apps/mobile-storefront/$CERT_PATH was not found." >&2
+              exit 1
+            fi
+            {
+              echo "EFFECTIVE_OTA_SIGNING_KEY_ID=${effective_key_id}"
+              echo "EFFECTIVE_OTA_CERT_PATH=apps/mobile-storefront/${CERT_PATH}"
+            } >> "$GITHUB_ENV"
+          else
+            if [[ "$ALLOW_UNSIGNED" != "true" ]]; then
+              echo '::error::Self-hosted OTA publish and rollback require code signing (EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH) unless allow_unsigned=true is explicitly passed (safe only for runtimes without code-signed binaries).' >&2
+              exit 1
+            fi
+            {
+              echo "EFFECTIVE_OTA_SIGNING_KEY_ID="
+              echo "EFFECTIVE_OTA_CERT_PATH="
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Refuse rollback target held by the storefront release gate
+        env:
+          ACTION: ${{ inputs.action }}
+          OTA_BASE_URL: ${{ env.OTA_BASE_URL }}
+          OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
+          CHANNEL: ${{ inputs.channel }}
+          PLATFORM: ${{ inputs.platform }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          ROLLBACK_UPDATE_ID: ${{ inputs.rollback_update_id }}
+          ROLLBACK_TO_EMBEDDED: ${{ inputs.rollback_to_embedded }}
+        run: |
+          set -euo pipefail
+          if [[ "$ACTION" != "rollback" || "$ROLLBACK_TO_EMBEDDED" == "true" ]]; then
+            exit 0
+          fi
+          source_sha="$(node --input-type=module -e '
+            const { OTA_BASE_URL, OTA_ADMIN_TOKEN, CHANNEL, PLATFORM, RUNTIME_VERSION, ROLLBACK_UPDATE_ID } = process.env;
+            const url = new URL(OTA_BASE_URL + "/api/admin/release");
+            url.searchParams.set("channel", CHANNEL);
+            url.searchParams.set("platform", PLATFORM);
+            url.searchParams.set("runtimeVersion", RUNTIME_VERSION);
+            url.searchParams.set("updateId", ROLLBACK_UPDATE_ID);
+            const resp = await fetch(url, {
+              headers: { authorization: "Bearer " + OTA_ADMIN_TOKEN },
+              redirect: "error",
+            });
+            const body = await resp.text();
+            if (!resp.ok) {
+              throw new Error("Failed to fetch rollback target metadata (" + resp.status + "): " + body);
+            }
+            const parsed = JSON.parse(body);
+            process.stdout.write(typeof parsed.sourceSha === "string" ? parsed.sourceSha : "");
+          ')"
+          if ! [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Rollback target ${ROLLBACK_UPDATE_ID} does not record a valid 40-char sourceSha and cannot be verified against .github/storefront-release-gate.json." >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${source_sha}^{commit}" 2>/dev/null; then
+            echo "::error::Rollback target sourceSha ${source_sha} is not a commit in this repository." >&2
+            exit 1
+          fi
+          held_target="$(git ls-tree --full-tree --name-only "$source_sha" -- .github/storefront-release-gate.json)"
+          if [[ -n "$held_target" ]]; then
+            echo "::error::Rollback target ${ROLLBACK_UPDATE_ID} (${source_sha}) is held by the storefront release gate (.github/storefront-release-gate.json)." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        if: inputs.action == 'publish'
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_CHROME_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Export storefront OTA bundle
+        if: inputs.action == 'publish'
+        working-directory: apps/mobile-storefront
+        env:
+          CI: '1'
+          NODE_OPTIONS: --no-experimental-strip-types
+          BACI_MOBILE_BUILD_PLATFORM: ${{ inputs.platform }}
+          EXPO_NO_DOTENV: '1'
+          EXPO_UPDATE_CHANNEL: ${{ inputs.channel }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          IOS_APP_VERSION: ${{ env.IOS_APP_VERSION }}
+          IOS_BUILD_NUMBER: ${{ env.IOS_BUILD_NUMBER }}
+          IOS_TIKTOK_CONFIGURED: ${{ inputs.ios_tiktok_configured }}
+          EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}
+          EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
+          EXPO_PUBLIC_OTA_UPDATES_URL: ${{ env.OTA_MANIFEST_URL }}
+          EXPO_PUBLIC_OTA_ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_CERT_PATH != '' && env.EFFECTIVE_OTA_SIGNING_KEY_ID || '' }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
+          EXPO_PUBLIC_API_URL: https://usebaci.com
+          EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY }}
+          EXPO_PUBLIC_POSTHOG_API_KEY: ${{ secrets.EXPO_PUBLIC_POSTHOG_API_KEY }}
+          EXPO_PUBLIC_POSTHOG_HOST: ${{ secrets.EXPO_PUBLIC_POSTHOG_HOST }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          EXPO_PUBLIC_SENTRY_ENVIRONMENT: production
+          EXPO_PUBLIC_ENV: ${{ inputs.channel }}
+          EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID != '' && 'true' || 'false' }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_MOBILE_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_MOBILE_ADS_ENABLED }}
+          EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
+          STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_URL: ${{ secrets.SENTRY_URL }}
+          STOREFRONT_FACEBOOK_APP_ID: ${{ secrets.STOREFRONT_FACEBOOK_APP_ID }}
+          STOREFRONT_FACEBOOK_CLIENT_TOKEN: ${{ secrets.STOREFRONT_FACEBOOK_CLIENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test ! -f .env
+          if [[ -n "${EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH:-}" ]]; then
+            test -f "$EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH"
+          fi
+          mkdir -p "$RUNNER_TEMP/storefront-ota"
+          pnpm exec expo config --type public --json > "$RUNNER_TEMP/storefront-ota/expo-config.json"
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const [configPath, platform, expected, expectedKeyId, expectedCertPath] = process.argv.slice(1);
+            const config = JSON.parse(readFileSync(configPath, "utf8"));
+            const actual = platform === "ios"
+              ? (config.ios?.runtimeVersion ?? config.runtimeVersion)
+              : (config.android?.runtimeVersion ?? config.runtimeVersion);
+            if (actual !== expected) {
+              throw new Error("Exported " + platform + " runtimeVersion (" + actual + ") does not match input runtime_version (" + expected + ").");
+            }
+            if (expectedCertPath) {
+              if (config.updates?.codeSigningCertificate !== expectedCertPath) {
+                throw new Error("Exported codeSigningCertificate (" + (config.updates?.codeSigningCertificate ?? "") + ") does not match EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH.");
+              }
+              const actualKeyId = config.updates?.codeSigningMetadata?.keyid ?? "";
+              if (actualKeyId !== expectedKeyId) {
+                throw new Error("Exported codeSigningMetadata.keyid (" + actualKeyId + ") does not match EFFECTIVE_OTA_SIGNING_KEY_ID (" + expectedKeyId + ").");
+              }
+            }
+          ' "$RUNNER_TEMP/storefront-ota/expo-config.json" "$BACI_MOBILE_BUILD_PLATFORM" "$RUNTIME_VERSION" "$EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID" "$EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH"
+          if [[ "$BACI_MOBILE_BUILD_PLATFORM" == "ios" ]]; then
+            node "$RUNNER_TEMP/prepare-storefront-ota-public-config.mjs" "$RUNNER_TEMP/storefront-ota/expo-config.json" "$IOS_TIKTOK_CONFIGURED"
+          fi
+          pnpm exec expo export --platform "$BACI_MOBILE_BUILD_PLATFORM" --dump-assetmap --source-maps external --max-workers 2 --output-dir "$RUNNER_TEMP/storefront-ota/dist"
+
+      - name: Verify export parity, digests, and reject private secrets
+        if: inputs.action == 'publish'
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          STOREFRONT_TIKTOK_APP_SECRET: ${{ secrets.STOREFRONT_TIKTOK_APP_SECRET }}
+          OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
+        run: |
+          set -euo pipefail
+          node --test "$RUNNER_TEMP/verify-storefront-self-hosted-ota-export.test.mjs"
+          node "$RUNNER_TEMP/verify-storefront-self-hosted-ota-export.mjs" \
+            "$RUNNER_TEMP/storefront-ota" \
+            "$PLATFORM" \
+            "$RUNTIME_VERSION" \
+            "$CHANNEL" \
+            "$SOURCE_SHA" \
+            "$OTA_MANIFEST_URL"
+
+      - name: Publish OTA update to ota.usebaci.com and smoke-check manifest
+        if: inputs.action == 'publish'
+        env:
+          OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}
+          OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
+          PLATFORM: ${{ inputs.platform }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          CHANNEL: ${{ inputs.channel }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          OTA_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_SIGNING_KEY_ID }}
+          OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ env.EFFECTIVE_OTA_CERT_PATH }}
+          OTA_CODE_SIGNING_CERTIFICATE_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
+        run: |
+          set -euo pipefail
+          node --test "$RUNNER_TEMP/smoke-check-ota-manifest.test.mjs"
+          result_json="$(
+            node "$RUNNER_TEMP/publish-ota.mjs" \
+              --dist "$RUNNER_TEMP/storefront-ota/dist" \
+              --config "$RUNNER_TEMP/storefront-ota/expo-config.json" \
+              --platform "$PLATFORM" \
+              --runtime "$RUNTIME_VERSION" \
+              --channel "$CHANNEL" \
+              --source-sha "$SOURCE_SHA"
+          )"
+          echo "$result_json"
+          if ! OTA_OPERATION_RESULT="$result_json" node "$RUNNER_TEMP/smoke-check-ota-manifest.mjs"; then
+            echo "::error::Manifest smoke check failed after publish; attempting compensating rollback." >&2
+            published_id="$(node -e 'const r = JSON.parse(process.argv[1]); process.stdout.write(typeof r.updateId === "string" ? r.updateId : "");' "$result_json")"
+            prev_mode="$(node -e 'const r = JSON.parse(process.argv[1]); process.stdout.write(typeof r.previousMode === "string" ? r.previousMode : "");' "$result_json")"
+            prev_id="$(node -e 'const r = JSON.parse(process.argv[1]); process.stdout.write(typeof r.previousUpdateId === "string" ? r.previousUpdateId : "");' "$result_json")"
+            rb_args=(
+              --rollback
+              --platform "$PLATFORM"
+              --runtime "$RUNTIME_VERSION"
+              --channel "$CHANNEL"
+              --idempotency-key "gh-smoke-compensate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            )
+            if [[ -n "$published_id" ]]; then
+              rb_args+=(--expected-current-update-id "$published_id")
+            fi
+            if [[ "$prev_mode" == "rollback_to_embedded" || -z "$prev_id" ]]; then
+              rb_args+=(--to-embedded)
+            else
+              rb_args+=(--update-id "$prev_id")
+            fi
+            if ! node "$RUNNER_TEMP/publish-ota.mjs" "${rb_args[@]}"; then
+              echo "::error::Compensating rollback FAILED! Broken update ${published_id:-unknown} may still be active on ${CHANNEL}/${PLATFORM}/${RUNTIME_VERSION}; manual rollback required." >&2
+            else
+              echo "::notice::Compensating rollback succeeded after failed smoke check for ${published_id:-unknown}." >&2
+            fi
+            exit 1
+          fi
+
+      - name: Rollback OTA update on ota.usebaci.com and smoke-check manifest
+        if: inputs.action == 'rollback'
+        env:
+          OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}
+          OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
+          PLATFORM: ${{ inputs.platform }}
+          RUNTIME_VERSION: ${{ inputs.runtime_version }}
+          CHANNEL: ${{ inputs.channel }}
+          ROLLBACK_UPDATE_ID: ${{ inputs.rollback_update_id }}
+          ROLLBACK_TO_EMBEDDED: ${{ inputs.rollback_to_embedded }}
+          OTA_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_SIGNING_KEY_ID }}
+          OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ env.EFFECTIVE_OTA_CERT_PATH }}
+          OTA_CODE_SIGNING_CERTIFICATE_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
+        run: |
+          set -euo pipefail
+          node --test .github/scripts/smoke-check-ota-manifest.test.mjs
+          args=(
+            --rollback
+            --platform "$PLATFORM"
+            --runtime "$RUNTIME_VERSION"
+            --channel "$CHANNEL"
+            --idempotency-key "gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          )
+          if [[ "$ROLLBACK_TO_EMBEDDED" == "true" ]]; then
+            args+=(--to-embedded)
+          elif [[ -n "$ROLLBACK_UPDATE_ID" ]]; then
+            args+=(--update-id "$ROLLBACK_UPDATE_ID")
+          fi
+          result_json="$(node apps/ota-server/scripts/publish-ota.mjs "${args[@]}")"
+          echo "$result_json"
+          OTA_OPERATION_RESULT="$result_json" node .github/scripts/smoke-check-ota-manifest.mjs

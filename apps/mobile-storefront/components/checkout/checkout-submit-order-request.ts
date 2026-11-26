@@ -34,6 +34,13 @@ export type CheckoutSubmitOrderRequestInput = {
   sharedCartBinding?: CartCheckoutBinding;
 };
 
+export function resolveEffectiveSavingsSelection(
+  liveSavingsSelection: SavingsSelection | undefined,
+  appliedDiscountCode?: string | null
+): SavingsSelection | undefined {
+  return appliedDiscountCode ? undefined : liveSavingsSelection;
+}
+
 export function buildCheckoutSubmitOrderRequest({
   address,
   appliedDiscountCode,
@@ -56,9 +63,12 @@ export function buildCheckoutSubmitOrderRequest({
   // The credit fields are returned separately so the submit rollback path
   // can re-freeze them if finalization emptied the cart before failing.
   const creditFields: Record<string, unknown> = {
-    ...(appliedDiscountCode
-      ? {}
-      : buildSavingsOrderFields(liveSavingsSelection)),
+    ...buildSavingsOrderFields(
+      resolveEffectiveSavingsSelection(
+        liveSavingsSelection,
+        appliedDiscountCode
+      )
+    ),
     ...buildWalletOrderFields(liveWalletSelection),
   };
   return {

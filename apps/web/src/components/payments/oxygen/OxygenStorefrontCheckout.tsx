@@ -1,3 +1,7 @@
+import {
+  sumActiveSavingsLedgerCredit,
+  summarizeWalletLedgerCredit,
+} from '@baci/shared/lib';
 import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import { CheckoutStepCard } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutStepCard';
@@ -5,7 +9,11 @@ import { CheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-p
 import { readOxygenCustomerPrefill } from '@/lib/payments/oxygen/customer-prefill';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { createClient } from '@/lib/supabase/server';
-import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
+import {
+  getOxygenOrderNetPayable,
+  isOxygenPreGatewayStatus,
+  oxygenCheckoutOrderSchema,
+} from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
 import { OxygenApplicationDialog } from './OxygenApplicationDialog';
 import { OxygenMobileOrderSummary } from './OxygenMobileOrderSummary';
@@ -57,7 +65,7 @@ export async function OxygenStorefrontCheckout({
   const { data, error } = await client
     .from('orders')
     .select(
-      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
+      'id, merchant_id, customer_id, payment_method, payment_status, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, amount_paid, wallet_amount_used, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
@@ -72,8 +80,37 @@ export async function OxygenStorefrontCheckout({
     !parsed.success
   )
     notFound();
-  const order = parsed.data;
-  const prefill = await readOxygenCustomerPrefill(client, orderId, user.id);
+  const [
+    { data: walletLedgerRows, error: walletLedgerError },
+    { data: savingsLedgerRows, error: savingsLedgerError },
+    prefill,
+  ] = await Promise.all([
+    client
+      .from('customer_wallet_transactions')
+      .select('amount, status, source_type, type')
+      .eq('source_id', orderId)
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId),
+    client
+      .from('customer_savings_redemptions')
+      .select('amount, metadata')
+      .eq('order_id', orderId)
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId),
+    readOxygenCustomerPrefill(client, orderId, user.id),
+  ]);
+  if (walletLedgerError || savingsLedgerError) notFound();
+  const walletLedgerSummary = summarizeWalletLedgerCredit(walletLedgerRows);
+  const order = {
+    ...parsed.data,
+    wallet_ledger_used: walletLedgerSummary.netCredit,
+    wallet_reversal_completed: walletLedgerSummary.hasCompletedReversal,
+    wallet_reversed_credit: walletLedgerSummary.reversedCredit,
+    savings_ledger_used: sumActiveSavingsLedgerCredit(savingsLedgerRows),
+  };
+  const netPayable = getOxygenOrderNetPayable(order);
+  const isPreGateway = isOxygenPreGatewayStatus(order.payment_status);
+  const isZeroDuePreGateway = isPreGateway && netPayable <= 0;
   const names = order.customer_name?.trim().split(/\s+/) ?? [];
   const checkoutContact = oxygenCustomerPrefillSchema.safeParse({
     ...prefill,
@@ -101,19 +138,31 @@ export async function OxygenStorefrontCheckout({
             summary="Delivery selection saved with this order"
           />
           <CheckoutStepCard number={3} title="Payment Method" active>
-            <OxygenApplicationDialog
-              orderId={orderId}
-              merchantSlug={merchantSlug}
-              selfieOrigins={selfieOrigins}
-              hostedOrigins={hostedOrigins}
-              prefill={contact}
-              productAmount={order.total}
-              products={order.order_items.map((item) => ({
-                ...item,
-                imageUrl: oxygenOrderItemImage(item),
-              }))}
-              currency={order.currency}
-            />
+            {!isPreGateway ? (
+              <p className="text-sm text-muted-foreground">
+                This order has already been completed. No additional financing
+                or payment is required.
+              </p>
+            ) : isZeroDuePreGateway ? (
+              <p className="text-sm text-muted-foreground">
+                This order is fully covered by store credit. No financing or
+                additional payment is required.
+              </p>
+            ) : (
+              <OxygenApplicationDialog
+                orderId={orderId}
+                merchantSlug={merchantSlug}
+                selfieOrigins={selfieOrigins}
+                hostedOrigins={hostedOrigins}
+                prefill={contact}
+                productAmount={netPayable}
+                products={order.order_items.map((item) => ({
+                  ...item,
+                  imageUrl: oxygenOrderItemImage(item),
+                }))}
+                currency={order.currency}
+              />
+            )}
           </CheckoutStepCard>
         </>
       }

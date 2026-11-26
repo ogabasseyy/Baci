@@ -60,6 +60,10 @@ export interface PaymentMethodSelectorProps {
   onSavingsToggle?: (selection: SavingsSelection) => void;
   suppressedSelectedMethods?: PaymentMethodType[];
   hiddenMethods?: PaymentMethodType[];
+  klumpLimits?: {
+    minAmount?: number | null;
+    maxAmount?: number | null;
+  };
   methodBadgeOverrides?: Partial<Record<PaymentMethodType, string>>;
   methodDescriptionOverrides?: Partial<Record<PaymentMethodType, string>>;
   methodDisabledReasons?: Partial<Record<PaymentMethodType, string>>;

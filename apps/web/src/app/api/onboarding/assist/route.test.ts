@@ -114,7 +114,7 @@ describe('POST /api/onboarding/assist', () => {
     );
   });
 
-  it('rejects extract_colors for another user or non-storage URL', async () => {
+  it('rejects extract_colors for another user or non-storage URL without consuming rate limits', async () => {
     const response = await POST(
       makeRequest({
         task: 'extract_colors',
@@ -128,6 +128,7 @@ describe('POST /api/onboarding/assist', () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: 'invalid_logo_url' });
+    expect(applyRateLimit).not.toHaveBeenCalled();
     expect(runGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 

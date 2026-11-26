@@ -114,6 +114,20 @@ export async function POST(request: NextRequest) {
 
   const task = parsed.data.task;
 
+  if (
+    task === 'extract_colors' &&
+    (!parsed.data.logoUrl ||
+      !isUserScopedOnboardingLogoUrl(parsed.data.logoUrl, user.id))
+  ) {
+    return NextResponse.json(
+      {
+        error: 'Logo URL must be a valid uploaded onboarding logo.',
+        code: 'invalid_logo_url',
+      },
+      { status: 400 }
+    );
+  }
+
   // Check IP bucket BEFORE per-user bucket so a shared-IP throttle does not
   // burn the caller's personal quota.
   const clientIp = getTrustedClientIdentifier(request);
@@ -178,20 +192,6 @@ export async function POST(request: NextRequest) {
         code: 'rate_limited',
       },
       { status: 429 }
-    );
-  }
-
-  if (
-    task === 'extract_colors' &&
-    (!parsed.data.logoUrl ||
-      !isUserScopedOnboardingLogoUrl(parsed.data.logoUrl, user.id))
-  ) {
-    return NextResponse.json(
-      {
-        error: 'Logo URL must be a valid uploaded onboarding logo.',
-        code: 'invalid_logo_url',
-      },
-      { status: 400 }
     );
   }
 

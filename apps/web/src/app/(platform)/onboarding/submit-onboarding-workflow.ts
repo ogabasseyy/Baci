@@ -11,6 +11,7 @@ import { normalizeBusinessName } from '@/lib/normalize-business-name';
 import { DEFAULT_CURATED_BRAND_COLORS } from '@/lib/storefront-defaults/default-curated-brand-colors';
 import { provisionCuratedHomepage } from '@/lib/storefront-defaults/provision-curated-homepage';
 import { createClient } from '@/lib/supabase/server';
+import { isReservedMerchantSlug } from '@/lib/validation';
 import { parseBrandColors } from '@/schemas/brand-colors';
 import { onboardingSchema } from '@/schemas/onboarding';
 import type { BrandColors } from '@/types';
@@ -55,6 +56,19 @@ function resolveStarterBrandColors(
     DEFAULT_CURATED_BRAND_COLORS
   );
 }
+function isRenameSlugUnavailableError(error: {
+  code?: string;
+  message?: string;
+}): boolean {
+  const key = (error.message ?? '').trim();
+  return (
+    error.code === '23505' ||
+    key === 'slug_taken' ||
+    key === 'reserved_slug' ||
+    key === 'invalid_slug'
+  );
+}
+
 export async function runSubmitOnboardingWorkflow(
   _prevState: ServerActionState,
   formData: FormData
@@ -122,15 +136,51 @@ export async function runSubmitOnboardingWorkflow(
       slug,
       slugIsCustom,
     });
-    const merchant = persisted.merchant;
+    let merchant = persisted.merchant;
     if (!merchant.slug)
       throw new Error('Could not finish store setup. Please try again.');
-    const domain = await ensureOnboardingDomain({
+    const rootDomain = getRootDomain() || 'usebaci.com';
+    let domain = await ensureOnboardingDomain({
       supabase,
       merchantId: merchant.id,
       slug: merchant.slug,
-      rootDomain: getRootDomain() || 'usebaci.com',
+      rootDomain,
     });
+    let recoveredFromDomainConflict = false;
+    const candidateSlug = slugIsCustom ? slug?.trim().toLowerCase() : undefined;
+    if (
+      domain.status === 'conflict' &&
+      persisted.status === 'completed' &&
+      candidateSlug &&
+      candidateSlug !== merchant.slug.toLowerCase()
+    ) {
+      if (isReservedMerchantSlug(candidateSlug)) {
+        throw new OnboardingSlugUnavailableError();
+      }
+      const { error: renameError } = await supabase.rpc(
+        'rename_merchant_slug',
+        {
+          p_merchant_id: merchant.id,
+          p_new_slug: candidateSlug,
+        }
+      );
+      if (renameError) {
+        if (isRenameSlugUnavailableError(renameError)) {
+          throw new OnboardingSlugUnavailableError();
+        }
+        throw new Error(
+          `Failed to update merchant slug: ${renameError.message}`
+        );
+      }
+      merchant = { ...merchant, slug: candidateSlug };
+      recoveredFromDomainConflict = true;
+      domain = await ensureOnboardingDomain({
+        supabase,
+        merchantId: merchant.id,
+        slug: candidateSlug,
+        rootDomain,
+      });
+    }
     if (domain.status === 'conflict') {
       throw new OnboardingSlugUnavailableError();
     }
@@ -163,7 +213,7 @@ export async function runSubmitOnboardingWorkflow(
     return {
       success: true,
       message:
-        persisted.status === 'completed'
+        persisted.status === 'completed' && !recoveredFromDomainConflict
           ? 'Welcome back! Redirecting to your dashboard...'
           : 'Store created!',
       businessName: persisted.businessName,

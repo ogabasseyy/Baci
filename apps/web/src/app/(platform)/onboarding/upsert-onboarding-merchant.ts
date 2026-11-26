@@ -1,6 +1,7 @@
 import type { User } from '@supabase/supabase-js';
 import { getCountryByCode } from '@/lib/countries';
 import type { createClient as createServerClient } from '@/lib/supabase/server';
+import { isReservedMerchantSlug } from '@/lib/validation';
 import type {
   OnboardingBrandColors,
   OnboardingMerchant,
@@ -40,13 +41,29 @@ export class OnboardingSlugUnavailableError extends Error {
   }
 }
 
-function isSlugUniqueViolation(error: {
+const SLUG_UNIQUE_ERROR_PATTERN =
+  /idx_merchants_slug|merchants_slug_key|slug_is_reserved|slug_is_retired_alias|slug_too_long/i;
+const SLUG_UNIQUE_DETAIL_PATTERN = /key\s*\(\s*slug\s*\)/i;
+
+interface MerchantMutationError {
   code?: string;
+  constraint?: string;
+  details?: string | null;
   message: string;
-}): boolean {
+}
+
+function isSlugUniqueViolation(error: MerchantMutationError): boolean {
+  if (error.code !== '23505') return false;
+  if (
+    error.constraint === 'idx_merchants_slug' ||
+    error.constraint === 'merchants_slug_key'
+  ) {
+    return true;
+  }
   return (
-    error.code === '23505' ||
-    /duplicate key value violates unique constraint.*slug/i.test(error.message)
+    SLUG_UNIQUE_ERROR_PATTERN.test(error.message) ||
+    (typeof error.details === 'string' &&
+      SLUG_UNIQUE_DETAIL_PATTERN.test(error.details))
   );
 }
 
@@ -108,7 +125,7 @@ export async function upsertOnboardingMerchant({
           select: (columns: string) => {
             single: () => Promise<{
               data: OnboardingMerchant | null;
-              error: { message: string } | null;
+              error: MerchantMutationError | null;
             }>;
           };
         };
@@ -118,7 +135,7 @@ export async function upsertOnboardingMerchant({
       select: (columns: string) => {
         single: () => Promise<{
           data: OnboardingMerchant | null;
-          error: { message: string } | null;
+          error: MerchantMutationError | null;
         }>;
       };
     };
@@ -143,10 +160,15 @@ export async function upsertOnboardingMerchant({
   }
 
   let merchant: OnboardingMerchant | null;
-  const useCustomSlug = Boolean(slugIsCustom && requestedSlug?.trim());
+  const customSlug = slugIsCustom
+    ? requestedSlug?.trim().toLowerCase()
+    : undefined;
+  if (customSlug && isReservedMerchantSlug(customSlug)) {
+    throw new OnboardingSlugUnavailableError();
+  }
   if (existing) {
-    const resolvedSlug = useCustomSlug
-      ? requestedSlug?.trim()
+    const resolvedSlug = customSlug
+      ? customSlug
       : hasEstablishedOnboardingSlug(existing.slug)
         ? null
         : await resolveOnboardingMerchantSlug(supabase, businessName);
@@ -175,10 +197,9 @@ export async function upsertOnboardingMerchant({
     }
     merchant = data;
   } else {
-    const slug = useCustomSlug
-      ? (requestedSlug?.trim() ??
-        (await resolveOnboardingMerchantSlug(supabase, businessName)))
-      : await resolveOnboardingMerchantSlug(supabase, businessName);
+    const slug =
+      customSlug ??
+      (await resolveOnboardingMerchantSlug(supabase, businessName));
     const { data, error } = await merchants
       .insert({
         user_id: user.id,

@@ -120,6 +120,7 @@ export async function notifyMerchantWithStore(
     data,
     sound: 'default' as const,
     channelId,
+    ...(options?.categoryId ? { categoryId: options.categoryId } : {}),
     priority: (channelId === 'orders' ? 'high' : 'default') as
       | 'high'
       | 'default',

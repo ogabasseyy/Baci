@@ -8,6 +8,20 @@ VALUES
 SELECT set_config('request.jwt.claim.sub','efab0000-0000-4000-8000-000000000003',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000003','env-merchant@example.test','Draft RLS fixture','oxygen-environment-fixture');
+DO $$ BEGIN
+ IF EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'merchant_feature_settings'
+    AND column_name = 'oxygen_enabled'
+ ) THEN
+  EXECUTE $sql$
+   UPDATE public.merchant_feature_settings
+   SET oxygen_enabled = true
+   WHERE merchant_id = 'efab0000-0000-4000-8000-000000000011'
+  $sql$;
+ END IF;
+END $$;
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('efab0000-0000-4000-8000-000000000021','efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000001','Test','Customer','env-owner@example.test');
 INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)

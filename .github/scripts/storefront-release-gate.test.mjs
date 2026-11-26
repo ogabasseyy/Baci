@@ -7,6 +7,7 @@ import {
   GATE_RUNBOOK,
   gitRepository,
   OTA_GUARD_STEP,
+  OTA_PUBLISH_WORKFLOW,
   OTA_WORKFLOW,
   parseGateMarker,
   RELEASE_GUARD_STEP,
@@ -284,4 +285,27 @@ test('the gate fails when a workflow ships the storefront through a package scri
     failures.includes('.github/workflows/nightly-ship.yml builds or ships the storefront app but is not covered by the storefront release gate'),
     failures.join('\n')
   );
+});
+
+test('the OTA publish workflow keeps its release gate refusal guard', () => {
+  const publish = repository.readFile(OTA_PUBLISH_WORKFLOW);
+  assert.ok(publish, `${OTA_PUBLISH_WORKFLOW} must exist`);
+  const withoutGuard = publish.replace(`- name: ${OTA_GUARD_STEP}`, '- name: Renamed step');
+  assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: withoutGuard })), [
+    `${OTA_PUBLISH_WORKFLOW} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "Validate and select reviewed source" in its publish job`,
+  ]);
+  const withoutRollbackGuard = publish.replace(
+    '- name: Refuse rollback target held by the storefront release gate',
+    '- name: Renamed rollback guard'
+  );
+  assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: withoutRollbackGuard })), [
+    `${OTA_PUBLISH_WORKFLOW} must run "Refuse rollback target held by the storefront release gate" before "Rollback OTA update on ota.usebaci.com and smoke-check manifest" in its publish job`,
+  ]);
+  const conditionalRollbackGuard = publish.replace(
+    '- name: Refuse rollback target held by the storefront release gate\n',
+    '- name: Refuse rollback target held by the storefront release gate\n        if: false\n'
+  );
+  assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: conditionalRollbackGuard })), [
+    `${OTA_PUBLISH_WORKFLOW} "Refuse rollback target held by the storefront release gate" must run unconditionally and fail gated rollbacks`,
+  ]);
 });

@@ -172,6 +172,50 @@ describe('fetchMerchantBySlug', () => {
       message: 'Server error',
     });
   });
+
+  it('falls back to select without oxygen_enabled when the column is missing pre-migration', async () => {
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: '42703',
+          message:
+            'column merchant_feature_settings_1.oxygen_enabled does not exist',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'merchant-1',
+          slug: 'test-store',
+          feature_settings: { paystack_enabled: true },
+        },
+        error: null,
+      });
+    const merchantsHandler = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn(),
+      maybeSingle,
+    };
+    const supabase = createMockSupabase({
+      merchants: merchantsHandler,
+    });
+
+    const result = await fetchMerchantBySlug(supabase, 'test-store');
+
+    expect(merchantsHandler.select).toHaveBeenCalledTimes(2);
+    expect(merchantsHandler.select.mock.calls[0]?.[0]).toContain(
+      'oxygen_enabled'
+    );
+    expect(merchantsHandler.select.mock.calls[1]?.[0]).not.toContain(
+      'oxygen_enabled'
+    );
+    expect(merchantsHandler.select.mock.calls[1]?.[0]).not.toContain(
+      'paystack_subaccount_code'
+    );
+    expect(result?.feature_settings).toEqual({ paystack_enabled: true });
+  });
 });
 
 describe('fetchPrimaryDomain', () => {

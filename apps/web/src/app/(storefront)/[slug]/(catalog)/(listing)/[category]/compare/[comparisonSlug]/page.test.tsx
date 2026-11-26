@@ -133,6 +133,22 @@ describe('compare page metadata', () => {
     expect(metadata.alternates?.canonical).toContain(
       '/smartphones/compare/iphone-17-pro-max-vs-samsung-galaxy-z-trifold'
     );
+    expect(metadata.openGraph).toMatchObject({
+      title: comparePageModel.metaTitle,
+      description: comparePageModel.metaDescription,
+      url: comparePageModel.canonicalUrl,
+      type: 'website',
+      images: [
+        {
+          url: 'https://ogabassey.com/opengraph-image',
+          alt: comparePageModel.metaTitle,
+        },
+      ],
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: 'summary_large_image',
+      images: ['https://ogabassey.com/opengraph-image'],
+    });
   });
 
   it('returns marker-free noindex metadata when the compare page loader returns null', async () => {

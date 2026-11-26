@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack, useNavigation } from 'expo-router';
 import {
   ActivityIndicator,
   FlatList,
@@ -7,10 +7,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import { ConversationActions } from '@/components/messages/ConversationActions';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { ReplyBox } from '@/components/messages/ReplyBox';
-import { AppKeyboardContainer } from '@/components/ui/AppKeyboardContainer';
+import { AppHeaderKeyboardContainer } from '@/components/ui/AppHeaderKeyboardContainer';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useInboxManage } from '@/hooks/useInboxManage';
 import { useInboxReply } from '@/hooks/useInboxReply';
 import { useInboxThread } from '@/hooks/useInboxThread';
 import { useTheme } from '@/hooks/useTheme';
@@ -22,8 +24,13 @@ export function ConversationThread({
   conversationId: number;
 }) {
   const { colors } = useTheme();
+  const navigation = useNavigation();
   const thread = useInboxThread(conversationId);
   const { messages, conversation, refetch } = thread;
+  const manage = useInboxManage({
+    conversationId,
+    merchantId: thread.merchantId,
+  });
   const reply = useInboxReply({
     conversationId,
     merchantId: thread.merchantId,
@@ -62,7 +69,20 @@ export function ConversationThread({
           </Pressable>
         </View>
       ) : (
-        <AppKeyboardContainer align="start" scrollEnabled={false}>
+        <AppHeaderKeyboardContainer>
+          {conversation ? (
+            <ConversationActions
+              busy={manage.isUpdating}
+              colors={colors}
+              conversation={conversation}
+              onDone={() => {
+                // Done can finish after the owner already left this chat
+                // (back button or swipe): never pop whichever screen is open.
+                if (navigation.isFocused()) router.back();
+              }}
+              onUpdate={manage.update}
+            />
+          ) : null}
           <FlatList
             contentContainerStyle={styles.list}
             data={rows}
@@ -118,7 +138,7 @@ export function ConversationThread({
             }}
             status={reply.status}
           />
-        </AppKeyboardContainer>
+        </AppHeaderKeyboardContainer>
       )}
     </View>
   );

@@ -8,10 +8,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { MerchantSetupForm } from '@/components/auth/register/MerchantSetupForm';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MerchantSetupChat } from '@/components/auth/onboarding-chat/MerchantSetupChat';
 import { getMerchantSetupStyles } from '@/components/auth/register/merchant-setup.styles';
 import { getStyles } from '@/components/auth/register/register.styles';
-import { AppFormScreen } from '@/components/ui/AppFormScreen';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 
@@ -51,27 +51,18 @@ export default function CompleteProfileScreen() {
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <AppFormScreen
-        contentContainerStyle={styles.content}
-        header={
-          <View style={styles.header}>
-            <View style={setupStyles.headerBrand}>
-              <View style={setupStyles.headerMark}>
-                <Ionicons
-                  color={colors.primary}
-                  name="storefront-outline"
-                  size={20}
-                />
-              </View>
-              <Text style={styles.headerTitle}>Complete Setup</Text>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <View style={styles.header}>
+          <View style={setupStyles.headerBrand}>
+            <View style={setupStyles.headerMark}>
+              <Ionicons color={colors.primary} name="sparkles" size={20} />
             </View>
-            <Text style={setupStyles.headerMeta}>About 2 min</Text>
+            <Text style={styles.headerTitle}>Complete Setup</Text>
           </View>
-        }
-        style={styles.safeArea}
-      >
-        <MerchantSetupForm />
-      </AppFormScreen>
+          <Text style={setupStyles.headerMeta}>Baci AI</Text>
+        </View>
+        <MerchantSetupChat />
+      </SafeAreaView>
     </View>
   );
 }

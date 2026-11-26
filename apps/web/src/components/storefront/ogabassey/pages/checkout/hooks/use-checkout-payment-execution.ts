@@ -26,6 +26,7 @@ export interface CheckoutPaymentExecutionOptions {
     session: ReturnType<typeof useCheckoutFormSession>['form'];
     account: ReturnType<typeof useCheckoutFormSession>['account'];
     user: Submission['account']['user'];
+    openAuthModal?: () => void;
   };
   cart: Submission['cart'];
   delivery: Omit<
@@ -175,6 +176,7 @@ export function useCheckoutPaymentExecution({
       password: form.account.password,
       user: form.user,
       waitForResolvedCustomerAuth: customerSession.waitForResolvedAuthenticated,
+      openAuthModal: form.openAuthModal,
     },
     cart,
     contact: {

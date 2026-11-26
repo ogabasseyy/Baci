@@ -84,6 +84,21 @@ describe('SwapPage', () => {
     expect(metadata.alternates).toEqual({
       canonical: 'https://ogabassey.com/swap',
     });
+    expect(metadata.openGraph).toMatchObject({
+      title: 'Swap Your Device',
+      url: 'https://ogabassey.com/swap',
+      type: 'website',
+      images: [
+        {
+          url: 'https://ogabassey.com/opengraph-image',
+          alt: 'Swap Your Device',
+        },
+      ],
+    });
+    expect(metadata.twitter).toMatchObject({
+      card: 'summary_large_image',
+      images: ['https://ogabassey.com/opengraph-image'],
+    });
   });
 
   it('returns fallback metadata when store is not found or non-ogabassey', async () => {

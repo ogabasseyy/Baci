@@ -3,10 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
+  cookies: vi.fn(async () => ({})),
+  createClient: vi.fn(),
   limit: vi.fn(),
   rpc: vi.fn(),
   environment: vi.fn(),
 }));
+vi.mock('next/headers', () => ({ cookies: mocks.cookies }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/rate-limit', () => ({
   checkOxygenProviderRateLimit: mocks.limit,
@@ -31,6 +35,7 @@ describe('Oxygen storefront availability', () => {
       supabase: { rpc: mocks.rpc },
       error: null,
     });
+    mocks.createClient.mockReturnValue({ rpc: mocks.rpc });
     mocks.limit.mockResolvedValue({ allowed: true });
     mocks.environment.mockReturnValue('production');
     mocks.rpc.mockResolvedValue({ data: true, error: null });
@@ -45,11 +50,27 @@ describe('Oxygen storefront availability', () => {
       { p_merchant_id: merchantId }
     );
   });
-  it('rejects unauthenticated and malformed requests', async () => {
+  it('returns available: false when merchant toggle or policy denies admission', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: false, error: null });
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'oxygen_storefront_pilot_available',
+      { p_merchant_id: merchantId }
+    );
+  });
+  it('returns open storefront availability for guests and rejects malformed requests', async () => {
     mocks.auth.mockResolvedValueOnce({ error: 'unauthorized' });
-    expect((await GET(request())).status).toBe(401);
+    const guestResponse = await GET(request());
+    expect(guestResponse.status).toBe(200);
+    expect(await guestResponse.json()).toEqual({ available: true });
+    expect(mocks.createClient).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'oxygen_storefront_pilot_available',
+      { p_merchant_id: merchantId }
+    );
     expect((await GET(request('?merchantId=invalid'))).status).toBe(400);
-    expect(mocks.rpc).not.toHaveBeenCalled();
   });
   it('fails closed when runtime is disabled or admission lookup fails', async () => {
     vi.stubEnv('OXYGEN_PRODUCTION_RUNTIME_ENABLED', 'false');

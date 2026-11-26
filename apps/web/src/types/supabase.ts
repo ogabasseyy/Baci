@@ -6273,6 +6273,7 @@ export type Database = {
           loyalty_enabled: boolean | null;
           merchant_id: string;
           order_tracking_enabled: boolean | null;
+          oxygen_enabled: boolean;
           pay_on_delivery_enabled: boolean | null;
           paystack_enabled: boolean | null;
           preferred_international_gateway: string | null;
@@ -6358,6 +6359,7 @@ export type Database = {
           loyalty_enabled?: boolean | null;
           merchant_id: string;
           order_tracking_enabled?: boolean | null;
+          oxygen_enabled?: boolean;
           pay_on_delivery_enabled?: boolean | null;
           paystack_enabled?: boolean | null;
           preferred_international_gateway?: string | null;
@@ -6443,6 +6445,7 @@ export type Database = {
           loyalty_enabled?: boolean | null;
           merchant_id?: string;
           order_tracking_enabled?: boolean | null;
+          oxygen_enabled?: boolean;
           pay_on_delivery_enabled?: boolean | null;
           paystack_enabled?: boolean | null;
           preferred_international_gateway?: string | null;
@@ -19466,6 +19469,7 @@ export type Database = {
           klump_max_amount: number;
           klump_min_amount: number;
           korapay_enabled: boolean;
+          oxygen_enabled: boolean;
           pay_on_delivery_enabled: boolean;
           paystack_enabled: boolean;
           vat_rate: number;

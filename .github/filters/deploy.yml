@@ -165,6 +165,7 @@ tracking:
   - 'apps/web/src/lib/supabase/public.ts'
   - 'packages/shared/src/lib/gigl-tracking-status.ts'
   - 'packages/shared/src/lib/filter-by-location-phrase.ts'
+  - 'packages/shared/src/lib/location-state-aliases.ts'
   # The poller imports the leaves above through workspace subpath
   # exports, resolved through this map: redirecting an export swaps
   # the executed module without touching the importer.

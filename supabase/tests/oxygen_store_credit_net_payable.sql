@@ -229,12 +229,17 @@ BEGIN
       AND column_name = 'wallet_id'
   ) THEN
     INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
-    VALUES ('ec310000-0000-4000-8000-000000000016','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-REVERSED',50000,50000,'NGN','unpaid','oxygen',0,0,20000,20000);
+    VALUES
+      ('ec310000-0000-4000-8000-000000000016','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-REVERSED',50000,50000,'NGN','unpaid','oxygen',0,0,20000,20000),
+      ('ec310000-0000-4000-8000-000000000018','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PENDING-WALLET',50000,50000,'NGN','unpaid','oxygen',0,0,0,0);
+
+    INSERT INTO public.order_items(order_id,product_id,name,price,quantity)
+    VALUES ('ec310000-0000-4000-8000-000000000016','ec310000-0000-4000-8000-000000000031','Oxygen Test Phone',50000,1);
 
     INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
     VALUES
       ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','completed',20000,0,'order_redemption','ec310000-0000-4000-8000-000000000016'),
-      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','pending',10000,0,'order_redemption','ec310000-0000-4000-8000-000000000016'),
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','pending',10000,0,'order_redemption','ec310000-0000-4000-8000-000000000018'),
       ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',20000,20000,'order_reversal','ec310000-0000-4000-8000-000000000016'),
       ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','pending',10000,0,'order_reversal','ec310000-0000-4000-8000-000000000012');
 
@@ -251,6 +256,9 @@ BEGIN
 
     IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 20000, 20000, 'unpaid') IS DISTINCT FROM 50000 THEN
       RAISE EXCEPTION 'Expected reversed ledger order net payable 50000 despite stale columns, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000016', 50000, 20000, 20000, 'unpaid');
+    END IF;
+    IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000018', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 50000 THEN
+      RAISE EXCEPTION 'Expected pending wallet redemption not to reduce credit on order 18, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000018', 50000, 0, 0, 'unpaid');
     END IF;
     IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid') IS DISTINCT FROM 35000 THEN
       RAISE EXCEPTION 'Expected pending reversal not to reduce credit on order 12, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000012', 50000, 0, 0, 'unpaid');

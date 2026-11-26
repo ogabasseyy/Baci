@@ -1,145 +1,33 @@
-import { staffTopUpSchema } from '@baci/shared';
-import { z } from 'zod';
+import type { z } from 'zod';
+import {
+  type AmendmentConfirmation,
+  type AmendmentReplacement,
+  amendmentApiErrorSchema,
+  amendmentResultSchema,
+  claimResultSchema,
+  confirmationResultSchema,
+  type FinanceActionResult,
+  previewSchema,
+  replacementsSchema,
+  type VerifiedSettlementAction,
+  verifiedReturnResultSchema,
+  workspaceSchema,
+} from '@/schemas/paid-order-amendment';
+
+export type {
+  AmendmentConfirmation,
+  AmendmentPreview,
+  AmendmentReplacement,
+  AmendmentWorkspace,
+  VerifiedSettlementAction,
+} from '@/schemas/paid-order-amendment';
+export {
+  amendmentConfirmationSchema,
+  verifiedSettlementActionSchema,
+} from '@/schemas/paid-order-amendment';
+
 import { createAuthenticatedFetchText } from '@/hooks/orders/authenticated-fetch';
 import { BASE_URL } from '@/lib/api-base-url';
-
-const replacementKind = z.enum(['product', 'variant', 'condition_offer']);
-const moneyMinor = z.number().int().safe();
-const state = z.enum([
-  'awaiting_payment',
-  'awaiting_refund',
-  'settled',
-  'reversed',
-  'cancelled_for_recovery',
-]);
-
-const workspaceSchema = z.object({
-  canStart: z.boolean(),
-  canRefund: z.boolean(),
-  isVerifiedFunding: z.boolean().optional(),
-  verifiedCreditDirectRefund: z.boolean().nullish(),
-  canOpenVerifiedCancellation: z.boolean().nullish(),
-  verifiedCancellationPending: z.boolean().nullish(),
-  verifiedCancellationReady: z.boolean().nullish(),
-  confirmationKey: z.string().nullish(),
-  summary: z.object({ amendmentId: z.uuid() }).nullable(),
-  events: z.array(
-    z.object({
-      id: z.number().int(),
-      type: z.string(),
-      createdAt: z.iso.datetime({ offset: true }),
-      details: z.record(z.string(), z.unknown()),
-    })
-  ),
-  bankEvidence: z.array(
-    z.object({
-      id: z.uuid(),
-      amountMinor: moneyMinor,
-      status: z.string().nullable(),
-      transactionId: z.uuid().nullable(),
-      occurredAt: z.iso.datetime({ offset: true }),
-      method: z.string().optional(),
-    })
-  ),
-  customer: z
-    .object({
-      state,
-      balanceDueMinor: moneyMinor,
-      refundOwedMinor: moneyMinor,
-    })
-    .nullable(),
-});
-const replacementsSchema = z.array(
-  z.object({
-    id: z.uuid(),
-    kind: replacementKind,
-    label: z.string(),
-  })
-);
-const lineSchema = z.object({
-  name: z.string(),
-  variantName: z.string().nullish(),
-  condition: z.string().nullish(),
-  quantity: z.number().int().positive(),
-});
-const previewSchema = z.object({
-  previewId: z.uuid(),
-  beforeLine: lineSchema,
-  afterLine: lineSchema,
-  beforeTotalMinor: moneyMinor,
-  afterTotalMinor: moneyMinor,
-  adjustmentMinor: moneyMinor,
-  canRecordStaffTopUp: z.boolean().optional(),
-  bankEvidence: z
-    .array(
-      z.object({
-        id: z.uuid(),
-        amountMinor: moneyMinor,
-        method: z.enum(['bank_transfer', 'cash', 'pos']).optional(),
-        occurredAt: z.iso.datetime({ offset: true }),
-      })
-    )
-    .optional(),
-});
-
-export const amendmentConfirmationSchema = z
-  .object({
-    previewId: z.uuid(),
-    idempotencyKey: z.uuid(),
-    reason: z.string().trim().min(1).max(500),
-    customerAgreed: z.literal(true),
-    bankEvidenceId: z.uuid().optional(),
-    staffTopUp: staffTopUpSchema.optional(),
-  })
-  .refine((value) => !(value.bankEvidenceId && value.staffTopUp));
-export const verifiedSettlementActionSchema = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('record_verified_lender_refund'),
-    idempotencyKey: z.uuid(),
-  }),
-  z.object({
-    action: z.literal('claim_offline_disbursement'),
-    idempotencyKey: z.uuid(),
-    sourceKind: z.literal('unapplied'),
-    sourceId: z.uuid(),
-  }),
-  z.object({
-    action: z.literal('record_offline_refund'),
-    idempotencyKey: z.uuid(),
-    claimId: z.uuid(),
-    evidenceId: z.uuid(),
-  }),
-  z.object({
-    action: z.literal([
-      'open_verified_cancellation',
-      'cancel_with_verified_refunds',
-    ]),
-    idempotencyKey: z.uuid(),
-    reason: z.string().trim().min(1).max(500),
-  }),
-]);
-export type VerifiedSettlementAction = z.infer<
-  typeof verifiedSettlementActionSchema
->;
-const claimResultSchema = z.object({
-  claimId: z.uuid(),
-  amountMinor: moneyMinor,
-  currency: z.literal('NGN'),
-});
-const verifiedReturnResultSchema = z.object({
-  claimId: z.uuid(),
-  outcome: z.literal('verified'),
-  transactionId: z.uuid().nullable(),
-});
-const amendmentResultSchema = z.object({ amendmentId: z.uuid() });
-type FinanceActionResult =
-  | z.infer<typeof claimResultSchema>
-  | z.infer<typeof verifiedReturnResultSchema>
-  | z.infer<typeof amendmentResultSchema>;
-export type AmendmentConfirmation = z.infer<typeof amendmentConfirmationSchema>;
-export type AmendmentPreview = z.infer<typeof previewSchema>;
-export type AmendmentWorkspace = z.infer<typeof workspaceSchema>;
-export type AmendmentReplacement = z.infer<typeof replacementsSchema>[number];
 
 export class PaidOrderAmendmentError extends Error {
   constructor(
@@ -182,9 +70,7 @@ async function request<T>(
     );
   }
   if (!response.ok) {
-    const error = z
-      .object({ error: z.string(), code: z.string().optional() })
-      .safeParse(data);
+    const error = amendmentApiErrorSchema.safeParse(data);
     throw new PaidOrderAmendmentError(
       error.data?.error ?? 'Unable to load the order change.',
       response.status,
@@ -227,6 +113,6 @@ export const paidOrderAmendment = {
     );
   },
   confirm(orderId: string, payload: AmendmentConfirmation) {
-    return request(orderId, '', z.object({ amendmentId: z.uuid() }), payload);
+    return request(orderId, '', confirmationResultSchema, payload);
   },
 };

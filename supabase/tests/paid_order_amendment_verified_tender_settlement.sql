@@ -16,6 +16,8 @@ DECLARE
   late_transfer uuid;
   outgoing uuid;
   bank_account uuid;
+  rotation_account uuid;
+  rotation_cutover timestamptz;
   claim jsonb;
   return_payload jsonb;
   amendment uuid;
@@ -216,6 +218,18 @@ BEGIN
       EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'refund_evidence_required' THEN RAISE; END IF;
       END;
+      BEGIN
+        UPDATE private.paid_order_amendment_config
+        SET bank_account_id = gen_random_uuid(),bank_evidence_cutover = now()
+        WHERE merchant_id = m;
+        RAISE EXCEPTION 'Bank account rotated with an unclaimed cancellation return';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'bank_return_claim_open' THEN RAISE; END IF;
+      END;
+      IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+        IS DISTINCT FROM bank_account THEN
+        RAISE EXCEPTION 'Rejected unclaimed-return rotation changed the configured account';
+      END IF;
       payload := jsonb_build_object('action','claim_offline_disbursement',
         'sourceKind','unapplied','sourceId',late_transfer,'idempotencyKey','claim-late-bank-return');
       claim := public.run_paid_order_amendment_action(o,amendment,payload);
@@ -256,6 +270,19 @@ BEGIN
       OR (public.read_paid_order_amendment_document(o,'current')#>>'{inputs,order,amount_paid}')::numeric
         IS DISTINCT FROM 0::numeric THEN
       RAISE EXCEPTION 'Verified cancellation refund, idempotency, restock or invoice drift: %',result;
+    END IF;
+    IF method = 'bank_transfer' THEN
+      rotation_account := gen_random_uuid();
+      rotation_cutover := now() + interval '1 second';
+      UPDATE private.paid_order_amendment_config
+      SET bank_account_id = rotation_account,bank_evidence_cutover = rotation_cutover
+      WHERE merchant_id = m;
+      IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+          IS DISTINCT FROM rotation_account
+        OR (SELECT bank_evidence_cutover FROM private.paid_order_amendment_config WHERE merchant_id = m)
+          IS DISTINCT FROM rotation_cutover THEN
+        RAISE EXCEPTION 'Bank account rotation remained blocked after return settlement';
+      END IF;
     END IF;
   END LOOP;
 END;

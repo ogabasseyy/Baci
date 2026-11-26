@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import type { AmendmentConfirmation } from './paid-order-amendment-api';
+import type { AmendmentConfirmation } from '@/schemas/paid-order-amendment';
 import {
   PaidOrderAmendmentError,
   paidOrderAmendment,

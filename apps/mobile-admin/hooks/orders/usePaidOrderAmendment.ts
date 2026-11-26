@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   type AmendmentConfirmation,
-  amendmentConfirmationSchema,
   PaidOrderAmendmentError,
   paidOrderAmendment,
 } from '@/lib/paid-order-amendment-api';
 import { asyncStorage } from '@/lib/storage';
+import { amendmentConfirmationSchema } from '@/schemas/paid-order-amendment';
 import { AuthenticatedFetchPreflightError } from './authenticated-fetch';
 
 type ConfirmationOutcome = 'confirmed' | 'competing' | 'unknown';

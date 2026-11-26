@@ -1,9 +1,11 @@
 import { ArrowRight, Calendar, User } from 'lucide-react';
-import Image from 'next/image';
 import Link from 'next/link';
+import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import {
   BLOG_HERO_IMAGE_QUALITY,
   BLOG_LISTING_CARD_IMAGE_SIZES,
+  BLOG_LISTING_CARD_MAX_SRCSET_WIDTH,
+  BLOG_LISTING_CARD_MIN_SRCSET_WIDTH,
 } from '@/components/storefront/ogabassey/config/blog-media';
 import { asRoute } from '@/lib/routes';
 import type { BlogPostData } from '@/templates/registry';
@@ -19,7 +21,9 @@ interface BlogPostCardProps {
  * Grid article card for the Ogabassey storefront blog listing.
  *
  * Uses a stretched link on the card heading so `next/link` does not serialize
- * the entire `<article>` subtree inside `__next_f` props.
+ * the entire `<article>` subtree inside `__next_f` props, and renders the
+ * card media via `CdnFormatImage` bounded to the `384–750w` card ladder so
+ * Slow-4G mobile fetches compact AVIF assets rather than full-size JPEGs.
  */
 export function BlogPostCard({
   href,
@@ -30,12 +34,14 @@ export function BlogPostCard({
   return (
     <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 focus-within:ring-2 focus-within:ring-red-600 hover:-translate-y-1 hover:shadow-xl">
       <div className="relative h-64 overflow-hidden">
-        <Image
+        <CdnFormatImage
           src={imageSrc}
           alt={post.title}
           className="object-cover transition-transform duration-700 group-hover:scale-110"
           fill
           sizes={BLOG_LISTING_CARD_IMAGE_SIZES}
+          minSrcSetWidth={BLOG_LISTING_CARD_MIN_SRCSET_WIDTH}
+          maxSrcSetWidth={BLOG_LISTING_CARD_MAX_SRCSET_WIDTH}
           loading="lazy"
           fetchPriority="low"
           quality={BLOG_HERO_IMAGE_QUALITY}

@@ -68,6 +68,7 @@ export function BlogListingPagination({
         {safeCurrentPage > 1 ? (
           <Link
             href={asRoute(buildPageHref(safeCurrentPage - 1))}
+            prefetch={false}
             rel="prev"
             className={LINK_CLASS}
           >
@@ -88,6 +89,7 @@ export function BlogListingPagination({
             <Link
               key={item.key}
               href={asRoute(buildPageHref(item.page))}
+              prefetch={false}
               aria-current={item.page === safeCurrentPage ? 'page' : undefined}
               className={
                 item.page === safeCurrentPage ? ACTIVE_CLASS : LINK_CLASS
@@ -101,6 +103,7 @@ export function BlogListingPagination({
         {safeCurrentPage < totalPages ? (
           <Link
             href={asRoute(buildPageHref(safeCurrentPage + 1))}
+            prefetch={false}
             rel="next"
             className={LINK_CLASS}
           >

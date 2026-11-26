@@ -172,4 +172,94 @@ describe('getOgabasseyImageFormatProps', () => {
       vi.resetModules();
     }
   });
+
+  it('caps srcSet rungs and fallback src to [minSrcSetWidth, maxSrcSetWidth] without leaking bound props', () => {
+    const cover = `${CDN}/core-assets/blog/post/cover.jpg`;
+    const result = getOgabasseyImageFormatProps({
+      src: cover,
+      fill: true,
+      alt: 'Blog card',
+      quality: 50,
+      sizes: '(max-width: 767px) calc(100vw - 2rem), 430px',
+      minSrcSetWidth: 384,
+      maxSrcSetWidth: 750,
+    });
+
+    expect(result.avifSource?.srcSet).toBe(
+      `${CDN}/image/width=384,quality=50,format=avif/core-assets/blog/post/cover.jpg 384w, ${CDN}/image/width=640,quality=50,format=avif/core-assets/blog/post/cover.jpg 640w, ${CDN}/image/width=750,quality=50,format=avif/core-assets/blog/post/cover.jpg 750w`
+    );
+    expect(result.imgProps.srcSet).toBe(
+      `${CDN}/image/width=384,quality=50,format=jpeg/core-assets/blog/post/cover.jpg 384w, ${CDN}/image/width=640,quality=50,format=jpeg/core-assets/blog/post/cover.jpg 640w, ${CDN}/image/width=750,quality=50,format=jpeg/core-assets/blog/post/cover.jpg 750w`
+    );
+    expect(result.imgProps.src).toBe(
+      `${CDN}/image/width=750,quality=50,format=jpeg/core-assets/blog/post/cover.jpg`
+    );
+    expect('minSrcSetWidth' in result.imgProps).toBe(false);
+    expect('maxSrcSetWidth' in result.imgProps).toBe(false);
+  });
+
+  it('caps non-CDN srcSet rungs to maxSrcSetWidth and leaves avifSource null', () => {
+    const src =
+      'https://xyz.supabase.co/storage/v1/object/public/blog/cover.jpg';
+    const result = getOgabasseyImageFormatProps({
+      src,
+      fill: true,
+      alt: 'External card',
+      quality: 50,
+      sizes: '(max-width: 767px) calc(100vw - 2rem), 430px',
+      minSrcSetWidth: 384,
+      maxSrcSetWidth: 750,
+    });
+
+    expect(result.avifSource).toBeNull();
+    expect(result.imgProps.srcSet).toBe(
+      `${src}?w=384&q=50 384w, ${src}?w=640&q=50 640w, ${src}?w=750&q=50 750w`
+    );
+    expect(result.imgProps.src).toBe(`${src}?w=750&q=50`);
+  });
+
+  it('preserves overrideSrc and bounds fixed-size 1x/2x CDN and query w= candidates without altering path width=', () => {
+    const cover = `${CDN}/core-assets/blog/post/cover.jpg`;
+    const withOverride = getOgabasseyImageFormatProps({
+      src: cover,
+      overrideSrc: '/legacy-cover.jpg',
+      fill: true,
+      alt: 'Blog card',
+      quality: 50,
+      sizes: '(max-width: 767px) calc(100vw - 2rem), 430px',
+      minSrcSetWidth: 384,
+      maxSrcSetWidth: 750,
+    });
+    expect(withOverride.imgProps.src).toBe('/legacy-cover.jpg');
+    expect(withOverride.imgProps.srcSet).not.toContain('828w');
+
+    const fixed = getOgabasseyImageFormatProps({
+      src: cover,
+      width: 600,
+      height: 400,
+      alt: 'Fixed card',
+      quality: 50,
+      maxSrcSetWidth: 750,
+    });
+    expect(fixed.avifSource?.srcSet).toBe(
+      `${CDN}/image/width=640,quality=50,format=avif/core-assets/blog/post/cover.jpg 1x`
+    );
+    expect(fixed.imgProps.src).toBe(
+      `${CDN}/image/width=640,quality=50,format=jpeg/core-assets/blog/post/cover.jpg`
+    );
+
+    const pathToken = getOgabasseyImageFormatProps({
+      src: '/images/width=1200/cover.jpg',
+      width: 400,
+      height: 300,
+      alt: 'Local asset with width= in path',
+      maxSrcSetWidth: 500,
+    });
+    expect(pathToken.imgProps.srcSet).toBe(
+      '/images/width=1200/cover.jpg?w=500&q=75 1x'
+    );
+    expect(pathToken.imgProps.src).toBe(
+      '/images/width=1200/cover.jpg?w=500&q=75'
+    );
+  });
 });

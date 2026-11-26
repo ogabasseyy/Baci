@@ -1,6 +1,7 @@
 import { getImageProps } from 'next/image';
 import { rewriteOgabasseyTransformUrlFormat } from '@/lib/ogabassey-cdn-image-url';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
+import { boundImageFormatImgProps } from '@/lib/ogabassey-image-srcset-bounds';
 
 /**
  * Per-format `<picture>` source builder for OgaBassey CDN images.
@@ -25,7 +26,23 @@ import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loa
 
 type GetImagePropsInput = Parameters<typeof getImageProps>[0];
 
-export type OgabasseyImageFormatPropsInput = Omit<GetImagePropsInput, 'loader'>;
+export type OgabasseyImageFormatPropsInput = Omit<
+  GetImagePropsInput,
+  'loader'
+> & {
+  /**
+   * Optional upper width bound applied to `w`-descriptor candidates and
+   * `x`/descriptorless candidates whose URL carries a `width=` or `w=`
+   * parameter. Static density/descriptorless URLs without width parameters
+   * pass through unchanged.
+   */
+  maxSrcSetWidth?: number;
+  /**
+   * Optional lower width bound applied under the same URL/descriptor rules as
+   * `maxSrcSetWidth`.
+   */
+  minSrcSetWidth?: number;
+};
 
 export interface OgabasseyAvifSourceProps {
   sizes?: string;
@@ -81,10 +98,17 @@ export function buildOgabasseyAvifSrcSet(
 export function getOgabasseyImageFormatProps(
   input: OgabasseyImageFormatPropsInput
 ): OgabasseyImageFormatProps {
-  const { props: imgProps } = getImageProps({
-    ...input,
+  const { maxSrcSetWidth, minSrcSetWidth, ...imageInput } = input;
+  const { props: rawImgProps } = getImageProps({
+    ...imageInput,
     loader: ogabasseyFallbackImageLoader,
   } as GetImagePropsInput);
+  const imgProps = boundImageFormatImgProps(
+    rawImgProps,
+    minSrcSetWidth,
+    maxSrcSetWidth,
+    Boolean(imageInput.overrideSrc)
+  );
 
   const avifSrcSet = buildOgabasseyAvifSrcSet(imgProps.srcSet);
 

@@ -43,6 +43,7 @@ export function BlogListingOgabasseyLcpHero() {
           href={asRoute(
             joinRouteBasePath(basePath, `/blog/${featuredPost.slug}`)
           )}
+          prefetch={false}
         >
           <div className="ogabassey-blog-featured-story__media">
             <CdnFormatImage

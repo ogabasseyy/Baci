@@ -101,6 +101,55 @@ it('collects address details and accepts PDF or image uploads', async () => {
   );
 });
 
+it('submits address at booked stage when optional landmark is left blank', async () => {
+  const submit = vi.fn().mockResolvedValue(undefined);
+  render(
+    <OxygenVerificationForms
+      stage="booked"
+      address={{}}
+      approvalOtpReady={false}
+      busy={false}
+      submit={submit}
+    />
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Enter address manually' })
+  );
+  for (const [label, value] of [
+    ['State', 'Lagos'],
+    ['City / town', 'Ikeja'],
+    ['Local government area (LGA)', 'Ikeja'],
+    ['Street address', 'Street'],
+    ['House / flat number', '1'],
+  ]) {
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  }
+  fireEvent.click(
+    screen.getByLabelText(
+      'This is my home address and matches my proof of address.'
+    )
+  );
+  const bill = new File(['bill'], 'bill.pdf', { type: 'application/pdf' });
+  fireEvent.change(screen.getByLabelText('Proof of address'), {
+    target: { files: [bill] },
+  });
+  fireEvent.submit(screen.getByRole('form', { name: 'Verify address' }));
+  await waitFor(() =>
+    expect(submit).toHaveBeenCalledWith(
+      {
+        action: 'submit_address',
+        state: 'Lagos',
+        city: 'Ikeja',
+        lga: 'Ikeja',
+        street: 'Street',
+        landmark: '',
+        house_number: '1',
+      },
+      bill
+    )
+  );
+});
+
 it('shows one phone task and loading feedback while blocking duplicate submissions', async () => {
   let finish: () => void = () => {};
   const submit = vi.fn(

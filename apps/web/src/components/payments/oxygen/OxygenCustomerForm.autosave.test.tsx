@@ -71,7 +71,7 @@ it('restores step 2 directly with masked identity, reconfirms saved bank in back
   const submitButton = screen.getByRole('button', {
     name: 'Continue verification',
   });
-  expect(submitButton).toBeEnabled();
+  await waitFor(() => expect(submitButton).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Back' }));
   await waitFor(() =>
     expect(
@@ -181,4 +181,32 @@ it.each([
   } finally {
     mocks.status = 'saved';
   }
+});
+
+it('keeps step 2 submit disabled while the bank list and account lookup are loading on reload', async () => {
+  const { fetchWithCsrf } = await import('@/lib/api-client');
+  let resolveBanks!: (response: Response) => void;
+  vi.mocked(fetchWithCsrf).mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        resolveBanks = resolve;
+      })
+  );
+  render(
+    <OxygenCustomerForm
+      workflowId="108497c7-a91c-4f72-b3cf-410ed6800fb3"
+      phone="08000000001"
+      busy={false}
+      submit={vi.fn()}
+    />
+  );
+  expect(
+    screen.getByRole('button', { name: 'Continue verification' })
+  ).toBeDisabled();
+  resolveBanks(Response.json({ banks: [{ code: '001', name: 'Test bank' }] }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue verification' })
+    ).toBeEnabled()
+  );
 });

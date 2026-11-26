@@ -100,6 +100,11 @@ it('focuses and highlights the missing payday instead of the error banner', asyn
   );
   await screen.findByRole('heading', { name: 'Employment and consent' });
   const payday = screen.getByLabelText('When are you paid?');
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue verification' })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );

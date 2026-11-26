@@ -69,7 +69,8 @@ it('retains the uploaded utility bill when editing home address fields at booked
     await screen.findByRole('button', {
       name: 'Submit saved home address and proof',
     })
-  ).toBeTruthy();
+  ).toBeEnabled();
+  fireEvent.press(screen.getByRole('button', { name: 'Edit home address' }));
   fireEvent.changeText(
     screen.getByLabelText('Nearby landmark'),
     'Near Allen Roundabout'

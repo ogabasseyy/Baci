@@ -85,7 +85,13 @@ export function OxygenBookedAddress({
     landmark: fields.home_landmark ?? '',
     house_number: fields.home_house_number ?? '',
   };
-  const complete = Object.values(address).every((v) => v.trim());
+  const complete = [
+    address.state,
+    address.lga,
+    address.city,
+    address.street,
+    address.house_number,
+  ].every((v) => v.trim());
   const file = picked.proof ?? (!edit ? prepared : undefined);
   const waiting =
     snapshot.state.kyc?.address_status === 'PROCESSING' ||

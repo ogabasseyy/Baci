@@ -73,7 +73,6 @@ export function OxygenBankFields({
   function invalidate() {
     generation.current++;
     onVerifiedChange?.(false);
-    onResolvingChange?.(false);
     setName('');
     setError('');
     setResolving(false);
@@ -99,7 +98,6 @@ export function OxygenBankFields({
       return;
     const token = ++generation.current;
     setResolving(true);
-    onResolvingChange?.(true);
     onVerifiedChange?.(false);
     setError('');
     setName('');
@@ -124,10 +122,22 @@ export function OxygenBankFields({
     } finally {
       if (generation.current === token) {
         setResolving(false);
-        onResolvingChange?.(false);
       }
     }
   }
+  const awaitingVerification = Boolean(
+    active &&
+      workflowId &&
+      !busy &&
+      bank &&
+      /^\d{10}$/.test(number) &&
+      !name &&
+      !error &&
+      (loading || resolving || banks.some((item) => item.code === bank))
+  );
+  useEffect(() => {
+    onResolvingChange?.(awaitingVerification);
+  }, [awaitingVerification, onResolvingChange]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: resolve reads only the selected account; result state must not restart the lookup.
   useEffect(() => {
     if (

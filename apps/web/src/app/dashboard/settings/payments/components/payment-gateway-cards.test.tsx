@@ -7,6 +7,7 @@ import { PaymentGatewayCards } from './payment-gateway-cards';
 const settings: PaymentGatewaySettings = {
   credit_direct_enabled: false,
   korapay_enabled: false,
+  oxygen_enabled: false,
   pay_on_delivery_enabled: false,
   paystack_enabled: false,
   preferred_international_gateway: 'korapay',

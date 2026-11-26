@@ -51,6 +51,10 @@ describe('useInboxReply', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: inboxConversationsKey('m1'),
     });
+    // bugfix: a chat opened from search kept its old last message and badge
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['inbox-search', 'm1'],
+    });
     expect(result.current.status).toBe('idle');
     expect(result.current.draft).toBe('');
   });
@@ -75,14 +79,19 @@ describe('useInboxReply', () => {
     sendInboxReply.mockRejectedValueOnce(
       new NetworkError('slow', { isTimeout: true })
     );
-    const { result, refreshThread } = setup(
+    const { result, refreshThread, client } = setup(
       vi.fn(async () => [{ ...sent, id: 11 }])
     );
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
     act(() => result.current.setDraft('Hello'));
     await act(() => result.current.send(3));
     expect(result.current.status).toBe('unconfirmed');
 
     await act(() => result.current.send(3));
+    // A delivery confirmed from the thread refreshes search results too.
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['inbox-search', 'm1'],
+    });
     expect(refreshThread).toHaveBeenCalledTimes(1);
     expect(sendInboxReply).toHaveBeenCalledTimes(1);
     expect(result.current.status).toBe('idle');

@@ -14,6 +14,8 @@ interface QuickActionButtonProps {
   iconSize?: number;
   /** Red counter on the corner; hidden at 0. Shows 99+ above 99. */
   badgeCount?: number;
+  /** The count is only what has loaded so far: shown as "N+", spoken as "at least N". */
+  badgeAtLeast?: boolean;
 }
 
 export function QuickActionButton({
@@ -24,6 +26,7 @@ export function QuickActionButton({
   backgroundColor,
   iconSize = 24,
   badgeCount = 0,
+  badgeAtLeast = false,
 }: QuickActionButtonProps) {
   const { colors, shadows } = useTheme();
   const finalIconColor = iconColor || colors.primary;
@@ -40,13 +43,19 @@ export function QuickActionButton({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={
-        badgeCount > 0 ? `${label}, ${badgeCount} waiting` : label
+        badgeCount > 0
+          ? `${label}, ${badgeAtLeast ? 'at least ' : ''}${badgeCount} waiting`
+          : label
       }
     >
       {badgeCount > 0 ? (
         <View style={[styles.badge, { backgroundColor: colors.error }]}>
           <Text style={[styles.badgeText, { color: colors.textOnPrimary }]}>
-            {badgeCount > 99 ? '99+' : badgeCount}
+            {badgeCount > 99
+              ? '99+'
+              : badgeAtLeast
+                ? `${badgeCount}+`
+                : badgeCount}
           </Text>
         </View>
       ) : null}

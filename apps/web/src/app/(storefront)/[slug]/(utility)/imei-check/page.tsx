@@ -11,6 +11,10 @@ import {
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
 import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
+import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
@@ -42,15 +46,32 @@ export async function generateMetadata({
   }
 
   const baseUrl = buildStoreUrl(merchant);
+  const canonicalUrl = `${baseUrl}/imei-check`;
+  const { metadataTitle, title } = buildStorefrontMetadataTitle({
+    title: 'Free Phone IMEI Check & Verification',
+    fallback: 'Free Phone IMEI Check & Verification',
+  });
+  const description =
+    'Check phone IMEI status, review verification requirements, and confirm device identity before buying, swapping, repairing or reselling a phone.';
 
   return {
-    title: buildStorefrontMetadataTitle({
-      title: 'IMEI Check',
-      fallback: 'IMEI Check',
-    }).metadataTitle,
-    description:
-      'Check phone IMEI status, review verification requirements, and confirm device identity before buying, swapping, repairing or reselling a phone.',
-    alternates: { canonical: `${baseUrl}/imei-check` },
+    title: metadataTitle,
+    description,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      type: 'website',
+      siteName: merchant.business_name,
+      images: getStorefrontOpenGraphImages(baseUrl, title, merchant.logo_url),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: getStorefrontTwitterImages(baseUrl, merchant.logo_url),
+    },
   };
 }
 

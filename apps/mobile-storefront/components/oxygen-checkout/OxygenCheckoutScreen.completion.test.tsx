@@ -47,7 +47,8 @@ describe('saved native Oxygen checkout completion', () => {
     jest.mocked(readOwnedOxygenOrder).mockResolvedValueOnce({
       id: 'order',
       total: 100,
-      payableTotal: 100,
+      payableTotal: paymentStatus === 'bnpl_approved' ? 0 : 100,
+      financedPrincipal: 100,
       order_number: 'ORD-STAGING-1',
       payment_method: 'oxygen',
       payment_status: paymentStatus,
@@ -135,6 +136,7 @@ it('keeps transient workflow state mounted during the confirmed OTP presentation
     id: 'order',
     total: 100,
     payableTotal: 100,
+    financedPrincipal: 100,
     payment_method: 'oxygen',
     payment_status: 'pending',
     shipping_status: 'pending',

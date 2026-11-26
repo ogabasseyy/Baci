@@ -347,6 +347,78 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'amendment_ineligible' THEN RAISE; END IF;
   END;
+
+  -- 10. Klump allows the canonical ceiling integer amount on fractional net-payable
+  --     residuals while non-Klump gateways remain strictly bounded at v_net_payable.
+  UPDATE public.orders
+  SET total = 50000, amount_paid = 0, wallet_amount_used = 0
+  WHERE id = 'cd710000-0000-4000-8000-000000000010';
+  -- Order 0010 already has 5,000 in customer_savings_redemptions, so 34,999.50
+  -- wallet + 5,000 savings = 39,999.50 credit, leaving 10,000.50 net payable.
+  UPDATE public.customer_wallet_transactions
+  SET amount = 34999.50
+  WHERE source_id = 'cd710000-0000-4000-8000-000000000010'
+    AND source_type = 'order_redemption';
+
+  IF public.claim_checkout_for_paid_order_amendment(
+    'cd710000-0000-4000-8000-000000000010',
+    'cd-track-partial',
+    'klump',
+    'BAC-CLAIMKLUMP02',
+    'NGN',
+    1000100
+  ) IS DISTINCT FROM 'untracked' THEN
+    RAISE EXCEPTION 'Klump fractional ceiling minor amount was rejected by claim_checkout_for_paid_order_amendment';
+  END IF;
+
+  BEGIN
+    PERFORM public.claim_checkout_for_paid_order_amendment(
+      'cd710000-0000-4000-8000-000000000010',
+      'cd-track-partial',
+      'klump',
+      'BAC-CLAIMKLUMP03',
+      'NGN',
+      1000050
+    );
+    RAISE EXCEPTION 'Non-integer Klump minor amount escaped claim_checkout_for_paid_order_amendment';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amendment_ineligible' THEN RAISE; END IF;
+  END;
+
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
+  v_tx_id := public.create_payment_transaction(
+    'cd710000-0000-4000-8000-000000000002',
+    'cd710000-0000-4000-8000-000000000010',
+    10001,
+    'NGN',
+    'klump',
+    'BAC-KLUMP-CEIL-01',
+    0,
+    10001,
+    'guest@example.test',
+    'Partial Buyer'
+  );
+  IF v_tx_id IS NULL THEN
+    RAISE EXCEPTION 'Expected canonical integer Klump create_payment_transaction to return transaction id';
+  END IF;
+
+  BEGIN
+    PERFORM public.create_payment_transaction(
+      'cd710000-0000-4000-8000-000000000002',
+      'cd710000-0000-4000-8000-000000000010',
+      10001,
+      'NGN',
+      'paystack',
+      'BAC-PAYSTACK-CEIL',
+      0,
+      10001,
+      'guest@example.test',
+      'Partial Buyer'
+    );
+    RAISE EXCEPTION 'Non-Klump gateway exceeded decimal v_net_payable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amount_exceeds_total' THEN RAISE; END IF;
+  END;
 END $tx_test$;
 
 ROLLBACK;

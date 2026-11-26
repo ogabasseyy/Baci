@@ -2103,7 +2103,7 @@ describe('POST /api/payments/initialize', () => {
       });
     });
 
-    it('keeps the order total as the RPC amount and stores the rounded Klump charge amount', async () => {
+    it('uses the rounded integer Klump charge amount across claim and transaction RPCs', async () => {
       rpcResult = {
         data: [
           {
@@ -2132,11 +2132,18 @@ describe('POST /api/payments/initialize', () => {
       );
 
       expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 5_808_900,
+        p_gateway: 'klump',
+      });
       const transactionCall = rpcCalls.find(
         (call) => call.name === 'create_payment_transaction'
       );
       expect(transactionCall?.args).toMatchObject({
-        p_amount: 58_088.5,
+        p_amount: 58_089,
         p_gateway: 'klump',
         p_merchant_amount: 58_089,
         p_platform_fee: 0,
@@ -2173,11 +2180,18 @@ describe('POST /api/payments/initialize', () => {
       );
 
       expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 5_808_900,
+        p_gateway: 'klump',
+      });
       const transactionCall = rpcCalls.find(
         (call) => call.name === 'create_payment_transaction'
       );
       expect(transactionCall?.args).toMatchObject({
-        p_amount: 58_088.5,
+        p_amount: 58_089,
         p_gateway: 'klump',
         p_merchant_amount: 58_089,
         p_platform_fee: 0,
@@ -2214,13 +2228,88 @@ describe('POST /api/payments/initialize', () => {
       );
 
       expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 5_808_900,
+        p_gateway: 'klump',
+      });
       const transactionCall = rpcCalls.find(
         (call) => call.name === 'create_payment_transaction'
       );
       expect(transactionCall?.args).toMatchObject({
-        p_amount: 58_088.5,
+        p_amount: 58_089,
         p_gateway: 'klump',
         p_merchant_amount: 58_089,
+        p_platform_fee: 0,
+        p_reference: 'BAC-ABCD12345678',
+      });
+    });
+
+    it('uses the canonical integer Klump amount across claim and transaction RPCs when wallet credit leaves a kobo residual', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: {
+          total: 50_000,
+          wallet_amount_used: 0,
+          amount_paid: 0,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 39_999.5,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 10_000.5, gateway: 'klump' })
+      );
+
+      expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 1_000_100,
+        p_gateway: 'klump',
+      });
+      const transactionCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(transactionCall?.args).toMatchObject({
+        p_amount: 10_001,
+        p_gateway: 'klump',
+        p_merchant_amount: 10_001,
         p_platform_fee: 0,
         p_reference: 'BAC-ABCD12345678',
       });

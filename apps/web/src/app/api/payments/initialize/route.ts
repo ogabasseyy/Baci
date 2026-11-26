@@ -1545,9 +1545,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const klumpChargeAmount = toKlumpIntegerAmount(payableAmount);
+
     const paymentData: AuthorizedPaymentInitRequest = {
       ...data,
-      amount: payableAmount,
+      amount: gateway === 'klump' ? klumpChargeAmount : payableAmount,
       currency: chargeCurrency,
     };
 
@@ -1566,8 +1568,6 @@ export async function POST(request: NextRequest) {
         400
       );
     }
-
-    const klumpChargeAmount = toKlumpIntegerAmount(payableAmount);
 
     if (gateway === 'klump') {
       if (!gatewaySettings.klump_enabled) {
@@ -1688,7 +1688,10 @@ export async function POST(request: NextRequest) {
                   : 'paystack_no_subaccount',
         p_reference: reference,
         p_currency: chargeCurrency,
-        p_expected_amount_minor: Math.round(payableAmount * 100),
+        p_expected_amount_minor:
+          gateway === 'klump'
+            ? klumpChargeAmount * 100
+            : Math.round(payableAmount * 100),
         p_platform_fee_minor: preparedPaystack?.fees.platformFee ?? null,
         p_retained_shipping_minor:
           preparedPaystack?.retainedShippingKobo ?? null,
@@ -2092,7 +2095,7 @@ export async function POST(request: NextRequest) {
       {
         p_merchant_id: merchantId,
         p_order_id: paymentData.order_id,
-        p_amount: paymentData.amount, // Klump keeps net decimal payable; p_merchant_amount stores rounded integer.
+        p_amount: paymentData.amount,
         p_currency: paymentData.currency,
         p_gateway: gateway,
         p_reference: paymentResult.reference,

@@ -123,7 +123,11 @@ it('returns net payable total after subtracting pre-gateway store credit', async
   });
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).resolves.toMatchObject({ total: 198000, payableTotal: 150000 });
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 150000,
+    financedPrincipal: 150000,
+  });
 });
 
 it('rejects an unpaid zero-balance Oxygen order covered 100% by store credit', async () => {
@@ -157,7 +161,28 @@ it('does not treat settled amount_paid as store credit for paid or bnpl_approved
   });
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).resolves.toMatchObject({ total: 198000, payableTotal: 198000 });
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 0,
+    financedPrincipal: 198000,
+  });
+
+  mockOrderQuery({
+    id: orderId,
+    total: 198000,
+    amount_paid: 198000,
+    wallet_amount_used: 48000,
+    payment_method: 'oxygen',
+    payment_status: 'paid',
+    shipping_status: 'pending',
+  });
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 0,
+    financedPrincipal: 150000,
+  });
 
   mockOrderQuery({
     id: orderId,
@@ -170,7 +195,11 @@ it('does not treat settled amount_paid as store credit for paid or bnpl_approved
   });
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).resolves.toMatchObject({ total: 198000, payableTotal: 150000 });
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 0,
+    financedPrincipal: 150000,
+  });
 });
 
 it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen orders', async () => {
@@ -198,7 +227,11 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
   );
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).resolves.toMatchObject({ total: 198000, payableTotal: 150000 });
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 150000,
+    financedPrincipal: 150000,
+  });
 
   mockOrderQuery(
     {
@@ -216,7 +249,11 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
   );
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).resolves.toMatchObject({ total: 198000, payableTotal: 150000 });
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 0,
+    financedPrincipal: 150000,
+  });
 
   mockOrderQuery(
     {
@@ -261,7 +298,11 @@ it('subtracts partial pre-gateway amount_paid on pending orders and ignores reve
   });
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).resolves.toMatchObject({ total: 198000, payableTotal: 150000 });
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 150000,
+    financedPrincipal: 150000,
+  });
 
   mockOrderQuery(
     {

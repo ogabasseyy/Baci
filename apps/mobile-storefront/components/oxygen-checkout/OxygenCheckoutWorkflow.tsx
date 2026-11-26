@@ -140,7 +140,11 @@ export function OxygenCheckoutWorkflow({
                   Boolean(refreshing) ||
                   !capabilities
                 }
-                productAmount={context.payableTotal ?? context.total}
+                productAmount={
+                  orderPaymentConfirmed
+                    ? 0
+                    : (context.payableTotal ?? context.total)
+                }
                 scopeKey={`${context.session.profile.storagePrefix}:${context.session.userId}:${context.session.profile.merchantId}:${orderId}`}
               />
             </View>

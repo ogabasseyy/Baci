@@ -174,4 +174,28 @@ describe('launchKlumpCheckout', () => {
       { name: 'Phone', quantity: 1, unit_price: 30_000 },
     ]);
   });
+
+  it('rounds kobo-fractional store-credit residuals to the canonical Klump integer amount', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 39_999.5,
+      savings_ledger_used: 0,
+      items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchKlumpCheckout(ctx);
+
+    expect(mockKlumpConstructor).toHaveBeenCalledTimes(1);
+    const args = mockKlumpConstructor.mock.calls[0][0] as WidgetArgs & {
+      data: { items: Array<{ unit_price: number }> };
+    };
+    expect(args.data.amount).toBe(10_001);
+    expect(args.data.items).toEqual([
+      { name: 'Phone', quantity: 1, unit_price: 10_001 },
+    ]);
+  });
 });

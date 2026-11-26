@@ -106,7 +106,9 @@ export async function readOwnedOxygenOrder(
   }
   return {
     ...order,
-    payableTotal,
+    // Settled orders have 0 remaining payable balance; preserve financedPrincipal separately.
+    payableTotal: isPreGateway ? payableTotal : 0,
+    financedPrincipal: payableTotal,
     prefill: oxygenOrderPrefill(order),
   };
 }

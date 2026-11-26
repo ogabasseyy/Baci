@@ -758,6 +758,7 @@ DECLARE
   v_integration bigint;
   v_wallet_checkout boolean;
   v_net_payable numeric;
+  v_expected_amount_minor bigint;
 BEGIN
   SELECT merchant_id INTO v_merchant FROM public.orders WHERE id = p_order_id;
   IF NOT FOUND THEN RETURN 'untracked'; END IF;
@@ -790,8 +791,13 @@ BEGIN
     o.wallet_amount_used,
     o.payment_status
   );
+  v_expected_amount_minor := CASE
+    WHEN COALESCE(p_gateway, '') = 'klump'
+      THEN (pg_catalog.ceil(GREATEST(v_net_payable, 0))::bigint * 100)
+    ELSE pg_catalog.round(v_net_payable * 100)::bigint
+  END;
   IF p_expected_amount_minor IS NULL
-     OR p_expected_amount_minor <> pg_catalog.round(v_net_payable * 100)::bigint
+     OR p_expected_amount_minor <> v_expected_amount_minor
      OR p_expected_amount_minor <= 0 THEN
     RAISE EXCEPTION 'amendment_ineligible';
   END IF;
@@ -878,6 +884,8 @@ DECLARE
   v_order_current_payment_status text;
   v_order_email text;
   v_net_payable numeric;
+  v_max_order_amount numeric;
+  v_max_net_payable numeric;
   v_existing_id uuid;
   v_existing_order_id uuid;
   v_existing_merchant_id uuid;
@@ -984,7 +992,11 @@ BEGIN
     RAISE EXCEPTION 'amount_invalid';
   END IF;
 
-  IF v_order_total IS NOT NULL AND p_amount > v_order_total THEN
+  v_max_order_amount := CASE
+    WHEN v_gateway = 'klump' THEN pg_catalog.ceil(GREATEST(v_order_total, 0))
+    ELSE v_order_total
+  END;
+  IF v_order_total IS NOT NULL AND p_amount > v_max_order_amount THEN
     RAISE EXCEPTION 'amount_exceeds_total';
   END IF;
 
@@ -1007,7 +1019,11 @@ BEGIN
     IF v_net_payable <= 0 THEN
       RAISE EXCEPTION 'amount_invalid';
     END IF;
-    IF p_amount > v_net_payable THEN
+    v_max_net_payable := CASE
+      WHEN v_gateway = 'klump' THEN pg_catalog.ceil(GREATEST(v_net_payable, 0))
+      ELSE v_net_payable
+    END;
+    IF p_amount > v_max_net_payable THEN
       RAISE EXCEPTION 'amount_exceeds_total';
     END IF;
   END IF;

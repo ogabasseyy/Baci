@@ -169,6 +169,18 @@ export function buildRollbackNoopCasAction(
   };
 }
 
+export function shouldTargetRollbackToEmbedded(
+  payload: RollbackPayload,
+  state: ChannelCurrentState | null | undefined
+): boolean {
+  return (
+    Boolean(payload.toEmbedded) ||
+    (!payload.targetUpdateId &&
+      state?.mode === 'update' &&
+      state.previousMode === 'rollback_to_embedded')
+  );
+}
+
 export async function cleanupPreparedRollbackArtifacts(
   env: OtaWorkerEnv,
   prepared: PreparedRollbackRelease | null,
@@ -180,12 +192,15 @@ export async function cleanupPreparedRollbackArtifacts(
   if (!prepared || !env.OTA_BUCKET.delete || !prepared.createdByRequest) {
     return;
   }
-  const reapedAfterDifferentIdempotent =
+  const reapedAfterDifferentOutcome =
     !(result instanceof Response) &&
-    'idempotentResult' in result &&
-    (result.idempotentResult.mode !== 'update' ||
-      result.idempotentResult.updateId !== prepared.releaseId);
-  if (!(result instanceof Response) && !reapedAfterDifferentIdempotent) {
+    (('idempotentResult' in result &&
+      (result.idempotentResult.mode !== 'update' ||
+        result.idempotentResult.updateId !== prepared.releaseId)) ||
+      ('state' in result &&
+        (result.state.mode !== 'update' ||
+          result.state.updateId !== prepared.releaseId)));
+  if (!(result instanceof Response) && !reapedAfterDifferentOutcome) {
     return;
   }
   try {

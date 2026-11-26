@@ -87,7 +87,7 @@ export function parseStoredPointer(raw: unknown): ChannelCurrentState | null {
   if (!isPlainObject(raw)) {
     return null;
   }
-  if (raw.updatedAt !== undefined && !isValidIsoTimestamp(raw.updatedAt)) {
+  if (!isValidIsoTimestamp(raw.updatedAt)) {
     return null;
   }
   if (

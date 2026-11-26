@@ -9,6 +9,7 @@ import {
   cleanupPreparedRollbackArtifacts,
   type PreparedRollbackRelease,
   prepareRollbackRelease,
+  shouldTargetRollbackToEmbedded,
 } from './admin-rollback-prepare';
 import {
   findRecordedRollback,
@@ -103,7 +104,7 @@ export async function handleAdminRollback(
   }
 
   let prepared: PreparedRollbackRelease | null = null;
-  if (!payload.toEmbedded) {
+  if (!shouldTargetRollbackToEmbedded(payload, initialState)) {
     const prepOrResponse = await prepareRollbackRelease(
       env,
       channel,
@@ -142,8 +143,7 @@ export async function handleAdminRollback(
       existing?.mode === 'update'
         ? existing.updateId
         : existing?.previousUpdateId;
-
-    if (payload.toEmbedded) {
+    if (shouldTargetRollbackToEmbedded(payload, existing)) {
       let now: string;
       try {
         now = nextMonotonicTimestamp(existing?.updatedAt);

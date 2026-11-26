@@ -461,5 +461,48 @@ describe('admin publish and rollback endpoints', () => {
       previousMode: 'rollback_to_embedded',
       previousUpdateId: UPDATE_2,
     });
+
+    const targetlessRollbackResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'targetless-after-embedded-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+        }),
+      }),
+      env
+    );
+    expect(targetlessRollbackResp.status).toBe(200);
+    expect(await targetlessRollbackResp.json()).toMatchObject({
+      ok: true,
+      mode: 'rollback_to_embedded',
+    });
+
+    const manifestResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: {
+          'expo-protocol-version': '1',
+          'expo-platform': 'ios',
+          'expo-runtime-version': RUNTIME,
+          'expo-channel-name': 'production',
+          'expo-current-update-id': UPDATE_3,
+          'expo-embedded-update-id': '44444444-4444-4444-8444-444444444444',
+        },
+      }),
+      env
+    );
+    const parts = parseMultipartMixed(
+      manifestResp.headers.get('content-type'),
+      await manifestResp.text()
+    );
+    expect(JSON.parse(parts[0]?.body ?? '')).toMatchObject({
+      type: 'rollBackToEmbedded',
+    });
   });
 });

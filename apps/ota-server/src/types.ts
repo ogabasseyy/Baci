@@ -44,6 +44,7 @@ export interface OtaWorkerEnv {
   OTA_ADMIN_TOKEN?: string;
   OTA_SIGNING_PRIVATE_KEY?: string;
   OTA_SIGNING_KEY_ID?: string;
+  OTA_CANONICAL_ORIGIN?: string;
 }
 
 export type OtaPlatform = 'ios' | 'android';

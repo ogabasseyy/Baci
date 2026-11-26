@@ -56,13 +56,14 @@ test('smoke-check and verify test files copied flat into RUNNER_TEMP run cleanly
       process.execPath,
       [
         '--test',
+        '--test-reporter=spec',
         path.join(tempDir, 'smoke-check-ota-manifest.test.mjs'),
         path.join(tempDir, 'verify-storefront-self-hosted-ota-export.test.mjs'),
       ],
       { cwd: tempDir, env: childEnv, encoding: 'utf8' }
     );
-    assert.match(output, /ℹ fail 0\b/);
-    const passMatch = /ℹ pass (\d+)\b/.exec(output);
+    assert.match(output, /(?:ℹ|#)\s+fail\s+0\b/);
+    const passMatch = /(?:ℹ|#)\s+pass\s+(\d+)\b/.exec(output);
     assert.ok(
       passMatch && Number(passMatch[1]) >= 4,
       `Expected >= 4 passing tests in RUNNER_TEMP, got:\n${output}`

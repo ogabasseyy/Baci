@@ -425,6 +425,22 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
       JSON.stringify({
         mode: 'update',
         updateId: UPDATE_ID,
+      })
+    );
+    const missingUpdatedAtPtr = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(missingUpdatedAtPtr.status).toBe(500);
+
+    await bucket.put(
+      pointerKey,
+      JSON.stringify({
+        mode: 'update',
+        updateId: UPDATE_ID,
+        updatedAt: '2026-11-25T15:00:00.000Z',
         recentRollbacks: {},
       })
     );
@@ -463,5 +479,36 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
       env
     );
     expect(mismatchedRel.status).toBe(500);
+  });
+
+  it('pins emitted manifest asset URLs to OTA_CANONICAL_ORIGIN when configured', async () => {
+    const bucket = new MockR2Bucket();
+    await seedRelease(bucket);
+    const env: OtaWorkerEnv = {
+      OTA_BUCKET: bucket,
+      OTA_CANONICAL_ORIGIN: 'https://ota.usebaci.com',
+    };
+
+    const resp = await worker.fetch(
+      new Request('https://baci-ota-server.example.workers.dev/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(resp.status).toBe(200);
+    const parts = parseMultipartMixed(
+      resp.headers.get('content-type'),
+      await resp.text()
+    );
+    const manifest = JSON.parse(parts[0]?.body ?? '') as {
+      launchAsset: { url: string };
+      assets: Array<{ url: string }>;
+    };
+    expect(manifest.launchAsset.url).toBe(
+      'https://ota.usebaci.com/api/assets/bundles/ios/abc123.hbc'
+    );
+    expect(manifest.assets[0]?.url).toBe(
+      'https://ota.usebaci.com/api/assets/blobs/def456.png'
+    );
   });
 });

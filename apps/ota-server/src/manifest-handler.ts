@@ -21,9 +21,28 @@ import {
   validateRuntimeVersion,
 } from './validation';
 
+function resolveManifestAssetBase(
+  requestUrl: string,
+  env: OtaWorkerEnv
+): string | Response {
+  const configured = env.OTA_CANONICAL_ORIGIN?.trim();
+  if (!configured) {
+    return requestUrl;
+  }
+  try {
+    const parsed = new URL(configured);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return errorResponse('Configured OTA_CANONICAL_ORIGIN is invalid', 500);
+    }
+    return parsed.origin;
+  } catch {
+    return errorResponse('Configured OTA_CANONICAL_ORIGIN is invalid', 500);
+  }
+}
+
 function resolveAssetForManifest(
   asset: StoredManifestAsset,
-  requestUrl: string,
+  assetBaseUrl: string,
   includeExtension = true
 ): ExpoManifestAsset {
   return {
@@ -33,7 +52,7 @@ function resolveAssetForManifest(
     ...(includeExtension && asset.fileExtension !== undefined
       ? { fileExtension: asset.fileExtension }
       : {}),
-    url: new URL(`/api/assets/${asset.r2Key}`, requestUrl).toString(),
+    url: new URL(`/api/assets/${asset.r2Key}`, assetBaseUrl).toString(),
   };
 }
 
@@ -231,17 +250,18 @@ export async function handleGetManifest(
     return errorResponse('Corrupt release manifest in storage', 500);
   }
 
+  const assetBase = resolveManifestAssetBase(request.url, env);
+  if (assetBase instanceof Response) {
+    return assetBase;
+  }
+
   const manifest: ExpoUpdateManifest = {
     id: release.id,
     createdAt: release.createdAt,
     runtimeVersion: release.runtimeVersion,
-    launchAsset: resolveAssetForManifest(
-      release.launchAsset,
-      request.url,
-      false
-    ),
+    launchAsset: resolveAssetForManifest(release.launchAsset, assetBase, false),
     assets: release.assets.map((asset) =>
-      resolveAssetForManifest(asset, request.url, true)
+      resolveAssetForManifest(asset, assetBase, true)
     ),
     metadata: release.metadata,
     extra: release.extra,

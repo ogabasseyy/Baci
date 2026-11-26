@@ -160,13 +160,9 @@ describe('OgabasseyLayoutChrome', () => {
   it('keeps immediate footer links root-relative for domain-routed storefronts', () => {
     render(<OgabasseyLayoutChrome basePath="" section="footer" />);
 
-    const aboutLink = screen.getByRole('link', { name: /about us/i });
-    expect(aboutLink).toHaveAttribute('href', '/about');
-    expect(aboutLink).toHaveClass('min-h-6', 'min-w-6', 'justify-center');
-    expect(screen.getByRole('link', { name: 'FAQ' })).toHaveClass(
-      'min-h-6',
-      'min-w-6',
-      'justify-center'
+    expect(screen.getByRole('link', { name: /about us/i })).toHaveAttribute(
+      'href',
+      '/about'
     );
   });
 

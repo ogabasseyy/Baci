@@ -23,9 +23,9 @@ BEGIN
     VALUES (v_merchant, 'GIGL-REPAIR-' || v_label, 1000) RETURNING id INTO v_order;
     INSERT INTO public.shipments (
       order_id, merchant_id, provider, tracking_number,
-      sender_address, receiver_address, items
+      sender_address, receiver_address, items, funding_source
     ) VALUES (v_order, v_merchant, 'GIGL', 'GIGL-REPAIR-' || v_label,
-      '{}'::jsonb, '{}'::jsonb, '[]'::jsonb) RETURNING id INTO v_ship;
+      '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 'external_manual') RETURNING id INTO v_ship;
     SELECT tracking_epoch_id INTO v_epoch
     FROM public.shipment_tracking_monitors WHERE shipment_id = v_ship;
     INSERT INTO repair_fixture VALUES (v_label, v_ship);
@@ -61,7 +61,7 @@ BEGIN
         CASE v_label WHEN 'with_sdr' THEN 'failed' ELSE 'delivered' END,
         'special scan', '2026-11-09 11:00+00');
     END IF;
-    UPDATE public.shipments SET status = CASE v_label WHEN 'terminal' THEN 'delivered' ELSE 'out_for_delivery' END,
+    UPDATE public.shipments SET last_tracked_at = now(), status = CASE v_label WHEN 'terminal' THEN 'delivered' ELSE 'out_for_delivery' END,
       tracking_events = CASE WHEN v_label = 'camel'
         THEN jsonb_build_array(
           jsonb_build_object('providerEventKey', v_label || '-a', 'status', 'out_for_delivery'),

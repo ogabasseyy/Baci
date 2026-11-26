@@ -37,10 +37,10 @@ BEGIN
     RETURNING id INTO v_order_id;
     INSERT INTO public.shipments (
       order_id, merchant_id, provider, tracking_number,
-      sender_address, receiver_address, items
+      sender_address, receiver_address, items, funding_source
     ) VALUES (
       v_order_id, v_merchant_id, 'GIGL', 'GIGL-BACKFILL-' || v_case.terminal,
-      '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+      '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 'external_manual'
     ) RETURNING id INTO v_shipment_id;
     SELECT tracking_epoch_id INTO v_epoch
     FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment_id;
@@ -50,6 +50,7 @@ BEGIN
     WHERE shipment_id = v_shipment_id;
     UPDATE public.shipments
     SET status = v_case.newer_status,
+      last_tracked_at = now(),
       current_location = 'NEWER HUB',
       tracking_events = jsonb_build_array(jsonb_build_object(
         'provider_event_key', 'newer-1', 'normalized_status', v_case.newer_status,
@@ -101,10 +102,10 @@ BEGIN
   VALUES (v_merchant_id, 'GIGL-BACKFILL-sdr', 1000) RETURNING id INTO v_order_id;
   INSERT INTO public.shipments (
     order_id, merchant_id, provider, tracking_number,
-    sender_address, receiver_address, items
+    sender_address, receiver_address, items, funding_source
   ) VALUES (
     v_order_id, v_merchant_id, 'GIGL', 'GIGL-BACKFILL-sdr',
-    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 'external_manual'
   ) RETURNING id INTO v_shipment_id;
   SELECT tracking_epoch_id INTO v_epoch
   FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment_id;
@@ -113,7 +114,7 @@ BEGIN
     notification_events_not_before = now() - interval '1 day'
   WHERE shipment_id = v_shipment_id;
   UPDATE public.shipments
-  SET status = 'failed',
+  SET status = 'failed', last_tracked_at = now(),
     tracking_events = jsonb_build_array(jsonb_build_object(
       'provider_event_key', 'sdr-1', 'raw_status', 'SDR',
       'normalized_status', 'failed',

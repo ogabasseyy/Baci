@@ -23,10 +23,10 @@ BEGIN
   VALUES (v_order_id, v_merchant_id, 'GIGL-ARRIVAL-ENQUEUE-001', 1000);
   INSERT INTO public.shipments (
     order_id, merchant_id, provider, tracking_number,
-    sender_address, receiver_address, items
+    sender_address, receiver_address, items, funding_source
   ) VALUES (
     v_order_id, v_merchant_id, 'GIGL', 'GIGL-ARRIVAL-ENQUEUE-001',
-    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 'external_manual'
   ) RETURNING id INTO v_shipment_id;
   SELECT tracking_epoch_id INTO v_epoch
   FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment_id;
@@ -39,7 +39,7 @@ BEGIN
   -- conflicts and queues nothing: the arrival is the only new event, and the
   -- supersession trigger has no newer notification to remove it with. Old code
   -- dropped it (in_transit <> out_for_delivery); the fix must queue it.
-  UPDATE public.shipments SET status = 'out_for_delivery' WHERE id = v_shipment_id;
+  UPDATE public.shipments SET status = 'out_for_delivery', last_tracked_at = now() WHERE id = v_shipment_id;
   INSERT INTO public.shipment_tracking_events (
     shipment_id, tracking_epoch_id, tracking_number, provider,
     provider_event_key, raw_status, normalized_status, description, occurred_at
@@ -98,10 +98,10 @@ BEGIN
   VALUES (v_order_id, v_merchant_id, 'GIGL-ARRIVAL-SAMEPOLL-001', 1000);
   INSERT INTO public.shipments (
     order_id, merchant_id, provider, tracking_number,
-    sender_address, receiver_address, items
+    sender_address, receiver_address, items, funding_source
   ) VALUES (
     v_order_id, v_merchant_id, 'GIGL', 'GIGL-ARRIVAL-SAMEPOLL-001',
-    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+    '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 'external_manual'
   ) RETURNING id INTO v_shipment_id;
   SELECT tracking_epoch_id INTO v_epoch
   FROM public.shipment_tracking_monitors WHERE shipment_id = v_shipment_id;

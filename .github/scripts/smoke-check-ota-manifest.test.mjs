@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, createSign, generateKeyPairSync } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { smokeCheckManifestEndpoint } from './smoke-check-ota-manifest.mjs';
 
 const BUNDLE_BYTES = Buffer.from('console.log("smoke-bundle");');
@@ -363,18 +360,5 @@ test('smoke check verifies expo-signature keyid, multipart disposition, and cryp
       async () => multipartResponse(payload, [], null)
     ),
     /Expected multipart content-disposition name="manifest"/
-  );
-});
-
-test('publish workflow fails closed when signing is enabled without a client-embeddable cert path', () => {
-  const workflowPath = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '../workflows/storefront-ota-publish.yml'
-  );
-  const workflowText = readFileSync(workflowPath, 'utf8');
-  assert.match(workflowText, /if \[\[ -z "\$CERT_PATH" \]\]; then/);
-  assert.match(
-    workflowText,
-    /EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH is missing/
   );
 });

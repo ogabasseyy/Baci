@@ -13,6 +13,26 @@ type Dependencies = {
   createOrder: typeof createOrder;
 };
 
+type OxygenOrderItem = CreateOrderRequest['items'][number] & {
+  voucherToken?: unknown;
+  voucherAwardId?: unknown;
+};
+
+function assertValidOxygenOrderItemVouchers(item: OxygenOrderItem) {
+  for (const [voucherField, value] of Object.entries({
+    voucher_token: item.voucher_token,
+    voucher_award_id: item.voucher_award_id,
+    voucherToken: item.voucherToken,
+    voucherAwardId: item.voucherAwardId,
+  })) {
+    if (value === undefined || value === null) continue;
+    if (typeof value !== 'string') {
+      // Preserve cause field name for malformed cart diagnostics without logging the code.
+      throw new Error('Invalid voucher identifier', { cause: voucherField });
+    }
+  }
+}
+
 export async function submitOxygenCheckout(
   input: Input,
   dependencies?: Dependencies
@@ -20,6 +40,9 @@ export async function submitOxygenCheckout(
   // This client check provides early feedback. POST /api/orders enforces admission.
   if (!input.isAuthenticated || input.request.payment_method !== 'oxygen') {
     throw new Error('Oxygen requires a signed-in customer');
+  }
+  for (const item of input.request.items) {
+    assertValidOxygenOrderItemVouchers(item as OxygenOrderItem);
   }
   const deps = dependencies ?? {
     readOwner: async () => {

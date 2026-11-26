@@ -132,6 +132,36 @@ describe('native Oxygen order admission', () => {
     );
     expect(createOrder).toHaveBeenCalledWith(mixedRequest, expect.anything());
   });
+  it.each([
+    { voucher_token: 12345 },
+    { voucherToken: { code: 'bad' } },
+    { voucher_award_id: 999 },
+    { voucherAwardId: ['bad'] },
+  ])('rejects malformed non-string voucher identifiers before createOrder: %p', async (badFields) => {
+    const invalidRequest = {
+      ...request,
+      items: [
+        {
+          ...request.items[0],
+          ...badFields,
+        },
+      ],
+    } as unknown as CreateOrderRequest;
+    await expect(
+      submitOxygenCheckout(
+        {
+          request: invalidRequest,
+          checkoutGeneration: 'g',
+          isAuthenticated: true,
+          hasVoucher: true,
+          hasCredits: false,
+        },
+        { readOwner, createOrder }
+      )
+    ).rejects.toThrow('Invalid voucher identifier');
+    expect(readOwner).not.toHaveBeenCalled();
+    expect(createOrder).not.toHaveBeenCalled();
+  });
   it('routes zero-due or 100%-covered Oxygen orders back to standard non-financing completion instead of throwing', async () => {
     createOrder.mockResolvedValueOnce({
       amountDueToGateway: 0,

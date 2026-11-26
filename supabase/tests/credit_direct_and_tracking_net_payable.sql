@@ -285,6 +285,68 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'amount_invalid' THEN RAISE; END IF;
   END;
+
+  -- Partial wallet-funded and BNPL orders on an amendment-configured merchant must
+  -- pass net-payable verification as 'untracked' instead of raising amendment_ineligible,
+  -- while stale pre-credit amounts and unqualified DVA channels stay blocked.
+  UPDATE public.orders
+  SET payment_status = 'unpaid', amount_paid = 15000, wallet_amount_used = 10000
+  WHERE id = 'cd710000-0000-4000-8000-000000000010';
+
+  INSERT INTO private.paid_order_amendment_config (merchant_id, version, enabled, paystack_integration_id)
+  VALUES ('cd710000-0000-4000-8000-000000000002', 1, true, 987)
+  ON CONFLICT (merchant_id) DO NOTHING;
+
+  PERFORM set_config('request.jwt.claim.role', 'anon', true);
+  IF public.claim_checkout_for_paid_order_amendment(
+    'cd710000-0000-4000-8000-000000000010',
+    'cd-track-partial',
+    'paystack',
+    'BAC-CLAIMWALLET1',
+    'NGN',
+    3500000
+  ) IS DISTINCT FROM 'untracked' THEN
+    RAISE EXCEPTION 'Partial wallet order on amendment-configured merchant was not returned as untracked';
+  END IF;
+
+  IF public.claim_checkout_for_paid_order_amendment(
+    'cd710000-0000-4000-8000-000000000010',
+    'cd-track-partial',
+    'klump',
+    'BAC-CLAIMKLUMP01',
+    'NGN',
+    3500000
+  ) IS DISTINCT FROM 'untracked' THEN
+    RAISE EXCEPTION 'Klump order with wallet credit on amendment-configured merchant was not returned as untracked';
+  END IF;
+
+  BEGIN
+    PERFORM public.claim_checkout_for_paid_order_amendment(
+      'cd710000-0000-4000-8000-000000000010',
+      'cd-track-partial',
+      'paystack',
+      'BAC-CLAIMSTALE01',
+      'NGN',
+      5000000
+    );
+    RAISE EXCEPTION 'Stale pre-credit amount escaped claim_checkout_for_paid_order_amendment';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amendment_ineligible' THEN RAISE; END IF;
+  END;
+
+  BEGIN
+    PERFORM public.claim_checkout_for_paid_order_amendment(
+      'cd710000-0000-4000-8000-000000000010',
+      'cd-track-partial',
+      'paystack_dva',
+      'BAC-CLAIMDVA0001',
+      'NGN',
+      3500000
+    );
+    RAISE EXCEPTION 'paystack_dva escaped amendment_ineligible on configured merchant';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amendment_ineligible' THEN RAISE; END IF;
+  END;
 END $tx_test$;
 
 ROLLBACK;

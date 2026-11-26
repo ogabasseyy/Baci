@@ -2819,6 +2819,58 @@ describe('POST /api/payments/initialize', () => {
       );
     });
 
+    it('initializes Paystack for net payable when partial wallet-credit order resolves untracked on an amendment-configured merchant', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      orderPaymentResult = {
+        data: {
+          total: 5000,
+          wallet_amount_used: 1500,
+          amount_paid: 1500,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 1500,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      mockInitializePaystack.mockResolvedValueOnce({
+        authorization_url: 'https://checkout.paystack.com/net-wallet',
+        access_code: 'ac_net_wallet',
+        reference: 'BAC-NETWALLET1',
+      });
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          gateway: 'paystack',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls).toContainEqual({
+        name: 'claim_checkout_for_paid_order_amendment',
+        args: expect.objectContaining({
+          p_expected_amount_minor: 350_000,
+        }),
+      });
+      expect(mockInitializePaystack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 350_000,
+        })
+      );
+    });
+
     it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED when concurrent ledger credit changes before gateway initialization', async () => {
       amendmentCheckoutClaimResult = { data: 'untracked', error: null };
       // Simulate concurrent wallet reversal while claim_checkout_for_paid_order_amendment

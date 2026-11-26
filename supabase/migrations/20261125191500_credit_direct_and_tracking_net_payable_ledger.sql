@@ -776,6 +776,9 @@ BEGIN
      OR EXISTS (SELECT 1 FROM private.paid_order_amendments WHERE order_id = o.id) THEN
     RAISE EXCEPTION 'amendment_payment_open';
   END IF;
+  IF COALESCE(p_gateway, '') IN ('paystack_dva', 'paystack_bank_transfer') THEN
+    RAISE EXCEPTION 'amendment_ineligible';
+  END IF;
   IF p_gateway = 'paystack_no_subaccount' AND NOT v_wallet_checkout THEN
     RAISE EXCEPTION 'checkout_gateway_not_configured';
   END IF;
@@ -787,11 +790,23 @@ BEGIN
     o.wallet_amount_used,
     o.payment_status
   );
+  IF p_expected_amount_minor IS NULL
+     OR p_expected_amount_minor <> pg_catalog.round(v_net_payable * 100)::bigint
+     OR p_expected_amount_minor <= 0 THEN
+    RAISE EXCEPTION 'amendment_ineligible';
+  END IF;
+  -- Non-Paystack gateways (BNPL, Korapay, Juicyway) and partial store-credit
+  -- orders (wallet/savings) are ineligible for paid-order amendments; leave them
+  -- untracked so ordinary checkout can initialize the net-payable amount.
+  IF COALESCE(p_gateway, '') IN ('credit_direct', 'klump', 'korapay', 'juicyway')
+     OR COALESCE(o.wallet_amount_used, 0) <> 0
+     OR COALESCE(o.amount_paid, 0) <> 0
+     OR pg_catalog.round(v_net_payable * 100)::bigint <> pg_catalog.round(o.total * 100)::bigint THEN
+    RETURN 'untracked';
+  END IF;
   IF v_integration IS NULL OR COALESCE(p_gateway,'') NOT IN ('paystack','paystack_no_subaccount')
      OR p_currency IS DISTINCT FROM 'NGN'
-     OR p_expected_amount_minor IS NULL OR p_expected_amount_minor <> pg_catalog.round(v_net_payable * 100)::bigint
-     OR p_expected_amount_minor <= 0 OR p_reference IS NULL OR p_reference !~ '^BAC-[A-Z0-9]{12}$'
-     OR COALESCE(o.wallet_amount_used, 0) <> 0 THEN
+     OR p_reference IS NULL OR p_reference !~ '^BAC-[A-Z0-9]{12}$' THEN
     RAISE EXCEPTION 'amendment_ineligible';
   END IF;
   IF p_platform_fee_minor IS NOT NULL OR p_retained_shipping_minor IS NOT NULL THEN

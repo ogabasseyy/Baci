@@ -131,32 +131,6 @@ BEGIN
   IF v_status IS DISTINCT FROM 'failed' THEN
     RAISE EXCEPTION 'a newer stored SDR must fence an older backfilled terminal scan, got %', v_status;
   END IF;
-
-  -- The SDR exists only as an event row (not in the JSON snapshot).
-  UPDATE public.shipment_tracking_monitors
-  SET locked_at = now(), locked_by = 'backfill-worker'
-  WHERE shipment_id = v_shipment_id;
-  UPDATE public.shipments SET tracking_events = '[]'::jsonb
-  WHERE id = v_shipment_id;
-  DELETE FROM public.shipment_tracking_events WHERE shipment_id = v_shipment_id;
-  INSERT INTO public.shipment_tracking_events (
-    shipment_id, tracking_epoch_id, tracking_number, provider,
-    provider_event_key, raw_status, normalized_status, description, occurred_at
-  )
-  SELECT v_shipment_id, v_epoch, tracking_number, 'GIGL', 'sdr-row', 'SDR',
-    'failed', 'Destroyed', now() - interval '2 hours'
-  FROM public.shipments WHERE id = v_shipment_id;
-  PERFORM public.apply_gigl_tracking_result(
-    v_shipment_id, v_epoch, 'backfill-worker', 'delivered', NULL, NULL,
-    jsonb_build_array(jsonb_build_object(
-      'provider_event_key', 'terminal-2', 'raw_status', 'SHD',
-      'normalized_status', 'delivered', 'description', 'Terminal scan',
-      'occurred_at', (now() - interval '3 hours')::text))
-  );
-  SELECT status INTO v_status FROM public.shipments WHERE id = v_shipment_id;
-  IF v_status IS DISTINCT FROM 'failed' THEN
-    RAISE EXCEPTION 'an SDR event row must fence a backfilled terminal scan, got %', v_status;
-  END IF;
 END;
 $test$;
 

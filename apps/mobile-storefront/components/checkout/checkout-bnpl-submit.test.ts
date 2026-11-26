@@ -553,4 +553,38 @@ describe('submitBnplCheckout', () => {
     expect(global.fetch).not.toHaveBeenCalled();
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
+
+  it('rejects zero-due fallback when wallet finalization left the order unpaid', async () => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+      liveWalletSelection: { use: true, amount: 5000 },
+    };
+    const unpaidZeroDueResponse = {
+      amountDueToGateway: 0,
+      order: {
+        created_at: '2026-05-30T12:00:00.000Z',
+        id: 'order-zero-unpaid',
+        order_number: 'BAC-ZERO-UNPAID',
+        payment_status: 'unpaid',
+        shipping_status: 'pending',
+        total: 21500,
+        tracking_token: 'tracking-token',
+      },
+      savings: null,
+      wallet: { amountUsed: 21500, newBalance: 0, transactionId: null },
+    };
+    mockCreateOrder.mockResolvedValueOnce(unpaidZeroDueResponse);
+    mockBuildCheckoutOrderRequest.mockReturnValueOnce({
+      payment_method: 'klump',
+    });
+
+    await expect(submitBnplCheckout(params)).rejects.toThrow(
+      'Your store credit could not complete this order. Please try again.'
+    );
+    expect(params.isOrderInFlight.current).toBe(false);
+    expect(params.setIsProcessing).toHaveBeenCalledWith(false);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
 });

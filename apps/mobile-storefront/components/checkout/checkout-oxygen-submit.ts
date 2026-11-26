@@ -18,19 +18,32 @@ type OxygenOrderItem = CreateOrderRequest['items'][number] & {
   voucherAwardId?: unknown;
 };
 
-function assertValidOxygenOrderItemVouchers(item: OxygenOrderItem) {
-  for (const [voucherField, value] of Object.entries({
-    voucher_token: item.voucher_token,
-    voucher_award_id: item.voucher_award_id,
-    voucherToken: item.voucherToken,
-    voucherAwardId: item.voucherAwardId,
-  })) {
+const OXYGEN_VOUCHER_FIELDS = [
+  'voucher_token',
+  'voucher_award_id',
+  'voucherToken',
+  'voucherAwardId',
+] as const;
+
+function prepareOxygenOrderItem(
+  item: OxygenOrderItem
+): CreateOrderRequest['items'][number] {
+  const cleanedItem: Record<string, unknown> = { ...item };
+  for (const voucherField of OXYGEN_VOUCHER_FIELDS) {
+    const value = cleanedItem[voucherField];
     if (value === undefined || value === null) continue;
     if (typeof value !== 'string') {
       // Preserve cause field name for malformed cart diagnostics without logging the code.
       throw new Error('Invalid voucher identifier', { cause: voucherField });
     }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      delete cleanedItem[voucherField];
+      continue;
+    }
+    cleanedItem[voucherField] = trimmed;
   }
+  return cleanedItem as CreateOrderRequest['items'][number];
 }
 
 export async function submitOxygenCheckout(
@@ -41,9 +54,9 @@ export async function submitOxygenCheckout(
   if (!input.isAuthenticated || input.request.payment_method !== 'oxygen') {
     throw new Error('Oxygen requires a signed-in customer');
   }
-  for (const item of input.request.items) {
-    assertValidOxygenOrderItemVouchers(item as OxygenOrderItem);
-  }
+  const items = input.request.items.map((item) =>
+    prepareOxygenOrderItem(item as OxygenOrderItem)
+  );
   const deps = dependencies ?? {
     readOwner: async () => {
       const { oxygenNativeSession } = await import(
@@ -57,12 +70,18 @@ export async function submitOxygenCheckout(
   // Scope the send to the current owner. The API admits new orders and can
   // still return an exact previously accepted order during a rollout pause.
   const { merchantId, userId } = await deps.readOwner();
-  const result = await deps.createOrder(input.request, {
-    checkoutGeneration: input.checkoutGeneration,
-    analyticsPaymentMethod: 'oxygen',
-    expectedMerchantId: merchantId,
-    expectedOwner: userId,
-  });
+  const result = await deps.createOrder(
+    {
+      ...input.request,
+      items,
+    },
+    {
+      checkoutGeneration: input.checkoutGeneration,
+      analyticsPaymentMethod: 'oxygen',
+      expectedMerchantId: merchantId,
+      expectedOwner: userId,
+    }
+  );
   // A receipt must be usable by the owned-order screen before we hand off
   // and clear the cart. The generic order decoder accepts string order IDs.
   const { order } = result;

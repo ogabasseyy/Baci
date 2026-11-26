@@ -15,7 +15,7 @@ import type {
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
 import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
-import { createOrder } from '@/services/orders';
+import { createOrder, OrderError } from '@/services/orders';
 import type { CreateOrderResult } from '@/services/orders.response';
 import type { CartItem } from '@/stores/cart-store';
 import type { CheckoutSnapshot } from './checkout-order-builders';
@@ -148,6 +148,14 @@ export async function submitBnplCheckout({
   onOrderCreated?.(orderResponse.order.id);
 
   if (orderResponse.amountDueToGateway <= 0) {
+    if (orderResponse.order.payment_status !== 'paid') {
+      isOrderInFlight.current = false;
+      setIsProcessing(false);
+      throw new OrderError(
+        'Your store credit could not complete this order. Please try again.',
+        'STORE_CREDIT_NOT_SETTLED'
+      );
+    }
     return {
       creditFields,
       fallbackOrderResponse: orderResponse,

@@ -105,7 +105,7 @@ describe('native Oxygen order admission', () => {
     ).rejects.toThrow('Owner unavailable');
     expect(createOrder).not.toHaveBeenCalled();
   });
-  it('preserves voucher identifiers on mixed Oxygen cart items', async () => {
+  it('preserves non-empty trimmed voucher identifiers on mixed Oxygen cart items', async () => {
     const mixedRequest = {
       ...request,
       items: [
@@ -115,7 +115,7 @@ describe('native Oxygen order admission', () => {
           name: 'Prize Item',
           quantity: 1,
           price: 0,
-          voucher_token: 'v-tok',
+          voucher_token: ' v-tok ',
           voucher_award_id: 'v-award',
         },
       ],
@@ -130,7 +130,47 @@ describe('native Oxygen order admission', () => {
       },
       { readOwner, createOrder }
     );
-    expect(createOrder).toHaveBeenCalledWith(mixedRequest, expect.anything());
+    expect(createOrder).toHaveBeenCalledWith(
+      {
+        ...mixedRequest,
+        items: [
+          ...request.items,
+          {
+            id: 'v',
+            name: 'Prize Item',
+            quantity: 1,
+            price: 0,
+            voucher_token: 'v-tok',
+            voucher_award_id: 'v-award',
+          },
+        ],
+      },
+      expect.anything()
+    );
+  });
+
+  it.each([
+    { voucher_token: '', voucher_award_id: '   ' },
+    { voucherToken: '', voucherAwardId: '   ' },
+  ])('strips empty and whitespace-only voucher identifiers before createOrder: %p', async (blankFields) => {
+    const itemWithBlankVouchers = {
+      ...request.items[0],
+      ...blankFields,
+    };
+    await submitOxygenCheckout(
+      {
+        request: {
+          ...request,
+          items: [itemWithBlankVouchers as CreateOrderRequest['items'][number]],
+        },
+        checkoutGeneration: 'g',
+        isAuthenticated: true,
+        hasVoucher: false,
+        hasCredits: false,
+      },
+      { readOwner, createOrder }
+    );
+    expect(createOrder).toHaveBeenCalledWith(request, expect.anything());
   });
   it.each([
     { voucher_token: 12345 },

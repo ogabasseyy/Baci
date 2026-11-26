@@ -109,6 +109,7 @@ describe('merchant feature settings audited mutation paths', () => {
         checkout_collect_phone: false,
         credit_direct_min_amount: 20_000,
         free_shipping_threshold: -1,
+        oxygen_enabled: true,
         paystack_enabled: false,
         preferred_local_gateway: 'korapay',
       })
@@ -122,6 +123,7 @@ describe('merchant feature settings audited mutation paths', () => {
         checkout_collect_phone: false,
         credit_direct_min_amount: 20_000,
         free_shipping_threshold: -1,
+        oxygen_enabled: true,
         paystack_enabled: false,
         preferred_local_gateway: 'korapay',
       })
@@ -141,6 +143,7 @@ describe('merchant feature settings audited mutation paths', () => {
         credit_direct_enabled: true,
         free_shipping_threshold: 50_000,
         korapay_enabled: true,
+        oxygen_enabled: false,
         preferred_international_gateway: 'paystack',
       })
     );
@@ -155,6 +158,7 @@ describe('merchant feature settings audited mutation paths', () => {
         free_shipping_threshold: 50_000,
         korapay_enabled: true,
         merchant_id: merchantId,
+        oxygen_enabled: false,
         preferred_international_gateway: 'paystack',
       }),
       { onConflict: 'merchant_id' }

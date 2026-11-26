@@ -54,6 +54,13 @@ export const PAYMENT_METHOD_SETTING_DEFINITIONS = [
     category: 'bnpl',
   },
   {
+    id: 'oxygen',
+    name: 'Oxygen',
+    description: 'Device & order financing in installments',
+    enabledField: 'oxygen_enabled',
+    category: 'bnpl',
+  },
+  {
     id: 'pay_on_delivery',
     name: 'Pay on Delivery',
     description: 'Cash payment when order arrives',

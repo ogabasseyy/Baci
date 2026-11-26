@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { PaymentGatewaySettings } from '../payment-settings';
 import { PaymentPreferencesCard } from './payment-preferences-card';
@@ -6,6 +7,7 @@ import { PaymentPreferencesCard } from './payment-preferences-card';
 const settings: PaymentGatewaySettings = {
   credit_direct_enabled: false,
   korapay_enabled: false,
+  oxygen_enabled: false,
   pay_on_delivery_enabled: true,
   paystack_enabled: false,
   preferred_international_gateway: 'korapay',
@@ -31,5 +33,35 @@ describe('PaymentPreferencesCard', () => {
     expect(screen.getByText(/Baci charges/i)).toHaveTextContent(
       '2% per transaction'
     );
+  });
+
+  it('toggles Oxygen BNPL setting when clicked', async () => {
+    const user = userEvent.setup();
+    const onSettingsChange = vi.fn();
+
+    render(
+      <PaymentPreferencesCard
+        hasPaystackSubaccount={false}
+        isPaystackSupported={true}
+        merchantCurrencyCode="NGN"
+        onSettingsChange={onSettingsChange}
+        paystackFixedFee="₦100"
+        platformFeeCap="₦2,050"
+        settings={settings}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        /requires an active oxygen merchant account and rollout admission/i
+      )
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('switch', { name: /toggle oxygen/i }));
+
+    expect(onSettingsChange).toHaveBeenCalledWith({
+      ...settings,
+      oxygen_enabled: true,
+    });
   });
 });

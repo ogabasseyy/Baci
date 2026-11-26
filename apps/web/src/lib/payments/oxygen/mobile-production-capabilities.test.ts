@@ -60,7 +60,7 @@ it.each([
   false,
   null,
   'true',
-])('keeps production off on non-affirmative admission %s', async (data) => {
+])('keeps production off on non-affirmative admission %s (including oxygen_enabled=false)', async (data) => {
   const client = mockClient({ data, error: null });
   await expect(
     readOxygenMobileCapabilities(client, 'ogabassey')

@@ -60,6 +60,7 @@ describe('PATCH /api/merchant/features persistence', () => {
     expect(testState.updatePayload).not.toHaveProperty('klump_enabled');
     expect(testState.updatePayload).not.toHaveProperty('klump_min_amount');
     expect(testState.updatePayload).not.toHaveProperty('klump_max_amount');
+    expect(testState.updatePayload).not.toHaveProperty('oxygen_enabled');
   });
 
   describe('bugfix R2: Zoho tokens never go into custom_settings', () => {
@@ -256,6 +257,22 @@ describe('PATCH /api/merchant/features persistence', () => {
       klump_min_amount: 2500,
       klump_max_amount: 750000,
     });
+  });
+
+  it('persists oxygen_enabled true and false via PATCH', async () => {
+    const { PATCH } = await import('./route');
+
+    const enableRes = await PATCH(
+      makeRequest('PATCH', { oxygen_enabled: true })
+    );
+    expect(enableRes.status).toBe(200);
+    expect(testState.updatePayload).toMatchObject({ oxygen_enabled: true });
+
+    const disableRes = await PATCH(
+      makeRequest('PATCH', { oxygen_enabled: false })
+    );
+    expect(disableRes.status).toBe(200);
+    expect(testState.updatePayload).toMatchObject({ oxygen_enabled: false });
   });
 
   it('returns 500 when PATCH persistence fails', async () => {

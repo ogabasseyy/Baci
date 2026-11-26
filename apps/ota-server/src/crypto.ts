@@ -1,0 +1,229 @@
+import {
+  createHash,
+  createPrivateKey,
+  createSign,
+  type KeyObject,
+  timingSafeEqual,
+} from 'node:crypto';
+
+export interface ExpectSignatureDirective {
+  expected: boolean;
+  keyid?: string;
+  alg?: string;
+  error?: string;
+}
+
+export function timingSafeBearerMatch(
+  authHeader: string | null,
+  expectedToken: string | undefined
+): boolean {
+  if (!expectedToken || expectedToken.length === 0 || !authHeader) {
+    return false;
+  }
+  const match = /^Bearer\s+(\S+)$/i.exec(authHeader.trim());
+  const provided = match?.[1];
+  if (!provided) {
+    return false;
+  }
+  const providedDigest = createHash('sha256').update(provided, 'utf8').digest();
+  const expectedDigest = createHash('sha256')
+    .update(expectedToken, 'utf8')
+    .digest();
+  return timingSafeEqual(providedDigest, expectedDigest);
+}
+
+function splitSfvDictionaryMembers(input: string): {
+  members: string[];
+  error?: string;
+} {
+  const members: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  let escaped = false;
+
+  for (const ch of input) {
+    if (escaped) {
+      current += ch;
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && inQuotes) {
+      current += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      current += ch;
+      continue;
+    }
+    if (ch === ',' && !inQuotes) {
+      if (current.trim().length > 0) {
+        members.push(current.trim());
+      }
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (inQuotes || escaped) {
+    return { members: [], error: 'Malformed expo-expect-signature header' };
+  }
+  if (current.trim().length > 0) {
+    members.push(current.trim());
+  }
+  return { members };
+}
+
+function unquoteSfvString(raw: string): string | null {
+  const match = /^"((?:[^"\\]|\\.)*)"$/.exec(raw.trim());
+  if (!match?.[1]) {
+    return raw.trim() === '""' ? '' : null;
+  }
+  return match[1].replace(/\\(.)/g, '$1');
+}
+
+export function parseExpectSignatureHeader(
+  headerValue: string | null
+): ExpectSignatureDirective {
+  if (!headerValue || headerValue.trim().length === 0) {
+    return { expected: false };
+  }
+
+  const { members, error } = splitSfvDictionaryMembers(headerValue);
+  if (error) {
+    return { expected: true, error };
+  }
+
+  let sigState: 'unset' | 'true' | 'false' = 'unset';
+  let keyid: string | undefined;
+  let alg: string | undefined;
+
+  for (const member of members) {
+    const eqIndex = member.indexOf('=');
+    const key = (eqIndex === -1 ? member : member.slice(0, eqIndex))
+      .trim()
+      .toLowerCase();
+    const rawValue = eqIndex === -1 ? undefined : member.slice(eqIndex + 1);
+
+    if (key === 'sig') {
+      const trimmedVal = rawValue?.trim();
+      if (trimmedVal === undefined || trimmedVal === '?1') {
+        sigState = 'true';
+      } else if (trimmedVal === '?0') {
+        sigState = 'false';
+      } else {
+        return {
+          expected: true,
+          error: 'Malformed sig in expo-expect-signature',
+        };
+      }
+      continue;
+    }
+    if (key === 'alg' && rawValue !== undefined) {
+      const parsed = unquoteSfvString(rawValue);
+      if (parsed === null || parsed.length === 0) {
+        return {
+          expected: true,
+          error: 'Malformed alg in expo-expect-signature',
+        };
+      }
+      if (parsed !== 'rsa-v1_5-sha256') {
+        return {
+          expected: true,
+          alg: parsed,
+          error: `Unsupported signature algorithm: ${parsed}`,
+        };
+      }
+      alg = parsed;
+    } else if (key === 'keyid' && rawValue !== undefined) {
+      const parsed = unquoteSfvString(rawValue);
+      if (parsed === null || parsed.length === 0) {
+        return {
+          expected: true,
+          error: 'Malformed keyid in expo-expect-signature',
+        };
+      }
+      keyid = parsed;
+    }
+  }
+
+  if (sigState === 'false') {
+    return { expected: false };
+  }
+  if (sigState !== 'true') {
+    return {
+      expected: true,
+      error: 'Malformed sig in expo-expect-signature',
+    };
+  }
+
+  return {
+    expected: true,
+    keyid,
+    alg: alg ?? 'rsa-v1_5-sha256',
+  };
+}
+
+function normalizePrivateKeyPem(rawKey: string): string {
+  const unescaped = rawKey.trim().replace(/\\n/g, '\n');
+  if (unescaped.startsWith('-----BEGIN ')) {
+    return unescaped;
+  }
+  const decoded = Buffer.from(unescaped, 'base64').toString('utf8').trim();
+  if (decoded.startsWith('-----BEGIN ')) {
+    return decoded;
+  }
+  return unescaped;
+}
+
+const MAX_CACHED_KEYS = 8;
+const cachedPrivateKeys = new Map<string, KeyObject>();
+
+function getOrParsePrivateKey(pem: string): KeyObject {
+  const cached = cachedPrivateKeys.get(pem);
+  if (cached) {
+    return cached;
+  }
+  const key = createPrivateKey(pem);
+  if (cachedPrivateKeys.size >= MAX_CACHED_KEYS) {
+    const oldest = cachedPrivateKeys.keys().next().value;
+    if (oldest !== undefined) {
+      cachedPrivateKeys.delete(oldest);
+    }
+  }
+  cachedPrivateKeys.set(pem, key);
+  return key;
+}
+
+export function signRsaSha256Sfv(
+  payload: string,
+  privateKeyInput: string,
+  keyId = 'main'
+): string {
+  const pem = normalizePrivateKeyPem(privateKeyInput);
+  const key = getOrParsePrivateKey(pem);
+  const signer = createSign('RSA-SHA256');
+  signer.update(payload, 'utf8');
+  const signatureBase64 = signer.sign(key).toString('base64');
+  const safeKeyId = keyId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `sig="${signatureBase64}", keyid="${safeKeyId}", alg="rsa-v1_5-sha256"`;
+}
+
+export function sha256Base64Url(input: Uint8Array | string): string {
+  return createHash('sha256').update(input).digest('base64url');
+}
+
+export function sha256Hex(input: Uint8Array | string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+export function deriveDeterministicUuid(seed: string): string {
+  const hex = sha256Hex(seed);
+  const versionNibbles = `4${hex.slice(13, 16)}`;
+  const variantNibble = (
+    8 |
+    (Number.parseInt(hex.slice(16, 17), 16) & 0x3)
+  ).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${versionNibbles}-${variantNibble}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}

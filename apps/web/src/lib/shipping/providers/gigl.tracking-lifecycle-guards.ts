@@ -149,7 +149,7 @@ export function applyLifecycleGuards(
   let returning = false;
   // A delivered or cancelled parcel gets no arrival update, unless a later
   // failed scan reopens it (same rule as the aggregate).
-  let closed = false;
+  let closedAt = Number.NEGATIVE_INFINITY;
   // Same-city shipments: only a scan away from the destination name proves
   // the parcel left the origin centre (repeat origin scans prove nothing).
   let leftDestinationCentre = false;
@@ -161,11 +161,15 @@ export function applyLifecycleGuards(
       // is rewritten to the synthetic status.
       !destroyed &&
       !returning &&
-      !closed &&
+      closedAt === Number.NEGATIVE_INFINITY &&
       !arrived &&
       // A mapped reason that says failed/delivered/returned is not an arrival.
       (candidate.recognizedStatus === null ||
         candidate.recognizedStatus === 'in_transit') &&
+      // Departure wording overrides even an explicit arrival code.
+      !DEPARTURE_WORD.test(
+        `${raw} ${candidate.scanText || event.description}`
+      ) &&
       (EXPLICIT_ARRIVAL_CODES.has(raw) ||
         FOREIGN_OFFICE_DESTINATIONS[raw]?.test(
           (destination ?? '').toUpperCase()
@@ -173,9 +177,6 @@ export function applyLifecycleGuards(
         (candidate.recognizedStatus === 'in_transit' &&
           !DEPARTURE_CODES.has(raw) &&
           !RETURN_CODES.has(raw) &&
-          !DEPARTURE_WORD.test(
-            `${raw} ${candidate.scanText || event.description}`
-          ) &&
           // A known same-city shipment never infers by name: a district centre
           // that omits the city token is not proof the parcel left the city.
           !originIsDestination &&
@@ -183,8 +184,13 @@ export function applyLifecycleGuards(
           matchesDestination(event.location, destination)));
     if (raw === 'SDR') destroyed = true;
     if (startsReturnFlow(candidate)) returning = true;
-    if (candidate.recognizedStatus === 'failed') closed = false;
-    if (isTerminal(candidate)) closed = true;
+    // Only a strictly later failure reopens; a tied terminal wins, as in the
+    // aggregate.
+    const time = event.timestamp.getTime();
+    if (candidate.recognizedStatus === 'failed' && time > closedAt) {
+      closedAt = Number.NEGATIVE_INFINITY;
+    }
+    if (isTerminal(candidate)) closedAt = time;
     if (isArrival) {
       arrived = true;
       if (candidate.recognizedStatus === null) {

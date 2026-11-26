@@ -52,6 +52,14 @@ DECLARE
     || E'            coalesce(sdr.event->>''occurred_at'', sdr.event->>''timestamp'')\n'
     || E'          ) > coalesce(v_latest_status_event_at, ''-infinity''::timestamptz)\n'
     || E'      )\n'
+    || E'      AND NOT EXISTS (\n'
+    || E'        SELECT 1 FROM public.shipment_tracking_events AS stored_sdr\n'
+    || E'        WHERE stored_sdr.shipment_id = p_shipment_id\n'
+    || E'          AND stored_sdr.tracking_epoch_id = p_tracking_epoch_id\n'
+    || E'          AND upper(stored_sdr.raw_status) = ''SDR''\n'
+    || E'          AND stored_sdr.occurred_at\n'
+    || E'            > coalesce(v_latest_status_event_at, ''-infinity''::timestamptz)\n'
+    || E'      )\n'
     || E'      THEN p_status\n'
     || v_anchor2;
   v_anchor3 constant text :=

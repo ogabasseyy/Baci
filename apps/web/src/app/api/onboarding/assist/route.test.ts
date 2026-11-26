@@ -79,6 +79,16 @@ describe('POST /api/onboarding/assist', () => {
     expect(runGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
+  it('fails closed with 403 when CSRF validation returns valid: false without a response', async () => {
+    vi.mocked(checkCsrfProtection).mockResolvedValueOnce({ valid: false });
+
+    const response = await POST(makeRequest({ task: 'generate_names' }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: 'csrf_failed' });
+    expect(applyRateLimit).not.toHaveBeenCalled();
+    expect(runGuideBusinessOnboarding).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when user is not authenticated', async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: null });
 

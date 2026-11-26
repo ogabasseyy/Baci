@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   upsertOnboardingMerchant: vi.fn(),
   ensureOnboardingDomain: vi.fn(),
   provisionCuratedHomepage: vi.fn(),
+  invalidateMerchantSlugRename: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -35,6 +36,10 @@ vi.mock('@/lib/supabase/server', () => ({
 
 vi.mock('./resolve-onboarding-user', () => ({
   resolveOnboardingUser: mocks.resolveOnboardingUser,
+}));
+
+vi.mock('@/lib/invalidate-merchant-slug-rename', () => ({
+  invalidateMerchantSlugRename: mocks.invalidateMerchantSlugRename,
 }));
 
 vi.mock('./upsert-onboarding-merchant', async () => {
@@ -139,17 +144,19 @@ describe('runSubmitOnboardingWorkflow', () => {
       message: 'That store link is already taken. Please choose another.',
     });
 
-    // Attempt 2: upsert returns 'completed' with old slug; old slug still conflicts,
-    // so workflow renames to the new custom slug and succeeds.
+    // Attempt 2: upsert returns 'completed' with old slug; workflow renames to the
+    // new custom slug, invalidates caches, ensures domain, and provisions homepage.
     mocks.upsertOnboardingMerchant.mockResolvedValueOnce({
       status: 'completed',
       businessName: 'Kicks Hub',
       businessType: 'fashion',
       merchant: persistedMerchant,
     });
-    mocks.ensureOnboardingDomain
-      .mockResolvedValueOnce({ status: 'conflict' })
-      .mockResolvedValueOnce({ status: 'created' });
+    mocks.rpc.mockResolvedValueOnce({
+      data: { slug: 'kicks-hub-ng', retired_slug: 'taken-domain' },
+      error: null,
+    });
+    mocks.ensureOnboardingDomain.mockResolvedValueOnce({ status: 'created' });
 
     const secondAttempt = await runSubmitOnboardingWorkflow(
       { success: false, message: '' },
@@ -159,6 +166,11 @@ describe('runSubmitOnboardingWorkflow', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('rename_merchant_slug', {
       p_merchant_id: 'merchant-1',
       p_new_slug: 'kicks-hub-ng',
+    });
+    expect(mocks.invalidateMerchantSlugRename).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      finalSlug: 'kicks-hub-ng',
+      retiredSlug: 'taken-domain',
     });
     expect(mocks.ensureOnboardingDomain).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -180,7 +192,57 @@ describe('runSubmitOnboardingWorkflow', () => {
     });
   });
 
-  it('returns slug_unavailable when domain-conflict recovery retries with a reserved or taken slug', async () => {
+  it('renames a completed merchant whose existing domain already exists when a new custom slug is submitted', async () => {
+    mocks.upsertOnboardingMerchant.mockResolvedValueOnce({
+      status: 'completed',
+      businessName: 'Kicks Hub',
+      businessType: 'fashion',
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Kicks Hub',
+        business_type: 'fashion',
+        slug: 'old-live-slug',
+        logo_url: null,
+        brand_colors: null,
+      },
+    });
+    mocks.rpc.mockResolvedValueOnce({
+      data: { slug: 'brand-new-slug', retired_slug: 'old-live-slug' },
+      error: null,
+    });
+    mocks.ensureOnboardingDomain.mockResolvedValueOnce({
+      status: 'already_exists',
+    });
+
+    const result = await runSubmitOnboardingWorkflow(
+      { success: false, message: '' },
+      makeOnboardingFormData('brand-new-slug')
+    );
+
+    expect(mocks.rpc).toHaveBeenCalledWith('rename_merchant_slug', {
+      p_merchant_id: 'merchant-1',
+      p_new_slug: 'brand-new-slug',
+    });
+    expect(mocks.invalidateMerchantSlugRename).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      finalSlug: 'brand-new-slug',
+      retiredSlug: 'old-live-slug',
+    });
+    expect(mocks.ensureOnboardingDomain).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'brand-new-slug' })
+    );
+    expect(mocks.provisionCuratedHomepage).toHaveBeenCalledWith(
+      expect.objectContaining({ merchantSlug: 'brand-new-slug' })
+    );
+    expect(result).toEqual({
+      success: true,
+      message: 'Store created!',
+      businessName: 'Kicks Hub',
+      merchantId: 'merchant-1',
+    });
+  });
+
+  it('returns slug_unavailable when completed-merchant custom slug is reserved or taken', async () => {
     const persistedMerchant = {
       id: 'merchant-1',
       business_name: 'Kicks Hub',
@@ -196,7 +258,6 @@ describe('runSubmitOnboardingWorkflow', () => {
       businessType: 'fashion',
       merchant: persistedMerchant,
     });
-    mocks.ensureOnboardingDomain.mockResolvedValueOnce({ status: 'conflict' });
 
     const reservedRetry = await runSubmitOnboardingWorkflow(
       { success: false, message: '' },
@@ -215,7 +276,6 @@ describe('runSubmitOnboardingWorkflow', () => {
       businessType: 'fashion',
       merchant: persistedMerchant,
     });
-    mocks.ensureOnboardingDomain.mockResolvedValueOnce({ status: 'conflict' });
     mocks.rpc.mockResolvedValueOnce({
       data: null,
       error: { code: '23505', message: 'slug_taken' },
@@ -234,5 +294,6 @@ describe('runSubmitOnboardingWorkflow', () => {
       p_merchant_id: 'merchant-1',
       p_new_slug: 'also-taken',
     });
+    expect(mocks.invalidateMerchantSlugRename).not.toHaveBeenCalled();
   });
 });

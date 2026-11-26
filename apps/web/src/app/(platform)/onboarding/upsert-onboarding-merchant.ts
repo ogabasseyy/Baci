@@ -7,7 +7,9 @@ import type {
   OnboardingMerchant,
 } from './onboarding-action-types';
 import {
+  extractRenamedSlugResult,
   hasEstablishedOnboardingSlug,
+  isRenameSlugUnavailableError,
   resolveOnboardingMerchantSlug,
 } from './onboarding-slug';
 
@@ -79,6 +81,7 @@ export type UpsertOnboardingMerchantResult =
       businessName: string;
       businessType: string;
       merchant: OnboardingMerchant;
+      retiredSlug?: string | null;
     };
 
 export async function upsertOnboardingMerchant({
@@ -160,6 +163,7 @@ export async function upsertOnboardingMerchant({
   }
 
   let merchant: OnboardingMerchant | null;
+  let retiredSlug: string | null = null;
   const customSlug = slugIsCustom
     ? requestedSlug?.trim().toLowerCase()
     : undefined;
@@ -167,11 +171,40 @@ export async function upsertOnboardingMerchant({
     throw new OnboardingSlugUnavailableError();
   }
   if (existing) {
-    const resolvedSlug = customSlug
-      ? customSlug
-      : hasEstablishedOnboardingSlug(existing.slug)
-        ? null
-        : await resolveOnboardingMerchantSlug(supabase, businessName);
+    const hasEstablishedSlug = hasEstablishedOnboardingSlug(existing.slug);
+    const existingSlugNormalized = existing.slug?.trim().toLowerCase();
+    if (
+      hasEstablishedSlug &&
+      customSlug &&
+      customSlug !== existingSlugNormalized
+    ) {
+      // prevent_established_merchant_slug_change() rejects direct UPDATEs on a
+      // non-empty slug; route draft-merchant custom-slug changes through the RPC.
+      const { data: renameData, error: renameError } = await supabase.rpc(
+        'rename_merchant_slug',
+        {
+          p_merchant_id: existing.id,
+          p_new_slug: customSlug,
+        }
+      );
+      if (renameError) {
+        if (isRenameSlugUnavailableError(renameError)) {
+          throw new OnboardingSlugUnavailableError();
+        }
+        throw new Error(
+          `Failed to update merchant slug: ${renameError.message}`
+        );
+      }
+      retiredSlug = extractRenamedSlugResult(
+        renameData,
+        customSlug,
+        existing.slug
+      ).retiredSlug;
+    }
+    const resolvedSlug = hasEstablishedSlug
+      ? null
+      : (customSlug ??
+        (await resolveOnboardingMerchantSlug(supabase, businessName)));
     const { data, error } = await merchants
       .update({
         email,
@@ -232,5 +265,6 @@ export async function upsertOnboardingMerchant({
     businessName,
     businessType: finalBusinessType,
     merchant,
+    ...(retiredSlug ? { retiredSlug } : {}),
   };
 }

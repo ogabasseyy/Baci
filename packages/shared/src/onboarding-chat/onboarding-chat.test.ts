@@ -91,4 +91,29 @@ describe('@baci/shared/onboarding-chat', () => {
     expect(editPhone.returnToSummary).toBe(true);
     expect(editPhone.nextStep).toBe('phone');
   });
+
+  it('requires affirmative summary text to launch and ignores negated or question text', () => {
+    for (const negative of ["don't launch yet", 'can I launch later?']) {
+      const result = transitionFromTextInput({
+        step: 'summary',
+        rawText: negative,
+        data: BASE_DATA,
+        countries: COUNTRIES,
+        businessTypes: BUSINESS_TYPES,
+      });
+      expect(result.sideEffect).toBeUndefined();
+      expect(result.messages).toHaveLength(2);
+    }
+
+    for (const affirmative of ['Launch my store!', 'launch', 'yes']) {
+      const result = transitionFromTextInput({
+        step: 'summary',
+        rawText: affirmative,
+        data: BASE_DATA,
+        countries: COUNTRIES,
+        businessTypes: BUSINESS_TYPES,
+      });
+      expect(result.sideEffect).toEqual({ type: 'launch_store' });
+    }
+  });
 });

@@ -294,7 +294,12 @@ export function transitionFromTextInput(
   }
 
   if (step === 'summary') {
-    if (lower.includes('launch') || lower === 'yes') {
+    const normalizedSummary = lower.replace(/[!.\s]+$/g, '');
+    if (
+      /^(?:yes(?:\s*,)?\s*)?(?:launch(?:\s+(?:my\s+store|store|it|now))?|yes)$/.test(
+        normalizedSummary
+      )
+    ) {
       return { sideEffect: { type: 'launch_store' } };
     }
     return {

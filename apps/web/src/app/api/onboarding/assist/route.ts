@@ -75,8 +75,14 @@ function isUserScopedOnboardingLogoUrl(
 
 export async function POST(request: NextRequest) {
   const csrf = await checkCsrfProtection(request);
-  if (!csrf.valid && csrf.response) {
-    return csrf.response;
+  if (!csrf.valid) {
+    return (
+      csrf.response ??
+      NextResponse.json(
+        { error: 'CSRF validation failed', code: 'csrf_failed' },
+        { status: 403 }
+      )
+    );
   }
 
   const supabase = createClient(await cookies());

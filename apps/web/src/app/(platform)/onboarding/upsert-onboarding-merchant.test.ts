@@ -174,7 +174,7 @@ describe('upsertOnboardingMerchant', () => {
     );
   });
 
-  it('honors custom slug on update of an incomplete merchant and omits blank phone', async () => {
+  it('routes custom slug changes for an incomplete merchant with an established draft slug through rename_merchant_slug RPC and omits slug from direct update', async () => {
     const single = vi.fn().mockResolvedValue({
       data: { id: 'merchant-1', slug: 'fresh-custom', logo_url: null },
       error: null,
@@ -188,6 +188,68 @@ describe('upsertOnboardingMerchant', () => {
     });
     const maybeSingle = vi.fn().mockResolvedValue({
       data: { id: 'merchant-1', business_name: null, slug: 'old-draft' },
+      error: null,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { slug: 'fresh-custom', retired_slug: 'old-draft' },
+      error: null,
+    });
+    const supabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({ maybeSingle }),
+        }),
+        update,
+      }),
+      rpc,
+    };
+
+    const result = await upsertOnboardingMerchant({
+      supabase: supabase as never,
+      user: { id: 'user-1' } as never,
+      email: 'merchant@example.com',
+      businessName: 'Fresh Custom',
+      businessType: 'fashion',
+      country: 'NG',
+      logoUrl: '',
+      phone: '   ',
+      slug: 'fresh-custom',
+      slugIsCustom: true,
+      brandColors: null,
+      brandColorsParsed: false,
+    });
+
+    expect(rpc).toHaveBeenCalledWith('rename_merchant_slug', {
+      p_merchant_id: 'merchant-1',
+      p_new_slug: 'fresh-custom',
+    });
+    const updatePayload = update.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(updatePayload).toMatchObject({
+      logo_url: null,
+      favicon_png_192_url: null,
+    });
+    expect(updatePayload).not.toHaveProperty('slug');
+    expect(updatePayload).not.toHaveProperty('phone');
+    expect(result).toMatchObject({
+      status: 'saved',
+      retiredSlug: 'old-draft',
+    });
+  });
+
+  it('writes custom slug directly when updating an incomplete merchant with no established slug', async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: { id: 'merchant-1', slug: 'fresh-custom', logo_url: null },
+      error: null,
+    });
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({ single }),
+        }),
+      }),
+    });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: 'merchant-1', business_name: null, slug: null },
       error: null,
     });
     const rpc = vi.fn();
@@ -217,13 +279,9 @@ describe('upsertOnboardingMerchant', () => {
     });
 
     expect(rpc).not.toHaveBeenCalled();
-    const updatePayload = update.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(updatePayload).toMatchObject({
-      slug: 'fresh-custom',
-      logo_url: null,
-      favicon_png_192_url: null,
-    });
-    expect(updatePayload).not.toHaveProperty('phone');
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: 'fresh-custom' })
+    );
   });
 
   it('uses auto-generated slug when slugIsCustom is false even if slug is provided', async () => {

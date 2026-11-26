@@ -11,6 +11,23 @@ INSERT INTO verified_funding_cases VALUES
   ('paused',pg_temp.verified_funding_fixture('credit_direct')),
   ('funding_mismatch',pg_temp.verified_funding_fixture('credit_direct')),
   ('duplicate_transfer',pg_temp.verified_funding_fixture('credit_direct'));
+DO $$
+DECLARE
+  fixture jsonb;
+  order_id uuid;
+BEGIN
+  SELECT ids INTO STRICT fixture FROM verified_funding_cases WHERE kind = 'credit_direct';
+  order_id := (fixture->>'order')::uuid;
+  UPDATE public.orders SET tracking_number = 'SYNTHETIC-TRACKED'
+  WHERE id = order_id;
+  PERFORM set_config('request.jwt.claim.role','authenticated',true);
+  PERFORM set_config('request.jwt.claim.sub',fixture->>'actor',true);
+  IF public.read_paid_order_amendment_workspace(order_id)->>'canStart' IS DISTINCT FROM 'false' THEN
+    RAISE EXCEPTION 'Tracked order still advertises paid-order item changes';
+  END IF;
+  UPDATE public.orders SET tracking_number = NULL WHERE id = order_id;
+END;
+$$;
 UPDATE private.paid_order_amendment_config SET enabled = false
 WHERE merchant_id = (SELECT (ids->>'merchant')::uuid FROM verified_funding_cases WHERE kind = 'paused');
 UPDATE public.transactions SET amount = amount - 1

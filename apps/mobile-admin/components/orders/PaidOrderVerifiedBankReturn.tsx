@@ -112,6 +112,9 @@ export function PaidOrderVerifiedBankReturn({
       ) : (
         repayableEvidence.map((entry) => (
           <View key={entry.id}>
+            <Text style={{ color: colors.textMuted }}>
+              Transfer {entry.transactionId ?? entry.occurredAt}
+            </Text>
             {action(
               `Prepare bank repayment (${formatPrice(entry.amountMinor / 100)})`,
               () => {

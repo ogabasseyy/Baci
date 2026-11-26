@@ -70,6 +70,15 @@ BEGIN
       IF public.register_paid_order_tender_receipt(o,method,'fixture-' || o,'AUDITED-REGISTER-' || o,2000000,now()) <> receipt THEN
         RAISE EXCEPTION 'Verified receipt ingestion was not idempotent';
       END IF;
+      IF method = 'pos' THEN
+        UPDATE private.paid_order_bank_evidence
+        SET bank_transaction_id = 'tender:pos:-POS-12345'
+        WHERE id = receipt;
+        IF public.register_paid_order_tender_receipt(
+          o,method,'-POS-12345','AUDITED-REGISTER-' || o,2000000,now()) <> receipt THEN
+          RAISE EXCEPTION 'Previously accepted punctuation-led POS reference did not replay';
+        END IF;
+      END IF;
       BEGIN
         PERFORM public.register_paid_order_tender_receipt(o,method,'FIXTURE-' || o,'AUDITED-REGISTER-' || o,1999999,now());
         RAISE EXCEPTION 'A verified receipt amount was overwritten';
@@ -213,6 +222,18 @@ BEGIN
       IF claim->>'amountMinor' IS DISTINCT FROM '500000'
         OR public.run_paid_order_amendment_action(o,amendment,payload) IS DISTINCT FROM claim THEN
         RAISE EXCEPTION 'Late bank return claim did not replay exactly';
+      END IF;
+      BEGIN
+        UPDATE private.paid_order_amendment_config
+        SET bank_account_id = gen_random_uuid(),bank_evidence_cutover = now()
+        WHERE merchant_id = m;
+        RAISE EXCEPTION 'Bank account rotated with an open return claim';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'bank_return_claim_open' THEN RAISE; END IF;
+      END;
+      IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+        IS DISTINCT FROM bank_account THEN
+        RAISE EXCEPTION 'Rejected bank account rotation changed the configured account';
       END IF;
       return_payload := jsonb_build_object('action','record_offline_refund',
         'claimId',claim->>'claimId','evidenceId',outgoing,'idempotencyKey','verify-late-bank-return');

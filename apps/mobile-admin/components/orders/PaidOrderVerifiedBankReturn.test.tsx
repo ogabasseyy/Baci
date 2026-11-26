@@ -113,6 +113,32 @@ it('claims an eligible verified bank return for repayment', () => {
   });
 });
 
+it('shows a distinct transfer reference when equal-amount returns are listed', () => {
+  const secondId = '8f2cb0d7-f014-4ab7-bbc5-0279b99cd65b';
+  render(
+    <Harness
+      verification={{
+        ...verifiedCancellation,
+        bankEvidence: [id, secondId].map((transactionId) => ({
+          id: transactionId,
+          amountMinor: 120_000,
+          status: 'unapplied',
+          transactionId,
+          occurredAt: '2026-11-22T13:55:00Z',
+          method: 'bank_transfer',
+        })),
+      }}
+      onSubmit={vi.fn()}
+    />
+  );
+
+  expect(screen.getByText(`Transfer ${id}`)).toBeInTheDocument();
+  expect(screen.getByText(`Transfer ${secondId}`)).toBeInTheDocument();
+  expect(
+    screen.getAllByRole('button', { name: /Prepare bank repayment/ })
+  ).toHaveLength(2);
+});
+
 it('does not offer allocated top-ups in the verified cancellation repayment flow', () => {
   const onSubmit = vi.fn();
   const transactionId = '1f7e5171-f2e3-4e8e-9202-6bc7a39f2bb6';

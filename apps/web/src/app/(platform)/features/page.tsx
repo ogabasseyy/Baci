@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import AppBody from '@/components/app-body';
 import { FeatureIcon } from '@/components/landing/feature-icon';
+import { RoadmapStrip } from '@/components/landing/roadmap-strip';
 import { PlatformFooter } from '@/components/platform/footer';
 import { PlatformHeader } from '@/components/platform/header';
 import { Button } from '@/components/ui/button';
@@ -147,6 +148,11 @@ export default function FeaturesPage() {
                 </ul>
               </section>
             ))}
+          </div>
+
+          {/* Upcoming Roadmap */}
+          <div className="mt-20">
+            <RoadmapStrip />
           </div>
 
           {/* Bottom CTA */}

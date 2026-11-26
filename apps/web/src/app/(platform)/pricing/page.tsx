@@ -72,7 +72,7 @@ const PRICING_PLANS: readonly PricingPlan[] = [
       'Branch & Staff Paystack Virtual Terminals',
       'Ship on Credit & Serialized Unit Tracking',
       'Executive Summary & Tax Ledger PDF Reports',
-      'Agentic Commerce (UCP/ACP) & API Access',
+      'Agentic Commerce Readiness (UCP/ACP)',
       'Dedicated Account Manager',
     ],
     cta: 'Contact Sales',
@@ -144,7 +144,7 @@ const COMPARISON_ROWS: readonly ComparisonRow[] = [
     premium: true,
   },
   {
-    feature: 'Virtual Terminals, Tax Ledgers & API Access',
+    feature: 'Virtual Terminals & Tax Ledger PDF Reports',
     free: false,
     pro: false,
     premium: true,
@@ -252,7 +252,7 @@ export default function PricingPage() {
                   href="/features"
                   className="font-semibold text-accent hover:underline"
                 >
-                  Explore all 35 built-in capabilities
+                  Explore all built-in capabilities
                 </Link>
                 .
               </p>

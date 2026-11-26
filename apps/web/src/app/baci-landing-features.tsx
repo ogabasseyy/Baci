@@ -3,6 +3,7 @@ import { FeatureIcon } from '@/components/landing/feature-icon';
 import { FeatureToolkitTabs } from '@/components/landing/feature-toolkit-tabs';
 import { MobileAppStrip } from '@/components/landing/mobile-app-strip';
 import { ProductShowcase } from '@/components/landing/product-showcase';
+import { RoadmapStrip } from '@/components/landing/roadmap-strip';
 import { JsonLd } from '@/components/seo/json-ld';
 import { PLATFORM_CONFIG } from '@/config/platform';
 import { PLATFORM_SPOTLIGHT_FEATURES } from '@/config/platform-features';
@@ -70,6 +71,9 @@ export function BaciLandingFeatures() {
 
       {/* Mobile Admin App Strip */}
       <MobileAppStrip />
+
+      {/* Upcoming Roadmap Strip */}
+      <RoadmapStrip />
 
       {/* How It Works Section */}
       <section

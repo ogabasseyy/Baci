@@ -63,6 +63,14 @@ export interface PlatformFeatureCategory {
   items: readonly PlatformFeatureItem[];
 }
 
+export interface PlatformRoadmapFeature {
+  id: string;
+  icon: PlatformFeatureIconKey;
+  title: string;
+  status: 'In Development' | 'In Planning';
+  description: string;
+}
+
 /**
  * Six flagship capabilities highlighted at the top of usebaci.com and /features.
  * Only verified, general-availability platform capabilities belong here—no
@@ -184,6 +192,14 @@ export const PLATFORM_FEATURE_CATEGORIES: readonly PlatformFeatureCategory[] = [
           'Moderate verified buyer reviews, sync Google Business Profile ratings, enable customer wishlists, and show recent purchase social proof.',
         surfaces: ['Web', 'Storefront'],
       },
+      {
+        id: 'customer-messaging',
+        icon: 'message-circle',
+        title: 'Multimodal Customer Messaging Inbox',
+        description:
+          'Converse with shoppers directly inside Baci Web and Mobile Admin with searchable threads, conversation insights, and instant replies.',
+        surfaces: ['Web', 'Mobile Admin'],
+      },
     ],
   },
   {
@@ -257,6 +273,14 @@ export const PLATFORM_FEATURE_CATEGORIES: readonly PlatformFeatureCategory[] = [
           'Sell airtime, mobile data, cable TV, and electricity directly from your storefront via Kuda and earn commissions on every transaction.',
         surfaces: ['Web', 'Storefront'],
       },
+      {
+        id: 'merchant-wallet-funding',
+        icon: 'wallet',
+        title: 'Merchant Wallet & Dedicated Funding Account',
+        description:
+          'Track available and pending balances, manage a dedicated merchant funding account, and automate weekly bank settlements.',
+        surfaces: ['Web', 'Mobile Admin'],
+      },
     ],
   },
   {
@@ -313,6 +337,14 @@ export const PLATFORM_FEATURE_CATEGORIES: readonly PlatformFeatureCategory[] = [
         description:
           'Expose /agent-commerce.json, /agent-trust.json, WebMCP browser tools, LLM .md pages, and signed agentic checkout sessions with crawler controls.',
         surfaces: ['Web', 'Storefront'],
+      },
+      {
+        id: 'experience-builder',
+        icon: 'layout',
+        title: 'Experience Builder & Publication Workflow',
+        description:
+          'Author custom storefront experiences with preview, approval, and publication gates powered by the Baci Experience SDK.',
+        surfaces: ['Web'],
       },
     ],
   },
@@ -401,7 +433,7 @@ export const PLATFORM_FEATURE_CATEGORIES: readonly PlatformFeatureCategory[] = [
         icon: 'megaphone',
         title: 'Ad Pixels, Server-Side CAPI & Spend ROAS',
         description:
-          'Connect Meta, Google GA4/Ads, TikTok, and Snapchat via OAuth for daily ad spend sync, server-side Conversions API, and Safari ITP-safe 90-day attribution.',
+          'Connect Meta, Google GA4/Ads, TikTok (including native TikTok Business App Events), and Snapchat for daily ad spend sync, server-side CAPI, and Safari ITP-safe 90-day attribution.',
         surfaces: ['Web', 'Mobile Admin'],
       },
       {
@@ -452,6 +484,61 @@ export const PLATFORM_FEATURE_CATEGORIES: readonly PlatformFeatureCategory[] = [
           'Protect merchant and staff accounts with WebAuthn passkeys, TOTP authenticator apps, one-time recovery codes, and full order audit trails.',
         surfaces: ['Web', 'Mobile Admin'],
       },
+      {
+        id: 'partner-channel-api',
+        icon: 'arrow-up-right',
+        title: 'Partner & External Sales-Channel API (v1)',
+        description:
+          'Syndicate versioned catalog snapshots, serve real-time quotes, and accept order submissions from external partner channels.',
+        surfaces: ['Web'],
+      },
     ],
+  },
+];
+
+/**
+ * Upcoming capabilities actively in development or planning.
+ * Always rendered with explicit roadmap/coming-soon labels—never claimed as GA.
+ */
+export const PLATFORM_ROADMAP_FEATURES: readonly PlatformRoadmapFeature[] = [
+  {
+    id: 'paid-order-amendments',
+    icon: 'receipt',
+    title: 'Paid Order Amendments',
+    status: 'In Development',
+    description:
+      'Swap an item or variant on an already-paid order while preserving the order number, original payment, stock adjustments, settlement delta, and full audit trail.',
+  },
+  {
+    id: 'multi-lender-financing',
+    icon: 'credit-card',
+    title: 'Multi-Lender Financing Checkout',
+    status: 'In Planning',
+    description:
+      'One unified, customer-consented checkout that compares installment financing offers across multiple lenders side by side.',
+  },
+  {
+    id: 'modular-headless-agent-authoring',
+    icon: 'bot',
+    title: 'Agent-First Authoring & Modular Commerce',
+    status: 'In Development',
+    description:
+      'Author Baci storefronts from ChatGPT and AI agents, or plug Baci payments, logistics, and catalog modules into any existing external website.',
+  },
+  {
+    id: 'google-pay-agentic-ucp',
+    icon: 'sparkles',
+    title: 'Google Pay Agentic Commerce & Full UCP',
+    status: 'In Development',
+    description:
+      'End-to-end Universal Commerce Protocol (UCP) checkout with Google Pay support for autonomous shopping agents.',
+  },
+  {
+    id: 'order-refund-recovery',
+    icon: 'shield-check',
+    title: 'Order Refund Status & Recovery',
+    status: 'In Development',
+    description:
+      'End-to-end refund lifecycle tracking and automated reconciliation across payment gateways.',
   },
 ];

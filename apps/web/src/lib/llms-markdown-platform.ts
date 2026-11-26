@@ -1,4 +1,3 @@
-import { PLATFORM_FEATURE_CATEGORIES } from '@/config/platform-features';
 import { normalizeOrigin } from '@/lib/normalize-origin';
 
 export function buildPlatformHomeMarkdown(origin: string): string {
@@ -12,7 +11,8 @@ export function buildPlatformHomeMarkdown(origin: string): string {
     '## Summary',
     '- Merchant-facing platform for store creation, catalog management, and operations.',
     '- Core platform surfaces: onboarding, pricing, features, login, dashboard, builder.',
-    '- Public marketing pages are the best source for positioning and packaging details.',
+    '- Public marketing pages summarize positioning; omissions are not evidence that a capability is absent.',
+    '- Baci is building agent-native commerce infrastructure for African merchants; its mission is not a claim of measured merchant outcomes.',
     '',
     '## Primary Routes',
     `- ${baseUrl}/onboarding`,
@@ -39,7 +39,7 @@ export function buildPlatformPricingMarkdown(origin: string): string {
     '## Plans',
     '- Free: NGN 0. Best for testing ideas and small hobby shops. Includes 1 store, up to 10 products, basic storefront, Baci subdomain, and standard support.',
     '- Pro: NGN 5,000 per month. For growing businesses. Includes unlimited products, custom domain, advanced analytics, priority support, marketing tools, and no transaction fees.',
-    '- Premium: NGN 15,000 per month. For scaling enterprises. Includes everything in Pro, multiple staff accounts, advanced reports, dedicated account management, API access, and wholesale features.',
+    '- Premium: NGN 15,000 per month. For scaling enterprises. Includes everything in Pro, multiple staff accounts, advanced reports, and dedicated account management.',
     '',
     '## Related Routes',
     `- ${baseUrl}/onboarding`,
@@ -50,19 +50,37 @@ export function buildPlatformPricingMarkdown(origin: string): string {
 
 export function buildPlatformFeaturesMarkdown(origin: string): string {
   const baseUrl = normalizeOrigin(origin);
-  const categoryLines = PLATFORM_FEATURE_CATEGORIES.flatMap((category) => [
-    `### ${category.label}`,
-    ...category.items.map((item) => `- ${item.title}: ${item.description}`),
-    '',
-  ]);
 
   return [
     '# Baci Features',
     '',
-    '> Feature summary for the Baci platform—including AI-powered store generation, price negotiations, discount codes, local & crypto payments, mobile admin, and agentic commerce.',
+    '> Feature summary for the Baci platform.',
     '',
     '## Capabilities',
-    ...categoryLines,
+    '- AI-powered store generation: generate structure, copy, and branding from business inputs, then refine in the visual Puck builder (29+ blocks) and Experience Builder.',
+    '- Smart theming: derive and apply brand colors from uploaded assets with AI logo generation and browser background removal.',
+    '- Price negotiations: accept single-item and whole-cart shopper offers with margin-protected counter-offers and real-time Mobile Admin approvals.',
+    '- Discount codes, vouchers, and loyalty: create percentage or fixed-amount promo codes with usage caps, announcement bars, and tiered loyalty rewards.',
+    '- Multimodal customer messaging: manage customer conversations inside Baci web and mobile admin.',
+    '- Inventory management: manage products, variants, serialized units, barcode scanning, demand forecasting, and stock alerts.',
+    '- Store analytics: review performance, sales, RFM segments, and reporting with available data and plan access.',
+    '- Mobile-first storefronts: responsive experiences optimized for mobile shoppers, including smart cart gifting, live repricing, and product comparisons.',
+    '- Domain purchase and management: search, register or connect domains and custom sender email domains; eligibility, payment and DNS setup apply. Android in-app purchasing is not enabled.',
+    '- Payments and checkout: configure supported Paystack, Korapay, dedicated virtual accounts, Juicyway crypto (USDT/USDC), CredPal, Credit Direct, Klump BNPL, Pay-for-Me links, Ship on Credit, Save-to-Buy goals, Virtual Terminals, VTU, and pay-on-delivery options; country, currency, provider and merchant configuration apply.',
+    '- Shipping and fulfillment: supported GIGL and Topship zones, rates, pickup, airport delivery, quotes, booking and tracking workflows; carrier coverage and configuration apply.',
+    '- Jumia sales channel: authorized marketplace product and order synchronization, subject to access and provider connection.',
+    '- Invoices and receipts: order documents, staff-entered orders, payment records, and Tax Ledger PDF exports with relevant permissions.',
+    '- Team permissions and multi-branch operations: 8 staff roles, branch scoping, passkeys, 2FA, and suspension, subject to subscription and permissions.',
+    '- Bulk catalog imports and migrations: supported CSV import, Google Sheets sync, AI price-list parsing, and Bumpa CSV migration with receipt-claim campaigns; format and validation rules apply.',
+    '- Mobile-admin: supported expense/profit reporting, unlinked item reconciliation, and failed or stale unpaid-order follow-ups; complete inputs and permissions required.',
+    '- Growth integrations: supported analytics, Meta/Google/TikTok/Snapchat CAPI, blog engine, and XML/JSONL shopping feeds; provider setup and consent apply, without guaranteed results.',
+    '- Agent-ready commerce: ACP and UCP discovery, WebMCP storefront tools, structured catalog access, carts, checkout sessions and order reads. Capability readiness and signed authorization apply; not automatic ChatGPT or Google shopping admission.',
+    '',
+    '## Agent Access Boundaries',
+    '- This feature summary is not a list of callable MCP tools or protocol certification.',
+    '- Buyer-facing shopping and merchant/admin tools have different identities, tenants and permissions. Discover actual tools from the relevant connector; do not infer tool availability from dashboard features.',
+    '- Sensitive purchases and merchant writes require explicit authorization and supported approval flows. Product assistance is not unconstrained autonomous operation.',
+    '',
     '## Related Routes',
     `- ${baseUrl}/features`,
     `- ${baseUrl}/pricing`,

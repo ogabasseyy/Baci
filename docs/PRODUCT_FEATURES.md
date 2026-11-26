@@ -31,6 +31,9 @@
 - **Verified Product Reviews, Google Reviews, Wishlists & Social Proof** (`Web`, `Storefront`, `API`)
   - Review moderation + merchant replies, Google Places 5-review sync, customer wishlists, and daily/weekly purchase social proof stats.
   - Code: `apps/web/src/app/dashboard/reviews/page.tsx`, `apps/web/src/app/api/reviews/`, `apps/web/src/app/api/wishlist/`, `apps/web/src/app/api/storefront/social-proof/route.ts`
+- **Multimodal Customer Messaging Inbox** (`Web`, `Mobile Admin`)
+  - Customer-to-merchant messaging with searchable conversation threads, reply composer, and insights cards across web and mobile admin.
+  - Code: `apps/web/src/app/dashboard/messages/`, `apps/mobile-admin/app/(admin)/messages/`
 
 ### Payments & Fintech
 - **Multi-Gateway Checkout & Weekly Auto-Payouts** (`Web`, `Storefront`, `Mobile Admin`, `API`)
@@ -57,6 +60,9 @@
 - **VTU & Utility Bill Payments** (`Web`, `Storefront`, `Mobile Storefront`, `API`)
   - Kuda-powered airtime, mobile data, cable TV, and electricity purchases with merchant commissions.
   - Code: `apps/web/src/app/dashboard/settings/vtu/`, `apps/web/src/app/api/vtu/`
+- **Merchant Wallet & Dedicated Funding Account** (`Web`, `Mobile Admin`, `API`)
+  - Dedicated merchant wallet funding account endpoints alongside automated weekly settlements.
+  - Code: `apps/web/src/app/api/merchant-wallet/`
 
 ### AI & Visual Builder
 - **3-Step AI Storefront Onboarding** (`Web`)
@@ -71,6 +77,9 @@
 - **Agentic Commerce (UCP/ACP, WebMCP & LLM Markdown)** (`Web`, `Storefront`, `API`)
   - `/agent-commerce.json`, `/agent-trust.json`, signed UCP/ACP catalog/cart/checkout APIs, WebMCP `modelContext` storefront tools, `.md` LLM renderer (`/api/llm/...`), and merchant crawler/trust dashboard.
   - Code: `apps/web/src/app/dashboard/agentic/client-page.tsx`, `apps/web/src/app/api/agentic/`, `apps/web/src/components/storefront/webmcp-storefront-tools.tsx`
+- **Experience Builder & Publication Workflow** (`Web`, `API`, `Shared`)
+  - Experience-driven storefront authoring with preview, approval, and publication gates powered by `@baci/experience-sdk`.
+  - Code: `apps/web/src/app/api/builder-experience/`, `apps/web/src/app/api/builder-publication/`, `packages/experience-sdk/`
 
 ### Operations & Mobile Admin
 - **Multi-Branch Switching & 8-Role Staff RBAC** (`Web`, `Mobile Admin`, `API`)
@@ -120,6 +129,12 @@
 - **Account Security (Passkeys, TOTP 2FA & Recovery Codes)** (`Web`, `Mobile Admin`)
   - WebAuthn passkeys, authenticator app 2FA, one-time recovery codes, and order audit trails.
   - Code: `apps/web/src/app/dashboard/settings/security/`, `apps/mobile-admin/app/(admin)/security.tsx`
+- **Partner & External Sales-Channel API (`v1`)** (`Web`, `API`)
+  - Versioned partner API for catalog snapshots, real-time quotes, order submissions, and order tracking.
+  - Code: `apps/web/src/app/api/partners/v1/`
+- **Native TikTok Business App Events SDK** (`Mobile`, `Packages`)
+  - First-party Expo native module for TikTok Business conversion and attribution events.
+  - Code: `packages/tiktok-business/`
 
 ---
 
@@ -142,3 +157,15 @@ Do **not** market these on `usebaci.com` or `/features` as general merchant plat
 - **Manual Merchant Wallet Withdrawal** — intentionally disabled (`404`); weekly auto-payouts are live (`apps/web/src/app/api/wallet/withdraw/route.ts`).
 - **Google Merchant Center OAuth & Webhook** — XML product feed is live; OAuth/webhook routes are stubs (`apps/web/src/app/api/integrations/google-merchant-center/{auth,webhook}/route.ts`).
 - **Standalone Gift Card Issuing UI & Loyalty Custom Reward Creation** — `Add Reward` button in `apps/web/src/app/dashboard/loyalty/page.tsx` is currently unwired.
+
+---
+
+## 4. Active Roadmap / Coming Soon (NOT General Availability Yet)
+
+Always label these explicitly as **In Development** or **In Planning** if surfaced publicly:
+- **Paid Order Amendments** — Swap an item/variant on an already-paid order with audit trail and settlement delta (`docs/superpowers/plans/2026-11-20-paid-order-amendments.md`).
+- **Multi-Lender Financing Checkout & FirstEase BNPL** — Consented multi-lender offer comparison at checkout (`docs/superpowers/specs/2026-10-31-multi-lender-financing-checkout-design.md`).
+- **Agent-First Developer Platform & Modular Headless Commerce** — Author stores from ChatGPT/AI agents or activate individual Baci modules from external websites (`docs/superpowers/plans/2026-11-10-baci-developer-platform.md`).
+- **Google Pay Agentic Commerce & Full UCP Checkout** (`docs/superpowers/plans/2026-10-29-google-pay-agentic-commerce.md`).
+- **Order Refund Status & Recovery** (`docs/superpowers/plans/2026-09-30-order-refund-status-and-recovery.md`).
+- **Partner Catalogue Syndication (e.g., BrilStash)** (`docs/superpowers/plans/2026-11-18-yield-brilstash-catalogue.md`).

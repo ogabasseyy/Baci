@@ -16,13 +16,13 @@ const submitLane = code.slice(code.indexOf('lane :submit do'));
 
 interface Store {
   review?: string;
-  canceling?: boolean;
+  pastSubmissions?: string[];
   editable?: boolean;
   latest?: string;
 }
 
 // Runs the real Ruby guard against a stubbed App Store Connect.
-function runGuard({ review, canceling, editable, latest }: Store) {
+function runGuard({ review, pastSubmissions = [], editable, latest }: Store) {
   const ruby = (value?: string) => (value ? `"${value}"` : 'nil');
   const script = `
     module UI
@@ -40,8 +40,9 @@ function runGuard({ review, canceling, editable, latest }: Store) {
             ${ruby(review)} && Submission.new(${ruby(review)})
           end
           def get_review_submissions(filter:)
-            raise "unexpected filter" unless filter[:state] == "CANCELING"
-            ${canceling ? '[Submission.new("CANCELING")]' : '[]'}
+            # Apple can refuse a filter on a state it does not accept.
+            raise "do not filter by state" if filter.key?(:state)
+            %w[${pastSubmissions.join(' ')}].map { |s| Submission.new(s) }
           end
           def get_edit_app_store_version(platform:)
             ${editable ? 'Version.new("PREPARE_FOR_SUBMISSION")' : 'nil'}
@@ -97,13 +98,24 @@ describe('admin iOS submit lane', () => {
     expect(output).toContain('blocked=true');
   });
 
-  it('skips while a cancelled submission is still winding down', () => {
-    const output = runGuard({ canceling: true });
+  it.each([
+    'CANCELING',
+    'COMPLETING',
+  ])('skips while an earlier submission is still %s', (state) => {
+    const output = runGuard({ pastSubmissions: ['COMPLETE', state] });
     expect(output).toContain(warning);
+    expect(output).toContain(state);
     expect(output).toContain('blocked=true');
   });
 
+  it('is not blocked by submissions that finished long ago', () => {
+    expect(
+      runGuard({ pastSubmissions: ['COMPLETE'], editable: true })
+    ).toContain('blocked=false');
+  });
+
   it.each([
+    'ACCEPTED',
     'PENDING_DEVELOPER_RELEASE',
     'PENDING_APPLE_RELEASE',
     'PROCESSING_FOR_DISTRIBUTION',

@@ -5,10 +5,14 @@
 
 # Approved versions that are not public yet. Apple will not accept a successor.
 APPROVED_UNRELEASED_VERSION_STATES = %w[
+  ACCEPTED
   PENDING_DEVELOPER_RELEASE
   PENDING_APPLE_RELEASE
   PROCESSING_FOR_DISTRIBUTION
 ].freeze
+
+# Submissions on their way out, which the in-progress query does not return.
+UNSETTLED_SUBMISSION_STATES = %w[CANCELING COMPLETING].freeze
 
 def pending_review_blocks_submission?(app_id:)
   app = Spaceship::ConnectAPI::App.find(app_id)
@@ -40,10 +44,11 @@ end
 # States the in-progress query does not return. Anything unrecognised falls
 # through, so the lane tries and fails loudly rather than skipping in silence.
 def occupied_slot_state(app, platform)
-  canceling = app.get_review_submissions(
-    filter: { state: "CANCELING", platform: platform }
-  )
-  return "CANCELING" unless canceling.empty?
+  # Matched here, not in the query: Apple can refuse a state filter value.
+  unsettled = app.get_review_submissions(filter: { platform: platform })
+                 .map(&:state)
+                 .find { |state| UNSETTLED_SUBMISSION_STATES.include?(state) }
+  return unsettled if unsettled
   return nil if app.get_edit_app_store_version(platform: platform)
 
   latest = app.get_latest_app_store_version(platform: platform)&.app_version_state

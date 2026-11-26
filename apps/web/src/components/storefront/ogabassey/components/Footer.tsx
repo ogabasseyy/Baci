@@ -38,9 +38,9 @@ type SocialPlatform =
 // Monochrome at rest (clean on the dark footer); full contrast on hover
 // so links pass WCAG 2.1 AA on the dark chrome surface.
 const SOCIAL_LINK_CLASS =
-  'text-current/65 hover:text-current transition-colors';
+  'inline-flex min-h-6 min-w-6 items-center justify-center text-current/65 hover:text-current transition-colors';
 const FOOTER_TEXT_LINK_CLASS =
-  'hover:text-current hover:underline underline-offset-4 transition-colors';
+  'inline-flex min-h-6 items-center hover:text-current hover:underline underline-offset-4 transition-colors';
 
 interface FooterProps {
   merchant?: MerchantData;
@@ -143,7 +143,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
             <Link
               href={asRoute(basePath || '/')}
               prefetch={false}
-              className="flex items-center cursor-pointer select-none"
+              className="inline-flex min-h-6 items-center cursor-pointer select-none"
             >
               <Logo className="h-8 w-auto" />
             </Link>
@@ -240,14 +240,17 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open ${contactAddress} in Google Maps`}
-                  className="hover:text-current transition-colors"
+                  className="inline-flex min-h-6 items-center hover:text-current transition-colors"
                 >
                   {contactAddress}
                 </a>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="shrink-0 text-store-primary" size={16} />
-                <a href={`tel:${contactPhone.replace(/\s/g, '')}`} className="hover:text-current transition-colors">
+                <a
+                  href={`tel:${contactPhone.replace(/\s/g, '')}`}
+                  className="inline-flex min-h-6 items-center hover:text-current transition-colors"
+                >
                   {contactPhone}
                 </a>
               </li>
@@ -255,7 +258,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                 <Mail className="shrink-0 text-store-primary" size={16} />
                 <a
                   href={`mailto:${contactEmail}`}
-                  className="hover:text-current transition-colors"
+                  className="inline-flex min-h-6 items-center hover:text-current transition-colors"
                 >
                   {contactEmail}
                 </a>

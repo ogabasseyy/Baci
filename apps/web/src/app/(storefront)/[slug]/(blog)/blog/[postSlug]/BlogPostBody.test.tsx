@@ -10,8 +10,21 @@ const { mockGetCachedDeadContentLinkSlugs, mockResolveBlogPostContent } =
   }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, ...props }: { children: ReactNode; href: string }) => (
-    <a {...props}>{children}</a>
+  default: ({
+    children,
+    prefetch,
+    ...props
+  }: {
+    children: ReactNode;
+    href: string;
+    prefetch?: boolean;
+  }) => (
+    <a
+      {...props}
+      data-prefetch={prefetch !== undefined ? String(prefetch) : undefined}
+    >
+      {children}
+    </a>
   ),
 }));
 
@@ -111,9 +124,9 @@ describe('BlogPostBody', () => {
       hasPreloadedHeroImage: true,
       merchantSlug: 'ogabassey',
     });
-    expect(
-      screen.getByRole('link', { name: /Related Post/i })
-    ).toBeInTheDocument();
+    const relatedLink = screen.getByRole('link', { name: /Related Post/i });
+    expect(relatedLink).toBeInTheDocument();
+    expect(relatedLink).toHaveAttribute('data-prefetch', 'false');
     expect(
       screen.getByRole('img', { name: 'Related Post' })
     ).toBeInTheDocument();

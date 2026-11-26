@@ -240,7 +240,7 @@ export function OgabasseyV2Blog({
               blogCategoryHref(basePath, 'Tips and Tricks', publishedCategories)
             )}
             prefetch={false}
-            className="rounded-xl bg-green-600 px-8 py-4 font-bold text-white shadow-xl transition-all hover:-translate-y-1 hover:bg-green-700 hover:shadow-2xl active:scale-95"
+            className="rounded-xl bg-green-700 px-8 py-4 font-bold text-white shadow-xl transition-all hover:-translate-y-1 hover:bg-green-800 hover:shadow-2xl active:scale-95"
           >
             View Green Tips
           </Link>

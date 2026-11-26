@@ -20,13 +20,9 @@ vi.mock('@/components/storefront/cdn-format-image', () => ({
   },
 }));
 vi.mock('next/link', () => ({
-  default: (
-    props: { children: React.ReactNode; href: string } & Record<string, unknown>
-  ) => {
-    const { children, prefetch: _prefetch, ...anchorProps } = props;
-
-    return <a {...anchorProps}>{children}</a>;
-  },
+  default: ({ children, prefetch, ...anchorProps }: { children: React.ReactNode; href: string; prefetch?: boolean } & Record<string, unknown>) => (
+    <a {...anchorProps} data-prefetch={prefetch !== undefined ? String(prefetch) : undefined}>{children}</a>
+  ),
 }));
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: vi.fn(() => ({ merchant: { id: 'm-1', slug: 'test' } })),
@@ -284,5 +280,10 @@ describe('ProductCard', () => {
     expect(screen.getByText('Open Box')).toHaveClass(
       'ogabassey-product-card-badge--condition'
     );
+  });
+
+  it.each(['grid', 'list'] as const)('disables link prefetching on the %s card overlay link', (viewMode) => {
+    render(<ProductCard product={mockProduct} onAddToCart={vi.fn()} isAdded={false} viewMode={viewMode} />);
+    expect(screen.getByRole('link', { name: `Buy ${mockProduct.name} for ${mockProduct.price}` })).toHaveAttribute('data-prefetch', 'false');
   });
 });

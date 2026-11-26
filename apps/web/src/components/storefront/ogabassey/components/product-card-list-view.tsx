@@ -59,6 +59,7 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
   >
     <Link
       href={productHref}
+      prefetch={false}
       title={linkTitle}
       aria-label={linkAriaLabel}
       className="absolute inset-0 z-0"

@@ -45,7 +45,7 @@ on:
         default: false
         type: boolean
       allow_unsigned:
-        description: Explicitly allow unsigned production OTA publish when no signing cert is configured
+        description: Explicitly allow unsigned OTA publish/rollback when no signing cert is configured (only safe for runtimes with no code-signed binaries)
         required: false
         default: false
         type: boolean
@@ -199,8 +199,8 @@ jobs:
               echo "EFFECTIVE_OTA_CERT_PATH=apps/mobile-storefront/${CERT_PATH}"
             } >> "$GITHUB_ENV"
           else
-            if [[ "$CHANNEL" == "production" && "$ALLOW_UNSIGNED" != "true" ]]; then
-              echo '::error::Production OTA publish and rollback require code signing (EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH) unless allow_unsigned=true is explicitly passed.' >&2
+            if [[ "$ALLOW_UNSIGNED" != "true" ]]; then
+              echo '::error::Self-hosted OTA publish and rollback require code signing (EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH) unless allow_unsigned=true is explicitly passed (safe only for runtimes without code-signed binaries).' >&2
               exit 1
             fi
             {

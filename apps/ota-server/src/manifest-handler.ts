@@ -159,6 +159,10 @@ export async function handleGetManifest(
   const configuredKeyId = env.OTA_SIGNING_KEY_ID?.trim() || 'main';
   if (expectSig.expected) {
     if (!hasSigningKey) {
+      console.warn(
+        'Manifest request expected signature but OTA_SIGNING_PRIVATE_KEY is not configured',
+        { channel, platform, runtimeVersion }
+      );
       return errorResponse(
         'Manifest signing was requested but signing key is not configured',
         500

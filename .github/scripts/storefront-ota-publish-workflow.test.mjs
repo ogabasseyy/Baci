@@ -33,7 +33,11 @@ test('publish workflow fails closed when signing is enabled without a client-emb
   );
   assert.match(
     workflowText,
-    /if \[\[ "\$CHANNEL" == "production" && "\$ALLOW_UNSIGNED" != "true" \]\]; then/
+    /if \[\[ "\$ALLOW_UNSIGNED" != "true" \]\]; then/
+  );
+  assert.match(
+    workflowText,
+    /safe only for runtimes without code-signed binaries/
   );
   assert.match(
     workflowText,

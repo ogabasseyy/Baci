@@ -37,10 +37,7 @@ export function authenticateAdmin(
     );
   }
   if (
-    !timingSafeBearerMatch(
-      request.headers.get('authorization'),
-      env.OTA_ADMIN_TOKEN
-    )
+    !timingSafeBearerMatch(request.headers.get('authorization'), configured)
   ) {
     return errorResponse('Unauthorized', 401);
   }

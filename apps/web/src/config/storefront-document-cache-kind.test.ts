@@ -18,7 +18,7 @@ describe('durably invalidated PDP freshness', () => {
       'max-age=1800, stale-while-revalidate=86400, stale-if-error=86400'
     );
     expect(headers.vercelCdnCacheControl).toBe(
-      'max-age=300, stale-while-revalidate=86400'
+      'max-age=1800, stale-while-revalidate=86400'
     );
     expect(headers.cacheControl).toBe('public, max-age=0, must-revalidate');
   });

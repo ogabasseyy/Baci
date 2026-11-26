@@ -46,4 +46,8 @@ describe('compare slug canonicalization', () => {
   it('returns null for invalid compare slugs', () => {
     expect(parseCompareSlug('apple')).toBeNull();
   });
+
+  it('returns null for unnecessary tilde hex-encoded compare keys', () => {
+    expect(parseCompareSlug('~6170706c65-vs-samsung')).toBeNull();
+  });
 });

@@ -43,7 +43,8 @@ function decodeCompareKey(key: string) {
   );
 
   try {
-    return new TextDecoder().decode(bytes);
+    const decoded = new TextDecoder().decode(bytes);
+    return shouldEscapeCompareKey(decoded) ? decoded : null;
   } catch {
     return null;
   }

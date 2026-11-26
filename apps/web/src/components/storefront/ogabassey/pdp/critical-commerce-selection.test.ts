@@ -189,6 +189,32 @@ describe('critical commerce selection helpers', () => {
     expect(resolveDefaultVariantSelection(noSelectionProduct)?.variant.id).toBe(
       'variant-256'
     );
+
+    const mixedProduct = {
+      ...trimmedProduct,
+      variants: [
+        {
+          attributes: { storage: '128GB' },
+          id: 'variant-128-full',
+          merchant_id: 'merchant-existing',
+          product_id: 'product-existing',
+          stock_quantity: 4,
+        },
+        ...(trimmedProduct.variants ?? []),
+      ],
+    };
+    expect(buildVariantCartProduct(mixedProduct, null).variants).toMatchObject([
+      {
+        id: 'variant-128-full',
+        merchant_id: 'merchant-existing',
+        product_id: 'product-existing',
+      },
+      {
+        id: 'variant-256',
+        merchant_id: '',
+        product_id: 'product-1',
+      },
+    ]);
   });
 
   it('falls back to base images when a variant has no image', () => {

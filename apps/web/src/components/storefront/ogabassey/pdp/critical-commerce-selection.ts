@@ -1,10 +1,8 @@
-import { resolveVariantInventory } from '@/lib/resolve-variant-inventory';
 import {
   canonicalizeCommerceVariantAxis,
   normalizeCommerceVariantOption,
 } from '@baci/shared/lib/commerce-variant-axis';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
-import type { Product as CartProduct, ProductVariant } from '@/lib/products';
 import type {
   CriticalCartProduct,
   CriticalCartProductInput,
@@ -18,6 +16,8 @@ import {
   type CurrencyConfig,
   formatCurrencyWithConfig,
 } from '@/lib/currency';
+
+export { buildVariantCartProduct } from './build-variant-cart-product';
 
 export interface InitialCriticalVariantSelection {
   attributes?: Record<string, string>;
@@ -65,53 +65,6 @@ export function formatCriticalPrice(
   currency: CurrencyConfig = DEFAULT_CRITICAL_PRICE_CURRENCY
 ) {
   return formatCurrencyWithConfig(price, currency, COMPACT_OPTIONS);
-}
-
-function hasFullCartVariants(
-  product: CriticalCartProductInput
-): product is CartProduct {
-  for (const variant of product.variants ?? []) {
-    const hasIds =
-      'merchant_id' in variant &&
-      typeof variant.merchant_id === 'string' &&
-      'product_id' in variant &&
-      typeof variant.product_id === 'string';
-    if (!hasIds) return false;
-  }
-  return true;
-}
-
-export function buildVariantCartProduct(
-  cartProduct: CriticalCartProductInput,
-  selection: ResolvedCriticalVariantSelection | null
-): CartProduct {
-  if (!selection) {
-    if (hasFullCartVariants(cartProduct)) return cartProduct;
-    const { variants: rawVariants, ...productWithoutVariants } = cartProduct;
-    const variants: ProductVariant[] = [];
-    for (const variant of rawVariants ?? []) {
-      variants.push({ ...variant, merchant_id: '', product_id: cartProduct.id });
-    }
-    return { ...productWithoutVariants, variants };
-  }
-
-  const { variants: _variants, ...productWithoutVariants } = cartProduct;
-  const variantImage =
-    selection.variant.primary_image || selection.variant.images?.[0];
-  const inventory = resolveVariantInventory(cartProduct, selection.variant);
-
-  return {
-    ...productWithoutVariants,
-    compare_at_price: selection.compareAtPrice ?? cartProduct.compare_at_price,
-    condition:
-      (selection.condition as CartProduct['condition'] | undefined) ??
-      cartProduct.condition,
-    image: variantImage ?? cartProduct.image,
-    imageLarge: variantImage ?? cartProduct.imageLarge,
-    manage_stock: inventory.manageStock,
-    price: selection.price,
-    stock: inventory.stock,
-  };
 }
 
 export function compactVariantOptions(

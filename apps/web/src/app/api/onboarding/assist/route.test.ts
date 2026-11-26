@@ -89,12 +89,30 @@ describe('POST /api/onboarding/assist', () => {
     expect(runGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
-  it('returns 401 when user is not authenticated', async () => {
+  it('returns 401 before checking CSRF when user is not authenticated', async () => {
     mockGetUser.mockResolvedValueOnce({ data: { user: null }, error: null });
 
     const response = await POST(makeRequest({ task: 'generate_names' }));
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ code: 'unauthorized' });
+    expect(checkCsrfProtection).not.toHaveBeenCalled();
+  });
+
+  it('rejects generate_names without description before consuming rate limits', async () => {
+    const response = await POST(
+      makeRequest({
+        task: 'generate_names',
+        businessName: '',
+        businessType: 'fashion',
+        brandPreferences: 'modern',
+        description: '   ',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'invalid_input' });
+    expect(applyRateLimit).not.toHaveBeenCalled();
+    expect(runGuideBusinessOnboarding).not.toHaveBeenCalled();
   });
 
   it('checks the IP rate limit before consuming the per-user bucket', async () => {

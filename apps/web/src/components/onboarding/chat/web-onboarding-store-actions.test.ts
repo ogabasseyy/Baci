@@ -4,6 +4,10 @@ import {
 } from '@baci/shared/onboarding-chat';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { submitOnboarding } from '@/app/(platform)/onboarding/actions';
+import {
+  trackMerchantSignupCompleted,
+  trackMerchantSignupStarted,
+} from '@/components/analytics/platform-analytics-provider';
 import { requestWebOnboardingAssist } from './web-onboarding-chat-helpers';
 import {
   runWebLogoGeneration,
@@ -14,6 +18,11 @@ import {
 
 vi.mock('@/app/(platform)/onboarding/actions', () => ({
   submitOnboarding: vi.fn(),
+}));
+
+vi.mock('@/components/analytics/platform-analytics-provider', () => ({
+  trackMerchantSignupStarted: vi.fn(),
+  trackMerchantSignupCompleted: vi.fn(),
 }));
 
 vi.mock('./web-onboarding-chat-helpers', async (importOriginal) => {
@@ -101,5 +110,42 @@ describe('web-onboarding-store-actions', () => {
 
     expect(ctx.setRejectedSlug).toHaveBeenCalledWith('kicks-hub');
     expect(ctx.setStep).toHaveBeenCalledWith('slug');
+    expect(trackMerchantSignupStarted).toHaveBeenCalledWith({
+      business_name: 'Kicks Hub',
+      business_type: 'fashion',
+    });
+    expect(trackMerchantSignupCompleted).not.toHaveBeenCalled();
+  });
+
+  it('fires signup started and completed analytics on successful store launch', async () => {
+    vi.mocked(submitOnboarding).mockResolvedValueOnce({
+      success: true,
+      message: 'Store created!',
+      merchantId: 'merchant-42',
+      businessName: 'Kicks Hub',
+    });
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: '' },
+    });
+    try {
+      const ctx = makeCtx();
+      await runWebStoreLaunch(ctx);
+
+      expect(trackMerchantSignupStarted).toHaveBeenCalledWith({
+        business_name: 'Kicks Hub',
+        business_type: 'fashion',
+      });
+      expect(trackMerchantSignupCompleted).toHaveBeenCalledWith('merchant-42', {
+        business_name: 'Kicks Hub',
+      });
+      expect(window.location.href).toBe('/dashboard');
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
   });
 });

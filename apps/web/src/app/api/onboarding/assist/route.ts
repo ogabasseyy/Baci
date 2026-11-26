@@ -74,17 +74,6 @@ function isUserScopedOnboardingLogoUrl(
 }
 
 export async function POST(request: NextRequest) {
-  const csrf = await checkCsrfProtection(request);
-  if (!csrf.valid) {
-    return (
-      csrf.response ??
-      NextResponse.json(
-        { error: 'CSRF validation failed', code: 'csrf_failed' },
-        { status: 403 }
-      )
-    );
-  }
-
   const supabase = createClient(await cookies());
   const {
     data: { user },
@@ -94,6 +83,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Authentication required.', code: 'unauthorized' },
       { status: 401 }
+    );
+  }
+
+  const csrf = await checkCsrfProtection(request);
+  if (!csrf.valid) {
+    return (
+      csrf.response ??
+      NextResponse.json(
+        { error: 'CSRF validation failed', code: 'csrf_failed' },
+        { status: 403 }
+      )
     );
   }
 
@@ -119,6 +119,16 @@ export async function POST(request: NextRequest) {
   }
 
   const task = parsed.data.task;
+
+  if (task === 'generate_names' && !parsed.data.description?.trim()) {
+    return NextResponse.json(
+      {
+        error: 'Please describe what your store sells so I can suggest names.',
+        code: 'invalid_input',
+      },
+      { status: 400 }
+    );
+  }
 
   if (
     task === 'extract_colors' &&

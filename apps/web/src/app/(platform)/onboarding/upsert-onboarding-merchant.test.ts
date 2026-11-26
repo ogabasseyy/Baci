@@ -284,6 +284,61 @@ describe('upsertOnboardingMerchant', () => {
     );
   });
 
+  it('routes a confirmed auto slug through rename_merchant_slug when an incomplete draft merchant has a different established slug', async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: { id: 'merchant-1', slug: 'kicks-hub', logo_url: null },
+      error: null,
+    });
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({ single }),
+        }),
+      }),
+    });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: 'merchant-1', business_name: null, slug: 'mobile-draft-1' },
+      error: null,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { slug: 'kicks-hub', retired_slug: 'mobile-draft-1' },
+      error: null,
+    });
+    const supabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({ maybeSingle }),
+        }),
+        update,
+      }),
+      rpc,
+    };
+
+    const result = await upsertOnboardingMerchant({
+      supabase: supabase as never,
+      user: { id: 'user-1' } as never,
+      email: 'merchant@example.com',
+      businessName: 'Kicks Hub',
+      businessType: 'fashion',
+      country: 'NG',
+      slug: 'kicks-hub',
+      slugIsCustom: false,
+      brandColors: null,
+      brandColorsParsed: false,
+    });
+
+    expect(rpc).toHaveBeenCalledWith('rename_merchant_slug', {
+      p_merchant_id: 'merchant-1',
+      p_new_slug: 'kicks-hub',
+    });
+    const updatePayload = update.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(updatePayload).not.toHaveProperty('slug');
+    expect(result).toMatchObject({
+      status: 'saved',
+      retiredSlug: 'mobile-draft-1',
+    });
+  });
+
   it('uses auto-generated slug when slugIsCustom is false even if slug is provided', async () => {
     const single = vi.fn().mockResolvedValue({
       data: { id: 'merchant-1', slug: 'kicks-hub-2' },

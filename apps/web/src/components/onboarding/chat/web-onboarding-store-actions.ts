@@ -7,6 +7,10 @@ import {
 import type { User } from '@supabase/supabase-js';
 import { submitOnboarding } from '@/app/(platform)/onboarding/actions';
 import {
+  trackMerchantSignupCompleted,
+  trackMerchantSignupStarted,
+} from '@/components/analytics/platform-analytics-provider';
+import {
   getWebBusinessTypeLabel,
   requestWebOnboardingAssist,
   uploadWebDataUriLogo,
@@ -197,11 +201,21 @@ export async function runWebStoreLaunch(
     formData.append('logoUrl', persistedLogoUrl);
     formData.append('brandColors', JSON.stringify(ctx.data.brandColors));
 
+    trackMerchantSignupStarted({
+      business_name: ctx.data.businessName.trim(),
+      business_type: ctx.data.businessType,
+    });
+
     const result = await submitOnboarding(
       { message: '', success: false },
       formData
     );
     if (result.success) {
+      if (result.merchantId) {
+        trackMerchantSignupCompleted(result.merchantId, {
+          business_name: result.businessName ?? ctx.data.businessName.trim(),
+        });
+      }
       window.location.href = '/dashboard';
       return;
     }

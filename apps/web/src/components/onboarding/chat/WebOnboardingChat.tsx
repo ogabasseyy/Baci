@@ -1,24 +1,18 @@
 'use client';
 
-import { ArrowUp, Eye, EyeOff, Globe, Loader2, Search } from 'lucide-react';
+import { ArrowUp, Eye, EyeOff, Globe, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { Logo } from '@/components/logo';
 import { OnboardingPuckPreview } from '@/components/onboarding-puck-preview';
 import { PasswordStrengthIndicator } from '@/components/password-strength-indicator';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { checkPasswordStrength } from '@/lib/utils';
 import { ChatMessageBubble } from './ChatMessageBubble';
+import { CountryPickerDialog } from './CountryPickerDialog';
 import { LogoDropzoneChip } from './LogoDropzoneChip';
 import { useWebOnboardingChat } from './use-web-onboarding-chat';
-import { WEB_COUNTRIES } from './web-onboarding-chat-helpers';
 import {
   getWebQuickRepliesForStep,
   getWebStepInputConfig,
@@ -27,7 +21,6 @@ import {
 export default function WebOnboardingChat() {
   const chat = useWebOnboardingChat();
   const [showPassword, setShowPassword] = useState(false);
-  const [countrySearch, setCountrySearch] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const quickReplies = getWebQuickRepliesForStep({
@@ -42,13 +35,6 @@ export default function WebOnboardingChat() {
   const inputConfig = getWebStepInputConfig(chat.step, chat.isCustomizingSlug);
   const isPasswordStep =
     chat.step === 'auth_password' || chat.step === 'auth_confirm';
-  const filteredCountries = countrySearch.trim()
-    ? WEB_COUNTRIES.filter(
-        (c) =>
-          c.name.toLowerCase().includes(countrySearch.trim().toLowerCase()) ||
-          c.code.toLowerCase().includes(countrySearch.trim().toLowerCase())
-      )
-    : WEB_COUNTRIES;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll to bottom whenever messages or loading state updates
   useEffect(() => {
@@ -260,43 +246,11 @@ export default function WebOnboardingChat() {
         </aside>
       </div>
 
-      <Dialog
+      <CountryPickerDialog
         open={chat.isCountryModalOpen}
         onOpenChange={chat.setIsCountryModalOpen}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Select your country</DialogTitle>
-          </DialogHeader>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={countrySearch}
-              onChange={(event) => setCountrySearch(event.target.value)}
-              placeholder="Search countries..."
-              aria-label="Search countries"
-              className="pl-9"
-            />
-          </div>
-          <ul className="max-h-72 space-y-1 overflow-y-auto">
-            {filteredCountries.map((country) => (
-              <li key={country.code}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCountrySearch('');
-                    chat.handleSelectCountry(country.code, country.name);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-                >
-                  <span aria-hidden="true">{country.flag}</span>
-                  <span>{country.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </DialogContent>
-      </Dialog>
+        onSelectCountry={chat.handleSelectCountry}
+      />
     </div>
   );
 }

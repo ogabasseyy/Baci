@@ -164,40 +164,63 @@ export async function upsertOnboardingMerchant({
 
   let merchant: OnboardingMerchant | null;
   let retiredSlug: string | null = null;
-  const customSlug = slugIsCustom
-    ? requestedSlug?.trim().toLowerCase()
-    : undefined;
+  const normalizedRequestedSlug =
+    requestedSlug?.trim().toLowerCase() || undefined;
+  const customSlug = slugIsCustom ? normalizedRequestedSlug : undefined;
   if (customSlug && isReservedMerchantSlug(customSlug)) {
     throw new OnboardingSlugUnavailableError();
   }
   if (existing) {
     const hasEstablishedSlug = hasEstablishedOnboardingSlug(existing.slug);
     const existingSlugNormalized = existing.slug?.trim().toLowerCase();
-    if (
+    const draftRenameTarget =
       hasEstablishedSlug &&
-      customSlug &&
-      customSlug !== existingSlugNormalized
-    ) {
-      // prevent_established_merchant_slug_change() rejects direct UPDATEs on a
-      // non-empty slug; route draft-merchant custom-slug changes through the RPC.
-      const { data: renameData, error: renameError } = await supabase.rpc(
-        'rename_merchant_slug',
-        {
-          p_merchant_id: existing.id,
-          p_new_slug: customSlug,
+      normalizedRequestedSlug &&
+      normalizedRequestedSlug !== existingSlugNormalized
+        ? normalizedRequestedSlug
+        : undefined;
+    if (draftRenameTarget) {
+      let targetSlug = draftRenameTarget;
+      if (isReservedMerchantSlug(targetSlug)) {
+        if (slugIsCustom) {
+          throw new OnboardingSlugUnavailableError();
         }
-      );
-      if (renameError) {
-        if (isRenameSlugUnavailableError(renameError)) {
+        targetSlug = await resolveOnboardingMerchantSlug(
+          supabase,
+          businessName
+        );
+      }
+      // prevent_established_merchant_slug_change() rejects direct UPDATEs on a
+      // non-empty slug; route draft-merchant slug changes through the RPC.
+      let renameAttempt = await supabase.rpc('rename_merchant_slug', {
+        p_merchant_id: existing.id,
+        p_new_slug: targetSlug,
+      });
+      if (
+        renameAttempt.error &&
+        !slugIsCustom &&
+        isRenameSlugUnavailableError(renameAttempt.error)
+      ) {
+        targetSlug = await resolveOnboardingMerchantSlug(
+          supabase,
+          businessName
+        );
+        renameAttempt = await supabase.rpc('rename_merchant_slug', {
+          p_merchant_id: existing.id,
+          p_new_slug: targetSlug,
+        });
+      }
+      if (renameAttempt.error) {
+        if (isRenameSlugUnavailableError(renameAttempt.error)) {
           throw new OnboardingSlugUnavailableError();
         }
         throw new Error(
-          `Failed to update merchant slug: ${renameError.message}`
+          `Failed to update merchant slug: ${renameAttempt.error.message}`
         );
       }
       retiredSlug = extractRenamedSlugResult(
-        renameData,
-        customSlug,
+        renameAttempt.data,
+        targetSlug,
         existing.slug
       ).retiredSlug;
     }

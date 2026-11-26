@@ -385,9 +385,7 @@ describe('initializePostHogBrowser', () => {
         'ph_project_token',
         { lightweight: false, sessionRecording: true }
       );
-      expect(mocks.posthogStartSessionRecording).toHaveBeenCalledWith({
-        sampling: true,
-      });
+      expect(mocks.posthogStartSessionRecording).toHaveBeenCalledWith();
 
       initializePostHogBrowser(env, console, {
         lightweight: false,
@@ -396,7 +394,7 @@ describe('initializePostHogBrowser', () => {
       });
       expect(mocks.posthogStopSessionRecording).not.toHaveBeenCalled();
 
-      mocks.posthogSessionRecordingStarted.mockReturnValue(true);
+      mocks.posthogSessionRecordingStarted.mockReturnValue(false);
       initializePostHogBrowser(env, console, {
         lightweight: false,
         pathname: '/orders',

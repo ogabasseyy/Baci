@@ -83,15 +83,11 @@ function syncPostHogSessionRecording(
   nextSessionRecording: boolean
 ) {
   if (previousSessionRecording !== true && nextSessionRecording === true) {
-    posthog.startSessionRecording?.({ sampling: true });
+    posthog.startSessionRecording?.();
     return;
   }
 
-  if (
-    previousSessionRecording === true &&
-    nextSessionRecording === false &&
-    posthog.sessionRecordingStarted?.()
-  ) {
+  if (previousSessionRecording === true && nextSessionRecording === false) {
     posthog.stopSessionRecording?.();
   }
 }

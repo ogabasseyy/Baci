@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product as CartProduct } from '@/lib/products';
+import type { CriticalCartVariantInput } from './critical-cart-product';
 import {
   formatVariantAxisLabel,
   formatVariantOptionLabel,
@@ -12,7 +12,7 @@ interface OgabasseyPdpCriticalVariantSelectorsProps {
   renderableVariantAxes: string[];
   selectedAttributes: Record<string, string>;
   variantAxisOptions?: Record<string, string[]>;
-  variants: CartProduct['variants'];
+  variants: CriticalCartVariantInput[] | undefined;
 }
 
 export function OgabasseyPdpCriticalVariantSelectors({

@@ -10,10 +10,14 @@ import {
 import type { CurrencyConfig } from '@/lib/currency';
 import type { Product as CartProduct } from '@/lib/products';
 import type { CriticalAddToCartBlocker } from './critical-add-to-cart-blocker';
+import type {
+  CriticalCartProduct,
+  CriticalCartProductInput,
+} from './critical-cart-product';
 import type { InitialCriticalVariantSelection } from './critical-commerce-selection';
 
 export interface OgabasseyPdpCriticalCommerceProviderProps {
-  cartProduct: CartProduct;
+  cartProduct: CriticalCartProductInput;
   children: ReactNode;
   currency?: CurrencyConfig;
   initialVariantSelection?: InitialCriticalVariantSelection;
@@ -64,7 +68,7 @@ export interface OgabasseyPdpCriticalCommerceState {
   setQuantity: Dispatch<SetStateAction<number>>;
   variantAxisOptions: Record<string, string[]>;
   variantCount: number;
-  variants: CartProduct['variants'];
+  variants: CriticalCartProduct['variants'];
 }
 
 export const OgabasseyPdpCriticalCommerceContext =

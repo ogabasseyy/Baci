@@ -6,9 +6,9 @@ import {
   formatCanonicalProductConditionLabel,
   normalizeCanonicalProductCondition,
 } from '@baci/shared/lib/product-condition';
-import type { Product as CartProduct } from '@/lib/products';
 import { getAvailableOptionsForAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { isRenderableVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
+import type { CriticalCartVariantInput } from './critical-cart-product';
 
 export function formatVariantAxisLabel(axis: string) {
   const labels: Record<string, string> = {
@@ -39,7 +39,7 @@ export function formatVariantOptionLabel(axis: string, value: string) {
 }
 
 export function getVariantAxisOptions(
-  variants: CartProduct['variants'],
+  variants: CriticalCartVariantInput[] | undefined,
   axis: string,
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {
@@ -99,7 +99,7 @@ export function getVariantAxisOptions(
 
 function isRenderableCriticalVariantAxis(
   axis: string,
-  variants: CartProduct['variants'],
+  variants: CriticalCartVariantInput[] | undefined,
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {
   const options = getVariantAxisOptions(variants, axis, fallbackAxisOptions);
@@ -111,7 +111,7 @@ function isRenderableCriticalVariantAxis(
 
 export function getRenderableCriticalVariantAxes(
   axes: string[],
-  variants: CartProduct['variants'],
+  variants: CriticalCartVariantInput[] | undefined,
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {
   return Array.from(
@@ -136,7 +136,7 @@ export function getRenderableCriticalVariantAxes(
 
 export function getAvailableCriticalVariantOptions(
   axis: string,
-  variants: CartProduct['variants'],
+  variants: CriticalCartVariantInput[] | undefined,
   explicitSelectedAttributes: Record<string, string>,
   fallbackAxisOptions: Record<string, string[]> = {}
 ) {

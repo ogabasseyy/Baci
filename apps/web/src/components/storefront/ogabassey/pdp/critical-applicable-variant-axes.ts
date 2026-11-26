@@ -1,10 +1,13 @@
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
-import type { Product as CartProduct } from '@/lib/products';
+import type { CriticalCartVariant } from './critical-cart-product';
 import { normalizeCriticalVariantAttributes } from './critical-commerce-selection';
 
-type CriticalVariant = NonNullable<CartProduct['variants']>[number];
+export type CriticalAxisVariant = Pick<
+  CriticalCartVariant,
+  'attributes' | 'condition'
+>;
 
-function readVariantAxisValues(variant: CriticalVariant) {
+function readVariantAxisValues(variant: CriticalAxisVariant) {
   const attributes = normalizeCriticalVariantAttributes(variant.attributes);
   const condition =
     attributes.condition ||
@@ -34,10 +37,10 @@ function sameOption(left: string | undefined, right: string | undefined) {
  * by a blank option stays buyable.
  */
 export function getInapplicableCriticalVariantAxes(
-  variants: CartProduct['variants'],
+  variants: readonly CriticalAxisVariant[] | null | undefined,
   selectedAttributes: Record<string, string>,
   axes: string[],
-  resolvedVariant?: CriticalVariant | null
+  resolvedVariant?: CriticalAxisVariant | null
 ): string[] {
   const variantValues = (variants ?? []).map(readVariantAxisValues);
   const resolvedValues = resolvedVariant

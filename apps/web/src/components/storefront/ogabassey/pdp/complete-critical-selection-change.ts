@@ -1,10 +1,13 @@
-import type { Product } from '@/lib/products';
 import { pruneSelectionsByVariantAvailability } from '@/components/storefront/ogabassey/variant-selection-pruning';
 import { recoverHiddenSelectionsFromUniqueVariant } from '@/components/storefront/ogabassey/recover-hidden-variant-selections';
+import type { CriticalCartProduct } from './critical-cart-product';
 import { completeCriticalVariantSelection } from './complete-critical-variant-selection';
 
 export function completeCriticalSelectionChange(
-  product: Pick<Product, 'price' | 'condition' | 'manage_stock' | 'variants'>,
+  product: Pick<
+    CriticalCartProduct,
+    'price' | 'condition' | 'manage_stock' | 'variants'
+  >,
   attributes: Record<string, string>,
   changedAxis: string,
   hiddenAxes: string[],

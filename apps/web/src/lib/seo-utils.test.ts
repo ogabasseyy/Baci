@@ -542,9 +542,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(schema.description).toBe(
       'A flagship device with variant-specific merchandising.'
     );
-    expect(variants[0]?.description).toContain(
-      'A flagship device with variant-specific merchandising.'
-    );
+    expect(variants[0]).not.toHaveProperty('description');
     expect(variants[0]?.color).toBe('Titanium Jetblack');
     expect(variants[0]?.size).toBe('256GB / 12GB');
   });
@@ -680,7 +678,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
       expect(schema.variesBy).toEqual([`https://schema.org/${expected}`]);
     });
 
-    it('provides a truthful description on each product variant', () => {
+    it('keeps shared description on ProductGroup and avoids repeating it on variants', () => {
       const schema = generateProductSchema(
         makeProduct({
           description: 'A refurbished phone with a clear display.',
@@ -699,11 +697,14 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
         'NG'
       );
       const variant = (schema.hasVariant as Record<string, unknown>[])[0];
-      expect(variant.description).toContain(
+      expect(schema.description).toBe(
         'A refurbished phone with a clear display.'
       );
-      expect(variant.description).toContain('Black');
-      expect(variant.description).toContain('128GB');
+      expect(variant).not.toHaveProperty('description');
+      expect(variant.color).toBe('Black');
+      expect(variant.size).toBe('128GB');
+      expect(variant.name).toContain('Black');
+      expect(variant.name).toContain('128GB');
     });
 
     it('keeps variant names concise when catalog attributes contain long specifications', () => {
@@ -912,10 +913,12 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(v2Offer.availability).toBe('https://schema.org/InStock');
   });
 
-  it('includes variant-level images with fallback to parent images', () => {
+  it('falls back to only the primary parent image on variants while keeping the full gallery on ProductGroup', () => {
     const product = makeProduct({
       images: [
-        { url: 'https://cdn.example.com/parent.avif', alt: 'Parent', order: 0 },
+        { url: 'https://cdn.example.com/parent-1.avif', alt: 'P1', order: 0 },
+        { url: 'https://cdn.example.com/parent-2.avif', alt: 'P2', order: 1 },
+        { url: 'https://cdn.example.com/parent-3.avif', alt: 'P3', order: 2 },
       ],
       variants: [
         {
@@ -932,7 +935,7 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
           merchant_id: 'm1',
           attributes: { color: 'White' },
           stock_quantity: 3,
-          // No variant images — should fall back to parent
+          // No variant images — falls back to only primary parent image
         },
       ],
     });
@@ -940,10 +943,69 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     const schema = generateProductSchema(product, 'TestStore', 'USD', 'NG');
     const variants = schema.hasVariant as Record<string, unknown>[];
 
-    // v1 has its own images
+    expect(schema.image).toEqual([
+      'https://cdn.example.com/parent-1.avif',
+      'https://cdn.example.com/parent-2.avif',
+      'https://cdn.example.com/parent-3.avif',
+    ]);
     expect(variants[0].image).toEqual(['https://cdn.example.com/black.avif']);
-    // v2 falls back to parent images
-    expect(variants[1].image).toEqual(['https://cdn.example.com/parent.avif']);
+    expect(variants[1].image).toEqual([
+      'https://cdn.example.com/parent-1.avif',
+    ]);
+  });
+
+  it('deduplicates merchant boilerplate across multi-variant ProductGroup JSON-LD', () => {
+    const longDescription =
+      'Flagship smartphone with titanium chassis. '.repeat(12);
+    const product = makeProduct({
+      description: longDescription,
+      images: [
+        { url: 'https://cdn.example.com/p-1.avif', alt: 'P1', order: 0 },
+        { url: 'https://cdn.example.com/p-2.avif', alt: 'P2', order: 1 },
+        { url: 'https://cdn.example.com/p-3.avif', alt: 'P3', order: 2 },
+        { url: 'https://cdn.example.com/p-4.avif', alt: 'P4', order: 3 },
+      ],
+      variants: Array.from({ length: 30 }, (_, index) => ({
+        id: `v-${index}`,
+        product_id: 'test-123',
+        merchant_id: 'm1',
+        attributes: {
+          color: `Color ${index % 5}`,
+          storage: `${128 * ((index % 3) + 1)}GB`,
+        },
+        price_override: 500_000 + index * 10_000,
+        stock_quantity: 4,
+      })),
+    });
+
+    const schema = generateProductSchema(
+      product,
+      'OgaBassey',
+      'NGN',
+      'NG',
+      undefined,
+      completePolicies,
+      {
+        acceptedPaymentMethods: [
+          'Debit and credit card',
+          'Bank transfer',
+          'Pay on delivery',
+        ],
+        merchantBaseUrl: 'https://ogabassey.com',
+        productUrl: 'https://ogabassey.com/phones/test-product',
+      }
+    );
+    const serialized = safeJsonLdStringify(schema);
+    const variants = schema.hasVariant as Record<string, unknown>[];
+
+    expect(variants).toHaveLength(30);
+    expect(schema.description).toBe(`${longDescription.slice(0, 497)}...`);
+    expect(variants.every((variant) => !('description' in variant))).toBe(true);
+    expect(serialized.match(/"@type":"Organization"/g)).toHaveLength(1);
+    expect(serialized.match(/"@type":"OfferShippingDetails"/g)).toHaveLength(1);
+    expect(serialized.match(/"@type":"MerchantReturnPolicy"/g)).toHaveLength(1);
+    expect(serialized.match(/"acceptedPaymentMethod"/g)).toHaveLength(1);
+    expect(serialized.length).toBeLessThan(25_000);
   });
 
   it('includes shippingDetails and returnPolicy on variant Offers (2026 best practice)', () => {

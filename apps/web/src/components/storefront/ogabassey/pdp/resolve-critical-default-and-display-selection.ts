@@ -4,7 +4,7 @@ import {
   resolveVariantDisplaySelection,
 } from '@baci/shared/lib/product-default-variant';
 import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
-import type { Product as CartProduct } from '@/lib/products';
+import type { CriticalCartProduct } from './critical-cart-product';
 import type { InitialCriticalVariantSelection } from './critical-commerce-selection';
 
 export function resolveCriticalDefaultAndDisplaySelection({
@@ -17,8 +17,8 @@ export function resolveCriticalDefaultAndDisplaySelection({
   explicitVariantCondition?: string;
   initialResolverAttributes: Record<string, string>;
   initialVariantSelection?: InitialCriticalVariantSelection;
-  selectionCartProduct: CartProduct;
-  variants: NonNullable<CartProduct['variants']>;
+  selectionCartProduct: CriticalCartProduct;
+  variants: NonNullable<CriticalCartProduct['variants']>;
 }) {
   const defaultSelectionProduct = {
     ...selectionCartProduct,

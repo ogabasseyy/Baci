@@ -4,7 +4,13 @@ import {
   normalizeCommerceVariantOption,
 } from '@baci/shared/lib/commerce-variant-axis';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
-import type { Product as CartProduct, ProductVariant } from '@/lib/products';
+import type { Product as CartProduct } from '@/lib/products';
+import type {
+  CriticalCartProduct,
+  CriticalCartProductInput,
+  CriticalCartVariant,
+  CriticalCartVariantInput,
+} from './critical-cart-product';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { isDisplayOnlyVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';
 import {
@@ -26,7 +32,7 @@ export interface ResolvedCriticalVariantSelection {
   condition?: string;
   price: number;
   storage?: string;
-  variant: ProductVariant;
+  variant: CriticalCartVariantInput;
 }
 
 /**
@@ -61,20 +67,35 @@ export function formatCriticalPrice(
   return formatCurrencyWithConfig(price, currency, COMPACT_OPTIONS);
 }
 
+function isVariantlessCartProduct(
+  product: CriticalCartProductInput
+): product is CartProduct & { variants?: undefined } {
+  return product.variants === undefined;
+}
+
 export function buildVariantCartProduct(
-  cartProduct: CartProduct,
+  cartProduct: CriticalCartProductInput,
   selection: ResolvedCriticalVariantSelection | null
 ): CartProduct {
   if (!selection) {
-    return cartProduct;
+    if (isVariantlessCartProduct(cartProduct)) {
+      return cartProduct;
+    }
+
+    const { variants: _variants, ...productWithoutVariants } = cartProduct;
+    return {
+      ...productWithoutVariants,
+      variants: [],
+    };
   }
 
+  const { variants: _variants, ...productWithoutVariants } = cartProduct;
   const variantImage =
     selection.variant.primary_image || selection.variant.images?.[0];
   const inventory = resolveVariantInventory(cartProduct, selection.variant);
 
   return {
-    ...cartProduct,
+    ...productWithoutVariants,
     compare_at_price: selection.compareAtPrice ?? cartProduct.compare_at_price,
     condition:
       (selection.condition as CartProduct['condition'] | undefined) ??
@@ -84,7 +105,6 @@ export function buildVariantCartProduct(
     manage_stock: inventory.manageStock,
     price: selection.price,
     stock: inventory.stock,
-    variants: cartProduct.variants,
   };
 }
 
@@ -150,30 +170,37 @@ function getSingleOptionVariantAttributes(
 }
 
 export function normalizeCriticalVariantProduct(
-  cartProduct: CartProduct,
+  cartProduct: CriticalCartProductInput,
   variantAxisOptions?: Record<string, string[]>
-): CartProduct {
+): CriticalCartProduct {
   if (!cartProduct.variants || cartProduct.variants.length === 0) {
     return cartProduct;
   }
 
   const singleOptionVariantAttributes =
     getSingleOptionVariantAttributes(variantAxisOptions);
+  const normalizedVariants: CriticalCartVariant[] = [];
 
-  return {
-    ...cartProduct,
-    variants: cartProduct.variants.map((variant) => ({
+  for (const variant of cartProduct.variants) {
+    normalizedVariants.push({
       ...variant,
       attributes: {
         ...singleOptionVariantAttributes,
         ...normalizeCriticalVariantAttributes(variant.attributes),
       },
       condition: variant.condition ?? cartProduct.condition,
-    })),
+    });
+  }
+
+  return {
+    ...cartProduct,
+    variants: normalizedVariants,
   };
 }
 
-export function getVariantAxesWithMultipleOptions(variants: ProductVariant[]) {
+export function getVariantAxesWithMultipleOptions(
+  variants: CriticalCartVariantInput[]
+) {
   const axisValues: Record<string, Set<string>> = {};
 
   const addAxisValue = (rawAxis: string, value: unknown) => {

@@ -63,4 +63,49 @@ describe('JsonLd', () => {
 
     expect(markup).toContain('Missing schema.org context');
   });
+
+  it('serializes deduplicated ProductGroup @id references into ld+json output', () => {
+    const markup = renderToStaticMarkup(
+      <JsonLd
+        data={{
+          '@context': 'https://schema.org',
+          '@type': 'ProductGroup',
+          name: 'Phone',
+          description: 'Shared description',
+          productGroupID: 'phone',
+          hasVariant: [
+            {
+              '@type': 'Product',
+              name: 'Phone - 128GB',
+              offers: {
+                '@type': 'Offer',
+                price: 100,
+                priceCurrency: 'NGN',
+                seller: {
+                  '@type': 'Organization',
+                  '@id': 'https://ogabassey.com/#online-store',
+                  name: 'OgaBassey',
+                },
+              },
+            },
+            {
+              '@type': 'Product',
+              name: 'Phone - 256GB',
+              offers: {
+                '@type': 'Offer',
+                price: 120,
+                priceCurrency: 'NGN',
+                seller: {
+                  '@id': 'https://ogabassey.com/#online-store',
+                },
+              },
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(markup.match(/"@type":"Organization"/g)).toHaveLength(1);
+    expect(markup).toContain('https://ogabassey.com/#online-store');
+  });
 });

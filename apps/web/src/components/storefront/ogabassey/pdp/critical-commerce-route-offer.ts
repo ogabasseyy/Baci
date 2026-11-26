@@ -4,6 +4,7 @@ import type { AddToCartOptions } from '@/hooks/cart/cart-types';
 import type { Product as CartProduct } from '@/lib/products';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
+import type { CriticalCartProduct } from './critical-cart-product';
 import type { ResolvedCriticalVariantSelection } from './critical-commerce-selection';
 import {
   buildVariantCartProduct,
@@ -65,7 +66,7 @@ export function applyCriticalRouteOfferToCartProduct(
   baseProduct: CartProduct,
   offer: CriticalRouteOfferLike,
   stockBase: Pick<
-    CartProduct,
+    CriticalCartProduct,
     'effective_policy' | 'inventory_tracking_policy' | 'stock' | 'stock_quantity'
   >
 ): CartProduct {
@@ -99,7 +100,7 @@ export function useCriticalRouteOfferState({
 }: {
   routeOfferMissing: boolean;
   initialOfferId: string | null | undefined;
-  selectionCartProduct: CartProduct;
+  selectionCartProduct: CriticalCartProduct;
   selectedVariantSelection: ResolvedCriticalVariantSelection | null;
   hasPurchasableVariantSelection: boolean;
   selectedCondition: string | null | undefined;

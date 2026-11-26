@@ -2,11 +2,14 @@ import {
   resolveVariantDisplaySelection,
   resolveVariantSelection,
 } from '@baci/shared/lib/product-default-variant';
-import type { Product } from '@/lib/products';
+import type { CriticalCartProduct } from './critical-cart-product';
 import { pickInitialSelectedAttributes } from './critical-commerce-selection';
 
 export function completeCriticalVariantSelection(
-  product: Pick<Product, 'price' | 'condition' | 'manage_stock' | 'variants'>,
+  product: Pick<
+    CriticalCartProduct,
+    'price' | 'condition' | 'manage_stock' | 'variants'
+  >,
   attributes: Record<string, string>,
   renderableVariantAxes: string[],
   variantAxisOptions: Record<string, string[]>

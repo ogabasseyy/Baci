@@ -31,7 +31,10 @@ import { getVariantSchemaColor } from './product-schema-color';
 import { isValidMerchantIdentifier } from './product-schema-identifier';
 import { buildVariantSchemaName } from './product-schema-name';
 import { buildMerchantReturnPolicyFromTrustProfile } from './product-schema-returns';
-import { buildSharedOfferPolicies } from './product-schema-shared-offer-policies';
+import {
+  buildSharedOfferPolicies,
+  buildSharedVariantOfferSeller,
+} from './product-schema-shared-offer-policies';
 import { buildOfferShippingDetails } from './product-schema-shipping';
 import { getVariantSchemaSize } from './product-schema-size';
 import { getProductSchemaSpecKeyForPropertyId } from './product-schema-spec-vocabulary';
@@ -810,17 +813,26 @@ export function generateProductSchema(
     if (variesBy.length > 0) schema.variesBy = variesBy;
     else delete schema.variesBy;
 
-    // Shared shipping + return policy for all variant Offers, defined once and
-    // referenced by @id (2026 best practice)
+    // Shared seller + payment methods + shipping/return policy for all variant
+    // Offers, defined once and referenced by @id.
     const variantOfferPolicies = buildSharedOfferPolicies(
       structuredDataProductUrl,
       String(schema.productGroupID),
       shippingDetails,
       hasMerchantReturnPolicy
     );
+    const variantOfferSeller = buildSharedVariantOfferSeller(
+      structuredDataProductUrl,
+      String(schema.productGroupID),
+      product.variants.length,
+      seller,
+      acceptedPaymentMethod
+    );
+    const variantFallbackImages = finalImages?.slice(0, 1);
 
-    // Build hasVariant array — each variant becomes a @type Product
-    // Include variant descriptions alongside the shared ProductGroup description.
+    // Build hasVariant array — each variant becomes a @type Product.
+    // Description and brand live on the parent ProductGroup to avoid
+    // duplicating ~500 chars per variant across HTML and RSC payloads.
     schema.hasVariant = product.variants.map((variant, variantIndex) => {
       const identifiers = resolveVariantProductIdentifiers(variant.attributes);
       const variantPrice = variant.price_override ?? product.price;
@@ -835,14 +847,14 @@ export function generateProductSchema(
       const variantSize = getVariantSchemaSize(variant.attributes);
       const variantName = buildVariantSchemaName(safeName, variant.attributes);
 
-      const variantImages = resolveVariantSeoImages(variant, finalImages);
+      const variantImages = resolveVariantSeoImages(
+        variant,
+        variantFallbackImages
+      );
 
       return {
         '@type': 'Product',
         name: variantName,
-        description: [variantColor, variantSize, safeDescription]
-          .filter(Boolean)
-          .join(' - '),
         ...(variantUrl && { url: variantUrl }),
         ...(variantImages && { image: variantImages }),
         inProductGroupWithID: schema.productGroupID,
@@ -865,8 +877,7 @@ export function generateProductSchema(
             stock_quantity: variant.stock_quantity,
           }),
           itemCondition: variantCondition,
-          seller,
-          ...(acceptedPaymentMethod && { acceptedPaymentMethod }),
+          seller: variantOfferSeller(variantIndex),
           ...variantOfferPolicies(variantIndex),
         },
       };

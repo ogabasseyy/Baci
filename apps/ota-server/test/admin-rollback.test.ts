@@ -855,5 +855,68 @@ describe('admin payload validation and rollback safety', () => {
       bucket.delete = origDelete;
       warnSpy.mockRestore();
     }
+
+    // Keyed rollback returning idempotentResult pointing to a different updateId also reaps orphaned release.
+    const differentReplayId = '55555555-5555-4555-8555-555555555555';
+    const releasesBeforeIdemReap = [...bucket.store.keys()].filter((k) =>
+      k.startsWith(releasePrefix)
+    ).length;
+    bucket.onBeforePut = (key) => {
+      if (key === pointerKeyCas) {
+        bucket.onBeforePut = undefined;
+        bucket.store.set(pointerKeyCas, {
+          etag: 'concurrent-keyed-idempotent',
+          bytes: new TextEncoder().encode(
+            JSON.stringify({
+              mode: 'update',
+              updateId: differentReplayId,
+              activeSourceUpdateId: UPDATE_A,
+              updatedAt: new Date(Date.now() + 180_000).toISOString(),
+              lastRollback: {
+                key: 'concurrent-idem-reap-key',
+                fingerprint: JSON.stringify({
+                  targetUpdateId: UPDATE_A,
+                  toEmbedded: false,
+                }),
+                response: {
+                  ok: true,
+                  mode: 'update',
+                  channel: 'production',
+                  platform: 'ios',
+                  runtimeVersion: RUNTIME,
+                  updateId: differentReplayId,
+                  rolledBackToUpdateId: UPDATE_A,
+                },
+              },
+            })
+          ),
+        });
+      }
+    };
+    const idemReapResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'concurrent-idem-reap-key',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+        }),
+      }),
+      env
+    );
+    expect(idemReapResp.status).toBe(200);
+    expect(await idemReapResp.json()).toMatchObject({
+      updateId: differentReplayId,
+    });
+    const releasesAfterIdemReap = [...bucket.store.keys()].filter((k) =>
+      k.startsWith(releasePrefix)
+    ).length;
+    expect(releasesAfterIdemReap).toBe(releasesBeforeIdemReap);
   });
 });

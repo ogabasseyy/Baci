@@ -641,8 +641,8 @@ describe('admin upload integrity and concurrent publish CAS', () => {
     });
   });
 
-  it('rejects duplicate asset key or duplicate hash across launchAsset and assets', async () => {
-    const { env } = createEnv();
+  it('rejects duplicate asset key while allowing identical-byte assets with distinct keys', async () => {
+    const { bucket, env } = createEnv();
     const bytesA = new TextEncoder().encode('dup-key-bytes-a');
     const hexA = createHash('sha256').update(bytesA).digest('hex');
     const b64A = createHash('sha256').update(bytesA).digest('base64url');
@@ -681,7 +681,15 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       error: expect.stringMatching(/duplicate asset key/i),
     });
 
-    const dupHashResp = await worker.fetch(
+    await bucket.put('assets/bundles/ios/dup.hbc', bytesA, {
+      httpMetadata: { contentType: 'application/javascript' },
+      customMetadata: { sha256Hex: hexA, sha256Base64Url: b64A },
+    });
+    await bucket.put('assets/blobs/dup-a.png', bytesA, {
+      httpMetadata: { contentType: 'image/png' },
+      customMetadata: { sha256Hex: hexA, sha256Base64Url: b64A },
+    });
+    const sharedHashDistinctKeysResp = await worker.fetch(
       new Request('https://ota.usebaci.com/api/admin/publish', {
         method: 'POST',
         headers: {
@@ -700,18 +708,21 @@ describe('admin upload integrity and concurrent publish CAS', () => {
           assets: [
             {
               hash: b64A,
-              key: 'distinct-key',
+              key: 'distinct-icon-a',
               contentType: 'image/png',
-              r2Key: 'blobs/dup.png',
+              r2Key: 'blobs/dup-a.png',
+            },
+            {
+              hash: b64A,
+              key: 'distinct-icon-b',
+              contentType: 'image/png',
+              r2Key: 'blobs/dup-a.png',
             },
           ],
         }),
       }),
       env
     );
-    expect(dupHashResp.status).toBe(400);
-    expect(await dupHashResp.json()).toMatchObject({
-      error: expect.stringMatching(/duplicate asset hash/i),
-    });
+    expect(sharedHashDistinctKeysResp.status).toBe(200);
   });
 });

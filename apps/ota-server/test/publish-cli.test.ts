@@ -672,4 +672,50 @@ describe('publish-ota CLI', () => {
     ).rejects.toThrow(/503/);
     expect(always503Calls).toBe(4);
   });
+
+  it('deduplicates uploads while preserving distinct asset keys for identical-byte Expo assets', async () => {
+    const { distDir, configPath, pngBytes } = await createExportFixture();
+    await mkdir(path.join(distDir, 'assets'), { recursive: true });
+    await writeFile(path.join(distDir, 'assets/icon-a.png'), pngBytes);
+    await writeFile(path.join(distDir, 'assets/icon-b.png'), pngBytes);
+    await writeFile(
+      path.join(distDir, 'metadata.json'),
+      JSON.stringify({
+        version: 0,
+        bundler: 'metro',
+        fileMetadata: {
+          ios: {
+            bundle: '_expo/static/js/ios/entry-1.hbc',
+            assets: [
+              { path: 'assets/icon-a.png', ext: 'png' },
+              { path: 'assets/icon-b.png', ext: 'png' },
+            ],
+          },
+        },
+      })
+    );
+    await writeFile(
+      path.join(distDir, 'assetmap.json'),
+      JSON.stringify({
+        'icon-a.png': { hash: 'hash-icon-a' },
+        'icon-b.png': { hash: 'hash-icon-b' },
+      })
+    );
+
+    const { payload, uploads } = await packageExportDirectory({
+      distDir,
+      configPath,
+      platform: 'ios',
+      runtimeVersion: '2.1.663',
+    });
+
+    expect(uploads).toHaveLength(2);
+    expect(payload.assets).toHaveLength(2);
+    expect(payload.assets.map((a) => a.key)).toEqual([
+      'hash-icon-a',
+      'hash-icon-b',
+    ]);
+    expect(payload.assets[0]?.hash).toBe(payload.assets[1]?.hash);
+    expect(payload.launchAsset).not.toHaveProperty('fileExtension');
+  });
 });

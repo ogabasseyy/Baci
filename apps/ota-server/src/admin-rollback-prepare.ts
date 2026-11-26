@@ -177,12 +177,15 @@ export async function cleanupPreparedRollbackArtifacts(
     | { idempotentResult: RollbackOperationResult }
     | Response
 ): Promise<void> {
-  if (!prepared || !env.OTA_BUCKET.delete) {
+  if (!prepared || !env.OTA_BUCKET.delete || !prepared.createdByRequest) {
     return;
   }
-  const shouldReapCreatedRelease =
-    result instanceof Response && prepared.createdByRequest;
-  if (!shouldReapCreatedRelease) {
+  const reapedAfterDifferentIdempotent =
+    !(result instanceof Response) &&
+    'idempotentResult' in result &&
+    (result.idempotentResult.mode !== 'update' ||
+      result.idempotentResult.updateId !== prepared.releaseId);
+  if (!(result instanceof Response) && !reapedAfterDifferentIdempotent) {
     return;
   }
   try {

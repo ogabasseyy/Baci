@@ -35,3 +35,39 @@ ALTER TABLE private.gigl_tracking_notification_policy
 -- row, and validating it here would scan the table while the DROP CONSTRAINT
 -- lock above is still held for the whole migration transaction. Validate it in
 -- a later standalone migration (VALIDATE only needs a non-blocking lock).
+
+-- When one arrival scan queues both customer rows, push only "arrived in your
+-- city". The transit_started row stays as the once-per-shipment milestone; the
+-- row-level email trigger has already seen it as pending when this statement
+-- trigger runs, so the shipped email is unaffected.
+CREATE OR REPLACE FUNCTION private.skip_gigl_transit_push_covered_by_arrival()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.shipment_tracking_notification_outbox AS transit
+  SET status = 'skipped', skipped_at = now(), updated_at = now(),
+    skip_reason = 'covered_by_arrival_push'
+  FROM inserted_outbox AS inserted,
+    public.shipment_tracking_notification_outbox AS arrival
+  WHERE transit.id = inserted.id
+    AND transit.audience = 'customer'
+    AND transit.notification_kind = 'transit_started'
+    AND transit.status = 'pending'
+    AND arrival.tracking_event_id = transit.tracking_event_id
+    AND arrival.audience = 'customer'
+    AND arrival.notification_kind = 'arrived_in_city'
+    AND arrival.status = 'pending';
+  RETURN NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.skip_gigl_transit_push_covered_by_arrival()
+  FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS zz_skip_gigl_transit_push_covered_by_arrival
+  ON public.shipment_tracking_notification_outbox;
+CREATE TRIGGER zz_skip_gigl_transit_push_covered_by_arrival
+  AFTER INSERT ON public.shipment_tracking_notification_outbox
+  REFERENCING NEW TABLE AS inserted_outbox
+  FOR EACH STATEMENT
+  EXECUTE FUNCTION private.skip_gigl_transit_push_covered_by_arrival();

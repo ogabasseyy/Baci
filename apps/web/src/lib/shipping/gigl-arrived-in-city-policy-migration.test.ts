@@ -18,4 +18,15 @@ describe('arrived-in-city policy rows', () => {
       );
     }
   });
+
+  it('pushes only the arrival when one scan queues both customer rows', () => {
+    const sql = readFileSync(MIGRATION, 'utf8');
+    expect(sql).toContain("skip_reason = 'covered_by_arrival_push'");
+    expect(sql).toContain("transit.notification_kind = 'transit_started'");
+    expect(sql).toContain(
+      'arrival.tracking_event_id = transit.tracking_event_id'
+    );
+    // Statement-level, so the row-level shipped-email trigger runs first.
+    expect(sql).toContain('REFERENCING NEW TABLE AS inserted_outbox');
+  });
 });

@@ -85,4 +85,16 @@ it('includes wallet and savings ledger credits for unpaid and settled orders', (
       wallet_reversal_completed: true,
     })
   ).toBe(180000);
+  expect(
+    getOxygenOrderNetPayable({
+      total: 50000,
+      payment_status: 'partially_paid',
+      amount_paid: 40000,
+      wallet_amount_used: 20000,
+      wallet_ledger_used: 0,
+      savings_ledger_used: 0,
+      wallet_reversal_completed: true,
+      wallet_reversed_credit: 20000,
+    })
+  ).toBe(30000);
 });

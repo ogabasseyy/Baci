@@ -23,6 +23,7 @@ export const oxygenCheckoutOrderSchema = z.object({
   wallet_ledger_used: amount.optional(),
   savings_ledger_used: amount.optional(),
   wallet_reversal_completed: z.boolean().optional(),
+  wallet_reversed_credit: amount.optional(),
   payment_status: z.string().optional(),
   order_items: z.array(
     z.object({
@@ -52,6 +53,7 @@ type OxygenOrderCreditFields = Pick<
   | 'wallet_ledger_used'
   | 'savings_ledger_used'
   | 'wallet_reversal_completed'
+  | 'wallet_reversed_credit'
   | 'payment_status'
 >;
 
@@ -66,6 +68,7 @@ export function getOxygenOrderPreGatewayPaid(
     savingsLedgerUsed: order.savings_ledger_used,
     paymentStatus: order.payment_status,
     walletReversalCompleted: order.wallet_reversal_completed,
+    walletReversedCredit: order.wallet_reversed_credit,
   });
 }
 
@@ -80,5 +83,6 @@ export function getOxygenOrderNetPayable(
     savingsLedgerUsed: order.savings_ledger_used,
     paymentStatus: order.payment_status,
     walletReversalCompleted: order.wallet_reversal_completed,
+    walletReversedCredit: order.wallet_reversed_credit,
   });
 }

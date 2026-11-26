@@ -526,6 +526,7 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
     expect(response.status).toBe(200);
     expect(data.wallet_ledger_used).toBe(3000);
     expect(data.savings_ledger_used).toBe(2000);
+    expect(data.wallet_reversed_credit).toBe(0);
     expect(mockOrderQuery.select.mock.calls[0][0]).toContain(
       'wallet_amount_used'
     );

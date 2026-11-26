@@ -225,6 +225,19 @@ describe('klump-utils', () => {
     expect(
       getBnplRemainingAmount({
         total: 50_000,
+        payment_status: 'partially_paid',
+        amount_paid: 40_000,
+        wallet_amount_used: 20_000,
+        wallet_ledger_used: 0,
+        savings_ledger_used: 0,
+        wallet_reversal_completed: true,
+        wallet_reversed_credit: 20_000,
+      })
+    ).toBe(30_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
         payment_status: 'bnpl_approved',
         amount_paid: 35_000,
         wallet_amount_used: 15_000,

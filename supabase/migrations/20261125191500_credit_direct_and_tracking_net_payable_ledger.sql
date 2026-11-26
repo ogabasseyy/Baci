@@ -480,6 +480,7 @@ RETURNS TABLE (
   wallet_ledger_used NUMERIC,
   savings_ledger_used NUMERIC,
   wallet_reversal_completed BOOLEAN,
+  wallet_reversed_credit NUMERIC,
   currency TEXT,
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ,
@@ -634,6 +635,17 @@ BEGIN
         AND rev.source_type = 'order_reversal'
         AND rev.status = 'completed'
     ) AS wallet_reversal_completed,
+    COALESCE(
+      (
+        SELECT SUM(GREATEST(rev.amount, 0))
+        FROM public.customer_wallet_transactions rev
+        WHERE rev.source_id = o.id
+          AND rev.merchant_id = o.merchant_id
+          AND rev.source_type = 'order_reversal'
+          AND rev.status = 'completed'
+      ),
+      0
+    ) AS wallet_reversed_credit,
     o.currency,
     o.created_at,
     o.updated_at,

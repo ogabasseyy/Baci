@@ -87,6 +87,7 @@ export async function readOwnedOxygenOrder(
     savingsLedgerUsed,
     paymentStatus: order.payment_status,
     walletReversalCompleted: walletSummary.hasCompletedReversal,
+    walletReversedCredit: walletSummary.reversedCredit,
   });
   if (isPreGateway && payableTotal <= 0) {
     throw new Error(

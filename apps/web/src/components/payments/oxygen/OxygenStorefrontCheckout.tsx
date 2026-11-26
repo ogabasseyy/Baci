@@ -105,6 +105,7 @@ export async function OxygenStorefrontCheckout({
     ...parsed.data,
     wallet_ledger_used: walletLedgerSummary.netCredit,
     wallet_reversal_completed: walletLedgerSummary.hasCompletedReversal,
+    wallet_reversed_credit: walletLedgerSummary.reversedCredit,
     savings_ledger_used: sumActiveSavingsLedgerCredit(savingsLedgerRows),
   };
   const netPayable = getOxygenOrderNetPayable(order);

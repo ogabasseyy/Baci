@@ -177,6 +177,8 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
           wallet_amount_used: 0,
           wallet_ledger_used: 12000,
           savings_ledger_used: 8000,
+          wallet_reversal_completed: true,
+          wallet_reversed_credit: 20000,
           items: [],
         },
       ],
@@ -195,6 +197,8 @@ describe('GET /api/storefront/orders/[id] public lookup', () => {
       wallet_amount_used: 0,
       wallet_ledger_used: 12000,
       savings_ledger_used: 8000,
+      wallet_reversal_completed: true,
+      wallet_reversed_credit: 20000,
     });
   });
 

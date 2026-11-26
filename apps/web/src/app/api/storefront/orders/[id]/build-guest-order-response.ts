@@ -22,6 +22,7 @@ export interface GuestTrackingOrderRow {
   wallet_ledger_used?: unknown;
   savings_ledger_used?: unknown;
   wallet_reversal_completed?: unknown;
+  wallet_reversed_credit?: unknown;
   customer_name?: unknown;
   customer_email?: unknown;
   customer_phone?: unknown;
@@ -73,6 +74,10 @@ export function buildGuestOrderResponse(input: GuestOrderResponseInput) {
       ? { savings_ledger_used: order.savings_ledger_used }
       : {}),
     wallet_reversal_completed: Boolean(order.wallet_reversal_completed),
+    ...(order.wallet_reversed_credit !== undefined &&
+    order.wallet_reversed_credit !== null
+      ? { wallet_reversed_credit: order.wallet_reversed_credit }
+      : {}),
     customer_name: order.customer_name,
     customer_email: order.customer_email,
     customer_phone: order.customer_phone,

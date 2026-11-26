@@ -351,6 +351,35 @@ BEGIN
       RAISE EXCEPTION 'Expected general_activation reconcile orderConfirmed=true, got %', v_rec;
     END IF;
   END;
+
+  -- partially_paid orders preserve genuine gateway installments (minus completed reversals).
+  DECLARE
+    v_pp_gw uuid := 'ec310000-0000-4000-8000-000000000050';
+    v_pp_gw_rev uuid := 'ec310000-0000-4000-8000-000000000051';
+    v_net numeric;
+  BEGIN
+    RESET ROLE;
+    INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
+    VALUES
+      (v_pp_gw,'ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OX-PP-GW',50000,50000,'NGN','partially_paid','oxygen',0,0,30000,10000),
+      (v_pp_gw_rev,'ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OX-PP-GW-REV',50000,50000,'NGN','partially_paid','oxygen',0,0,40000,20000);
+
+    INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
+    VALUES
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','completed',10000,0,'order_redemption',v_pp_gw),
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','redemption','completed',20000,0,'order_redemption',v_pp_gw_rev),
+      ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',20000,20000,'order_reversal',v_pp_gw_rev);
+
+    v_net := oxygen_private.order_net_payable_for_order(v_pp_gw, 50000, 30000, 10000, 'partially_paid');
+    IF v_net IS DISTINCT FROM 20000 THEN
+      RAISE EXCEPTION 'Expected partially_paid gateway net payable 20000, got %', v_net;
+    END IF;
+
+    v_net := oxygen_private.order_net_payable_for_order(v_pp_gw_rev, 50000, 40000, 20000, 'partially_paid');
+    IF v_net IS DISTINCT FROM 30000 THEN
+      RAISE EXCEPTION 'Expected partially_paid reversed-wallet + gateway net payable 30000, got %', v_net;
+    END IF;
+  END;
 END $test$;
 RESET ROLE;
 ROLLBACK;

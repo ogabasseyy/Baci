@@ -19,6 +19,7 @@ describe('buildGuestOrderResponse', () => {
         wallet_ledger_used: 15000,
         savings_ledger_used: 10000,
         wallet_reversal_completed: true,
+        wallet_reversed_credit: 20000,
         customer_name: 'Ada',
         customer_email: 'ada@example.com',
         customer_phone: '0801',
@@ -48,6 +49,7 @@ describe('buildGuestOrderResponse', () => {
       wallet_ledger_used: 15000,
       savings_ledger_used: 10000,
       wallet_reversal_completed: true,
+      wallet_reversed_credit: 20000,
     });
   });
 

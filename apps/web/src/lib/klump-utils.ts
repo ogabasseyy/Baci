@@ -15,6 +15,7 @@ export interface BnplOrder {
   wallet_ledger_used?: number | string | null;
   savings_ledger_used?: number | string | null;
   wallet_reversal_completed?: boolean | null;
+  wallet_reversed_credit?: number | string | null;
   payment_status?: string | null;
   currency?: string | null;
   order_number?: string | null;
@@ -81,6 +82,7 @@ export function getBnplRemainingAmount(
     | 'wallet_ledger_used'
     | 'savings_ledger_used'
     | 'wallet_reversal_completed'
+    | 'wallet_reversed_credit'
     | 'payment_status'
   >
 ) {
@@ -111,6 +113,10 @@ export function getBnplRemainingAmount(
       walletLedgerUsed: toCurrencyAmount(order.wallet_ledger_used),
       savingsLedgerUsed: toCurrencyAmount(order.savings_ledger_used),
       walletReversalCompleted: order.wallet_reversal_completed === true,
+      walletReversedCredit:
+        order.wallet_reversed_credit != null
+          ? toCurrencyAmount(order.wallet_reversed_credit)
+          : undefined,
       paymentStatus: effectiveStatus,
     })
   );

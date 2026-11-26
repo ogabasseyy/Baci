@@ -10,6 +10,7 @@ export type StorefrontOrderLedgerCreditResult =
       walletLedgerUsed: number;
       savingsLedgerUsed: number;
       walletReversalCompleted: boolean;
+      walletReversedCredit: number;
     }
   | { ok: false };
 
@@ -65,5 +66,6 @@ export async function fetchStorefrontOrderLedgerCredit(
     walletLedgerUsed: walletSummary.netCredit,
     savingsLedgerUsed: sumActiveSavingsLedgerCredit(savingsRows),
     walletReversalCompleted: walletSummary.hasCompletedReversal,
+    walletReversedCredit: walletSummary.reversedCredit,
   };
 }

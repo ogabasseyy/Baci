@@ -136,14 +136,15 @@ export async function runSubmitOnboardingWorkflow(
       slug,
       slugIsCustom,
     });
-    let merchant = persisted.merchant;
+    const merchant = persisted.merchant;
     if (!merchant.slug)
       throw new Error('Could not finish store setup. Please try again.');
+    let merchantSlug = merchant.slug;
     const rootDomain = getRootDomain() || 'usebaci.com';
     let domain = await ensureOnboardingDomain({
       supabase,
       merchantId: merchant.id,
-      slug: merchant.slug,
+      slug: merchantSlug,
       rootDomain,
     });
     let recoveredFromDomainConflict = false;
@@ -152,7 +153,7 @@ export async function runSubmitOnboardingWorkflow(
       domain.status === 'conflict' &&
       persisted.status === 'completed' &&
       candidateSlug &&
-      candidateSlug !== merchant.slug.toLowerCase()
+      candidateSlug !== merchantSlug.toLowerCase()
     ) {
       if (isReservedMerchantSlug(candidateSlug)) {
         throw new OnboardingSlugUnavailableError();
@@ -172,12 +173,12 @@ export async function runSubmitOnboardingWorkflow(
           `Failed to update merchant slug: ${renameError.message}`
         );
       }
-      merchant = { ...merchant, slug: candidateSlug };
+      merchantSlug = candidateSlug;
       recoveredFromDomainConflict = true;
       domain = await ensureOnboardingDomain({
         supabase,
         merchantId: merchant.id,
-        slug: candidateSlug,
+        slug: merchantSlug,
         rootDomain,
       });
     }
@@ -190,7 +191,7 @@ export async function runSubmitOnboardingWorkflow(
       supabase,
       expectedOwnerUserId: userResolution.user.id,
       merchantId: merchant.id,
-      merchantSlug: merchant.slug,
+      merchantSlug,
       merchantLogoUrl: merchant.logo_url,
       businessName: persisted.businessName,
       businessType: persisted.businessType,

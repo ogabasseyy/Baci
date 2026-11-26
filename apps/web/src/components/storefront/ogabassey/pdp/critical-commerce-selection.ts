@@ -4,7 +4,7 @@ import {
   normalizeCommerceVariantOption,
 } from '@baci/shared/lib/commerce-variant-axis';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
-import type { Product as CartProduct } from '@/lib/products';
+import type { Product as CartProduct, ProductVariant } from '@/lib/products';
 import type {
   CriticalCartProduct,
   CriticalCartProductInput,
@@ -67,10 +67,18 @@ export function formatCriticalPrice(
   return formatCurrencyWithConfig(price, currency, COMPACT_OPTIONS);
 }
 
-function isVariantlessCartProduct(
+function hasFullCartVariants(
   product: CriticalCartProductInput
-): product is CartProduct & { variants?: undefined } {
-  return product.variants === undefined;
+): product is CartProduct {
+  for (const variant of product.variants ?? []) {
+    const hasIds =
+      'merchant_id' in variant &&
+      typeof variant.merchant_id === 'string' &&
+      'product_id' in variant &&
+      typeof variant.product_id === 'string';
+    if (!hasIds) return false;
+  }
+  return true;
 }
 
 export function buildVariantCartProduct(
@@ -78,15 +86,13 @@ export function buildVariantCartProduct(
   selection: ResolvedCriticalVariantSelection | null
 ): CartProduct {
   if (!selection) {
-    if (isVariantlessCartProduct(cartProduct)) {
-      return cartProduct;
+    if (hasFullCartVariants(cartProduct)) return cartProduct;
+    const { variants: rawVariants, ...productWithoutVariants } = cartProduct;
+    const variants: ProductVariant[] = [];
+    for (const variant of rawVariants ?? []) {
+      variants.push({ ...variant, merchant_id: '', product_id: cartProduct.id });
     }
-
-    const { variants: _variants, ...productWithoutVariants } = cartProduct;
-    return {
-      ...productWithoutVariants,
-      variants: [],
-    };
+    return { ...productWithoutVariants, variants };
   }
 
   const { variants: _variants, ...productWithoutVariants } = cartProduct;

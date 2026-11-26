@@ -1,5 +1,7 @@
+import { resolveDefaultVariantSelection } from '@baci/shared/lib/product-default-variant';
 import { describe, expect, it } from 'vitest';
 import type { Product as CartProduct, ProductVariant } from '@/lib/products';
+import { createCriticalCartProduct } from './critical-cart-product';
 import {
   buildVariantCartProduct,
   compactVariantOptions,
@@ -160,6 +162,33 @@ describe('critical commerce selection helpers', () => {
 
   it('returns the original cart product when no variant selection exists', () => {
     expect(buildVariantCartProduct(cartProduct, null)).toBe(cartProduct);
+  });
+
+  it('preserves variants on the no-selection path so default-variant cart fallback remains intact', () => {
+    const productWithVariants: CartProduct = {
+      ...cartProduct,
+      has_variants: true,
+      variants: [
+        {
+          attributes: { storage: '256GB' },
+          id: 'variant-256',
+          merchant_id: 'merchant-1',
+          price_override: 278_418.6,
+          product_id: 'product-1',
+          stock_quantity: 8,
+        },
+      ],
+    };
+    expect(buildVariantCartProduct(productWithVariants, null)).toBe(
+      productWithVariants
+    );
+
+    const trimmedProduct = createCriticalCartProduct(productWithVariants);
+    const noSelectionProduct = buildVariantCartProduct(trimmedProduct, null);
+    expect(noSelectionProduct.variants).toHaveLength(1);
+    expect(resolveDefaultVariantSelection(noSelectionProduct)?.variant.id).toBe(
+      'variant-256'
+    );
   });
 
   it('falls back to base images when a variant has no image', () => {

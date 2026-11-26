@@ -262,7 +262,25 @@ export async function submitWebEmailPasswordAuth(input: {
     if (!signInError && signInData.user) {
       return { status: 'authenticated', user: signInData.user };
     }
-    return { status: 'existing_wrong_password' };
+    const signInCode = signInError?.code ?? '';
+    const signInMessage = signInError?.message ?? '';
+    if (
+      signInCode === 'email_not_confirmed' ||
+      /email\s+not\s+confirmed/i.test(signInMessage)
+    ) {
+      return { status: 'confirm_email' };
+    }
+    if (
+      signInCode === 'invalid_credentials' ||
+      /invalid\s+login\s+credentials/i.test(signInMessage)
+    ) {
+      return { status: 'existing_wrong_password' };
+    }
+    return {
+      status: 'error',
+      message:
+        signInMessage || 'Could not sign in right now. Please try again.',
+    };
   }
   if (error) {
     return {

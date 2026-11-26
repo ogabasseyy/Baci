@@ -233,10 +233,10 @@ describe('upsertOnboardingMerchant', () => {
     });
     const updatePayload = update.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(updatePayload).toMatchObject({
-      logo_url: null,
-      favicon_png_192_url: null,
       phone: null,
     });
+    expect(updatePayload).not.toHaveProperty('logo_url');
+    expect(updatePayload).not.toHaveProperty('favicon_png_192_url');
     expect(updatePayload).not.toHaveProperty('slug');
     expect(invalidateMerchantSlugRename).toHaveBeenCalledWith({
       merchantId: 'merchant-1',

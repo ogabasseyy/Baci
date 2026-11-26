@@ -376,6 +376,20 @@ describe('runSubmitOnboardingWorkflow', () => {
         success: false,
         message: 'Logo URL must be a valid uploaded onboarding logo.',
       });
+
+      const svgFd = makeOnboardingFormData('kicks-hub');
+      svgFd.set(
+        'logoUrl',
+        'https://project.supabase.co/storage/v1/object/public/images/onboarding/user-1/logo.svg'
+      );
+      const svgResult = await runSubmitOnboardingWorkflow(
+        { success: false, message: '' },
+        svgFd
+      );
+      expect(svgResult).toEqual({
+        success: false,
+        message: 'Logo URL must be a valid uploaded onboarding logo.',
+      });
       expect(mocks.upsertOnboardingMerchant).not.toHaveBeenCalled();
 
       mocks.upsertOnboardingMerchant.mockResolvedValueOnce({

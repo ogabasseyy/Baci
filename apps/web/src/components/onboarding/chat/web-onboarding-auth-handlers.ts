@@ -32,7 +32,7 @@ export interface AuthStepHandlersContext {
   setStep: (step: WebChatStep) => void;
   setIsBusy: (busy: boolean) => void;
   appendMessages: (...items: Omit<OnboardingChatMessage, 'id'>[]) => void;
-  enterStoreSetup: (user: User) => void;
+  enterStoreSetup: (user: User) => Promise<void>;
 }
 
 export async function runWebAuthQuickReply(
@@ -47,7 +47,7 @@ export async function runWebAuthQuickReply(
       const supabase = createClient();
       const { data: authData } = await supabase.auth.getUser();
       if (authData.user) {
-        ctx.enterStoreSetup(authData.user);
+        await ctx.enterStoreSetup(authData.user);
         return;
       }
       appendMessages({
@@ -262,7 +262,7 @@ export async function runWebAuthTextInput(
         fullName: authDraft.fullName,
       });
       if (outcome.status === 'authenticated') {
-        enterStoreSetup(outcome.user);
+        await enterStoreSetup(outcome.user);
         return;
       }
       if (outcome.status === 'existing_wrong_password') {

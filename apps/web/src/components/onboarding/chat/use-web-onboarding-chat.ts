@@ -117,36 +117,33 @@ export function useWebOnboardingChat() {
     ]);
   };
 
-  const enterStoreSetup = (nextUser: User) => {
+  const enterStoreSetup = async (nextUser: User): Promise<void> => {
     const supabase = createClient();
     const hasPreservableDraft =
       Boolean(data.businessName) &&
       (!draftOwnerIdRef.current || draftOwnerIdRef.current === nextUser.id);
-    const run = async () => {
-      if (await hasCompletedMerchant(supabase, nextUser.id)) {
-        window.location.href = '/dashboard';
-        return;
-      }
-      if (hasPreservableDraft) {
-        const { firstName, lastName } = extractUserNames(nextUser);
-        draftOwnerIdRef.current = nextUser.id;
-        setAuthDraft({ fullName: '', email: '', password: '' });
-        setUser(nextUser);
-        setData((prev) => ({
-          ...prev,
-          firstName: prev.firstName || firstName,
-          lastName: prev.lastName || lastName,
-        }));
-        setStep('summary');
-        appendMessages({
-          role: 'assistant',
-          text: "You're signed back in! Your store details are still ready — tap Launch my store whenever you're ready.",
-        });
-        return;
-      }
-      applyStoreWelcomeState(nextUser);
-    };
-    void run();
+    if (await hasCompletedMerchant(supabase, nextUser.id)) {
+      window.location.href = '/dashboard';
+      return;
+    }
+    if (hasPreservableDraft) {
+      const { firstName, lastName } = extractUserNames(nextUser);
+      draftOwnerIdRef.current = nextUser.id;
+      setAuthDraft({ fullName: '', email: '', password: '' });
+      setUser(nextUser);
+      setData((prev) => ({
+        ...prev,
+        firstName: prev.firstName || firstName,
+        lastName: prev.lastName || lastName,
+      }));
+      setStep('summary');
+      appendMessages({
+        role: 'assistant',
+        text: "You're signed back in! Your store details are still ready — tap Launch my store whenever you're ready.",
+      });
+      return;
+    }
+    applyStoreWelcomeState(nextUser);
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: hydration runs once on mount; applyStoreWelcomeState only calls stable state setters

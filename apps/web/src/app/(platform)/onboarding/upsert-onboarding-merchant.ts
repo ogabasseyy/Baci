@@ -223,8 +223,7 @@ export async function upsertOnboardingMerchant({
         targetSlug,
         existing.slug
       );
-      // Invalidate caches immediately after the RPC commits so even if the
-      // subsequent merchant UPDATE fails, caches stay consistent with the DB.
+      // Invalidate caches immediately after the RPC commits.
       invalidateMerchantSlugRename({
         merchantId: existing.id,
         finalSlug: renamed.finalSlug,
@@ -235,6 +234,9 @@ export async function upsertOnboardingMerchant({
       ? null
       : (customSlug ??
         (await resolveOnboardingMerchantSlug(supabase, businessName)));
+    const logoPatch = normalizedLogoUrl
+      ? { logo_url: normalizedLogoUrl, favicon_png_192_url: normalizedLogoUrl }
+      : {};
     const { data, error } = await merchants
       .update({
         email,
@@ -242,8 +244,7 @@ export async function upsertOnboardingMerchant({
         business_type: finalBusinessType,
         country,
         payout_currency: payoutCurrency,
-        logo_url: normalizedLogoUrl,
-        favicon_png_192_url: normalizedLogoUrl,
+        ...logoPatch,
         ...(phone !== undefined ? { phone: normalizedPhone ?? null } : {}),
         ...(brandColorsParsed ? { brand_colors: brandColors } : {}),
         ...(resolvedSlug ? { slug: resolvedSlug } : {}),

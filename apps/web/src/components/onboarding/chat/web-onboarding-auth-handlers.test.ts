@@ -185,4 +185,58 @@ describe('web-onboarding-auth-handlers', () => {
     expect(ctx.setStep).toHaveBeenCalledWith('auth_choice');
     expect(ctx.enterStoreSetup).not.toHaveBeenCalled();
   });
+
+  it('routes unconfirmed existing accounts to auth_check_email instead of reporting wrong password', async () => {
+    mockSignUp.mockResolvedValueOnce({
+      data: { user: { id: 'u-unconfirmed', identities: [] }, session: null },
+      error: null,
+    });
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { code: 'email_not_confirmed', message: 'Email not confirmed' },
+    });
+    const ctx = makeCtx({
+      step: 'auth_confirm',
+      authDraft: {
+        fullName: 'Ada Okafor',
+        email: 'ada@example.com',
+        password: 'StrongPassword!2026',
+      },
+    });
+
+    await runWebAuthTextInput('StrongPassword!2026', ctx);
+
+    expect(ctx.setStep).toHaveBeenCalledWith('auth_check_email');
+    expect(ctx.setStep).not.toHaveBeenCalledWith('auth_choice');
+  });
+
+  it('surfaces non-credential sign-in errors directly without clearing auth step to wrong-password flow', async () => {
+    mockSignUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: {
+        code: 'user_already_exists',
+        message: 'User already registered',
+      },
+    });
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { code: 'over_request_rate_limit', message: 'Too many requests' },
+    });
+    const ctx = makeCtx({
+      step: 'auth_confirm',
+      authDraft: {
+        fullName: 'Ada Okafor',
+        email: 'ada@example.com',
+        password: 'StrongPassword!2026',
+      },
+    });
+
+    await runWebAuthTextInput('StrongPassword!2026', ctx);
+
+    expect(ctx.appendMessages).toHaveBeenCalledWith({
+      role: 'system',
+      text: 'Too many requests',
+    });
+    expect(ctx.setStep).not.toHaveBeenCalledWith('auth_choice');
+  });
 });

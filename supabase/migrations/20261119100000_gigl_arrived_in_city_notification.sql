@@ -33,8 +33,8 @@ ALTER TABLE private.gigl_tracking_notification_policy
   VALIDATE CONSTRAINT gigl_tracking_notification_policy_notification_kind_check;
 -- The outbox CHECK stays NOT VALID on purpose: it is enforced for every new
 -- row, and validating it here would scan the table while the DROP CONSTRAINT
--- lock above is still held for the whole migration transaction. Validate it in
--- a later standalone migration (VALIDATE only needs a non-blocking lock).
+-- lock above is still held for the whole migration transaction. The next
+-- migration validates it (VALIDATE only needs a non-blocking lock).
 
 -- When one poll queues an arrival and an in-transit milestone (from the arrival
 -- scan or an earlier one), push only "arrived in your city". The

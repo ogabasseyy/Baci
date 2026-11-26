@@ -47,8 +47,13 @@ export const RETURN_FLOW_CODES = new Set([
   'RSR',
   'SRHUB',
 ]);
-// Explicit "arrived final destination" scans. AHD ("arrived final destination
-// for home delivery") has no entry in the shared status map.
+// Explicit "arrived final destination" scans, so no destination name match is
+// needed. Source: GIG's "Scan Status List" (checked 2026-11-26) at
+// https://gig-logistics.readme.io/reference/get_track-mobileshipment
+// ARF/ARF* and IAFD* read "arrived final destination", AHD "... for home
+// delivery", ADF "arrived delivery facility", AD "from 2nd day of arrival at
+// destination", DUBC "delayed pick up by customer". MAFD is not on that list;
+// the shared status map carries it.
 export const EXPLICIT_ARRIVAL_CODES = new Set([
   'ARF',
   'MAFD',

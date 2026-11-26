@@ -13,6 +13,7 @@ function toNonNegativeAmount(raw: unknown): number {
 
 export interface WalletLedgerSummary {
   netCredit: number;
+  reversedCredit: number;
   hasCompletedReversal: boolean;
 }
 
@@ -34,7 +35,7 @@ export function summarizeWalletLedgerCredit(
   rows: unknown
 ): WalletLedgerSummary {
   if (!Array.isArray(rows)) {
-    return { netCredit: 0, hasCompletedReversal: false };
+    return { netCredit: 0, reversedCredit: 0, hasCompletedReversal: false };
   }
 
   let redeemed = 0;
@@ -74,6 +75,7 @@ export function summarizeWalletLedgerCredit(
 
   return {
     netCredit: Math.max(Math.round((redeemed - reversed) * 100) / 100, 0),
+    reversedCredit: Math.round(reversed * 100) / 100,
     hasCompletedReversal,
   };
 }
@@ -119,16 +121,19 @@ export interface OrderPreGatewayCreditInput {
   amountPaid?: number | null;
   walletAmountUsed?: number | null;
   walletLedgerUsed?: number | null;
+  walletReversedCredit?: number | null;
   savingsLedgerUsed?: number | null;
   paymentStatus?: string | null;
   walletReversalCompleted?: boolean | null;
 }
 
 /**
- * Derives authoritative pre-gateway store credit applied to an order.
- * When a completed wallet reversal exists, stale `orders.amount_paid` and
- * `orders.wallet_amount_used` columns are ignored so reversed credit cannot be
- * subtracted again.
+ * Derives authoritative pre-gateway store credit and prior partial gateway
+ * installments already applied to an order.
+ * When a completed wallet reversal exists, stale `orders.wallet_amount_used`
+ * and reversed `orders.amount_paid` are excluded so reversed credit cannot be
+ * subtracted again, while preserving any genuine gateway installment on
+ * `partially_paid` orders.
  */
 export function computeOrderPreGatewayPaid(
   input: OrderPreGatewayCreditInput
@@ -139,10 +144,28 @@ export function computeOrderPreGatewayPaid(
   const walletLedger = toNonNegativeAmount(input.walletLedgerUsed);
   const savingsLedger = toNonNegativeAmount(input.savingsLedgerUsed);
   const reversalCompleted = input.walletReversalCompleted === true;
+  const normalizedStatus = (input.paymentStatus ?? 'unpaid')
+    .trim()
+    .toLowerCase();
 
   const effectiveWallet = reversalCompleted
     ? walletLedger
     : Math.max(walletColumn, walletLedger);
+
+  if (normalizedStatus === 'partially_paid') {
+    const effectiveAmountPaid = reversalCompleted
+      ? input.walletReversedCredit != null
+        ? Math.max(
+            amountPaid - toNonNegativeAmount(input.walletReversedCredit),
+            0
+          )
+        : 0
+      : amountPaid;
+    return Math.min(
+      Math.max(effectiveAmountPaid, effectiveWallet + savingsLedger, 0),
+      total
+    );
+  }
 
   if (!isPreGatewayCreditStatus(input.paymentStatus)) {
     return Math.min(effectiveWallet + savingsLedger, total);

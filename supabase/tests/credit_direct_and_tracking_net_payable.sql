@@ -44,7 +44,8 @@ VALUES
   ('cd710000-0000-4000-8000-000000000011', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-LEDGER-ZERO', 50000, 50000, 'NGN', 'pending', 'credit_direct', 0, 0, 0, 0, 'guest@example.test', 'cd-track-zero'),
   ('cd710000-0000-4000-8000-000000000012', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-LEDGER-REV', 50000, 50000, 'NGN', 'unpaid', 'credit_direct', 0, 0, 20000, 20000, 'guest@example.test', 'cd-track-rev'),
   ('cd710000-0000-4000-8000-000000000013', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID-REV', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 35000, 20000, 'guest@example.test', 'cd-track-pp-rev'),
-  ('cd710000-0000-4000-8000-000000000014', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 30000, 10000, 'guest@example.test', 'cd-track-pp');
+  ('cd710000-0000-4000-8000-000000000014', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 30000, 10000, 'guest@example.test', 'cd-track-pp'),
+  ('cd710000-0000-4000-8000-000000000015', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID-GW-REV', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 40000, 20000, 'guest@example.test', 'cd-track-pp-gw-rev');
 
 INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, status, amount, balance_after, source_type, source_id)
 VALUES
@@ -56,7 +57,9 @@ VALUES
   ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'credit', 'pending', 10000, 10000, 'order_reversal', 'cd710000-0000-4000-8000-000000000010'),
   ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'redemption', 'completed', 20000, 0, 'order_redemption', 'cd710000-0000-4000-8000-000000000013'),
   ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'credit', 'completed', 20000, 20000, 'order_reversal', 'cd710000-0000-4000-8000-000000000013'),
-  ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'redemption', 'completed', 10000, 0, 'order_redemption', 'cd710000-0000-4000-8000-000000000014');
+  ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'redemption', 'completed', 10000, 0, 'order_redemption', 'cd710000-0000-4000-8000-000000000014'),
+  ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'redemption', 'completed', 20000, 0, 'order_redemption', 'cd710000-0000-4000-8000-000000000015'),
+  ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'credit', 'completed', 20000, 20000, 'order_reversal', 'cd710000-0000-4000-8000-000000000015');
 
 INSERT INTO public.customer_savings_redemptions(goal_id, merchant_id, customer_id, order_id, amount, idempotency_key, metadata)
 VALUES
@@ -156,8 +159,8 @@ BEGIN
     RAISE EXCEPTION 'Expected partially_paid reversed signed_amount 35000, got %', v_issued.signed_amount;
   END IF;
 
-  -- 6. partially_paid order with non-unpaid amount_paid (30,000) ignores amount_paid and subtracts
-  -- only wallet (10,000) + savings (5,000), signing 35,000 in parity with shared TS computeOrderNetPayable.
+  -- 6. partially_paid order with genuine gateway amount_paid (30,000 = 15k gateway + 10k wallet + 5k savings)
+  -- subtracts amount_paid and signs 20,000 (not 35,000) in parity with shared TS computeOrderNetPayable.
   SELECT * INTO v_issued
   FROM public.issue_credit_direct_checkout_token(
     'cd710000-0000-4000-8000-000000000014',
@@ -166,8 +169,22 @@ BEGIN
     'cd-sess-pp',
     'cd-track-pp'
   );
-  IF v_issued.signed_amount IS DISTINCT FROM 35000 THEN
-    RAISE EXCEPTION 'Expected partially_paid active signed_amount 35000, got %', v_issued.signed_amount;
+  IF v_issued.signed_amount IS DISTINCT FROM 20000 THEN
+    RAISE EXCEPTION 'Expected partially_paid active signed_amount 20000, got %', v_issued.signed_amount;
+  END IF;
+
+  -- 6b. partially_paid order combining 20k gateway installment + 20k reversed wallet (stale amount_paid=40k)
+  -- preserves the 20k gateway installment while dropping the 20k reversed wallet, signing 30,000.
+  SELECT * INTO v_issued
+  FROM public.issue_credit_direct_checkout_token(
+    'cd710000-0000-4000-8000-000000000015',
+    'guest@example.test',
+    'cd710000-0000-4000-8000-000000000002',
+    'cd-sess-pp-gw-rev',
+    'cd-track-pp-gw-rev'
+  );
+  IF v_issued.signed_amount IS DISTINCT FROM 30000 THEN
+    RAISE EXCEPTION 'Expected partially_paid gateway+reversed signed_amount 30000, got %', v_issued.signed_amount;
   END IF;
 END $test$;
 

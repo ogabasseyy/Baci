@@ -59,6 +59,7 @@ export async function readOrderPayableState(params: {
   let total = snapshotTotal;
   let walletAmountUsed = 0;
   let walletLedgerUsed = 0;
+  let walletReversedCredit = 0;
   let amountPaidFromOrderRow = 0;
   let orderPaymentStatus = 'unpaid';
   let hasWalletReversal = false;
@@ -163,6 +164,7 @@ export async function readOrderPayableState(params: {
     );
     const walletSummary = summarizeWalletLedgerCredit(walletRows);
     walletLedgerUsed = walletSummary.netCredit;
+    walletReversedCredit = walletSummary.reversedCredit;
     hasWalletReversal = walletSummary.hasCompletedReversal;
 
     walletAmountUsed = hasWalletReversal
@@ -191,6 +193,7 @@ export async function readOrderPayableState(params: {
     amountPaid: amountPaidFromOrderRow,
     walletAmountUsed,
     walletLedgerUsed: redvaultRequested ? walletAmountUsed : walletLedgerUsed,
+    walletReversedCredit,
     savingsLedgerUsed: savingsAmountUsed,
     paymentStatus: orderPaymentStatus,
     walletReversalCompleted: hasWalletReversal,

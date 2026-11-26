@@ -220,7 +220,7 @@ describe('klump-utils', () => {
         wallet_ledger_used: 10_000,
         savings_ledger_used: 5_000,
       })
-    ).toBe(35_000);
+    ).toBe(20_000);
 
     expect(
       getBnplRemainingAmount({

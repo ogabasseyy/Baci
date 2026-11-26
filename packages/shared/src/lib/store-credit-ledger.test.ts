@@ -113,7 +113,11 @@ describe('summarizeWalletLedgerCredit & computeOrderNetPayable', () => {
         status: 'completed',
       },
     ]);
-    expect(summary).toEqual({ netCredit: 0, hasCompletedReversal: true });
+    expect(summary).toEqual({
+      netCredit: 0,
+      reversedCredit: 20000,
+      hasCompletedReversal: true,
+    });
 
     expect(
       computeOrderPreGatewayPaid({
@@ -140,7 +144,7 @@ describe('summarizeWalletLedgerCredit & computeOrderNetPayable', () => {
     ).toBe(45000);
   });
 
-  it('ignores non-unpaid amountPaid on partially_paid orders and subtracts only active wallet/savings credit', () => {
+  it('subtracts genuine gateway amountPaid on partially_paid orders while still excluding reversed wallet credit', () => {
     expect(
       computeOrderNetPayable({
         total: 50000,
@@ -151,7 +155,20 @@ describe('summarizeWalletLedgerCredit & computeOrderNetPayable', () => {
         paymentStatus: 'partially_paid',
         walletReversalCompleted: false,
       })
-    ).toBe(35000);
+    ).toBe(20000);
+
+    expect(
+      computeOrderNetPayable({
+        total: 50000,
+        amountPaid: 40000,
+        walletAmountUsed: 20000,
+        walletLedgerUsed: 0,
+        walletReversedCredit: 20000,
+        savingsLedgerUsed: 0,
+        paymentStatus: 'partially_paid',
+        walletReversalCompleted: true,
+      })
+    ).toBe(30000);
   });
 
   it('caps pre-gateway credit at order total when amountPaid and ledger columns overlap', () => {

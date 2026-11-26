@@ -64,7 +64,13 @@ BEGIN
     AND r.merchant_id = p_merchant_id
     AND NOT (COALESCE(r.metadata, '{}'::jsonb) ? 'reversed_at');
 
-  IF COALESCE(p_payment_status, 'unpaid') IN ('unpaid', 'pending')
+  IF COALESCE(p_payment_status, 'unpaid') = 'partially_paid' THEN
+    v_pre_gateway_credit := GREATEST(
+      GREATEST(COALESCE(p_amount_paid, 0) - v_wallet_reversed, 0),
+      v_effective_wallet + v_savings_ledger,
+      0
+    );
+  ELSIF COALESCE(p_payment_status, 'unpaid') IN ('unpaid', 'pending')
      AND NOT v_has_wallet_reversal THEN
     v_pre_gateway_credit := GREATEST(
       COALESCE(p_amount_paid, 0),
@@ -727,6 +733,80 @@ GRANT EXECUTE ON FUNCTION public.get_order_tracking(TEXT, UUID, TEXT, TEXT, TEXT
 COMMENT ON FUNCTION public.get_order_tracking(TEXT, UUID, TEXT, TEXT, TEXT) IS
   'Retrieve order tracking info by token or email+order, including wallet_amount_used and reversal-aware wallet/savings ledger sums for guest BNPL net-payable calculations.';
 
+-- Align paid-order amendment checkout claim with the net-payable amount so
+-- savings-funded Paystack checkouts do not mismatch o.total.
+CREATE OR REPLACE FUNCTION public.claim_checkout_for_paid_order_amendment(
+  p_order_id uuid, p_tracking_token text, p_gateway text, p_reference text,
+  p_currency text, p_expected_amount_minor bigint,
+  p_platform_fee_minor bigint DEFAULT NULL, p_retained_shipping_minor bigint DEFAULT NULL
+) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  o public.orders%ROWTYPE;
+  v_merchant uuid;
+  v_integration bigint;
+  v_wallet_checkout boolean;
+  v_net_payable numeric;
+BEGIN
+  SELECT merchant_id INTO v_merchant FROM public.orders WHERE id = p_order_id;
+  IF NOT FOUND THEN RETURN 'untracked'; END IF;
+  SELECT paystack_integration_id,integration_wallet_checkout INTO v_integration,v_wallet_checkout
+  FROM private.paid_order_amendment_config WHERE merchant_id = v_merchant FOR SHARE;
+  IF NOT FOUND THEN RETURN 'untracked'; END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text, 0));
+  SELECT * INTO o FROM public.orders WHERE id = p_order_id AND merchant_id = v_merchant FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'order_not_found' USING ERRCODE = 'P0002'; END IF;
+  IF p_tracking_token IS NULL OR NOT COALESCE(public.verify_order_tracking_token(p_order_id, p_tracking_token), false) THEN
+    RAISE EXCEPTION 'checkout_proof_required' USING ERRCODE = '42501';
+  END IF;
+  IF o.payment_status NOT IN ('unpaid', 'pending')
+     OR o.shipping_status NOT IN ('pending', 'processing')
+     OR o.cancelled_at IS NOT NULL
+     OR EXISTS (SELECT 1 FROM private.paid_order_amendments WHERE order_id = o.id) THEN
+    RAISE EXCEPTION 'amendment_payment_open';
+  END IF;
+  IF p_gateway = 'paystack_no_subaccount' AND NOT v_wallet_checkout THEN
+    RAISE EXCEPTION 'checkout_gateway_not_configured';
+  END IF;
+  v_net_payable := private.credit_direct_net_payable(
+    o.id,
+    o.merchant_id,
+    o.total,
+    o.amount_paid,
+    o.wallet_amount_used,
+    o.payment_status
+  );
+  IF v_integration IS NULL OR COALESCE(p_gateway,'') NOT IN ('paystack','paystack_no_subaccount')
+     OR p_currency IS DISTINCT FROM 'NGN'
+     OR p_expected_amount_minor IS NULL OR p_expected_amount_minor <> pg_catalog.round(v_net_payable * 100)::bigint
+     OR p_expected_amount_minor <= 0 OR p_reference IS NULL OR p_reference !~ '^BAC-[A-Z0-9]{12}$'
+     OR COALESCE(o.wallet_amount_used, 0) <> 0 THEN
+    RAISE EXCEPTION 'amendment_ineligible';
+  END IF;
+  IF p_platform_fee_minor IS NOT NULL OR p_retained_shipping_minor IS NOT NULL THEN
+    IF p_platform_fee_minor IS NULL OR p_platform_fee_minor NOT BETWEEN 0 AND p_expected_amount_minor
+      OR p_retained_shipping_minor IS DISTINCT FROM least(
+        pg_catalog.round(private.gigl_order_remaining_retained_shipping(o.id, o.merchant_id) * 100)::bigint,
+        p_expected_amount_minor - p_platform_fee_minor)
+    THEN RAISE EXCEPTION 'checkout_payment_details_changed'; END IF;
+  END IF;
+  INSERT INTO private.paid_order_checkout_claims(
+    order_id, reference, gateway, currency, expected_amount_minor, order_version
+  ) VALUES (o.id, p_reference, 'paystack', p_currency, p_expected_amount_minor, pg_catalog.md5(pg_catalog.to_jsonb(o)::text))
+  ON CONFLICT (order_id) DO NOTHING;
+  IF NOT FOUND THEN RAISE EXCEPTION 'amendment_payment_open'; END IF;
+  INSERT INTO private.paid_order_checkout_capture_bindings(
+    reference, order_id, expected_amount_minor, currency, provider_integration_id, order_fingerprint, integration_wallet_checkout
+  ) VALUES (p_reference, o.id, p_expected_amount_minor, p_currency, v_integration,
+    private.paid_order_checkout_fingerprint(o), v_wallet_checkout);
+  RETURN CASE WHEN v_wallet_checkout THEN 'claimed_integration' ELSE 'claimed' END;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.claim_checkout_for_paid_order_amendment(uuid,text,text,text,text,bigint,bigint,bigint)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.claim_checkout_for_paid_order_amendment(uuid,text,text,text,text,bigint,bigint,bigint)
+  TO anon, authenticated;
+
 -- Enforce authoritative net-payable upper bound inside create_payment_transaction
 -- under the order-scoped advisory lock so concurrent wallet/savings redemptions
 -- cannot let a stale pre-credit charge commit.
@@ -820,7 +900,7 @@ BEGIN
       v_order_email
   FROM public.orders o
   WHERE o.id = p_order_id
-  LIMIT 1;
+  FOR UPDATE;
 
   IF v_order_merchant_id IS NULL THEN
     RAISE EXCEPTION 'order_not_found';
@@ -862,6 +942,13 @@ BEGIN
   END IF;
 
   IF v_order_total IS NOT NULL THEN
+    -- Keep lock order aligned with 20261031001000 (orders FOR UPDATE -> wallet -> savings_reversal)
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      ('x' || pg_catalog.substr(pg_catalog.md5(p_order_id::text), 1, 16))::bit(64)::bigint
+    );
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('savings_reversal:' || p_order_id::text, 0)
+    );
     v_net_payable := private.credit_direct_net_payable(
       p_order_id,
       p_merchant_id,
@@ -1013,77 +1100,3 @@ GRANT EXECUTE ON FUNCTION public.create_payment_transaction(
   text,
   jsonb
 ) TO authenticated, service_role;
-
--- Align paid-order amendment checkout claim with the net-payable amount so
--- savings-funded Paystack checkouts do not mismatch o.total.
-CREATE OR REPLACE FUNCTION public.claim_checkout_for_paid_order_amendment(
-  p_order_id uuid, p_tracking_token text, p_gateway text, p_reference text,
-  p_currency text, p_expected_amount_minor bigint,
-  p_platform_fee_minor bigint DEFAULT NULL, p_retained_shipping_minor bigint DEFAULT NULL
-) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
-DECLARE
-  o public.orders%ROWTYPE;
-  v_merchant uuid;
-  v_integration bigint;
-  v_wallet_checkout boolean;
-  v_net_payable numeric;
-BEGIN
-  SELECT merchant_id INTO v_merchant FROM public.orders WHERE id = p_order_id;
-  IF NOT FOUND THEN RETURN 'untracked'; END IF;
-  SELECT paystack_integration_id,integration_wallet_checkout INTO v_integration,v_wallet_checkout
-  FROM private.paid_order_amendment_config WHERE merchant_id = v_merchant FOR SHARE;
-  IF NOT FOUND THEN RETURN 'untracked'; END IF;
-  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text, 0));
-  SELECT * INTO o FROM public.orders WHERE id = p_order_id AND merchant_id = v_merchant FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'order_not_found' USING ERRCODE = 'P0002'; END IF;
-  IF p_tracking_token IS NULL OR NOT COALESCE(public.verify_order_tracking_token(p_order_id, p_tracking_token), false) THEN
-    RAISE EXCEPTION 'checkout_proof_required' USING ERRCODE = '42501';
-  END IF;
-  IF o.payment_status NOT IN ('unpaid', 'pending')
-     OR o.shipping_status NOT IN ('pending', 'processing')
-     OR o.cancelled_at IS NOT NULL
-     OR EXISTS (SELECT 1 FROM private.paid_order_amendments WHERE order_id = o.id) THEN
-    RAISE EXCEPTION 'amendment_payment_open';
-  END IF;
-  IF p_gateway = 'paystack_no_subaccount' AND NOT v_wallet_checkout THEN
-    RAISE EXCEPTION 'checkout_gateway_not_configured';
-  END IF;
-  v_net_payable := private.credit_direct_net_payable(
-    o.id,
-    o.merchant_id,
-    o.total,
-    o.amount_paid,
-    o.wallet_amount_used,
-    o.payment_status
-  );
-  IF v_integration IS NULL OR COALESCE(p_gateway,'') NOT IN ('paystack','paystack_no_subaccount')
-     OR p_currency IS DISTINCT FROM 'NGN'
-     OR p_expected_amount_minor IS NULL OR p_expected_amount_minor <> pg_catalog.round(v_net_payable * 100)::bigint
-     OR p_expected_amount_minor <= 0 OR p_reference IS NULL OR p_reference !~ '^BAC-[A-Z0-9]{12}$'
-     OR COALESCE(o.wallet_amount_used, 0) <> 0 THEN
-    RAISE EXCEPTION 'amendment_ineligible';
-  END IF;
-  IF p_platform_fee_minor IS NOT NULL OR p_retained_shipping_minor IS NOT NULL THEN
-    IF p_platform_fee_minor IS NULL OR p_platform_fee_minor NOT BETWEEN 0 AND p_expected_amount_minor
-      OR p_retained_shipping_minor IS DISTINCT FROM least(
-        pg_catalog.round(private.gigl_order_remaining_retained_shipping(o.id, o.merchant_id) * 100)::bigint,
-        p_expected_amount_minor - p_platform_fee_minor)
-    THEN RAISE EXCEPTION 'checkout_payment_details_changed'; END IF;
-  END IF;
-  INSERT INTO private.paid_order_checkout_claims(
-    order_id, reference, gateway, currency, expected_amount_minor, order_version
-  ) VALUES (o.id, p_reference, 'paystack', p_currency, p_expected_amount_minor, pg_catalog.md5(pg_catalog.to_jsonb(o)::text))
-  ON CONFLICT (order_id) DO NOTHING;
-  IF NOT FOUND THEN RAISE EXCEPTION 'amendment_payment_open'; END IF;
-  INSERT INTO private.paid_order_checkout_capture_bindings(
-    reference, order_id, expected_amount_minor, currency, provider_integration_id, order_fingerprint, integration_wallet_checkout
-  ) VALUES (p_reference, o.id, p_expected_amount_minor, p_currency, v_integration,
-    private.paid_order_checkout_fingerprint(o), v_wallet_checkout);
-  RETURN CASE WHEN v_wallet_checkout THEN 'claimed_integration' ELSE 'claimed' END;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.claim_checkout_for_paid_order_amendment(uuid,text,text,text,text,bigint,bigint,bigint)
-  FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.claim_checkout_for_paid_order_amendment(uuid,text,text,text,text,bigint,bigint,bigint)
-  TO anon, authenticated;

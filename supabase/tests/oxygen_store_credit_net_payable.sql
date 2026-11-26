@@ -238,6 +238,24 @@ BEGIN
     EXCEPTION WHEN check_violation THEN
       IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
     END;
+
+    -- DELETE of wallet or savings ledger rows is also blocked once an Oxygen workflow exists.
+    BEGIN
+      DELETE FROM public.customer_wallet_transactions
+       WHERE source_id = 'ec310000-0000-4000-8000-000000000012'
+         AND source_type = 'order_redemption';
+      RAISE EXCEPTION 'Post-workflow wallet delete bypassed freeze guard';
+    EXCEPTION WHEN check_violation THEN
+      IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
+    END;
+
+    BEGIN
+      DELETE FROM public.customer_savings_redemptions
+       WHERE order_id = 'ec310000-0000-4000-8000-000000000012';
+      RAISE EXCEPTION 'Post-workflow savings delete bypassed freeze guard';
+    EXCEPTION WHEN check_violation THEN
+      IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
+    END;
   END IF;
 
   -- Patched Oxygen helper/activation functions evaluate partial-credit orders without

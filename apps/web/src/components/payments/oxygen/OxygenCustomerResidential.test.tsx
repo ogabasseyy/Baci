@@ -62,6 +62,11 @@ it('submits start_application from step 2 without requiring address or proof upf
   expect(screen.queryByLabelText('Proof of address')).toBeNull();
   fireEvent.click(screen.getByRole('checkbox', { name: /I agree to share/ }));
   flush.mockResolvedValueOnce(false);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue verification' })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );
@@ -69,6 +74,11 @@ it('submits start_application from step 2 without requiring address or proof upf
     'We could not save your details. Check the message above before continuing.'
   );
   expect(submit).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue verification' })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );

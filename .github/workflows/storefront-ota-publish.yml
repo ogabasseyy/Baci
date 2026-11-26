@@ -44,6 +44,11 @@ on:
         required: false
         default: false
         type: boolean
+      allow_unsigned:
+        description: Explicitly allow unsigned production OTA publish when no signing cert is configured
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -55,6 +60,7 @@ concurrency:
 jobs:
   publish:
     if: github.ref == 'refs/heads/main'
+    environment: ${{ inputs.channel == 'production' && 'Production' || 'Preview' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -168,6 +174,9 @@ jobs:
 
       - name: Derive OTA code signing configuration
         env:
+          ACTION: ${{ inputs.action }}
+          CHANNEL: ${{ inputs.channel }}
+          ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
           KEY_ID: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID || vars.OTA_SIGNING_KEY_ID || '' }}
           CERT_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH || '' }}
           CERT_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
@@ -188,6 +197,10 @@ jobs:
               echo "EFFECTIVE_OTA_CERT_PATH=apps/mobile-storefront/${CERT_PATH}"
             } >> "$GITHUB_ENV"
           else
+            if [[ "$ACTION" == "publish" && "$CHANNEL" == "production" && "$ALLOW_UNSIGNED" != "true" ]]; then
+              echo '::error::Production OTA publish requires code signing (EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH) unless allow_unsigned=true is explicitly passed.' >&2
+              exit 1
+            fi
             {
               echo "EFFECTIVE_OTA_SIGNING_KEY_ID="
               echo "EFFECTIVE_OTA_CERT_PATH="

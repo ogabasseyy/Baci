@@ -44,4 +44,27 @@ describe('health and routing', () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: 'Not found' });
   });
+
+  it('returns controlled 500 JSON with no-store on unexpected storage errors', async () => {
+    const bucket = new MockR2Bucket();
+    bucket.get = () => Promise.reject(new Error('sensitive-internal-r2-trace'));
+    const env: OtaWorkerEnv = {
+      OTA_BUCKET: bucket,
+      OTA_ADMIN_TOKEN: 'test-admin-token',
+    };
+    const response = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: {
+          'expo-protocol-version': '1',
+          'expo-platform': 'ios',
+          'expo-runtime-version': '2.1.663-ios-sdk58-rn0880-splashmotion1',
+          'expo-channel-name': 'production',
+        },
+      }),
+      env
+    );
+    expect(response.status).toBe(500);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({ error: 'Internal server error' });
+  });
 });

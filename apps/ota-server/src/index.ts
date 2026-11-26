@@ -55,7 +55,11 @@ export function handleRequest(
 }
 
 export default {
-  fetch(request: Request, env: OtaWorkerEnv): Promise<Response> {
-    return handleRequest(request, env);
+  async fetch(request: Request, env: OtaWorkerEnv): Promise<Response> {
+    try {
+      return await handleRequest(request, env);
+    } catch {
+      return errorResponse('Internal server error', 500);
+    }
   },
 };

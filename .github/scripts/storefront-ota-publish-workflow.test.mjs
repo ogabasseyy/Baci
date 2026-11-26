@@ -27,6 +27,14 @@ test('publish workflow fails closed when signing is enabled without a client-emb
     workflowText,
     /if \[\[ "\$prev_mode" == "rollback_to_embedded" \|\| -z "\$prev_id" \]\]; then/
   );
+  assert.match(
+    workflowText,
+    /environment: \$\{\{ inputs\.channel == 'production' && 'Production' \|\| 'Preview' \}\}/
+  );
+  assert.match(
+    workflowText,
+    /if \[\[ "\$ACTION" == "publish" && "\$CHANNEL" == "production" && "\$ALLOW_UNSIGNED" != "true" \]\]; then/
+  );
 });
 
 test('smoke-check and verify test files copied flat into RUNNER_TEMP run cleanly outside repo layout', () => {

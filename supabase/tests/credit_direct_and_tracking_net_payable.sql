@@ -419,6 +419,31 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'amount_exceeds_total' THEN RAISE; END IF;
   END;
+
+  -- 11. create_payment_transaction preserves partially_paid status while enforcing
+  --     net-payable bounds for an additional installment.
+  v_tx_id := public.create_payment_transaction(
+    'cd710000-0000-4000-8000-000000000002',
+    'cd710000-0000-4000-8000-000000000014',
+    20000,
+    'NGN',
+    'klump',
+    'BAC-PP-KLUMP-01',
+    0,
+    20000,
+    'guest@example.test',
+    'Partial Buyer'
+  );
+  IF v_tx_id IS NULL THEN
+    RAISE EXCEPTION 'Expected partially_paid create_payment_transaction to return transaction id';
+  END IF;
+  IF (
+    SELECT o.payment_status
+    FROM public.orders o
+    WHERE o.id = 'cd710000-0000-4000-8000-000000000014'
+  ) IS DISTINCT FROM 'partially_paid' THEN
+    RAISE EXCEPTION 'create_payment_transaction downgraded partially_paid order status';
+  END IF;
 END $tx_test$;
 
 ROLLBACK;

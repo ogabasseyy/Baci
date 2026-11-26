@@ -107,11 +107,11 @@ describe('createOrSubmitCheckoutOrder with PiggyVest off', () => {
         created_at: '2026-11-25T12:00:00.000Z',
         id: 'order-off-2',
         order_number: 'ORD-OFF-2',
-        payment_status: 'pending',
+        payment_status: 'paid',
         shipping_status: 'pending',
         total: 20_000,
       },
-      wallet: null,
+      wallet: { amountUsed: 20_000, newBalance: 0, transactionId: 'tx-off-2' },
     };
     const mockBnpl = submitBnplCheckout as jest.MockedFunction<
       typeof submitBnplCheckout
@@ -157,5 +157,52 @@ describe('createOrSubmitCheckoutOrder with PiggyVest off', () => {
       creditFields: { wallet_amount_used: 20_000 },
       orderResponse: fallbackOrderResponse,
     });
+  });
+
+  it('propagates rejection when submitBnplCheckout rejects an unpaid zero-due response', async () => {
+    const mockBnpl = submitBnplCheckout as jest.MockedFunction<
+      typeof submitBnplCheckout
+    >;
+    mockBnpl.mockRejectedValueOnce(
+      new Error(
+        'Your store credit could not complete this order. Please try again.'
+      )
+    );
+
+    await expect(
+      createOrSubmitCheckoutOrder({
+        address,
+        boundItemsSnapshot: [],
+        checkoutGeneration: 'gen-off-3',
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada Lovelace',
+        customerPhone: '08012345678',
+        deliveryMethod: 'door',
+        getShippingProvider: () => undefined,
+        isAuthenticated: true,
+        isBNPL: true,
+        isOrderInFlight: { current: true },
+        isVoucherOnlyCart: false,
+        isZeroBalanceOrder: false,
+        liveSavingsSelection: undefined,
+        liveWalletSelection: { use: true, amount: 10_000 },
+        mobileCheckoutIdempotencyRef: { current: null },
+        onOrderCreated: jest.fn(),
+        paymentMethodForOrder: 'klump',
+        paymentSettings: {
+          klump_enabled: true,
+          klump_max_amount: 500_000,
+          klump_min_amount: 10_000,
+        },
+        selectedPayment: 'klump',
+        selectedQuote: undefined,
+        setIsProcessing: jest.fn(),
+        snapshot,
+        walletSelection: { use: true, amount: 10_000 },
+      })
+    ).rejects.toThrow(
+      'Your store credit could not complete this order. Please try again.'
+    );
+    expect(createSubmittedCheckoutOrder).not.toHaveBeenCalled();
   });
 });

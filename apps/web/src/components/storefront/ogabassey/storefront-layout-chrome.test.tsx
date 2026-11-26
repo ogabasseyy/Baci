@@ -162,7 +162,12 @@ describe('OgabasseyLayoutChrome', () => {
 
     const aboutLink = screen.getByRole('link', { name: /about us/i });
     expect(aboutLink).toHaveAttribute('href', '/about');
-    expect(aboutLink).toHaveClass('min-h-6');
+    expect(aboutLink).toHaveClass('min-h-6', 'min-w-6', 'justify-center');
+    expect(screen.getByRole('link', { name: 'FAQ' })).toHaveClass(
+      'min-h-6',
+      'min-w-6',
+      'justify-center'
+    );
   });
 
   it('omits non-publishable warranty links from the immediate fallback footer', () => {

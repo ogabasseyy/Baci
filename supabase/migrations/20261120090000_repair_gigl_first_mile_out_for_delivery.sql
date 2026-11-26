@@ -91,7 +91,7 @@ BEGIN
     WHERE event.id = fm.id AND fm.shipment_id IN (SELECT shipment_id FROM repairable)
     RETURNING event.shipment_id, event.tracking_epoch_id, event.provider_event_key, event.normalized_status
   ), deleted_outbox AS (
-    -- A pending or unstarted out_for_delivery update for a demoted scan must not
+    -- A pending, unstarted or skipped out_for_delivery update for a demoted scan must not
     -- go out, and (never sent) it must not keep occupying the milestone identity
     -- a later genuine out-for-delivery scan needs. Sent history is kept.
     DELETE FROM public.shipment_tracking_notification_outbox AS outbox
@@ -100,8 +100,11 @@ BEGIN
       AND fm.shipment_id IN (SELECT shipment_id FROM repairable)
       AND outbox.notification_kind = 'out_for_delivery'
       AND (
+        -- 'skipped' covers a muted merchant notice (out_for_delivery is off by
+        -- default), which was never sent but still holds the identity.
         outbox.status = 'pending'
-        OR (outbox.status = 'processing' AND outbox.delivery_started_at IS NULL)
+        OR (outbox.status IN ('processing', 'skipped')
+          AND outbox.delivery_started_at IS NULL)
       )
     RETURNING outbox.id
   ), new_status AS (

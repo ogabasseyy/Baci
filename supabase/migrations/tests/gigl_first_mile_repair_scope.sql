@@ -1,6 +1,10 @@
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+\ir ../../tests/pgtap_public_execute.sql
+SET search_path = public, extensions;
 
 SELECT plan(12);
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
 CREATE TEMP TABLE repair_fixture (label text PRIMARY KEY, shipment_id uuid);
 

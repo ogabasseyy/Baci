@@ -1,8 +1,10 @@
 BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+\ir ../../tests/pgtap_public_execute.sql
+SET search_path = public, extensions;
 
 SELECT plan(1);
 
-SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 
 DO $test$

@@ -23,7 +23,6 @@ it('does not submit to Oxygen when the final durable save fails', async () => {
       accountName: 'TEST CUSTOMER',
       checking: false,
       consent: true,
-      hasProof: true,
       checkoutPhone: '08012345678',
       setFieldErrors: jest.fn(),
       setError: jest.fn(),
@@ -34,6 +33,61 @@ it('does not submit to Oxygen when the final durable save fails', async () => {
   await act(async () => result.current.submit());
   expect(onExecute).not.toHaveBeenCalled();
   expect(result.current.label).toBeNull();
+});
+it('surfaces field-specific employment errors and consentError instead of blocking silently', async () => {
+  const setFieldErrors = jest.fn();
+  const setConsentError = jest.fn();
+  const setError = jest.fn();
+  const onExecute = jest.fn();
+  const { result, rerender } = renderHook(
+    ({
+      customFields,
+      consent,
+    }: {
+      customFields: typeof fields & { name_of_employer?: string };
+      consent: boolean;
+    }) =>
+      useOxygenApplicationSubmission({
+        fields: customFields,
+        banks: [{ code: '058', name: 'GT Bank' }],
+        accountName: 'TEST CUSTOMER',
+        checking: false,
+        consent,
+        checkoutPhone: '08012345678',
+        setFieldErrors,
+        setConsentError,
+        setError,
+        save: jest.fn().mockResolvedValue(true),
+        onExecute,
+      }),
+    {
+      initialProps: {
+        customFields: {
+          ...fields,
+          salary_amount: '',
+          name_of_employer: 'x'.repeat(151),
+        },
+        consent: false,
+      },
+    }
+  );
+  await act(async () => result.current.submit());
+  expect(setFieldErrors).toHaveBeenLastCalledWith({
+    salary_amount: 'Enter your monthly income.',
+    name_of_employer: 'Employer name must be 150 characters or fewer.',
+  });
+  expect(setError).toHaveBeenLastCalledWith(
+    'Check the highlighted employment and income details.'
+  );
+  rerender({ customFields: fields, consent: false });
+  await act(async () => result.current.submit());
+  expect(setConsentError).toHaveBeenLastCalledWith(
+    'Accept Oxygen’s terms to continue.'
+  );
+  expect(setError).toHaveBeenLastCalledWith(
+    'Accept Oxygen’s terms before continuing.'
+  );
+  expect(onExecute).not.toHaveBeenCalled();
 });
 it('shows save and code-request phases, fences repeat taps, then unlocks after failure', async () => {
   let finishSave: (saved: boolean) => void = () => {};
@@ -56,7 +110,6 @@ it('shows save and code-request phases, fences repeat taps, then unlocks after f
     accountName: 'TEST CUSTOMER',
     checking: false,
     consent: true,
-    hasProof: true,
     checkoutPhone: '08012345678',
     setFieldErrors: jest.fn(),
     setError: jest.fn(),

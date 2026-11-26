@@ -5,13 +5,19 @@ import { OxygenResidentialFields } from './OxygenResidentialFields';
 
 vi.mock('@/components/address-autocomplete', () => ({
   AddressAutocomplete: ({
+    onChange,
     onError,
     onSelect,
   }: {
+    onChange: (value: string) => void;
     onError: (failed: boolean) => void;
     onSelect: (place: PlaceDetails) => void;
   }) => (
     <>
+      <input
+        aria-label="Find your home address"
+        onChange={(e) => onChange(e.target.value)}
+      />
       <button
         type="button"
         onClick={() =>
@@ -169,6 +175,33 @@ it('keeps a saved landmark editable when restoring a partial entry', () => {
   );
   const input = screen.getByLabelText('Nearby landmark');
   expect(input).toBeVisible();
+  expect(input).not.toBeRequired();
   fireEvent.change(input, { target: { value: 'Ikeja' } });
   expect(input).toBeVisible();
+});
+
+it('does not mark hidden address inputs required and keeps entered fields when search text changes', () => {
+  const onChange = vi.fn();
+  render(
+    <OxygenResidentialFields
+      initial={{
+        street: 'Example Road',
+        city: 'Ikeja',
+        state: 'Lagos',
+        lga: 'Ikeja',
+        house_number: '4',
+      }}
+      file={null}
+      onFile={vi.fn()}
+      onChange={onChange}
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Change address' }));
+  expect(screen.getByLabelText('Street address')).not.toBeVisible();
+  expect(screen.getByLabelText('Street address')).not.toBeRequired();
+  fireEvent.change(screen.getByLabelText('Find your home address'), {
+    target: { value: '' },
+  });
+  expect(screen.getByLabelText('Street address')).toHaveValue('Example Road');
+  expect(onChange).not.toHaveBeenCalled();
 });

@@ -208,6 +208,9 @@ export function OxygenWorkflowBody({
           snapshot={snapshot}
           client={client}
           proof={proof}
+          checkoutAddress={
+            prefill?.home_street ? { kind: 'delivery', fields: prefill } : null
+          }
           busy={busy}
           onExecute={controller.execute}
           onRefresh={() => void command('refresh_kyc')}

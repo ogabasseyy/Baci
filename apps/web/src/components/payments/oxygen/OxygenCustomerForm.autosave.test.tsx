@@ -34,13 +34,18 @@ vi.mock('./use-oxygen-draft', () => ({
   }),
 }));
 vi.mock('@/lib/api-client', () => ({
-  fetchWithCsrf: vi.fn(async () => ({
-    ok: true,
-    json: async () => ({ banks: [{ code: '001', name: 'Test bank' }] }),
-  })),
+  fetchWithCsrf: vi.fn(async (_url: string, options?: RequestInit) => {
+    const body = options?.body ? JSON.parse(String(options.body)) : {};
+    return body.action === 'resolve'
+      ? { ok: true, json: async () => ({ accountName: 'ADA OKON' }) }
+      : {
+          ok: true,
+          json: async () => ({ banks: [{ code: '001', name: 'Test bank' }] }),
+        };
+  }),
 }));
 
-it('restores form fields masked, requires bank reverification, and never restores consent', async () => {
+it('restores step 2 directly with masked identity, reconfirms saved bank in background, and never restores consent', async () => {
   const onProgress = vi.fn();
   render(
     <OxygenCustomerForm
@@ -52,24 +57,27 @@ it('restores form fields masked, requires bank reverification, and never restore
     />
   );
   await waitFor(() =>
-    expect(screen.getByLabelText('Bank')).toHaveTextContent('Test bank')
+    expect(screen.getByLabelText('Account name')).toHaveValue('ADA OKON')
   );
   expect(
-    screen.getByRole('heading', { name: 'Verify your bank account' })
+    screen.getByRole('heading', { name: 'Employment and consent' })
   ).toBeVisible();
-  expect(onProgress).toHaveBeenCalledWith('bank');
+  expect(onProgress).toHaveBeenCalledWith('income');
   expect(screen.getByLabelText('BVN')).toHaveValue('12345678901');
   expect(screen.getByLabelText('BVN')).toHaveAttribute('type', 'password');
   expect(screen.getByLabelText('Date of birth')).toHaveValue('10/02/1990');
   expect(screen.getByLabelText('Account number')).toHaveValue('0123456789');
-  expect(screen.getByLabelText('Account name')).toHaveValue('');
-  expect(screen.getByRole('checkbox', { hidden: true })).not.toBeChecked();
-  const continueButton = screen.getByRole('button', {
-    name: 'Continue to income details',
+  expect(screen.getByRole('checkbox')).not.toBeChecked();
+  const submitButton = screen.getByRole('button', {
+    name: 'Continue verification',
   });
-  expect(continueButton).toBeDisabled();
-  fireEvent.click(continueButton);
-  expect(onProgress).not.toHaveBeenCalledWith('income', 'bank');
+  expect(submitButton).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('heading', { name: 'Verify your bank account' })
+    ).toBeVisible()
+  );
   fireEvent.change(screen.getByLabelText('Account number'), {
     target: { value: '0123456780' },
   });
@@ -96,16 +104,16 @@ it('flushes the current allowed values on field blur', async () => {
     />
   );
   await waitFor(() =>
-    expect(screen.getByLabelText('Bank')).toHaveTextContent('Test bank')
+    expect(screen.getByLabelText('Account name')).toHaveValue('ADA OKON')
   );
   mocks.queue.mockClear();
   mocks.flush.mockClear();
-  fireEvent.change(screen.getByLabelText('Account number'), {
-    target: { value: '0123456780' },
+  fireEvent.change(screen.getByLabelText('Employer'), {
+    target: { value: 'Updated employer' },
   });
-  fireEvent.blur(screen.getByLabelText('Account number'));
-  expect(mocks.queue.mock.calls.at(-1)?.[0].fields.account_number).toBe(
-    '0123456780'
+  fireEvent.blur(screen.getByLabelText('Employer'));
+  expect(mocks.queue.mock.calls.at(-1)?.[0].fields.name_of_employer).toBe(
+    'Updated employer'
   );
   expect(mocks.flush).toHaveBeenCalledOnce();
 });
@@ -148,7 +156,7 @@ it('offers an explicit reload action on conflict and blocks continuation', () =>
       screen.getByText(/Your latest edits have not been saved/)
     ).toBeVisible();
     expect(
-      screen.getByRole('button', { name: 'Continue to income details' })
+      screen.getByRole('button', { name: 'Continue verification' })
     ).toBeDisabled();
   } finally {
     mocks.status = 'saved';

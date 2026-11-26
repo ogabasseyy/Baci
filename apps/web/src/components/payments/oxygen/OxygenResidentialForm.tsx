@@ -56,6 +56,16 @@ export function OxygenResidentialForm({
             ])
           )
         );
+        if (
+          !address.street.trim() ||
+          !address.city.trim() ||
+          !address.state.trim() ||
+          !address.lga.trim() ||
+          !address.house_number.trim()
+        ) {
+          setError('Select or enter your full home address before continuing.');
+          return;
+        }
         setEnteredAddress(address);
         lock.current = true;
         setSending(true);

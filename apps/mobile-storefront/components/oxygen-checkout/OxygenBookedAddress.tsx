@@ -17,6 +17,7 @@ export function OxygenBookedAddress({
   snapshot,
   client,
   proof: prepared,
+  checkoutAddress,
   busy,
   onExecute,
   onRefresh,
@@ -24,6 +25,10 @@ export function OxygenBookedAddress({
   snapshot: OxygenRuntimeSnapshot;
   client: OxygenClient;
   proof?: OxygenTransientFile;
+  checkoutAddress?: {
+    kind: 'pickup' | 'delivery';
+    fields: OxygenFields;
+  } | null;
   busy: boolean;
   onExecute: (
     command: OxygenRuntimeAction,
@@ -39,8 +44,7 @@ export function OxygenBookedAddress({
   const [confirmed, setConfirmed] = useState(false);
   const [recovered, setRecovered] = useState(false);
   const colors = useOxygenColors();
-  const proofScope = JSON.stringify([snapshot.workflowId, fields]);
-  const picked = useOxygenProof(proofScope);
+  const picked = useOxygenProof(snapshot.workflowId);
   useEffect(() => {
     if (loadFailed) return;
     let live = true;
@@ -142,6 +146,7 @@ export function OxygenBookedAddress({
           {!complete || edit || recovered ? (
             <OxygenHomeAddress
               fields={fields}
+              checkoutAddress={checkoutAddress}
               onChange={(patch) => {
                 setEdit(true);
                 setConfirmed(false);

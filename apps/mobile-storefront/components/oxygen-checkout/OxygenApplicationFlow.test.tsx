@@ -71,7 +71,7 @@ describe('native application draft restoration', () => {
       jest.useRealTimers();
     }
   });
-  it('restores fields while requiring missing proof and fresh consent', async () => {
+  it('restores fields without requiring upfront proof and requires fresh consent', async () => {
     const fields = {
       home_street: 'Example Road',
       home_state: 'Lagos',
@@ -88,7 +88,6 @@ describe('native application draft restoration', () => {
         .fn()
         .mockResolvedValue({ banks: [{ code: '001', name: 'Access' }] }),
     } as unknown as OxygenClient;
-    const proof = jest.fn();
     render(
       <OxygenApplicationFlow
         snapshot={snapshot}
@@ -96,15 +95,67 @@ describe('native application draft restoration', () => {
         busy={false}
         scopeKey="user/merchant/workflow"
         onExecute={jest.fn()}
-        onProof={proof}
       />
     );
     await act(async () => {});
     expect(mockStepProps.fields).toEqual(fields);
     expect(mockStepProps.step).toBe(2);
-    expect(mockStepProps.proof).toBeNull();
     expect(mockStepProps.consent).toBe(false);
-    expect(proof).toHaveBeenLastCalledWith(undefined);
+    expect(mockStepProps.consentError).toBeNull();
+  });
+
+  it('reports and clears consentError when submitting without consent', async () => {
+    const client = {
+      draft: {
+        read: jest.fn().mockResolvedValue({
+          version: 3,
+          draft: {
+            step: 2,
+            fields: {
+              first_name: 'Test',
+              last_name: 'Customer',
+              email: 'test@example.com',
+              bvn: '12345678901',
+              nin: '12345678901',
+              date_of_birth: '1990-01-01',
+              bank_code: '058',
+              account_number: '0123456789',
+              employment_status: 'EMPLOYED',
+              salary_amount: '250000',
+              salary_date: '25',
+            },
+          },
+        }),
+        write: jest.fn(),
+      },
+      bankDetails: jest
+        .fn()
+        .mockImplementation(async ({ action }: { action: string }) =>
+          action === 'banks'
+            ? { banks: [{ code: '058', name: 'GT Bank' }] }
+            : { accountName: 'TEST CUSTOMER' }
+        ),
+    } as unknown as OxygenClient;
+    render(
+      <OxygenApplicationFlow
+        snapshot={{ ...snapshot, checkoutPhone: '08012345678' }}
+        client={client}
+        busy={false}
+        scopeKey="consent/check"
+        onExecute={jest.fn()}
+      />
+    );
+    await act(async () => {});
+    await act(async () => mockStepProps.onSubmit());
+    expect(mockStepProps.consentError).toBe(
+      'Accept Oxygen’s terms to continue.'
+    );
+    expect(mockStepProps.error).toBe(
+      'Accept Oxygen’s terms before continuing.'
+    );
+    act(() => mockStepProps.onConsent(true));
+    expect(mockStepProps.consentError).toBeNull();
+    expect(mockStepProps.error).toBeNull();
   });
   it('keeps draft fields and transient proof ownership across the first booking', async () => {
     const client = {

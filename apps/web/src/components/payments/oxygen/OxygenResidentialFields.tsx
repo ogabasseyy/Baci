@@ -159,7 +159,6 @@ export function OxygenResidentialFields({
             placeholder="Search street or area"
             onChange={(value) => {
               setSearch(typeof value === 'string' ? value : value.target.value);
-              update(residentialAddress());
             }}
             onSelect={select}
             onError={setSearchFailed}
@@ -193,29 +192,31 @@ export function OxygenResidentialFields({
             'lga',
             'landmark',
           ] as const
-        ).map((key) => (
-          <label
-            key={key}
-            hidden={
-              !manual && (!address.street || !missingFields.includes(key))
-            }
-            className={`grid gap-1.5 text-xs font-semibold text-gray-700 ${!manual && (!address.street || !missingFields.includes(key)) ? 'hidden' : manual && (key === 'street' || key === 'landmark') ? 'min-[400px]:col-span-2' : ''}`}
-          >
-            {labels[key]}
-            <input
-              className={field}
-              name={`home_${key}`}
-              required
-              maxLength={200}
-              value={address[key]}
-              disabled={disabled}
-              autoComplete="off"
-              onChange={(event) =>
-                update({ ...address, [key]: event.target.value })
-              }
-            />
-          </label>
-        ))}
+        ).map((key) => {
+          const isHidden =
+            !manual && (!address.street || !missingFields.includes(key));
+          return (
+            <label
+              key={key}
+              hidden={isHidden}
+              className={`grid gap-1.5 text-xs font-semibold text-gray-700 ${isHidden ? 'hidden' : manual && (key === 'street' || key === 'landmark') ? 'min-[400px]:col-span-2' : ''}`}
+            >
+              {labels[key]}
+              <input
+                className={field}
+                name={`home_${key}`}
+                required={!isHidden && key !== 'landmark'}
+                maxLength={200}
+                value={address[key]}
+                disabled={disabled}
+                autoComplete="off"
+                onChange={(event) =>
+                  update({ ...address, [key]: event.target.value })
+                }
+              />
+            </label>
+          );
+        })}
       </div>
       <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-dashed border-store-primary/30 bg-white p-4">
         {file ? (

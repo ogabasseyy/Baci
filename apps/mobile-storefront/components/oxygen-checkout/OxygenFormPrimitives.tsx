@@ -34,6 +34,7 @@ export function OxygenField({
   keyboardType,
   secureTextEntry,
   editable = true,
+  maxLength,
 }: {
   label: string;
   value?: string;
@@ -42,6 +43,7 @@ export function OxygenField({
   keyboardType?: KeyboardTypeOptions;
   secureTextEntry?: boolean;
   editable?: boolean;
+  maxLength?: number;
 }) {
   const colors = useOxygenColors();
   const [focused, setFocused] = useState(false);
@@ -58,6 +60,7 @@ export function OxygenField({
           keyboardType={keyboardType}
           secureTextEntry={Boolean(secureTextEntry && !revealed)}
           editable={editable}
+          maxLength={maxLength}
           autoCorrect={false}
           autoCapitalize={keyboardType === 'email-address' ? 'none' : 'words'}
           onFocus={() => setFocused(true)}

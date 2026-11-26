@@ -76,6 +76,7 @@ export function OxygenEmploymentFields({
         value={fields.name_of_employer}
         onChange={(name_of_employer) => onChange({ name_of_employer })}
         editable={!busy}
+        maxLength={150}
         error={errors?.name_of_employer}
       />
       <OxygenField

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
+import { CHAT_REPLY_NOTIFICATION_CATEGORY } from '@baci/shared';
 import { notifyMerchantWithStore } from '@/lib/expo-push-core';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
@@ -42,6 +43,7 @@ function pushContent(input: ChatEventPushInput) {
       data: {
         type: 'customer_message',
         conversation_id: input.conversationId,
+        merchant_id: input.merchantId,
         handover: true,
       },
     };
@@ -51,7 +53,11 @@ function pushContent(input: ChatEventPushInput) {
       ? `New message from ${input.customerName}`
       : 'New customer message',
     body: input.preview || 'A customer sent a message to your store.',
-    data: { type: 'customer_message', conversation_id: input.conversationId },
+    data: {
+      type: 'customer_message',
+      conversation_id: input.conversationId,
+      merchant_id: input.merchantId,
+    },
   };
 }
 
@@ -108,7 +114,12 @@ export async function sendChatEventPush(
       content.title,
       content.body,
       content.data,
-      'general'
+      // Still the general channel: Expo does not show a push for an Android
+      // channel the installed app has not created yet, so moving chat pushes to
+      // a louder channel has to wait until the apps that create it are out.
+      'general',
+      // The Reply box; apps that do not know the category show the plain push.
+      { categoryId: CHAT_REPLY_NOTIFICATION_CATEGORY }
     );
     // The delivery layer reports provider failures as counts and errors
     // instead of throwing, so the status has to be derived from them.

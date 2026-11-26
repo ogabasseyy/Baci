@@ -8,6 +8,20 @@ VALUES
 SELECT set_config('request.jwt.claim.sub','f1ab0000-0000-4000-8000-000000000003',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('f1ab0000-0000-4000-8000-000000000011','f1ab0000-0000-4000-8000-000000000003','pilot-merchant@example.test','Pilot test','oxygen-pilot-fixture');
+DO $$ BEGIN
+ IF EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'merchant_feature_settings'
+    AND column_name = 'oxygen_enabled'
+ ) THEN
+  EXECUTE $sql$
+   UPDATE public.merchant_feature_settings
+   SET oxygen_enabled = true
+   WHERE merchant_id = 'f1ab0000-0000-4000-8000-000000000011'
+  $sql$;
+ END IF;
+END $$;
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES
  ('f1ab0000-0000-4000-8000-000000000021','f1ab0000-0000-4000-8000-000000000011','f1ab0000-0000-4000-8000-000000000001','Pilot','One','pilot-owner@example.test'),

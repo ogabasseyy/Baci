@@ -69,6 +69,7 @@ const merchantFeatureSettingsFields = {
   klump_enabled: z.boolean(),
   klump_min_amount: z.number(),
   klump_max_amount: z.number(),
+  oxygen_enabled: z.boolean(),
   preferred_local_gateway: z.enum(['paystack', 'korapay']),
   preferred_international_gateway: z.enum(['paystack', 'korapay']),
   // Shipping
@@ -144,6 +145,7 @@ export const merchantFeatureSettingsSchema = z.object({
     merchantFeatureSettingsFields.klump_min_amount.default(10_000),
   klump_max_amount:
     merchantFeatureSettingsFields.klump_max_amount.default(1_000_000),
+  oxygen_enabled: merchantFeatureSettingsFields.oxygen_enabled.default(false),
 });
 
 export const merchantFeatureSettingsPatchSchema = z

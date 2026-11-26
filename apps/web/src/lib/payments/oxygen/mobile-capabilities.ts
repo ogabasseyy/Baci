@@ -83,6 +83,31 @@ export async function readOxygenMobileCapabilities(
         : !origins.hosted.length || !origins.selfie.length
           ? 'Hosted verification is not configured.'
           : null;
+    // Mobile staging admission requires `oxygen_enabled === true`. The local-only
+    // web checkout staging flag (`payment-step-availability.ts`) is wired in the
+    // follow-up checkout PR; `public.oxygen_start_workflow` still fails closed (42501).
+    if (reason === null && environment === 'staging') {
+      const featureSettings = await client.rpc(
+        'get_storefront_payment_settings',
+        { p_merchant_id: row.data.merchant_id }
+      );
+      if (
+        featureSettings.error ||
+        !Array.isArray(featureSettings.data) ||
+        featureSettings.data.length !== 1
+      ) {
+        return { ok: false, status: 503 };
+      }
+      const settingsRow = featureSettings.data[0] as
+        | { oxygen_enabled?: unknown }
+        | undefined;
+      if (typeof settingsRow?.oxygen_enabled !== 'boolean') {
+        return { ok: false, status: 503 };
+      }
+      if (!settingsRow.oxygen_enabled) {
+        reason = 'Oxygen is disabled for this storefront.';
+      }
+    }
     if (reason === null && environment === 'production') {
       const admission = await client.rpc('oxygen_storefront_pilot_available', {
         p_merchant_id: row.data.merchant_id,

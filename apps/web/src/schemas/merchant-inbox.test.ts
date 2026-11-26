@@ -1,6 +1,8 @@
+import { CHAT_REPLY_MAX_LENGTH } from '@baci/shared';
 import { describe, expect, it } from 'vitest';
 import {
   MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE,
+  MERCHANT_INBOX_REPLY_MAX_LENGTH,
   merchantInboxConversationIdSchema,
   merchantInboxListQuerySchema,
   merchantInboxMessagesQuerySchema,
@@ -80,5 +82,11 @@ describe('providerInboxConversationListSchema', () => {
     expect(
       providerInboxConversationListSchema.safeParse(page(201)).success
     ).toBe(false);
+  });
+});
+
+describe('MERCHANT_INBOX_REPLY_MAX_LENGTH', () => {
+  it('is the one reply length limit the app and the server share', () => {
+    expect(MERCHANT_INBOX_REPLY_MAX_LENGTH).toBe(CHAT_REPLY_MAX_LENGTH);
   });
 });

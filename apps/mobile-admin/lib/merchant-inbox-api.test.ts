@@ -69,6 +69,23 @@ describe('merchant inbox api', () => {
     );
   });
 
+  it('names the store a reply was meant for, only when asked to', async () => {
+    apiClient.mockResolvedValue({ message });
+
+    await sendInboxReply(5, 'Hi', '11111111-1111-4111-8111-111111111111');
+
+    expect(apiClient).toHaveBeenCalledWith(
+      '/api/merchant/inbox/conversations/5/messages',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          content: 'Hi',
+          merchantId: '11111111-1111-4111-8111-111111111111',
+        }),
+      }
+    );
+  });
+
   it('treats only 4xx answers as definitely not sent', () => {
     expect(
       isDefinitelyNotSent(new NetworkError('x', { statusCode: 403 }))

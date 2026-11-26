@@ -116,6 +116,35 @@ describe('MessagesScreen', () => {
     expect(mocks.refetch).toHaveBeenCalled();
   });
 
+  /** Every loaded page narrowed to nothing, then a request failed. */
+  const failedWithNothingToShow = (isFetchNextPageError: boolean) => ({
+    ...ready([]),
+    error: new Error('down'),
+    hasNextPage: true,
+    isError: true,
+    isFetchNextPageError,
+  });
+
+  it('bugfix: the full-screen retry asks for the next page when that is what failed', () => {
+    mocks.query.mockReturnValue(failedWithNothingToShow(true));
+    render(<MessagesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap to retry' }));
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+    expect(mocks.refetch).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the chats on retry when no further page is what failed', () => {
+    mocks.query.mockReturnValue(failedWithNothingToShow(false));
+    render(<MessagesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap to retry' }));
+
+    expect(mocks.refetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
   it('explains a missing permission instead of a generic error', () => {
     mocks.query.mockReturnValue({
       ...ready([]),

@@ -92,3 +92,53 @@ describe('notifyMerchantWithStore', () => {
     );
   });
 });
+
+describe('notifyMerchantWithStore message shape', () => {
+  const TOKEN = 'ExponentPushToken[abcdefghijklmnop]';
+
+  function deliveryWithExpo() {
+    const sentMessages: Record<string, unknown>[] = [];
+    const expo = {
+      chunkPushNotifications: (messages: Record<string, unknown>[]) => [
+        messages,
+      ],
+      sendPushNotificationsAsync: vi.fn(
+        async (chunk: Record<string, unknown>[]) => {
+          sentMessages.push(...chunk);
+          return chunk.map(() => ({ status: 'ok', id: 'ticket-1' }));
+        }
+      ),
+    };
+    const store = delivery({
+      fetchMerchantTokens: vi.fn(async () => ({
+        data: [{ token: TOKEN, user_id: 'u' }],
+        error: null,
+      })),
+      getExpo: vi.fn(() => expo),
+    } as unknown as Partial<PushDelivery>);
+    return { sentMessages, store };
+  }
+
+  it('carries the category on the push so the app can show its action buttons', async () => {
+    const { sentMessages, store } = deliveryWithExpo();
+
+    await notifyMerchantWithStore(store, 'm', 't', 'b', undefined, 'general', {
+      categoryId: 'chat_reply',
+    });
+
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0]).toMatchObject({
+      categoryId: 'chat_reply',
+      channelId: 'general',
+    });
+  });
+
+  it('adds no category when none is asked for', async () => {
+    const { sentMessages, store } = deliveryWithExpo();
+
+    await notifyMerchantWithStore(store, 'm', 't', 'b', undefined, 'general');
+
+    expect(sentMessages[0]).not.toHaveProperty('categoryId');
+    expect(sentMessages[0]).toMatchObject({ priority: 'default' });
+  });
+});

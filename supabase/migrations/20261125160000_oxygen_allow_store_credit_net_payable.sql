@@ -371,18 +371,7 @@ BEGIN
     '(p_payload->''state''->''booking''->>''product_amount'')::numeric <> oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used,v_order.payment_status)'
   );
 
-  needle := 'SELECT o.total,o.amount_paid,o.wallet_amount_used,';
-  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
-  IF occurrences <> 1 THEN
-    RAISE EXCEPTION 'Unexpected Oxygen runtime SELECT pattern count: %', occurrences;
-  END IF;
-  definition := replace(
-    definition,
-    needle,
-    'SELECT o.total,o.amount_paid,o.wallet_amount_used,o.payment_method,'
-  );
-
-  needle := 'coalesce(b.enabled,false) AND v_order.payment_status=''unpaid''';
+  needle := 'coalesce(b.enabled,false) AND b.environment=w.environment AND v_order.payment_method=''oxygen'' AND v_order.payment_status=''unpaid''';
   occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
   IF occurrences <> 1 THEN
     RAISE EXCEPTION 'Unexpected Oxygen runtime executionEnabled pattern count: %', occurrences;
@@ -390,7 +379,7 @@ BEGIN
   definition := replace(
     definition,
     needle,
-    'coalesce(b.enabled,false) AND v_order.payment_method=''oxygen'' AND COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)),''''),''unpaid'') IN (''unpaid'',''pending'')'
+    'coalesce(b.enabled,false) AND b.environment=w.environment AND v_order.payment_method=''oxygen'' AND COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)),''''),''unpaid'') IN (''unpaid'',''pending'')'
   );
 
   needle := 'CASE WHEN v_order.payment_status<>''unpaid''';
@@ -482,6 +471,17 @@ BEGIN
     'product_amount=oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used,v_order.payment_status)'
   );
 
+  needle := 'v_order.payment_status IS DISTINCT FROM ''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected oxygen_accept_saved_plan status check count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)),''''),''unpaid'') NOT IN (''unpaid'',''pending'')'
+  );
+
   EXECUTE definition;
 END $migration$;
 
@@ -537,6 +537,17 @@ BEGIN
     definition,
     needle,
     '(s->''booking''->>''product_amount'')::numeric IS DISTINCT FROM oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)'
+  );
+
+  needle := 'o.payment_status IS DISTINCT FROM ''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected general_activation_reconcile_conflict status check count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(o.payment_status)),''''),''unpaid'') NOT IN (''unpaid'',''pending'')'
   );
 
   EXECUTE definition;
@@ -605,6 +616,17 @@ BEGIN
     ',(s->>''bookingReference'')::uuid,oxygen_private.order_net_payable_for_order(w.order_id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status),''executing'')'
   );
 
+  needle := 'o.payment_status IS DISTINCT FROM ''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected general_activation status check count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(o.payment_status)),''''),''unpaid'') NOT IN (''unpaid'',''pending'')'
+  );
+
   EXECUTE definition;
 END $migration$;
 
@@ -660,6 +682,17 @@ BEGIN
     'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)=(s->''booking''->>''product_amount'')::numeric'
   );
 
+  needle := 'o.payment_status=''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected authorize_staging_approval_retry status check count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(o.payment_status)),''''),''unpaid'') IN (''unpaid'',''pending'')'
+  );
+
   EXECUTE definition;
 END $migration$;
 
@@ -680,9 +713,21 @@ BEGIN
     needle,
     'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)>0'
   );
+
+  needle := 'o.payment_status=''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected nin_retry_proof status check count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(o.payment_status)),''''),''unpaid'') IN (''unpaid'',''pending'')'
+  );
   EXECUTE definition;
 
   definition := pg_catalog.pg_get_functiondef('public.oxygen_nin_attempt_status(uuid,integer)'::regprocedure);
+  needle := 'o.total>0';
   occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
   IF occurrences <> 1 THEN
     RAISE EXCEPTION 'Unexpected oxygen_nin_attempt_status amount check count: %', occurrences;
@@ -691,6 +736,17 @@ BEGIN
     definition,
     needle,
     'oxygen_private.order_net_payable_for_order(o.id,o.total,o.amount_paid,o.wallet_amount_used,o.payment_status)>0'
+  );
+
+  needle := 'o.payment_status=''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected oxygen_nin_attempt_status status check count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(o.payment_status)),''''),''unpaid'') IN (''unpaid'',''pending'')'
   );
   EXECUTE definition;
 END $migration$;

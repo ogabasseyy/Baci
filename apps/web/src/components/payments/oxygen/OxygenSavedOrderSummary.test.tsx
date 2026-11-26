@@ -138,3 +138,38 @@ it('shows Paid via Oxygen and Amount due ₦0.00 for settled paid orders with wa
   expect(region).toHaveTextContent('Amount due');
   expect(region).toHaveTextContent('₦0.00');
 });
+
+it('shows Amount due with remaining balance for partially_paid orders instead of Financed principal', () => {
+  render(
+    <OxygenSavedOrderSummary
+      order={{
+        id: 'order',
+        customer_name: 'Ada',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 100,
+        shipping_fee: 10,
+        tax_amount: 5,
+        total: 115,
+        payment_status: 'partially_paid',
+        amount_paid: 40,
+        wallet_amount_used: 25,
+        wallet_ledger_used: 25,
+        order_items: [
+          {
+            id: 'line',
+            name: 'Camera',
+            quantity: 1,
+            price: 100,
+            image_url: null,
+            products: null,
+          },
+        ],
+      }}
+    />
+  );
+  const region = screen.getByRole('region', { name: 'Saved order summary' });
+  expect(region).not.toHaveTextContent('Financed principal');
+  expect(region).toHaveTextContent('Amount due');
+  expect(region).toHaveTextContent('₦75.00');
+});

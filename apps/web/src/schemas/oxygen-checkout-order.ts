@@ -45,6 +45,12 @@ export const oxygenCheckoutOrderSchema = z.object({
 
 export const isOxygenPreGatewayStatus = isPreGatewayCreditStatus;
 
+/** Returns true only when an Oxygen order has reached a terminal settled state. */
+export function isOxygenSettledStatus(status?: string | null): boolean {
+  const normalized = (status ?? '').trim().toLowerCase();
+  return normalized === 'paid' || normalized === 'bnpl_approved';
+}
+
 type OxygenOrderCreditFields = Pick<
   z.infer<typeof oxygenCheckoutOrderSchema>,
   | 'total'

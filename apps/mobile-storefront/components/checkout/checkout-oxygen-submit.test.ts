@@ -11,7 +11,14 @@ const receipt = {
   payment_method: 'oxygen',
   currency: 'NGN',
 };
-jest.mock('@/services/orders', () => ({ createOrder: jest.fn() }));
+jest.mock('@/services/orders', () => {
+  const actual =
+    jest.requireActual<typeof import('@/services/orders')>('@/services/orders');
+  return {
+    ...actual,
+    createOrder: jest.fn(),
+  };
+});
 describe('native Oxygen order admission', () => {
   const createOrder = jest.fn();
   const readOwner = jest.fn();
@@ -202,10 +209,11 @@ describe('native Oxygen order admission', () => {
     expect(readOwner).not.toHaveBeenCalled();
     expect(createOrder).not.toHaveBeenCalled();
   });
-  it('routes zero-due or 100%-covered Oxygen orders back to standard non-financing completion instead of throwing', async () => {
+  it('routes zero-due or 100%-covered Oxygen orders back to standard non-financing completion only when settled', async () => {
+    const settledPaidReceipt = { ...receipt, payment_status: 'paid' };
     createOrder.mockResolvedValueOnce({
       amountDueToGateway: 0,
-      order: { ...receipt, total: 0 },
+      order: { ...settledPaidReceipt, total: 0 },
     });
     await expect(
       submitOxygenCheckout(
@@ -222,7 +230,7 @@ describe('native Oxygen order admission', () => {
 
     createOrder.mockResolvedValueOnce({
       amountDueToGateway: 0,
-      order: receipt,
+      order: { ...receipt, payment_status: ' PAID ' },
     });
     await expect(
       submitOxygenCheckout(
@@ -237,11 +245,12 @@ describe('native Oxygen order admission', () => {
       )
     ).resolves.toMatchObject({
       amountDueToGateway: 0,
-      order: receipt,
+      order: settledPaidReceipt,
     });
 
+    const approvedReceipt = { ...receipt, payment_status: 'bnpl_approved' };
     createOrder.mockResolvedValueOnce({
-      order: receipt,
+      order: approvedReceipt,
       wallet: { amountUsed: 5000, newBalance: 0, transactionId: 'tx-1' },
       savings: { amountUsed: 15000, goalId: 'g-1', redemptionId: 'sr-1' },
     });
@@ -258,8 +267,39 @@ describe('native Oxygen order admission', () => {
       )
     ).resolves.toMatchObject({
       amountDueToGateway: 0,
-      order: receipt,
+      order: approvedReceipt,
     });
+
+    for (const unsettledStatus of [
+      undefined,
+      'unpaid',
+      'pending',
+      'partially_paid',
+    ]) {
+      createOrder.mockResolvedValueOnce({
+        amountDueToGateway: 0,
+        order:
+          unsettledStatus === undefined
+            ? receipt
+            : { ...receipt, payment_status: unsettledStatus },
+      });
+      await expect(
+        submitOxygenCheckout(
+          {
+            request,
+            checkoutGeneration: 'g',
+            isAuthenticated: true,
+            hasVoucher: true,
+            hasCredits: true,
+          },
+          { readOwner, createOrder }
+        )
+      ).rejects.toMatchObject({
+        code: 'STORE_CREDIT_NOT_SETTLED',
+        message:
+          'Your store credit could not complete this order. Please try again.',
+      });
+    }
 
     createOrder.mockResolvedValueOnce({
       order: receipt,

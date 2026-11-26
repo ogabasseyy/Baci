@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { type CreateOrderRequest, createOrder } from '@/services/orders';
+import {
+  type CreateOrderRequest,
+  createOrder,
+  OrderError,
+} from '@/services/orders';
 
 type Input = {
   request: CreateOrderRequest;
@@ -99,8 +103,26 @@ export async function submitOxygenCheckout(
   const resolvedAmountDue =
     result.amountDueToGateway ?? Math.max(0, order.total - appliedCredit);
   if (order.total <= 0 || resolvedAmountDue <= 0) {
+    const normalizedPaymentStatus =
+      order.payment_status?.trim().toLowerCase() ?? '';
+    if (
+      normalizedPaymentStatus !== 'paid' &&
+      normalizedPaymentStatus !== 'bnpl_approved'
+    ) {
+      throw new OrderError(
+        'Your store credit could not complete this order. Please try again.',
+        'STORE_CREDIT_NOT_SETTLED'
+      );
+    }
     return {
       ...result,
+      order:
+        normalizedPaymentStatus === order.payment_status
+          ? order
+          : {
+              ...order,
+              payment_status: normalizedPaymentStatus,
+            },
       amountDueToGateway: 0,
     };
   }

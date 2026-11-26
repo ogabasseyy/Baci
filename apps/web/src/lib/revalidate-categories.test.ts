@@ -53,6 +53,19 @@ describe('revalidateCategories', () => {
     );
   });
 
+  it('skips shared product and category-page tags when omitSharedProductTags is true', () => {
+    revalidateCategories(MERCHANT_ID, undefined, {
+      expireImmediately: true,
+      omitSharedProductTags: true,
+    });
+
+    const tags = mocks.revalidateTag.mock.calls.map(([tag]) => tag);
+    expect(tags).toEqual([
+      `categories-${MERCHANT_ID}`,
+      `navigation-categories-${MERCHANT_ID}`,
+    ]);
+  });
+
   it('propagates cache API failures to the mutation caller', () => {
     mocks.revalidateTag.mockImplementationOnce(() => {
       throw new Error('cache unavailable');

@@ -21,7 +21,7 @@ import {
 import {
   getPostHogAssetsHost,
   getPostHogIngestHost,
-  getPostHogProxyPath,
+  getPostHogLocalProxyPath,
   getPostHogPublicBuildEnv,
   getPostHogReleaseVersion,
   getPostHogUiHost,
@@ -101,7 +101,7 @@ const NEXT_DEPLOYMENT_ID = applyNextDeploymentIdEnv();
 const POSTHOG_PUBLIC_BUILD_ENV = getPostHogPublicBuildEnv();
 
 function getPostHogRewriteRules() {
-  const proxyPath = getPostHogProxyPath();
+  const proxyPath = getPostHogLocalProxyPath();
   const assetsHost = getPostHogAssetsHost();
   const ingestHost = getPostHogIngestHost();
 

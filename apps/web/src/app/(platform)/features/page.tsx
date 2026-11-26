@@ -6,16 +6,45 @@ import { FeatureIcon } from '@/components/landing/feature-icon';
 import { RoadmapStrip } from '@/components/landing/roadmap-strip';
 import { PlatformFooter } from '@/components/platform/footer';
 import { PlatformHeader } from '@/components/platform/header';
+import { JsonLd } from '@/components/seo/json-ld';
 import { Button } from '@/components/ui/button';
+import { PLATFORM_CONFIG } from '@/config/platform';
 import {
   PLATFORM_FEATURE_CATEGORIES,
   PLATFORM_SPOTLIGHT_FEATURES,
 } from '@/config/platform-features';
 
+const FEATURES_TITLE = 'Features - Baci';
+const FEATURES_DESCRIPTION =
+  'Explore every built-in Baci capability: AI store builder, price negotiations, discount codes, loyalty tiers, Paystack/BNPL/crypto payments, Mobile Admin, and agentic commerce.';
+
 export const metadata: Metadata = {
-  title: 'Features - Baci',
-  description:
-    'Explore every built-in Baci capability: AI store builder, price negotiations, discount codes, loyalty tiers, Paystack/BNPL/crypto payments, Mobile Admin, and agentic commerce.',
+  title: FEATURES_TITLE,
+  description: FEATURES_DESCRIPTION,
+  alternates: {
+    canonical: `${PLATFORM_CONFIG.url}/features`,
+  },
+  openGraph: {
+    title: FEATURES_TITLE,
+    description: FEATURES_DESCRIPTION,
+    url: `${PLATFORM_CONFIG.url}/features`,
+    siteName: PLATFORM_CONFIG.name,
+    type: 'website',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: FEATURES_TITLE,
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: FEATURES_TITLE,
+    description: FEATURES_DESCRIPTION,
+    images: ['/opengraph-image'],
+  },
 };
 
 export default function FeaturesPage() {
@@ -27,6 +56,26 @@ export default function FeaturesPage() {
   return (
     <AppBody>
       <div className="flex flex-col min-h-screen bg-background font-sans selection:bg-accent/30">
+        <JsonLd
+          data={{
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: 'Home',
+                item: PLATFORM_CONFIG.url,
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: 'Features',
+                item: `${PLATFORM_CONFIG.url}/features`,
+              },
+            ],
+          }}
+        />
         <PlatformHeader />
         <main id="main-content" className="flex-1 pt-24 pb-20">
           {/* Header & Spotlight */}

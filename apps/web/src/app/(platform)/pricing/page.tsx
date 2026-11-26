@@ -1,15 +1,44 @@
-import { Check, Minus, Sparkles } from 'lucide-react';
+import { Check, CheckCircle2, Minus, Sparkles } from 'lucide-react';
 import type { Metadata, Route } from 'next';
 import Link from 'next/link';
 import AppBody from '@/components/app-body';
 import { PlatformFooter } from '@/components/platform/footer';
 import { PlatformHeader } from '@/components/platform/header';
+import { JsonLd } from '@/components/seo/json-ld';
 import { Button } from '@/components/ui/button';
+import { PLATFORM_CONFIG } from '@/config/platform';
+
+const PRICING_TITLE = 'Pricing - Baci';
+const PRICING_DESCRIPTION =
+  'Simple, transparent NGN pricing for your online store—start free and unlock custom domains, Jumia sync, ad CAPI, and multi-branch teams as you grow.';
 
 export const metadata: Metadata = {
-  title: 'Pricing - Baci',
-  description:
-    'Simple, transparent NGN pricing for your online store—start free and unlock custom domains, Jumia sync, ad CAPI, and multi-branch teams as you grow.',
+  title: PRICING_TITLE,
+  description: PRICING_DESCRIPTION,
+  alternates: {
+    canonical: `${PLATFORM_CONFIG.url}/pricing`,
+  },
+  openGraph: {
+    title: PRICING_TITLE,
+    description: PRICING_DESCRIPTION,
+    url: `${PLATFORM_CONFIG.url}/pricing`,
+    siteName: PLATFORM_CONFIG.name,
+    type: 'website',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: PRICING_TITLE,
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: PRICING_TITLE,
+    description: PRICING_DESCRIPTION,
+    images: ['/opengraph-image'],
+  },
 };
 
 type PricingPlan = {
@@ -174,6 +203,26 @@ export default function PricingPage() {
   return (
     <AppBody>
       <div className="flex flex-col min-h-screen bg-background font-sans selection:bg-accent/30">
+        <JsonLd
+          data={{
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              {
+                '@type': 'ListItem',
+                position: 1,
+                name: 'Home',
+                item: PLATFORM_CONFIG.url,
+              },
+              {
+                '@type': 'ListItem',
+                position: 2,
+                name: 'Pricing',
+                item: `${PLATFORM_CONFIG.url}/pricing`,
+              },
+            ],
+          }}
+        />
         <PlatformHeader />
         <main id="main-content" className="flex-1 pt-24 pb-20">
           <section className="container px-4 md:px-6">
@@ -296,6 +345,25 @@ export default function PricingPage() {
                 </tbody>
               </table>
             </div>
+
+            <ul
+              aria-label="Billing guarantees"
+              className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground"
+            >
+              {[
+                'No hidden Baci transaction fees on Pro & Premium',
+                'Automated weekly Paystack & Korapay settlements',
+                'Switch plans or cancel anytime',
+              ].map((guarantee) => (
+                <li key={guarantee} className="inline-flex items-center gap-2">
+                  <CheckCircle2
+                    className="size-4 text-accent shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>{guarantee}</span>
+                </li>
+              ))}
+            </ul>
           </section>
         </main>
         <PlatformFooter />

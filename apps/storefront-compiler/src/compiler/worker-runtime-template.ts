@@ -1,4 +1,7 @@
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
+import { buildContentSecurityPolicyHeader } from './csp-header';
+
+export { buildContentSecurityPolicyHeader };
 
 export function buildWorkerSsrEntrySource(options: {
   manifest: WorkerStorefrontManifest;
@@ -9,6 +12,7 @@ export function buildWorkerSsrEntrySource(options: {
   const entryImportPath = `./${manifest.entry}`;
   const themeTokensJson = JSON.stringify(manifest.themeTokens);
   const declaredRoutesJson = JSON.stringify(manifest.routes);
+  const cspHeaderValue = buildContentSecurityPolicyHeader(manifest);
 
   return `
 import { createElement } from 'react';
@@ -17,6 +21,8 @@ import StorefrontApp from ${JSON.stringify(entryImportPath)};
 
 const THEME_TOKENS = ${themeTokensJson};
 const DECLARED_ROUTES = ${declaredRoutesJson};
+const CSP_HEADER = ${JSON.stringify(cspHeaderValue)};
+const EMPTY_FACETS = { brands: [], conditions: [], totalMatches: 0 };
 
 function escapeHtmlAttr(value) {
   return String(value)
@@ -43,7 +49,49 @@ function resolveMerchantSlug(url, request) {
   return host.split('.')[0] || 'store';
 }
 
-const EMPTY_FACETS = { brands: [], conditions: [], totalMatches: 0 };
+function safeDecodeSegment(raw) {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
+function matchDeclaredRoute(pathname) {
+  const reqSegs = pathname.split('/').filter(Boolean);
+  for (const route of DECLARED_ROUTES) {
+    const patSegs = route.path.split('/').filter(Boolean);
+    if (patSegs.length !== reqSegs.length) continue;
+    const params = {};
+    let matched = true;
+    for (let i = 0; i < patSegs.length; i++) {
+      const pat = patSegs[i];
+      const seg = reqSegs[i];
+      if (pat.startsWith(':') || (pat.startsWith('[') && pat.endsWith(']'))) {
+        const decoded = safeDecodeSegment(seg);
+        if (decoded === null) return { view: 'bad_request', params: {} };
+        params[pat.startsWith(':') ? pat.slice(1) : pat.slice(1, -1)] = decoded;
+      } else if (pat !== seg) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return { view: route.view, params };
+  }
+  return null;
+}
+
+async function fetchCatalogJson(endpointUrl) {
+  try {
+    const res = await fetch(endpointUrl);
+    if (!res.ok) return { ok: false, status: res.status };
+    const data = await res.json();
+    if (!data || typeof data !== 'object') return { ok: false, status: 502 };
+    return { ok: true, data };
+  } catch {
+    return { ok: false, status: 502 };
+  }
+}
 
 export default {
   async fetch(request) {
@@ -51,99 +99,111 @@ export default {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Method Not Allowed', {
         status: 405,
-        headers: { Allow: 'GET, HEAD' },
+        headers: {
+          Allow: 'GET, HEAD',
+          'content-security-policy': CSP_HEADER,
+        },
       });
     }
 
     const url = new URL(request.url);
-    const segments = url.pathname.split('/').filter(Boolean);
     const merchantSlug = resolveMerchantSlug(url, request);
     const spoofProbe = url.searchParams.get('__spoof_merchant');
     const spoofSuffix = spoofProbe ? \`&merchantId=\${encodeURIComponent(spoofProbe)}\` : '';
 
+    const matchedRoute = matchDeclaredRoute(url.pathname);
+    if (matchedRoute && matchedRoute.view === 'bad_request') {
+      return new Response('Bad Request', {
+        status: 400,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'content-security-policy': CSP_HEADER,
+          'x-robots-tag': 'noindex, nofollow',
+        },
+      });
+    }
     let status = 200;
-    let view = 'home';
+    let view = matchedRoute ? matchedRoute.view : 'not_found';
     let title = 'Storefront';
     let products = [];
     let facets = EMPTY_FACETS;
     let productDetail = null;
 
-    if (segments.length === 0) {
-      view = 'home';
-      const res = await fetch(\`https://catalog.baci.internal/v1/search?limit=12\${spoofSuffix}\`);
-      const data = await res.json();
-      title = data.title || 'Featured Devices';
-      products = data.products || [];
-      facets = data.facets || EMPTY_FACETS;
-    } else if (segments.length === 1 && segments[0] === 'search') {
-      view = 'search';
+    if (!matchedRoute) {
+      status = 404;
+      view = 'not_found';
+      title = 'Page Not Found';
+    } else if (matchedRoute.view === 'home') {
+      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?limit=12\${spoofSuffix}\`);
+      if (!upstream.ok) {
+        status = 502;
+        title = 'Catalog Temporarily Unavailable';
+      } else {
+        title = upstream.data.title || 'Featured Devices';
+        products = upstream.data.products || [];
+        facets = upstream.data.facets || EMPTY_FACETS;
+      }
+    } else if (matchedRoute.view === 'search') {
       const passthrough = new URLSearchParams(url.searchParams);
       passthrough.delete('__spoof_merchant');
-      const res = await fetch(\`https://catalog.baci.internal/v1/search?\${passthrough.toString()}\${spoofSuffix}\`);
-      const data = await res.json();
-      title = data.title || 'Search Catalog';
-      products = data.products || [];
-      facets = data.facets || EMPTY_FACETS;
-    } else if (segments.length === 1 && segments[0] === 'cart') {
-      const claimsCart = DECLARED_ROUTES.some((r) => r.path === '/cart');
-      if (!claimsCart) {
-        status = 404;
-        view = 'not_found';
-        title = 'Not Found';
+      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?\${passthrough.toString()}\${spoofSuffix}\`);
+      if (!upstream.ok) {
+        status = 502;
+        title = 'Search Temporarily Unavailable';
       } else {
-        view = 'cart';
-        title = 'Your Cart';
+        title = upstream.data.title || 'Search Catalog';
+        products = upstream.data.products || [];
+        facets = upstream.data.facets || EMPTY_FACETS;
       }
-    } else if (
-      segments.length === 2 &&
-      (segments[0] === 'products' || segments[0] === 'product')
-    ) {
-      view = 'product';
-      const res = await fetch(
-        \`https://catalog.baci.internal/v1/product?productSlug=\${encodeURIComponent(segments[1])}\${spoofSuffix}\`
+    } else if (matchedRoute.view === 'cart') {
+      title = 'Your Cart';
+    } else if (matchedRoute.view === 'editorial') {
+      title = matchedRoute.params.slug || matchedRoute.params.page || 'Editorial';
+    } else if (matchedRoute.view === 'collection') {
+      const categoryParam =
+        matchedRoute.params.category ||
+        matchedRoute.params.handle ||
+        url.pathname.split('/').filter(Boolean)[0] ||
+        '';
+      const upstream = await fetchCatalogJson(
+        \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\${spoofSuffix}\`
       );
-      const data = await res.json();
-      if (!data.product) {
-        status = 404;
-        view = 'not_found';
-        title = 'Product Not Found';
-      } else {
-        productDetail = data.product;
-        title = data.product.name;
-      }
-    } else if (segments.length === 1) {
-      view = 'collection';
-      const res = await fetch(
-        \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(segments[0])}\${spoofSuffix}\`
-      );
-      const data = await res.json();
-      if (!data.categoryExists) {
+      if (!upstream.ok) {
+        status = 502;
+        title = 'Category Temporarily Unavailable';
+      } else if (!upstream.data.categoryExists) {
         status = 404;
         view = 'not_found';
         title = 'Category Not Found';
       } else {
-        title = data.title || segments[0];
-        products = data.products || [];
-        facets = data.facets || EMPTY_FACETS;
+        title = upstream.data.title || categoryParam;
+        products = upstream.data.products || [];
+        facets = upstream.data.facets || EMPTY_FACETS;
       }
-    } else if (segments.length === 2) {
-      view = 'product';
-      const res = await fetch(
-        \`https://catalog.baci.internal/v1/product?category=\${encodeURIComponent(segments[0])}&productSlug=\${encodeURIComponent(segments[1])}\${spoofSuffix}\`
+    } else if (matchedRoute.view === 'product') {
+      const productSlug =
+        matchedRoute.params.productSlug ||
+        matchedRoute.params.slug ||
+        matchedRoute.params.handle ||
+        url.pathname.split('/').filter(Boolean).pop() ||
+        '';
+      const categoryQuery = matchedRoute.params.category
+        ? \`category=\${encodeURIComponent(matchedRoute.params.category)}&\`
+        : '';
+      const upstream = await fetchCatalogJson(
+        \`https://catalog.baci.internal/v1/product?\${categoryQuery}productSlug=\${encodeURIComponent(productSlug)}\${spoofSuffix}\`
       );
-      const data = await res.json();
-      if (!data.product) {
+      if (!upstream.ok) {
+        status = 502;
+        title = 'Product Temporarily Unavailable';
+      } else if (!upstream.data.product) {
         status = 404;
         view = 'not_found';
         title = 'Product Not Found';
       } else {
-        productDetail = data.product;
-        title = data.product.name;
+        productDetail = upstream.data.product;
+        title = upstream.data.product.name;
       }
-    } else {
-      status = 404;
-      view = 'not_found';
-      title = 'Page Not Found';
     }
 
     const renderProps = {
@@ -157,11 +217,14 @@ export default {
     };
 
     const renderStart = performance.now();
-    const appHtml = renderToString(createElement(StorefrontApp, renderProps));
+    const appHtml =
+      status === 502
+        ? \`<main class="storefront-shell min-h-screen p-8 max-w-3xl mx-auto"><h1>\${escapeHtmlAttr(title)}</h1><p>Please try again in a moment.</p></main>\`
+        : renderToString(createElement(StorefrontApp, renderProps));
     const renderMs = performance.now() - renderStart;
 
     const jsonLd =
-      view === 'product' && productDetail
+      status === 200 && view === 'product' && productDetail
         ? {
             '@context': 'https://schema.org',
             '@type': 'Product',
@@ -184,7 +247,7 @@ export default {
           };
 
     const robotsMeta =
-      status === 404
+      status !== 200
         ? '<meta name="robots" content="noindex, nofollow" />'
         : '<meta name="robots" content="index, follow" />';
 
@@ -211,6 +274,7 @@ export default {
       status,
       headers: {
         'content-type': 'text/html; charset=utf-8',
+        'content-security-policy': CSP_HEADER,
         'server-timing': \`ssr;dur=\${renderMs.toFixed(2)},total;dur=\${totalMs.toFixed(2)}\`,
       },
     });

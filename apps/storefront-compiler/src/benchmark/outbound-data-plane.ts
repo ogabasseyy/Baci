@@ -27,6 +27,39 @@ export interface OutboundTelemetry {
   spoofedTenantIgnoredCount: number;
 }
 
+function applyVariantStockOverlayToJson(
+  cachedBody: string,
+  variantStockById: Readonly<Record<string, boolean>>
+): string {
+  const parsed = JSON.parse(cachedBody) as {
+    products?: PublicProjectedProduct[];
+    product?: PublicProjectedProduct | null;
+    [key: string]: unknown;
+  };
+
+  const mergeProduct = (
+    product: PublicProjectedProduct
+  ): PublicProjectedProduct => {
+    const mergedVariants = product.variants.map((variant) => ({
+      ...variant,
+      inStock: variantStockById[variant.id] ?? variant.inStock,
+    }));
+    return {
+      ...product,
+      variants: mergedVariants,
+      inStock: mergedVariants.some((v) => v.inStock),
+    };
+  };
+
+  if (Array.isArray(parsed.products)) {
+    parsed.products = parsed.products.map(mergeProduct);
+  }
+  if (parsed.product) {
+    parsed.product = mergeProduct(parsed.product);
+  }
+  return JSON.stringify(parsed);
+}
+
 /**
  * Simulates Supabase PostgREST + Outbound Worker `caches.default` behavior,
  * enforcing trusted WfP outbound parameter tenant binding and comparing
@@ -87,13 +120,22 @@ export class SimulatedPostgrestOutboundPlane {
     this.nowMs += deltaMs;
   }
 
-  public recordInventoryWrite(merchantId: string, variantIndex: number): void {
+  public recordInventoryWrite(
+    merchantId: string,
+    variantIndex: number,
+    explicitQty?: number
+  ): void {
     const catalog = this.catalogByMerchant.get(merchantId);
     if (!catalog || catalog.length === 0) return;
     const product = catalog[variantIndex % catalog.length];
-    const variant = product.variants[0];
-    if (variant) {
-      variant.stockQty = variant.stockQty > 0 ? variant.stockQty - 1 : 8;
+    if (!product) return;
+    if (explicitQty !== undefined) {
+      for (const variant of product.variants) {
+        variant.stockQty = explicitQty;
+      }
+    } else if (product.variants[0]) {
+      product.variants[0].stockQty =
+        product.variants[0].stockQty > 0 ? product.variants[0].stockQty - 1 : 8;
     }
     this.coupledGen.set(merchantId, (this.coupledGen.get(merchantId) ?? 1) + 1);
     this.availabilityGen.set(
@@ -197,21 +239,31 @@ export class SimulatedPostgrestOutboundPlane {
       });
     }
 
+    let responseJson = baseJson;
     if (strategy === 'split-availability') {
       const availKey = `https://cache.baci.internal/v1/${merchantId}/avail/${generations.availability}/${queryHash}`;
       const availHit = this.edgeCache.get(availKey);
-      if (!availHit || availHit.expiresAtMs <= this.nowMs) {
+      let availJson: string;
+      if (availHit && availHit.expiresAtMs > this.nowMs) {
+        availJson = availHit.body;
+      } else {
         this.telemetry.originAvailabilityRpcCalls += 1;
         await this.simulateOriginDelay(this.originRpcLatencyMs * 0.2);
-        const stockMap = this.computeCompactStockOverlay(merchantId, baseJson);
+        const variantMap = this.computeVariantStockOverlay(
+          merchantId,
+          baseJson
+        );
+        availJson = JSON.stringify(variantMap);
         this.edgeCache.set(availKey, {
-          body: JSON.stringify(stockMap),
+          body: availJson,
           expiresAtMs: this.nowMs + 86_400_000,
         });
       }
+      const parsedOverlay = JSON.parse(availJson) as Record<string, boolean>;
+      responseJson = applyVariantStockOverlayToJson(baseJson, parsedOverlay);
     }
 
-    return new Response(baseJson, {
+    return new Response(responseJson, {
       status: 200,
       headers: {
         'content-type': 'application/json; charset=utf-8',
@@ -221,7 +273,7 @@ export class SimulatedPostgrestOutboundPlane {
     });
   }
 
-  private computeCompactStockOverlay(
+  private computeVariantStockOverlay(
     merchantId: string,
     cachedBody: string
   ): Record<string, boolean> {
@@ -231,14 +283,15 @@ export class SimulatedPostgrestOutboundPlane {
     };
     const rows = this.catalogByMerchant.get(merchantId) ?? [];
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const overlay: Record<string, boolean> = {};
+    const variantOverlay: Record<string, boolean> = {};
     const targets = parsed.products ?? (parsed.product ? [parsed.product] : []);
     for (const item of targets) {
       const backing = byId.get(item.id);
-      if (backing) {
-        overlay[item.id] = backing.variants.some((v) => v.stockQty > 0);
+      if (!backing) continue;
+      for (const variant of backing.variants) {
+        variantOverlay[variant.id] = variant.stockQty > 0;
       }
     }
-    return overlay;
+    return variantOverlay;
   }
 }

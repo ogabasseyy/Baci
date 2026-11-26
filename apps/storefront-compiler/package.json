@@ -8,15 +8,17 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --external:esbuild --external:tailwindcss --external:@typescript/typescript6 --outfile=dist/cli.mjs",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "typecheck:ci": "pnpm run typecheck",
-    "test": "vitest run",
+    "test": "pnpm run build && vitest run",
     "benchmark": "node --import tsx src/benchmark/cli.ts"
   },
   "dependencies": {
     "@baci/experience-sdk": "workspace:*",
     "@baci/shared": "workspace:*",
+    "@typescript/typescript6": "~6.0.2",
     "esbuild": "0.28.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",

@@ -1,4 +1,12 @@
+import ts from '@typescript/typescript6';
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
+import {
+  DYNAMIC_CODE_NAMES,
+  isProhibitedImportSpecifier,
+  SENSITIVE_GLOBAL_ROOTS,
+} from './banned-specifiers';
+
+export { isProhibitedImportSpecifier };
 
 export interface SourceSafetyViolation {
   filePath: string;
@@ -11,145 +19,92 @@ export interface SourceSafetyViolation {
   detail: string;
 }
 
-const BANNED_RUNTIME_SPECIFIERS: ReadonlySet<string> = new Set([
-  'fs',
-  'fs/promises',
-  'path',
-  'os',
-  'child_process',
-  'cluster',
-  'crypto',
-  'dgram',
-  'dns',
-  'http',
-  'http2',
-  'https',
-  'inspector',
-  'module',
-  'net',
-  'perf_hooks',
-  'process',
-  'readline',
-  'repl',
-  'stream',
-  'tls',
-  'tty',
-  'url',
-  'util',
-  'v8',
-  'vm',
-  'worker_threads',
-  'zlib',
-]);
-
-const IMPORT_KEYWORD_PREFIX_RE = /(?:^|[^\w$])(?:import|from)\s*(?:\(\s*)?$/;
-
 /**
- * Strips JS/TS comments and masks string/template literal contents so checks do
- * not false-positive on comments or product copy. When `preserveImportSpecifiers`
- * is true, string literals immediately following `import` / `from` / `import(`
- * remain intact so executable import specifiers can be inspected accurately.
+ * Constant-folds string literals, templates, and `+` concatenations so
+ * obfuscated forms like `'dangerously' + 'SetInnerHTML'` or `globalThis['ev' + 'al']`
+ * resolve to their runtime string value.
  */
-function sanitizeSourceForStaticScan(
-  source: string,
-  preserveImportSpecifiers: boolean
-): string {
-  let out = '';
-  let i = 0;
-  const len = source.length;
-  while (i < len) {
-    const ch = source[i];
-    const next = source[i + 1];
-    if (ch === '/' && next === '/') {
-      out += ' ';
-      i += 2;
-      while (i < len && source[i] !== '\n') i++;
-      continue;
-    }
-    if (ch === '/' && next === '*') {
-      out += ' ';
-      i += 2;
-      while (i < len && !(source[i] === '*' && source[i + 1] === '/')) i++;
-      i += 2;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      const quote = ch;
-      const keepLiteral =
-        preserveImportSpecifiers &&
-        IMPORT_KEYWORD_PREFIX_RE.test(out.slice(-48));
-      out += quote;
-      i++;
-      while (i < len && source[i] !== quote) {
-        if (source[i] === '\\') {
-          if (keepLiteral) out += source.slice(i, i + 2);
-          i += 2;
-        } else {
-          if (keepLiteral) out += source[i];
-          i++;
-        }
-      }
-      out += quote;
-      i++;
-      continue;
-    }
-    if (ch === '`') {
-      out += '""';
-      i++;
-      while (i < len && source[i] !== '`') {
-        if (source[i] === '\\') {
-          i += 2;
-        } else if (source[i] === '$' && source[i + 1] === '{') {
-          out += ' + (';
-          i += 2;
-          let depth = 1;
-          let expr = '';
-          while (i < len && depth > 0) {
-            if (source[i] === '{') depth++;
-            else if (source[i] === '}') depth--;
-            if (depth > 0) expr += source[i];
-            i++;
-          }
-          out += `${sanitizeSourceForStaticScan(expr, preserveImportSpecifiers)}) + ""`;
-        } else {
-          i++;
-        }
-      }
-      i++;
-      continue;
-    }
-    out += ch;
-    i++;
+function resolveStaticString(node: ts.Expression): string | null {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
   }
-  return out;
-}
-
-export function isProhibitedImportSpecifier(specifier: string): boolean {
-  const trimmed = specifier.trim();
   if (
-    trimmed.startsWith('node:') ||
-    trimmed.startsWith('cloudflare:') ||
-    trimmed.startsWith('workerd:') ||
-    trimmed.startsWith('bun:') ||
-    trimmed.startsWith('deno:') ||
-    trimmed.startsWith('http:') ||
-    trimmed.startsWith('https:') ||
-    trimmed.startsWith('data:') ||
-    trimmed.startsWith('file:')
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isTypeAssertionExpression(node)
   ) {
-    return true;
+    return resolveStaticString(node.expression);
   }
-  const rootName = trimmed.startsWith('@')
-    ? trimmed.split('/').slice(0, 2).join('/')
-    : (trimmed.split('/')[0] ?? '');
-  return (
-    BANNED_RUNTIME_SPECIFIERS.has(trimmed) ||
-    BANNED_RUNTIME_SPECIFIERS.has(rootName)
-  );
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    const left = resolveStaticString(node.left);
+    const right = resolveStaticString(node.right);
+    return left !== null && right !== null ? left + right : null;
+  }
+  if (ts.isTemplateExpression(node)) {
+    let acc = node.head.text;
+    for (const span of node.templateSpans) {
+      const mid = resolveStaticString(span.expression);
+      if (mid === null) return null;
+      acc += mid + span.literal.text;
+    }
+    return acc;
+  }
+  return null;
 }
 
-const STATIC_OR_DYNAMIC_IMPORT_RE =
-  /(?:^|[^\w$])(?:import\s+(?:[^'"]*?\s+from\s+)?|export\s+[^'"]*?\s+from\s+|import\s*\()\s*['"]([^'"]+)['"]/g;
+function scriptKindForPath(filePath: string): ts.ScriptKind {
+  if (filePath.endsWith('.tsx')) return ts.ScriptKind.TSX;
+  if (filePath.endsWith('.jsx')) return ts.ScriptKind.JSX;
+  if (filePath.endsWith('.js')) return ts.ScriptKind.JS;
+  return ts.ScriptKind.TS;
+}
+
+function classifyMemberName(
+  filePath: string,
+  memberName: string,
+  violations: SourceSafetyViolation[]
+): void {
+  if (memberName === 'dangerouslySetInnerHTML' || memberName === '__html') {
+    violations.push({
+      filePath,
+      rule: 'DANGEROUS_INNER_HTML',
+      detail: `Forbidden raw HTML property "${memberName}"`,
+    });
+  } else if (DYNAMIC_CODE_NAMES.has(memberName)) {
+    violations.push({
+      filePath,
+      rule: 'DYNAMIC_CODE_EVAL',
+      detail: `Dynamic code access via "${memberName}" is forbidden`,
+    });
+  } else if (memberName === 'serviceWorker') {
+    violations.push({
+      filePath,
+      rule: 'SERVICE_WORKER_ACCESS',
+      detail:
+        'Service Worker registration or control is forbidden on storefronts',
+    });
+  } else if (memberName === 'cookie' || memberName === 'cookieStore') {
+    violations.push({
+      filePath,
+      rule: 'DIRECT_COOKIE_ACCESS',
+      detail:
+        'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
+    });
+  }
+}
+
+function unwrapIdentifierName(expr: ts.Expression): string | null {
+  if (ts.isIdentifier(expr)) return expr.text;
+  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
+    return unwrapIdentifierName(expr.expression);
+  }
+  return null;
+}
 
 export function scanManifestSourceSafety(
   manifest: WorkerStorefrontManifest
@@ -159,62 +114,152 @@ export function scanManifestSourceSafety(
   for (const file of manifest.files) {
     if (file.path.endsWith('.css')) continue;
 
-    const importScanSource = sanitizeSourceForStaticScan(file.content, true);
-    for (const match of importScanSource.matchAll(
-      STATIC_OR_DYNAMIC_IMPORT_RE
-    )) {
-      const specifier = match[1] ?? '';
-      if (specifier && isProhibitedImportSpecifier(specifier)) {
+    const sourceFile = ts.createSourceFile(
+      file.path,
+      file.content,
+      ts.ScriptTarget.Latest,
+      true,
+      scriptKindForPath(file.path)
+    );
+
+    const visit = (node: ts.Node): void => {
+      if (ts.isTypeNode(node)) return;
+
+      if (
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier &&
+        ts.isStringLiteral(node.moduleSpecifier) &&
+        isProhibitedImportSpecifier(node.moduleSpecifier.text)
+      ) {
         violations.push({
           filePath: file.path,
           rule: 'PROHIBITED_RUNTIME_IMPORT',
-          detail: `Prohibited runtime specifier "${specifier}"`,
+          detail: `Prohibited runtime specifier "${node.moduleSpecifier.text}"`,
         });
       }
-    }
 
-    const stripped = sanitizeSourceForStaticScan(file.content, false);
+      if (
+        ts.isCallExpression(node) &&
+        node.expression.kind === ts.SyntaxKind.ImportKeyword
+      ) {
+        const spec = node.arguments[0]
+          ? resolveStaticString(node.arguments[0])
+          : null;
+        if (spec === null) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DYNAMIC_CODE_EVAL',
+            detail: 'Non-literal dynamic import() is forbidden',
+          });
+        } else if (isProhibitedImportSpecifier(spec)) {
+          violations.push({
+            filePath: file.path,
+            rule: 'PROHIBITED_RUNTIME_IMPORT',
+            detail: `Prohibited runtime specifier "${spec}"`,
+          });
+        }
+      }
 
-    if (
-      /\beval\s*\(/.test(stripped) ||
-      /\bnew\s+Function\s*\(/.test(stripped) ||
-      /\bFunction\s*\(/.test(stripped)
-    ) {
-      violations.push({
-        filePath: file.path,
-        rule: 'DYNAMIC_CODE_EVAL',
-        detail: 'Dynamic code evaluation (eval / Function) is forbidden',
-      });
-    }
+      if (ts.isJsxAttribute(node)) {
+        classifyMemberName(
+          file.path,
+          node.name.getText(sourceFile),
+          violations
+        );
+      }
 
-    if (/\bserviceWorker\b/.test(stripped)) {
-      violations.push({
-        filePath: file.path,
-        rule: 'SERVICE_WORKER_ACCESS',
-        detail:
-          'Service Worker registration or control is forbidden on storefronts',
-      });
-    }
+      if (
+        ts.isPropertyAssignment(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node)
+      ) {
+        if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) {
+          const isPlainConstructorDataKey =
+            ts.isPropertyAssignment(node) && node.name.text === 'constructor';
+          if (!isPlainConstructorDataKey) {
+            classifyMemberName(file.path, node.name.text, violations);
+          }
+        } else if (ts.isComputedPropertyName(node.name)) {
+          const folded = resolveStaticString(node.name.expression);
+          if (folded !== null) {
+            classifyMemberName(file.path, folded, violations);
+          } else {
+            violations.push({
+              filePath: file.path,
+              rule: 'DYNAMIC_CODE_EVAL',
+              detail: 'Unresolvable computed object property key is forbidden',
+            });
+          }
+        }
+      }
 
-    if (
-      /\bdocument\s*\.\s*cookie\b/.test(stripped) ||
-      /\bcookieStore\b/.test(stripped)
-    ) {
-      violations.push({
-        filePath: file.path,
-        rule: 'DIRECT_COOKIE_ACCESS',
-        detail:
-          'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
-      });
-    }
+      if (ts.isBindingElement(node)) {
+        const keyNode = node.propertyName ?? node.name;
+        if (ts.isIdentifier(keyNode) || ts.isStringLiteral(keyNode)) {
+          classifyMemberName(file.path, keyNode.text, violations);
+        } else if (ts.isComputedPropertyName(keyNode)) {
+          const folded = resolveStaticString(keyNode.expression);
+          if (folded !== null) {
+            classifyMemberName(file.path, folded, violations);
+          } else {
+            violations.push({
+              filePath: file.path,
+              rule: 'DYNAMIC_CODE_EVAL',
+              detail: 'Unresolvable computed destructuring key is forbidden',
+            });
+          }
+        }
+      }
 
-    if (/\bdangerouslySetInnerHTML\b/.test(stripped)) {
-      violations.push({
-        filePath: file.path,
-        rule: 'DANGEROUS_INNER_HTML',
-        detail: 'dangerouslySetInnerHTML is forbidden in storefront components',
-      });
-    }
+      if (
+        ts.isShorthandPropertyAssignment(node) ||
+        ts.isPropertyAccessExpression(node)
+      ) {
+        classifyMemberName(file.path, node.name.text, violations);
+      }
+
+      if (ts.isElementAccessExpression(node)) {
+        const folded = resolveStaticString(node.argumentExpression);
+        if (folded !== null) {
+          classifyMemberName(file.path, folded, violations);
+        } else {
+          const rootId = unwrapIdentifierName(node.expression);
+          if (rootId && SENSITIVE_GLOBAL_ROOTS.has(rootId)) {
+            violations.push({
+              filePath: file.path,
+              rule: 'DYNAMIC_CODE_EVAL',
+              detail: `Dynamic bracket indexing on "${rootId}" is forbidden`,
+            });
+          }
+        }
+      }
+
+      if (ts.isIdentifier(node)) {
+        const parent = node.parent;
+        const isPropName =
+          (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+          (ts.isPropertyAssignment(parent) && parent.name === node);
+        if (!isPropName && (node.text === 'eval' || node.text === 'Function')) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DYNAMIC_CODE_EVAL',
+            detail: `Direct reference to "${node.text}" is forbidden`,
+          });
+        } else if (!isPropName && node.text === 'cookieStore') {
+          violations.push({
+            filePath: file.path,
+            rule: 'DIRECT_COOKIE_ACCESS',
+            detail:
+              'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
+          });
+        }
+      }
+
+      ts.forEachChild(node, visit);
+    };
+
+    visit(sourceFile);
   }
 
   return violations;

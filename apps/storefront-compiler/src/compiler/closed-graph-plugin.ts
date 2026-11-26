@@ -6,7 +6,25 @@ import {
   type SourceSafetyViolation,
 } from './source-guard';
 
-export const COMPILER_ROOT = path.resolve(import.meta.dirname, '../..');
+function resolveCompilerPackageRoot(startDir: string): string {
+  let currentDir = path.resolve(startDir);
+  while (currentDir !== path.dirname(currentDir)) {
+    try {
+      const parsed = JSON.parse(
+        readFileSync(path.join(currentDir, 'package.json'), 'utf8')
+      ) as { name?: unknown };
+      if (parsed.name === '@baci/storefront-compiler') {
+        return currentDir;
+      }
+    } catch {
+      // Keep walking parent directories until @baci/storefront-compiler/package.json is located.
+    }
+    currentDir = path.dirname(currentDir);
+  }
+  return path.resolve(startDir, '../..');
+}
+
+export const COMPILER_ROOT = resolveCompilerPackageRoot(import.meta.dirname);
 
 const PINNED_PACKAGE_ALLOWLIST: ReadonlySet<string> = new Set([
   'react',

@@ -10,7 +10,6 @@ import {
   trackMerchantSignupCompleted,
   trackMerchantSignupStarted,
 } from '@/components/analytics/platform-analytics-provider';
-import { getRootDomain } from '@/env';
 import {
   getWebBusinessTypeLabel,
   requestWebOnboardingAssist,
@@ -228,7 +227,7 @@ export async function runWebStoreLaunch(
     if (result.success) {
       const assignedSlug = result.merchantSlug?.trim();
       if (assignedSlug && assignedSlug !== ctx.data.slug) {
-        const rootDomain = getRootDomain() || 'usebaci.com';
+        const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'usebaci.com';
         ctx.setData((prev) => ({ ...prev, slug: assignedSlug }));
         ctx.appendMessages({
           role: 'assistant',

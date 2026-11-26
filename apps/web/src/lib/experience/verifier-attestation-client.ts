@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHmac, randomBytes } from 'node:crypto';
+import { serializeExperienceOwnerWireMessage } from '@/schemas/experience-owner-wire';
 import { experienceApprovalId } from '@/schemas/experience-publication';
 import type { OwnerLifecycleVerification } from './owner-lifecycle-runtime';
 import { VerifierTemporarilyUnavailable } from './verifier-availability';
@@ -30,7 +31,7 @@ export function createVerifierAttestationClient(settings: {
     const verified = await client.auth.getUser(token);
     if (verified.error || !verified.data.user)
       throw Error('VERIFIER_UNAVAILABLE');
-    const body = JSON.stringify({
+    const body = serializeExperienceOwnerWireMessage('verifier-attest/v1', {
       version: 1,
       nonce: randomBytes(32).toString('hex'),
       expiresAt: (settings.now ?? Date.now)() + 30000,

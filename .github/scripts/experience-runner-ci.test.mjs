@@ -19,11 +19,18 @@ test('installs the locked Chromium shell before running the portable suite', () 
   const browser = steps.findIndex(
     (step) => step.run === 'pnpm --filter @baci/web exec playwright install --only-shell chromium'
   );
+  const sandbox = steps.findIndex(
+    (step) => step.name === 'Allow Chromium sandbox user namespaces on Ubuntu 24.04'
+  );
   const runner = steps.findIndex(
     (step) => step.run === 'pnpm --filter @baci/web test:experience:runner'
   );
-  assert.ok(browser >= 0 && browser < runner);
+  assert.ok(browser >= 0 && browser < sandbox && sandbox < runner);
   assert.equal(steps[browser].if, steps[runner].if);
+  assert.equal(
+    steps[sandbox].if,
+    `${steps[runner].if} && runner.environment == 'github-hosted'`
+  );
 });
 test('only full CI downloads and verifies Caddy for the HTTPS test', () => {
   const steps = workflow.jobs.changes.steps;

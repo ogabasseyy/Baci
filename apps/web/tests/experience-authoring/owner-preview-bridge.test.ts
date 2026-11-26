@@ -7,6 +7,7 @@ vi.mock('server-only', () => ({}));
 
 import { createOwnerPreviewBridge } from '@/lib/experience/owner-preview-bridge';
 import { createOwnerPreviewBridgeClient } from '@/lib/experience/owner-preview-bridge-client';
+import { serializeExperienceOwnerWireMessage } from '@/schemas/experience-owner-wire';
 import { createOwnerPreviewNonceStore } from '../../tools/builder-auth/owner-preview-nonce';
 import { experienceDataFixture } from './data-fixture.test-support';
 
@@ -75,7 +76,7 @@ it('uses normal authenticated RLS for owner preview handoff and denies another u
       accessToken: string,
       nonce = randomUUID().replaceAll('-', '').repeat(2)
     ) => {
-      const body = JSON.stringify({
+      const body = serializeExperienceOwnerWireMessage('owner-preview/v1', {
         version: 1,
         nonce,
         expiresAt: now + 30000,

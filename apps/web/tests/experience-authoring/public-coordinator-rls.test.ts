@@ -62,6 +62,7 @@ vi.mock('./../../tools/experience-verifier/public-verification-plan', () => ({
   }),
 }));
 
+import { serializeExperienceOwnerWireMessage } from '@/schemas/experience-owner-wire';
 import { createPublicVerificationCoordinator } from '../../tools/experience-verifier/public-verification-coordinator';
 import { createPublicVerificationHandler } from '../../tools/experience-verifier/public-verification-handler';
 import { experienceDataFixture } from './data-fixture.test-support';
@@ -206,6 +207,7 @@ it('binds the synthetic owner receipt and anonymous published bytes to a restric
       return observation(...args);
     });
     await expect(verify(intent)).rejects.toThrow();
+    expect(observe).toHaveBeenCalledTimes(1);
     expect(
       (
         await f.db.pool.query(
@@ -233,7 +235,7 @@ it('binds the synthetic owner receipt and anonymous published bytes to a restric
       },
     });
     const call = (accessToken: string) => {
-      const body = JSON.stringify({
+      const body = serializeExperienceOwnerWireMessage('verifier-public/v1', {
         version: 1,
         nonce: 'a'.repeat(64),
         expiresAt: Date.now() + 30000,
@@ -269,6 +271,7 @@ it('binds the synthetic owner receipt and anonymous published bytes to a restric
       [f.merchantId]
     );
     await expect(verify(intent)).rejects.toThrow();
+    expect(observe).toHaveBeenCalledTimes(2);
   } finally {
     state.anonymous = undefined;
     await pool.end();

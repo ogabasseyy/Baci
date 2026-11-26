@@ -2,7 +2,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import type { OwnerLifecycleVerification } from '@/lib/experience/owner-lifecycle-runtime';
-import { experienceOwnerWireSchemas } from '@/schemas/experience-owner-wire';
+import {
+  experienceOwnerWireSchemas,
+  serializeCanonicalOwnerWirePayload,
+} from '@/schemas/experience-owner-wire';
 import { RunnerCapacityError } from '../experience-runner/runner-transport';
 import type { OwnerVerificationKind } from './owner-verification-slots';
 
@@ -46,7 +49,9 @@ export function createVerifierAttestationHandler(settings: {
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
       const expected = createHmac('sha256', key)
-        .update(`verifier-attest/v1\n${JSON.stringify(parsed.data)}`)
+        .update(
+          `verifier-attest/v1\n${serializeCanonicalOwnerWirePayload(parsed.data)}`
+        )
         .digest();
       if (
         !signature ||

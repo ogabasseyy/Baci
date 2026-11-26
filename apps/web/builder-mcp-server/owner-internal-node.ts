@@ -28,9 +28,11 @@ export function createOwnerInternalNodeServer(options: {
       !options.ownerPublicVerificationAdmission)
   )
     throw Error('OWNER_ADMISSION_REQUIRED');
+  const previewOwnerSlots = new Set<string>();
   const preview = options.ownerPreview
     ? createOwnerPreviewHttpHandler(options.ownerPreview, {
         admit: options.ownerPreviewAdmission,
+        ownerSlots: previewOwnerSlots,
       })
     : undefined;
   const verifierOwnerSlots = new Set<string>();

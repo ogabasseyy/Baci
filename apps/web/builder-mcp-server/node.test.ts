@@ -150,7 +150,8 @@ it('routes the internal owner preview only when explicitly installed', async () 
   const ownerPreview = vi.fn(async () => Response.json({ ok: true }));
   const runtime = createOwnerInternalNodeServer({
     ownerPreview,
-    ownerPreviewAdmission: () => true,
+    ownerPreviewAdmission: (_body, _signature, reserve) =>
+      reserve?.('synthetic-owner') ?? false,
   });
   const port = await runtime.listen(0);
   try {

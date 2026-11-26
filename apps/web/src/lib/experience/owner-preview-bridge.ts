@@ -2,7 +2,10 @@ import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
-import { experienceOwnerWireSchemas } from '@/schemas/experience-owner-wire';
+import {
+  experienceOwnerWireSchemas,
+  serializeCanonicalOwnerWirePayload,
+} from '@/schemas/experience-owner-wire';
 import { requireExperienceOwner } from './authorization';
 import type { ExperienceOwnerRuntime } from './owner-runtime';
 import { productionOrigin } from './production-origins';
@@ -61,7 +64,9 @@ export function createOwnerPreviewBridge(settings: {
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-owner-signature');
       const expected = createHmac('sha256', key)
-        .update(`owner-preview/v1\n${JSON.stringify(parsed.data)}`)
+        .update(
+          `owner-preview/v1\n${serializeCanonicalOwnerWirePayload(parsed.data)}`
+        )
         .digest();
       if (
         !signature ||

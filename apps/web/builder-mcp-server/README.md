@@ -45,11 +45,12 @@ The [upstream integration test](../tools/builder-auth/upstream-integration.node.
 rejects corrupted state, nonce, and verifier values against disposable GoTrue.
 The live callback and issuer still require qualification before activation.
 
-The owner-preview v1 signature covers the schema-normalized message, not raw
-wire JSON. The caller parses its nested input before serializing; the bridge
-parses the complete message using the matching ordered schema before verifying.
-The client/bridge tests cover reordered input and wire fields. Treat a schema
-ordering or signing-format change as a coordinated protocol rollout.
+The owner-preview and verifier v1 signatures cover canonical sorted-key JSON of the
+schema-validated message, not raw wire JSON. Callers validate and serialize with
+sorted object keys before signing; admission and downstream handlers validate the
+message against the same strict schema and recompute the HMAC over sorted-key JSON.
+The client/bridge tests cover reordered input and wire fields. Treat a signing-format
+change as a coordinated protocol rollout.
 
 Production ingress is not yet qualified, and a proxy's loopback address is not
 proof that a request is private. Require an independently verified ingress boundary
@@ -70,6 +71,8 @@ fails closed at capacity. This does not qualify the 600-second downstream work
 deadline or replace production ingress and load testing. On the verifier,
 attestation, public verification and build verification share two
 long-running slots, with at most one operation per authenticated owner.
+The owner preview route enforces a separate per-owner concurrency slot (at most
+one active preview launch per authenticated owner) within its 16 global active slots.
 Build verification and the public observer each allow one concurrent request.
 Busy verifier requests receive 429. Build verification retries admission for
 up to 75 seconds; a linked build can be reclaimed after its lease expires if

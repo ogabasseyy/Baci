@@ -16,7 +16,14 @@ it('runs the browser worker over its framed host channel with a synthetic cart',
     ['--import', 'tsx', 'tools/experience-runner/public-observation-worker.ts'],
     {
       cwd: process.cwd(),
-      env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'test' },
+      env: {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        NODE_ENV: 'test',
+        ...(process.env.PLAYWRIGHT_BROWSERS_PATH
+          ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH }
+          : {}),
+      },
       stdio: 'pipe',
     }
   );
@@ -53,7 +60,7 @@ it('runs the browser worker over its framed host channel with a synthetic cart',
     const observation = await runPublicCartChannel({
       input: child.stdout,
       output: child.stdin,
-      timeoutMs: 20000,
+      timeoutMs: 25000,
       session: async (request) => {
         if (!policy(request)) throw Error('DENIED');
         if (request.url.endsWith('/api/csrf'))
@@ -67,6 +74,12 @@ it('runs the browser worker over its framed host channel with a synthetic cart',
           ),
         };
       },
+    }).catch((error) => {
+      const detail = stderr.trim();
+      if (!detail) throw error;
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} (worker stderr: ${detail})`
+      );
     });
     expect(await exited, stderr).toBe(0);
     expect(observation).toMatchObject({

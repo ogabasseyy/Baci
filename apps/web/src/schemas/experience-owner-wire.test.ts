@@ -2,6 +2,8 @@ import { expect, it } from 'vitest';
 import {
   experienceOwnerSubject,
   experienceOwnerWireSchemas,
+  serializeCanonicalOwnerWirePayload,
+  serializeExperienceOwnerWireMessage,
 } from './experience-owner-wire';
 
 const id = '11111111-1111-4111-8111-111111111111';
@@ -43,11 +45,11 @@ it.each(operations)('validates the strict %s envelope', (operation, fields) => {
   ).toBe(true);
 });
 
-// These are signed bytes on the v1 wire. Changing the schema's output order
-// requires a coordinated protocol rollout even though parsers accept reordered JSON.
+// These are signed bytes on the v1 wire. Canonical sorted-key serialization
+// keeps signatures stable even if caller or schema object key order changes.
 it.each(
   operations
-)('keeps the %s signing order when wire fields are reordered', (operation, fields) => {
+)('serializes %s with deterministic sorted keys when wire fields are reordered', (operation, fields) => {
   const reversedFields =
     'input' in fields
       ? { input: { routeId: '/', buildId: id, merchantId: id } }
@@ -61,9 +63,25 @@ it.each(
     nonce: envelope.nonce,
     version: envelope.version,
   };
-  expect(
-    JSON.stringify(experienceOwnerWireSchemas[operation].parse(input))
-  ).toBe(JSON.stringify({ ...envelope, ...fields }));
+  const canonical = serializeExperienceOwnerWireMessage(operation, input);
+  expect(canonical).toBe(
+    serializeExperienceOwnerWireMessage(operation, { ...envelope, ...fields })
+  );
+  expect(canonical).toBe(
+    serializeCanonicalOwnerWirePayload(
+      experienceOwnerWireSchemas[operation].parse(input)
+    )
+  );
+  expect(Object.keys(JSON.parse(canonical))).toEqual(
+    Object.keys({ ...envelope, ...fields }).sort()
+  );
+  if ('input' in fields) {
+    expect(Object.keys(JSON.parse(canonical).input)).toEqual([
+      'buildId',
+      'merchantId',
+      'routeId',
+    ]);
+  }
 });
 
 it('accepts only the fields for each signed operation', () => {

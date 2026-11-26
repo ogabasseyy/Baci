@@ -326,6 +326,21 @@ jobs:
       - name: Install Chromium for portable experience runner units
         if: steps.test-plan.outputs.mode != 'config-smoke'
         run: pnpm --filter @baci/web exec playwright install --only-shell chromium
+      - name: Allow Chromium sandbox user namespaces on Ubuntu 24.04
+        if: steps.test-plan.outputs.mode != 'config-smoke' && runner.environment == 'github-hosted'
+        run: |
+          if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo 0)" = "1" ] && command -v apparmor_parser >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+            browsers_dir="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+            sudo tee /etc/apparmor.d/baci-playwright-chromium-sandbox >/dev/null <<EOF
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile baci-playwright-chromium-sandbox "${browsers_dir}/**/{chrome,chrome-headless-shell,headless_shell}" flags=(unconfined) {
+            userns,
+          }
+          EOF
+            sudo apparmor_parser -r /etc/apparmor.d/baci-playwright-chromium-sandbox
+          fi
       - name: Run portable experience runner units
         if: steps.test-plan.outputs.mode != 'config-smoke'
         run: pnpm --filter @baci/web test:experience:runner

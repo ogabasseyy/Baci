@@ -6,7 +6,11 @@ import type { OwnerAdmission } from './owner-admission';
 /** Fixed, bounded transport for the signed server-to-server owner preview route. */
 export function createOwnerPreviewHttpHandler(
   bridge: (request: Request) => Promise<Response>,
-  options: { timeoutMs?: number; admit?: OwnerAdmission } = {}
+  options: {
+    timeoutMs?: number;
+    admit?: OwnerAdmission;
+    ownerSlots?: Set<string>;
+  } = {}
 ) {
   const timeoutMs = options.timeoutMs ?? OWNER_PREVIEW_WORK_TIMEOUT_MS;
   if (
@@ -21,6 +25,7 @@ export function createOwnerPreviewHttpHandler(
     signature: 'x-baci-owner-signature',
     timeoutMs,
     admit: options.admit,
+    ownerSlots: options.ownerSlots,
   });
 }
 

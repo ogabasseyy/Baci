@@ -1,22 +1,26 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { lifecycleFixture } from './sql.test-support';
+import { hash, lifecycleFixture } from './sql.test-support';
+import { runVerifierTransaction } from './verifier-transaction';
 
 vi.mock('server-only', () => ({}));
 
 let f: Awaited<ReturnType<typeof lifecycleFixture>>;
 beforeAll(async () => {
   f = await lifecycleFixture(false, process.env.BACI_BUILDER_LOCAL_PG === '1');
-  await f.pool.query(
-    readFileSync(
-      new URL(
-        '../../../../supabase/migrations/20261123091421_experience_resume_approval_preparation.sql',
-        import.meta.url
-      ),
-      'utf8'
-    )
-  );
+  for (const name of [
+    '20261111231000_experience_approval_retry_proofs.sql',
+    '20261123091421_experience_resume_approval_preparation.sql',
+    '20261126072000_experience_prepare_approval_max_proof.sql',
+  ]) {
+    await f.pool.query(
+      readFileSync(
+        new URL(`../../../../supabase/migrations/${name}`, import.meta.url),
+        'utf8'
+      )
+    );
+  }
 });
 afterAll(async () => f?.close());
 
@@ -114,4 +118,42 @@ it('reuses a valid proof and renews without publishing when that proof loses its
       )
     ).rows[0].count
   ).toBe('0');
+});
+
+it('reuses the latest valid draft retry proof instead of picking an earlier expired proof row', async () => {
+  const build = await f.build('draft-retry-proof-max');
+  const initial = await f.run('experience_request_draft_apply', [
+    f.merchantId,
+    f.connection,
+    1,
+    build.id,
+    build.evidence,
+    1,
+    randomUUID(),
+  ]);
+  await runVerifierTransaction(f.c, async () => {
+    await f.c.query(
+      "INSERT INTO experience_authorization.approval_checks(intent_id,effect_digest,evidence_digest,verified_at,expires_at) VALUES($1,$2,$3,clock_timestamp()-interval '30 seconds',clock_timestamp()-interval '1 second')",
+      [initial.approvalId, initial.effectDigest, hash('expired-render')]
+    );
+  });
+  await runVerifierTransaction(f.c, async () => {
+    await f.c.query(
+      "INSERT INTO experience_authorization.approval_checks(intent_id,effect_digest,evidence_digest,verified_at,expires_at) VALUES($1,$2,$3,clock_timestamp(),clock_timestamp()+interval '4 minutes')",
+      [initial.approvalId, initial.effectDigest, hash('fresh-retry-render')]
+    );
+  });
+  const prepared = await f.run('experience_prepare_approval', [
+    initial.approvalId,
+    'draft',
+  ]);
+  expect(prepared).toMatchObject({
+    approvalId: initial.approvalId,
+    status: 'confirmation-required',
+    effectDigest: initial.effectDigest,
+    proofExpiresAt: expect.any(String),
+  });
+  expect(Date.parse(prepared.proofExpiresAt)).toBeGreaterThan(
+    Date.now() + 60_000
+  );
 });

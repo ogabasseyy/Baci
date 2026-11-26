@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { expect, it, vi } from 'vitest';
+import { serializeExperienceOwnerWireMessage } from '../src/schemas/experience-owner-wire';
 import { createOwnerAdmission } from './owner-admission';
 import { createOwnerPreviewHttpHandler as createProductionOwnerPreviewHttpHandler } from './owner-preview-http';
 
@@ -13,7 +14,7 @@ import {
 } from './owner-preview-http.test-support';
 
 function previewBody(nonce: string) {
-  return JSON.stringify({
+  return serializeExperienceOwnerWireMessage('owner-preview/v1', {
     version: 1,
     nonce,
     expiresAt: Date.now() + 30000,

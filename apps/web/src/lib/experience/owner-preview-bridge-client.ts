@@ -2,6 +2,7 @@ import 'server-only';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ownerPreviewLaunchResponse } from '@/schemas/experience-owner-preview-response';
+import { serializeExperienceOwnerWireMessage } from '@/schemas/experience-owner-wire';
 import { experiencePreviewInput } from '@/schemas/experience-preview';
 import { OWNER_PREVIEW_CALL_TIMEOUT_MS } from './owner-preview-deadline';
 import { RemoteOwnerPreviewDenied } from './owner-preview-remote-runtime';
@@ -75,7 +76,7 @@ export function createOwnerPreviewBridgeClient(settings: {
     if (verified.error || !verified.data.user)
       throw Error('OWNER_PREVIEW_UNAVAILABLE');
     const selection = experiencePreviewInput.parse(input);
-    const body = JSON.stringify({
+    const body = serializeExperienceOwnerWireMessage('owner-preview/v1', {
       version: 1,
       nonce: randomBytes(32).toString('hex'),
       expiresAt: now() + 30000,

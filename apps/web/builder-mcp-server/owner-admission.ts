@@ -3,6 +3,7 @@ import { decodeJwt } from 'jose';
 import {
   experienceOwnerSubject,
   experienceOwnerWireSchemas,
+  serializeCanonicalOwnerWirePayload,
 } from '../src/schemas/experience-owner-wire';
 
 export type OwnerAdmission = (
@@ -34,7 +35,7 @@ export function createOwnerAdmission(
       if (expiresAt <= current || expiresAt > current + 60000) return false;
       const expected = createHmac('sha256', secret)
         .update(`${domain}\n`)
-        .update(JSON.stringify(parsed.data))
+        .update(serializeCanonicalOwnerWirePayload(parsed.data))
         .digest();
       if (!timingSafeEqual(expected, Buffer.from(signature, 'hex')))
         return false;

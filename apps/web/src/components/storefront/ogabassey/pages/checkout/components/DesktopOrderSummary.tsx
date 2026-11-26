@@ -90,9 +90,13 @@ export function DesktopOrderSummary({
             reserved so hydration of a multi-item persisted cart cannot
             grow the summary and shift the payment controls. */}
         <div className="mb-6 h-[200px] space-y-4 overflow-y-auto pr-1">
-          {displayItems.map((item) => (
+          {displayItems.map((item, index) => (
             <DesktopOrderSummaryLine
-              key={item.kind === 'cart' ? item.cartItemId || item.id : item.id}
+              key={
+                item.kind === 'cart'
+                  ? item.cartItemId || `${item.id}-${index}`
+                  : `${item.id}-${index}`
+              }
               item={item}
               formatCurrencyAuto={formatCurrencyAuto}
             />

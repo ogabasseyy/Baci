@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
+import { serializeCanonicalOwnerWirePayload } from '@/schemas/experience-owner-wire';
 import { createVerifierAttestationHandler } from './attestation-handler';
 import { createOwnerVerificationSlots } from './owner-verification-slots';
 import { createPublicVerificationHandler } from './public-verification-handler';
@@ -15,10 +16,11 @@ const body = {
 };
 function request(value: object = body, signature?: string) {
   const encoded = JSON.stringify(value);
+  const canonical = serializeCanonicalOwnerWirePayload(value);
   const signed =
     signature ??
     createHmac('sha256', key)
-      .update(`verifier-public/v1\n${encoded}`)
+      .update(`verifier-public/v1\n${canonical}`)
       .digest('hex');
   return new Request('https://verifier.baci-internal.invalid/v1/public', {
     method: 'POST',
@@ -149,7 +151,10 @@ it('shares slow verification capacity across signed owner operations', async () 
         await publicSlow.promise;
       }),
   });
-  const attestationBody = JSON.stringify({ ...body, kind: 'draft' });
+  const attestationBody = serializeCanonicalOwnerWirePayload({
+    ...body,
+    kind: 'draft',
+  });
   const pending = attest(
     new Request('https://verifier.baci-internal.invalid/v1/attest', {
       method: 'POST',

@@ -4,6 +4,7 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { serializeCanonicalOwnerWirePayload } from '@/schemas/experience-owner-wire';
 import { createOwnerPreviewBridge } from './owner-preview-bridge';
 import { createOwnerPreviewUserClientResolver } from './owner-preview-user-client';
 
@@ -20,6 +21,7 @@ const body = () => ({
 });
 function request(input: unknown, signature?: string) {
   const text = JSON.stringify(input);
+  const signedPayload = serializeCanonicalOwnerWirePayload(input);
   return new Request(
     'https://owner.baci-internal.invalid/internal/owner/preview',
     {
@@ -29,7 +31,7 @@ function request(input: unknown, signature?: string) {
         'x-baci-owner-signature':
           signature ??
           createHmac('sha256', key)
-            .update(`owner-preview/v1\n${text}`)
+            .update(`owner-preview/v1\n${signedPayload}`)
             .digest('hex'),
       },
       body: text,
@@ -88,11 +90,11 @@ it('requires a signed fresh single-use request and verifies the user and owner b
   expect(f.launch).toHaveBeenCalledOnce();
 });
 
-it('accepts reordered wire fields signed using the validated schema order', async () => {
+it('accepts reordered wire fields signed using canonical sorted-key JSON', async () => {
   const f = fixture();
   const original = body();
   const signed = createHmac('sha256', key)
-    .update(`owner-preview/v1\n${JSON.stringify(original)}`)
+    .update(`owner-preview/v1\n${serializeCanonicalOwnerWirePayload(original)}`)
     .digest('hex');
   const reordered = {
     input: {

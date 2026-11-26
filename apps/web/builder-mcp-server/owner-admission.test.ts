@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { expect, it } from 'vitest';
+import { serializeExperienceOwnerWireMessage } from '../src/schemas/experience-owner-wire';
 import { createOwnerAdmission } from './owner-admission';
 
 function attestation(nonce: string, expiresAt: number) {
@@ -13,24 +14,31 @@ function attestation(nonce: string, expiresAt: number) {
   };
 }
 
-it('admits schema-canonical signatures over reordered wire fields', () => {
+function canonicalAttestation(nonce: string, expiresAt: number) {
+  return serializeExperienceOwnerWireMessage(
+    'verifier-attest/v1',
+    attestation(nonce, expiresAt)
+  );
+}
+
+it('admits canonical sorted-key signatures over reordered wire fields', () => {
   const key = Buffer.alloc(32, 4);
   const domain = 'verifier-attest/v1';
-  const canonical = attestation('a'.repeat(64), 1030000);
-  const { kind, ...rest } = canonical;
+  const raw = attestation('a'.repeat(64), 1030000);
+  const canonical = serializeExperienceOwnerWireMessage(domain, raw);
+  const { kind, ...rest } = raw;
   const wire = Buffer.from(JSON.stringify({ kind, ...rest }, null, 2));
   const sign = (body: string | Buffer) =>
     createHmac('sha256', key).update(`${domain}\n`).update(body).digest('hex');
   const admit = createOwnerAdmission(key, domain, () => 1000000);
   expect(admit(wire, sign(wire))).toBe(false);
-  expect(admit(wire, sign(JSON.stringify(canonical)))).toBe(true);
+  expect(admit(wire, sign(JSON.stringify(raw)))).toBe(false);
+  expect(admit(wire, sign(canonical))).toBe(true);
 });
 
 it('admits only a fresh body signed for the exact verifier operation', () => {
   const key = Buffer.alloc(32, 1);
-  const body = Buffer.from(
-    JSON.stringify(attestation('a'.repeat(64), 1030000))
-  );
+  const body = Buffer.from(canonicalAttestation('a'.repeat(64), 1030000));
   const sign = (prefix: string, bytes = body) =>
     createHmac('sha256', key).update(`${prefix}\n`).update(bytes).digest('hex');
   const admit = createOwnerAdmission(key, 'verifier-attest/v1', () => 1000000);
@@ -38,22 +46,16 @@ it('admits only a fresh body signed for the exact verifier operation', () => {
   expect(admit(body, sign('verifier-public/v1'))).toBe(false);
   expect(admit(Buffer.from('{}'), sign('verifier-attest/v1'))).toBe(false);
   expect(admit(body, 'a'.repeat(64))).toBe(false);
-  const expired = Buffer.from(
-    JSON.stringify(attestation('a'.repeat(64), 999999))
-  );
+  const expired = Buffer.from(canonicalAttestation('a'.repeat(64), 999999));
   expect(admit(expired, sign('verifier-attest/v1', expired))).toBe(false);
-  const farFuture = Buffer.from(
-    JSON.stringify(attestation('a'.repeat(64), 1060001))
-  );
+  const farFuture = Buffer.from(canonicalAttestation('a'.repeat(64), 1060001));
   expect(admit(farFuture, sign('verifier-attest/v1', farFuture))).toBe(false);
 });
 
 it('does not admit the same valid signed nonce twice, but allows fresh nonces after rejection', () => {
   const key = Buffer.alloc(32, 2);
   const admit = createOwnerAdmission(key, 'verifier-attest/v1', () => 1000000);
-  const body = Buffer.from(
-    JSON.stringify(attestation('b'.repeat(64), 1030000))
-  );
+  const body = Buffer.from(canonicalAttestation('b'.repeat(64), 1030000));
   const signature = createHmac('sha256', key)
     .update('verifier-attest/v1\n')
     .update(body)
@@ -61,9 +63,7 @@ it('does not admit the same valid signed nonce twice, but allows fresh nonces af
   expect(admit(body, 'a'.repeat(64))).toBe(false);
   expect(admit(body, signature)).toBe(true);
   expect(admit(body, signature)).toBe(false);
-  const next = Buffer.from(
-    JSON.stringify(attestation('c'.repeat(64), 1030000))
-  );
+  const next = Buffer.from(canonicalAttestation('c'.repeat(64), 1030000));
   const nextSignature = createHmac('sha256', key)
     .update('verifier-attest/v1\n')
     .update(next)
@@ -76,7 +76,7 @@ it('bounds the early replay filter and releases entries after expiry', () => {
   let now = 1000000;
   const admit = createOwnerAdmission(key, 'verifier-attest/v1', () => now);
   const signed = (nonce: string, expiresAt: number) => {
-    const body = Buffer.from(JSON.stringify(attestation(nonce, expiresAt)));
+    const body = Buffer.from(canonicalAttestation(nonce, expiresAt));
     return [
       body,
       createHmac('sha256', key)

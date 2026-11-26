@@ -38,7 +38,8 @@ it('separates owner routes when explicitly composed on distinct local listeners'
   const publicListener = createBuilderMcpNodeServer();
   const internalListener = createOwnerInternalNodeServer({
     ownerPreview: owner,
-    ownerPreviewAdmission: () => true,
+    ownerPreviewAdmission: (_body, _signature, reserve) =>
+      reserve?.('synthetic-owner') ?? false,
   });
   publicListener.server.listen(0, '127.0.0.1');
   const publicReady = once(publicListener.server, 'listening');
@@ -144,7 +145,8 @@ it('refuses owner handlers when admission is missing', () => {
 it('rejects invalid ports without binding', async () => {
   const listener = createOwnerInternalNodeServer({
     ownerPreview: async () => new Response(null, { status: 204 }),
-    ownerPreviewAdmission: () => true,
+    ownerPreviewAdmission: (_body, _signature, reserve) =>
+      reserve?.('synthetic-owner') ?? false,
   });
   await expect(listener.listen(-1)).rejects.toThrow('INVALID_OWNER_PORT');
   await listener.close();
@@ -160,7 +162,8 @@ it('waits for admitted owner work to settle during shutdown', async () => {
     entered = resolve;
   });
   const listener = createOwnerInternalNodeServer({
-    ownerPreviewAdmission: () => true,
+    ownerPreviewAdmission: (_body, _signature, reserve) =>
+      reserve?.('synthetic-owner') ?? false,
     ownerPreview: async () => {
       entered();
       await gate;

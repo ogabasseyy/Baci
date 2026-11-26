@@ -42,7 +42,7 @@ export async function experienceDataFixture(
       'CREATE TABLE auth.sessions(id uuid PRIMARY KEY,user_id uuid REFERENCES auth.users(id),not_after timestamptz)'
     );
     await f.pool.query(
-      "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS premium_features jsonb DEFAULT '[]'"
+      "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS premium_features jsonb DEFAULT '[]'; GRANT SELECT(premium_features) ON merchants TO authenticated;"
     );
     // Mirror the owner/staff branch of production's products_insert_policy.
     // Writes below still use the signed user Data API client and normal RLS.

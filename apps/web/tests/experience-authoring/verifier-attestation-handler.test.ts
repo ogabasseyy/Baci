@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { serializeExperienceOwnerWireMessage } from '@/schemas/experience-owner-wire';
 import { createVerifierAttestationHandler } from '../../tools/experience-verifier/attestation-handler';
 
 const key = new Uint8Array(32).fill(7);
@@ -28,7 +29,7 @@ function fixture() {
     resolveUserClient,
     attest,
   });
-  const body = JSON.stringify({
+  const body = serializeExperienceOwnerWireMessage('verifier-attest/v1', {
     version: 1,
     nonce: 'a'.repeat(64),
     expiresAt: now + 30000,

@@ -11,6 +11,7 @@ import { createIndependentApprovalVerifier } from '@/lib/experience/independent-
 import { installRemoteOwnerPreview } from '@/lib/experience/owner-preview-remote-runtime';
 import { createPreviewLaunch } from '@/lib/experience/preview-launch';
 import { createPreviewVault } from '@/lib/experience/preview-service';
+import { serializeExperienceOwnerWireMessage } from '@/schemas/experience-owner-wire';
 import { experienceApprovalRef } from '@/schemas/experience-publication';
 import type { createLocalPrerenderArtifacts } from '../../tools/experience-runner/prerender-artifacts';
 import { createProductionPreviewDelivery } from '../../tools/experience-runner/preview-delivery';
@@ -125,7 +126,7 @@ export async function checkProductionRunnerPreview(input: {
         : Promise.reject(Error('INVALID_TOKEN')),
     attest: verifier.attest,
   });
-  const payload = JSON.stringify({
+  const payload = serializeExperienceOwnerWireMessage('verifier-attest/v1', {
     version: 1,
     nonce: randomBytes(32).toString('hex'),
     expiresAt: Date.now() + 60000,

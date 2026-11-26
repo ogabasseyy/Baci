@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
-import { experienceOwnerWireSchemas } from '@/schemas/experience-owner-wire';
+import {
+  experienceOwnerWireSchemas,
+  serializeCanonicalOwnerWirePayload,
+} from '@/schemas/experience-owner-wire';
 import type { OwnerVerificationKind } from './owner-verification-slots';
 
 const message = experienceOwnerWireSchemas['verifier-public/v1'];
@@ -49,7 +52,9 @@ export function createPublicVerificationHandler(settings: {
       if (!parsed?.success) return reply(400);
       const signature = request.headers.get('x-baci-verifier-signature');
       const expected = createHmac('sha256', key)
-        .update(`verifier-public/v1\n${JSON.stringify(parsed.data)}`)
+        .update(
+          `verifier-public/v1\n${serializeCanonicalOwnerWirePayload(parsed.data)}`
+        )
         .digest();
       if (
         !signature ||

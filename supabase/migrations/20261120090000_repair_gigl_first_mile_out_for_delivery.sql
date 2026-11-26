@@ -130,7 +130,9 @@ BEGIN
          CASE candidate.status
            WHEN 'pending' THEN 0 WHEN 'booked' THEN 1 WHEN 'pickup_scheduled' THEN 2
            WHEN 'picked_up' THEN 3 WHEN 'in_transit' THEN 4
-           WHEN 'out_for_delivery' THEN 5 WHEN 'failed' THEN 5 ELSE 6 END DESC
+           WHEN 'out_for_delivery' THEN 5 WHEN 'failed' THEN 5 ELSE 6 END DESC,
+         -- Deterministic for the equal rank: the exception wins.
+         (candidate.status = 'failed') DESC
        LIMIT 1) AS status
     FROM public.shipments AS shipment
     WHERE shipment.id IN (SELECT shipment_id FROM repairable)

@@ -92,7 +92,9 @@ function awayFromDestination(
 }
 
 function isTerminal({ recognizedStatus }: Guardable): number {
-  return recognizedStatus === 'delivered' || recognizedStatus === 'cancelled'
+  return recognizedStatus === 'delivered' ||
+    recognizedStatus === 'returned' ||
+    recognizedStatus === 'cancelled'
     ? 1
     : 0;
 }

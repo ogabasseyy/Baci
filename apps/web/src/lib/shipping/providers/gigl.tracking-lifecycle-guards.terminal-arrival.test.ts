@@ -36,6 +36,8 @@ describe('bugfix: no arrival update after a terminal outcome', () => {
     ['SHD', 'arrival first'],
     ['MSCP', 'terminal first'],
     ['MSCP', 'arrival first'],
+    ['SRHUB', 'terminal first'],
+    ['SRHUB', 'arrival first'],
   ])('fences an arrival tied with %s (%s)', (terminal, order) => {
     const DateTimeUtc = '2026-11-09T10:00:00.000Z';
     const scans = [

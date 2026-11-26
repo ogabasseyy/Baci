@@ -786,4 +786,39 @@ describe('publish-ota CLI', () => {
       expectedCurrentUpdateId: '22222222-2222-4222-8222-222222222222',
     });
   });
+
+  it('deduplicates asset keys for same-stem assets in different directories when assetmap.json is absent', async () => {
+    const { distDir, configPath } = await createExportFixture();
+    await rm(path.join(distDir, 'assetmap.json'), { force: true });
+    await mkdir(path.join(distDir, 'assets/dir-a'), { recursive: true });
+    await mkdir(path.join(distDir, 'assets/dir-b'), { recursive: true });
+    await writeFile(path.join(distDir, 'assets/dir-a/logo.png'), 'png-a');
+    await writeFile(path.join(distDir, 'assets/dir-b/logo.png'), 'png-b');
+    await writeFile(
+      path.join(distDir, 'metadata.json'),
+      JSON.stringify({
+        version: 0,
+        bundler: 'metro',
+        fileMetadata: {
+          ios: {
+            bundle: '_expo/static/js/ios/entry-1.hbc',
+            assets: [
+              { path: 'assets/dir-a/logo.png', ext: 'png' },
+              { path: 'assets/dir-b/logo.png', ext: 'png' },
+            ],
+          },
+        },
+      })
+    );
+
+    const { payload } = await packageExportDirectory({
+      distDir,
+      configPath,
+      platform: 'ios',
+      runtimeVersion: '2.1.663',
+    });
+
+    expect(payload.assets).toHaveLength(2);
+    expect(new Set(payload.assets.map((a) => a.key)).size).toBe(2);
+  });
 });

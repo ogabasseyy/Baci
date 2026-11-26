@@ -1,299 +1,16 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { constants as fsConstants } from 'node:fs';
-import { lstat, open, readFile, realpath } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { normalizeServerBaseUrl, parseCliArgs } from './publish-ota-args.mjs';
+import {
+  hashBytes,
+  inferAssetContentType,
+  readContainedFile,
+  sanitizeExpoClientForManifest,
+} from './publish-ota-sanitize.mjs';
 
-const CONTENT_TYPES = {
-  css: 'text/css',
-  db: 'application/octet-stream',
-  gif: 'image/gif',
-  hbc: 'application/javascript',
-  jpeg: 'image/jpeg',
-  jpg: 'image/jpeg',
-  js: 'application/javascript',
-  json: 'application/json',
-  mp3: 'audio/mpeg',
-  mp4: 'video/mp4',
-  otf: 'font/otf',
-  pdf: 'application/pdf',
-  png: 'image/png',
-  ttf: 'font/ttf',
-  wav: 'audio/wav',
-  webp: 'image/webp',
-  woff: 'font/woff',
-  woff2: 'font/woff2',
-};
-
-const VALUE_FLAGS = {
-  '--dist': 'distDir',
-  '--config': 'configPath',
-  '--platform': 'platform',
-  '--runtime': 'runtimeVersion',
-  '--channel': 'channel',
-  '--source-sha': 'sourceSha',
-  '--update-id': 'updateId',
-  '--expected-current-update-id': 'expectedCurrentUpdateId',
-  '--idempotency-key': 'idempotencyKey',
-  '--server': 'serverUrl',
-  '--token': 'token',
-};
-
-const BOOLEAN_FLAGS = new Set(['--rollback', '--to-embedded', '--dry-run']);
-const CHANNEL_REGEX = /^[a-zA-Z0-9._-]{1,64}$/;
-const RUNTIME_REGEX = /^[a-zA-Z0-9._+-]{1,128}$/;
-const IDEMPOTENCY_KEY_REGEX = /^[a-zA-Z0-9._:-]{8,128}$/;
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const COMMIT_SHA_REGEX = /^[0-9a-f]{40}$/i;
-
-export function inferAssetContentType(ext) {
-  const normalized = (ext ?? '').replace(/^\./, '').toLowerCase();
-  return CONTENT_TYPES[normalized] ?? 'application/octet-stream';
-}
-
-export function parseCliArgs(argv) {
-  const options = {
-    channel: 'production',
-    dryRun: false,
-    rollback: false,
-    toEmbedded: false,
-    serverUrl: process.env.OTA_SERVER_URL || 'https://ota.usebaci.com',
-    token: process.env.OTA_ADMIN_TOKEN || '',
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg in VALUE_FLAGS) {
-      const value = argv[i + 1];
-      if (
-        value === undefined ||
-        value.trim().length === 0 ||
-        value in VALUE_FLAGS ||
-        BOOLEAN_FLAGS.has(value)
-      ) {
-        throw new Error(`Missing or invalid value for ${arg}`);
-      }
-      options[VALUE_FLAGS[arg]] = value;
-      i += 1;
-    } else if (arg === '--rollback') {
-      options.rollback = true;
-    } else if (arg === '--to-embedded') {
-      options.toEmbedded = true;
-    } else if (arg === '--dry-run') {
-      options.dryRun = true;
-    } else {
-      throw new Error(`Unknown CLI argument: ${arg}`);
-    }
-  }
-
-  if (options.platform !== 'ios' && options.platform !== 'android') {
-    throw new Error('--platform must be "ios" or "android"');
-  }
-  if (
-    !options.runtimeVersion?.trim() ||
-    options.runtimeVersion.includes('..') ||
-    !RUNTIME_REGEX.test(options.runtimeVersion.trim())
-  ) {
-    throw new Error('--runtime is required and must be a valid runtime version');
-  }
-  if (
-    !options.channel?.trim() ||
-    options.channel.includes('..') ||
-    !CHANNEL_REGEX.test(options.channel.trim())
-  ) {
-    throw new Error('--channel must be a valid channel name');
-  }
-  if (options.updateId !== undefined && !UUID_REGEX.test(options.updateId.trim())) {
-    throw new Error('--update-id must be a valid UUID');
-  }
-  if (
-    options.expectedCurrentUpdateId !== undefined &&
-    !UUID_REGEX.test(options.expectedCurrentUpdateId.trim())
-  ) {
-    throw new Error('--expected-current-update-id must be a valid UUID');
-  }
-  if (options.expectedCurrentUpdateId !== undefined && !options.rollback) {
-    throw new Error('--expected-current-update-id requires --rollback');
-  }
-  if (
-    options.idempotencyKey !== undefined &&
-    !IDEMPOTENCY_KEY_REGEX.test(options.idempotencyKey.trim())
-  ) {
-    throw new Error('--idempotency-key must match [a-zA-Z0-9._:-]{8,128}');
-  }
-  if (
-    options.sourceSha !== undefined &&
-    !COMMIT_SHA_REGEX.test(options.sourceSha.trim())
-  ) {
-    throw new Error('--source-sha must be a 40-char hex SHA');
-  }
-  if (options.toEmbedded && !options.rollback) {
-    throw new Error('--to-embedded requires --rollback');
-  }
-  if (options.rollback && options.toEmbedded && options.updateId) {
-    throw new Error('Specify either --update-id or --to-embedded, not both');
-  }
-  if (
-    options.rollback &&
-    !options.toEmbedded &&
-    !options.updateId &&
-    !options.idempotencyKey?.trim()
-  ) {
-    throw new Error(
-      '--idempotency-key is required for targetless --rollback (without --update-id or --to-embedded)'
-    );
-  }
-  if (!options.rollback && !options.distDir?.trim()) {
-    throw new Error('--dist is required when publishing');
-  }
-  if (!options.dryRun && !options.token?.trim()) {
-    throw new Error('OTA_ADMIN_TOKEN or --token is required');
-  }
-  return options;
-}
-
-async function readContainedFile(baseDir, relativePath) {
-  if (typeof relativePath !== 'string' || path.isAbsolute(relativePath)) {
-    throw new Error(`Invalid relative export path: ${String(relativePath)}`);
-  }
-  const canonicalRoot = await realpath(baseDir);
-  const resolved = path.resolve(canonicalRoot, relativePath);
-  if (!resolved.startsWith(`${canonicalRoot}${path.sep}`)) {
-    throw new Error(`Export path escapes dist directory: ${relativePath}`);
-  }
-  const stat = await lstat(resolved);
-  if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new Error(`Export file must be a regular file: ${relativePath}`);
-  }
-  const canonicalTarget = await realpath(resolved);
-  if (!canonicalTarget.startsWith(`${canonicalRoot}${path.sep}`)) {
-    throw new Error(`Export path escapes canonical dist root: ${relativePath}`);
-  }
-  const handle = await open(
-    canonicalTarget,
-    fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)
-  );
-  try {
-    const fdStat = await handle.stat();
-    if (!fdStat.isFile()) {
-      throw new Error(`Export file must be a regular file: ${relativePath}`);
-    }
-    return await handle.readFile();
-  } finally {
-    await handle.close();
-  }
-}
-
-function hashBytes(bytes) {
-  const digest = createHash('sha256').update(bytes).digest();
-  return {
-    sha256Hex: digest.toString('hex'),
-    sha256Base64Url: digest.toString('base64url'),
-  };
-}
-
-const EXPO_CLIENT_ALLOWLIST = {
-  name: true,
-  slug: true,
-  version: true,
-  runtimeVersion: true,
-  sdkVersion: true,
-  platforms: true,
-  owner: true,
-  scheme: true,
-  orientation: true,
-  userInterfaceStyle: true,
-  updates: {
-    enabled: true,
-    checkAutomatically: true,
-    fallbackToCacheTimeout: true,
-    url: true,
-    requestHeaders: {
-      'expo-channel-name': true,
-    },
-    codeSigningCertificate: true,
-    codeSigningMetadata: {
-      alg: true,
-      keyid: true,
-    },
-  },
-  ios: {
-    bundleIdentifier: true,
-    buildNumber: true,
-    runtimeVersion: true,
-    supportsTablet: true,
-    usesAppleSignIn: true,
-  },
-  android: {
-    package: true,
-    versionCode: true,
-    runtimeVersion: true,
-  },
-  extra: {
-    merchantId: true,
-    merchantSlug: true,
-    merchantDomain: true,
-    businessType: true,
-    templateId: true,
-    supabaseUrl: true,
-    supabasePublishableKey: true,
-    supabaseAnonKey: true,
-    apiUrl: true,
-    posthogApiKey: true,
-    posthogHost: true,
-    tiktokBusiness: {
-      iosAppStoreId: true,
-      iosTikTokAppId: true,
-      isConfigured: true,
-    },
-    facebookAppId: true,
-    eas: {
-      projectId: true,
-    },
-  },
-};
-
-function sanitizeAllowedValue(value, schema) {
-  if (typeof value === 'string') {
-    if (value.includes('-----BEGIN') && value.includes('PRIVATE KEY')) {
-      throw new Error(
-        'Refusing to embed private key material in expoClient manifest metadata'
-      );
-    }
-    return value;
-  }
-  if (schema === true) {
-    if (Array.isArray(value)) {
-      return value.map((item) => sanitizeAllowedValue(item, true));
-    }
-    if (value && typeof value === 'object') {
-      return undefined;
-    }
-    return value;
-  }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-  const out = {};
-  for (const [key, childSchema] of Object.entries(schema)) {
-    if (!Object.hasOwn(value, key) || value[key] === undefined) {
-      continue;
-    }
-    const sanitized = sanitizeAllowedValue(value[key], childSchema);
-    if (sanitized !== undefined) {
-      out[key] = sanitized;
-    }
-  }
-  return out;
-}
-
-function sanitizeExpoClientForManifest(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return undefined;
-  }
-  return sanitizeAllowedValue(raw, EXPO_CLIENT_ALLOWLIST);
-}
+export { inferAssetContentType, parseCliArgs };
 
 export async function packageExportDirectory({
   distDir,
@@ -337,6 +54,7 @@ export async function packageExportDirectory({
   });
 
   const assets = [];
+  const seenAssetKeys = new Set();
   for (const item of platformMeta.assets ?? []) {
     const assetBytes = await readContainedFile(distDir, item.path);
     const assetHashes = hashBytes(assetBytes);
@@ -347,7 +65,19 @@ export async function packageExportDirectory({
         ? rawBasename.slice(0, -ext.length)
         : rawBasename;
     const mapped = assetMap[rawBasename] ?? assetMap[stem];
-    const assetKey = typeof mapped?.hash === 'string' ? mapped.hash : stem;
+    const baseAssetKey = typeof mapped?.hash === 'string' ? mapped.hash : stem;
+    let assetKey = baseAssetKey;
+    if (seenAssetKeys.has(assetKey)) {
+      assetKey = `${baseAssetKey}-${assetHashes.sha256Hex.slice(0, 12)}`;
+      if (seenAssetKeys.has(assetKey)) {
+        let suffix = 2;
+        while (seenAssetKeys.has(`${assetKey}-${suffix}`)) {
+          suffix += 1;
+        }
+        assetKey = `${assetKey}-${suffix}`;
+      }
+    }
+    seenAssetKeys.add(assetKey);
     const contentType = inferAssetContentType(ext);
     const r2Key = `blobs/${assetHashes.sha256Hex}${ext}`;
 
@@ -396,27 +126,6 @@ async function assertOkResponse(response, label) {
     throw new Error(`${label} failed (${response.status}): ${await response.text()}`);
   }
   return response.json();
-}
-
-function normalizeServerBaseUrl(serverUrl) {
-  let parsed;
-  try {
-    parsed = new URL(serverUrl.trim());
-  } catch {
-    throw new Error(`Invalid OTA server URL: ${serverUrl}`);
-  }
-  if (parsed.protocol !== 'https:') {
-    throw new Error('OTA server URL must use https://');
-  }
-  const normalizedPath = parsed.pathname
-    .replace(/\/+$/, '')
-    .replace(/\/api\/manifest$/, '');
-  if (normalizedPath !== '') {
-    throw new Error(
-      `OTA server URL must target the root origin without a path prefix: ${serverUrl}`
-    );
-  }
-  return parsed.origin;
 }
 
 export async function publishOta(options, fetchImpl = fetch) {

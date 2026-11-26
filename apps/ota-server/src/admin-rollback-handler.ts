@@ -128,34 +128,85 @@ export async function handleAdminRollback(
     }
   }
 
-  const result = await updateChannelPointerCas(env, pointerKey, (existing) => {
-    const recorded = idempotencyKey
-      ? findRecordedRollback(existing, idempotencyKey, fingerprint)
-      : undefined;
-    if (recorded?.status === 'mismatch') {
-      return {
-        kind: 'error',
-        response: errorResponse(
-          'Idempotency-Key was already used with a different rollback payload',
-          409,
-          'IDEMPOTENCY_KEY_MISMATCH'
-        ),
-      };
-    }
-    if (recorded?.status === 'match') {
-      return { kind: 'idempotent', result: recorded.response };
-    }
-    const casExpectedErr = checkExpectedCurrentUpdate(payload, existing);
-    if (casExpectedErr) {
-      return { kind: 'error', response: casExpectedErr };
-    }
+  let result: Awaited<ReturnType<typeof updateChannelPointerCas>> | null = null;
+  try {
+    result = await updateChannelPointerCas(env, pointerKey, (existing) => {
+      const recorded = idempotencyKey
+        ? findRecordedRollback(existing, idempotencyKey, fingerprint)
+        : undefined;
+      if (recorded?.status === 'mismatch') {
+        return {
+          kind: 'error',
+          response: errorResponse(
+            'Idempotency-Key was already used with a different rollback payload',
+            409,
+            'IDEMPOTENCY_KEY_MISMATCH'
+          ),
+        };
+      }
+      if (recorded?.status === 'match') {
+        return { kind: 'idempotent', result: recorded.response };
+      }
+      const casExpectedErr = checkExpectedCurrentUpdate(payload, existing);
+      if (casExpectedErr) {
+        return { kind: 'error', response: casExpectedErr };
+      }
 
-    const priorActiveId =
-      existing?.mode === 'update'
-        ? existing.updateId
-        : existing?.previousUpdateId;
-    if (shouldTargetRollbackToEmbedded(payload, existing)) {
-      if (prepared) {
+      const priorActiveId =
+        existing?.mode === 'update'
+          ? existing.updateId
+          : existing?.previousUpdateId;
+      if (shouldTargetRollbackToEmbedded(payload, existing)) {
+        if (prepared) {
+          return {
+            kind: 'error',
+            response: errorResponse(
+              'Concurrent channel state changed during targetless rollback; retry',
+              409
+            ),
+          };
+        }
+        return buildEmbeddedRollbackAction(
+          existing,
+          channel,
+          payload.platform,
+          payload.runtimeVersion,
+          priorActiveId,
+          idempotencyKey,
+          fingerprint
+        );
+      }
+
+      if (
+        payload.targetUpdateId &&
+        existing?.mode === 'update' &&
+        (existing.updateId === payload.targetUpdateId ||
+          existing.activeSourceUpdateId === payload.targetUpdateId)
+      ) {
+        return buildRollbackNoopCasAction(
+          existing,
+          channel,
+          payload.platform,
+          payload.runtimeVersion,
+          idempotencyKey,
+          fingerprint
+        );
+      }
+
+      if (!prepared) {
+        return {
+          kind: 'error',
+          response: errorResponse(
+            'Concurrent channel state changed during rollback; retry',
+            409
+          ),
+        };
+      }
+
+      if (
+        !payload.targetUpdateId &&
+        existing?.previousUpdateId !== prepared.sourceTargetId
+      ) {
         return {
           kind: 'error',
           response: errorResponse(
@@ -164,100 +215,58 @@ export async function handleAdminRollback(
           ),
         };
       }
-      return buildEmbeddedRollbackAction(
-        existing,
-        channel,
-        payload.platform,
-        payload.runtimeVersion,
-        priorActiveId,
-        idempotencyKey,
-        fingerprint
-      );
-    }
 
-    if (
-      payload.targetUpdateId &&
-      existing?.mode === 'update' &&
-      (existing.updateId === payload.targetUpdateId ||
-        existing.activeSourceUpdateId === payload.targetUpdateId)
-    ) {
-      return buildRollbackNoopCasAction(
-        existing,
-        channel,
-        payload.platform,
-        payload.runtimeVersion,
-        idempotencyKey,
-        fingerprint
-      );
-    }
+      if (
+        existing?.updatedAt &&
+        Date.parse(existing.updatedAt) >= Date.parse(prepared.createdAt)
+      ) {
+        return {
+          kind: 'error',
+          response: errorResponse(
+            'Concurrent update advanced channel timestamp during rollback; retry',
+            409
+          ),
+        };
+      }
 
-    if (!prepared) {
-      return {
-        kind: 'error',
-        response: errorResponse(
-          'Concurrent channel state changed during rollback; retry',
-          409
-        ),
-      };
-    }
-
-    if (
-      !payload.targetUpdateId &&
-      existing?.previousUpdateId !== prepared.sourceTargetId
-    ) {
-      return {
-        kind: 'error',
-        response: errorResponse(
-          'Concurrent channel state changed during targetless rollback; retry',
-          409
-        ),
-      };
-    }
-
-    if (
-      existing?.updatedAt &&
-      Date.parse(existing.updatedAt) >= Date.parse(prepared.createdAt)
-    ) {
-      return {
-        kind: 'error',
-        response: errorResponse(
-          'Concurrent update advanced channel timestamp during rollback; retry',
-          409
-        ),
-      };
-    }
-
-    const response: RollbackOperationResult = {
-      ok: true,
-      mode: 'update',
-      channel,
-      platform: payload.platform,
-      runtimeVersion: payload.runtimeVersion,
-      updateId: prepared.releaseId,
-      rolledBackToUpdateId: prepared.sourceTargetId,
-    };
-    const entry = idempotencyKey
-      ? { key: idempotencyKey, fingerprint, response }
-      : undefined;
-    return {
-      kind: 'write',
-      state: {
+      const response: RollbackOperationResult = {
+        ok: true,
         mode: 'update',
+        channel,
+        platform: payload.platform,
+        runtimeVersion: payload.runtimeVersion,
         updateId: prepared.releaseId,
-        activeSourceUpdateId: prepared.sourceTargetId,
-        ...(existing?.mode ? { previousMode: existing.mode } : {}),
-        ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
-        updatedAt: prepared.createdAt,
-        ...(entry ? { lastRollback: entry } : {}),
-        recentRollbacks: mergeRollbackHistory(existing, entry),
-      },
-    };
-  });
+        rolledBackToUpdateId: prepared.sourceTargetId,
+      };
+      const entry = idempotencyKey
+        ? { key: idempotencyKey, fingerprint, response }
+        : undefined;
+      return {
+        kind: 'write',
+        state: {
+          mode: 'update',
+          updateId: prepared.releaseId,
+          activeSourceUpdateId: prepared.sourceTargetId,
+          ...(existing?.mode ? { previousMode: existing.mode } : {}),
+          ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
+          updatedAt: prepared.createdAt,
+          ...(entry ? { lastRollback: entry } : {}),
+          recentRollbacks: mergeRollbackHistory(existing, entry),
+        },
+      };
+    });
+  } finally {
+    await cleanupPreparedRollbackArtifacts(env, prepared, result);
+  }
 
-  await cleanupPreparedRollbackArtifacts(env, prepared, result);
-
-  if (result instanceof Response) {
-    return result;
+  if (result === null || result instanceof Response) {
+    return (
+      result ??
+      errorResponse(
+        'Rollback failed before channel pointer update completed',
+        500
+      )
+    );
   }
   if ('idempotentResult' in result) {
     return jsonResponse(result.idempotentResult);

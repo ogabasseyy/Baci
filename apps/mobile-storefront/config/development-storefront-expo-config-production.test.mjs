@@ -24,6 +24,7 @@ function loadProductionConfigWithEnv(overrides = {}) {
   delete process.env.EXPO_PUBLIC_ENV;
   delete process.env.EAS_BUILD_PROFILE;
   delete process.env.EXPO_PUBLIC_OTA_UPDATES_URL;
+  delete process.env.EXPO_PUBLIC_OTA_ALLOW_UNSIGNED;
   delete process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH;
   delete process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID;
   delete process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE_PATH;
@@ -235,4 +236,27 @@ test('rejects invalid or non-HTTPS EXPO_PUBLIC_OTA_UPDATES_URL', () => {
       }),
     /Must be an allowlisted OTA endpoint/
   );
+});
+
+test('enforces pairing between self-hosted OTA URL and code signing certificate unless unsigned opt-in is set', () => {
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: './certs/ota-cert.pem',
+      }),
+    /requires EXPO_PUBLIC_OTA_UPDATES_URL="https:\/\/ota\.usebaci\.com\/api\/manifest"/
+  );
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_UPDATES_URL: 'https://ota.usebaci.com/api/manifest',
+      }),
+    /requires EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH unless EXPO_PUBLIC_OTA_ALLOW_UNSIGNED=true/
+  );
+  const optedIn = loadProductionConfigWithEnv({
+    EXPO_PUBLIC_OTA_UPDATES_URL: 'https://ota.usebaci.com/api/manifest',
+    EXPO_PUBLIC_OTA_ALLOW_UNSIGNED: 'true',
+  });
+  assert.equal(optedIn.updates.url, 'https://ota.usebaci.com/api/manifest');
+  assert.equal(optedIn.updates.codeSigningCertificate, undefined);
 });

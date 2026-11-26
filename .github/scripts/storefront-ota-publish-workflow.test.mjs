@@ -33,7 +33,15 @@ test('publish workflow fails closed when signing is enabled without a client-emb
   );
   assert.match(
     workflowText,
-    /if \[\[ "\$ACTION" == "publish" && "\$CHANNEL" == "production" && "\$ALLOW_UNSIGNED" != "true" \]\]; then/
+    /if \[\[ "\$CHANNEL" == "production" && "\$ALLOW_UNSIGNED" != "true" \]\]; then/
+  );
+  assert.match(
+    workflowText,
+    /cp apps\/ota-server\/scripts\/publish-ota-args\.mjs "\$RUNNER_TEMP\/"/
+  );
+  assert.match(
+    workflowText,
+    /cp apps\/ota-server\/scripts\/publish-ota-sanitize\.mjs "\$RUNNER_TEMP\/"/
   );
   assert.match(
     workflowText,

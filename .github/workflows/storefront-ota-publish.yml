@@ -144,6 +144,8 @@ jobs:
           cp .github/scripts/verify-storefront-self-hosted-ota-export.test.mjs "$RUNNER_TEMP/"
           cp .github/scripts/smoke-check-ota-manifest.mjs "$RUNNER_TEMP/"
           cp .github/scripts/smoke-check-ota-manifest.test.mjs "$RUNNER_TEMP/"
+          cp apps/ota-server/scripts/publish-ota-args.mjs "$RUNNER_TEMP/"
+          cp apps/ota-server/scripts/publish-ota-sanitize.mjs "$RUNNER_TEMP/"
           cp apps/ota-server/scripts/publish-ota.mjs "$RUNNER_TEMP/"
           git checkout --detach "$SOURCE_SHA"
 
@@ -197,8 +199,8 @@ jobs:
               echo "EFFECTIVE_OTA_CERT_PATH=apps/mobile-storefront/${CERT_PATH}"
             } >> "$GITHUB_ENV"
           else
-            if [[ "$ACTION" == "publish" && "$CHANNEL" == "production" && "$ALLOW_UNSIGNED" != "true" ]]; then
-              echo '::error::Production OTA publish requires code signing (EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH) unless allow_unsigned=true is explicitly passed.' >&2
+            if [[ "$CHANNEL" == "production" && "$ALLOW_UNSIGNED" != "true" ]]; then
+              echo '::error::Production OTA publish and rollback require code signing (EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH) unless allow_unsigned=true is explicitly passed.' >&2
               exit 1
             fi
             {
@@ -279,6 +281,7 @@ jobs:
           EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}
           EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
           EXPO_PUBLIC_OTA_UPDATES_URL: ${{ env.OTA_MANIFEST_URL }}
+          EXPO_PUBLIC_OTA_ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
           EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH }}
           EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_CERT_PATH != '' && env.EFFECTIVE_OTA_SIGNING_KEY_ID || '' }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}

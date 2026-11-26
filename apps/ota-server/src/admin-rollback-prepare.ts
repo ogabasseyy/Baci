@@ -240,11 +240,13 @@ export async function cleanupPreparedRollbackArtifacts(
     | { state: ChannelCurrentState }
     | { idempotentResult: RollbackOperationResult }
     | Response
+    | null
 ): Promise<void> {
   if (!prepared || !env.OTA_BUCKET.delete || !prepared.createdByRequest) {
     return;
   }
   const reapedAfterDifferentOutcome =
+    result !== null &&
     !(result instanceof Response) &&
     (('idempotentResult' in result &&
       (result.idempotentResult.mode !== 'update' ||
@@ -252,7 +254,11 @@ export async function cleanupPreparedRollbackArtifacts(
       ('state' in result &&
         (result.state.mode !== 'update' ||
           result.state.updateId !== prepared.releaseId)));
-  if (!(result instanceof Response) && !reapedAfterDifferentOutcome) {
+  if (
+    result !== null &&
+    !(result instanceof Response) &&
+    !reapedAfterDifferentOutcome
+  ) {
     return;
   }
   try {

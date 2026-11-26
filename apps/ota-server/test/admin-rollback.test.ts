@@ -1074,4 +1074,43 @@ describe('admin payload validation and rollback safety', () => {
     expect(racePointer?.mode).toBe('update');
     expect(racePointer?.updateId).toBe(UPDATE_C);
   });
+
+  it('reaps prepared rollback release when updateChannelPointerCas throws unexpectedly', async () => {
+    const { bucket, env } = await setupChannelWithTwoReleases();
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+    const releasePrefix = `releases/production/ios/${RUNTIME}/`;
+    const releasesBefore = [...bucket.store.keys()].filter((k) =>
+      k.startsWith(releasePrefix)
+    ).length;
+
+    bucket.onBeforePut = (key) => {
+      if (key === pointerKey) {
+        bucket.onBeforePut = undefined;
+        throw new Error('Transient R2 pointer write outage');
+      }
+    };
+
+    const throwResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+        }),
+      }),
+      env
+    );
+    expect(throwResp.status).toBe(500);
+    expect(await throwResp.json()).toEqual({ error: 'Internal server error' });
+    const releasesAfter = [...bucket.store.keys()].filter((k) =>
+      k.startsWith(releasePrefix)
+    ).length;
+    expect(releasesAfter).toBe(releasesBefore);
+  });
 });

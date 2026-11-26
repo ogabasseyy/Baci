@@ -122,11 +122,13 @@ DECLARE
   v_order record;
 BEGIN
   PERFORM oxygen_private.credit_admission_lock(p_order_id);
-  SELECT o.total, o.amount_paid, o.wallet_amount_used, o.payment_status
+  SELECT o.total, o.amount_paid, o.wallet_amount_used, o.payment_status, o.payment_method
     INTO v_order
   FROM public.orders o
   WHERE o.id = p_order_id;
-  IF FOUND AND oxygen_private.order_net_payable_for_order(
+  IF FOUND
+     AND v_order.payment_method = 'oxygen'
+     AND oxygen_private.order_net_payable_for_order(
     p_order_id,
     v_order.total,
     v_order.amount_paid,

@@ -159,17 +159,19 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
     expect(parts[0]?.name).toBe('manifest');
     const manifest = JSON.parse(parts[0]?.body ?? '') as {
       id: string;
-      launchAsset: { url: string; r2Key?: string };
-      assets: { url: string; r2Key?: string }[];
+      launchAsset: { url: string; r2Key?: string; fileExtension?: string };
+      assets: { url: string; r2Key?: string; fileExtension?: string }[];
     };
     expect(manifest.id).toBe(UPDATE_ID);
     expect(manifest.launchAsset.url).toBe(
       'https://ota.usebaci.com/api/assets/bundles/ios/abc123.hbc'
     );
     expect(manifest.launchAsset.r2Key).toBeUndefined();
+    expect(manifest.launchAsset.fileExtension).toBeUndefined();
     expect(manifest.assets[0]?.url).toBe(
       'https://ota.usebaci.com/api/assets/blobs/def456.png'
     );
+    expect(manifest.assets[0]?.fileExtension).toBe('.png');
 
     const sameUpdateResp = await worker.fetch(
       new Request('https://ota.usebaci.com/api/manifest', {

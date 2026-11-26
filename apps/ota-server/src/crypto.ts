@@ -2,6 +2,7 @@ import {
   createHash,
   createPrivateKey,
   createSign,
+  type KeyObject,
   timingSafeEqual,
 } from 'node:crypto';
 
@@ -176,13 +177,32 @@ function normalizePrivateKeyPem(rawKey: string): string {
   return unescaped;
 }
 
+const MAX_CACHED_KEYS = 8;
+const cachedPrivateKeys = new Map<string, KeyObject>();
+
+function getOrParsePrivateKey(pem: string): KeyObject {
+  const cached = cachedPrivateKeys.get(pem);
+  if (cached) {
+    return cached;
+  }
+  const key = createPrivateKey(pem);
+  if (cachedPrivateKeys.size >= MAX_CACHED_KEYS) {
+    const oldest = cachedPrivateKeys.keys().next().value;
+    if (oldest !== undefined) {
+      cachedPrivateKeys.delete(oldest);
+    }
+  }
+  cachedPrivateKeys.set(pem, key);
+  return key;
+}
+
 export function signRsaSha256Sfv(
   payload: string,
   privateKeyInput: string,
   keyId = 'main'
 ): string {
   const pem = normalizePrivateKeyPem(privateKeyInput);
-  const key = createPrivateKey(pem);
+  const key = getOrParsePrivateKey(pem);
   const signer = createSign('RSA-SHA256');
   signer.update(payload, 'utf8');
   const signatureBase64 = signer.sign(key).toString('base64');

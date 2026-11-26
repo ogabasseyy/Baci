@@ -59,7 +59,7 @@ function assetAwareFetch(manifestFactory, overrides = {}) {
     }
     if (u === ASSET_URL) {
       if (overrides.asset) return overrides.asset(u, init);
-      return new Response(null, {
+      return new Response(BUNDLE_BYTES, {
         status: 200,
         headers: { 'content-type': 'image/png' },
       });
@@ -182,10 +182,31 @@ test('smoke check fails on HTTP 500, unexpected update id, missing asset, or has
         expectedUpdateId: updateId,
       },
       assetAwareFetch(() => multipartResponse(buildManifestPayload(updateId)), {
-        asset: () => new Response(null, { status: 404 }),
+        asset: () => new Response('Not found', { status: 404 }),
       })
     ),
-    /Asset smoke HEAD failed \(404\)/
+    /Asset smoke fetch failed \(404\)/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+      },
+      assetAwareFetch(() => multipartResponse(buildManifestPayload(updateId)), {
+        asset: () =>
+          new Response('corrupted-asset-bytes', {
+            status: 200,
+            headers: { 'content-type': 'image/png' },
+          }),
+      })
+    ),
+    /Asset SHA-256 mismatch/
   );
 });
 

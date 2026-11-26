@@ -23,13 +23,14 @@ import {
 
 function resolveAssetForManifest(
   asset: StoredManifestAsset,
-  requestUrl: string
+  requestUrl: string,
+  includeExtension = true
 ): ExpoManifestAsset {
   return {
     hash: asset.hash,
     key: asset.key,
     contentType: asset.contentType,
-    ...(asset.fileExtension !== undefined
+    ...(includeExtension && asset.fileExtension !== undefined
       ? { fileExtension: asset.fileExtension }
       : {}),
     url: new URL(`/api/assets/${asset.r2Key}`, requestUrl).toString(),
@@ -234,9 +235,13 @@ export async function handleGetManifest(
     id: release.id,
     createdAt: release.createdAt,
     runtimeVersion: release.runtimeVersion,
-    launchAsset: resolveAssetForManifest(release.launchAsset, request.url),
+    launchAsset: resolveAssetForManifest(
+      release.launchAsset,
+      request.url,
+      false
+    ),
     assets: release.assets.map((asset) =>
-      resolveAssetForManifest(asset, request.url)
+      resolveAssetForManifest(asset, request.url, true)
     ),
     metadata: release.metadata,
     extra: release.extra,

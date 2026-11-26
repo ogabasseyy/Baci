@@ -195,16 +195,20 @@ jobs:
           fi
 
       - name: Refuse rollback target held by the storefront release gate
-        if: inputs.action == 'rollback' && !inputs.rollback_to_embedded
         env:
+          ACTION: ${{ inputs.action }}
           OTA_BASE_URL: ${{ env.OTA_BASE_URL }}
           OTA_ADMIN_TOKEN: ${{ secrets.OTA_ADMIN_TOKEN }}
           CHANNEL: ${{ inputs.channel }}
           PLATFORM: ${{ inputs.platform }}
           RUNTIME_VERSION: ${{ inputs.runtime_version }}
           ROLLBACK_UPDATE_ID: ${{ inputs.rollback_update_id }}
+          ROLLBACK_TO_EMBEDDED: ${{ inputs.rollback_to_embedded }}
         run: |
           set -euo pipefail
+          if [[ "$ACTION" != "rollback" || "$ROLLBACK_TO_EMBEDDED" == "true" ]]; then
+            exit 0
+          fi
           source_sha="$(node --input-type=module -e '
             const { OTA_BASE_URL, OTA_ADMIN_TOKEN, CHANNEL, PLATFORM, RUNTIME_VERSION, ROLLBACK_UPDATE_ID } = process.env;
             const url = new URL(OTA_BASE_URL + "/api/admin/release");

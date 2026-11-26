@@ -294,4 +294,18 @@ test('the OTA publish workflow keeps its release gate refusal guard', () => {
   assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: withoutGuard })), [
     `${OTA_PUBLISH_WORKFLOW} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "Validate and select reviewed source" in its publish job`,
   ]);
+  const withoutRollbackGuard = publish.replace(
+    '- name: Refuse rollback target held by the storefront release gate',
+    '- name: Renamed rollback guard'
+  );
+  assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: withoutRollbackGuard })), [
+    `${OTA_PUBLISH_WORKFLOW} must run "Refuse rollback target held by the storefront release gate" before "Rollback OTA update on ota.usebaci.com and smoke-check manifest" in its publish job`,
+  ]);
+  const conditionalRollbackGuard = publish.replace(
+    '- name: Refuse rollback target held by the storefront release gate\n',
+    '- name: Refuse rollback target held by the storefront release gate\n        if: false\n'
+  );
+  assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: conditionalRollbackGuard })), [
+    `${OTA_PUBLISH_WORKFLOW} "Refuse rollback target held by the storefront release gate" must run unconditionally and fail gated rollbacks`,
+  ]);
 });

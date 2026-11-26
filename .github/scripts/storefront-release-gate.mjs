@@ -11,10 +11,10 @@ import { fileURLToPath } from 'node:url';
 import { expandReferences } from './storefront-release-gate-references.mjs';
 import { dispatchFailures } from './storefront-release-gate-dispatch.mjs';
 import { findMissingServerOffTests, STOREFRONT_ROOT } from './storefront-release-gate-server-off.mjs';
-import { ciGateFailures, otaGuardFailures, releaseGuardFailures, storeSecretsUsed } from './storefront-release-gate-steps.mjs';
+import { ciGateFailures, otaGuardFailures, otaRollbackGuardFailures, releaseGuardFailures, storeSecretsUsed } from './storefront-release-gate-steps.mjs';
 import { dispatchOnlyFailures, readJobIds, releaseTriggerFailures, shipsStorefront } from './storefront-release-gate-workflows.mjs';
 
-export { OTA_GUARD_STEP, RELEASE_GUARD_STEP } from './storefront-release-gate-steps.mjs';
+export { OTA_GUARD_STEP, OTA_ROLLBACK_GUARD_STEP, RELEASE_GUARD_STEP } from './storefront-release-gate-steps.mjs';
 
 export const GATE_MARKER = '.github/storefront-release-gate.json';
 export const GATE_RUNBOOK = 'docs/runbooks/storefront-release-gate.md';
@@ -104,7 +104,12 @@ function stepFailures(repository) {
   const gateTests = repository.listTracked('.github/scripts').filter((file) => GATE_TEST.test(file)).sort();
   return [
     ...(ota === undefined ? [] : otaGuardFailures(OTA_WORKFLOW, ota, GATE_MARKER)),
-    ...(otaPublish === undefined ? [] : otaGuardFailures(OTA_PUBLISH_WORKFLOW, otaPublish, GATE_MARKER, 'publish')),
+    ...(otaPublish === undefined
+      ? []
+      : [
+          ...otaGuardFailures(OTA_PUBLISH_WORKFLOW, otaPublish, GATE_MARKER, 'publish'),
+          ...otaRollbackGuardFailures(OTA_PUBLISH_WORKFLOW, otaPublish, GATE_MARKER, 'publish'),
+        ]),
     ...(ci === undefined ? [`${CI_WORKFLOW} is missing`] : ciGateFailures(CI_WORKFLOW, ci, gateTests)),
   ];
 }

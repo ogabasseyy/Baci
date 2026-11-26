@@ -304,7 +304,6 @@ export async function packageExportDirectory({
         hash: bundleHashes.sha256Base64Url,
         key: bundleHashes.sha256Hex,
         contentType: 'application/javascript',
-        fileExtension: bundleExt,
         r2Key: bundleR2Key,
       },
       assets,

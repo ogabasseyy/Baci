@@ -88,77 +88,52 @@ function verifyPartSignature(part, expectSignatureKeyId, publicKeyOrCertPem) {
   }
 }
 
-async function verifyManifestAssets(manifest, fetchImpl) {
-  const launchAsset = manifest.launchAsset;
+async function verifySingleAsset(asset, fetchImpl, label) {
   if (
-    !launchAsset ||
-    typeof launchAsset !== 'object' ||
-    typeof launchAsset.url !== 'string' ||
-    typeof launchAsset.hash !== 'string'
+    !asset ||
+    typeof asset !== 'object' ||
+    typeof asset.url !== 'string' ||
+    typeof asset.hash !== 'string'
   ) {
     throw new Error(
-      `Manifest missing launchAsset.url or launchAsset.hash: ${JSON.stringify(manifest)}`
+      `Manifest ${label} missing url or hash: ${JSON.stringify(asset)}`
     );
   }
-  const launchResp = await fetchImpl(launchAsset.url, {
+  const resp = await fetchImpl(asset.url, {
     method: 'GET',
     redirect: 'error',
   });
-  if (launchResp.status !== 200) {
+  if (resp.status !== 200) {
     throw new Error(
-      `Launch asset smoke fetch failed (${launchResp.status}) for ${launchAsset.url}`
+      `${label} smoke fetch failed (${resp.status}) for ${asset.url}`
     );
   }
-  const actualLaunchType = (launchResp.headers.get('content-type') ?? '')
+  const actualType = (resp.headers.get('content-type') ?? '')
     .split(';')[0]
     .trim()
     .toLowerCase();
-  const expectedLaunchType = (launchAsset.contentType ?? '')
+  const expectedType = (asset.contentType ?? '')
     .split(';')[0]
     .trim()
     .toLowerCase();
-  if (expectedLaunchType && actualLaunchType !== expectedLaunchType) {
+  if (expectedType && actualType !== expectedType) {
     throw new Error(
-      `Launch asset content-type mismatch for ${launchAsset.url}: expected "${expectedLaunchType}", got "${actualLaunchType}"`
+      `${label} content-type mismatch for ${asset.url}: expected "${expectedType}", got "${actualType}"`
     );
   }
-  const launchBytes = new Uint8Array(await launchResp.arrayBuffer());
-  const actualLaunchHash = createHash('sha256')
-    .update(launchBytes)
-    .digest('base64url');
-  if (actualLaunchHash !== launchAsset.hash) {
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  const actualHash = createHash('sha256').update(bytes).digest('base64url');
+  if (actualHash !== asset.hash) {
     throw new Error(
-      `Launch asset SHA-256 mismatch for ${launchAsset.url}: expected "${launchAsset.hash}", got "${actualLaunchHash}"`
+      `${label} SHA-256 mismatch for ${asset.url}: expected "${asset.hash}", got "${actualHash}"`
     );
   }
+}
+
+async function verifyManifestAssets(manifest, fetchImpl) {
+  await verifySingleAsset(manifest.launchAsset, fetchImpl, 'Launch asset');
   for (const asset of manifest.assets ?? []) {
-    if (!asset || typeof asset !== 'object' || typeof asset.url !== 'string') {
-      throw new Error(
-        `Manifest contains invalid asset entry: ${JSON.stringify(asset)}`
-      );
-    }
-    const assetResp = await fetchImpl(asset.url, {
-      method: 'HEAD',
-      redirect: 'error',
-    });
-    if (assetResp.status !== 200) {
-      throw new Error(
-        `Asset smoke HEAD failed (${assetResp.status}) for ${asset.url}`
-      );
-    }
-    const actualAssetType = (assetResp.headers.get('content-type') ?? '')
-      .split(';')[0]
-      .trim()
-      .toLowerCase();
-    const expectedAssetType = (asset.contentType ?? '')
-      .split(';')[0]
-      .trim()
-      .toLowerCase();
-    if (expectedAssetType && actualAssetType !== expectedAssetType) {
-      throw new Error(
-        `Asset content-type mismatch for ${asset.url}: expected "${expectedAssetType}", got "${actualAssetType}"`
-      );
-    }
+    await verifySingleAsset(asset, fetchImpl, 'Asset');
   }
 }
 

@@ -21,6 +21,22 @@ describe('PaymentMethodsScreen', () => {
     expect(screen.getByLabelText('Toggle Klump')).toBeChecked();
   });
 
+  it('renders and persists Oxygen as a BNPL payment toggle', async () => {
+    render(<PaymentMethodsScreen />);
+
+    expect(screen.getByText('Oxygen')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle Oxygen')).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Toggle Oxygen' }));
+
+    await waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith({ oxygen_enabled: true });
+    });
+    expect(mocks.from).toHaveBeenCalledWith('merchant_feature_settings');
+    expect(mocks.eq).toHaveBeenCalledWith('id', 'settings-1');
+    expect(mocks.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+  });
+
   it('persists a Paystack toggle through its rendered accessible control', async () => {
     // Arrange
     render(<PaymentMethodsScreen />);

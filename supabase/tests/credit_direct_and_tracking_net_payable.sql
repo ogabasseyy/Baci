@@ -236,6 +236,55 @@ BEGIN
   IF v_tx_id IS NULL THEN
     RAISE EXCEPTION 'Expected net-payable create_payment_transaction to return transaction id';
   END IF;
+
+  -- Reject duplicate pending transactions on already-settled orders ('paid' and 'bnpl_approved').
+  UPDATE public.orders
+  SET payment_status = 'paid', amount_paid = 50000
+  WHERE id = 'cd710000-0000-4000-8000-000000000010';
+
+  BEGIN
+    PERFORM public.create_payment_transaction(
+      'cd710000-0000-4000-8000-000000000002',
+      'cd710000-0000-4000-8000-000000000010',
+      35000,
+      'NGN',
+      'paystack',
+      'BAC-CD-PAID-001',
+      0,
+      35000,
+      'guest@example.test',
+      'Credit Guest',
+      NULL,
+      '{}'::jsonb
+    );
+    RAISE EXCEPTION 'Settled paid order was allowed create_payment_transaction';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amount_invalid' THEN RAISE; END IF;
+  END;
+
+  UPDATE public.orders
+  SET payment_status = 'bnpl_approved', amount_paid = 50000
+  WHERE id = 'cd710000-0000-4000-8000-000000000010';
+
+  BEGIN
+    PERFORM public.create_payment_transaction(
+      'cd710000-0000-4000-8000-000000000002',
+      'cd710000-0000-4000-8000-000000000010',
+      35000,
+      'NGN',
+      'klump',
+      'BAC-CD-BNPL-001',
+      0,
+      35000,
+      'guest@example.test',
+      'Credit Guest',
+      NULL,
+      '{}'::jsonb
+    );
+    RAISE EXCEPTION 'Settled bnpl_approved order was allowed create_payment_transaction';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amount_invalid' THEN RAISE; END IF;
+  END;
 END $tx_test$;
 
 ROLLBACK;

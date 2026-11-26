@@ -230,7 +230,26 @@ function createMockAdminClient() {
           select: () => ({
             eq: () => ({
               eq: () => ({
-                single: () => Promise.resolve(orderPaymentResult),
+                single: () => {
+                  const rawData = orderPaymentResult.data;
+                  if (
+                    rawData &&
+                    typeof rawData === 'object' &&
+                    !Object.hasOwn(rawData, 'total') &&
+                    Array.isArray(rpcResult.data) &&
+                    rpcResult.data[0] &&
+                    typeof rpcResult.data[0] === 'object'
+                  ) {
+                    return Promise.resolve({
+                      ...orderPaymentResult,
+                      data: {
+                        ...(rawData as Record<string, unknown>),
+                        total: (rpcResult.data[0] as { total?: unknown }).total,
+                      },
+                    });
+                  }
+                  return Promise.resolve(orderPaymentResult);
+                },
               }),
               single: () => Promise.resolve(orderTokenResult),
             }),
@@ -1021,7 +1040,10 @@ describe('POST /api/payments/initialize', () => {
         ],
         error: null,
       };
-      orderPaymentResult = { data: { wallet_amount_used: 1200 }, error: null };
+      orderPaymentResult = {
+        data: { total: 5000, wallet_amount_used: 1200 },
+        error: null,
+      };
       savingsRedemptionsResult = { data: [{ amount: 800 }], error: null };
       enableKorapayForTest();
       mockInitializeKorapay.mockResolvedValue({
@@ -1638,7 +1660,7 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       orderPaymentResult = {
-        data: { wallet_amount_used: 25_000 },
+        data: { total: 50_000, wallet_amount_used: 25_000 },
         error: null,
       };
       featureSettingsResult = {
@@ -1685,7 +1707,7 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       orderPaymentResult = {
-        data: { wallet_amount_used: 0 },
+        data: { total: 50_000, wallet_amount_used: 0 },
         error: null,
       };
       walletTransactionsResult = {
@@ -1742,7 +1764,7 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       orderPaymentResult = {
-        data: { wallet_amount_used: 0 },
+        data: { total: 50_000, wallet_amount_used: 0 },
         error: null,
       };
       walletTransactionsResult = {
@@ -1797,7 +1819,7 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       orderPaymentResult = {
-        data: { wallet_amount_used: 20_000 },
+        data: { total: 50_000, wallet_amount_used: 20_000 },
         error: null,
       };
       walletTransactionsResult = {
@@ -1875,6 +1897,7 @@ describe('POST /api/payments/initialize', () => {
       };
       orderPaymentResult = {
         data: {
+          total: 50_000,
           wallet_amount_used: 0,
           amount_paid: 20_000,
           payment_status: 'pending',
@@ -1925,7 +1948,7 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       orderPaymentResult = {
-        data: { wallet_amount_used: 50_000 },
+        data: { total: 50_000, wallet_amount_used: 50_000 },
         error: null,
       };
       featureSettingsResult = {
@@ -2887,6 +2910,72 @@ describe('POST /api/payments/initialize', () => {
       } finally {
         onAmendmentClaim = undefined;
       }
+    });
+
+    it('returns 400 INVALID_ORDER_TOTAL when non-REDVAULT recheck reads a null orders.total', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      orderPaymentResult = {
+        data: {
+          total: 5000,
+          wallet_amount_used: 0,
+          amount_paid: 0,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      onAmendmentClaim = () => {
+        orderPaymentResult = {
+          data: {
+            total: null,
+            wallet_amount_used: 0,
+            amount_paid: 0,
+            payment_status: 'unpaid',
+          },
+          error: null,
+        };
+      };
+
+      try {
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(400);
+        expect(json.code).toBe('INVALID_ORDER_TOTAL');
+        expect(mockInitializePaystack).not.toHaveBeenCalled();
+        expect(
+          rpcCalls.some((call) => call.name === 'create_payment_transaction')
+        ).toBe(false);
+      } finally {
+        onAmendmentClaim = undefined;
+      }
+    });
+
+    it('returns 409 ORDER_NOT_PAYABLE when initializing payment for an already-settled paid or bnpl_approved order', async () => {
+      for (const paymentStatus of ['paid', 'bnpl_approved']) {
+        orderPaymentResult = {
+          data: {
+            total: 5000,
+            wallet_amount_used: 0,
+            amount_paid: 5000,
+            payment_status: paymentStatus,
+          },
+          error: null,
+        };
+
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(409);
+        expect(json.code).toBe('ORDER_NOT_PAYABLE');
+      }
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(
+        rpcCalls.some((call) => call.name === 'create_payment_transaction')
+      ).toBe(false);
     });
   });
 });

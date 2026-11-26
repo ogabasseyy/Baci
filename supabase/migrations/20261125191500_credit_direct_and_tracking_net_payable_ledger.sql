@@ -949,6 +949,26 @@ BEGIN
     RAISE EXCEPTION 'email_mismatch';
   END IF;
 
+  IF COALESCE(lower(trim(v_order_current_payment_status)), 'unpaid') IN (
+       'bnpl_approved',
+       'refunded',
+       'cancelled',
+       'canceled'
+     )
+     OR (
+       lower(trim(COALESCE(v_order_current_payment_status, ''))) = 'paid'
+       AND (
+         v_gateway IN ('klump', 'credit_direct')
+         OR NOT EXISTS (
+           SELECT 1
+           FROM private.paid_order_amendment_config cfg
+           WHERE cfg.merchant_id = p_merchant_id
+         )
+       )
+     ) THEN
+    RAISE EXCEPTION 'amount_invalid';
+  END IF;
+
   IF v_order_total IS NOT NULL AND p_amount > v_order_total THEN
     RAISE EXCEPTION 'amount_exceeds_total';
   END IF;

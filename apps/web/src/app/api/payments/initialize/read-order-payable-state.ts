@@ -129,12 +129,10 @@ export async function readOrderPayableState(params: {
       };
     }
 
-    if (
-      recheckSnapshot &&
-      (orderPaymentRow as { total?: unknown }).total != null
-    ) {
-      const freshTotal = Number((orderPaymentRow as { total?: unknown }).total);
-      if (!Number.isFinite(freshTotal) || freshTotal <= 0) {
+    if (recheckSnapshot) {
+      const rawTotal = (orderPaymentRow as { total?: unknown }).total;
+      const freshTotal = Number(rawTotal);
+      if (rawTotal == null || !Number.isFinite(freshTotal) || freshTotal <= 0) {
         return {
           ok: false,
           message: 'Invalid order total',
@@ -186,6 +184,23 @@ export async function readOrderPayableState(params: {
     walletAmountUsed = hasWalletReversal
       ? walletLedgerUsed
       : Math.max(walletFromOrderRow, walletLedgerUsed);
+  }
+
+  const normalizedOrderPaymentStatus = orderPaymentStatus.trim().toLowerCase();
+  if (
+    normalizedOrderPaymentStatus === 'paid' ||
+    normalizedOrderPaymentStatus === 'bnpl_approved' ||
+    normalizedOrderPaymentStatus === 'refunded' ||
+    normalizedOrderPaymentStatus === 'cancelled' ||
+    normalizedOrderPaymentStatus === 'canceled'
+  ) {
+    return {
+      ok: false,
+      message:
+        'This order is already settled or closed and can no longer be paid',
+      code: 'ORDER_NOT_PAYABLE',
+      status: 409,
+    };
   }
 
   const { data: savingsRows, error: savingsError } = await paymentDataClient

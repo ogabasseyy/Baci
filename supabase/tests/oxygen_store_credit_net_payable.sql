@@ -70,8 +70,8 @@ BEGIN
       contribution_frequency,start_date,maturity_date,source_mode,status,completed_at,
       terms_accepted_at,non_withdrawable_accepted_at
     ) VALUES
-      ('ec310000-0000-4000-8000-000000000032','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000031','Goal Partial',5000,5000,1000,'daily',current_date,current_date,'manual','completed',now(),now(),now()),
-      ('ec310000-0000-4000-8000-000000000033','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000031','Goal Full',15000,15000,1000,'daily',current_date,current_date,'manual','completed',now(),now(),now());
+      ('ec310000-0000-4000-8000-000000000032','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000031','Goal Partial',50000,50000,1000,'daily',current_date,current_date,'manual','completed',now(),now(),now()),
+      ('ec310000-0000-4000-8000-000000000033','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000031','Goal Full',50000,50000,1000,'daily',current_date,current_date,'manual','completed',now(),now(),now());
 
     INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,amount,balance_after,source_type,source_id)
     VALUES
@@ -126,6 +126,7 @@ BEGIN
   ));
 
   PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000002',true);
+  PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000002"}',true);
   v_claim := public.oxygen_runtime('claim', (v_cmd->>'commandId')::uuid, jsonb_build_object('commandId', v_cmd->>'commandId'));
   IF (v_claim->'context'->>'productAmount')::numeric IS DISTINCT FROM 35000 THEN
     RAISE EXCEPTION 'Expected net productAmount 35000, got %', v_claim->'context'->>'productAmount';
@@ -148,6 +149,7 @@ BEGIN
 
   -- Ledger-only 100%-covered order (amount_paid=0, wallet_amount_used=0) cannot start Oxygen workflow.
   PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+  PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000001"}',true);
   BEGIN
     PERFORM public.oxygen_start_workflow('ec310000-0000-4000-8000-000000000013', 'web');
     RAISE EXCEPTION 'Ledger-covered zero-net-payable order started Oxygen workflow';
@@ -164,6 +166,7 @@ BEGIN
     'command', jsonb_build_object('action', 'start_application')
   ));
   PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000002',true);
+  PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000002"}',true);
   v_claim := public.oxygen_runtime('claim', (v_cmd->>'commandId')::uuid, jsonb_build_object('commandId', v_cmd->>'commandId'));
   IF (v_claim->'context'->>'productAmount')::numeric IS DISTINCT FROM 35000 THEN
     RAISE EXCEPTION 'Expected ledger-reduced productAmount 35000, got %', v_claim->'context'->>'productAmount';
@@ -177,6 +180,7 @@ BEGIN
     v_pending_claim jsonb;
   BEGIN
     PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+    PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000001"}',true);
     v_pending_wf := public.oxygen_start_workflow('ec310000-0000-4000-8000-000000000017', 'web');
     v_pending_wf_id := (v_pending_wf->>'id')::uuid;
     v_pending_cmd := public.oxygen_runtime('enqueue', v_pending_wf_id, jsonb_build_object(
@@ -185,11 +189,13 @@ BEGIN
       'command', jsonb_build_object('action', 'start_application')
     ));
     PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000002',true);
+    PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000002"}',true);
     v_pending_claim := public.oxygen_runtime('claim', (v_pending_cmd->>'commandId')::uuid, jsonb_build_object('commandId', v_pending_cmd->>'commandId'));
     IF (v_pending_claim->'context'->>'productAmount')::numeric IS DISTINCT FROM 35000 THEN
       RAISE EXCEPTION 'Expected pending partial-credit productAmount 35000, got %', v_pending_claim->'context'->>'productAmount';
     END IF;
     PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+    PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000001"}',true);
   END;
 
   -- Settled orders ('paid' / 'bnpl_approved') with amount_paid = total must not treat settled payment as store credit.
@@ -232,7 +238,7 @@ BEGIN
       contribution_frequency,start_date,maturity_date,source_mode,status,completed_at,
       terms_accepted_at,non_withdrawable_accepted_at
     ) VALUES
-      ('ec310000-0000-4000-8000-000000000034','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000031','Goal Reversed',15000,15000,1000,'daily',current_date,current_date,'manual','completed',now(),now(),now());
+      ('ec310000-0000-4000-8000-000000000034','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000031','Goal Reversed',50000,50000,1000,'daily',current_date,current_date,'manual','completed',now(),now(),now());
 
     INSERT INTO public.customer_savings_redemptions(goal_id,merchant_id,customer_id,order_id,amount,idempotency_key,metadata)
     VALUES
@@ -370,7 +376,9 @@ BEGIN
     END IF;
 
     SET LOCAL ROLE authenticated;
+    PERFORM pg_catalog.set_config('request.jwt.claim.role','authenticated',true);
     PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000002',true);
+    PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000002"}',true);
     v_rec := oxygen_private.reconcile_activation(v_wf_partial, v_book_ref);
     IF (v_rec->>'orderConfirmed')::boolean IS DISTINCT FROM true THEN
       RAISE EXCEPTION 'Expected reconcile_activation orderConfirmed=true, got %', v_rec;

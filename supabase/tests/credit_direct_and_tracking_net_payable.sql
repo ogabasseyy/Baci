@@ -33,11 +33,11 @@ INSERT INTO public.customer_savings_goals(
   contribution_frequency, start_date, maturity_date, source_mode, status, completed_at,
   terms_accepted_at, non_withdrawable_accepted_at
 ) VALUES
-  ('cd710000-0000-4000-8000-000000000006', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial', 5000, 5000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
-  ('cd710000-0000-4000-8000-000000000007', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Full', 20000, 20000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
-  ('cd710000-0000-4000-8000-000000000008', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Reversed', 15000, 15000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
-  ('cd710000-0000-4000-8000-000000000009', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial Paid Rev', 15000, 15000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
-  ('cd710000-0000-4000-8000-00000000000a', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial Paid', 5000, 5000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now());
+  ('cd710000-0000-4000-8000-000000000006', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial', 50000, 50000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
+  ('cd710000-0000-4000-8000-000000000007', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Full', 50000, 50000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
+  ('cd710000-0000-4000-8000-000000000008', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Reversed', 50000, 50000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
+  ('cd710000-0000-4000-8000-000000000009', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial Paid Rev', 50000, 50000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now()),
+  ('cd710000-0000-4000-8000-00000000000a', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000004', 'Goal Partial Paid', 50000, 50000, 1000, 'daily', current_date, current_date, 'manual', 'completed', now(), now(), now());
 
 -- Orders with stale amount_paid = 0 / wallet_amount_used = 0 while ledger credit exists.
 INSERT INTO public.orders(id, merchant_id, customer_id, order_number, subtotal, total, currency, payment_status, payment_method, shipping_fee, discount_amount, amount_paid, wallet_amount_used, customer_email, tracking_token)

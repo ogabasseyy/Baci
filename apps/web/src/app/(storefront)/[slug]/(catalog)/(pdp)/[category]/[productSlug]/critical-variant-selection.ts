@@ -6,6 +6,8 @@ import {
   resolveVariantSelection,
   resolveVariantSelectionParamResolution,
 } from '@baci/shared/lib';
+import { areSelectionAttributesEqual } from '@/app/(storefront)/[slug]/(catalog)/(pdp)/products/[productSlug]/product-selection-attributes-equal';
+import type { InitialCriticalVariantSelection } from '@/components/storefront/ogabassey/pdp/critical-commerce-selection';
 import { canonicalizeVariantAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { filterDefaultAdvertisedVariants } from '@/lib/default-advertised-variants';
 import type { Product, ProductVariant } from '@/lib/products';
@@ -236,5 +238,32 @@ export function getInitialCriticalVariantSelectionPrimaryImage(
 
   return getVariantPrimaryImage(
     resolveVariantSelection(normalizedProduct, selection)?.variant
+  );
+}
+
+/**
+ * Returns whether resolved query selection or route-offer params diverge from
+ * the canonical critical shell defaults using key-order-insensitive attribute
+ * comparison.
+ */
+export function hasExplicitVariantOrOfferQuery(
+  queryRouteOffer: Pick<
+    ReturnType<typeof resolveCriticalRouteOffer>,
+    'missing' | 'offerId'
+  >,
+  querySelection: InitialCriticalVariantSelection | undefined,
+  canonicalSelection: InitialCriticalVariantSelection | undefined
+): boolean {
+  if (queryRouteOffer.offerId || queryRouteOffer.missing) {
+    return true;
+  }
+
+  return (
+    querySelection?.variantId !== canonicalSelection?.variantId ||
+    querySelection?.condition !== canonicalSelection?.condition ||
+    !areSelectionAttributesEqual(
+      querySelection?.attributes ?? {},
+      canonicalSelection?.attributes ?? {}
+    )
   );
 }

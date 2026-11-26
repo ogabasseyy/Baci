@@ -131,3 +131,22 @@
     display: none;
   }
 }
+
+@supports selector(:has(*)) {
+  .storefront-ppr-static-shell:has([data-ogabassey-pdp-critical-shell])
+    .storefront-header-slot:not([data-hide-navigation="true"]):not(
+      :has(header, nav)
+    ) {
+    background: var(--storefront-shell-background, #0f0f0f);
+    min-height: 132px;
+  }
+
+  @media (min-width: 768px) {
+    .storefront-ppr-static-shell:has([data-ogabassey-pdp-critical-shell])
+      .storefront-header-slot:not([data-hide-navigation="true"]):not(
+        :has(header, nav)
+      ) {
+      min-height: 128px;
+    }
+  }
+}

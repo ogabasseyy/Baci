@@ -9,16 +9,18 @@ import {
 
 interface OgabasseyLayoutProvidersProps {
   children: React.ReactNode;
+  enabled?: boolean;
   initialTheme?: V2ThemeMode;
 }
 
 export function OgabasseyLayoutProviders({
   children,
+  enabled = true,
   initialTheme,
 }: OgabasseyLayoutProvidersProps) {
   return (
-    <V2ThemeProvider initialTheme={initialTheme}>
-      <V2SavedProvider>{children}</V2SavedProvider>
+    <V2ThemeProvider enabled={enabled} initialTheme={initialTheme}>
+      <V2SavedProvider enabled={enabled}>{children}</V2SavedProvider>
     </V2ThemeProvider>
   );
 }

@@ -55,6 +55,46 @@ vi.mock('@/components/storefront/ogabassey/storefront-layout', () => ({
   OgabasseyStorefrontLayout: mockOgabasseyStorefrontLayout,
 }));
 
+vi.mock(
+  '@/components/storefront/ogabassey/storefront-layout-providers',
+  () => ({
+    OgabasseyLayoutProviders: ({ children }: { children: ReactNode }) =>
+      children,
+  })
+);
+
+vi.mock('@/components/storefront/chatwoot-widget', () => ({
+  ChatwootWidget: ({ children }: { children: ReactNode }) => children,
+}));
+
+vi.mock('@/components/storefront/cookie-consent', () => ({
+  CookieConsent: () => null,
+}));
+
+vi.mock(
+  '@/components/storefront/ogabassey/storefront-header-critical-style',
+  () => ({
+    OgabasseyHeaderCriticalStyle: () => null,
+  })
+);
+
+vi.mock('@/components/storefront/ogabassey/storefront-chrome-runtime', () => ({
+  StorefrontChromeRuntime: ({ section }: { section: string }) => (
+    <div data-testid={`chrome-runtime-${section}`} />
+  ),
+}));
+
+vi.mock(
+  '@/components/storefront/ogabassey/storefront-speculation-rules',
+  () => ({
+    StorefrontSpeculationRules: () => null,
+  })
+);
+
+vi.mock('@/components/analytics/deferred-google-store-widget', () => ({
+  DeferredGoogleStoreWidget: () => null,
+}));
+
 vi.mock('@/components/storefront/deferred-page-view-tracker', () => ({
   DeferredPageViewTracker: () => <div data-testid="page-view-tracker" />,
 }));

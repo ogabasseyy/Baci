@@ -40,9 +40,11 @@ vi.mock('./load-category-compare-hub-data', () => ({
     mockLoadCategoryCompareHubData(...args),
 }));
 
-const { default: CategoryCompareIndexPage, generateMetadata } = await import(
-  './page'
-);
+const {
+  default: CategoryCompareIndexPage,
+  CategoryCompareIndexRuntime,
+  generateMetadata,
+} = await import('./page');
 
 describe('CategoryCompareIndexPage', () => {
   beforeEach(() => {
@@ -84,9 +86,22 @@ describe('CategoryCompareIndexPage', () => {
     });
   });
 
+  it('wraps CategoryCompareIndexRuntime in a local Suspense loading boundary', () => {
+    const { container } = render(
+      CategoryCompareIndexPage({
+        params: Promise.resolve({
+          slug: 'ogabassey',
+          category: 'smartphones',
+        }),
+      })
+    );
+
+    expect(container.querySelector('[role="status"]')).toBeInTheDocument();
+  });
+
   it('renders a category compare hub with crawlable comparison links', async () => {
     const { container } = render(
-      (await CategoryCompareIndexPage({
+      (await CategoryCompareIndexRuntime({
         params: Promise.resolve({
           slug: 'ogabassey',
           category: 'smartphones',
@@ -158,7 +173,7 @@ describe('CategoryCompareIndexPage', () => {
     });
 
     render(
-      (await CategoryCompareIndexPage({
+      (await CategoryCompareIndexRuntime({
         params: Promise.resolve({
           slug: 'ogabassey',
           category: 'laptops',
@@ -221,7 +236,7 @@ describe('CategoryCompareIndexPage', () => {
 
   it('redirects non-canonical category hub casing to the canonical path', async () => {
     await expect(
-      CategoryCompareIndexPage({
+      CategoryCompareIndexRuntime({
         params: Promise.resolve({
           slug: 'ogabassey',
           category: 'Smartphones',

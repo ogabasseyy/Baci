@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -10,13 +10,12 @@ const slugDirectory = dirname(fileURLToPath(import.meta.url));
 
 const runtimeRouteManifest = [
   '(home)/page.tsx',
-  '(home)/loading.tsx',
-  '(catalog)/loading.tsx',
   '(catalog)/(listing)/compare/page.tsx',
   '(catalog)/(listing)/compare/loading.tsx',
   '(catalog)/(listing)/products/page.tsx',
   '(catalog)/(listing)/search/page.tsx',
   '(catalog)/(listing)/[category]/page.tsx',
+  '(catalog)/(listing)/[category]/compare/page.tsx',
   '(catalog)/(listing)/[category]/compare/[comparisonSlug]/page.tsx',
   '(catalog)/(listing)/[category]/compare/[comparisonSlug]/loading.tsx',
   '(catalog)/(listing)/[category]/best-under/[priceBandSlug]/page.tsx',
@@ -28,10 +27,8 @@ const runtimeRouteManifest = [
   '(catalog)/(pdp)/product/[productSlug]/page.tsx',
   '(catalog)/(pdp)/product/[productSlug]/loading.tsx',
   '(catalog)/(pdp)/[category]/[productSlug]/page.tsx',
-  '(catalog)/(pdp)/[category]/[productSlug]/loading.tsx',
   '(blog)/blog/page.tsx',
   '(blog)/blog/[postSlug]/page.tsx',
-  '(blog)/blog/[postSlug]/loading.tsx',
   '(content)/loading.tsx',
   '(content)/about/page.tsx',
   '(content)/contact/page.tsx',
@@ -139,27 +136,6 @@ const legacyRouteManifest = [
 // page graphs.
 const firstPaintOwnershipManifest = [
   {
-    routePath: '/blog/post-slug',
-    pagePath: '(blog)/blog/[postSlug]/page.tsx',
-    loadingPath: '(blog)/blog/[postSlug]/loading.tsx',
-    label: 'Loading blog post',
-    renderStrategy: 'lazy-module',
-  },
-  {
-    routePath: '/products',
-    pagePath: '(catalog)/(listing)/products/page.tsx',
-    loadingPath: '(catalog)/loading.tsx',
-    label: 'Loading product listing',
-    renderStrategy: 'lazy-module',
-  },
-  {
-    routePath: '/phones',
-    pagePath: '(catalog)/(listing)/[category]/page.tsx',
-    loadingPath: '(catalog)/loading.tsx',
-    label: 'Loading product listing',
-    renderStrategy: 'lazy-module',
-  },
-  {
     routePath: '/products/iphone-16-pro',
     pagePath: '(catalog)/(pdp)/products/[productSlug]/page.tsx',
     loadingPath: '(catalog)/(pdp)/products/[productSlug]/loading.tsx',
@@ -170,13 +146,6 @@ const firstPaintOwnershipManifest = [
     routePath: '/product/iphone-16-pro',
     pagePath: '(catalog)/(pdp)/product/[productSlug]/page.tsx',
     loadingPath: '(catalog)/(pdp)/product/[productSlug]/loading.tsx',
-    label: 'Loading product page',
-    renderStrategy: 'lazy-module',
-  },
-  {
-    routePath: '/phones/iphone-16-pro',
-    pagePath: '(catalog)/(pdp)/[category]/[productSlug]/page.tsx',
-    loadingPath: '(catalog)/(pdp)/[category]/[productSlug]/loading.tsx',
     label: 'Loading product page',
     renderStrategy: 'lazy-module',
   },
@@ -279,6 +248,51 @@ describe('storefront route groups', () => {
         )
       )
     ).toBe(false);
+  });
+
+  it('removes stacked and blocking route-level loading boundaries from hoisted-hero routes', () => {
+    expect(existsSync(resolve(slugDirectory, '(catalog)/loading.tsx'))).toBe(
+      false
+    );
+    expect(
+      existsSync(resolve(slugDirectory, '(catalog)/(listing)/loading.tsx'))
+    ).toBe(false);
+    expect(
+      existsSync(
+        resolve(
+          slugDirectory,
+          '(catalog)/(pdp)/[category]/[productSlug]/loading.tsx'
+        )
+      )
+    ).toBe(false);
+    expect(existsSync(resolve(slugDirectory, '(home)/loading.tsx'))).toBe(
+      false
+    );
+    expect(
+      existsSync(resolve(slugDirectory, '(blog)/blog/[postSlug]/loading.tsx'))
+    ).toBe(false);
+  });
+
+  it('renders route children outside the root [slug] B:0 Suspense boundary', () => {
+    const pprShellSource = readFileSync(
+      resolve(slugDirectory, 'storefront-ppr-static-shell.tsx'),
+      'utf8'
+    );
+    const rootLayoutSource = readFileSync(
+      resolve(slugDirectory, 'layout.tsx'),
+      'utf8'
+    );
+
+    expect(pprShellSource).toMatch(
+      /<div className="storefront-ppr-static-shell__content">\{children\}<\/div>/
+    );
+    expect(pprShellSource).not.toMatch(
+      /<Suspense[\s\S]*storefront-ppr-static-shell__content[\s\S]*<\/Suspense>/
+    );
+    expect(rootLayoutSource).toContain('<StorefrontClientShell');
+    expect(rootLayoutSource).not.toMatch(
+      /<StorefrontLayoutContent[\s\S]*>[\s\S]*\{props\.children\}[\s\S]*<\/StorefrontLayoutContent>/
+    );
   });
 
   it.each(

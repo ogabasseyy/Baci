@@ -155,9 +155,10 @@ export const useV2Saved = () => {
 const getSavedFallback = () => SERVER_SAVED_CONTEXT_FALLBACK;
 const subscribeToMissingSaved = () => () => undefined;
 
-export const V2SavedProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const V2SavedProvider: React.FC<{
+  children: React.ReactNode;
+  enabled?: boolean;
+}> = ({ children, enabled = true }) => {
   const [savedItems, setSavedItems] = useState<Product[]>([]);
   const [hasHydratedStorage, setHasHydratedStorage] = useState(false);
   const [toastState, setToastState] = useState<ToastState>({
@@ -168,7 +169,7 @@ export const V2SavedProvider: React.FC<{ children: React.ReactNode }> = ({
   const hasHydratedStorageRef = useRef(false);
 
   const hydrateSavedItems = () => {
-    if (typeof window === 'undefined' || hasHydratedStorageRef.current) {
+    if (!enabled || typeof window === 'undefined' || hasHydratedStorageRef.current) {
       return null;
     }
 
@@ -181,7 +182,7 @@ export const V2SavedProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   useEffect(() => {
-    if (typeof window === 'undefined' || hasHydratedStorageRef.current) {
+    if (!enabled || typeof window === 'undefined' || hasHydratedStorageRef.current) {
       return undefined;
     }
 
@@ -231,13 +232,13 @@ export const V2SavedProvider: React.FC<{ children: React.ReactNode }> = ({
         window.cancelIdleCallback?.(idleCallbackId);
       }
     };
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && hasHydratedStorage) {
+    if (enabled && typeof window !== 'undefined' && hasHydratedStorage) {
       writeSavedItemsToStorage(savedItems);
     }
-  }, [hasHydratedStorage, savedItems]);
+  }, [enabled, hasHydratedStorage, savedItems]);
 
   const toggleSaved = (product: Product) => {
     const hydratedSavedItems = hydrateSavedItems();

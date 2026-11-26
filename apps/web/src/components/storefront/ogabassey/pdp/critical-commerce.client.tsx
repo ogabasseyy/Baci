@@ -33,6 +33,7 @@ export {
 } from './critical-commerce-condition.client';
 export {
   OgabasseyPdpCriticalCommerceProvider,
+  OgabasseyPdpCriticalQuerySync,
   useOgabasseyPdpCriticalCommerce,
   useOptionalOgabasseyPdpCriticalCommerce,
 } from './critical-commerce-state.client';

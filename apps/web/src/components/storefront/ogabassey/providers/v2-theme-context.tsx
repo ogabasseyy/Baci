@@ -93,12 +93,14 @@ export const useV2Theme = () => {
 
 interface V2ThemeProviderProps {
   children: React.ReactNode;
+  enabled?: boolean;
   /** Initial theme from server (read from cookie) - enables SSR consistency */
   initialTheme?: V2ThemeMode;
 }
 
 export const V2ThemeProvider: React.FC<V2ThemeProviderProps> = ({
   children,
+  enabled = true,
   initialTheme,
 }) => {
   // Explicit user choice (toggle) wins over the resolved default.
@@ -110,15 +112,18 @@ export const V2ThemeProvider: React.FC<V2ThemeProviderProps> = ({
   // setState-in-effect sync without an extra stale committed frame.
   const defaultTheme = useSyncExternalStore(
     subscribeToThemeDefaults,
-    () => resolveClientDefaultTheme(initialTheme),
+    () => (enabled ? resolveClientDefaultTheme(initialTheme) : 'standard'),
     () => (initialTheme === 'santa' ? 'standard' : (initialTheme ?? 'standard'))
   );
 
-  const theme = userTheme ?? defaultTheme;
+  const theme = enabled ? (userTheme ?? defaultTheme) : 'standard';
 
   // Keep the cookie and in-memory theme aligned with the date-based default
   // after hydration. SSR remains deterministic; seasonal changes apply here.
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
     const isDecember = new Date().getMonth() === 11;
     const cookieTheme = getCookie(THEME_COOKIE_NAME);
     const now = new Date();
@@ -166,7 +171,7 @@ export const V2ThemeProvider: React.FC<V2ThemeProviderProps> = ({
       setCookie(THEME_COOKIE_NAME, 'santa');
     }
     return () => window.clearTimeout(timer);
-  }, [initialTheme]);
+  }, [enabled, initialTheme]);
 
   const setTheme = (newTheme: V2ThemeMode) => {
     if (newTheme === 'santa' && new Date().getMonth() !== 11) {

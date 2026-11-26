@@ -124,6 +124,7 @@ const {
   mockOgabasseyPdpCriticalCommerce,
   mockOgabasseyPdpCriticalCommerceProvider,
   mockOgabasseyPdpCriticalCommerceSummary,
+  mockOgabasseyPdpCriticalQuerySync,
   mockOgabasseyPdpDeferredDetailIsland,
   mockOgabasseyProductDetailsPage,
   mockConnection,
@@ -142,6 +143,7 @@ const {
   mockOgabasseyPdpCriticalCommerce: vi.fn<(props: unknown) => void>(),
   mockOgabasseyPdpCriticalCommerceProvider: vi.fn<(props: unknown) => void>(),
   mockOgabasseyPdpCriticalCommerceSummary: vi.fn<() => void>(),
+  mockOgabasseyPdpCriticalQuerySync: vi.fn<(props: unknown) => void>(),
   mockOgabasseyPdpDeferredDetailIsland: vi.fn<(props: unknown) => void>(),
   mockOgabasseyProductDetailsPage: vi.fn<(props: unknown) => void>(),
   mockConnection: vi.fn<() => Promise<void>>(() => Promise.resolve()),
@@ -463,6 +465,10 @@ vi.mock(
       mockOgabasseyPdpCriticalCommerceSummary();
       return <div data-testid="critical-commerce-summary" />;
     },
+    OgabasseyPdpCriticalQuerySync: (props: unknown) => {
+      mockOgabasseyPdpCriticalQuerySync(props);
+      return null;
+    },
   })
 );
 
@@ -740,7 +746,8 @@ function isDeferredCategoryProductContent(
     isAsyncServerComponent(type) &&
     ((typeof props.slug === 'string' &&
       isPromiseLike(props.searchParams) &&
-      isPromiseLike(props.productResultPromise)) ||
+      (isPromiseLike(props.productResultPromise) ||
+        isRecord(props.commerceProduct))) ||
       isPromiseLike(props.basePathPromise))
   );
 }
@@ -954,6 +961,7 @@ describe('[category]/[productSlug] page metadata', () => {
     mockOgabasseyPdpCriticalCommerce.mockReset();
     mockOgabasseyPdpCriticalCommerceProvider.mockReset();
     mockOgabasseyPdpCriticalCommerceSummary.mockReset();
+    mockOgabasseyPdpCriticalQuerySync.mockReset();
     mockOgabasseyPdpDeferredDetailIsland.mockReset();
     mockOgabasseyProductDetailsPage.mockReset();
     mockProductDetailClient.mockReset();
@@ -2087,6 +2095,7 @@ describe('[category]/[productSlug] page render', () => {
     mockOgabasseyPdpCriticalCommerce.mockReset();
     mockOgabasseyPdpCriticalCommerceProvider.mockReset();
     mockOgabasseyPdpCriticalCommerceSummary.mockReset();
+    mockOgabasseyPdpCriticalQuerySync.mockReset();
     mockOgabasseyPdpDeferredDetailIsland.mockReset();
     mockOgabasseyProductDetailsPage.mockReset();
     mockBuildProductSemanticModel.mockReturnValue({
@@ -3608,7 +3617,47 @@ describe('[category]/[productSlug] page render', () => {
     render(await resolveRsc(resolvedPage));
   });
 
-  it('redirects invalid variant query routes before streaming early product hints', async () => {
+  it('commits the OgaBassey critical PDP shell without awaiting unresolved searchParams', async () => {
+    const earlyProductImage =
+      'https://cdn.ogabassey.com/core-assets/products/static-pdp.avif';
+    mockGetCachedProductLcpHint.mockResolvedValueOnce(
+      toLegacyCachedProduct({
+        ...categorizedDetailedProduct,
+        images: [earlyProductImage],
+      })
+    );
+    const pendingSearchParams = new Promise<
+      Record<string, string | string[] | undefined>
+    >(() => {
+      // Intentionally unresolved to assert canonical static shells never block on searchParams.
+    });
+
+    const criticalShellOnly = await resolveRsc(
+      await CategoryProductPage({
+        params: Promise.resolve({
+          slug: 'teststore',
+          category: 'laptops',
+          productSlug: 'hp-laptop-14-ep0063nia',
+        }),
+        searchParams: pendingSearchParams,
+      }),
+      { pruneSkippedContent: true, skipContent: true }
+    );
+
+    render(criticalShellOnly);
+
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'HP Laptop 14-ep0063nia',
+      })
+    ).toBeInTheDocument();
+    expect(mockOgabasseyPdpProductResourceHints).toHaveBeenCalledWith({
+      src: earlyProductImage,
+    });
+  });
+
+  it('redirects invalid variant query routes before streaming product details', async () => {
     const productImage =
       'https://cdn.ogabassey.com/core-assets/products/variant-laptop.avif';
     const variants = [
@@ -3633,8 +3682,8 @@ describe('[category]/[productSlug] page render', () => {
     });
     mockNormalizeStorefrontProductVariants.mockReturnValue(variants);
 
-    await expect(
-      CategoryProductPage({
+    await resolveRsc(
+      await CategoryProductPage({
         params: Promise.resolve({
           slug: 'teststore',
           category: 'laptops',
@@ -3642,7 +3691,7 @@ describe('[category]/[productSlug] page render', () => {
         }),
         searchParams: Promise.resolve({ storage: '128GB' }),
       })
-    ).rejects.toThrow('NEXT_REDIRECT');
+    );
 
     expect(mockPermanentRedirect).toHaveBeenCalled();
     const redirectTargets = mockPermanentRedirect.mock.calls.map(
@@ -3686,7 +3735,7 @@ describe('[category]/[productSlug] page render', () => {
     );
   });
 
-  it('allows valid variantId query routes to stream product hints without redirecting', async () => {
+  it('allows valid variantId query routes to sync variant selection and stream product hints without redirecting', async () => {
     const productImage =
       'https://cdn.ogabassey.com/core-assets/products/variant-laptop.avif';
     const variantImage =
@@ -3738,7 +3787,7 @@ describe('[category]/[productSlug] page render', () => {
         name: 'HP Laptop 14-ep0063nia',
       })
     ).toBeInTheDocument();
-    expect(mockOgabasseyPdpCriticalCommerceProvider).toHaveBeenCalledWith(
+    expect(mockOgabasseyPdpCriticalQuerySync).toHaveBeenCalledWith(
       expect.objectContaining({
         initialVariantSelection: {
           attributes: { storage: '128GB' },
@@ -3796,7 +3845,7 @@ describe('[category]/[productSlug] page render', () => {
     );
 
     expect(mockPermanentRedirect).not.toHaveBeenCalled();
-    expect(mockOgabasseyPdpCriticalCommerceProvider).toHaveBeenCalledWith(
+    expect(mockOgabasseyPdpCriticalQuerySync).toHaveBeenCalledWith(
       expect.objectContaining({
         initialVariantSelection: {
           condition: 'used',

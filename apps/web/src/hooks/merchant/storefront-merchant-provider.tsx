@@ -68,6 +68,7 @@ export function StorefrontMerchantProvider({
   slug,
   initialMerchant = null,
   initialRoutingMode,
+  loading = false,
   navigationCategories = [],
   shellSnapshot = null,
 }: MerchantProviderProps) {
@@ -91,7 +92,7 @@ export function StorefrontMerchantProvider({
     <MerchantContext.Provider
       value={{
         merchant,
-        loading: false,
+        loading,
         updateMerchant: () => {
           throw new Error(
             'Merchant updates are unavailable in storefront context.'

@@ -88,17 +88,23 @@ export function getPostHogUiHost(env: PostHogEnv = process.env): string {
 export function normalizePostHogRelayUrl(
   value?: string | null
 ): string | undefined {
-  const trimmed = value?.trim().replace(/\/+$/, '');
+  const trimmed = value?.trim();
   if (!trimmed) {
     return undefined;
   }
 
   try {
     const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    const isLocalHttp =
+      parsed.protocol === 'http:' &&
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+    if (parsed.protocol !== 'https:' && !isLocalHttp) {
       return undefined;
     }
-    return trimmed;
+    if (parsed.username || parsed.password) {
+      return undefined;
+    }
+    return parsed.origin;
   } catch {
     return undefined;
   }

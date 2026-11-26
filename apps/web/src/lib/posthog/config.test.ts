@@ -75,6 +75,20 @@ describe('PostHog config helpers', () => {
     );
     expect(normalizePostHogRelayUrl('javascript:alert(1)')).toBeUndefined();
     expect(normalizePostHogRelayUrl('not a url')).toBeUndefined();
+    expect(
+      normalizePostHogRelayUrl('http://posthog-proxy.usebaci.com')
+    ).toBeUndefined();
+    expect(
+      normalizePostHogRelayUrl('https://user:pass@posthog-proxy.usebaci.com')
+    ).toBeUndefined();
+    expect(
+      normalizePostHogRelayUrl(
+        'https://posthog-proxy.usebaci.com/proxy?x=1#frag'
+      )
+    ).toBe('https://posthog-proxy.usebaci.com');
+    expect(normalizePostHogRelayUrl('http://localhost:8787/relay')).toBe(
+      'http://localhost:8787'
+    );
     expect(getPostHogRelayUrl(env)).toBe('https://posthog-proxy.usebaci.com');
     expect(getPostHogProxyPath(env)).toBe('https://posthog-proxy.usebaci.com');
     expect(getPostHogLocalProxyPath(env)).toBe('/baci-observe');

@@ -54,11 +54,7 @@ describe('getCachedCompareCategoryShell', () => {
       productScope: { kind: 'collection', collectionSlug: 'new-arrivals' },
     });
     expect(from).not.toHaveBeenCalled();
-    expect(mockCacheLife).toHaveBeenCalledWith({
-      stale: 3600,
-      revalidate: 86400,
-      expire: 604800,
-    });
+    expect(mockCacheLife).toHaveBeenCalledWith('products');
   });
 
   it('uses the supplied comparison revision in the local cache contract', async () => {

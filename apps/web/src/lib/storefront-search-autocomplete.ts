@@ -10,7 +10,7 @@ import { runBoundedAutocompleteRequest } from './storefront-search-autocomplete-
 const AUTOCOMPLETE_PRODUCT_SELECT = 'id, name, category, price, images, slug';
 const MAX_AUTOCOMPLETE_LIMIT = 100;
 const AUTOCOMPLETE_CACHE_VERSION = 'v1';
-const AUTOCOMPLETE_CACHE_TTL_MS = 5_000;
+const AUTOCOMPLETE_CACHE_TTL_MS = 30_000;
 const MAX_AUTOCOMPLETE_CACHE_ENTRIES = 256;
 const AUTOCOMPLETE_IN_FLIGHT_TIMEOUT_MS = 5_000;
 const MAX_AUTOCOMPLETE_IN_FLIGHT_ENTRIES = 256;

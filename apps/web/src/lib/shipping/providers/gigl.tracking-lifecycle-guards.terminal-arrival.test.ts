@@ -60,7 +60,14 @@ describe('bugfix: no arrival update after a terminal outcome', () => {
 });
 
 describe('bugfix: tied failures and departure wording', () => {
-  const run = (scans: Record<string, string>[]) =>
+  const run = (
+    scans: Array<{
+      Status: string;
+      DateTimeUtc: string;
+      Location?: string;
+      ScanStatusReason?: string;
+    }>
+  ) =>
     normalizeGiglTrackingShipment(
       { Waybill: 'W95', Destination: 'ABUJA', MobileShipmentTrackings: scans },
       'W95',

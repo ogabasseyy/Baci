@@ -587,4 +587,51 @@ describe('submitBnplCheckout', () => {
     expect(global.fetch).not.toHaveBeenCalled();
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { rawStatus: ' PAID ', expectedStatus: 'paid' },
+    { rawStatus: 'bnpl_approved', expectedStatus: 'bnpl_approved' },
+  ])('accepts zero-due fallback for terminal settled status $rawStatus', async ({
+    rawStatus,
+    expectedStatus,
+  }) => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+      liveWalletSelection: { use: true, amount: 5000 },
+    };
+    const settledZeroDueResponse = {
+      amountDueToGateway: 0,
+      order: {
+        created_at: '2026-05-30T12:00:00.000Z',
+        id: 'order-zero-settled',
+        order_number: 'BAC-ZERO-SETTLED',
+        payment_status: rawStatus,
+        shipping_status: 'pending',
+        total: 21500,
+        tracking_token: 'tracking-token',
+      },
+      savings: null,
+      wallet: { amountUsed: 5000, newBalance: 0, transactionId: null },
+    };
+    mockCreateOrder.mockResolvedValueOnce(settledZeroDueResponse);
+    mockBuildCheckoutOrderRequest.mockReturnValueOnce({
+      payment_method: 'klump',
+    });
+
+    const result = await submitBnplCheckout(params);
+
+    expect(result).toEqual({
+      creditFields: { use_wallet_credit: true, wallet_amount: 5000 },
+      fallbackOrderResponse: {
+        ...settledZeroDueResponse,
+        order: {
+          ...settledZeroDueResponse.order,
+          payment_status: expectedStatus,
+        },
+      },
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(mockRouterPush).not.toHaveBeenCalled();
+  });
 });

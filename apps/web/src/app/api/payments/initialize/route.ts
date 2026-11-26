@@ -1360,6 +1360,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (payableAmount <= 0) {
+      return createErrorResponse(
+        'No payable amount remains for this order',
+        'NO_PAYABLE_AMOUNT',
+        400
+      );
+    }
+
+    if (
+      orderRequiresRedvault &&
+      (walletAmountUsed > 0 || savingsAmountUsed > 0)
+    ) {
+      return createErrorResponse(
+        'REDVAULT orders cannot use wallet or savings store credit',
+        'REDVAULT_STORE_CREDIT_UNSUPPORTED',
+        400
+      );
+    }
+
     // Fetch merchant
     const merchantResult = redvaultRequested
       ? await paymentDataClient
@@ -1536,14 +1555,6 @@ export async function POST(request: NextRequest) {
     }
 
     const chargeCurrency = currencyResolution.currency;
-
-    if (payableAmount <= 0) {
-      return createErrorResponse(
-        'No payable amount remains for this order',
-        'NO_PAYABLE_AMOUNT',
-        400
-      );
-    }
 
     const klumpChargeAmount = toKlumpIntegerAmount(payableAmount);
 

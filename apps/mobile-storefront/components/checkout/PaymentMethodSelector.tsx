@@ -48,6 +48,7 @@ export function PaymentMethodSelector({
   onSavingsToggle,
   suppressedSelectedMethods = [],
   hiddenMethods = [],
+  klumpLimits,
   methodBadgeOverrides = {},
   methodDescriptionOverrides = {},
   methodDisabledReasons = {},
@@ -80,6 +81,7 @@ export function PaymentMethodSelector({
   } = usePaymentMethodAvailability({
     enabledMethods,
     hiddenMethods,
+    klumpLimits,
     methodDisabledReasons,
     orderTotal,
     selectedMethod,

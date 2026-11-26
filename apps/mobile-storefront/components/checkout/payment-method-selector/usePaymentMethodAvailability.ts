@@ -15,6 +15,10 @@ import {
 interface UsePaymentMethodAvailabilityInput {
   enabledMethods?: PaymentMethodType[];
   hiddenMethods?: PaymentMethodType[];
+  klumpLimits?: {
+    minAmount?: number | null;
+    maxAmount?: number | null;
+  };
   methodDisabledReasons: Partial<Record<PaymentMethodType, string>>;
   orderTotal: number;
   selectedMethod: PaymentMethodType | null;
@@ -39,6 +43,7 @@ export function usePaymentMethodAvailability(
   const {
     enabledMethods,
     hiddenMethods = [],
+    klumpLimits,
     methodDisabledReasons,
     orderTotal,
     selectedMethod,
@@ -60,11 +65,19 @@ export function usePaymentMethodAvailability(
   const netPayableAmount = hasValidTotal
     ? Math.max(orderTotal - activeWalletAmount - activeSavingsAmount, 0)
     : 0;
-  const isBNPLEligible =
-    hasValidTotal &&
-    netPayableAmount > 0 &&
-    netPayableAmount >= BNPL_MIN_AMOUNT &&
-    netPayableAmount <= BNPL_MAX_AMOUNT;
+  const klumpMinAmount = klumpLimits?.minAmount ?? BNPL_MIN_AMOUNT;
+  const klumpMaxAmount = klumpLimits?.maxAmount ?? BNPL_MAX_AMOUNT;
+  const getInstallmentRange = (methodId: PaymentMethodType) =>
+    methodId === 'klump'
+      ? { min: klumpMinAmount, max: klumpMaxAmount }
+      : { min: BNPL_MIN_AMOUNT, max: BNPL_MAX_AMOUNT };
+  const isInstallmentMethodEligible = (methodId: PaymentMethodType) => {
+    if (!hasValidTotal || netPayableAmount <= 0) {
+      return false;
+    }
+    const { min, max } = getInstallmentRange(methodId);
+    return netPayableAmount >= min && netPayableAmount <= max;
+  };
 
   const enabledCandidates = PAYMENT_METHODS.filter(
     (method) =>
@@ -83,6 +96,10 @@ export function usePaymentMethodAvailability(
     ? enabledCandidates.filter((method) => method.id !== 'korapay')
     : enabledCandidates;
 
+  const isBNPLEligible = candidateMethods.some(
+    (method) =>
+      method.tab === 'installments' && isInstallmentMethodEligible(method.id)
+  );
   const hasBNPLMethods = candidateMethods.some(
     (method) => method.tab === 'installments'
   );
@@ -102,13 +119,17 @@ export function usePaymentMethodAvailability(
         };
       }
 
-      if (method.tab === 'installments' && !isBNPLEligible) {
+      if (
+        method.tab === 'installments' &&
+        !isInstallmentMethodEligible(method.id)
+      ) {
+        const { min, max } = getInstallmentRange(method.id);
         const reason =
           hasValidTotal && netPayableAmount <= 0
             ? 'No payable balance remains for installment financing'
-            : hasValidTotal && netPayableAmount > BNPL_MAX_AMOUNT
-              ? `Maximum order: ${formatPrice(BNPL_MAX_AMOUNT)}`
-              : `Minimum order: ${formatPrice(BNPL_MIN_AMOUNT)}`;
+            : hasValidTotal && netPayableAmount > max
+              ? `Maximum order: ${formatPrice(max)}`
+              : `Minimum order: ${formatPrice(min)}`;
         return {
           ...method,
           disabled: true,

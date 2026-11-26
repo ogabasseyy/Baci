@@ -156,4 +156,38 @@ describe('usePaymentMethodAvailability', () => {
     );
     expect(result.hasBNPLMethods).toBe(false);
   });
+
+  it('uses merchant klumpLimits when net payable sits between merchant and generic BNPL bounds', () => {
+    const lowerMerchantMin = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      klumpLimits: { minAmount: 5_000, maxAmount: 500_000 },
+      methodDisabledReasons: {},
+      orderTotal: 20_000,
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 12_000, use: true },
+    });
+    const enabledKlump = lowerMerchantMin.filteredMethods.find(
+      (method) => method.id === 'klump'
+    );
+    expect(lowerMerchantMin.isBNPLEligible).toBe(true);
+    expect(enabledKlump?.disabled).toBeUndefined();
+
+    const higherMerchantMin = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      klumpLimits: { minAmount: 15_000, maxAmount: 500_000 },
+      methodDisabledReasons: {},
+      orderTotal: 20_000,
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 8_000, use: true },
+    });
+    const disabledKlump = higherMerchantMin.filteredMethods.find(
+      (method) => method.id === 'klump'
+    );
+    expect(higherMerchantMin.isBNPLEligible).toBe(false);
+    expect(disabledKlump?.disabled).toBe(true);
+    expect(disabledKlump?.disabledReason).toContain('Minimum order');
+    expect(disabledKlump?.disabledReason).toContain('15,000');
+  });
 });

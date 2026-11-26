@@ -934,6 +934,68 @@ describe('POST /api/payments/initialize', () => {
       });
     });
 
+    it('rejects a non-pilot REDVAULT order when store credit covers 100% of the total', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+            wallet_amount_used: 5000,
+          },
+        ],
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('NO_PAYABLE_AMOUNT');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-pilot REDVAULT order with partial wallet store credit before initializing Paystack', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+            wallet_amount_used: 1500,
+          },
+        ],
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('REDVAULT_STORE_CREDIT_UNSUPPORTED');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
     it('ignores a client-supplied amount and derives the gateway amount from the order', async () => {
       enableKorapayForTest();
       mockInitializeKorapay.mockResolvedValue({

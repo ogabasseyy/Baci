@@ -26,6 +26,10 @@ DECLARE
   v_effective_wallet numeric := 0;
   v_savings_ledger numeric := 0;
   v_pre_gateway_credit numeric := 0;
+  v_payment_status text := COALESCE(
+    NULLIF(pg_catalog.lower(pg_catalog.btrim(p_payment_status)), ''),
+    'unpaid'
+  );
 BEGIN
   IF p_total IS NULL
     OR p_total IN ('NaN'::numeric, 'Infinity'::numeric, '-Infinity'::numeric)
@@ -80,13 +84,13 @@ BEGIN
     ELSE GREATEST(COALESCE(p_wallet_amount_used, 0), COALESCE(v_wallet_ledger, 0), 0)
   END;
 
-  IF COALESCE(p_payment_status, 'unpaid') = 'partially_paid' THEN
+  IF v_payment_status = 'partially_paid' THEN
     v_pre_gateway_credit := GREATEST(
       GREATEST(COALESCE(p_amount_paid, 0) - v_wallet_reversed, 0),
       v_effective_wallet + COALESCE(v_savings_ledger, 0),
       0
     );
-  ELSIF COALESCE(p_payment_status, 'unpaid') IN ('unpaid', 'pending')
+  ELSIF v_payment_status IN ('unpaid', 'pending')
     AND NOT v_has_wallet_reversal THEN
     v_pre_gateway_credit := GREATEST(
       COALESCE(p_amount_paid, 0),

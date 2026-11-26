@@ -444,6 +444,18 @@ BEGIN
   ) IS DISTINCT FROM 'partially_paid' THEN
     RAISE EXCEPTION 'create_payment_transaction downgraded partially_paid order status';
   END IF;
+
+  -- 12. Mixed-case payment_status normalization matches TypeScript trim().toLowerCase().
+  IF private.credit_direct_net_payable(
+    'cd710000-0000-4000-8000-000000000014',
+    'cd710000-0000-4000-8000-000000000002',
+    50000,
+    30000,
+    10000,
+    ' Partially_Paid '
+  ) IS DISTINCT FROM 20000 THEN
+    RAISE EXCEPTION 'Mixed-case Partially_Paid status diverged in credit_direct_net_payable';
+  END IF;
 END $tx_test$;
 
 ROLLBACK;

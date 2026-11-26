@@ -402,6 +402,12 @@ BEGIN
       IF v_net IS DISTINCT FROM 35000 THEN
         RAISE EXCEPTION 'Cross-merchant ledger rows leaked into order_net_payable_for_order: got %', v_net;
       END IF;
+
+      -- Mixed-case status spellings match the TypeScript trim().toLowerCase() contract.
+      v_net := oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000010', 50000, 20000, 0, ' Partially_Paid ');
+      IF v_net IS DISTINCT FROM 30000 THEN
+        RAISE EXCEPTION 'Mixed-case Partially_Paid status diverged in order_net_payable_for_order: got %', v_net;
+      END IF;
     END IF;
 
     -- Active Oxygen workflows on live orders block reversals so booked principal cannot drift,

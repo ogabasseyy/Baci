@@ -148,7 +148,12 @@ export async function submitBnplCheckout({
   onOrderCreated?.(orderResponse.order.id);
 
   if (orderResponse.amountDueToGateway <= 0) {
-    if (orderResponse.order.payment_status !== 'paid') {
+    const normalizedPaymentStatus =
+      orderResponse.order.payment_status?.trim().toLowerCase() ?? '';
+    if (
+      normalizedPaymentStatus !== 'paid' &&
+      normalizedPaymentStatus !== 'bnpl_approved'
+    ) {
       isOrderInFlight.current = false;
       setIsProcessing(false);
       throw new OrderError(
@@ -156,9 +161,19 @@ export async function submitBnplCheckout({
         'STORE_CREDIT_NOT_SETTLED'
       );
     }
+    const normalizedOrderResponse =
+      normalizedPaymentStatus === orderResponse.order.payment_status
+        ? orderResponse
+        : {
+            ...orderResponse,
+            order: {
+              ...orderResponse.order,
+              payment_status: normalizedPaymentStatus,
+            },
+          };
     return {
       creditFields,
-      fallbackOrderResponse: orderResponse,
+      fallbackOrderResponse: normalizedOrderResponse,
     };
   }
 

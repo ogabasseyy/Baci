@@ -142,6 +142,10 @@ export function CheckoutStepContent({
           paymentController.savings.isLoadingCheckoutSavings
         }
         klumpDisabledReason={paymentController.klumpDisabledReason}
+        klumpLimits={{
+          maxAmount: paymentController.paymentSettings?.klump_max_amount,
+          minAmount: paymentController.paymentSettings?.klump_min_amount,
+        }}
         oxygenDisabledReason={paymentController.oxygenDisabledReason}
         onRetrySavings={paymentController.savings.reloadCheckoutSavings}
         onSavingsToggle={paymentController.savings.setSavingsSelection}

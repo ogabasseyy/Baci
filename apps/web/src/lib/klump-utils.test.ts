@@ -221,5 +221,35 @@ describe('klump-utils', () => {
         savings_ledger_used: 5_000,
       })
     ).toBe(35_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'bnpl_approved',
+        amount_paid: 35_000,
+        wallet_amount_used: 15_000,
+        wallet_ledger_used: 15_000,
+        savings_ledger_used: 0,
+      })
+    ).toBe(0);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'bnpl_approved',
+        amount_paid: 35_000,
+        wallet_amount_used: 15_000,
+      })
+    ).toBe(0);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'paid',
+        amount_paid: 50_000,
+        wallet_ledger_used: 0,
+        savings_ledger_used: 0,
+      })
+    ).toBe(0);
   });
 });

@@ -84,15 +84,24 @@ export function getBnplRemainingAmount(
     | 'payment_status'
   >
 ) {
-  const hasLedgerProjection =
-    order.wallet_ledger_used != null || order.savings_ledger_used != null;
   const normalizedStatus = (order.payment_status ?? 'unpaid')
     .trim()
     .toLowerCase();
-  const isTerminalPaid =
-    normalizedStatus === 'paid' || normalizedStatus === 'refunded';
-  const effectiveStatus =
-    !hasLedgerProjection && !isTerminalPaid ? 'unpaid' : order.payment_status;
+  if (
+    normalizedStatus === 'paid' ||
+    normalizedStatus === 'bnpl_approved' ||
+    normalizedStatus === 'refunded' ||
+    normalizedStatus === 'cancelled' ||
+    normalizedStatus === 'canceled'
+  ) {
+    return 0;
+  }
+
+  const hasLedgerProjection =
+    order.wallet_ledger_used != null || order.savings_ledger_used != null;
+  const effectiveStatus = !hasLedgerProjection
+    ? 'unpaid'
+    : order.payment_status;
 
   return toCurrencyAmount(
     computeOrderNetPayable({

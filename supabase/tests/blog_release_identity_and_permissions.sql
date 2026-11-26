@@ -80,7 +80,7 @@ SELECT pg_temp.assert_error(
     repeat('a', 64),
     'v1',
     'standard',
-    '2026-12-01T12:00:00Z'
+    transaction_timestamp() + interval '40 days'
   )$$,
   '42501',
   'blog_release_access_denied',
@@ -219,39 +219,47 @@ BEGIN
 END $$;
 
 -- Scheduled insert without requested_publish_at backfills requested_publish_at from published_at
-INSERT INTO public.blog_posts (id, merchant_id, title, slug, content, author_name, status, published_at)
-VALUES (
-  'd3000000-0000-4000-8000-000000000097',
-  'd2000000-0000-4000-8000-000000000001',
-  'Scheduled Insert Backfill',
-  'scheduled-insert-backfill',
-  'Scheduled body',
-  'Editor',
-  'scheduled',
-  '2026-11-26T10:00:00Z'
-);
+DO $$
+DECLARE
+  v_day_orig date := (transaction_timestamp() AT TIME ZONE 'Africa/Lagos')::date + 40;
+  v_day_next date := v_day_orig + 1;
+  v_ts_orig timestamptz := (v_day_orig::timestamp + time '10:00:00') AT TIME ZONE 'Africa/Lagos';
+  v_ts_next timestamptz := (v_day_next::timestamp + time '10:00:00') AT TIME ZONE 'Africa/Lagos';
+BEGIN
+  INSERT INTO public.blog_posts (id, merchant_id, title, slug, content, author_name, status, published_at)
+  VALUES (
+    'd3000000-0000-4000-8000-000000000097',
+    'd2000000-0000-4000-8000-000000000001',
+    'Scheduled Insert Backfill',
+    'scheduled-insert-backfill',
+    'Scheduled body',
+    'Editor',
+    'scheduled',
+    v_ts_orig
+  );
 
-SELECT pg_temp.assert_true(
-  (SELECT requested_publish_at = '2026-11-26T10:00:00Z'::timestamptz
-   FROM public.blog_posts WHERE id = 'd3000000-0000-4000-8000-000000000097'),
-  'scheduled INSERT populates requested_publish_at from published_at when omitted'
-);
+  PERFORM pg_temp.assert_true(
+    (SELECT requested_publish_at = v_ts_orig
+     FROM public.blog_posts WHERE id = 'd3000000-0000-4000-8000-000000000097'),
+    'scheduled INSERT populates requested_publish_at from published_at when omitted'
+  );
 
--- Unmanaged scheduled post moved to a new published_at charges the new day, not stale requested_publish_at
-UPDATE public.blog_posts
-SET published_at = '2026-11-27T10:00:00Z'
-WHERE id = 'd3000000-0000-4000-8000-000000000097';
+  -- Unmanaged scheduled post moved to a new published_at charges the new day, not stale requested_publish_at
+  UPDATE public.blog_posts
+  SET published_at = v_ts_next
+  WHERE id = 'd3000000-0000-4000-8000-000000000097';
 
-SELECT pg_temp.assert_true(
-  (SELECT total_used = 0
-   FROM private.compute_blog_release_day_usage_v1('d2000000-0000-4000-8000-000000000001', '2026-11-26')),
-  'unmanaged scheduled post vacates original requested_publish_at day when published_at moves'
-);
+  PERFORM pg_temp.assert_true(
+    (SELECT total_used = 0
+     FROM private.compute_blog_release_day_usage_v1('d2000000-0000-4000-8000-000000000001', v_day_orig)),
+    'unmanaged scheduled post vacates original requested_publish_at day when published_at moves'
+  );
 
-SELECT pg_temp.assert_true(
-  (SELECT total_used = 1
-   FROM private.compute_blog_release_day_usage_v1('d2000000-0000-4000-8000-000000000001', '2026-11-27')),
-  'unmanaged scheduled post counts against its current published_at day'
-);
+  PERFORM pg_temp.assert_true(
+    (SELECT total_used = 1
+     FROM private.compute_blog_release_day_usage_v1('d2000000-0000-4000-8000-000000000001', v_day_next)),
+    'unmanaged scheduled post counts against its current published_at day'
+  );
+END $$;
 
 ROLLBACK;

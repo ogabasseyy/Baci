@@ -293,14 +293,16 @@ platform :ios do
     deliver_opts[:build_number] = build_number unless build_number.empty?
     deliver_opts[:app_version] = app_version unless app_version.empty?
 
+    # Before set_changelog, which would rename a version Apple is still holding,
+    # and before the processing wait, so a skip costs no runner time.
+    # asc_api_key above has already authorised Spaceship.
+    next if pending_review_blocks_submission?(app_id: BUNDLE_ID)
+
     wait_for_app_store_build_processing!(
       api_key: api_key,
       app_version: app_version,
       build_number: build_number
     )
-
-    # Before set_changelog, which would rename a version Apple is still holding.
-    next if pending_review_blocks_submission?(app_id: BUNDLE_ID)
 
     changelog_opts = { api_key: api_key, changelog: release_notes_text }
     changelog_opts[:version] = app_version unless app_version.empty?

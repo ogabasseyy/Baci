@@ -34,6 +34,16 @@ describe('admin publish and rollback endpoints', () => {
     );
     expect(unconfigured.status).toBe(503);
 
+    const shortToken = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: { authorization: 'Bearer short-token' },
+        body: '{}',
+      }),
+      { OTA_BUCKET: env.OTA_BUCKET, OTA_ADMIN_TOKEN: 'short-token' }
+    );
+    expect(shortToken.status).toBe(503);
+
     const noAuth = await worker.fetch(
       new Request('https://ota.usebaci.com/api/admin/publish', {
         method: 'POST',

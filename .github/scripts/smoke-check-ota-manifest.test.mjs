@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash, createSign, generateKeyPairSync } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { smokeCheckManifestEndpoint } from './smoke-check-ota-manifest.mjs';
+import {
+  resolveSmokeCheckCertificatePem,
+  smokeCheckManifestEndpoint,
+} from './smoke-check-ota-manifest.mjs';
 
 const BUNDLE_BYTES = Buffer.from('console.log("smoke-bundle");');
 const BUNDLE_HASH = createHash('sha256').update(BUNDLE_BYTES).digest('base64url');
@@ -382,4 +388,28 @@ test('smoke check verifies expo-signature keyid, multipart disposition, and cryp
     ),
     /Expected multipart content-disposition name="manifest"/
   );
+});
+
+test('resolveSmokeCheckCertificatePem prefers embedded certificate file and rejects divergent PEM env', () => {
+  const pairA = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const pairB = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const pemA = pairA.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+  const pemB = pairB.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), 'ota-cert-resolve-'));
+  try {
+    const certPath = path.join(tempDir, 'embedded.pem');
+    writeFileSync(certPath, pemA);
+
+    assert.equal(resolveSmokeCheckCertificatePem({ certPath }), pemA.trim());
+    assert.equal(
+      resolveSmokeCheckCertificatePem({ certPath, certPemEnv: pemA }),
+      pemA.trim()
+    );
+    assert.throws(
+      () => resolveSmokeCheckCertificatePem({ certPath, certPemEnv: pemB }),
+      /does not match the client-embedded certificate file/
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 });

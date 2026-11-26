@@ -423,7 +423,11 @@ jobs:
             else
               rb_args+=(--update-id "$prev_id")
             fi
-            node "$RUNNER_TEMP/publish-ota.mjs" "${rb_args[@]}" || true
+            if ! node "$RUNNER_TEMP/publish-ota.mjs" "${rb_args[@]}"; then
+              echo "::error::Compensating rollback FAILED! Broken update ${published_id:-unknown} may still be active on ${CHANNEL}/${PLATFORM}/${RUNTIME_VERSION}; manual rollback required." >&2
+            else
+              echo "::notice::Compensating rollback succeeded after failed smoke check for ${published_id:-unknown}." >&2
+            fi
             exit 1
           fi
 

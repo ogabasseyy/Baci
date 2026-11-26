@@ -236,6 +236,28 @@ export async function smokeCheckManifestEndpoint(
   return first;
 }
 
+export function resolveSmokeCheckCertificatePem({ certPath, certPemEnv }) {
+  const trimmedPath = certPath?.trim();
+  const trimmedEnv = certPemEnv?.trim();
+  const filePem = trimmedPath ? readFileSync(trimmedPath, 'utf8').trim() : undefined;
+  if (filePem && trimmedEnv) {
+    const fileSpki = createPublicKey(filePem).export({
+      type: 'spki',
+      format: 'der',
+    });
+    const envSpki = createPublicKey(trimmedEnv).export({
+      type: 'spki',
+      format: 'der',
+    });
+    if (!fileSpki.equals(envSpki)) {
+      throw new Error(
+        'Configured OTA_CODE_SIGNING_CERTIFICATE_PEM does not match the client-embedded certificate file'
+      );
+    }
+  }
+  return filePem || trimmedEnv || undefined;
+}
+
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   const manifestUrl = process.env.OTA_MANIFEST_URL;
   const platform = process.env.PLATFORM;
@@ -243,10 +265,10 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const channel = process.env.CHANNEL;
   const resultJson = process.env.OTA_OPERATION_RESULT;
   const expectSignatureKeyId = process.env.OTA_SIGNING_KEY_ID?.trim() || undefined;
-  const certPemEnv = process.env.OTA_CODE_SIGNING_CERTIFICATE_PEM?.trim();
-  const certPath = process.env.OTA_CODE_SIGNING_CERTIFICATE_PATH?.trim();
-  const publicKeyOrCertPem =
-    certPemEnv || (certPath ? readFileSync(certPath, 'utf8') : undefined);
+  const publicKeyOrCertPem = resolveSmokeCheckCertificatePem({
+    certPath: process.env.OTA_CODE_SIGNING_CERTIFICATE_PATH,
+    certPemEnv: process.env.OTA_CODE_SIGNING_CERTIFICATE_PEM,
+  });
   if (!manifestUrl || !platform || !runtimeVersion || !channel || !resultJson) {
     throw new Error('Missing required env vars for OTA manifest smoke check');
   }

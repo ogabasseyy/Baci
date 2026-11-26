@@ -47,6 +47,14 @@ test('publish workflow fails closed when signing is enabled without a client-emb
     workflowText,
     /rb_args\+=\(--expected-current-update-id "\$published_id"\)/
   );
+  assert.match(
+    workflowText,
+    /Compensating rollback FAILED!/
+  );
+  assert.doesNotMatch(
+    workflowText,
+    /publish-ota\.mjs" "\$\{rb_args\[@\]\}" \|\| true/
+  );
 });
 
 test('smoke-check and verify test files copied flat into RUNNER_TEMP run cleanly outside repo layout', () => {

@@ -23,13 +23,18 @@ const UTF8_DECODER = new TextDecoder('utf-8', {
   ignoreBOM: false,
 });
 const MAX_SAFE_TIMESTAMP_MS = 253_402_300_799_000;
+const MIN_ADMIN_TOKEN_LENGTH = 32;
 
 export function authenticateAdmin(
   request: Request,
   env: OtaWorkerEnv
 ): Response | null {
-  if (!env.OTA_ADMIN_TOKEN || env.OTA_ADMIN_TOKEN.trim().length === 0) {
-    return errorResponse('OTA admin token is not configured', 503);
+  const configured = env.OTA_ADMIN_TOKEN?.trim();
+  if (!configured || configured.length < MIN_ADMIN_TOKEN_LENGTH) {
+    return errorResponse(
+      'OTA admin token is not configured or below minimum length',
+      503
+    );
   }
   if (
     !timingSafeBearerMatch(

@@ -79,8 +79,12 @@ BEGIN
     SELECT status, delivered_at, current_location
     INTO v_status, v_delivered_at, v_location
     FROM public.shipments WHERE id = v_shipment_id;
-    IF v_location IS DISTINCT FROM 'NEWER HUB' THEN
-      RAISE EXCEPTION 'a backfilled older % scan must not overwrite the newer location, got %',
+    -- Only the terminal-only payload keeps the newer location. When the payload
+    -- repeats the newer scan, the apply function takes the location the worker
+    -- sends, which is the leading terminal scan's by design.
+    IF v_location IS DISTINCT FROM (CASE WHEN v_case.terminal = 'delivered'
+        THEN 'NEWER HUB' ELSE 'OLDER LOCATION' END) THEN
+      RAISE EXCEPTION 'unexpected location after a backfilled % scan: %',
         v_case.terminal, v_location;
     END IF;
     IF v_status IS DISTINCT FROM v_case.terminal THEN

@@ -99,12 +99,6 @@ export function getBnplRemainingAmount(
     return 0;
   }
 
-  const hasLedgerProjection =
-    order.wallet_ledger_used != null || order.savings_ledger_used != null;
-  const effectiveStatus = !hasLedgerProjection
-    ? 'unpaid'
-    : order.payment_status;
-
   return toCurrencyAmount(
     computeOrderNetPayable({
       total: toCurrencyAmount(order.total),
@@ -117,7 +111,7 @@ export function getBnplRemainingAmount(
         order.wallet_reversed_credit != null
           ? toCurrencyAmount(order.wallet_reversed_credit)
           : undefined,
-      paymentStatus: effectiveStatus,
+      paymentStatus: order.payment_status,
     })
   );
 }

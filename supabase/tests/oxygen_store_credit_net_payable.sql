@@ -427,6 +427,25 @@ BEGIN
         IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
       END;
 
+      -- Reversals on a live (non-cancelled, non-refunded) order whose workflow is
+      -- already 'activated' must still fail closed so booked principal stays frozen.
+      BEGIN
+        INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
+        VALUES ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',10000,10000,'order_reversal','ec310000-0000-4000-8000-000000000010');
+        RAISE EXCEPTION 'Activated live-order wallet reversal unexpectedly bypassed freeze guard';
+      EXCEPTION WHEN check_violation THEN
+        IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
+      END;
+
+      BEGIN
+        UPDATE public.customer_savings_redemptions
+        SET metadata = jsonb_build_object('reversed_at', '2026-11-26T00:00:00Z')
+        WHERE order_id = 'ec310000-0000-4000-8000-000000000010';
+        RAISE EXCEPTION 'Activated live-order savings reversal unexpectedly bypassed freeze guard';
+      EXCEPTION WHEN check_violation THEN
+        IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
+      END;
+
       UPDATE public.orders
          SET cancelled_at = now(), payment_status = 'refunded'
        WHERE id = 'ec310000-0000-4000-8000-000000000010';

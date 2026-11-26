@@ -212,8 +212,8 @@ BEGIN
           ON o.id = w.order_id
         WHERE w.order_id = v_order
           AND o.cancelled_at IS NULL
-          AND COALESCE(o.payment_status, '') NOT IN ('refunded', 'cancelled')
-          AND w.stage NOT IN ('activated', 'cancelled', 'expired', 'failed')
+          AND pg_catalog.lower(pg_catalog.btrim(COALESCE(o.payment_status, ''))) NOT IN ('refunded', 'cancelled', 'canceled')
+          AND w.stage NOT IN ('cancelled', 'expired', 'failed')
       ) THEN
         RAISE EXCEPTION 'oxygen_local_credit_in_use' USING ERRCODE = '23514';
       END IF;

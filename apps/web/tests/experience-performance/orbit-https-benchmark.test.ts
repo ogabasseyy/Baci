@@ -15,6 +15,7 @@ import { runLocalQualification } from '../../tools/experience-runner/local-oci-e
 import { packPrivateBuild } from '../../tools/experience-runner/private-build-payload';
 import { createCommerceEngineFixture } from '../experience-commerce/cart-engine-fixture';
 import { prepareCommerceCatalog } from '../experience-commerce/catalog-fixture';
+import { compileStorefrontFixture } from '../experience-commerce/compile-storefront';
 import { startCommerceDataApi } from '../experience-commerce/data-api';
 import { seedFixtureOutput } from '../experience-commerce/seed-output';
 
@@ -47,7 +48,11 @@ it.skipIf(process.env.BACI_RUN_ORBIT_HTTPS_BENCHMARK !== '1')(
     let api: Awaited<ReturnType<typeof startCommerceDataApi>> | undefined;
     try {
       const { merchant } = await prepareCommerceCatalog(fixture);
-      const { image } = await seedFixtureOutput(fixture, merchant);
+      const { image } = await seedFixtureOutput(
+        fixture,
+        merchant,
+        await compileStorefrontFixture()
+      );
       api = await startCommerceDataApi(fixture);
       // Resolve public data through the retained fixture head's exact trusted host,
       // then compile the same source for the synthetic HTTPS measurement host.

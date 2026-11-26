@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
+import { BUILDER_METADATA_URL } from '../src/lib/builder-connector/resource';
 import { experienceToolPolicy } from '../src/lib/experience/tool-policy';
 import { experienceEvidenceId } from '../src/schemas/experience-evidence-row';
 import {
@@ -53,7 +54,7 @@ export async function experienceMcpToolResult(
       ? {
           _meta: {
             'mcp/www_authenticate': [
-              `Bearer resource_metadata="https://mcp.usebaci.com/.well-known/oauth-protected-resource/builder/mcp", scope="${experienceToolPolicy[name].scopes.join(' ')}", error="${envelope.code === 'INSUFFICIENT_SCOPE' ? 'insufficient_scope' : 'invalid_token'}"`,
+              `Bearer resource_metadata="${BUILDER_METADATA_URL}", scope="${experienceToolPolicy[name].scopes.join(' ')}", error="${envelope.code === 'INSUFFICIENT_SCOPE' ? 'insufficient_scope' : 'invalid_token'}"`,
             ],
           },
         }

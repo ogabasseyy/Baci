@@ -1,22 +1,16 @@
 /** Disposable database-only fixture rows, not the publication workflow. */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import type { ExperienceManifest } from '@baci/shared/experience';
 import sharp from 'sharp';
+import type { CompiledCandidate } from '@/lib/experience/compiled-candidate';
 import type { createCommerceEngineFixture } from './cart-engine-fixture.ts';
 export async function seedFixtureOutput(
   f: Awaited<ReturnType<typeof createCommerceEngineFixture>>,
-  merchant: string
+  merchant: string,
+  fixture: { manifest: ExperienceManifest; compiled: CompiledCandidate }
 ) {
-  const { manifest, compiled } = JSON.parse(
-    readFileSync(
-      new URL(
-        '../../../../.superpowers/sdd/2026-10-23-full-code-experiences/c-compiled-fixture.json',
-        import.meta.url
-      ),
-      'utf8'
-    )
-  );
+  const { manifest, compiled } = fixture;
   const digest = (bytes: Uint8Array | string) =>
     createHash('sha256').update(bytes).digest('hex');
   if (

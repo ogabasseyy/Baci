@@ -36,7 +36,7 @@ it('captures semantic evidence from a real offline HTTPS execution frame through
   const handler = createRunnerHandler({
     key,
     toolchainDigest,
-    execute: runLocalQualification,
+    execute: (kind, payload) => runLocalQualification(kind, payload),
   });
   const execute = createRunnerExecutor({
     endpoint: 'https://runner.synthetic.test/v1/execute',

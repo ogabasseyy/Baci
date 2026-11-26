@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { assertLocalQualificationHost } from './local-prerequisites.mjs';
+import { buildPublicObservationWorker } from './public-observer-bundle.mjs';
 
 assertLocalQualificationHost();
 
@@ -30,6 +31,10 @@ for (const profile of ['node24', 'browser'])
     { env }
   );
 mkdirSync(scratch, { recursive: true });
+await buildPublicObservationWorker(
+  app,
+  path.join(scratch, 'public-observation-worker.mjs')
+);
 for (const [source, target, external] of [
   [
     'tools/experience-runner/performance-worker.ts',
@@ -67,6 +72,18 @@ for (const [source, target, external] of [
     logLevel: 'silent',
   });
 }
+execFileSync(
+  'colima',
+  [
+    'ssh',
+    '--',
+    'sudo',
+    'cp',
+    path.join(scratch, 'public-observation-worker.mjs'),
+    `${root}/browser/rootfs/opt/experience/public-observation-worker.mjs`,
+  ],
+  { env }
+);
 execFileSync(
   'colima',
   [
@@ -167,6 +184,7 @@ const workerFiles = [
     'bundle-source-prerender.mjs',
     'capture-worker.mjs',
     'performance-worker.mjs',
+    'public-observation-worker.mjs',
   ].map((name) => [name, path.join(scratch, name)]),
   ['compile-runtime.mjs', compiler],
   ...[

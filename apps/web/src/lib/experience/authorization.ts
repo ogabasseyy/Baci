@@ -4,10 +4,29 @@ export interface OwnerRequestContext {
   merchantId: string;
   supabase: SupabaseClient;
   identity?: BuilderContext['identity'];
+  signal?: AbortSignal;
 }
 export interface ExperienceContext extends OwnerRequestContext {
   actorUserId: string;
 }
+async function getOwnerUser(client: SupabaseClient, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  if (!signal) return client.auth.getUser();
+
+  // Auth's getUser API has no per-call AbortSignal. Release this caller
+  // immediately while observing the eventual transport result.
+  const pending =
+    Promise.withResolvers<Awaited<ReturnType<typeof client.auth.getUser>>>();
+  const abort = () => pending.reject(signal.reason);
+  signal.addEventListener('abort', abort, { once: true });
+  try {
+    client.auth.getUser().then(pending.resolve, pending.reject);
+    return await pending.promise;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
 /** Early rejection. Every write RPC repeats authorization under the grant lock. */
 export async function requireExperienceOwner(
   ctx: BuilderContext | OwnerRequestContext,
@@ -16,7 +35,9 @@ export async function requireExperienceOwner(
     | 'storefront.write'
     | 'storefront.publish' = 'storefront.write'
 ): Promise<ExperienceContext> {
-  const { data, error } = await ctx.supabase.auth.getUser();
+  const signal = 'signal' in ctx ? ctx.signal : undefined;
+  const { data, error } = await getOwnerUser(ctx.supabase, signal);
+  signal?.throwIfAborted();
   if (
     error ||
     !data.user ||
@@ -29,7 +50,7 @@ export async function requireExperienceOwner(
       !ctx.identity.allowedMerchantIds.includes(ctx.merchantId))
   )
     throw Error('INSUFFICIENT_SCOPE');
-  const result = await (ctx.supabase as SupabaseClient).rpc(
+  const query = (ctx.supabase as SupabaseClient).rpc(
     scope === 'storefront.write'
       ? 'experience_require_owner'
       : scope === 'storefront.publish'
@@ -41,6 +62,8 @@ export async function requireExperienceOwner(
       p_version: ctx.identity?.grantVersion ?? null,
     }
   );
+  const result = await (signal ? query.abortSignal(signal) : query);
+  signal?.throwIfAborted();
   if (result.error || result.data !== true) throw Error('NOT_FOUND');
   return { ...ctx, actorUserId: data.user.id };
 }

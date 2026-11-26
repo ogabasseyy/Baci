@@ -25,6 +25,7 @@ export function ProductDetailPurchasePanel({
   routeVariantMissing,
   hasCurrentVariantSelection,
   onAddToCart,
+  cartReady,
 }: {
   product: Product;
   cartItem: CartItem | undefined;
@@ -43,6 +44,7 @@ export function ProductDetailPurchasePanel({
   routeVariantMissing: boolean;
   hasCurrentVariantSelection: boolean;
   onAddToCart: () => void;
+  cartReady?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -167,6 +169,7 @@ export function ProductDetailPurchasePanel({
               routeVariantMissing ||
               (product.has_variants && !hasCurrentVariantSelection)
             }
+            data-baci-pdp-cart-ready={cartReady ? 'true' : undefined}
             onClick={onAddToCart}
           >
             Add to Cart

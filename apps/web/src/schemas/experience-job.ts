@@ -13,3 +13,8 @@ export const experienceFinalizedBuildRow = z.strictObject({
   build_digest: z.string().regex(/^[a-f0-9]{64}$/),
   host_origin: z.string().url(),
 });
+
+export const experienceFinalizedOperation = z.object({
+  buildId: z.uuid(),
+  buildDigest: z.string().regex(/^[a-f0-9]{64}$/),
+});

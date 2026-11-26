@@ -11,6 +11,7 @@ import {
 } from './rollback-build.test-support';
 import { hash, lifecycleFixture } from './sql.test-support';
 
+// The rehearsal runs 24 sandbox jobs serially. Each job keeps its own timeout.
 it('retains two real offline builds and proves compatible whole-site rollback in a fully rolled-back normal-role transaction', async () => {
   const f = await lifecycleFixture();
   const data = await lifecycleDataClient(f);
@@ -245,4 +246,4 @@ it('retains two real offline builds and proves compatible whole-site rollback in
     await data.close();
     await f.close();
   }
-}, 300000);
+}, 600000);

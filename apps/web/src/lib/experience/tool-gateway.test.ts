@@ -24,7 +24,8 @@ function fixture(scopes = ['storefront.read']) {
 }
 function request(
   body = JSON.stringify({ storefrontId: id }),
-  authorization: string | null = 'Bearer synthetic.token'
+  authorization: string | null = 'Bearer synthetic.token',
+  signal?: AbortSignal
 ) {
   return new Request('http://localhost/api', {
     method: 'POST',
@@ -33,6 +34,7 @@ function request(
       ...(authorization ? { authorization } : {}),
     },
     body,
+    signal,
   });
 }
 it('admits authenticated, scoped, validated calls and returns non-cacheable output', async () => {
@@ -43,8 +45,41 @@ it('admits authenticated, scoped, validated calls and returns non-cacheable outp
   expect(f.execute).toHaveBeenCalledWith(
     expect.objectContaining({ actorUserId: id }),
     'get_experience_capabilities',
-    { storefrontId: id }
+    { storefrontId: id },
+    expect.any(AbortSignal)
   );
+});
+it('propagates a disconnect during tool execution', async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const req = request(undefined, undefined, controller.signal);
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  let aborted = false;
+  f.execute.mockImplementationOnce(
+    (...args: unknown[]) =>
+      new Promise((_resolve, reject) => {
+        const signal = args[3];
+        signal instanceof AbortSignal
+          ? signal.addEventListener(
+              'abort',
+              () => {
+                aborted = true;
+                reject(signal.reason);
+              },
+              { once: true }
+            )
+          : reject(Error('Missing request signal'));
+        entered();
+      })
+  );
+  const response = f.gateway(req, 'get_experience_capabilities');
+  await started;
+  controller.abort();
+  await response;
+  expect(aborted).toBe(true);
 });
 it.each([
   null,

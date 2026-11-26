@@ -42,6 +42,10 @@ it('actual quote routes persist and read mocked carrier output through normal an
       [merchant]
     );
     api = await startCommerceDataApi(f);
+    // The public-rate loader creates its own anonymous client at request time.
+    // Point that client at the same disposable Data API, not the disabled stub.
+    process.env.NEXT_PUBLIC_SUPABASE_URL = api.url;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = api.anonKey;
     fakes.client = createClient(api.url, api.anonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
@@ -108,6 +112,14 @@ it('actual quote routes persist and read mocked carrier output through normal an
     expect(serverSession).toMatch(/^[a-f0-9-]{36}$/);
     expect(value.quotes.all).toContainEqual(
       expect.objectContaining({ id, price: 1800 })
+    );
+    expect(value.quotes.all).toContainEqual(
+      expect.objectContaining({
+        provider: 'MERCHANT',
+        displayName: 'Synthetic local delivery',
+        price: 1500,
+        currency: 'NGN',
+      })
     );
     expect(JSON.stringify(value)).not.toContain('providerCost');
     expect(fakes.getQuotes).toHaveBeenCalledWith(
@@ -188,6 +200,8 @@ it('actual quote routes persist and read mocked carrier output through normal an
     ).toBe('0');
   } finally {
     fakes.client = null;
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://127.0.0.1:1';
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'synthetic-disabled';
     await api?.close();
     await f.close();
   }

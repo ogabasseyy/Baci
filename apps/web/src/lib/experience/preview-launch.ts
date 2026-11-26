@@ -15,8 +15,10 @@ export async function createPreviewLaunch(
   input: { buildId: string; routeId?: string },
   vault: PreviewVault,
   expectedHostOrigin?: string,
-  prerender?: PrerenderPreviewOptions
+  prerender?: PrerenderPreviewOptions,
+  signal?: AbortSignal
 ) {
+  signal?.throwIfAborted();
   const ctx = await requireExperienceOwner(inputCtx);
   const build = await ctx.supabase
     .from('experience_builds')
@@ -71,12 +73,14 @@ export async function createPreviewLaunch(
       }))
     );
   }
+  signal?.throwIfAborted();
   const binding = await ctx.supabase.rpc('experience_create_preview_binding', {
     ...ownerRpcArgs(ctx),
     p_build: input.buildId,
   });
   if (binding.error || typeof binding.data !== 'string')
     throw Error('NOT_FOUND');
+  signal?.throwIfAborted();
   const ref = vault.create({
     ownerId: ctx.actorUserId,
     merchantId: ctx.merchantId,
@@ -97,7 +101,8 @@ export async function createPreviewLaunch(
               ref,
             },
             vault,
-            prerender
+            prerender,
+            signal
           )
         : vault.consume(ctx.actorUserId, ref)),
       hostOrigin: build.data.host_origin as string,

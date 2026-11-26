@@ -80,3 +80,41 @@ it('rejects a read-only connection before the publish DB check', async () => {
   ).rejects.toThrow('INSUFFICIENT_SCOPE');
   expect(c.supabase.rpc).not.toHaveBeenCalled();
 });
+
+it('binds cancellation to the owner authorization RPC and rejects a late result', async () => {
+  const controller = new AbortController();
+  const c = context();
+  const abortSignal = vi.fn(async () => {
+    controller.abort();
+    return { data: true, error: null };
+  });
+  c.supabase.rpc.mockReturnValueOnce({ abortSignal } as never);
+  await expect(
+    requireExperienceOwner({ ...c, signal: controller.signal } as never)
+  ).rejects.toMatchObject({ name: 'AbortError' });
+  expect(abortSignal).toHaveBeenCalledExactlyOnceWith(controller.signal);
+  await expect(
+    requireExperienceOwner({ ...c, signal: controller.signal } as never)
+  ).rejects.toMatchObject({ name: 'AbortError' });
+  expect(c.supabase.auth.getUser).toHaveBeenCalledOnce();
+});
+
+it('releases a disconnected owner handler before a stalled auth read resolves', async () => {
+  const controller = new AbortController();
+  const c = context();
+  const pending =
+    Promise.withResolvers<
+      Awaited<ReturnType<typeof c.supabase.auth.getUser>>
+    >();
+  c.supabase.auth.getUser.mockReturnValueOnce(pending.promise);
+  const reason = Error('owner disconnected');
+  const rejected = expect(
+    requireExperienceOwner({ ...c, signal: controller.signal } as never)
+  ).rejects.toBe(reason);
+  controller.abort(reason);
+  await rejected;
+  expect(c.supabase.rpc).not.toHaveBeenCalled();
+  pending.resolve({ data: { user: { id: 'owner' } }, error: null });
+  await pending.promise;
+  expect(c.supabase.rpc).not.toHaveBeenCalled();
+});

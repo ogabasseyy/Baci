@@ -45,20 +45,29 @@ function matches(
 }
 async function boundedText(
   body: ReadableStream<Uint8Array> | null,
-  limit: number
+  limit: number,
+  signal?: AbortSignal
 ) {
   if (!body) throw Error('INVALID_RUNNER_MESSAGE');
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let length = 0;
   let timedOut = false;
+  let cancellation: Promise<void> | undefined;
+  const cancel = () => {
+    cancellation ??= reader.cancel().catch(() => undefined);
+    return cancellation;
+  };
   const timer = setTimeout(() => {
     timedOut = true;
-    void reader.cancel().catch(() => undefined);
+    void cancel();
   }, 10000);
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
     for (;;) {
+      signal?.throwIfAborted();
       const part = await reader.read();
+      signal?.throwIfAborted();
       if (timedOut) throw Error('RUNNER_MESSAGE_TIMEOUT');
       if (part.done) break;
       length += part.value.byteLength;
@@ -66,10 +75,11 @@ async function boundedText(
       chunks.push(part.value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => undefined);
+    await cancel();
     throw error;
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
     reader.releaseLock();
   }
   return Buffer.concat(chunks).toString('utf8');
@@ -77,6 +87,12 @@ async function boundedText(
 function validateConfig(key: Uint8Array, digest: string) {
   if (key.length < 32 || !/^[a-f0-9]{64}$/.test(digest))
     throw Error('INVALID_RUNNER_CONFIG');
+}
+
+export class RunnerCapacityError extends Error {
+  constructor() {
+    super('RUNNER_UNAVAILABLE');
+  }
 }
 
 /** Trusted control plane only. Payload is the existing public-data/source envelope;
@@ -93,7 +109,12 @@ export function createRunnerExecutor(config: {
   const key = Uint8Array.from(config.key);
   validateConfig(key, config.toolchainDigest);
   const now = config.now ?? Date.now;
-  return async (kind: QualificationKind, payload: unknown) => {
+  async function withSignal(
+    kind: QualificationKind,
+    payload: unknown,
+    ownerSignal?: AbortSignal
+  ) {
+    ownerSignal?.throwIfAborted();
     if (config.lane === 'public-render' && kind !== 'prerender')
       throw Error('INVALID_PUBLIC_RUNNER_KIND');
     const request = experienceRunnerRequest.parse({
@@ -109,13 +130,17 @@ export function createRunnerExecutor(config: {
     const body = JSON.stringify(request);
     if (Buffer.byteLength(body) > INPUT_LIMIT)
       throw Error('RUNNER_MESSAGE_BUDGET');
+    const timeout = AbortSignal.timeout(75000);
+    const signal = ownerSignal
+      ? AbortSignal.any([ownerSignal, timeout])
+      : timeout;
     const response = await (config.fetch ?? fetch)(endpoint, {
       method: 'POST',
       body,
       redirect: 'error',
       credentials: 'omit',
       cache: 'no-store',
-      signal: AbortSignal.timeout(75000),
+      signal,
       headers: {
         'Content-Type': 'application/json',
         'X-Baci-Runner-Signature': signature(key, 'request', body),
@@ -123,9 +148,10 @@ export function createRunnerExecutor(config: {
     });
     if (response.status !== 200) {
       await response.body?.cancel();
+      if (response.status === 429) throw new RunnerCapacityError();
       throw Error('RUNNER_UNAVAILABLE');
     }
-    const text = await boundedText(response.body, OUTPUT_LIMIT);
+    const text = await boundedText(response.body, OUTPUT_LIMIT, signal);
     if (
       !matches(
         key,
@@ -137,7 +163,11 @@ export function createRunnerExecutor(config: {
       throw Error('INVALID_RUNNER_RESPONSE');
     const result = experienceRunnerReply(request.nonce).parse(JSON.parse(text));
     return experienceRunnerExecution.parse(result.output);
-  };
+  }
+  return Object.assign(
+    (kind: QualificationKind, payload: unknown) => withSignal(kind, payload),
+    { withSignal }
+  );
 }
 
 /** Ingress adapter: the injected executor MUST enforce the existing offline OCI
@@ -146,7 +176,11 @@ export function createRunnerExecutor(config: {
 export function createRunnerHandler(config: {
   key: Uint8Array;
   toolchainDigest: string;
-  execute: (kind: QualificationKind, payload: unknown) => Promise<unknown>;
+  execute: (
+    kind: QualificationKind,
+    payload: unknown,
+    signal: AbortSignal
+  ) => Promise<unknown>;
   now?: () => number;
 }) {
   const key = Uint8Array.from(config.key);
@@ -174,7 +208,7 @@ export function createRunnerHandler(config: {
     let dispatched = false;
     let publicDispatch = false;
     try {
-      const text = await boundedText(request.body, INPUT_LIMIT);
+      const text = await boundedText(request.body, INPUT_LIMIT, request.signal);
       readers--;
       reading = false;
       if (
@@ -215,7 +249,13 @@ export function createRunnerHandler(config: {
       if (publicDispatch) publicActive++;
       consumed.set(input.nonce, { expiry: input.expiresAt, lane: input.lane });
       laneCounts.set(input.lane, (laneCounts.get(input.lane) ?? 0) + 1);
-      const output = await config.execute(input.kind, input.payload);
+      request.signal.throwIfAborted();
+      const output = await config.execute(
+        input.kind,
+        input.payload,
+        request.signal
+      );
+      request.signal.throwIfAborted();
       const body = JSON.stringify({ nonce: input.nonce, output });
       if (Buffer.byteLength(body) > OUTPUT_LIMIT)
         throw Error('RUNNER_MESSAGE_BUDGET');

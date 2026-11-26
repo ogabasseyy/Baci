@@ -1,0 +1,42 @@
+# If combining with the builder candidate, retain its identical global logger.
+{
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri delete
+			}
+		}
+	}
+}
+
+# Output-only upstream. Keep this on a separate vhost from builder auth/MCP/owner.
+builder-output-origin.usebaci.com {
+	# Do not record ticket URLs even if access logging is enabled later.
+	log_skip
+	@delivery {
+		method GET
+		path_regexp delivery `^/(resource/[a-f0-9]{64}|published/[a-z0-9][a-z0-9-]{0,99}/[a-f0-9]{64})/(index\.html|app\.(js|css)|assets/[a-z0-9-]{1,80})$`
+		# Worker sends one canonical path parameter. Count its decoded bytes plus "path=".
+		expression `{env.BACI_EXECUTION_ORIGIN_KEY}.matches("^[A-Za-z0-9_-]{43}$") && {http.request.header.X-Baci-Execution-Origin-Key} == {env.BACI_EXECUTION_ORIGIN_KEY} && ({http.request.uri.query} == "" || ({http.request.uri.path}.startsWith("/published/") && {http.request.uri.path}.endsWith("/index.html") && {http.request.uri.query}.matches("^path=%2F(([A-Za-z0-9_-]|%5B|%5D)+(%2F([A-Za-z0-9_-]|%5B|%5D)+)*)?$") && {http.request.uri.query}.replace("%2F", "/").replace("%5B", "[").replace("%5D", "]").size() <= 1029))`
+	}
+	handle @delivery {
+		header Cache-Control "private, no-store"
+		reverse_proxy 127.0.0.1:{$BACI_DELIVERY_PORT} {
+			header_up Host baci-builder-output.ogabassey-ai.workers.dev
+			header_up -X-Baci-Execution-Origin-Key
+			header_up -Authorization
+			header_up -Cookie
+			header_up -Referer
+			header_up -Forwarded
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+		}
+	}
+	handle {
+		header Cache-Control "private, no-store"
+		respond 404
+	}
+}

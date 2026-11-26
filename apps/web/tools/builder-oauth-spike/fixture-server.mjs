@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { openaiClient, selectClientMetadata } from './client-metadata.mjs';
 import { createAdapter } from './sqlite-adapter.mjs';
-export const resource = 'https://mcp.usebaci.com/builder/mcp';
+export const resource = 'https://builder-mcp.usebaci.com/builder/mcp';
 export const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
 const candidate = resolve(
   process.env.BACI_OAUTH_CANDIDATE_DIR ??

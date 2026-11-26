@@ -16,10 +16,14 @@ import { getExperienceStorefrontRuntime } from './storefront-runtime';
 
 const id = '11111111-1111-4111-8111-111111111111';
 function fixture() {
-  const rpc = vi.fn(async () => ({ data: true, error: null }));
+  const authorization = {
+    abortSignal: vi.fn(async () => ({ data: true, error: null })),
+  };
+  const rpc = vi.fn(() => authorization);
   const query = {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    abortSignal: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn(async () => ({
       data: { id, user_id: id },
       error: null,
@@ -87,7 +91,7 @@ function fixture() {
       }),
     },
   };
-  return { settings, resolveUserClient, legacyGateway };
+  return { settings, resolveUserClient, legacyGateway, authorization, query };
 }
 const request = (name: string, body: unknown = { storefrontId: id }) =>
   POST(
@@ -126,6 +130,12 @@ it('concurrent Node startup installs combined HTTP dispatch, normal-owner admiss
       value: { mode: 'full-custom-code', aiProviderCalls: 0 },
     });
     expect(f.resolveUserClient).toHaveBeenCalledOnce();
+    expect(f.query.abortSignal).toHaveBeenCalledExactlyOnceWith(
+      expect.any(AbortSignal)
+    );
+    expect(f.authorization.abortSignal).toHaveBeenCalledExactlyOnceWith(
+      expect.any(AbortSignal)
+    );
     expect(f.legacyGateway).not.toHaveBeenCalled();
     expect((await request('not_a_tool')).status).toBe(404);
     expect(f.legacyGateway).not.toHaveBeenCalled();

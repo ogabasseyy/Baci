@@ -1,20 +1,33 @@
 import { expect, it, vi } from 'vitest';
 import { createOwnerApprovalHandler } from './owner-approval-handler';
+import { VerifierTemporarilyUnavailable } from './verifier-availability';
 
 const id = '11111111-1111-4111-8111-111111111111';
 function fixture() {
   const load = vi.fn(async () => ({ status: 'confirmation-required' }));
   const confirm = vi.fn(async () => ({ version: 1 }));
+  const prepareDraft = vi.fn(async () => ({
+    status: 'preparing',
+    approvalId: id,
+  }));
+  const preparePublication = vi.fn(async () => ({
+    status: 'ready',
+    approvalId: id,
+  }));
   const checkMutation = vi.fn(async (): Promise<Response | null> => null);
   const ownerClient = vi.fn(async () => ({}) as never);
   return {
     load,
     confirm,
+    prepareDraft,
+    preparePublication,
     checkMutation,
     ownerClient,
     handler: createOwnerApprovalHandler({
       load,
       confirm,
+      prepareDraft,
+      preparePublication,
       checkMutation,
       ownerClient,
     }),
@@ -31,15 +44,14 @@ it('GET reads only and never confirms an intent', async () => {
 });
 it('POST uses owner auth and CSRF before confirming the exact intent', async () => {
   const f = fixture();
-  const r = await f.handler(
-    new Request('http://localhost/api', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
-    })
-  );
+  const request = new Request('http://localhost/api', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
+  });
+  const r = await f.handler(request);
   expect(r.status).toBe(200);
   expect(r.headers.get('Cache-Control')).toBe('private, no-store');
-  expect(f.confirm).toHaveBeenCalledWith(expect.anything(), id);
+  expect(f.confirm).toHaveBeenCalledWith(expect.anything(), id, request.signal);
 });
 it('fails closed for missing owner, rejected CSRF, malformed JSON and approval booleans', async () => {
   const f = fixture();
@@ -80,4 +92,40 @@ it('returns a safe bounded error when confirmation fails; never retries a mutati
   expect(r.status).toBe(403);
   expect(await r.text()).not.toContain('private details');
   expect(f.confirm).toHaveBeenCalledOnce();
+});
+
+it('returns retryable 503 for a verifier outage without repeating confirmation', async () => {
+  const f = fixture();
+  f.confirm.mockRejectedValueOnce(new VerifierTemporarilyUnavailable());
+  const response = await f.handler(
+    new Request('http://localhost/api', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'confirm-draft', approvalId: id }),
+    })
+  );
+  expect(response.status).toBe(503);
+  expect(f.confirm).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ['prepare-draft', 'prepareDraft'],
+  ['prepare-publication', 'preparePublication'],
+] as const)('requires CSRF for %s and never confirms while preparing', async (action, handler) => {
+  const f = fixture();
+  const request = () =>
+    new Request('http://localhost/api', {
+      method: 'POST',
+      body: JSON.stringify({ action, approvalId: id }),
+    });
+  f.checkMutation.mockResolvedValueOnce(new Response(null, { status: 403 }));
+  expect((await f.handler(request())).status).toBe(403);
+  expect(f[handler]).not.toHaveBeenCalled();
+  const admitted = request();
+  expect((await f.handler(admitted)).status).toBe(200);
+  expect(f[handler]).toHaveBeenCalledWith(
+    expect.anything(),
+    id,
+    admitted.signal
+  );
+  expect(f.confirm).not.toHaveBeenCalled();
 });

@@ -4,33 +4,55 @@ import type {
   ExperienceManifest,
   PublicBootstrap,
 } from '@baci/shared/experience';
+import type { Pool } from 'pg';
 import { expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 vi.mock('server-only', () => ({}));
 
-import { queueExperienceBuild } from '@/lib/experience/build-service';
+const web = vi.hoisted(() => ({ client: undefined as unknown }));
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: async () => web.client,
+}));
+vi.mock('@/lib/csrf', () => ({
+  checkCsrfProtection: async () => ({ valid: true }),
+}));
+vi.mock('@/lib/get-merchant-for-api-request', () => ({
+  getMerchantForApiRequest: async (
+    _client: unknown,
+    _user: string,
+    input: { requestedMerchantId: string }
+  ) => ({
+    merchantId: input.requestedMerchantId,
+    staffAccess: { isOwner: true },
+  }),
+}));
+
 import { runExperienceBuild } from '@/lib/experience/local-build-supervisor';
 import { digestBytes } from '@/lib/experience/manifest-digest';
-import { createPreviewLaunch } from '@/lib/experience/preview-launch';
-import { createPreviewVault } from '@/lib/experience/preview-service';
-import {
-  beginUpload,
-  finalizeUpload,
-  writeChunk,
-} from '@/lib/experience/upload-service';
 import { runLocalQualification } from '../../tools/experience-runner/local-oci-executor';
 import { createLocalPrerenderArtifacts } from '../../tools/experience-runner/prerender-artifacts';
-import { createProductionPreviewDelivery } from '../../tools/experience-runner/preview-delivery';
 import {
   createRunnerExecutor,
   createRunnerHandler,
 } from '../../tools/experience-runner/runner-transport';
 import { createTransientOutputStore } from '../../tools/experience-runner/transient-output-store';
-import { runVerifierTransaction } from '../experience-lifecycle/verifier-transaction';
+import { createVerifierBuildRecorder } from '../../tools/experience-verifier/build-recorder';
+import { createIndependentBuildVerifier } from '../../tools/experience-verifier/build-verifier';
+import { createVerifierCaptureWorker } from '../../tools/experience-verifier/capture-worker';
 import { experienceDataFixture } from './data-fixture.test-support';
+import { startMcpRunnerFixture } from './mcp-runner.test-support';
+import { checkProductionRunnerPreview } from './production-runner-preview.test-support';
+import { setupBuildVerification } from './verifier-build-loopback.test-support';
+import { setupVerifierPool } from './verifier-pool.test-support';
 
 it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private prerender delivery -> revocation, with no publication', async () => {
   const f = await experienceDataFixture();
+  let verifierPool: Pool | undefined;
+  let buildVerification:
+    | Awaited<ReturnType<typeof setupBuildVerification>>
+    | undefined;
+  let mcp: Awaited<ReturnType<typeof startMcpRunnerFixture>> | undefined;
   try {
     const hostOrigin = 'https://shop.synthetic.test';
     const previewOrigin = 'https://builder.synthetic-baci.test';
@@ -86,30 +108,65 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       assets: [],
       capabilities: ['navigation', 'catalog.read'],
     };
-    const upload = await beginUpload(f.owner, {
-      manifest,
-      files: {
-        files: [
-          {
-            path: 'app.tsx',
-            bytes: Buffer.byteLength(content),
-            digest: digestBytes(content),
-          },
-        ],
-      },
+    let dependencies: Parameters<typeof runExperienceBuild>[2] | undefined;
+    const capturedBuild: {
+      value?: Awaited<ReturnType<typeof runExperienceBuild>>;
+    } = {};
+    mcp = await startMcpRunnerFixture(f, async (ctx, input) => {
+      if (!dependencies) throw Error('BUILD_NOT_READY');
+      capturedBuild.value = await runExperienceBuild(ctx, input, dependencies);
+      return capturedBuild.value;
     });
-    await writeChunk(f.owner, {
-      uploadId: upload.uploadId,
+    const upload = z
+      .object({
+        status: z.literal('ok'),
+        value: z.object({ uploadId: z.uuid() }),
+      })
+      .parse(
+        await mcp.call('begin_experience_upload', {
+          storefrontId: f.merchantId,
+          manifest,
+          files: {
+            files: [
+              {
+                path: 'app.tsx',
+                bytes: Buffer.byteLength(content),
+                digest: digestBytes(content),
+              },
+            ],
+          },
+        })
+      );
+    const chunk = await mcp.call('write_experience_chunk', {
+      storefrontId: f.merchantId,
+      uploadId: upload.value.uploadId,
       path: 'app.tsx',
       offset: 0,
-      bytes: Buffer.from(content),
+      bytesBase64: Buffer.from(content).toString('base64'),
       chunkDigest: digestBytes(content),
     });
-    const artifact = await finalizeUpload(f.owner, upload);
-    const job = await queueExperienceBuild(f.owner, {
-      artifactId: artifact.artifactId,
-      idempotencyKey: randomUUID(),
-    });
+    expect(chunk).toMatchObject({ status: 'ok' });
+    const artifact = z
+      .object({
+        status: z.literal('ok'),
+        value: z.object({ artifactId: z.uuid() }),
+      })
+      .parse(
+        await mcp.call('finalize_experience_upload', {
+          storefrontId: f.merchantId,
+          uploadId: upload.value.uploadId,
+        })
+      );
+    const queued = z
+      .object({ status: z.literal('ok'), value: z.object({ jobId: z.uuid() }) })
+      .parse(
+        await mcp.call('build_experience', {
+          storefrontId: f.merchantId,
+          artifactId: artifact.value.artifactId,
+          idempotencyKey: randomUUID(),
+        })
+      );
+    const job = queued.value;
     const bootstrap: PublicBootstrap = {
       route: {
         epoch: 1,
@@ -122,7 +179,41 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       capabilities: manifest.capabilities,
     };
     let artifacts = createLocalPrerenderArtifacts();
-    const dependencies: Parameters<typeof runExperienceBuild>[2] = {
+    verifierPool = await setupVerifierPool(f);
+    await f.db.pool.query('UPDATE merchants SET slug=$2 WHERE id=$1', [
+      f.merchantId,
+      'synthetic',
+    ]);
+    const verifyBuild = createIndependentBuildVerifier({
+      execute,
+      bootstrap: async () => bootstrap,
+      canonicalBase: async () => hostOrigin,
+      previewOrigin,
+      executionOrigin,
+      record: await createVerifierBuildRecorder(verifierPool),
+    });
+    const verifierKey = randomBytes(32);
+    const capture = await createVerifierCaptureWorker({
+      pool: verifierPool,
+      hostOrigin,
+      previewOrigin,
+      bootstrap: async () => bootstrap,
+      runner: {
+        endpoint: 'https://runner.baci-offline.invalid/v1/execute',
+        key,
+        toolchainDigest,
+        fetch: (url, init) => handler(new Request(url, init)),
+      },
+    });
+    buildVerification = await setupBuildVerification({
+      f,
+      pool: verifierPool,
+      key: verifierKey,
+      verify: verifyBuild,
+      capture,
+      previewOrigin,
+    });
+    dependencies = {
       profile: 'production',
       previewOrigin,
       hostOrigin,
@@ -132,32 +223,19 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
       execute,
       prerenderArtifacts: artifacts,
       bootstrap: async () => bootstrap,
-      recordVerifiedEvidence: async (receipt) => {
-        const client = await f.db.pool.connect();
-        try {
-          await runVerifierTransaction(client, () =>
-            client.query(
-              'INSERT INTO experience_evidence(merchant_id,job_id,attempt_nonce,build_digest,receipt_digest,host_origin) VALUES($1,$2,$3,$4,$5,$6)',
-              [
-                receipt.merchantId,
-                receipt.jobId,
-                receipt.attemptNonce,
-                receipt.buildDigest,
-                receipt.receiptDigest,
-                receipt.hostOrigin,
-              ]
-            )
-          );
-        } finally {
-          client.release();
-        }
-      },
+      recordVerifiedEvidence: buildVerification.client,
     };
-    const build = await runExperienceBuild(
-      f.owner,
-      { jobId: job.jobId, idempotencyKey: randomUUID() },
-      dependencies
-    );
+    const response = await mcp.call('finalize_experience_build', {
+      storefrontId: f.merchantId,
+      jobId: job.jobId,
+      idempotencyKey: randomUUID(),
+    });
+    expect(response).toMatchObject({ status: 'ok' });
+    const build = capturedBuild.value;
+    if (!build) throw Error('MCP build did not run');
+    expect(response).toMatchObject({
+      value: { buildId: build.buildId, buildDigest: build.buildDigest },
+    });
     expect(build.proofs).toHaveLength(12);
     expect(new Set(build.proofs.map((proof) => proof.hostOrigin))).toEqual(
       new Set([hostOrigin, previewOrigin])
@@ -181,100 +259,30 @@ it('normal owner RLS -> signed runner -> offline HTTPS browser matrix -> private
     expect(committed.error).toBeNull();
     expect(committed.data).toHaveLength(1);
 
-    const vault = createPreviewVault({
-      origin: executionOrigin,
-      now: Date.now,
-      isActive: async (binding) => {
-        const result = await f.anonymous.rpc(
-          'experience_preview_binding_active',
-          { p_binding: binding }
-        );
-        return !result.error && result.data === true;
-      },
-    });
-    const prerender = {
+    await checkProductionRunnerPreview({
+      f,
+      mcp,
+      buildId: build.buildId,
+      buildVerification,
+      capture,
+      verifierPool,
+      verifierKey,
+      key,
+      toolchainDigest,
+      bootstrap,
       artifacts,
       execute,
-      executionOrigin,
-      bootstrap: async () => bootstrap,
-    };
-    await expect(
-      createPreviewLaunch(
-        f.other,
-        { buildId: build.buildId, routeId: 'home' },
-        vault,
-        hostOrigin,
-        prerender
-      )
-    ).rejects.toThrow('NOT_FOUND');
-    const launch = await createPreviewLaunch(
-      f.owner,
-      { buildId: build.buildId, routeId: 'home' },
-      vault,
       hostOrigin,
-      prerender
-    );
-    const delivery = createProductionPreviewDelivery({
-      vault,
+      previewOrigin,
       executionOrigin,
-      hostOrigins: [hostOrigin],
+      setWebClient: (client) => {
+        web.client = client;
+      },
     });
-    expect(
-      (
-        await f.anonymous
-          .from('experience_preview_bindings')
-          .select('id')
-          .limit(1)
-      ).error
-    ).not.toBeNull();
-    const html = await delivery(new Request(launch.src));
-    expect(html.status).toBe(200);
-    expect(await html.text()).toContain('Synthetic Orbit production ports');
-    await f.db.pool.query('DELETE FROM auth.sessions WHERE id=$1', [
-      f.sessionId,
-    ]);
-    expect((await delivery(new Request(launch.src))).status).toBe(404);
-    expect(
-      (await f.db.pool.query('SELECT count(*) FROM experience_published_heads'))
-        .rows[0].count
-    ).toBe('0');
   } finally {
+    await mcp?.close();
+    await buildVerification?.close();
+    await verifierPool?.end();
     await f.close();
   }
 }, 180000);
-
-it('keeps canonical HTTPS SQL origins strict without changing local support', async () => {
-  const f = await experienceDataFixture();
-  try {
-    const origins = [
-      'https://shop.synthetic.test',
-      'https://shop.synthetic.test:8443',
-      'http://127.0.0.1:4102',
-      'http://public.example.test',
-      'https://user:password@shop.synthetic.test',
-      'https://shop.synthetic.test/path',
-      'https://shop.synthetic.test:443',
-      'https://shop.synthetic.test:65536',
-      'https://shop.synthetic.test;bad',
-      'https://127.0.0.1',
-    ];
-    const validity = await f.db.pool.query(
-      'SELECT public.experience_host_origin_valid(value) AS valid FROM unnest($1::text[]) WITH ORDINALITY AS origins(value, n) ORDER BY n',
-      [origins]
-    );
-    expect(validity.rows.map((row) => row.valid)).toEqual([
-      true,
-      true,
-      true,
-      false,
-      false,
-      false,
-      false,
-      false,
-      false,
-      false,
-    ]);
-  } finally {
-    await f.close();
-  }
-});

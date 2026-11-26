@@ -1,4 +1,5 @@
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
+import { experienceSourceHeadRow } from '@/schemas/experience-source-head';
 import { experienceSourcePatch } from '@/schemas/experience-source-patch';
 import { experienceSourcePath } from '@/schemas/experience-upload';
 import {
@@ -13,6 +14,36 @@ import {
   sourcePage,
   writeChunk,
 } from './upload-service';
+
+export async function readSourceHead(inputCtx: OwnerRequestContext) {
+  const ctx = await requireExperienceOwner(inputCtx);
+  const { data, error } = await ctx.supabase
+    .from('experience_source_heads')
+    .select(
+      'artifact_id,version,artifact:experience_artifacts(source_digest,entry:manifest->>entry,files:experience_source_files(path))'
+    )
+    .eq('merchant_id', ctx.merchantId)
+    .maybeSingle();
+  if (error) throw Error('NOT_FOUND');
+  // Do not reveal the head if the grant was revoked while the read completed.
+  await requireExperienceOwner(ctx);
+  if (!data)
+    return {
+      artifactId: null,
+      sourceDigest: null,
+      version: 0,
+      entry: null,
+      files: [],
+    };
+  const row = experienceSourceHeadRow.parse(data);
+  return {
+    artifactId: row.artifact_id,
+    sourceDigest: row.artifact.source_digest,
+    version: row.version,
+    entry: row.artifact.entry,
+    files: row.artifact.files.map((file) => file.path).sort(),
+  };
+}
 
 export async function readSource(
   inputCtx: OwnerRequestContext,

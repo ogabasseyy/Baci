@@ -1,7 +1,13 @@
-export const BUILDER_RESOURCE = 'https://mcp.usebaci.com/builder/mcp';
-export const BUILDER_ISSUER = 'https://auth.usebaci.com';
-export const BUILDER_METADATA_PATH =
-  '/.well-known/oauth-protected-resource/builder/mcp';
+import {
+  BUILDER_ISSUER,
+  BUILDER_RESOURCE,
+} from '../src/lib/builder-connector/resource';
+
+export {
+  BUILDER_ISSUER,
+  BUILDER_METADATA_PATH,
+  BUILDER_RESOURCE,
+} from '../src/lib/builder-connector/resource';
 export const builderProtectedResource = {
   resource: BUILDER_RESOURCE,
   authorization_servers: [BUILDER_ISSUER],

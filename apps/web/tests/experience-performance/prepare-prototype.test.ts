@@ -13,6 +13,7 @@ import { bundleSource } from '../../tools/experience-runner/bundle-source';
 import { runLocalQualification } from '../../tools/experience-runner/local-oci-executor';
 import { createCommerceEngineFixture } from '../experience-commerce/cart-engine-fixture';
 import { prepareCommerceCatalog } from '../experience-commerce/catalog-fixture';
+import { compileStorefrontFixture } from '../experience-commerce/compile-storefront';
 import { startCommerceDataApi } from '../experience-commerce/data-api';
 import { seedFixtureOutput } from '../experience-commerce/seed-output';
 import { prerenderDocument } from './prerender-document';
@@ -28,7 +29,11 @@ it('prerenders full Orbit routes in gVisor from normal anonymous/RLS public data
   let api: Awaited<ReturnType<typeof startCommerceDataApi>> | undefined;
   try {
     const { merchant } = await prepareCommerceCatalog(f);
-    const { image } = await seedFixtureOutput(f, merchant);
+    const { image } = await seedFixtureOutput(
+      f,
+      merchant,
+      await compileStorefrontFixture()
+    );
     api = await startCommerceDataApi(f);
     const runtime = createPublicExperienceRuntime({
       client: createClient(api.url, api.anonKey, {

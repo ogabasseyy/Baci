@@ -20,7 +20,7 @@ test('provider refuses missing callback, HTTP hosts and reused signing/cookie co
       createBuilderProvider(
         {
           issuer: 'https://auth.usebaci.com',
-          resource: 'https://mcp.usebaci.com/builder/mcp',
+          resource: 'https://builder-mcp.usebaci.com/builder/mcp',
           callback: 'https://chatgpt.com/approved-callback',
           clientId: 'new-builder-client',
           cookieKeys: ['fixture-cookie-key-with-more-than-32-bytes'],

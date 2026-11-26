@@ -1,20 +1,24 @@
 import type { ExperienceManifest } from '@baci/shared/experience';
 import { sourceDigest } from '@baci/shared/experience';
 import { parseExperienceManifest } from '@/schemas/experience-manifest';
-import { runLocalQualification } from '../../../tools/experience-runner/local-oci-executor';
 import {
   acceptJobOutput,
   signJobTicket,
 } from '../../../tools/experience-runner/output-receiver';
 import { unpackPrerenderBuild } from '../../../tools/experience-runner/prerender-artifacts';
-import { localPreviewHost } from '../../../tools/experience-runner/preview-origin';
 import { packPrivateBuild } from '../../../tools/experience-runner/private-build-payload';
+import { RunnerCapacityError } from '../../../tools/experience-runner/runner-transport';
 import { loadOfflineAssets } from './asset-service';
 import {
   type OwnerRequestContext,
   ownerRpcArgs,
   requireExperienceOwner,
 } from './authorization';
+import {
+  bindBuildExecutor,
+  resolveBuildHost,
+  startLinkedBuildLease,
+} from './build-execution';
 import { retainBuildPerformanceReport } from './build-performance-retention';
 import { verifyCompiledCandidate } from './build-service';
 import { assertCandidatePerformanceBudget } from './candidate-performance-budget';
@@ -32,29 +36,21 @@ export async function runExperienceBuild(
   input: { jobId: string; idempotencyKey: string },
   deps: ExperienceBuildDependencies
 ) {
-  if (deps.previewOrigin && deps.profile !== 'production')
-    throw Error('INVALID_PREVIEW_ORIGIN');
-  if (
-    deps.profile === 'production' &&
-    (!deps.execute ||
-      !deps.prerenderArtifacts ||
-      typeof deps.bootstrap !== 'function')
-  )
-    throw Error('INCOMPLETE_PRODUCTION_BUILD');
-  const hostOrigin =
-    deps.profile === 'production'
-      ? productionOrigin(deps.hostOrigin)
-      : localPreviewHost(deps.hostOrigin);
+  const signal = inputCtx.signal;
+  const hostOrigin = resolveBuildHost(inputCtx, deps);
   const ctx = await requireExperienceOwner(inputCtx);
   const repo = createExperienceRepository(ctx);
   const job = await repo.loadOwnedJob(input.jobId);
+  signal?.throwIfAborted();
+  const execute = bindBuildExecutor(deps.execute, signal);
   if (job.status === 'finalized')
     return recoverFinalizedBuild(ctx, job, {
       hostOrigin,
       previewOrigin: deps.previewOrigin,
       profile: deps.profile,
       artifacts: deps.prerenderArtifacts,
-      execute: deps.execute,
+      verifiedRendererStorage: deps.verifiedRendererStorage,
+      execute,
     });
   if (job.status !== 'queued' || Date.parse(job.expires_at) <= Date.now())
     throw Error('BUILD_FAILED');
@@ -64,6 +60,7 @@ export async function runExperienceBuild(
     p_attempt: job.attempt_nonce,
   });
   if (claim.error) throw Error('BUILD_FAILED');
+  const lease = startLinkedBuildLease(ctx, job);
   let transientId: string | undefined;
   try {
     const source = await ctx.supabase
@@ -83,7 +80,6 @@ export async function runExperienceBuild(
         ? await deps.bootstrap(ctx, manifest)
         : deps.bootstrap;
     await requireExperienceOwner(ctx);
-    const execute = deps.execute ?? runLocalQualification;
     const ticket = signJobTicket(
       {
         jobId: job.id,
@@ -158,6 +154,7 @@ export async function runExperienceBuild(
     const performance = deps.performanceMeasurement
       ? await deps.performanceMeasurement({
           ctx,
+          execute,
           manifest,
           candidate,
           renderer: prepared?.renderer ?? candidate,
@@ -219,20 +216,28 @@ export async function runExperienceBuild(
         proofs,
       })
     );
-    await deps.recordVerifiedEvidence({
-      merchantId: ctx.merchantId,
-      jobId: job.id,
-      attemptNonce: job.attempt_nonce,
-      buildDigest: candidate.digest,
-      receiptDigest,
-      hostOrigin,
-    });
+    await lease?.assertHeld();
+    signal?.throwIfAborted();
+    await deps.recordVerifiedEvidence(
+      {
+        merchantId: ctx.merchantId,
+        jobId: job.id,
+        attemptNonce: job.attempt_nonce,
+        buildDigest: candidate.digest,
+        receiptDigest,
+        hostOrigin,
+      },
+      ctx
+    );
+    await lease?.assertHeld();
+    signal?.throwIfAborted();
     const result = await finalizeExperienceBuild(ctx, input, {
       jobId: job.id,
       attemptNonce: job.attempt_nonce,
       sourceDigest: job.source_digest,
       candidate,
       receiptDigest,
+      verifiedRendererStorage: deps.verifiedRendererStorage,
     });
     const performanceStatus = await retainBuildPerformanceReport(
       ctx,
@@ -245,7 +250,7 @@ export async function runExperienceBuild(
       performance,
       deps.performanceReports
     );
-    if (prepared && deps.prerenderArtifacts) {
+    if (prepared && deps.prerenderArtifacts && !deps.verifiedRendererStorage) {
       await requireExperienceOwner(ctx);
       deps.prerenderArtifacts.retain({
         merchantId: ctx.merchantId,
@@ -265,13 +270,21 @@ export async function runExperienceBuild(
       },
     };
   } catch (error) {
-    await ctx.supabase.rpc('experience_fail_build', {
-      ...ownerRpcArgs(ctx),
-      p_job: job.id,
-      p_attempt: job.attempt_nonce,
-    });
+    await lease?.stop();
+    // The linked recovery worker can reclaim an expired lease after backpressure.
+    const capacityRejected =
+      error instanceof RunnerCapacityError ||
+      (error instanceof Error && error.message === 'VERIFIER_BUSY');
+    if (!lease || !capacityRejected) {
+      await ctx.supabase.rpc('experience_fail_build', {
+        ...ownerRpcArgs(ctx),
+        p_job: job.id,
+        p_attempt: job.attempt_nonce,
+      });
+    }
     throw error;
   } finally {
+    await lease?.stop();
     if (transientId) deps.transient.remove(transientId);
   }
 }

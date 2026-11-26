@@ -12,6 +12,13 @@ import {
   requireExperienceOwner,
 } from './authorization';
 import { digestBytes } from './manifest-digest';
+import {
+  approvalSnapshotReplayKey,
+  captureReplayState,
+  findCaptureReplay,
+  loadCaptureReplay,
+  validateCaptureReplay,
+} from './private-capture-replay';
 import { productionOrigin } from './production-origins';
 import type { ExperienceSnapshot } from './snapshot-freshness';
 import { snapshotKeyDigest } from './snapshot-key';
@@ -35,8 +42,15 @@ export function createPrivateExperienceCapture(deps: {
     routeId: string
   ): Promise<PublicBootstrap>;
   record(capture: RecordedPrivateCapture): Promise<void>;
-  capture?: typeof captureExperience;
+  capture?(
+    input: Parameters<typeof captureExperience>[0],
+    signal?: AbortSignal
+  ): ReturnType<typeof captureExperience>;
+  maxPendingCaptures?: number;
 }) {
+  const capacity = deps.maxPendingCaptures ?? 32;
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > 128)
+    throw Error('INVALID_CAPTURE_CAPACITY');
   const origin = new URL(deps.hostOrigin);
   if (deps.profile === 'production') {
     productionOrigin(deps.hostOrigin);
@@ -52,7 +66,6 @@ export function createPrivateExperienceCapture(deps: {
     string,
     {
       fingerprint: string;
-      expires: number;
       value: Promise<{
         evidenceId: string;
         buildId: string;
@@ -63,17 +76,20 @@ export function createPrivateExperienceCapture(deps: {
   >();
   return async (
     inputCtx: OwnerRequestContext,
-    input: { buildId: string; routeId: string; idempotencyKey: string }
+    input: { buildId: string; routeId: string; idempotencyKey: string },
+    replay: 'strict' | 'approval' = 'strict'
   ) => {
+    const signal = inputCtx.signal;
+    signal?.throwIfAborted();
     experienceId.parse(input.buildId);
     experienceId.parse(input.idempotencyKey);
     const ctx = await requireExperienceOwner(inputCtx);
-    for (const [k, v] of cache) if (v.expires <= Date.now()) cache.delete(k);
     const key = [
       ctx.merchantId,
       ctx.actorUserId,
       ctx.identity?.connectionId ?? 'owner',
       ctx.identity?.grantVersion ?? 0,
+      replay,
       input.idempotencyKey,
     ].join(':');
     const fingerprint = digestBytes(JSON.stringify(input));
@@ -83,8 +99,12 @@ export function createPrivateExperienceCapture(deps: {
         throw Error('IDEMPOTENCY_CONFLICT');
       return prior.value;
     }
-    if (cache.size >= 32) throw Error('QUOTA_EXCEEDED');
+    if (cache.size >= capacity) throw Error('QUOTA_EXCEEDED');
     const value = (async () => {
+      const priorBinding =
+        replay === 'strict'
+          ? await loadCaptureReplay(ctx.supabase, ctx.merchantId, input)
+          : null;
       const build = await ctx.supabase
         .from('experience_builds')
         .select('id,build_digest,job_id,host_origin')
@@ -97,6 +117,7 @@ export function createPrivateExperienceCapture(deps: {
         build.data.host_origin !== deps.hostOrigin
       )
         throw Error('NOT_FOUND');
+      const buildData = build.data;
       const job = await ctx.supabase
         .from('experience_jobs')
         .select('artifact_id,status')
@@ -124,6 +145,7 @@ export function createPrivateExperienceCapture(deps: {
         .select('path,bytes,digest')
         .eq('merchant_id', ctx.merchantId)
         .eq('build_id', input.buildId)
+        .in('path', ['app.js', 'app.css'])
         .limit(2);
       if (files.error || files.data?.length !== 2) throw Error('BUILD_FAILED');
       const read = (path: string) => {
@@ -144,49 +166,109 @@ export function createPrivateExperienceCapture(deps: {
           )
         : [];
       const bootstrap = await deps.bootstrap(ctx, manifest, input.routeId);
-      const captured = await (deps.capture ?? captureExperience)({
-        manifest,
-        hostOrigin: deps.hostOrigin,
-        bundle: { javascript, css, digest: build.data.build_digest },
-        bootstrap,
-        assets,
-        engine: 'chromium',
-        width: 390,
-        assetsDigest: digestBytes(JSON.stringify(assets.map((a) => a.digest))),
+      const assetsDigest = digestBytes(
+        JSON.stringify(assets.map((a) => a.digest))
+      );
+      const snapshotIdentity = {
+        build: build.data.build_digest,
+        assets: assetsDigest,
+        catalog: bootstrap.catalog.revision,
+        path: bootstrap.route.canonicalPath,
+        viewport: '390' as const,
+        locale: 'en-NG',
+        browser: 'chromium' as const,
+      };
+      const replayInput =
+        replay === 'approval'
+          ? {
+              ...input,
+              idempotencyKey: approvalSnapshotReplayKey(
+                input.idempotencyKey,
+                snapshotKeyDigest(snapshotIdentity)
+              ),
+            }
+          : input;
+      const state = captureReplayState(replayInput);
+      const expectedKey = snapshotKeyDigest({ ...snapshotIdentity, state });
+      const findReplay = () =>
+        findCaptureReplay(
+          ctx.supabase,
+          ctx.merchantId,
+          replayInput,
+          buildData.build_digest,
+          expectedKey
+        );
+      const priorEvidence =
+        replay === 'approval'
+          ? await findReplay()
+          : validateCaptureReplay(
+              priorBinding,
+              buildData.build_digest,
+              expectedKey
+            );
+      const result = (evidenceId: string) => ({
+        evidenceId,
+        buildId: input.buildId,
+        buildDigest: buildData.build_digest,
+        previewUrl: `${deps.previewOrigin ?? deps.hostOrigin}/builder/experience/preview?${new URLSearchParams({ merchant: ctx.merchantId, build: input.buildId, routeId: input.routeId })}`,
       });
+      if (priorEvidence) {
+        await requireExperienceOwner(ctx);
+        return result(priorEvidence);
+      }
+      signal?.throwIfAborted();
+      const capture = deps.capture ?? ((input) => captureExperience(input));
+      const captured = await capture(
+        {
+          manifest,
+          hostOrigin: deps.hostOrigin,
+          bundle: { javascript, css, digest: build.data.build_digest },
+          bootstrap,
+          assets,
+          engine: 'chromium',
+          width: 390,
+          assetsDigest,
+        },
+        signal
+      );
+      signal?.throwIfAborted();
       const snapshot = {
         ...captured.snapshot,
         key: {
           ...captured.snapshot.key,
-          state: `preview:${input.idempotencyKey}`,
+          state,
         },
       };
       const bytes = captured.evidence.bytes;
       const id = randomUUID();
       await requireExperienceOwner(ctx);
-      await deps.record({
-        id,
-        merchantId: ctx.merchantId,
-        buildId: input.buildId,
-        buildDigest: build.data.build_digest,
-        snapshot,
-        keyDigest: snapshotKeyDigest(snapshot.key),
-        bytes,
-        evidenceDigest: digestBytes(bytes),
-      });
-      return {
-        evidenceId: id,
-        buildId: input.buildId,
-        buildDigest: build.data.build_digest,
-        previewUrl: `${deps.previewOrigin ?? deps.hostOrigin}/builder/experience/preview?${new URLSearchParams({ merchant: ctx.merchantId, build: input.buildId, routeId: input.routeId })}`,
-      };
+      if (snapshotKeyDigest(snapshot.key) !== expectedKey)
+        throw Error('BUILD_FAILED');
+      signal?.throwIfAborted();
+      try {
+        await deps.record({
+          id,
+          merchantId: ctx.merchantId,
+          buildId: input.buildId,
+          buildDigest: build.data.build_digest,
+          snapshot,
+          keyDigest: expectedKey,
+          bytes,
+          evidenceDigest: digestBytes(bytes),
+        });
+      } catch (error) {
+        const recovered = await findReplay();
+        if (!recovered) throw error;
+        await requireExperienceOwner(ctx);
+        return result(recovered);
+      }
+      return result(id);
     })();
-    cache.set(key, { fingerprint, expires: Date.now() + 600000, value });
+    cache.set(key, { fingerprint, value });
     try {
       return await value;
-    } catch (e) {
-      cache.delete(key);
-      throw e;
+    } finally {
+      if (cache.get(key)?.value === value) cache.delete(key);
     }
   };
 }

@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiPost } from '@/lib/api-client';
 import { PreviewClient } from '../preview/preview-client';
+import { prepareApprovalUntilReady } from './prepare-approval';
 import { ExperienceVerificationRetry } from './verification-retry';
 export interface ExperienceApprovalView {
   approvalId: string;
@@ -14,6 +15,7 @@ export interface ExperienceApprovalView {
   capabilities?: unknown;
   summary?: unknown;
   enabled: boolean;
+  needsPreparation?: boolean;
 }
 
 type ApprovalPostAction =
@@ -72,9 +74,63 @@ export function ExperienceApprovalClient({
 }) {
   const [result, setResult] = useState('');
   const [busy, setBusy] = useState(false);
+  const [approvalId, setApprovalId] = useState(view.approvalId);
+  const [preparedUntil, setPreparedUntil] = useState(0);
+  const preparation = useRef<AbortController | null>(null);
+  useEffect(() => () => preparation.current?.abort(), []);
+  useEffect(() => {
+    if (preparedUntil === 0) return;
+    const timer = setTimeout(
+      () => setPreparedUntil(0),
+      Math.max(0, preparedUntil - Date.now())
+    );
+    return () => clearTimeout(timer);
+  }, [preparedUntil]);
   const confirmation = confirmationByAction[`${view.kind}:${view.action}`];
+  const needsPreparation = view.needsPreparation && preparedUntil === 0;
+  async function prepare() {
+    if (!view.enabled || !confirmation || busy || !needsPreparation) return;
+    setBusy(true);
+    setResult('Preparing route evidence…');
+    const controller = new AbortController();
+    preparation.current = controller;
+    try {
+      const ready = await prepareApprovalUntilReady({
+        approvalId,
+        action: view.kind === 'draft' ? 'prepare-draft' : 'prepare-publication',
+        signal: controller.signal,
+        onProgress: (nextId) => {
+          setApprovalId(nextId);
+          const url = new URL(window.location.href);
+          if (url.searchParams.get('approval') !== nextId) {
+            url.searchParams.set('approval', nextId);
+            window.history.replaceState(window.history.state, '', url);
+          }
+        },
+      });
+      if (ready.status === 'reconciled') {
+        setResult(
+          'This approval already has a receipt. Reload the review to see the result.'
+        );
+        return;
+      }
+      const deadline = ready.expiresAt ? Date.parse(ready.expiresAt) : 0;
+      if (deadline <= Date.now()) throw Error('Approval window elapsed');
+      setPreparedUntil(deadline);
+      setResult('');
+    } catch {
+      if (!controller.signal.aborted)
+        setResult(
+          'Preparation paused. Try again to resume saved route evidence.'
+        );
+    } finally {
+      preparation.current = null;
+      setBusy(false);
+    }
+  }
   async function confirm() {
     if (!view.enabled || !confirmation || busy) return;
+    if (view.needsPreparation && preparedUntil <= Date.now()) return;
     setBusy(true);
     setResult('');
     try {
@@ -82,7 +138,7 @@ export function ExperienceApprovalClient({
         '/api/builder-experience/approval',
         {
           action: confirmation.requestAction,
-          approvalId: view.approvalId,
+          approvalId,
         }
       );
       setResult(
@@ -145,16 +201,25 @@ export function ExperienceApprovalClient({
         ) : null}
         <button
           type="button"
-          disabled={!view.enabled || !confirmation || busy || !!result}
-          onClick={confirm}
+          disabled={
+            !view.enabled ||
+            !confirmation ||
+            busy ||
+            (!needsPreparation && !!result)
+          }
+          onClick={needsPreparation ? prepare : confirm}
         >
           {busy
-            ? 'Confirming…'
-            : (confirmation?.buttonLabel ?? 'Confirmation unavailable')}
+            ? needsPreparation
+              ? 'Preparing…'
+              : 'Confirming…'
+            : needsPreparation
+              ? 'Prepare approval'
+              : (confirmation?.buttonLabel ?? 'Confirmation unavailable')}
         </button>
         {result === 'verifying' &&
         confirmation?.requestAction === 'confirm-publication' ? (
-          <ExperienceVerificationRetry approvalId={view.approvalId} />
+          <ExperienceVerificationRetry approvalId={approvalId} />
         ) : result ? (
           <p role="status">{result}</p>
         ) : null}

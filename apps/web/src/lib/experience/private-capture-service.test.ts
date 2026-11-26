@@ -1,95 +1,47 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import { digestBytes } from './manifest-digest';
-import { createPrivateExperienceCapture } from './private-capture-service';
+import {
+  buildId,
+  fixture,
+  input,
+  merchantId,
+} from './private-capture-service.test-support';
 
-const merchantId = '11111111-1111-4111-8111-111111111111';
-const buildId = '22222222-2222-4222-8222-222222222222';
-const idempotencyKey = '33333333-3333-4333-8333-333333333333';
-const input = { buildId, routeId: '/', idempotencyKey };
-function fixture() {
-  const javascript = 'export default null;';
-  const css = '';
-  const buildDigest = digestBytes(`${javascript}\0${css}`);
-  const manifest = {
-    format: 'baci.experience/v2',
-    runtime: 'react-browser-sandbox/v1',
-    sdkVersion: 'commerce-bridge/v1',
-    entry: 'app.tsx',
-    files: [{ path: 'app.tsx', content: javascript }],
-    packages: [],
-    routes: [{ path: '/', view: 'home' }],
-    assets: [],
-    capabilities: ['navigation'],
+it('selects the executable files even when another retained file appears first', async () => {
+  const f = fixture();
+  (f.rows.experience_build_files as unknown[]).unshift({ path: 'extra.txt' });
+  await f.run(f.ctx as never, input);
+  expect(f.capture).toHaveBeenCalledOnce();
+});
+
+it('replays a capture when the database returns its assets in a different order', async () => {
+  const f = fixture();
+  const artifact = f.rows.experience_artifacts as {
+    manifest: { assets: unknown[] };
   };
-  const rows: Record<string, unknown> = {
-    experience_builds: {
-      id: buildId,
-      build_digest: buildDigest,
-      job_id: 'job',
-      host_origin: 'http://localhost:43174',
-    },
-    experience_jobs: { artifact_id: 'artifact', status: 'finalized' },
-    experience_artifacts: { manifest },
-    experience_build_files: [javascript, css].map((value, i) => ({
-      path: i ? 'app.css' : 'app.js',
-      bytes: `\\x${Buffer.from(value).toString('hex')}`,
-      digest: digestBytes(value),
-    })),
-  };
-  const eq = vi.fn();
-  const from = vi.fn((table: string) => {
-    const q = {
-      select: () => q,
-      eq: (key: string, value: string) => {
-        eq(table, key, value);
-        return q;
-      },
-      maybeSingle: async () => ({ data: rows[table], error: null }),
-      limit: async () => ({ data: rows[table], error: null }),
+  const assets = ['front', 'side'].map((asset_id, index) => {
+    const bytes = Buffer.alloc(48);
+    bytes.write('wOF2');
+    bytes.writeUInt32BE(bytes.length, 8);
+    bytes[47] = index;
+    return {
+      asset_id,
+      digest: digestBytes(bytes),
+      mime: 'font/woff2',
+      bytes: `\\x${bytes.toString('hex')}`,
+      purpose: 'design',
     };
-    return q;
   });
-  const rpc = vi.fn(async () => ({ data: true, error: null }));
-  const getUser = vi.fn(async () => ({
-    data: { user: { id: merchantId } },
-    error: null,
+  artifact.manifest.assets = assets.map(({ asset_id }) => ({
+    assetId: asset_id,
+    alt: '',
   }));
-  const ctx = { merchantId, supabase: { from, rpc, auth: { getUser } } };
-  const record = vi.fn(async () => {});
-  const capture = vi.fn(async () => ({
-    snapshot: {
-      key: {
-        build: buildDigest,
-        assets: 'a'.repeat(64),
-        catalog: 'revision',
-        path: '/',
-        extractor: 'semantic-v1',
-      },
-      text: 'synthetic',
-    },
-    evidence: { bytes: Buffer.from('synthetic-image') },
-  }));
-  const bootstrap = vi.fn(async () => ({ merchant: { id: merchantId } }));
-  const run = createPrivateExperienceCapture({
-    hostOrigin: 'http://localhost:43174',
-    record,
-    capture: capture as never,
-    bootstrap: bootstrap as never,
-  });
-  return {
-    ctx,
-    run,
-    rows,
-    eq,
-    from,
-    rpc,
-    getUser,
-    capture,
-    record,
-    bootstrap,
-    buildDigest,
-  };
-}
+  f.rows.experience_assets = assets;
+  const first = await f.run(f.ctx as never, input);
+  assets.reverse();
+  expect(await f.run(f.ctx as never, input)).toEqual(first);
+  expect(f.capture).toHaveBeenCalledOnce();
+});
 
 it('captures merchant/build-bound evidence through the normal owner client and replays idempotently', async () => {
   const f = fixture();
@@ -108,8 +60,37 @@ it('captures merchant/build-bound evidence through the normal owner client and r
   for (const table of Object.keys(f.rows))
     expect(f.eq).toHaveBeenCalledWith(table, 'merchant_id', merchantId);
   expect(f.eq).toHaveBeenCalledWith('experience_builds', 'id', buildId);
-  expect(f.getUser).toHaveBeenCalledTimes(3);
+  expect(f.getUser).toHaveBeenCalledTimes(4);
   expect(first.previewUrl).toContain(`merchant=${merchantId}&build=${buildId}`);
+});
+it('does not reuse evidence after its catalog changes, even before restart', async () => {
+  const f = fixture();
+  await f.run(f.ctx as never, input);
+  f.bootstrap.mockResolvedValueOnce({
+    catalog: { revision: 'changed' },
+    route: { canonicalPath: '/' },
+  });
+  await expect(f.run(f.ctx as never, input)).rejects.toThrow(
+    'IDEMPOTENCY_CONFLICT'
+  );
+  expect(f.capture).toHaveBeenCalledOnce();
+});
+
+it('reuses internal approval evidence only for the exact current snapshot', async () => {
+  const f = fixture();
+  const attest = () => f.run(f.ctx as never, input, 'approval');
+
+  const first = await attest();
+  expect(await attest()).toEqual(first);
+  f.bootstrap.mockResolvedValue({
+    catalog: { revision: 'changed' },
+    route: { canonicalPath: '/' },
+  });
+  const second = await attest();
+  expect(second.evidenceId).not.toBe(first.evidenceId);
+  expect(await attest()).toEqual(second);
+  expect(f.capture).toHaveBeenCalledTimes(2);
+  expect(f.record).toHaveBeenCalledTimes(2);
 });
 
 it('rejects owner authorization before reads, including cached replay', async () => {
@@ -172,21 +153,13 @@ it.each([
 
 it('does not persist evidence when owner authorization is revoked during capture', async () => {
   const f = fixture();
+  const result = await f.capture.getMockImplementation()?.({
+    assetsDigest: 'a'.repeat(64),
+  });
   f.capture.mockImplementationOnce(async () => {
     f.rpc.mockResolvedValueOnce({ data: false, error: null });
-    return {
-      snapshot: {
-        key: {
-          build: f.buildDigest,
-          assets: 'a'.repeat(64),
-          catalog: 'revision',
-          path: '/',
-          extractor: 'semantic-v1',
-        },
-        text: 'synthetic',
-      },
-      evidence: { bytes: Buffer.from('synthetic-image') },
-    };
+    if (!result) throw Error('Missing synthetic capture');
+    return result;
   });
   await expect(f.run(f.ctx as never, input)).rejects.toThrow('NOT_FOUND');
   expect(f.record).not.toHaveBeenCalled();

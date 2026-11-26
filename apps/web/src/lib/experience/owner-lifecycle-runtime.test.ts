@@ -12,7 +12,7 @@ vi.mock('./mode-exit-service', () => ({
   confirmExperienceModeExit: vi.fn(async () => ({ status: 'legacy' })),
 }));
 
-import { confirmDraftApply, loadDraftApproval } from './approval-service';
+import { confirmDraftApply } from './approval-service';
 import { createOwnerLifecycleRuntime } from './owner-lifecycle-runtime';
 import {
   confirmExperiencePublication,
@@ -30,19 +30,11 @@ function setup() {
     approval: createOwnerLifecycleRuntime(vi.fn(), verifier).approval,
   };
 }
-it('response-loss reconciliation skips recapture after applied receipt; fresh approval requires independent proof', async () => {
+it('draft confirmation reconciles through SQL without starting a capture', async () => {
   const f = setup();
-  vi.mocked(loadDraftApproval).mockResolvedValueOnce({
-    status: 'applied',
-  } as never);
   await f.approval?.confirm({} as never, id);
   expect(f.verifier.attest).not.toHaveBeenCalled();
   expect(confirmDraftApply).toHaveBeenCalled();
-  vi.mocked(loadDraftApproval).mockResolvedValueOnce({
-    status: 'confirmation-required',
-  } as never);
-  await f.approval?.confirm({} as never, id);
-  expect(f.verifier.attest).toHaveBeenCalledWith({}, id, 'draft');
 });
 it('failed delivery remains verifying; replay verifies same receipt without fresh attestation or republish attempt', async () => {
   const f = setup();
@@ -51,29 +43,21 @@ it('failed delivery remains verifying; replay verifies same receipt without fres
     status: 'verifying',
     receiptId: id,
   });
+  const { signal } = new AbortController();
   f.verifier.verifyCommitted.mockRejectedValueOnce(Error('browser offline'));
   await expect(
-    f.approval?.confirmPublication?.({} as never, id)
+    f.approval?.confirmPublication?.({} as never, id, signal)
   ).resolves.toEqual({ status: 'verifying', receiptId: id });
+  expect(f.verifier.verifyCommitted).toHaveBeenCalledWith(
+    {},
+    { status: 'verifying', receiptId: id, approvalId: id },
+    signal
+  );
   expect(f.verifier.attest).not.toHaveBeenCalled();
-  vi.mocked(loadLifecycleApproval)
-    .mockResolvedValueOnce({ status: 'verifying' })
-    .mockResolvedValueOnce({ status: 'live' });
+  vi.mocked(loadLifecycleApproval).mockResolvedValueOnce({ status: 'live' });
   await expect(
     f.approval?.confirmPublication?.({} as never, id)
   ).resolves.toEqual({ status: 'live' });
   expect(f.verifier.verifyCommitted).toHaveBeenCalledTimes(2);
   expect(f.verifier.attest).not.toHaveBeenCalled();
-});
-it('independent proof failure prevents confirmation', async () => {
-  const f = setup();
-  vi.mocked(confirmDraftApply).mockClear();
-  vi.mocked(loadDraftApproval).mockResolvedValue({
-    status: 'confirmation-required',
-  } as never);
-  f.verifier.attest.mockRejectedValue(Error('mismatch'));
-  await expect(f.approval?.confirm({} as never, id)).rejects.toThrow(
-    'mismatch'
-  );
-  expect(confirmDraftApply).not.toHaveBeenCalled();
 });

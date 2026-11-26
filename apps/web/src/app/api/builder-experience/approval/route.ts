@@ -1,8 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { createOwnerApprovalHandler } from '@/lib/experience/owner-approval-handler';
+import { getConfiguredOwnerApproval } from '@/lib/experience/owner-approval-web-config';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { createClient } from '@/lib/supabase/server';
+
+export const maxDuration = 120;
 
 async function handle(request: NextRequest) {
   const client = await createClient();
@@ -16,7 +19,8 @@ async function handle(request: NextRequest) {
       { error: 'Sign in to review.' },
       { status: 401, headers }
     );
-  const runtime = getExperienceOwnerRuntime()?.approval;
+  const runtime =
+    getExperienceOwnerRuntime()?.approval ?? getConfiguredOwnerApproval();
   if (!runtime)
     return Response.json(
       { error: 'Owner approval is not installed.' },
@@ -29,6 +33,8 @@ async function handle(request: NextRequest) {
       return csrf.valid ? null : new Response(null, { status: 403 });
     },
     load: runtime.load,
+    prepareDraft: runtime.prepareDraft,
+    preparePublication: runtime.preparePublication,
     confirm: runtime.confirm,
     loadLifecycle: runtime.loadLifecycle,
     confirmPublication: runtime.confirmPublication,

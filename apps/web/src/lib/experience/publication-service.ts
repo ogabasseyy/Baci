@@ -5,6 +5,7 @@ import {
   experienceLifecycleReceipt,
 } from '@/schemas/experience-publication';
 import { experienceToolInputs } from '@/schemas/experience-tools';
+import { ApprovalExpired } from './approval-service';
 import {
   type OwnerRequestContext,
   ownerRpcArgs,
@@ -41,12 +42,18 @@ export async function requestExperiencePublication(
 }
 export async function loadLifecycleApproval(
   client: SupabaseClient,
-  id: string
+  id: string,
+  signal?: AbortSignal
 ) {
+  signal?.throwIfAborted();
   experienceApprovalId.parse(id);
   const auth = await client.auth.getUser();
   if (auth.error || !auth.data.user) throw Error('NOT_FOUND');
-  const r = await client.rpc('experience_load_lifecycle', { p_intent: id });
+  signal?.throwIfAborted();
+  const query = client.rpc('experience_load_lifecycle', { p_intent: id });
+  const r = await (signal ? query.abortSignal(signal) : query);
+  signal?.throwIfAborted();
+  if (r.error?.message === 'APPROVAL_EXPIRED') throw new ApprovalExpired();
   if (r.error) throw Error('UNAVAILABLE');
   return experienceLifecycleReceipt.parse(r.data);
 }

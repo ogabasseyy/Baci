@@ -1,3 +1,4 @@
+import { BUILDER_METADATA_URL } from '@/lib/builder-connector/resource';
 import type { BuilderIdentity } from '@/lib/builder-connector/types';
 import { createBuilderThrottle } from '@/lib/builder-gateway/throttle';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
@@ -16,7 +17,8 @@ export function createExperienceGateway(deps: {
   execute(
     identity: BuilderIdentity,
     name: ExperienceToolName,
-    input: unknown
+    input: unknown,
+    signal: AbortSignal
   ): Promise<unknown>;
 }) {
   const limit = createBuilderThrottle({ perUser: 60, perConnection: 30 });
@@ -28,7 +30,7 @@ export function createExperienceGateway(deps: {
           'Cache-Control': 'no-store',
           ...(status === 401 || status === 403
             ? {
-                'WWW-Authenticate': `Bearer resource_metadata="https://mcp.usebaci.com/.well-known/oauth-protected-resource/builder/mcp", scope="${isExperienceTool(name) ? experienceToolPolicy[name].scopes.join(' ') : 'storefront.read'}", error="${status === 403 ? 'insufficient_scope' : 'invalid_token'}"`,
+                'WWW-Authenticate': `Bearer resource_metadata="${BUILDER_METADATA_URL}", scope="${isExperienceTool(name) ? experienceToolPolicy[name].scopes.join(' ') : 'storefront.read'}", error="${status === 403 ? 'insufficient_scope' : 'invalid_token'}"`,
               }
             : {}),
         },
@@ -66,9 +68,11 @@ export function createExperienceGateway(deps: {
     const parsed = experienceToolInputs[name].safeParse(body.body);
     if (!parsed.success) return send(experienceError('INVALID_REQUEST'), 400);
     try {
+      request.signal.throwIfAborted();
       const result = experienceToolResult.safeParse(
-        await deps.execute(identity, name, parsed.data)
+        await deps.execute(identity, name, parsed.data, request.signal)
       );
+      request.signal.throwIfAborted();
       if (
         !result.success ||
         Buffer.byteLength(JSON.stringify(result.data)) > 98304

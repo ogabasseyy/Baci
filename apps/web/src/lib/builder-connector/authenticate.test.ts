@@ -2,12 +2,13 @@
 import { generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createBuilderAuthenticator } from './authenticate';
+import { BUILDER_ISSUER, BUILDER_RESOURCE } from './resource';
 
 const actor = '10000000-0000-4000-8000-000000000001';
 const id = '20000000-0000-4000-8000-000000000001';
 const merchant = '30000000-0000-4000-8000-000000000001';
-const issuer = 'https://auth.usebaci.com';
-const audience = 'https://mcp.usebaci.com/builder/mcp';
+const issuer = BUILDER_ISSUER;
+const audience = BUILDER_RESOURCE;
 let keys: Awaited<ReturnType<typeof generateKeyPair>>;
 beforeAll(async () => {
   keys = await generateKeyPair('ES256');
@@ -112,6 +113,7 @@ describe('builder request authentication', () => {
     });
     for (const jwt of [
       await token({}, 'https://evil.invalid'),
+      await token({}, 'https://auth.usebaci.com'),
       await token({}, issuer, 'authenticated'),
       await token({ exp: 1 }),
       await token({ connectionId: merchant }),

@@ -2,6 +2,11 @@ import type { NextRequest } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { requireExperienceOwner } from '@/lib/experience/authorization';
+import {
+  getRemoteOwnerPreview,
+  RemoteOwnerPreviewDenied,
+} from '@/lib/experience/owner-preview-remote-runtime';
+import { getConfiguredOwnerPreview } from '@/lib/experience/owner-preview-web-config';
 import { getExperienceOwnerRuntime } from '@/lib/experience/owner-runtime';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
@@ -68,7 +73,8 @@ export async function POST(request: NextRequest) {
       { status: 401, headers }
     );
   const runtime = getExperienceOwnerRuntime();
-  if (!runtime)
+  const remote = getRemoteOwnerPreview() ?? getConfiguredOwnerPreview();
+  if (!runtime && !remote)
     return Response.json(
       { error: 'Private preview is not installed.' },
       { status: 503, headers }
@@ -92,17 +98,31 @@ export async function POST(request: NextRequest) {
       merchant.merchantId !== parsed.data.merchantId
     )
       throw Error('FORBIDDEN');
-    return Response.json(
-      await runtime.createPreviewLaunch(
-        {
-          supabase,
-          merchantId: merchant.merchantId,
-          requestOrigin: request.nextUrl.origin,
-        },
-        parsed.data
-      ),
-      { headers }
-    );
+    if (!runtime && remote) {
+      try {
+        const launch = await remote(supabase, parsed.data, request.signal);
+        if (launch === undefined) throw Error('PREVIEW_UNAVAILABLE');
+        return Response.json(launch, { headers });
+      } catch (failure) {
+        if (failure instanceof RemoteOwnerPreviewDenied) throw failure;
+        return Response.json(
+          { error: 'Preview temporarily unavailable.' },
+          { status: 503, headers }
+        );
+      }
+    }
+    const result = runtime
+      ? await runtime.createPreviewLaunch(
+          {
+            supabase,
+            merchantId: merchant.merchantId,
+            requestOrigin: request.nextUrl.origin,
+          },
+          parsed.data
+        )
+      : undefined;
+    if (result === undefined) throw Error('PREVIEW_UNAVAILABLE');
+    return Response.json(result, { headers });
   } catch {
     return Response.json(
       { error: 'Preview unavailable.' },

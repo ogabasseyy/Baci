@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import type { ExperienceManifest } from '@baci/shared/experience';
 import { sourceDigest } from '@baci/shared/experience';
 import { createClient } from '@supabase/supabase-js';
 import { startLocalPrerenderStorefront } from '../../src/lib/experience/local-prerender-storefront';
@@ -13,6 +12,7 @@ import { createCommerceEngineFixture } from '../experience-commerce/cart-engine-
 import { prepareCommerceCatalog } from '../experience-commerce/catalog-fixture';
 import { startCommerceDataApi } from '../experience-commerce/data-api';
 import { seedFixtureOutput } from '../experience-commerce/seed-output';
+import { storefrontFixture } from '../experience-commerce/storefront-fixture';
 
 const hash = (value: string) =>
   createHash('sha256').update(value).digest('hex');
@@ -29,7 +29,6 @@ export async function durableStorefrontFixture(
   try {
     const ids = await prepareCommerceCatalog(f);
     await prepareAnalyticsFixture(f);
-    await seedFixtureOutput(f, ids.merchant);
     await f.pool.query(
       readFileSync(
         new URL(
@@ -39,15 +38,7 @@ export async function durableStorefrontFixture(
         'utf8'
       )
     );
-    const { manifest } = JSON.parse(
-      readFileSync(
-        new URL(
-          '../../../../.superpowers/sdd/2026-10-23-full-code-experiences/c-compiled-fixture.json',
-          import.meta.url
-        ),
-        'utf8'
-      )
-    ) as { manifest: ExperienceManifest };
+    const manifest = storefrontFixture();
     const compiled = unpackPrerenderBuild(
       (
         await runLocalQualification(
@@ -56,6 +47,10 @@ export async function durableStorefrontFixture(
         )
       ).output
     );
+    await seedFixtureOutput(f, ids.merchant, {
+      manifest,
+      compiled: compiled.client,
+    });
     const build = (
       await f.pool.query(
         'SELECT b.id,b.job_id FROM experience_builds b WHERE b.merchant_id=$1',
@@ -133,7 +128,7 @@ export async function durableStorefrontFixture(
     await delivery.prepare({ id: ids.merchant, slug: 'qa1' }, [
       '/',
       '/collections/all',
-      '/phones/synthetic-device',
+      '/smartphones/synthetic-device',
       '/pages/story',
     ]);
     return {

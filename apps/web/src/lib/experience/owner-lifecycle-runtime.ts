@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { createApprovalPreparation } from './approval-preparation';
 import { confirmDraftApply, loadDraftApproval } from './approval-service';
 import { confirmExperienceModeExit } from './mode-exit-service';
 import type { ExperienceOwnerRuntime } from './owner-runtime';
@@ -11,11 +12,13 @@ export interface OwnerLifecycleVerification {
   attest(
     client: SupabaseClient,
     approvalId: string,
-    kind: 'draft' | 'lifecycle'
+    kind: 'draft' | 'lifecycle',
+    signal?: AbortSignal
   ): Promise<void>;
   verifyCommitted(
     client: SupabaseClient,
-    receipt: Record<string, unknown>
+    receipt: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<void>;
 }
 export function createOwnerLifecycleRuntime(
@@ -27,23 +30,25 @@ export function createOwnerLifecycleRuntime(
     approval: {
       load: loadDraftApproval,
       loadLifecycle: loadLifecycleApproval,
-      confirm: async (client, id) => {
-        const existing = await loadDraftApproval(client, id);
-        if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'draft');
-        return confirmDraftApply(client, id);
-      },
-      confirmPublication: async (client, id) => {
-        const existing = await loadLifecycleApproval(client, id);
-        if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'lifecycle');
+      prepareDraft: createApprovalPreparation(verifier.attest, 'draft'),
+      preparePublication: createApprovalPreparation(
+        verifier.attest,
+        'lifecycle'
+      ),
+      confirm: confirmDraftApply,
+      confirmPublication: async (client, id, signal) => {
+        signal?.throwIfAborted();
         const receipt = await confirmExperiencePublication(client, id);
         if (receipt.status === 'verifying') {
           try {
-            await verifier.verifyCommitted(client, {
-              ...receipt,
-              approvalId: id,
-            });
+            await verifier.verifyCommitted(
+              client,
+              {
+                ...receipt,
+                approvalId: id,
+              },
+              signal
+            );
           } catch {
             return receipt;
           }
@@ -51,10 +56,11 @@ export function createOwnerLifecycleRuntime(
         }
         return receipt;
       },
-      confirmModeExit: async (client, id) => {
+      confirmModeExit: async (client, id, signal) => {
         const existing = await loadLifecycleApproval(client, id);
         if (existing.status === 'confirmation-required')
-          await verifier.attest(client, id, 'lifecycle');
+          await verifier.attest(client, id, 'lifecycle', signal);
+        signal?.throwIfAborted();
         return confirmExperienceModeExit(client, id);
       },
     },

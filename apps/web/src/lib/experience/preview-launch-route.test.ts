@@ -74,18 +74,21 @@ it.each([
     },
   };
   const vault = { create: vi.fn(() => 'ref'), revoke: vi.fn() };
+  const { signal } = new AbortController();
   await createPreviewLaunch(
     ctx as never,
     { buildId: 'build' },
     vault as never,
     undefined,
-    {} as never
+    {} as never,
+    signal
   );
   expect(f.prerender).toHaveBeenLastCalledWith(
     ctx,
     expect.objectContaining({ routeId: path }),
     vault,
-    {}
+    {},
+    signal
   );
   expect(vault.create).toHaveBeenCalledWith(
     expect.objectContaining({ merchantId: 'merchant' })

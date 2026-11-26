@@ -11,6 +11,7 @@ import {
   type ExperienceContext,
   requireExperienceOwner,
 } from './authorization';
+import { readVerifiedPrerender } from './read-verified-prerender';
 import { createExperienceRepository } from './repository';
 
 interface RecoveryJob {
@@ -31,6 +32,7 @@ export async function recoverFinalizedBuild(
     previewOrigin?: string;
     profile?: 'production';
     artifacts?: LocalPrerenderArtifacts;
+    verifiedRendererStorage?: boolean;
     execute?: typeof runLocalQualification;
   }
 ) {
@@ -58,7 +60,10 @@ export async function recoverFinalizedBuild(
     sourceDigest: job.source_digest,
   };
   const artifacts = deps.artifacts;
-  if (artifacts) {
+  const managedRenderer = deps.verifiedRendererStorage
+    ? await readVerifiedPrerender(ctx, binding, ctx.signal)
+    : null;
+  if (artifacts && !managedRenderer) {
     let missing = false;
     try {
       artifacts.read(binding);

@@ -3,16 +3,33 @@ import { createRemoteJWKSet } from 'jose';
 import { createBuilderBackendClient } from './backend-client';
 import { createBuilderMcpHttpHandler } from './http';
 import { BUILDER_ISSUER } from './metadata';
+import type { BuilderMcpDependencies } from './registry';
 import { createBuilderTransportVerifier } from './token-verifier';
 /** Public JWKS + outer-token HTTPS forwarder only. No vault, database, cookies or admin client. */
-export function createBuilderMcpNodeServer() {
+export function createBuilderMcpNodeServer(
+  options: {
+    experience?: BuilderMcpDependencies['experience'];
+    executeBuilderTool?: BuilderMcpDependencies['executeBuilderTool'];
+    verifyAccessToken?: (token: string) => Promise<void>;
+  } = {}
+) {
+  if (
+    Reflect.get(options, 'ownerPreview') !== undefined ||
+    Reflect.get(options, 'ownerAttestation') !== undefined ||
+    Reflect.get(options, 'ownerPublicVerification') !== undefined
+  )
+    throw Error('OWNER_ROUTES_FORBIDDEN');
   const handler = createBuilderMcpHttpHandler({
+    experience: options.experience,
     // The listener is loopback-only; the local proxy overwrites X-Forwarded-For.
     trustedProxies: ['127.0.0.1', '::1'],
-    verifyAccessToken: createBuilderTransportVerifier(
-      createRemoteJWKSet(new URL(`${BUILDER_ISSUER}/jwks`))
-    ),
-    executeBuilderTool: createBuilderBackendClient(),
+    verifyAccessToken:
+      options.verifyAccessToken ??
+      createBuilderTransportVerifier(
+        createRemoteJWKSet(new URL(`${BUILDER_ISSUER}/jwks`))
+      ),
+    executeBuilderTool:
+      options.executeBuilderTool ?? createBuilderBackendClient(),
   });
   const server = createServer((req, res) => {
     void handler.handle(req, res).catch(() => {
@@ -26,6 +43,7 @@ export function createBuilderMcpNodeServer() {
       } else res.end();
     });
   });
+  // This bounds receiving the request, not the time spent producing a response.
   server.requestTimeout = 30000;
   server.headersTimeout = 10000;
   return {

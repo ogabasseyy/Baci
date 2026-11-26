@@ -13,7 +13,7 @@ it('prepares an isolated, honest package source without a fabricated app or endp
   const listing = manifest.extensions['com.openai'].interface;
   expect(listing.shortDescription.length).toBeLessThanOrEqual(30);
   expect(listing.longDescription).toContain(
-    'separate signed-in owner approval'
+    'Publishing requires a separate confirmation from the signed-in store owner.'
   );
   for (const field of [
     'websiteURL',

@@ -121,6 +121,17 @@ it('executes prerendering only in the credential-free Node sandbox with build li
   expect(execution?.timeout).toBe(60000);
 });
 
+it('allows a bounded 60 seconds for offline browser evidence capture', async () => {
+  const calls: Array<{ args: string[]; timeout?: number }> = [];
+  await runLocalQualification('capture', {}, async (args, _input, timeout) => {
+    calls.push({ args, timeout });
+    return args.includes('run') ? '{}' : '';
+  });
+  const execution = calls.find((call) => call.args.includes('run'));
+  expect(execution?.args).toContain('--network=none');
+  expect(execution?.timeout).toBe(60000);
+});
+
 it('keeps prerender browser verification in the network-disabled capture profile', async () => {
   const calls: Array<{ args: string[]; input?: string; timeout?: number }> = [];
   await runLocalQualification(

@@ -20,7 +20,7 @@ const safePath = (p: string) =>
 /** Private output-only vault. No owner client/credentials are retained across requests. */
 export function createPreviewVault(deps: {
   now: () => number;
-  isActive: (bindingId: string) => Promise<boolean>;
+  isActive: (bindingId: string, signal?: AbortSignal) => Promise<boolean>;
   origin: string;
 }) {
   const origin = new URL(deps.origin);
@@ -222,20 +222,24 @@ export function createPreviewVault(deps: {
       ref: string,
       render: (
         resources: Array<{ path: string; url: string; digest: string }>
-      ) => Promise<string>
+      ) => Promise<string>,
+      signal?: AbortSignal
     ) {
+      signal?.throwIfAborted();
       const launch = this.consume(ownerId, ref);
       try {
         const html = await render(launch.resources);
+        signal?.throwIfAborted();
         const bytes = Buffer.from(html);
         if (bytes.length > 4194304) throw Error('QUOTA_EXCEEDED');
         if (
           launch.expiresAt <= deps.now() ||
-          !(await deps.isActive(launch.bindingId)) ||
+          !(await deps.isActive(launch.bindingId, signal)) ||
           launch.expiresAt <= deps.now() ||
           !launch.resources.every((r) => resources.has(r.ticket))
         )
           throw Error('LAUNCH_EXPIRED');
+        signal?.throwIfAborted();
         const originalTicket = new URL(launch.src).pathname.split('/')[2];
         const original = resources.get(originalTicket);
         if (!original) throw Error('LAUNCH_EXPIRED');
@@ -265,17 +269,19 @@ export function createPreviewVault(deps: {
       }
     },
 
-    async read(ticket: string, path: string) {
+    async read(ticket: string, path: string, signal?: AbortSignal) {
+      signal?.throwIfAborted();
       const r = resources.get(ticket);
       if (!r || !safePath(path) || r.file.path !== path)
         throw Error('NOT_FOUND');
       if (
         r.expiresAt <= deps.now() ||
-        !(await deps.isActive(r.bindingId)) ||
+        !(await deps.isActive(r.bindingId, signal)) ||
         resources.get(ticket) !== r ||
         r.expiresAt <= deps.now()
       )
         throw Error('LAUNCH_EXPIRED');
+      signal?.throwIfAborted();
       if (digestBytes(r.file.bytes) !== r.file.digest)
         throw Error('BUILD_FAILED');
       return { ...r.file, bytes: r.file.bytes.slice() };

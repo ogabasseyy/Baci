@@ -56,17 +56,31 @@ describe('createSupabaseReplaySqlApplier', () => {
     }
   });
 
-  it('leaves unrelated migrations unchanged and does not provision cron', async () => {
+  it('leaves concurrent index migrations in autocommit', async () => {
     const run = vi
       .fn<ReplayCommand>()
       .mockResolvedValue({ stdout: '', stderr: '' });
-    await createSupabaseReplaySqlApplier(
-      run,
-      'psql',
-      url
-    )('/tmp/126-other.sql');
+    const file =
+      '/tmp/126-20261121131000_index_bank_card_offer_payment_references.sql';
+    await createSupabaseReplaySqlApplier(run, 'psql', url)(file);
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run.mock.calls[0][1]).toContain('/tmp/126-other.sql');
+    expect(run.mock.calls[0][1].slice(-2)).toEqual(['-f', file]);
+    expect(run.mock.calls[0][1]).not.toContain('--single-transaction');
+  });
+
+  it('holds the renderer write lock across budget initialization and trigger install', async () => {
+    const run = vi
+      .fn<ReplayCommand>()
+      .mockResolvedValue({ stdout: '', stderr: '' });
+    const file =
+      '/tmp/2548-20261124072648_experience_renderer_pilot_budget.sql';
+    await createSupabaseReplaySqlApplier(run, 'psql', url)(file);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][1].slice(-3)).toEqual([
+      '--single-transaction',
+      '-f',
+      file,
+    ]);
   });
 
   it('rejects changed retention bytes before any database command', async () => {

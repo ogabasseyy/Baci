@@ -1,0 +1,113 @@
+import { chromium } from 'playwright-core';
+import { expect, it, vi } from 'vitest';
+import { getStorefrontCartStorageKey } from '@/hooks/cart/cart-storage';
+import { observePublicBrowser } from './public-observation-browser';
+import {
+  fixture,
+  origin,
+  productId,
+} from './public-observation-fixture.test-support';
+
+it.each([
+  { noVariants: false, quantity: 1 },
+  { noVariants: true, quantity: 1 },
+  { noVariants: true, quantity: 3 },
+])('observes native guest checkout without Shared Cart (no variants: $noVariants, quantity: $quantity)', async ({
+  noVariants,
+  quantity,
+}) => {
+  const browser = await chromium.launch({ headless: true });
+  const payload = fixture();
+  const product = payload.expected.product;
+  const variantId = '33333333-3333-4333-8333-333333333334';
+  const variantQuery = noVariants ? '' : `?variantId=${variantId}`;
+  const otherVariantId = '33333333-3333-4333-8333-333333333335';
+  const storageKey = getStorefrontCartStorageKey('synthetic');
+  const body = {
+    [product.path + variantQuery]:
+      `<title>Native device</title><link rel="canonical" href="${origin}${product.path}">
+      ${noVariants ? '' : '<button>New</button><button>Used</button><button>Blue</button>'}
+      <button id="add">Add to cart</button>
+      <script>
+        localStorage.setItem("${storageKey}", "[]");
+        setTimeout(() => {
+          const add = document.querySelector("#add");
+          add.onclick = () => {
+            const routedVariant = new URLSearchParams(location.search).get("variantId");
+            const selectedVariant = ${noVariants} ? null : routedVariant ?? "${otherVariantId}";
+            localStorage.setItem("${storageKey}", JSON.stringify([{ id: "${productId}", variantId: selectedVariant, quantity: ${quantity} }]));
+          };
+          add.dataset.baciPdpCartReady = "true";
+        }, 200);
+      </script>`,
+    '/checkout': `<title>Checkout</title><input name="firstName"><script>
+      const [line] = JSON.parse(localStorage.getItem('${storageKey}') ?? '[]');
+      if (line) {
+        const summary = document.createElement('div');
+        summary.textContent = 'Synthetic device';
+        summary.dataset.baciCheckoutProduct = line.id;
+        summary.dataset.baciCheckoutVariant = line.variantId ?? '';
+        summary.dataset.baciCheckoutQuantity = line.quantity;
+        document.body.append(summary);
+      }
+      </script>`,
+  };
+  const asResource = (path: keyof typeof body) => ({
+    url: `${origin}${path}`,
+    mime: 'text/html',
+    bytes: Buffer.from(body[path]).toString('base64'),
+    headers: {},
+  });
+  const relay = vi.fn(async () => ({ status: 200, body: '{}' }));
+  try {
+    const observation = await observePublicBrowser(
+      {
+        ...payload,
+        product: {
+          ...payload.product,
+          variantId: noVariants ? undefined : variantId,
+        },
+        expected: {
+          ...payload.expected,
+          routes: [payload.expected.routes[0]],
+          product: {
+            ...product,
+            native: true,
+            variantId: noVariants ? undefined : variantId,
+            nativeCheckout: { merchantSlug: 'synthetic' },
+          },
+        },
+        resources: [
+          ...payload.resources.filter(
+            (item) =>
+              item.url !== `${origin}${product.path}` &&
+              !item.url.endsWith(encodeURIComponent(product.path))
+          ),
+          asResource(product.path + variantQuery),
+          asResource('/checkout'),
+        ],
+      },
+      browser,
+      relay
+    );
+    expect(
+      observation.journey.steps.map(({ action, path }) => [action, path])
+    ).toEqual([
+      ['navigate', '/'],
+      ['product', product.path],
+      ['cart-add', product.path],
+      ['cart-read', '/checkout'],
+      ['checkout-review', '/checkout'],
+    ]);
+    expect(observation.journey).toMatchObject({
+      orderRequests: 0,
+      paymentRequests: 0,
+    });
+    expect(relay).toHaveBeenCalledExactlyOnceWith({
+      url: `${origin}/api/csrf`,
+      method: 'GET',
+    });
+  } finally {
+    await browser.close();
+  }
+}, 30000);

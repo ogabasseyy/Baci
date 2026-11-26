@@ -91,22 +91,18 @@ export async function loadOfflineAssets(
     .eq('merchant_id', ctx.merchantId)
     .in('asset_id', ids)
     .limit(32);
-  if (
-    r.error ||
-    !r.data ||
-    r.data.length !== new Set(ids).size ||
-    r.data.some((a) => a.purpose !== 'design')
-  )
+  const orderedIds = [...new Set(ids)];
+  if (r.error || !r.data || r.data.length !== orderedIds.length)
     throw Error('NOT_FOUND');
-  return materializeAssets(
-    r.data.map((a) => ({
-      assetId: a.asset_id,
-      digest: a.digest,
-      mime: a.mime,
-    })),
-    (id) => {
-      const a = r.data.find((a) => a.asset_id === id);
-      return Promise.resolve(a ? Buffer.from(a.bytes.slice(2), 'hex') : null);
-    }
-  );
+  const byId = new Map(r.data.map((asset) => [asset.asset_id, asset]));
+  // The manifest binds asset order, regardless of the database row order.
+  const assets = orderedIds.map((id) => {
+    const asset = byId.get(id);
+    if (asset?.purpose !== 'design') throw Error('NOT_FOUND');
+    return { assetId: id, digest: asset.digest, mime: asset.mime };
+  });
+  return materializeAssets(assets, (id) => {
+    const a = byId.get(id);
+    return Promise.resolve(a ? Buffer.from(a.bytes.slice(2), 'hex') : null);
+  });
 }

@@ -6,6 +6,7 @@ import {
   merchantHasFeature,
 } from '@/lib/merchant-has-feature';
 import { createPublicClient } from '@/lib/supabase/public';
+import { EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE } from '@/schemas/experience-catalog';
 import {
   type ExperienceCatalogMerchant,
   loadExperienceCatalog,
@@ -22,7 +23,10 @@ interface Options {
   prerenderDelivery?: boolean;
   client?: SupabaseClient;
   runtimeBase: string;
-  canonicalBase: (slug: string) => string;
+  canonicalBase: (
+    slug: string,
+    signal?: AbortSignal
+  ) => string | Promise<string>;
   catalogImages?: ReadonlyMap<string, { assetId: string; alt: string }>;
 }
 /** Normal anonymous/RLS reads only; startup remains explicitly uninstalled. */
@@ -41,30 +45,35 @@ export function createPublicExperienceRuntime(
     base.hash
   )
     throw Error('INVALID_RUNTIME_ORIGIN');
-  const manifest = async (merchant: { id: string; slug?: string | null }) => {
+  const manifest = async (
+    merchant: { id: string; slug?: string | null },
+    signal?: AbortSignal
+  ) => {
     if (!merchant.slug) return null;
-    const r = await client.rpc('experience_public_manifest', {
+    const query = client.rpc('experience_public_manifest', {
       p_slug: merchant.slug,
     });
+    const r = await (signal ? query.abortSignal(signal) : query);
     if (r.error) throw Error('PUBLIC_UNAVAILABLE');
     if (!r.data) return null;
     const m = parsePublishedExperience(r.data);
     return m.merchantId === merchant.id ? m : null;
   };
   const loadMerchant = async (
-    id: string
+    id: string,
+    signal?: AbortSignal
   ): Promise<
     | (ExperienceCatalogMerchant &
         MerchantFeatureSource & { slug: string; business_name: string })
     | null
   > => {
-    const r = await client
+    const query = client
       .from('merchants')
       .select(
         'id,slug,business_name,is_published,payout_currency,country,premium_features,plan_tier,plan_expires_at'
       )
-      .eq('id', id)
-      .maybeSingle();
+      .eq('id', id);
+    const r = await (signal ? query.abortSignal(signal) : query).maybeSingle();
     if (r.error) throw Error('PUBLIC_UNAVAILABLE');
     if (r.data?.is_published !== true) return null;
     return {
@@ -82,17 +91,22 @@ export function createPublicExperienceRuntime(
     m: ExperienceCatalogMerchant,
     handle?: string,
     productSlug?: string,
-    productId?: string
+    productId?: string,
+    signal?: AbortSignal,
+    offset = 0
   ): Promise<PublicCatalog | null> => {
     let categoryId: string | undefined;
     if (handle && handle !== 'all') {
-      const r = await client
+      const query = client
         .from('categories')
         .select('id,slug')
         .eq('merchant_id', m.id)
         .eq('slug', handle)
-        .eq('is_active', true)
-        .maybeSingle();
+        .eq('is_active', true);
+      const r = await (signal
+        ? query.abortSignal(signal)
+        : query
+      ).maybeSingle();
       if (r.error) throw Error('CATALOG_UNAVAILABLE');
       if (!r.data) return null;
       categoryId = r.data.id;
@@ -101,12 +115,14 @@ export function createPublicExperienceRuntime(
       client,
       m,
       {
-        limit: 100,
+        offset,
+        limit: EXPERIENCE_PUBLIC_CATALOG_PAGE_SIZE,
         ...(categoryId ? { categoryId } : {}),
         ...(productSlug ? { productSlug } : {}),
         ...(productId ? { productId } : {}),
       },
-      options.catalogImages
+      options.catalogImages,
+      signal
     );
     if (result)
       result.revision = digestBytes(
@@ -145,31 +161,31 @@ export function createPublicExperienceRuntime(
         }
       );
     },
-    async catalog(merchant, selection) {
-      const head = await manifest(merchant);
+    async catalog(merchant, selection, signal) {
+      const head = await manifest(merchant, signal);
       if (!head) return null;
-      const m = await loadMerchant(merchant.id);
+      const m = await loadMerchant(merchant.id, signal);
       return m
         ? catalog(
             m,
             selection.handle,
             selection.productSlug,
-            selection.productId
+            selection.productId,
+            signal,
+            selection.offset
           )
         : null;
     },
-    async resolveBoundary(merchant, path) {
+    async resolveBoundary(merchant, path, signal) {
       const [head, m] = await Promise.all([
-        manifest(merchant),
-        loadMerchant(merchant.id),
+        manifest(merchant, signal),
+        loadMerchant(merchant.id, signal),
       ]);
-      if (
-        !head ||
-        !m ||
-        !head.hostOrigin ||
-        new URL(options.canonicalBase(m.slug)).origin !== head.hostOrigin
-      )
-        return null;
+      if (!head || !m || !head.hostOrigin) return null;
+      const canonicalBase = (
+        await options.canonicalBase(m.slug, signal)
+      ).replace(/\/$/, '');
+      if (new URL(canonicalBase).origin !== head.hostOrigin) return null;
       if (
         head.capabilities.some(
           (c) => c.startsWith('cart.') || c.startsWith('checkout.')
@@ -184,7 +200,9 @@ export function createPublicExperienceRuntime(
           !path.startsWith('/collections/') &&
           !path.startsWith('/pages/')
           ? path.split('/')[2]
-          : undefined
+          : undefined,
+        undefined,
+        signal
       );
       if (!data) return null;
       const resolved = await resolveExperienceRoute(head.routes, path, {
@@ -215,7 +233,6 @@ export function createPublicExperienceRuntime(
         head.capabilities,
         m.currency
       );
-      const canonicalBase = options.canonicalBase(m.slug).replace(/\/$/, '');
       const resources = `${base.origin}/published/${m.slug}/${head.buildDigest}`;
       bootstrap.assets = Object.fromEntries(
         (head.assets ?? []).map((a) => [

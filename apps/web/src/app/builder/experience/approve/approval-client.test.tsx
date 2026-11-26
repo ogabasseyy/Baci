@@ -178,3 +178,51 @@ it.each([
   expect(await screen.findByRole('status')).toHaveTextContent(message);
   expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
 });
+
+it('prepares a renewed intent and waits for a separate owner confirmation', async () => {
+  const renewed = '22222222-2222-4222-8222-222222222222';
+  post
+    .mockResolvedValueOnce({
+      approvalId: renewed,
+      status: 'ready',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    })
+    .mockResolvedValueOnce({ version: 1 });
+  const initialUrl = window.location.href;
+  try {
+    render(
+      <ExperienceApprovalClient
+        view={{
+          approvalId: id,
+          merchantId: id,
+          kind: 'draft',
+          action: 'apply',
+          effectDigest: 'a'.repeat(64),
+          enabled: true,
+          needsPreparation: true,
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare approval' }));
+    const confirm = await screen.findByRole('button', {
+      name: 'Confirm private apply',
+    });
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(
+      '/api/builder-experience/approval',
+      {
+        action: 'prepare-draft',
+        approvalId: id,
+      },
+      { signal: expect.any(AbortSignal) }
+    );
+    fireEvent.click(confirm);
+    await screen.findByText('Private draft version 1');
+    expect(post).toHaveBeenLastCalledWith('/api/builder-experience/approval', {
+      action: 'confirm-draft',
+      approvalId: renewed,
+    });
+  } finally {
+    window.history.replaceState(window.history.state, '', initialUrl);
+  }
+});

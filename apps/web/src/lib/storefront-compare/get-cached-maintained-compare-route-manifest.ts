@@ -14,12 +14,18 @@ interface MaintainedManifestInput {
   storeUrl: string;
 }
 
+const COMPARE_MANIFEST_CACHE_LIFE = {
+  stale: 3600,
+  revalidate: 86400,
+  expire: 604800,
+} as const;
+
 function tagMaintainedManifest(
   input: MaintainedManifestInput,
   comparisonRevision?: StorefrontComparisonRevision
 ): void {
   try {
-    cacheLife('products');
+    cacheLife(COMPARE_MANIFEST_CACHE_LIFE);
     if (comparisonRevision) {
       cacheTag(`comparison-revision-${input.merchantId}-${comparisonRevision}`);
       return;

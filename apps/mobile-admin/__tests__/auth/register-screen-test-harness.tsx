@@ -74,6 +74,24 @@ vi.mock('react-native', async () => {
       ),
     ScrollView: ({ children }: { children?: React.ReactNode }) =>
       React.createElement('div', null, children),
+    FlatList: ({
+      data,
+      renderItem,
+    }: {
+      data: Array<{ id: string }>;
+      renderItem: (info: { item: { id: string } }) => React.ReactNode;
+    }) =>
+      React.createElement(
+        'div',
+        null,
+        data.map((item) =>
+          React.createElement(
+            React.Fragment,
+            { key: item.id },
+            renderItem({ item })
+          )
+        )
+      ),
     ActivityIndicator: () => null,
     KeyboardAvoidingView: ({ children }: { children?: React.ReactNode }) =>
       React.createElement('div', null, children),
@@ -81,6 +99,14 @@ vi.mock('react-native', async () => {
       React.createElement('div', null, children),
     Linking: { openURL: vi.fn() },
     Platform: { OS: 'ios' },
+  };
+});
+
+vi.mock('react-native-safe-area-context', async () => {
+  const React = await import('react');
+  return {
+    SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement('div', null, children),
   };
 });
 
@@ -161,27 +187,30 @@ vi.mock('@/lib/sanitize', () => ({ getEmailError: () => null }));
 
 // --- Helpers ---
 
-/** Fill the account form and submit native signup. */
+/** Walk through the chat registration steps and submit native signup. */
 export function fillFormAndSubmit() {
-  fireEvent.change(screen.getByPlaceholderText('John'), {
-    target: { value: 'Test' },
+  const send = () =>
+    fireEvent.click(screen.getByRole('button', { name: 'Send response' }));
+
+  fireEvent.change(screen.getByLabelText('Full name'), {
+    target: { value: 'Test User' },
   });
-  fireEvent.change(screen.getByPlaceholderText('Doe'), {
-    target: { value: 'User' },
-  });
-  fireEvent.change(screen.getByPlaceholderText('you@example.com'), {
+  send();
+
+  fireEvent.change(screen.getByLabelText('Email address'), {
     target: { value: 'test@example.com' },
   });
+  send();
+
   fireEvent.change(screen.getByLabelText('Password'), {
     target: { value: 'StrongP@ss123!' },
   });
+  send();
+
   fireEvent.change(screen.getByLabelText('Confirm Password'), {
     target: { value: 'StrongP@ss123!' },
   });
-
-  // "Continue" now creates the native account/session. Authenticated merchant
-  // setup lives on complete-profile and never retains this password.
-  fireEvent.click(screen.getByRole('button', { name: 'Proceed to next step' }));
+  send();
 }
 
 export function getRegisterScreenMocks() {

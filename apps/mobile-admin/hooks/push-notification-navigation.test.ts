@@ -1,9 +1,17 @@
+import { CHAT_REPLY_ACTION_ID } from '@baci/shared';
 import type { NotificationResponse } from 'expo-notifications';
 import { describe, expect, it, vi } from 'vitest';
 import {
   handleNotificationTap,
   navigateToNotificationTarget,
 } from './push-notification-navigation';
+
+const replyMocks = vi.hoisted(() => ({ handle: vi.fn() }));
+
+// Only the sender is replaced; the real Reply-action check is used.
+vi.mock('@/services/chat-notification-reply', () => ({
+  handleChatReplyResponse: replyMocks.handle,
+}));
 
 vi.mock('@/services/push-notifications', () => ({
   getNotificationNavigationParams: (response: NotificationResponse) => {
@@ -18,8 +26,12 @@ vi.mock('@/services/push-notifications', () => ({
   },
 }));
 
-function makeResponse(data: unknown): NotificationResponse {
+function makeResponse(
+  data: unknown,
+  actionIdentifier = 'expo.modules.notifications.actions.DEFAULT'
+): NotificationResponse {
   return {
+    actionIdentifier,
     notification: {
       request: {
         content: { data },
@@ -157,5 +169,43 @@ describe('handleNotificationTap', () => {
 
     expect(router.push).toHaveBeenNthCalledWith(1, '/(admin)/messages/4821');
     expect(router.push).toHaveBeenNthCalledWith(2, '/(admin)/messages');
+  });
+
+  it('bugfix: hands the Reply box of a chat notification to the reply sender instead of only opening the chat', () => {
+    replyMocks.handle.mockClear();
+    const router = { push: vi.fn() };
+    const response = makeResponse(
+      { type: 'customer_message', conversation_id: 4821 },
+      CHAT_REPLY_ACTION_ID
+    );
+
+    handleNotificationTap(router, response, vi.fn());
+
+    expect(replyMocks.handle).toHaveBeenCalledWith(router, response);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it('still just opens the chat for a plain tap on a chat notification', () => {
+    replyMocks.handle.mockClear();
+    const router = { push: vi.fn() };
+
+    handleNotificationTap(
+      router,
+      makeResponse({ screen: 'order', id: '7' }),
+      vi.fn()
+    );
+
+    expect(replyMocks.handle).not.toHaveBeenCalled();
+    expect(router.push).toHaveBeenCalledWith('/(admin)/order/7');
+  });
+
+  it('bugfix: a Reply from a notification with no usable data still reaches the reply handler', () => {
+    replyMocks.handle.mockClear();
+    const router = { push: vi.fn() };
+    const response = makeResponse(undefined, CHAT_REPLY_ACTION_ID);
+
+    handleNotificationTap(router, response, vi.fn());
+
+    expect(replyMocks.handle).toHaveBeenCalledWith(router, response);
   });
 });

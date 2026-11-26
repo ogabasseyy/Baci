@@ -29,30 +29,20 @@ vi.mock('react-native', async () => {
       React.createElement('div', null, children),
   };
 });
+vi.mock('react-native-safe-area-context', async () => {
+  const React = await import('react');
+  return {
+    SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement('div', null, children),
+  };
+});
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: () => null }));
 vi.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => <span>redirect:{href}</span>,
 }));
 vi.mock('@react-native-vector-icons/ionicons', () => ({ default: () => null }));
-vi.mock('@/components/ui/AppFormScreen', async () => {
-  const React = await import('react');
-  return {
-    AppFormScreen: ({
-      children,
-      header,
-    }: {
-      children?: React.ReactNode;
-      header?: React.ReactNode;
-    }) => (
-      <>
-        {header}
-        {children}
-      </>
-    ),
-  };
-});
-vi.mock('@/components/auth/register/MerchantSetupForm', () => ({
-  MerchantSetupForm: () => <div>merchant setup form</div>,
+vi.mock('@/components/auth/onboarding-chat/MerchantSetupChat', () => ({
+  MerchantSetupChat: () => <div>merchant setup chat</div>,
 }));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -83,12 +73,12 @@ describe('CompleteProfileScreen', () => {
     };
   });
 
-  it('hosts authenticated merchant setup without a second registration path', () => {
+  it('hosts authenticated chat merchant setup without a second registration path', () => {
     render(<CompleteProfileScreen />);
 
     expect(screen.getByText('Complete Setup')).toBeTruthy();
-    expect(screen.queryByText('Welcome, Ada!')).toBeNull();
-    expect(screen.getByText('merchant setup form')).toBeTruthy();
+    expect(screen.getByText('Baci AI')).toBeTruthy();
+    expect(screen.getByText('merchant setup chat')).toBeTruthy();
   });
 
   it('redirects a signed-out deep link to login after auth initializes', () => {

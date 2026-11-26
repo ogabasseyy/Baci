@@ -75,9 +75,13 @@ describe('sendChatEventPush', () => {
       input.merchantId,
       'New message from Ada',
       'Is it in stock?',
-      { type: 'customer_message', conversation_id: 21 },
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+      },
       'general',
-      { onDeliveryStart: expect.any(Function) }
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -90,7 +94,7 @@ describe('sendChatEventPush', () => {
       'A customer sent a message to your store.',
       expect.anything(),
       'general',
-      expect.anything()
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -109,9 +113,14 @@ describe('sendChatEventPush', () => {
       input.merchantId,
       'Ada needs a person',
       'The assistant handed this chat to your team. Open it to reply.',
-      { type: 'customer_message', conversation_id: 21, handover: true },
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+        handover: true,
+      },
       'general',
-      expect.anything()
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -127,7 +136,7 @@ describe('sendChatEventPush', () => {
       'The assistant handed this chat to your team. Open it to reply.',
       expect.objectContaining({ handover: true }),
       'general',
-      expect.anything()
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -146,9 +155,14 @@ describe('sendChatEventPush', () => {
       input.merchantId,
       'Follow up: Ada',
       'This chat is due for a follow-up. Open it to reply.',
-      { type: 'customer_message', conversation_id: 21, follow_up: true },
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+        follow_up: true,
+      },
       'general',
-      expect.anything()
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -165,6 +179,7 @@ describe('sendChatEventPush', () => {
     expect(mocks.notify.mock.calls[0][4]).toEqual({
       type: 'customer_message',
       conversation_id: 21,
+      merchant_id: input.merchantId,
     });
   });
 

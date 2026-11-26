@@ -103,11 +103,20 @@ export async function runWebAuthQuickReply(
     return;
   }
   if (option.id === 'auth:edit_email') {
+    const isMagicLinkFlow =
+      ctx.step === 'auth_check_email' &&
+      !ctx.authDraft.fullName &&
+      !ctx.authDraft.password;
     appendMessages(
       { role: 'user', text: option.label },
-      { role: 'assistant', text: "What's your email address?" }
+      {
+        role: 'assistant',
+        text: isMagicLinkFlow
+          ? "Enter your email address and I'll send you a one-click sign-in link:"
+          : "What's your email address?",
+      }
     );
-    setStep('auth_email');
+    setStep(isMagicLinkFlow ? 'auth_magic_email' : 'auth_email');
   }
 }
 
@@ -160,25 +169,16 @@ export async function runWebAuthTextInput(
       return;
     }
     setAuthDraft((prev) => ({ ...prev, fullName: normalized }));
-    if (authDraft.email) {
-      appendMessages(
-        { role: 'user', text: normalized },
-        {
-          role: 'assistant',
-          text: `Great to meet you, ${parsed.firstName}! Now create a strong password (8+ characters):`,
-        }
-      );
-      setStep('auth_password');
-    } else {
-      appendMessages(
-        { role: 'user', text: normalized },
-        {
-          role: 'assistant',
-          text: `Great to meet you, ${parsed.firstName}! What's your email address?`,
-        }
-      );
-      setStep('auth_email');
-    }
+    appendMessages(
+      { role: 'user', text: normalized },
+      {
+        role: 'assistant',
+        text: authDraft.email
+          ? `Great to meet you, ${parsed.firstName}! Now create a strong password (8+ characters):`
+          : `Great to meet you, ${parsed.firstName}! What's your email address?`,
+      }
+    );
+    setStep(authDraft.email ? 'auth_password' : 'auth_email');
     return;
   }
 

@@ -98,4 +98,24 @@ describe('useWebOnboardingChat', () => {
       });
     }
   });
+
+  it('falls through to store setup during hydration when the merchant lookup rejects', async () => {
+    mockGetUser.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'user-transient',
+          email: 'ada@example.com',
+          user_metadata: { first_name: 'Ada', last_name: 'Okafor' },
+        },
+      },
+    });
+    mockMaybeSingle.mockRejectedValueOnce(new Error('network error'));
+
+    const { result } = renderHook(() => useWebOnboardingChat());
+
+    await waitFor(() => {
+      expect(result.current.isHydrating).toBe(false);
+    });
+    expect(result.current.step).toBe('country');
+  });
 });

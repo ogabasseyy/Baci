@@ -110,4 +110,14 @@ describe('web-onboarding-auth-handlers', () => {
 
     expect(ctx.enterStoreSetup).toHaveBeenCalledWith(user);
   });
+
+  it('routes auth:edit_email back to auth_magic_email when coming from the magic-link flow', async () => {
+    const ctx = makeCtx({ step: 'auth_check_email' });
+    await runWebAuthQuickReply(
+      { id: 'auth:edit_email', label: 'Use another email' },
+      ctx
+    );
+
+    expect(ctx.setStep).toHaveBeenCalledWith('auth_magic_email');
+  });
 });

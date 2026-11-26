@@ -66,12 +66,16 @@ async function hasCompletedMerchant(
   userId: string
 ): Promise<boolean> {
   if (typeof supabase.from !== 'function') return false;
-  const { data: existingMerchant } = await supabase
-    .from('merchants')
-    .select('business_name')
-    .eq('user_id', userId)
-    .maybeSingle();
-  return Boolean(existingMerchant?.business_name);
+  try {
+    const { data: existingMerchant } = await supabase
+      .from('merchants')
+      .select('business_name')
+      .eq('user_id', userId)
+      .maybeSingle();
+    return Boolean(existingMerchant?.business_name);
+  } catch {
+    return false;
+  }
 }
 
 export function useWebOnboardingChat() {
@@ -142,13 +146,9 @@ export function useWebOnboardingChat() {
   const enterStoreSetup = (nextUser: User) => {
     const supabase = createClient();
     const run = async () => {
-      try {
-        if (await hasCompletedMerchant(supabase, nextUser.id)) {
-          window.location.href = '/dashboard';
-          return;
-        }
-      } catch {
-        // Fall through to store setup if the lookup fails transiently.
+      if (await hasCompletedMerchant(supabase, nextUser.id)) {
+        window.location.href = '/dashboard';
+        return;
       }
       applyStoreWelcomeState(nextUser);
     };

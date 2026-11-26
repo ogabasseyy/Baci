@@ -371,6 +371,61 @@ BEGIN
     '(p_payload->''state''->''booking''->>''product_amount'')::numeric <> oxygen_private.order_net_payable_for_order(w.order_id,v_order.total,v_order.amount_paid,v_order.wallet_amount_used,v_order.payment_status)'
   );
 
+  needle := 'SELECT o.total,o.amount_paid,o.wallet_amount_used,';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected Oxygen runtime SELECT pattern count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'SELECT o.total,o.amount_paid,o.wallet_amount_used,o.payment_method,'
+  );
+
+  needle := 'coalesce(b.enabled,false) AND v_order.payment_status=''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected Oxygen runtime executionEnabled pattern count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'coalesce(b.enabled,false) AND v_order.payment_method=''oxygen'' AND COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)),''''),''unpaid'') IN (''unpaid'',''pending'')'
+  );
+
+  needle := 'CASE WHEN v_order.payment_status<>''unpaid''';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected Oxygen runtime state redaction pattern count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'CASE WHEN (v_order.payment_method IS DISTINCT FROM ''oxygen'' OR COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)),''''),''unpaid'') NOT IN (''unpaid'',''pending''))'
+  );
+
+  needle := 'IF v_action IN (''start_application'',''book'') AND v_order.payment_status<>''unpaid'' THEN';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected Oxygen runtime enqueue status pattern count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'IF v_action IN (''start_application'',''book'') AND (v_order.payment_method IS DISTINCT FROM ''oxygen'' OR COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)),''''),''unpaid'') NOT IN (''unpaid'',''pending'')) THEN'
+  );
+
+  needle := 'IF c.command->>''action'' IN (''start_application'',''book'',''trigger_approval_otp'',''approve_booking'') AND (v_order.payment_status<>''unpaid'' OR';
+  occurrences := (length(definition) - length(replace(definition, needle, ''))) / length(needle);
+  IF occurrences <> 1 THEN
+    RAISE EXCEPTION 'Unexpected Oxygen runtime claim status pattern count: %', occurrences;
+  END IF;
+  definition := replace(
+    definition,
+    needle,
+    'IF c.command->>''action'' IN (''start_application'',''book'',''trigger_approval_otp'',''approve_booking'') AND (v_order.payment_method IS DISTINCT FROM ''oxygen'' OR COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)),''''),''unpaid'') NOT IN (''unpaid'',''pending'') OR'
+  );
+
   EXECUTE definition;
 END $migration$;
 

@@ -514,9 +514,17 @@ describe('publish-ota CLI', () => {
             { ios: { appSecret: 'top-secret' } },
           ],
         ],
+        accessToken: 'top-level-access-token',
         extra: {
           merchantSlug: 'ogabassey',
           adminSecret: 'should-not-leak',
+          accessToken: 'nested-access-token',
+          bearerToken: 'nested-bearer-token',
+          sessionToken: 'nested-session-token',
+          apiKey: 'nested-api-key',
+          authorization: 'Bearer should-not-leak',
+          dsn: 'https://secret@sentry.example/1',
+          facebookClientToken: 'fb-client-token-leak',
         },
       })
     );
@@ -567,6 +575,12 @@ describe('publish-ota CLI', () => {
     const serializedExtra = JSON.stringify(publishedPayload?.extra ?? {});
     expect(serializedExtra).not.toContain('top-secret');
     expect(serializedExtra).not.toContain('should-not-leak');
+    expect(serializedExtra).not.toContain('access-token');
+    expect(serializedExtra).not.toContain('bearer-token');
+    expect(serializedExtra).not.toContain('session-token');
+    expect(serializedExtra).not.toContain('api-key');
+    expect(serializedExtra).not.toContain('sentry.example');
+    expect(serializedExtra).not.toContain('fb-client-token-leak');
     const extraObj = publishedPayload?.extra;
     if (
       typeof extraObj !== 'object' ||

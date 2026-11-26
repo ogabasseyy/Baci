@@ -510,5 +510,16 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
     expect(manifest.assets[0]?.url).toBe(
       'https://ota.usebaci.com/api/assets/blobs/def456.png'
     );
+
+    const httpOriginResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      {
+        OTA_BUCKET: bucket,
+        OTA_CANONICAL_ORIGIN: 'http://ota.usebaci.com',
+      }
+    );
+    expect(httpOriginResp.status).toBe(500);
   });
 });

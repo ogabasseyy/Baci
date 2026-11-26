@@ -227,4 +227,12 @@ test('rejects invalid or non-HTTPS EXPO_PUBLIC_OTA_UPDATES_URL', () => {
       /without credentials, query, fragment, or non-public\/loopback host/
     );
   }
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_UPDATES_URL:
+          'https://attacker.example.com/api/manifest',
+      }),
+    /Must be an allowlisted OTA endpoint/
+  );
 });

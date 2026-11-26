@@ -122,6 +122,10 @@ const merchantDomain =
 const updateChannel = resolveUpdateChannel(process.env);
 const DEFAULT_OTA_UPDATES_URL =
   'https://u.expo.dev/c6c1897b-cac8-49b0-85f9-3d277aecc379';
+const ALLOWED_OTA_UPDATES_URLS = new Set([
+  DEFAULT_OTA_UPDATES_URL,
+  'https://ota.usebaci.com/api/manifest',
+]);
 const rawUpdatesUrl = process.env.EXPO_PUBLIC_OTA_UPDATES_URL?.trim();
 let updatesUrl = DEFAULT_OTA_UPDATES_URL;
 
@@ -172,7 +176,12 @@ if (rawUpdatesUrl) {
       `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be a public https origin/path without credentials, query, fragment, or non-public/loopback host.`
     );
   }
-  updatesUrl = rawUpdatesUrl;
+  if (!ALLOWED_OTA_UPDATES_URLS.has(parsedUpdatesUrl.href)) {
+    throw new Error(
+      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be an allowlisted OTA endpoint (${[...ALLOWED_OTA_UPDATES_URLS].join(', ')}).`
+    );
+  }
+  updatesUrl = parsedUpdatesUrl.href;
 }
 
 const codeSigningCertificatePath =

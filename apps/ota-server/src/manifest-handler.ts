@@ -31,7 +31,7 @@ function resolveManifestAssetBase(
   }
   try {
     const parsed = new URL(configured);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    if (parsed.protocol !== 'https:') {
       return errorResponse('Configured OTA_CANONICAL_ORIGIN is invalid', 500);
     }
     return parsed.origin;
@@ -66,7 +66,12 @@ function signBodyOrError(
   }
   const privateKey = env.OTA_SIGNING_PRIVATE_KEY?.trim();
   if (!privateKey) {
-    return {};
+    return {
+      error: errorResponse(
+        'Manifest signing is not configured on the server',
+        500
+      ),
+    };
   }
   const keyId = env.OTA_SIGNING_KEY_ID?.trim() || 'main';
   try {

@@ -183,39 +183,106 @@ function hashBytes(bytes) {
   };
 }
 
-const SENSITIVE_EXPO_KEY_REGEX =
-  /secret|password|private[-_]?key|credential|auth[-_]?token/i;
+const EXPO_CLIENT_ALLOWLIST = {
+  name: true,
+  slug: true,
+  version: true,
+  runtimeVersion: true,
+  sdkVersion: true,
+  platforms: true,
+  owner: true,
+  scheme: true,
+  orientation: true,
+  userInterfaceStyle: true,
+  updates: {
+    enabled: true,
+    checkAutomatically: true,
+    fallbackToCacheTimeout: true,
+    url: true,
+    requestHeaders: {
+      'expo-channel-name': true,
+    },
+    codeSigningCertificate: true,
+    codeSigningMetadata: {
+      alg: true,
+      keyid: true,
+    },
+  },
+  ios: {
+    bundleIdentifier: true,
+    buildNumber: true,
+    runtimeVersion: true,
+    supportsTablet: true,
+    usesAppleSignIn: true,
+  },
+  android: {
+    package: true,
+    versionCode: true,
+    runtimeVersion: true,
+  },
+  extra: {
+    merchantId: true,
+    merchantSlug: true,
+    merchantDomain: true,
+    businessType: true,
+    templateId: true,
+    supabaseUrl: true,
+    supabasePublishableKey: true,
+    supabaseAnonKey: true,
+    apiUrl: true,
+    posthogApiKey: true,
+    posthogHost: true,
+    tiktokBusiness: {
+      iosAppStoreId: true,
+      iosTikTokAppId: true,
+      isConfigured: true,
+    },
+    facebookAppId: true,
+    eas: {
+      projectId: true,
+    },
+  },
+};
 
-function sanitizeExpoValue(value) {
+function sanitizeAllowedValue(value, schema) {
   if (typeof value === 'string') {
     if (value.includes('-----BEGIN') && value.includes('PRIVATE KEY')) {
-      throw new Error('Refusing to embed private key material in expoClient manifest metadata');
+      throw new Error(
+        'Refusing to embed private key material in expoClient manifest metadata'
+      );
     }
     return value;
   }
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeExpoValue(item));
-  }
-  if (value && typeof value === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(value)) {
-      if (SENSITIVE_EXPO_KEY_REGEX.test(k)) {
-        continue;
-      }
-      out[k] = sanitizeExpoValue(v);
+  if (schema === true) {
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeAllowedValue(item, true));
     }
-    return out;
+    if (value && typeof value === 'object') {
+      return undefined;
+    }
+    return value;
   }
-  return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const out = {};
+  for (const [key, childSchema] of Object.entries(schema)) {
+    if (!Object.hasOwn(value, key) || value[key] === undefined) {
+      continue;
+    }
+    const sanitized = sanitizeAllowedValue(value[key], childSchema);
+    if (sanitized !== undefined) {
+      out[key] = sanitized;
+    }
+  }
+  return out;
 }
 
 function sanitizeExpoClientForManifest(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return undefined;
   }
-  const copy = { ...raw };
-  delete copy.plugins;
-  return sanitizeExpoValue(copy);
+  return sanitizeAllowedValue(raw, EXPO_CLIENT_ALLOWLIST);
 }
 
 export async function packageExportDirectory({

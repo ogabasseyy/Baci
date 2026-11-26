@@ -606,4 +606,70 @@ describe('publish-ota CLI', () => {
     });
     expect(secondPkg.payload).toEqual(firstPkg.payload);
   });
+
+  it('retries asset PUT on transient HTTP 503 with bounded attempts and aborts when exhausted', async () => {
+    const { distDir, configPath } = await createExportFixture();
+    let putAttempts = 0;
+
+    const retryThenOkFetch: OtaFetch = async (input, init) => {
+      const method = init?.method ?? 'GET';
+      const url = getRequestUrl(input);
+      if (method === 'HEAD') {
+        return new Response(null, { status: 404 });
+      }
+      if (method === 'PUT' && url.includes('/bundles/')) {
+        putAttempts += 1;
+        if (putAttempts <= 2) {
+          return new Response(JSON.stringify({ error: 'Busy' }), {
+            status: 503,
+          });
+        }
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    const okResult = await publishOta(
+      {
+        distDir,
+        configPath,
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        serverUrl: 'https://ota.usebaci.com',
+        token: 'secret-token',
+      },
+      retryThenOkFetch
+    );
+    expect(okResult).toEqual({ ok: true });
+    expect(putAttempts).toBe(3);
+
+    let always503Calls = 0;
+    const always503Fetch: OtaFetch = async (_input, init) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'HEAD') {
+        return new Response(null, { status: 404 });
+      }
+      if (method === 'PUT') {
+        always503Calls += 1;
+        return new Response(JSON.stringify({ error: 'Busy' }), { status: 503 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    await expect(
+      publishOta(
+        {
+          distDir,
+          configPath,
+          platform: 'ios',
+          runtimeVersion: '2.1.663',
+          channel: 'production',
+          serverUrl: 'https://ota.usebaci.com',
+          token: 'secret-token',
+        },
+        always503Fetch
+      )
+    ).rejects.toThrow(/503/);
+    expect(always503Calls).toBe(4);
+  });
 });

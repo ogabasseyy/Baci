@@ -380,16 +380,30 @@ export async function publishOta(options, fetchImpl = fetch) {
     ) {
       continue;
     }
-    const putResp = await fetchImpl(`${baseUrl}/api/admin/assets/${asset.r2Key}`, {
-      method: 'PUT',
-      headers: {
-        ...authHeaders,
-        'content-type': asset.contentType,
-        'x-asset-sha256': asset.sha256Hex,
-      },
-      body: asset.bytes,
-      redirect: 'error',
-    });
+    const MAX_PUT_ATTEMPTS = 4;
+    let putResp;
+    for (let attempt = 1; attempt <= MAX_PUT_ATTEMPTS; attempt += 1) {
+      putResp = await fetchImpl(`${baseUrl}/api/admin/assets/${asset.r2Key}`, {
+        method: 'PUT',
+        headers: {
+          ...authHeaders,
+          'content-type': asset.contentType,
+          'x-asset-sha256': asset.sha256Hex,
+        },
+        body: asset.bytes,
+        redirect: 'error',
+      });
+      if (putResp.status !== 503 || attempt === MAX_PUT_ATTEMPTS) {
+        break;
+      }
+      await putResp.text();
+      const rawRetryAfter = Number(putResp.headers.get('retry-after'));
+      const retryDelayMs =
+        Number.isFinite(rawRetryAfter) && rawRetryAfter > 0
+          ? Math.min(2000, rawRetryAfter * 1000)
+          : Math.min(2000, 50 * attempt);
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
     await assertOkResponse(putResp, `Upload asset ${asset.r2Key}`);
   }
 

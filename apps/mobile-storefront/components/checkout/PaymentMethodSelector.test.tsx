@@ -340,6 +340,68 @@ describe('PaymentMethodSelector', () => {
     ).toBeTruthy();
   });
 
+  it('uses live wallet balance rather than stale retained wallet selection amount when computing savings remaining amount', () => {
+    render(
+      <PaymentMethodSelector
+        selectedMethod="klump"
+        onSelectMethod={() => {}}
+        selectedTab="installments"
+        onSelectTab={() => {}}
+        orderTotal={120000}
+        enabledMethods={['klump']}
+        savingsGoalId="123e4567-e89b-12d3-a456-426614174555"
+        savingsBalance={50000}
+        savingsGoalTitle="Laptop Goal"
+        savingsSelection={{
+          use: true,
+          goalId: '123e4567-e89b-12d3-a456-426614174555',
+          amount: 50000,
+        }}
+        onSavingsToggle={() => {}}
+        walletMode="orders"
+        walletBalance={30000}
+        walletOrderTotal={120000}
+        walletSelection={{ use: true, amount: 10000 }}
+        onWalletToggle={() => {}}
+      />
+    );
+
+    expect(
+      screen.getByText('₦50,000 from Laptop Goal · ₦40,000 remaining')
+    ).toBeTruthy();
+  });
+
+  it('ignores retained wallet selection amount when wallet balance is exhausted', () => {
+    render(
+      <PaymentMethodSelector
+        selectedMethod="klump"
+        onSelectMethod={() => {}}
+        selectedTab="installments"
+        onSelectTab={() => {}}
+        orderTotal={120000}
+        enabledMethods={['klump']}
+        savingsGoalId="123e4567-e89b-12d3-a456-426614174555"
+        savingsBalance={50000}
+        savingsGoalTitle="Laptop Goal"
+        savingsSelection={{
+          use: true,
+          goalId: '123e4567-e89b-12d3-a456-426614174555',
+          amount: 50000,
+        }}
+        onSavingsToggle={() => {}}
+        walletMode="orders"
+        walletBalance={0}
+        walletOrderTotal={120000}
+        walletSelection={{ use: true, amount: 30000 }}
+        onWalletToggle={() => {}}
+      />
+    );
+
+    expect(
+      screen.getByText('₦50,000 from Laptop Goal · ₦70,000 remaining')
+    ).toBeTruthy();
+  });
+
   it('can show Paystack as an unselected alternate card option when a saved card owns the selection', () => {
     const onSelectMethod = jest.fn();
 

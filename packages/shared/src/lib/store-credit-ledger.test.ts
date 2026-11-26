@@ -9,10 +9,12 @@ import {
 } from './store-credit-ledger';
 
 describe('isPreGatewayCreditStatus', () => {
-  it('treats unpaid, pending, and missing statuses as pre-gateway', () => {
+  it('treats unpaid, pending, blank, and missing statuses as pre-gateway', () => {
     expect(isPreGatewayCreditStatus('unpaid')).toBe(true);
     expect(isPreGatewayCreditStatus('pending')).toBe(true);
     expect(isPreGatewayCreditStatus(' PENDING ')).toBe(true);
+    expect(isPreGatewayCreditStatus('')).toBe(true);
+    expect(isPreGatewayCreditStatus('   ')).toBe(true);
     expect(isPreGatewayCreditStatus(null)).toBe(true);
     expect(isPreGatewayCreditStatus(undefined)).toBe(true);
   });

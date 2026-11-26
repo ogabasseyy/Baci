@@ -22,7 +22,7 @@ export interface WalletLedgerSummary {
  * pre-gateway state where `orders.amount_paid` records pre-gateway credit.
  */
 export function isPreGatewayCreditStatus(status?: string | null): boolean {
-  const normalized = (status ?? 'unpaid').trim().toLowerCase();
+  const normalized = (status ?? '').trim().toLowerCase() || 'unpaid';
   return normalized === 'unpaid' || normalized === 'pending';
 }
 

@@ -996,6 +996,14 @@ BEGIN
     RAISE EXCEPTION 'amount_invalid';
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM private.paid_order_amendments pa
+    WHERE pa.order_id = p_order_id
+  ) THEN
+    RAISE EXCEPTION 'amendment_payment_open';
+  END IF;
+
   v_max_order_amount := CASE
     WHEN v_gateway = 'klump' THEN pg_catalog.ceil(GREATEST(v_order_total, 0))
     ELSE v_order_total

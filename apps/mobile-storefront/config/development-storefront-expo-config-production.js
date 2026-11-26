@@ -139,6 +139,28 @@ if (rawUpdatesUrl) {
       `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must use https.`
     );
   }
+  const hostname = parsedUpdatesUrl.hostname.toLowerCase();
+  const isLoopbackIpv4 =
+    /^127\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(
+      hostname
+    );
+  if (
+    parsedUpdatesUrl.username ||
+    parsedUpdatesUrl.password ||
+    parsedUpdatesUrl.hash ||
+    parsedUpdatesUrl.search ||
+    hostname === 'localhost' ||
+    isLoopbackIpv4 ||
+    hostname === '0.0.0.0' ||
+    hostname === '[::1]' ||
+    hostname === '::1' ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal')
+  ) {
+    throw new Error(
+      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be a public https origin/path without credentials, query, fragment, or loopback host.`
+    );
+  }
   updatesUrl = rawUpdatesUrl;
 }
 

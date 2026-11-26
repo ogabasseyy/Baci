@@ -346,6 +346,9 @@ describe('admin payload size and count limits', () => {
         env
       );
       expect(maxDatePublish.status).toBe(400);
+      expect(await maxDatePublish.json()).toMatchObject({
+        error: expect.stringMatching(/safe operational range/i),
+      });
     } finally {
       vi.useRealTimers();
     }

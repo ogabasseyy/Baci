@@ -10,7 +10,43 @@ import {
   isPlainObject,
   ValidationError,
   validateAssetKey,
+  validateUpdateId,
 } from './validation';
+
+const SHA256_BASE64URL_REGEX = /^[A-Za-z0-9_-]{43}$/;
+
+function isValidIsoTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.trim().length > 0 &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
+function isValidUuidString(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  try {
+    validateUpdateId(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isValidRollbackHistoryEntry(raw: unknown): boolean {
+  if (!isPlainObject(raw)) {
+    return false;
+  }
+  if (typeof raw.key !== 'string' || raw.key.length === 0) {
+    return false;
+  }
+  if (raw.fingerprint !== undefined && typeof raw.fingerprint !== 'string') {
+    return false;
+  }
+  return isPlainObject(raw.response);
+}
 
 function parseStoredAsset(raw: unknown): StoredManifestAsset | null {
   if (!isPlainObject(raw)) {
@@ -19,13 +55,13 @@ function parseStoredAsset(raw: unknown): StoredManifestAsset | null {
   const { hash, key, contentType, fileExtension, r2Key } = raw;
   if (
     typeof hash !== 'string' ||
-    hash.trim().length === 0 ||
+    !SHA256_BASE64URL_REGEX.test(hash) ||
     typeof key !== 'string' ||
     key.trim().length === 0 ||
     typeof contentType !== 'string' ||
     contentType.trim().length === 0 ||
     typeof r2Key !== 'string' ||
-    r2Key.trim().length === 0
+    r2Key.length === 0
   ) {
     return null;
   }
@@ -37,7 +73,7 @@ function parseStoredAsset(raw: unknown): StoredManifestAsset | null {
     return null;
   }
   try {
-    validateAssetKey(r2Key.trim());
+    validateAssetKey(r2Key);
   } catch (err) {
     if (err instanceof ValidationError) {
       return null;
@@ -51,26 +87,41 @@ export function parseStoredPointer(raw: unknown): ChannelCurrentState | null {
   if (!isPlainObject(raw)) {
     return null;
   }
-  if (raw.updatedAt !== undefined && typeof raw.updatedAt !== 'string') {
+  if (raw.updatedAt !== undefined && !isValidIsoTimestamp(raw.updatedAt)) {
     return null;
   }
   if (
     raw.previousUpdateId !== undefined &&
-    typeof raw.previousUpdateId !== 'string'
+    !isValidUuidString(raw.previousUpdateId)
   ) {
     return null;
   }
   if (
-    raw.mode === 'update' &&
-    typeof raw.updateId === 'string' &&
-    raw.updateId.trim().length > 0
+    raw.activeSourceUpdateId !== undefined &&
+    !isValidUuidString(raw.activeSourceUpdateId)
   ) {
+    return null;
+  }
+  if (
+    raw.lastRollback !== undefined &&
+    !isValidRollbackHistoryEntry(raw.lastRollback)
+  ) {
+    return null;
+  }
+  if (raw.recentRollbacks !== undefined) {
+    if (
+      !Array.isArray(raw.recentRollbacks) ||
+      !raw.recentRollbacks.every(isValidRollbackHistoryEntry)
+    ) {
+      return null;
+    }
+  }
+  if (raw.mode === 'update' && isValidUuidString(raw.updateId)) {
     return raw as ChannelCurrentState;
   }
   if (
     raw.mode === 'rollback_to_embedded' &&
-    typeof raw.commitTime === 'string' &&
-    raw.commitTime.trim().length > 0
+    isValidIsoTimestamp(raw.commitTime)
   ) {
     return raw as ChannelCurrentState;
   }
@@ -82,10 +133,8 @@ export function parseStoredRelease(raw: unknown): StoredReleaseRecord | null {
     return null;
   }
   if (
-    typeof raw.id !== 'string' ||
-    raw.id.trim().length === 0 ||
-    typeof raw.createdAt !== 'string' ||
-    Number.isNaN(Date.parse(raw.createdAt)) ||
+    !isValidUuidString(raw.id) ||
+    !isValidIsoTimestamp(raw.createdAt) ||
     typeof raw.runtimeVersion !== 'string' ||
     raw.runtimeVersion.trim().length === 0 ||
     typeof raw.channel !== 'string' ||

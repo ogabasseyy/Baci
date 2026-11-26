@@ -26,7 +26,7 @@ async function seedRelease(bucket: MockR2Bucket) {
     channel: 'production',
     platform: 'ios',
     launchAsset: {
-      hash: 'bundle-sha256-base64url',
+      hash: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
       key: 'bundle-key',
       contentType: 'application/javascript',
       fileExtension: '.hbc',
@@ -211,7 +211,7 @@ describe('GET /api/manifest RSA-SHA256 code signing', () => {
         channel: 'production',
         platform: 'ios',
         launchAsset: {
-          hash: 'bundle-hash',
+          hash: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
           key: 'bundle-key',
           contentType: 'application/javascript',
           r2Key: 'bundles/ios/signed.hbc',

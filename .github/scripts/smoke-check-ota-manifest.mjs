@@ -138,7 +138,30 @@ export async function smokeCheckManifestEndpoint(
   }
 
   const parts = extractMultipartParts(contentType, text);
+  if (parts.length !== 1) {
+    throw new Error(
+      `Expected exactly 1 manifest/directive multipart part, got ${parts.length}`
+    );
+  }
   const firstPart = parts[0];
+  const partContentType = firstPart?.headers['content-type'] ?? '';
+  if (!partContentType.toLowerCase().includes('application/json')) {
+    throw new Error(
+      `Expected application/json part content-type, got: ${partContentType}`
+    );
+  }
+  const expectedDispositionName =
+    expectedMode === 'rollback_to_embedded' ? 'directive' : 'manifest';
+  const partDisposition = firstPart?.headers['content-disposition'] ?? '';
+  const nameMatch = /(?:^|;)\s*name=(?:"([^"]+)"|([^;\s]+))/i.exec(
+    partDisposition
+  );
+  const actualDispositionName = (nameMatch?.[1] ?? nameMatch?.[2] ?? '').trim();
+  if (actualDispositionName !== expectedDispositionName) {
+    throw new Error(
+      `Expected multipart content-disposition name="${expectedDispositionName}", got: ${partDisposition || 'missing'}`
+    );
+  }
   const first = firstPart?.payload;
   if (!firstPart || !first || typeof first !== 'object') {
     throw new Error('Manifest smoke check returned no JSON payload part');

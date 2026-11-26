@@ -100,8 +100,13 @@ export class MockR2Bucket implements OtaR2Bucket {
     this.onBeforePut?.(key, options);
     const existing = this.store.get(key);
     if (options?.onlyIf) {
-      if (options.onlyIf.etagDoesNotMatch === '*' && existing) {
-        return null;
+      if (options.onlyIf.etagDoesNotMatch !== undefined && existing) {
+        if (
+          options.onlyIf.etagDoesNotMatch === '*' ||
+          options.onlyIf.etagDoesNotMatch === existing.etag
+        ) {
+          return null;
+        }
       }
       if (options.onlyIf.etagMatches !== undefined) {
         if (

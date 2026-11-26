@@ -136,6 +136,18 @@ export async function verifyAssetIntegrity(
     return `Referenced asset does not exist in R2: ${asset.r2Key}`;
   }
 
+  if (head.httpMetadata?.contentType !== undefined) {
+    const storedContentType =
+      head.httpMetadata.contentType.split(';')[0]?.trim().toLowerCase() ||
+      'application/octet-stream';
+    const declaredContentType =
+      asset.contentType.split(';')[0]?.trim().toLowerCase() ||
+      'application/octet-stream';
+    if (storedContentType !== declaredContentType) {
+      return `Stored asset content-type mismatch in R2: ${asset.r2Key}`;
+    }
+  }
+
   const metadataHash = head.customMetadata?.sha256Base64Url;
   if (metadataHash !== undefined) {
     return metadataHash === asset.hash
@@ -215,6 +227,12 @@ export async function putImmutableRelease(
   }
   try {
     const existingRecord = await existing.json<StoredReleaseRecord>();
+    if (
+      typeof existingRecord.createdAt !== 'string' ||
+      Number.isNaN(Date.parse(existingRecord.createdAt))
+    ) {
+      return { status: 'conflict' };
+    }
     const serializedCandidate = JSON.parse(serialized) as StoredReleaseRecord;
     const candidate = options?.ignoreCreatedAtOnMatch
       ? { ...serializedCandidate, createdAt: existingRecord.createdAt }

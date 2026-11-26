@@ -1,5 +1,8 @@
 import { parseExpectSignatureHeader, signRsaSha256Sfv } from './crypto';
-import { buildMultipartMixedResponse } from './multipart';
+import {
+  acceptsMultipartMixed,
+  buildMultipartMixedResponse,
+} from './multipart';
 import { parseStoredPointer, parseStoredRelease } from './stored-record-parser';
 import type {
   ChannelCurrentState,
@@ -74,53 +77,19 @@ function directiveResponse(
   ]);
 }
 
-function acceptsMultipartMixed(acceptHeader: string | null): boolean {
-  if (!acceptHeader || acceptHeader.trim().length === 0) {
-    return true;
-  }
-  let bestSpecificity = 0;
-  let bestQ = 0;
-  for (const rawRange of acceptHeader.split(',')) {
-    const [mediaTypePart, ...params] = rawRange.trim().toLowerCase().split(';');
-    const mediaType = mediaTypePart?.trim();
-    const specificity =
-      mediaType === 'multipart/mixed'
-        ? 3
-        : mediaType === 'multipart/*'
-          ? 2
-          : mediaType === '*/*'
-            ? 1
-            : 0;
-    if (specificity === 0) {
-      continue;
-    }
-    let q = 1;
-    for (const param of params) {
-      const [key, value] = param.trim().split('=');
-      if (key?.trim() === 'q' && value !== undefined) {
-        const parsedQ = Number(value.trim());
-        if (!Number.isNaN(parsedQ)) {
-          q = parsedQ;
-        }
-      }
-    }
-    if (
-      specificity > bestSpecificity ||
-      (specificity === bestSpecificity && q > bestQ)
-    ) {
-      bestSpecificity = specificity;
-      bestQ = q;
-    }
-  }
-  return bestSpecificity > 0 && bestQ > 0;
-}
-
 export async function handleGetManifest(
   request: Request,
   env: OtaWorkerEnv
 ): Promise<Response> {
   if (request.method !== 'GET') {
-    return errorResponse('Method not allowed', 405);
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+        allow: 'GET',
+      },
+    });
   }
 
   if (!acceptsMultipartMixed(request.headers.get('accept'))) {

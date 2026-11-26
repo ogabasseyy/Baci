@@ -5,6 +5,8 @@ import {
   parseRollbackPayload,
 } from './admin-auth';
 import {
+  buildRollbackNoopCasAction,
+  cleanupPreparedRollbackArtifacts,
   type PreparedRollbackRelease,
   prepareRollbackRelease,
 } from './admin-rollback-prepare';
@@ -113,7 +115,9 @@ export async function handleAdminRollback(
     if (prepOrResponse instanceof Response) {
       return prepOrResponse;
     }
-    prepared = prepOrResponse;
+    if (!('alreadyActive' in prepOrResponse)) {
+      prepared = prepOrResponse;
+    }
   }
 
   const result = await updateChannelPointerCas(env, pointerKey, (existing) => {
@@ -176,10 +180,29 @@ export async function handleAdminRollback(
       };
     }
 
+    if (
+      payload.targetUpdateId &&
+      existing?.mode === 'update' &&
+      (existing.updateId === payload.targetUpdateId ||
+        existing.activeSourceUpdateId === payload.targetUpdateId)
+    ) {
+      return buildRollbackNoopCasAction(
+        existing,
+        channel,
+        payload.platform,
+        payload.runtimeVersion,
+        idempotencyKey,
+        fingerprint
+      );
+    }
+
     if (!prepared) {
       return {
         kind: 'error',
-        response: errorResponse('Rollback release preparation missing', 500),
+        response: errorResponse(
+          'Concurrent channel state changed during rollback; retry',
+          409
+        ),
       };
     }
 
@@ -194,15 +217,6 @@ export async function handleAdminRollback(
           409
         ),
       };
-    }
-
-    if (
-      payload.targetUpdateId &&
-      existing?.mode === 'update' &&
-      (existing.updateId === payload.targetUpdateId ||
-        existing.activeSourceUpdateId === payload.targetUpdateId)
-    ) {
-      return { kind: 'noop', state: existing };
     }
 
     if (
@@ -244,20 +258,7 @@ export async function handleAdminRollback(
     };
   });
 
-  if (prepared && env.OTA_BUCKET.delete) {
-    const committedThisRelease =
-      !(result instanceof Response) &&
-      'state' in result &&
-      result.state.mode === 'update' &&
-      result.state.updateId === prepared.releaseId;
-    if (committedThisRelease) {
-      await env.OTA_BUCKET.delete(prepared.preparedKey);
-    } else if (!idempotencyKey && prepared.createdByRequest) {
-      // Only non-keyed random releases are exclusive to this request and safe to reap on abort.
-      await env.OTA_BUCKET.delete(prepared.releaseKey);
-      await env.OTA_BUCKET.delete(prepared.preparedKey);
-    }
-  }
+  await cleanupPreparedRollbackArtifacts(env, prepared, result, idempotencyKey);
 
   if (result instanceof Response) {
     return result;

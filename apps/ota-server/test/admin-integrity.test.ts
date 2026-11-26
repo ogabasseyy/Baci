@@ -174,6 +174,7 @@ describe('admin upload integrity and concurrent publish CAS', () => {
           method: 'PUT',
           headers: {
             authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/javascript',
             'x-asset-sha256': shaHex,
           },
           body: bytes,
@@ -315,12 +316,13 @@ describe('admin upload integrity and concurrent publish CAS', () => {
     );
     expect(putConflictType.status).toBe(409);
 
+    const baseTimeMs = Date.now();
     const basePublishBody = {
       channel: 'production',
       platform: 'ios',
       runtimeVersion: RUNTIME,
       updateId: UPDATE_1,
-      createdAt: '2026-11-25T12:00:00.000Z',
+      createdAt: new Date(baseTimeMs - 120_000).toISOString(),
       launchAsset: {
         hash: shaB64,
         key: shaHex,
@@ -389,7 +391,7 @@ describe('admin upload integrity and concurrent publish CAS', () => {
     const negZeroBody = JSON.stringify({
       ...basePublishBody,
       updateId: UPDATE_2,
-      createdAt: '2026-11-25T12:05:00.000Z',
+      createdAt: new Date(baseTimeMs - 60_000).toISOString(),
       extra: { score: -0 },
     });
     expect(
@@ -436,6 +438,7 @@ describe('admin upload integrity and concurrent publish CAS', () => {
           method: 'PUT',
           headers: {
             authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/javascript',
             'x-asset-sha256': shaHex,
           },
           body: bytes,
@@ -444,8 +447,10 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       env
     );
 
+    const monoBaseMs = Date.now();
     const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
-    const newerTimestamp = '2026-11-25T16:30:00.000Z';
+    const newerTimestamp = new Date(monoBaseMs - 30_000).toISOString();
+    const olderCandidateTimestamp = new Date(monoBaseMs - 60_000).toISOString();
     let injected = false;
     bucket.onBeforePut = (key) => {
       if (!injected && key === pointerKey) {
@@ -476,7 +481,7 @@ describe('admin upload integrity and concurrent publish CAS', () => {
           platform: 'ios',
           runtimeVersion: RUNTIME,
           updateId: UPDATE_1,
-          createdAt: '2026-11-25T16:00:00.000Z',
+          createdAt: olderCandidateTimestamp,
           launchAsset: {
             hash: shaB64,
             key: shaHex,
@@ -598,5 +603,41 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       );
       expect(resp.status).toBe(415);
     }
+  });
+
+  it('rejects publish when stored asset content-type disagrees with manifest contentType', async () => {
+    const { bucket, env } = createEnv();
+    const bytes = new TextEncoder().encode('mismatch-type-bytes');
+    const shaHex = createHash('sha256').update(bytes).digest('hex');
+    const shaB64 = createHash('sha256').update(bytes).digest('base64url');
+    await bucket.put('assets/bundles/ios/mismatch.hbc', bytes, {
+      httpMetadata: { contentType: 'text/plain' },
+      customMetadata: { sha256Hex: shaHex, sha256Base64Url: shaB64 },
+    });
+
+    const resp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          launchAsset: {
+            hash: shaB64,
+            key: shaHex,
+            contentType: 'application/javascript',
+            r2Key: 'bundles/ios/mismatch.hbc',
+          },
+        }),
+      }),
+      env
+    );
+    expect(resp.status).toBe(400);
+    expect(await resp.json()).toMatchObject({
+      error: expect.stringMatching(/content-type mismatch/i),
+    });
   });
 });

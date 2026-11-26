@@ -51,6 +51,26 @@ describe('GET /api/assets/*', () => {
       'public, max-age=31536000, immutable'
     );
     expect(await headResp.text()).toBe('');
+
+    const etag = getResp.headers.get('etag');
+    expect(etag).toBeTruthy();
+    const notModifiedGet = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/assets/blobs/abc123.png', {
+        headers: { 'if-none-match': `"other,tag", W/${etag}` },
+      }),
+      env
+    );
+    expect(notModifiedGet.status).toBe(304);
+    expect(await notModifiedGet.text()).toBe('');
+
+    const notModifiedHead = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/assets/blobs/abc123.png', {
+        method: 'HEAD',
+        headers: { 'if-none-match': '*' },
+      }),
+      env
+    );
+    expect(notModifiedHead.status).toBe(304);
   });
 
   it('returns 404 when asset does not exist and 405 on POST', async () => {
@@ -68,6 +88,7 @@ describe('GET /api/assets/*', () => {
       env
     );
     expect(post.status).toBe(405);
+    expect(post.headers.get('allow')).toBe('GET, HEAD');
   });
 
   it('strictly rejects path traversal and malformed asset paths', async () => {

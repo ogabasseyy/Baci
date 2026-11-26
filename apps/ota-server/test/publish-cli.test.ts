@@ -312,7 +312,10 @@ describe('publish-ota CLI', () => {
       if (method === 'HEAD' && url.includes('/blobs/')) {
         return new Response(null, {
           status: 200,
-          headers: { 'x-asset-sha256': pngShaHex },
+          headers: {
+            'content-type': 'image/png',
+            'x-asset-sha256': pngShaHex,
+          },
         });
       }
       if (method === 'HEAD') {
@@ -496,5 +499,111 @@ describe('publish-ota CLI', () => {
       )
     ).rejects.toThrow(/409/);
     expect(publishCalls).toBe(1);
+  });
+
+  it('sanitizes plugins and secret keys out of extra.expoClient and skips HEAD fast-path on content-type mismatch', async () => {
+    const { distDir, configPath } = await createExportFixture();
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        name: 'Ogabassey',
+        slug: 'ogabassey-store',
+        plugins: [
+          [
+            '@baci/tiktok-business/plugin',
+            { ios: { appSecret: 'top-secret' } },
+          ],
+        ],
+        extra: {
+          merchantSlug: 'ogabassey',
+          adminSecret: 'should-not-leak',
+        },
+      })
+    );
+
+    const uploadedKeys: string[] = [];
+    let publishedPayload: Record<string, unknown> | undefined;
+    const mockFetch: OtaFetch = async (input, init) => {
+      const url = getRequestUrl(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'HEAD') {
+        const keyPart = url.split('/api/assets/')[1];
+        const assetSha = keyPart?.split('/').pop()?.split('.')[0] ?? '';
+        return new Response(null, {
+          status: 200,
+          headers: {
+            'content-type': 'text/plain',
+            'x-asset-sha256': assetSha,
+          },
+        });
+      }
+      if (method === 'PUT') {
+        uploadedKeys.push(url);
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (url.endsWith('/api/admin/publish')) {
+        publishedPayload = JSON.parse(String(init?.body ?? '{}')) as Record<
+          string,
+          unknown
+        >;
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    await publishOta(
+      {
+        distDir,
+        configPath,
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        serverUrl: 'https://ota.usebaci.com',
+        token: 'secret-token',
+      },
+      mockFetch
+    );
+
+    expect(uploadedKeys.length).toBeGreaterThanOrEqual(2);
+    const serializedExtra = JSON.stringify(publishedPayload?.extra ?? {});
+    expect(serializedExtra).not.toContain('top-secret');
+    expect(serializedExtra).not.toContain('should-not-leak');
+    const extraObj = publishedPayload?.extra;
+    if (
+      typeof extraObj !== 'object' ||
+      extraObj === null ||
+      !('expoClient' in extraObj) ||
+      typeof extraObj.expoClient !== 'object' ||
+      extraObj.expoClient === null ||
+      !('extra' in extraObj.expoClient) ||
+      typeof extraObj.expoClient.extra !== 'object' ||
+      extraObj.expoClient.extra === null ||
+      !('merchantSlug' in extraObj.expoClient.extra)
+    ) {
+      throw new Error('Expected sanitized extra.expoClient.extra.merchantSlug');
+    }
+    expect(extraObj.expoClient.extra.merchantSlug).toBe('ogabassey');
+  });
+
+  it('omits createdAt for explicit updateId so repeated replays with advancing time match idempotently', async () => {
+    const { distDir, configPath } = await createExportFixture();
+    const explicitId = '44444444-4444-4444-8444-444444444444';
+    const firstPkg = await packageExportDirectory({
+      distDir,
+      configPath,
+      platform: 'ios',
+      runtimeVersion: '2.1.663',
+      updateId: explicitId,
+    });
+    expect(firstPkg.payload.updateId).toBe(explicitId);
+    expect(firstPkg.payload.createdAt).toBeUndefined();
+
+    const secondPkg = await packageExportDirectory({
+      distDir,
+      configPath,
+      platform: 'ios',
+      runtimeVersion: '2.1.663',
+      updateId: explicitId,
+    });
+    expect(secondPkg.payload).toEqual(firstPkg.payload);
   });
 });

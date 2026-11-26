@@ -1,3 +1,5 @@
+export { readBodyBytesWithLimit } from './body-reader';
+
 import type { OtaPlatform, StoredManifestAsset } from './types';
 
 export const MAX_ASSET_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -6,52 +8,6 @@ export const MAX_ROLLBACK_JSON_BYTES = 16 * 1024;
 export const MAX_MANIFEST_ASSETS = 500;
 export const MAX_EXTRA_BYTES = 256 * 1024;
 export const MAX_METADATA_BYTES = 16 * 1024;
-
-export async function readBodyBytesWithLimit(
-  request: Request,
-  maxBytes: number
-): Promise<Uint8Array> {
-  const rawContentLength = request.headers.get('content-length');
-  if (rawContentLength !== null) {
-    const declared = Number(rawContentLength.trim());
-    if (Number.isFinite(declared) && declared > maxBytes) {
-      throw new ValidationError(
-        `Request body exceeds maximum allowed size of ${maxBytes} bytes`,
-        413
-      );
-    }
-  }
-
-  if (!request.body) {
-    return new Uint8Array(0);
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      throw new ValidationError(
-        `Request body exceeds maximum allowed size of ${maxBytes} bytes`,
-        413
-      );
-    }
-    chunks.push(value);
-  }
-
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
-}
 
 export class ValidationError extends Error {
   readonly status: number;
@@ -190,18 +146,7 @@ export function validateAssetKey(rawPath: string): string {
       'Percent-encoded characters are not allowed in asset paths'
     );
   }
-  const rawSegments = assertCleanPathSegments(rawPath);
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(rawPath);
-  } catch {
-    throw new ValidationError('Malformed asset path');
-  }
-  const decodedSegments = assertCleanPathSegments(decoded);
-  if (decodedSegments.join('/') !== rawSegments.join('/')) {
-    throw new ValidationError('Invalid asset path');
-  }
-  return decodedSegments.join('/');
+  return assertCleanPathSegments(rawPath).join('/');
 }
 
 export function isPlainObject(

@@ -259,7 +259,7 @@ jobs:
           EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
           EXPO_PUBLIC_OTA_UPDATES_URL: ${{ env.OTA_MANIFEST_URL }}
           EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH }}
-          EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_SIGNING_KEY_ID }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_CERT_PATH != '' && env.EFFECTIVE_OTA_SIGNING_KEY_ID || '' }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
@@ -303,11 +303,14 @@ jobs:
         run: |
           set -euo pipefail
           test ! -f .env
+          if [[ -n "${EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH:-}" ]]; then
+            test -f "$EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH"
+          fi
           mkdir -p "$RUNNER_TEMP/storefront-ota"
           pnpm exec expo config --type public --json > "$RUNNER_TEMP/storefront-ota/expo-config.json"
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
-            const [configPath, platform, expected, expectedKeyId] = process.argv.slice(1);
+            const [configPath, platform, expected, expectedKeyId, expectedCertPath] = process.argv.slice(1);
             const config = JSON.parse(readFileSync(configPath, "utf8"));
             const actual = platform === "ios"
               ? (config.ios?.runtimeVersion ?? config.runtimeVersion)
@@ -315,13 +318,16 @@ jobs:
             if (actual !== expected) {
               throw new Error("Exported " + platform + " runtimeVersion (" + actual + ") does not match input runtime_version (" + expected + ").");
             }
-            if (expectedKeyId) {
+            if (expectedCertPath) {
+              if (config.updates?.codeSigningCertificate !== expectedCertPath) {
+                throw new Error("Exported codeSigningCertificate (" + (config.updates?.codeSigningCertificate ?? "") + ") does not match EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH.");
+              }
               const actualKeyId = config.updates?.codeSigningMetadata?.keyid ?? "";
               if (actualKeyId !== expectedKeyId) {
                 throw new Error("Exported codeSigningMetadata.keyid (" + actualKeyId + ") does not match EFFECTIVE_OTA_SIGNING_KEY_ID (" + expectedKeyId + ").");
               }
             }
-          ' "$RUNNER_TEMP/storefront-ota/expo-config.json" "$BACI_MOBILE_BUILD_PLATFORM" "$RUNTIME_VERSION" "$EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID"
+          ' "$RUNNER_TEMP/storefront-ota/expo-config.json" "$BACI_MOBILE_BUILD_PLATFORM" "$RUNTIME_VERSION" "$EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID" "$EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH"
           if [[ "$BACI_MOBILE_BUILD_PLATFORM" == "ios" ]]; then
             node "$RUNNER_TEMP/prepare-storefront-ota-public-config.mjs" "$RUNNER_TEMP/storefront-ota/expo-config.json" "$IOS_TIKTOK_CONFIGURED"
           fi

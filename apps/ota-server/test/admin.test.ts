@@ -175,6 +175,7 @@ describe('admin publish and rollback endpoints', () => {
           method: 'PUT',
           headers: {
             authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/javascript',
             'x-asset-sha256': shaHex,
           },
           body: assetBytes,
@@ -308,5 +309,64 @@ describe('admin publish and rollback endpoints', () => {
     expect(JSON.parse(parts[0]?.body ?? '')).toMatchObject({
       type: 'rollBackToEmbedded',
     });
+  });
+
+  it('preserves own-property __proto__ metadata keys in published manifests', async () => {
+    const { env } = createEnv();
+    const assetBytes = new TextEncoder().encode('proto-metadata-bundle');
+    const shaHex = createHash('sha256').update(assetBytes).digest('hex');
+    const shaB64 = createHash('sha256').update(assetBytes).digest('base64url');
+
+    await worker.fetch(
+      new Request(
+        'https://ota.usebaci.com/api/admin/assets/bundles/ios/proto.hbc',
+        {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/javascript',
+            'x-asset-sha256': shaHex,
+          },
+          body: assetBytes,
+        }
+      ),
+      env
+    );
+
+    const publishResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body:
+          '{"channel":"production","platform":"ios","runtimeVersion":"2.1.663-ios-sdk58-rn0880-splashmotion1","metadata":{"__proto__":"storefront"},"launchAsset":{"hash":"' +
+          shaB64 +
+          '","key":"' +
+          shaHex +
+          '","contentType":"application/javascript","r2Key":"bundles/ios/proto.hbc"}}',
+      }),
+      env
+    );
+    expect(publishResp.status).toBe(200);
+
+    const manifestResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: {
+          'expo-protocol-version': '1',
+          'expo-platform': 'ios',
+          'expo-runtime-version': RUNTIME,
+          'expo-channel-name': 'production',
+        },
+      }),
+      env
+    );
+    const parts = parseMultipartMixed(
+      manifestResp.headers.get('content-type'),
+      await manifestResp.text()
+    );
+    const bodyText = parts[0]?.body ?? '';
+    expect(bodyText).toContain('"__proto__":"storefront"');
   });
 });

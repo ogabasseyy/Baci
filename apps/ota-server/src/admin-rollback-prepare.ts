@@ -1,9 +1,15 @@
-import { nextMonotonicTimestamp, putImmutableRelease } from './admin-storage';
+import {
+  mergeRollbackHistory,
+  nextMonotonicTimestamp,
+  type PointerCasAction,
+  putImmutableRelease,
+} from './admin-storage';
 import { deriveDeterministicUuid } from './crypto';
 import { readStoredReleaseOrError } from './stored-record-parser';
 import type {
   ChannelCurrentState,
   OtaWorkerEnv,
+  RollbackOperationResult,
   RollbackPayload,
   StoredReleaseRecord,
 } from './types';
@@ -18,6 +24,10 @@ export interface PreparedRollbackRelease {
   sourceTargetId: string;
 }
 
+export type RollbackPreparation =
+  | PreparedRollbackRelease
+  | { alreadyActive: true };
+
 export async function prepareRollbackRelease(
   env: OtaWorkerEnv,
   channel: string,
@@ -25,7 +35,7 @@ export async function prepareRollbackRelease(
   initialObj: { etag?: string; httpEtag?: string } | null,
   initialState: ChannelCurrentState | null,
   idempotencyKey?: string
-): Promise<PreparedRollbackRelease | Response> {
+): Promise<RollbackPreparation | Response> {
   const sourceTargetId =
     payload.targetUpdateId ?? initialState?.previousUpdateId;
   if (!sourceTargetId) {
@@ -41,6 +51,9 @@ export async function prepareRollbackRelease(
     (initialState.updateId === payload.targetUpdateId ||
       initialState.activeSourceUpdateId === payload.targetUpdateId)
   ) {
+    if (idempotencyKey) {
+      return { alreadyActive: true };
+    }
     return jsonResponse({
       ok: true,
       mode: 'update',
@@ -133,4 +146,72 @@ export async function prepareRollbackRelease(
     createdAt: releaseResult.createdAt,
     sourceTargetId,
   };
+}
+
+export function buildRollbackNoopCasAction(
+  existing: Extract<ChannelCurrentState, { mode: 'update' }>,
+  channel: string,
+  platform: RollbackPayload['platform'],
+  runtimeVersion: string,
+  idempotencyKey: string | undefined,
+  fingerprint: string
+): PointerCasAction {
+  if (!idempotencyKey) {
+    return { kind: 'noop', state: existing };
+  }
+  const response: RollbackOperationResult = {
+    ok: true,
+    mode: 'update',
+    channel,
+    platform,
+    runtimeVersion,
+    updateId: existing.updateId,
+    ...(existing.activeSourceUpdateId &&
+    existing.activeSourceUpdateId !== existing.updateId
+      ? { rolledBackToUpdateId: existing.activeSourceUpdateId }
+      : {}),
+  };
+  const entry = { key: idempotencyKey, fingerprint, response };
+  return {
+    kind: 'write',
+    state: {
+      ...existing,
+      lastRollback: entry,
+      recentRollbacks: mergeRollbackHistory(existing, entry),
+    },
+  };
+}
+
+export async function cleanupPreparedRollbackArtifacts(
+  env: OtaWorkerEnv,
+  prepared: PreparedRollbackRelease | null,
+  result:
+    | { state: ChannelCurrentState }
+    | { idempotentResult: RollbackOperationResult }
+    | Response,
+  idempotencyKey?: string
+): Promise<void> {
+  if (!prepared || !env.OTA_BUCKET.delete) {
+    return;
+  }
+  const committedThisRelease =
+    !(result instanceof Response) &&
+    'state' in result &&
+    result.state.mode === 'update' &&
+    result.state.updateId === prepared.releaseId;
+  try {
+    if (committedThisRelease) {
+      await env.OTA_BUCKET.delete(prepared.preparedKey);
+    } else if (!idempotencyKey && prepared.createdByRequest) {
+      await env.OTA_BUCKET.delete(prepared.releaseKey);
+      await env.OTA_BUCKET.delete(prepared.preparedKey);
+    }
+  } catch (err) {
+    console.warn(
+      committedThisRelease
+        ? 'Failed to clean up committed rollback marker'
+        : 'Failed to clean up aborted rollback artifacts',
+      err
+    );
+  }
 }

@@ -183,6 +183,41 @@ function hashBytes(bytes) {
   };
 }
 
+const SENSITIVE_EXPO_KEY_REGEX =
+  /secret|password|private[-_]?key|credential|auth[-_]?token/i;
+
+function sanitizeExpoValue(value) {
+  if (typeof value === 'string') {
+    if (value.includes('-----BEGIN') && value.includes('PRIVATE KEY')) {
+      throw new Error('Refusing to embed private key material in expoClient manifest metadata');
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeExpoValue(item));
+  }
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (SENSITIVE_EXPO_KEY_REGEX.test(k)) {
+        continue;
+      }
+      out[k] = sanitizeExpoValue(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+function sanitizeExpoClientForManifest(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const copy = { ...raw };
+  delete copy.plugins;
+  return sanitizeExpoValue(copy);
+}
+
 export async function packageExportDirectory({
   distDir,
   platform,
@@ -208,7 +243,7 @@ export async function packageExportDirectory({
   }
 
   const expoClient = configPath
-    ? JSON.parse(await readFile(configPath, 'utf8'))
+    ? sanitizeExpoClientForManifest(JSON.parse(await readFile(configPath, 'utf8')))
     : undefined;
 
   const uploads = new Map();
@@ -263,7 +298,7 @@ export async function packageExportDirectory({
       platform,
       runtimeVersion,
       updateId: updateId ?? randomUUID().toLowerCase(),
-      createdAt: new Date().toISOString(),
+      ...(updateId ? {} : { createdAt: new Date().toISOString() }),
       ...(sourceSha ? { sourceSha } : {}),
       launchAsset: {
         hash: bundleHashes.sha256Base64Url,
@@ -328,10 +363,20 @@ export async function publishOta(options, fetchImpl = fetch) {
       redirect: 'error',
     });
     const remoteSha256 = headResp.headers.get('x-asset-sha256')?.trim();
+    const remoteContentType = headResp.headers
+      .get('content-type')
+      ?.split(';')[0]
+      ?.trim()
+      .toLowerCase();
+    const expectedContentType = asset.contentType
+      .split(';')[0]
+      ?.trim()
+      .toLowerCase();
     if (
       headResp.ok &&
       remoteSha256 &&
-      remoteSha256.toLowerCase() === asset.sha256Hex.toLowerCase()
+      remoteSha256.toLowerCase() === asset.sha256Hex.toLowerCase() &&
+      remoteContentType === expectedContentType
     ) {
       continue;
     }

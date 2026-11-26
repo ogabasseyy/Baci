@@ -42,5 +42,11 @@ describe('MockR2Bucket conditional writes and etag contracts', () => {
     });
     expect(updated?.etag).toBeTruthy();
     expect(updated?.etag).not.toBe(created?.etag);
+
+    const blockedByMismatch = await bucket.put('ptr.json', 'v3', {
+      onlyIf: { etagDoesNotMatch: updated?.etag },
+    });
+    expect(blockedByMismatch).toBeNull();
+    expect(await (await bucket.get('ptr.json'))?.text()).toBe('v2');
   });
 });

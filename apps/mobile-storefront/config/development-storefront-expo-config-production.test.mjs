@@ -206,4 +206,26 @@ test('rejects invalid or non-HTTPS EXPO_PUBLIC_OTA_UPDATES_URL', () => {
       }),
     /Must be a valid https URL/
   );
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_UPDATES_URL:
+          'https://user:pass@ota.usebaci.com/api/manifest',
+      }),
+    /without credentials, query, fragment, or loopback host/
+  );
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_UPDATES_URL: 'https://localhost/api/manifest',
+      }),
+    /without credentials, query, fragment, or loopback host/
+  );
+  assert.throws(
+    () =>
+      loadProductionConfigWithEnv({
+        EXPO_PUBLIC_OTA_UPDATES_URL: 'https://127.0.0.2/api/manifest',
+      }),
+    /without credentials, query, fragment, or loopback host/
+  );
 });

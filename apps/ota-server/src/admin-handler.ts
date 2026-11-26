@@ -263,9 +263,6 @@ export async function handleAdminPublish(
   });
 
   if (result instanceof Response) {
-    if (releaseResult.status === 'created' && env.OTA_BUCKET.delete) {
-      await env.OTA_BUCKET.delete(releaseKey);
-    }
     return result;
   }
   if ('idempotentResult' in result) {

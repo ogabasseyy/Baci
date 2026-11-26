@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
-import type { ExpoUpdateManifest, OtaWorkerEnv } from '../src/types';
+import type { OtaWorkerEnv } from '../src/types';
 import { MockR2Bucket } from './helpers/mock-r2';
 import { parseMultipartMixed } from './helpers/multipart-parser';
 
@@ -24,7 +24,7 @@ async function setupChannelWithTwoReleases() {
   const hexB = createHash('sha256').update(bytesB).digest('hex');
   const b64B = createHash('sha256').update(bytesB).digest('base64url');
 
-  await worker.fetch(
+  const upA = await worker.fetch(
     new Request('https://ota.usebaci.com/api/admin/assets/bundles/ios/a.hbc', {
       method: 'PUT',
       headers: {
@@ -36,7 +36,8 @@ async function setupChannelWithTwoReleases() {
     }),
     env
   );
-  await worker.fetch(
+  expect(upA.status).toBe(200);
+  const upB = await worker.fetch(
     new Request('https://ota.usebaci.com/api/admin/assets/bundles/ios/b.hbc', {
       method: 'PUT',
       headers: {
@@ -48,8 +49,13 @@ async function setupChannelWithTwoReleases() {
     }),
     env
   );
+  expect(upB.status).toBe(200);
 
-  await worker.fetch(
+  const setupBaseMs = Date.now();
+  const timestampA = new Date(setupBaseMs - 120_000).toISOString();
+  const timestampB = new Date(setupBaseMs - 60_000).toISOString();
+
+  const pubA = await worker.fetch(
     new Request('https://ota.usebaci.com/api/admin/publish', {
       method: 'POST',
       headers: {
@@ -61,7 +67,7 @@ async function setupChannelWithTwoReleases() {
         platform: 'ios',
         runtimeVersion: RUNTIME,
         updateId: UPDATE_A,
-        createdAt: '2026-11-25T10:00:00.000Z',
+        createdAt: timestampA,
         metadata: { release: 'a' },
         launchAsset: {
           hash: b64A,
@@ -73,8 +79,9 @@ async function setupChannelWithTwoReleases() {
     }),
     env
   );
+  expect(pubA.status).toBe(200);
 
-  await worker.fetch(
+  const pubB = await worker.fetch(
     new Request('https://ota.usebaci.com/api/admin/publish', {
       method: 'POST',
       headers: {
@@ -86,7 +93,7 @@ async function setupChannelWithTwoReleases() {
         platform: 'ios',
         runtimeVersion: RUNTIME,
         updateId: UPDATE_B,
-        createdAt: '2026-11-25T12:00:00.000Z',
+        createdAt: timestampB,
         metadata: { release: 'b' },
         launchAsset: {
           hash: b64B,
@@ -98,8 +105,9 @@ async function setupChannelWithTwoReleases() {
     }),
     env
   );
+  expect(pubB.status).toBe(200);
 
-  return { bucket, env, b64A };
+  return { bucket, env, b64A, timestampB };
 }
 
 describe('admin payload validation and rollback safety', () => {
@@ -220,7 +228,7 @@ describe('admin payload validation and rollback safety', () => {
   });
 
   it('republishes A with a fresh UUID and newer createdAt for clients on B, and keeps targetless rollback idempotent', async () => {
-    const { env, b64A } = await setupChannelWithTwoReleases();
+    const { env, b64A, timestampB } = await setupChannelWithTwoReleases();
 
     const missingKeyResp = await worker.fetch(
       new Request('https://ota.usebaci.com/api/admin/rollback', {
@@ -314,12 +322,30 @@ describe('admin payload validation and rollback safety', () => {
       manifestResp.headers.get('content-type'),
       await manifestResp.text()
     );
-    const manifest = JSON.parse(parts[0]?.body ?? '') as ExpoUpdateManifest;
-    expect(manifest.id).toBe(rollbackId);
-    expect(manifest.launchAsset.hash).toBe(b64A);
-    expect(manifest.metadata).toEqual({ release: 'a' });
-    expect(Date.parse(manifest.createdAt)).toBeGreaterThan(
-      Date.parse('2026-11-25T12:00:00.000Z')
+    const parsedManifestUnknown: unknown = JSON.parse(parts[0]?.body ?? '');
+    if (
+      typeof parsedManifestUnknown !== 'object' ||
+      parsedManifestUnknown === null ||
+      !('id' in parsedManifestUnknown) ||
+      typeof parsedManifestUnknown.id !== 'string' ||
+      !('createdAt' in parsedManifestUnknown) ||
+      typeof parsedManifestUnknown.createdAt !== 'string' ||
+      !('launchAsset' in parsedManifestUnknown) ||
+      typeof parsedManifestUnknown.launchAsset !== 'object' ||
+      parsedManifestUnknown.launchAsset === null ||
+      !('hash' in parsedManifestUnknown.launchAsset) ||
+      typeof parsedManifestUnknown.launchAsset.hash !== 'string' ||
+      !('metadata' in parsedManifestUnknown)
+    ) {
+      throw new Error(
+        'Expected manifest JSON object with id, createdAt, launchAsset.hash, metadata'
+      );
+    }
+    expect(parsedManifestUnknown.id).toBe(rollbackId);
+    expect(parsedManifestUnknown.launchAsset.hash).toBe(b64A);
+    expect(parsedManifestUnknown.metadata).toEqual({ release: 'a' });
+    expect(Date.parse(parsedManifestUnknown.createdAt)).toBeGreaterThan(
+      Date.parse(timestampB)
     );
   });
 
@@ -377,11 +403,20 @@ describe('admin payload validation and rollback safety', () => {
         env
       );
       expect(rbResp.status).toBe(200);
-      const rbJson = (await rbResp.json()) as {
-        updateId: string;
-        rolledBackToUpdateId: string;
-      };
-      expect(rbJson.rolledBackToUpdateId).toBe(UPDATE_A);
+      const rbBodyUnknown: unknown = await rbResp.json();
+      if (
+        typeof rbBodyUnknown !== 'object' ||
+        rbBodyUnknown === null ||
+        !('updateId' in rbBodyUnknown) ||
+        typeof rbBodyUnknown.updateId !== 'string' ||
+        !('rolledBackToUpdateId' in rbBodyUnknown) ||
+        typeof rbBodyUnknown.rolledBackToUpdateId !== 'string'
+      ) {
+        throw new Error(
+          'Expected rollback result with updateId and rolledBackToUpdateId'
+        );
+      }
+      expect(rbBodyUnknown.rolledBackToUpdateId).toBe(UPDATE_A);
 
       const releasesAfter = [...bucket.store.keys()].filter((k) =>
         k.startsWith(releasePrefix)
@@ -390,12 +425,19 @@ describe('admin payload validation and rollback safety', () => {
       expect(releasesAfter - releasesBefore).toBe(1);
 
       const pointerObj = await bucket.get(pointerKey);
-      const pointer = await pointerObj?.json<{
-        updateId: string;
-        previousUpdateId: string;
-      }>();
-      expect(pointer?.updateId).toBe(rbJson.updateId);
-      expect(pointer?.previousUpdateId).toBe(UPDATE_C);
+      const pointerUnknown: unknown = await pointerObj?.json();
+      if (
+        typeof pointerUnknown !== 'object' ||
+        pointerUnknown === null ||
+        !('updateId' in pointerUnknown) ||
+        !('previousUpdateId' in pointerUnknown)
+      ) {
+        throw new Error(
+          'Expected pointer object with updateId and previousUpdateId'
+        );
+      }
+      expect(pointerUnknown.updateId).toBe(rbBodyUnknown.updateId);
+      expect(pointerUnknown.previousUpdateId).toBe(UPDATE_C);
     } finally {
       vi.useRealTimers();
     }
@@ -450,6 +492,13 @@ describe('admin payload validation and rollback safety', () => {
         env
       );
       expect(rbResp.status).toBe(409);
+      expect(await rbResp.json()).toMatchObject({
+        error: expect.stringMatching(/advanced channel timestamp/i),
+      });
+      const pointerAfterConflict = await (await bucket.get(pointerKey))?.json<{
+        updateId: string;
+      }>();
+      expect(pointerAfterConflict?.updateId).toBe(UPDATE_C);
     } finally {
       vi.useRealTimers();
     }
@@ -667,5 +716,83 @@ describe('admin payload validation and rollback safety', () => {
       runtimeVersion: RUNTIME,
       sourceSha,
     });
+  });
+
+  it('persists keyed no-op rollbacks and survives post-commit cleanup deletion failures', async () => {
+    const { bucket, env } = await setupChannelWithTwoReleases();
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+
+    const keyedNoop = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'noop-persisted-key-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_B,
+        }),
+      }),
+      env
+    );
+    expect(keyedNoop.status).toBe(200);
+    const keyedNoopBody = await keyedNoop.json();
+    expect(keyedNoopBody).toMatchObject({ ok: true, updateId: UPDATE_B });
+
+    const pointerAfterNoop = await (await bucket.get(pointerKey))?.json<{
+      lastRollback?: { key: string };
+    }>();
+    expect(pointerAfterNoop?.lastRollback?.key).toBe('noop-persisted-key-1');
+
+    const replayNoop = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'noop-persisted-key-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_B,
+        }),
+      }),
+      env
+    );
+    expect(replayNoop.status).toBe(200);
+    expect(await replayNoop.json()).toEqual(keyedNoopBody);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    bucket.delete = async () => {
+      throw new Error('R2 transient delete outage');
+    };
+    try {
+      const rbWithDeleteOutage = await worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/rollback', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: 'production',
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            targetUpdateId: UPDATE_A,
+          }),
+        }),
+        env
+      );
+      expect(rbWithDeleteOutage.status).toBe(200);
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

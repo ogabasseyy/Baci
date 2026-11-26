@@ -3,13 +3,15 @@ import { createSign, generateKeyPairSync } from 'node:crypto';
 import test from 'node:test';
 import { smokeCheckManifestEndpoint } from './smoke-check-ota-manifest.mjs';
 
-function multipartResponse(jsonBody, extraHeaders = []) {
+function multipartResponse(jsonBody, extraHeaders = [], dispositionName = 'manifest') {
   const boundary = 'ota-smoke-boundary';
   const body = JSON.stringify(jsonBody);
   const payload = [
     `--${boundary}`,
     'content-type: application/json; charset=utf-8',
-    'content-disposition: form-data; name="manifest"',
+    ...(dispositionName !== null
+      ? [`content-disposition: form-data; name="${dispositionName}"`]
+      : []),
     ...extraHeaders,
     '',
     body,
@@ -49,7 +51,7 @@ test('smoke check verifies active manifest updateId and rollBackToEmbedded direc
       const headers = new Headers(init?.headers);
       assert.ok(headers.get('expo-current-update-id'));
       assert.ok(headers.get('expo-embedded-update-id'));
-      return multipartResponse({ type: 'rollBackToEmbedded' });
+      return multipartResponse({ type: 'rollBackToEmbedded' }, [], 'directive');
     }
   );
   assert.equal(rollbackResult.type, 'rollBackToEmbedded');
@@ -192,5 +194,70 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
         )
     ),
     /Cryptographic verification failed/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+      },
+      async () => {
+        const boundary = 'ota-smoke-boundary';
+        const body = [
+          `--${boundary}`,
+          'content-type: application/json; charset=utf-8',
+          'content-disposition: form-data; name="manifest"',
+          '',
+          JSON.stringify({ id: updateId }),
+          `--${boundary}`,
+          'content-type: application/json; charset=utf-8',
+          'content-disposition: form-data; name="extra"',
+          '',
+          JSON.stringify({ rogue: true }),
+          `--${boundary}--`,
+          '',
+        ].join('\r\n');
+        return new Response(body, {
+          status: 200,
+          headers: { 'content-type': `multipart/mixed; boundary=${boundary}` },
+        });
+      }
+    ),
+    /Expected exactly 1 manifest\/directive multipart part/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+      },
+      async () => multipartResponse({ id: updateId }, [], 'directive')
+    ),
+    /Expected multipart content-disposition name="manifest"/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+      },
+      async () => multipartResponse({ id: updateId }, [], null)
+    ),
+    /Expected multipart content-disposition name="manifest"/
   );
 });

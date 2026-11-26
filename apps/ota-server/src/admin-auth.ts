@@ -73,14 +73,14 @@ function validateMetadataRecord(raw: unknown): Record<string, string> {
   if (!isPlainObject(raw)) {
     throw new ValidationError('metadata must be an object');
   }
-  const result: Record<string, string> = {};
+  const entries: [string, string][] = [];
   for (const [key, value] of Object.entries(raw)) {
     if (typeof value !== 'string') {
       throw new ValidationError(`metadata.${key} must be a string`);
     }
-    result[key] = value;
+    entries.push([key, value]);
   }
-  return result;
+  return Object.fromEntries(entries);
 }
 
 export function parseIdempotencyKey(raw: unknown): string | undefined {

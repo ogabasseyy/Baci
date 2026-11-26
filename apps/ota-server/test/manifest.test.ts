@@ -4,8 +4,10 @@ import type { OtaWorkerEnv, StoredReleaseRecord } from '../src/types';
 import { MockR2Bucket } from './helpers/mock-r2';
 import { parseMultipartMixed } from './helpers/multipart-parser';
 
-const UPDATE_ID = '11111111-1111-4111-8111-111111111111';
-const EMBEDDED_ID = '22222222-2222-4222-8222-222222222222';
+const UPDATE_ID = '1111111a-1111-4111-8111-11111111111a';
+const EMBEDDED_ID = '2222222b-2222-4222-8222-22222222222b';
+const VALID_BUNDLE_HASH = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const VALID_ASSET_HASH = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
 const RUNTIME = '2.1.663-ios-sdk58-rn0880-splashmotion1';
 
 function createBaseHeaders(overrides: Record<string, string> = {}) {
@@ -26,7 +28,7 @@ async function seedRelease(bucket: MockR2Bucket, updateId = UPDATE_ID) {
     channel: 'production',
     platform: 'ios',
     launchAsset: {
-      hash: 'bundle-sha256-base64url',
+      hash: VALID_BUNDLE_HASH,
       key: 'bundle-key',
       contentType: 'application/javascript',
       fileExtension: '.hbc',
@@ -34,7 +36,7 @@ async function seedRelease(bucket: MockR2Bucket, updateId = UPDATE_ID) {
     },
     assets: [
       {
-        hash: 'img-sha256-base64url',
+        hash: VALID_ASSET_HASH,
         key: 'md5-logo',
         contentType: 'image/png',
         fileExtension: '.png',
@@ -307,6 +309,25 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
       env
     );
     expect(mixedAcceptResp.status).toBe(200);
+
+    const paramRangeResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders({
+          accept: 'multipart/mixed; boundary=client; q=0, multipart/*; q=1',
+        }),
+      }),
+      env
+    );
+    expect(paramRangeResp.status).toBe(200);
+
+    const postManifestResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        method: 'POST',
+      }),
+      env
+    );
+    expect(postManifestResp.status).toBe(405);
+    expect(postManifestResp.headers.get('allow')).toBe('GET');
   });
 
   it('returns controlled 500 JSON when R2 pointer or release JSON is malformed or invalid shape', async () => {
@@ -367,7 +388,7 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
         channel: 'production',
         platform: 'ios',
         launchAsset: {
-          hash: 'bundle-sha256-base64url',
+          hash: VALID_BUNDLE_HASH,
           key: 'bundle-key',
           contentType: 'application/javascript',
           r2Key: 'bundles/ios/abc123.hbc',
@@ -386,6 +407,23 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
     expect(badAssetRel.status).toBe(500);
 
     await bucket.put(
+      pointerKey,
+      JSON.stringify({
+        mode: 'update',
+        updateId: UPDATE_ID,
+        recentRollbacks: {},
+      })
+    );
+    const badHistoryPtr = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: createBaseHeaders(),
+      }),
+      env
+    );
+    expect(badHistoryPtr.status).toBe(500);
+
+    await seedRelease(bucket);
+    await bucket.put(
       releaseKey,
       JSON.stringify({
         id: UPDATE_ID,
@@ -394,7 +432,7 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
         channel: 'production',
         platform: 'android',
         launchAsset: {
-          hash: 'bundle-sha256-base64url',
+          hash: VALID_BUNDLE_HASH,
           key: 'bundle-key',
           contentType: 'application/javascript',
           r2Key: 'bundles/ios/abc123.hbc',

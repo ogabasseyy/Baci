@@ -70,7 +70,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 34,
+    // Tall enough to tap (#4483); the slimmer sides and per-state weight are
+    // the list's newer look.
+    minHeight: SPACING.touchTarget,
     paddingHorizontal: SPACING.md,
   },
   label: { fontSize: TYPOGRAPHY.size.md },

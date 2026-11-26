@@ -66,7 +66,8 @@ export function AppSheetModal({
         />
         <AppKeyboardContainer
           // An attached sheet sits on the bottom edge: its own colour fills the
-          // safe area under it. A detached one floats, so keeps the backdrop.
+          // safe area under it, so a sheet must not add that inset to its own
+          // padding. A detached one floats, so keeps the backdrop.
           bottomFillColor={isDetached ? undefined : colors.card}
           contentContainerStyle={[
             styles.keyboardContent,

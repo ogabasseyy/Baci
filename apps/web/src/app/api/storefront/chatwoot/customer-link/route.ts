@@ -28,7 +28,14 @@ export async function POST(request: NextRequest) {
   if (!csrf.valid) return csrf.response ?? reply(403, 'forbidden');
 
   // Authenticate before reading input: a guest learns nothing about it.
-  const auth = await authenticateApiRequest(request);
+  const auth = await authenticateApiRequest(request, {
+    requireVerifiedGuest: true,
+  });
+  // The widget treats 401/404 as final and tries a 503 once more, so a check
+  // that failed (rather than found nothing) must answer 503.
+  if (auth.error === 'Authentication failed') {
+    return reply(503, 'temporarily_unavailable');
+  }
   if (auth.error || !auth.user || !auth.supabase) {
     return reply(401, 'unauthorized');
   }
@@ -44,7 +51,8 @@ export async function POST(request: NextRequest) {
     .select('id')
     .eq('slug', body.data.storeSlug)
     .maybeSingle();
-  if (merchantError || !merchant) return reply(404, 'not_found');
+  if (merchantError) return reply(503, 'temporarily_unavailable');
+  if (!merchant) return reply(404, 'not_found');
 
   // Only stores whose chat is set up get a link.
   try {

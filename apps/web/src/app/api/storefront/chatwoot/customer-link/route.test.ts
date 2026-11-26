@@ -124,6 +124,36 @@ describe('POST /api/storefront/chatwoot/customer-link', () => {
     expect(mocks.issue).not.toHaveBeenCalled();
   });
 
+  // The widget treats 401/404 as final and 503 as worth one more try, so a
+  // passing database or sign-in failure must never look like either.
+  it('answers 503, not "no such store", when the store lookup fails', async () => {
+    mocks.merchantResult.mockReturnValue({
+      data: null,
+      error: { message: 'connection reset' },
+    });
+    expect((await call({ storeSlug: 'ogabassey' })).status).toBe(503);
+    expect(mocks.issue).not.toHaveBeenCalled();
+  });
+
+  it('answers 404 for a store that does not exist', async () => {
+    mocks.merchantResult.mockReturnValue({ data: null, error: null });
+    expect((await call({ storeSlug: 'ogabassey' })).status).toBe(404);
+  });
+
+  it('answers 503, not "signed out", when the sign-in check itself fails', async () => {
+    mocks.auth.mockResolvedValue({
+      user: null,
+      supabase: null,
+      error: 'Authentication failed',
+    });
+    expect((await call({ storeSlug: 'ogabassey' })).status).toBe(503);
+    // Only this option tells a failed check apart from a missing session.
+    expect(mocks.auth).toHaveBeenCalledWith(expect.anything(), {
+      requireVerifiedGuest: true,
+    });
+    expect(mocks.issue).not.toHaveBeenCalled();
+  });
+
   it('does not link a shopper who is not a customer of that store', async () => {
     mocks.customerResult.mockReturnValue({ data: null, error: null });
     expect((await call({ storeSlug: 'ogabassey' })).status).toBe(404);

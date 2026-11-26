@@ -103,7 +103,7 @@ describe('qualified PDP proxy cache policy', () => {
     const res = await proxy(req);
 
     expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe(
-      'max-age=300, stale-while-revalidate=86400'
+      'max-age=1800, stale-while-revalidate=86400'
     );
     expect(res.headers.get('CDN-Cache-Control')).toBe(
       'max-age=1800, stale-while-revalidate=86400, stale-if-error=86400'

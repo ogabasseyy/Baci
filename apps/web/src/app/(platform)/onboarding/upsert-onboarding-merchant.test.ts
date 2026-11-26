@@ -227,9 +227,9 @@ describe('upsertOnboardingMerchant', () => {
     expect(updatePayload).toMatchObject({
       logo_url: null,
       favicon_png_192_url: null,
+      phone: null,
     });
     expect(updatePayload).not.toHaveProperty('slug');
-    expect(updatePayload).not.toHaveProperty('phone');
     expect(result).toMatchObject({
       status: 'saved',
       retiredSlug: 'old-draft',

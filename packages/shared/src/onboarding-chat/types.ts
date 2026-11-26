@@ -66,6 +66,63 @@ export const TOP_COUNTRY_CODES = ['NG', 'GH', 'KE', 'ZA', 'GB', 'US'] as const;
 
 const STORE_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
+// Mirror of public.is_reserved_merchant_slug() so auto-derived preview slugs
+// never display a reserved label that the server will rewrite on submit.
+const RESERVED_ONBOARDING_SLUGS = new Set([
+  'www',
+  'app',
+  'api',
+  'admin',
+  'dashboard',
+  'mail',
+  'smtp',
+  'assets',
+  'static',
+  'cdn',
+  'status',
+  'support',
+  'help',
+  'chat',
+  'cart',
+  'checkout',
+  'auth',
+  'login',
+  'logout',
+  'builder',
+  'onboarding',
+  'preview',
+  'about',
+  'contact',
+  'blog',
+  'pricing',
+  'terms',
+  'privacy',
+  'faq',
+  'features',
+  'demo',
+  'developers',
+  'track',
+  'invite',
+  'reset-password',
+  'template-preview',
+  'orders',
+  'saved',
+  'addresses',
+  'reviews',
+  'wallet',
+  'repairs',
+  'swap',
+  'account',
+  'delete-account',
+  'images',
+  'product',
+  'staff',
+  'signup',
+  'forgot-password',
+  'update-password',
+  'verify',
+]);
+
 export function sanitizeSlugInput(value: string): string {
   return value
     .toLowerCase()
@@ -86,7 +143,9 @@ export function slugifyBusinessName(value: string): string {
     .slice(0, 63)
     .replace(/-+$/g, '');
   if (!base) return 'my-store';
-  if (base.length < 3) return `${base}-store`;
+  if (base.length < 3 || RESERVED_ONBOARDING_SLUGS.has(base)) {
+    return `${base}-store`;
+  }
   return base;
 }
 

@@ -133,7 +133,7 @@ export async function runSubmitOnboardingWorkflow(
       throw new Error('Could not finish store setup. Please try again.');
     let merchantSlug = merchant.slug;
     const rootDomain = getRootDomain() || 'usebaci.com';
-    let renamedCompletedMerchant = false;
+    let recoveredFromDomainConflict = false;
     if (persisted.status === 'saved' && persisted.retiredSlug) {
       invalidateMerchantSlugRename({
         merchantId: merchant.id,
@@ -141,8 +141,18 @@ export async function runSubmitOnboardingWorkflow(
         retiredSlug: persisted.retiredSlug,
       });
     }
+    let domain = await ensureOnboardingDomain({
+      supabase,
+      merchantId: merchant.id,
+      slug: merchantSlug,
+      rootDomain,
+    });
     const candidateSlug = slugIsCustom ? slug?.trim().toLowerCase() : undefined;
+    // Only rename a completed merchant when its persisted slug failed at the
+    // domain stage (conflict). Never silently rename an already-live store
+    // whose domain already exists while other onboarding edits are ignored.
     if (
+      domain.status === 'conflict' &&
       persisted.status === 'completed' &&
       candidateSlug &&
       candidateSlug !== merchantSlug.toLowerCase()
@@ -171,19 +181,19 @@ export async function runSubmitOnboardingWorkflow(
         merchantSlug
       );
       merchantSlug = finalSlug;
-      renamedCompletedMerchant = true;
+      recoveredFromDomainConflict = true;
       invalidateMerchantSlugRename({
         merchantId: merchant.id,
         finalSlug,
         retiredSlug,
       });
+      domain = await ensureOnboardingDomain({
+        supabase,
+        merchantId: merchant.id,
+        slug: merchantSlug,
+        rootDomain,
+      });
     }
-    const domain = await ensureOnboardingDomain({
-      supabase,
-      merchantId: merchant.id,
-      slug: merchantSlug,
-      rootDomain,
-    });
     if (domain.status === 'conflict') {
       throw new OnboardingSlugUnavailableError();
     }
@@ -216,7 +226,7 @@ export async function runSubmitOnboardingWorkflow(
     return {
       success: true,
       message:
-        persisted.status === 'completed' && !renamedCompletedMerchant
+        persisted.status === 'completed' && !recoveredFromDomainConflict
           ? 'Welcome back! Redirecting to your dashboard...'
           : 'Store created!',
       businessName: persisted.businessName,

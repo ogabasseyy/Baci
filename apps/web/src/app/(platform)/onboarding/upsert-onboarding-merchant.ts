@@ -237,7 +237,7 @@ export async function upsertOnboardingMerchant({
         payout_currency: payoutCurrency,
         logo_url: normalizedLogoUrl,
         favicon_png_192_url: normalizedLogoUrl,
-        ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+        ...(phone !== undefined ? { phone: normalizedPhone ?? null } : {}),
         ...(brandColorsParsed ? { brand_colors: brandColors } : {}),
         ...(resolvedSlug ? { slug: resolvedSlug } : {}),
       })

@@ -42,6 +42,10 @@ describe('@baci/shared/onboarding-chat', () => {
     expect(isValidStoreSlug('ab')).toBe(false);
     expect(isValidStoreSlug('a'.repeat(64))).toBe(false);
     expect(slugifyBusinessName('AB')).toBe('ab-store');
+    expect(slugifyBusinessName('Admin')).toBe('admin-store');
+    expect(slugifyBusinessName('Chat')).toBe('chat-store');
+    expect(slugifyBusinessName('API')).toBe('api-store');
+    expect(slugifyBusinessName('Onboarding')).toBe('onboarding-store');
     expect(normalizePersonName("mary O'Brien McDonald")).toBe(
       "Mary O'Brien McDonald"
     );

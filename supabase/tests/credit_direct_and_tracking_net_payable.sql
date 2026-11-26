@@ -209,6 +209,11 @@ DECLARE
   v_tx_id uuid;
 BEGIN
   PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
+  UPDATE public.orders
+  SET payment_status = 'unpaid', payment_method = 'klump'
+  WHERE id = 'cd710000-0000-4000-8000-000000000010';
 
   BEGIN
     PERFORM public.create_payment_transaction(

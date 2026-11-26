@@ -41,10 +41,24 @@ describe('dueChatFollowUpReminderSchema', () => {
 });
 
 describe('chatFollowUpRecordResultSchema', () => {
-  it.each(['notified', 'muted', 'ignored'])('accepts %s', (outcome) => {
-    expect(chatFollowUpRecordResultSchema.safeParse({ outcome }).success).toBe(
-      true
-    );
+  it.each([
+    { outcome: 'notified', take: 1 },
+    { outcome: 'muted' },
+    { outcome: 'ignored' },
+  ])('accepts $outcome', (answer) => {
+    expect(chatFollowUpRecordResultSchema.safeParse(answer).success).toBe(true);
+  });
+
+  it.each([
+    undefined,
+    0,
+    4,
+    1.5,
+  ])('rejects a take to push numbered %s', (take) => {
+    expect(
+      chatFollowUpRecordResultSchema.safeParse({ outcome: 'notified', take })
+        .success
+    ).toBe(false);
   });
 
   it('rejects an outcome of another kind of alert', () => {

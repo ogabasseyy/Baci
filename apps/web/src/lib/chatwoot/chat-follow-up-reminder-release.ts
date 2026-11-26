@@ -7,6 +7,8 @@ import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
 export type ChatFollowUpReleaseInput = {
   merchantId: string;
   reminderId: string;
+  /** The take being given up, as `record_chat_follow_up_reminder` numbered it. */
+  take: number;
 };
 
 /**
@@ -23,6 +25,7 @@ export function buildChatFollowUpReleaseProof(
     String(issuedAt),
     input.merchantId,
     input.reminderId,
+    String(input.take),
   ];
   return createHmac('sha256', secret).update(canonical.join('|')).digest('hex');
 }
@@ -30,7 +33,8 @@ export function buildChatFollowUpReleaseProof(
 /**
  * Puts back a reminder whose push never left the server, so the next sweep
  * tries again. True only when the database did so; it refuses after three
- * takes or a day past the due time. Call it only for such a failure.
+ * takes, a day past the due time, or once a later take exists. Call it only for
+ * such a failure.
  */
 export async function releaseChatFollowUpReminder(
   input: ChatFollowUpReleaseInput,
@@ -47,6 +51,7 @@ export async function releaseChatFollowUpReminder(
         p_issued_at: issuedAt,
         p_merchant_id: input.merchantId,
         p_reminder_id: input.reminderId,
+        p_take: input.take,
       }
     );
     return !error && data === true;

@@ -8,11 +8,11 @@ BEGIN;
 
 DO $$
 BEGIN
-  IF NOT has_function_privilege('anon', 'public.release_chat_follow_up_reminder(text,bigint,uuid,uuid)', 'EXECUTE') THEN
+  IF NOT has_function_privilege('anon', 'public.release_chat_follow_up_reminder(text,bigint,uuid,uuid,integer)', 'EXECUTE') THEN
     RAISE EXCEPTION 'release must be executable by anon (proof-gated)';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_proc p, aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a
-    WHERE p.oid = 'public.release_chat_follow_up_reminder(text,bigint,uuid,uuid)'::regprocedure AND a.grantee = 0) THEN
+    WHERE p.oid = 'public.release_chat_follow_up_reminder(text,bigint,uuid,uuid,integer)'::regprocedure AND a.grantee = 0) THEN
     RAISE EXCEPTION 'release is executable by PUBLIC';
   END IF;
   IF NOT has_function_privilege('anon', 'public.chat_event_mark_push_dispatch(text,bigint,uuid,text,uuid)', 'EXECUTE') THEN
@@ -22,14 +22,14 @@ BEGIN
     WHERE p.oid = 'public.chat_event_mark_push_dispatch(text,bigint,uuid,text,uuid)'::regprocedure AND a.grantee = 0) THEN
     RAISE EXCEPTION 'the dispatch mark is executable by PUBLIC';
   END IF;
-  IF has_function_privilege('anon', 'private.requeue_chat_follow_up_reminder(uuid,uuid)', 'EXECUTE')
-    OR has_function_privilege('authenticated', 'private.requeue_chat_follow_up_reminder(uuid,uuid)', 'EXECUTE')
-    OR has_function_privilege('service_role', 'private.requeue_chat_follow_up_reminder(uuid,uuid)', 'EXECUTE') THEN
+  IF has_function_privilege('anon', 'private.requeue_chat_follow_up_reminder(uuid,uuid,integer)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'private.requeue_chat_follow_up_reminder(uuid,uuid,integer)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'private.requeue_chat_follow_up_reminder(uuid,uuid,integer)', 'EXECUTE') THEN
     RAISE EXCEPTION 'the requeue helper is reachable from an API role';
   END IF;
   -- Proof vector the Node builder is tested against.
-  IF encode(extensions.hmac(concat_ws('|', 'chat-follow-up-release:v1', '1794730000', 'c4a70000-0000-4000-8000-0000000000b1', '5f2d3c1e-8a47-4b69-9c0e-1a2b3c4d5e6f'),
-    'synthetic-chat-event-secret-0123456789abcdef', 'sha256'), 'hex') <> '1ebb2ecdc817b0acf56d7d4af442f6373763ed165d25664731927445cb7616ac' THEN
+  IF encode(extensions.hmac(concat_ws('|', 'chat-follow-up-release:v1', '1794730000', 'c4a70000-0000-4000-8000-0000000000b1', '5f2d3c1e-8a47-4b69-9c0e-1a2b3c4d5e6f', '2'),
+    'synthetic-chat-event-secret-0123456789abcdef', 'sha256'), 'hex') <> 'ea75b514ab394efcf1746c62357e3bf0b2ff207045c84ee380e1db5ebe43b0a4' THEN
     RAISE EXCEPTION 'release proof vector drifted from the Node builder';
   END IF;
   BEGIN PERFORM pg_temp.release('c4a73000-0000-4000-8000-000000000101', p_secret => 'another-secret-another-secret-another-0000'); RAISE EXCEPTION 'forged release proof accepted';
@@ -46,7 +46,7 @@ DECLARE r uuid := 'c4a73000-0000-4000-8000-000000000101'; claim uuid := 'c4a7300
   key text := 'fu-' || replace('c4a73000-0000-4000-8000-000000000101', '-', '');
 BEGIN
   IF pg_temp.release(r) THEN RAISE EXCEPTION 'a reminder that was never taken was released'; END IF;
-  IF pg_temp.take(r) <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'first take refused'; END IF;
+  IF pg_temp.take(r) <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'first take refused'; END IF;
   -- Another store's id releases nothing.
   IF pg_temp.release(r, 'c4a73000-0000-4000-8000-0000000000b2') THEN RAISE EXCEPTION 'released through another store'; END IF;
   -- Claimed but never dispatched: the server may still release it.
@@ -59,13 +59,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a first retry did not wait'; END IF;
   PERFORM pg_temp.age_take(r, interval '11 minutes');
   IF NOT EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a released reminder is not listed again'; END IF;
-  IF pg_temp.take(r) <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'second take refused'; END IF;
+  IF pg_temp.take(r) <> '{"outcome":"notified","take":2}'::jsonb THEN RAISE EXCEPTION 'second take refused'; END IF;
   IF NOT pg_temp.release(r) THEN RAISE EXCEPTION 'second release refused'; END IF;
   PERFORM pg_temp.age_take(r, interval '11 minutes');
   IF EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a second retry did not wait two hours'; END IF;
   PERFORM pg_temp.age_take(r, interval '121 minutes');
   IF NOT EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a second retry never came'; END IF;
-  IF pg_temp.take(r) <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'third take refused'; END IF;
+  IF pg_temp.take(r) <> '{"outcome":"notified","take":3}'::jsonb THEN RAISE EXCEPTION 'third take refused'; END IF;
   IF pg_temp.release(r) THEN RAISE EXCEPTION 'a fourth take was allowed'; END IF;
 END $$;
 
@@ -104,6 +104,25 @@ BEGIN
   -- Nor on the server's own say-so: the mark is the database's guarantee.
   IF pg_temp.release(r) THEN RAISE EXCEPTION 'a push marked as sending was released'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = key) THEN RAISE EXCEPTION 'a marked event was removed'; END IF;
+END $$;
+
+-- A late release of an earlier take never undoes a newer one, which reuses the
+-- same event key.
+INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, due_at) VALUES
+  ('c4a73000-0000-4000-8000-000000000105', 'c4a73000-0000-4000-8000-0000000000b1', 605, now() - interval '1 hour');
+DO $$
+DECLARE r uuid := 'c4a73000-0000-4000-8000-000000000105'; claim uuid := 'c4a73000-0000-4000-8000-0000000000c5';
+  key text := 'fu-' || replace('c4a73000-0000-4000-8000-000000000105', '-', '');
+BEGIN
+  PERFORM pg_temp.take(r);
+  PERFORM pg_temp.age_take(r, interval '11 minutes');
+  PERFORM pg_temp.due(); -- the list's own recovery puts take 1 back
+  IF pg_temp.take(r) <> '{"outcome":"notified","take":2}'::jsonb THEN RAISE EXCEPTION 'take after recovery refused'; END IF;
+  PERFORM public.chat_event_claim_push(pg_temp.push_proof(key, claim, 'claim'), extract(epoch FROM now())::bigint, 'c4a73000-0000-4000-8000-0000000000b1', key, claim);
+  IF pg_temp.release(r, p_take => 1) THEN RAISE EXCEPTION 'an earlier take released a newer one'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = key AND push_claim = claim) THEN RAISE EXCEPTION 'the newer event was removed'; END IF;
+  IF EXISTS (SELECT 1 FROM public.chat_follow_up_reminders WHERE id = r AND processed_at IS NULL) THEN RAISE EXCEPTION 'the newer take was undone'; END IF;
+  IF NOT pg_temp.mark(key, claim) THEN RAISE EXCEPTION 'the newer take could no longer send'; END IF;
 END $$;
 
 -- A stale or muted reminder has no notified event and is never put back.

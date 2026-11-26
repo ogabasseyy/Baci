@@ -254,7 +254,7 @@ SELECT * FROM (VALUES
    'cron sweep; short-lived HMAC proof verified in the body, no service role'),
   ('public.record_chat_follow_up_reminder(text,bigint,uuid,uuid,boolean)',
    'cron sweep; short-lived HMAC proof verified in the body, no service role'),
-  ('public.release_chat_follow_up_reminder(text,bigint,uuid,uuid)',
+  ('public.release_chat_follow_up_reminder(text,bigint,uuid,uuid,integer)',
    'cron sweep; short-lived HMAC proof verified in the body, no service role'),
   ('public.chat_event_mark_push_dispatch(text,bigint,uuid,text,uuid)',
    'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),

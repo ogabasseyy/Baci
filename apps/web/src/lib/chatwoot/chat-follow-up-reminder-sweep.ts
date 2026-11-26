@@ -95,6 +95,7 @@ async function handleReminder(
     deps.release({
       merchantId: reminder.merchant_id,
       reminderId: reminder.reminder_id,
+      take: recorded.take,
     });
   // No device to deliver to: a phone may register before the next sweep.
   if (push.status === 'sent' && push.noDevices) {

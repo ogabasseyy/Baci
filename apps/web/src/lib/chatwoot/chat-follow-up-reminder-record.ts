@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
   type ChatFollowUpIntakeFailure,
-  type ChatFollowUpRecordOutcome,
+  type ChatFollowUpRecordResult,
   chatFollowUpRecordResultSchema,
 } from '@/schemas/chat-follow-up-reminder';
 import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
@@ -38,14 +38,14 @@ export function buildChatFollowUpRecordProof(
 
 /**
  * Takes one reminder exactly once. `notified` is the only answer that may be
- * pushed; `muted` and `ignored` (already taken, replaced, not due, or not to
- * be sent) never are.
+ * pushed (it carries the take number); `muted` and `ignored` (already taken,
+ * replaced, not due, or not to be sent) never are.
  */
 export async function recordChatFollowUpReminder(
   input: ChatFollowUpRecordInput,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<
-  { ok: true; outcome: ChatFollowUpRecordOutcome } | ChatFollowUpIntakeFailure
+  ({ ok: true } & ChatFollowUpRecordResult) | ChatFollowUpIntakeFailure
 > {
   const secret = env.EKAETTE_CHAT_EVENT_RPC_SECRET?.trim() ?? '';
   if (!CHAT_EVENT_SECRET_PATTERN.test(secret)) {
@@ -66,7 +66,7 @@ export async function recordChatFollowUpReminder(
     if (error) return { ok: false, code: 'unavailable' };
     const parsed = chatFollowUpRecordResultSchema.safeParse(data);
     if (!parsed.success) return { ok: false, code: 'unavailable' };
-    return { ok: true, outcome: parsed.data.outcome };
+    return { ok: true, ...parsed.data };
   } catch {
     return { ok: false, code: 'unavailable' };
   }

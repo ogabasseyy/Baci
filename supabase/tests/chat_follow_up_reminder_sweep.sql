@@ -77,7 +77,7 @@ DECLARE
 BEGIN
   SELECT count(*) INTO v_notifications FROM public.notifications;
   v := pg_temp.take(d1);
-  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'first take: %', v; END IF;
+  IF v <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'first take: %', v; END IF;
   SELECT * INTO v_event FROM public.chat_message_events WHERE merchant_id = m AND event_key = 'fu-' || replace(d1::text, '-', '');
   IF v_event.event_key IS NULL OR v_event.kind <> 'follow_up' OR v_event.outcome <> 'notified'
     OR v_event.conversation_id <> 201 OR v_event.notification_id IS NOT NULL THEN
@@ -132,7 +132,7 @@ DO $$
 DECLARE v jsonb;
 BEGIN
   v := pg_temp.take('c4a73000-0000-4000-8000-0000000000e1');
-  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'handover-only level muted a reminder: %', v; END IF;
+  IF v <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'handover-only level muted a reminder: %', v; END IF;
   UPDATE public.notification_preferences SET chat_message_notifications = 'off' WHERE merchant_id = 'c4a73000-0000-4000-8000-0000000000b1';
   v := pg_temp.take('c4a73000-0000-4000-8000-0000000000e2');
   IF v <> '{"outcome":"muted"}'::jsonb THEN RAISE EXCEPTION 'off level did not mute: %', v; END IF;
@@ -144,7 +144,7 @@ BEGIN
   END IF;
   UPDATE public.notification_preferences SET chat_message_notifications = 'all' WHERE merchant_id = 'c4a73000-0000-4000-8000-0000000000b1';
   v := pg_temp.take('c4a73000-0000-4000-8000-0000000000e3');
-  IF v <> '{"outcome":"notified"}'::jsonb THEN RAISE EXCEPTION 'the all level did not notify: %', v; END IF;
+  IF v <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'the all level did not notify: %', v; END IF;
 END $$;
 
 -- The reminder event is pushed through the existing proof-and-claim wrappers, once.

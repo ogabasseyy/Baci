@@ -48,11 +48,15 @@ describe('recordChatFollowUpReminder', () => {
   const input = { merchantId: MERCHANT, reminderId: REMINDER, send: true };
 
   it('takes the reminder and returns the outcome', async () => {
-    mocks.rpc.mockResolvedValue({ data: { outcome: 'notified' }, error: null });
+    mocks.rpc.mockResolvedValue({
+      data: { outcome: 'notified', take: 2 },
+      error: null,
+    });
 
     await expect(recordChatFollowUpReminder(input, env)).resolves.toEqual({
       ok: true,
       outcome: 'notified',
+      take: 2,
     });
     const [name, args] = mocks.rpc.mock.calls[0];
     expect(name).toBe('record_chat_follow_up_reminder');

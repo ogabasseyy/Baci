@@ -18,6 +18,7 @@ const env = {
 const input = {
   merchantId: 'c4a70000-0000-4000-8000-0000000000b1',
   reminderId: '5f2d3c1e-8a47-4b69-9c0e-1a2b3c4d5e6f',
+  take: 2,
 };
 
 beforeEach(() => {
@@ -28,7 +29,7 @@ beforeEach(() => {
 describe('releaseChatFollowUpReminder', () => {
   it('builds the proof the database recomputes', () => {
     expect(buildChatFollowUpReleaseProof(SECRET, 1794730000, input)).toBe(
-      '1ebb2ecdc817b0acf56d7d4af442f6373763ed165d25664731927445cb7616ac'
+      'ea75b514ab394efcf1746c62357e3bf0b2ff207045c84ee380e1db5ebe43b0a4'
     );
   });
 
@@ -39,6 +40,7 @@ describe('releaseChatFollowUpReminder', () => {
       expect.objectContaining({
         p_merchant_id: input.merchantId,
         p_reminder_id: input.reminderId,
+        p_take: 2,
       })
     );
   });

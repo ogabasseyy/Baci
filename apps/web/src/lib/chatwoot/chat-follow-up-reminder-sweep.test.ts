@@ -36,7 +36,7 @@ beforeEach(() => {
   mocks.release.mockResolvedValue(true);
   mocks.list.mockResolvedValue({ ok: true, reminders: [reminder(1)] });
   mocks.check.mockResolvedValue('due');
-  mocks.record.mockResolvedValue({ ok: true, outcome: 'notified' });
+  mocks.record.mockResolvedValue({ ok: true, outcome: 'notified', take: 2 });
   mocks.push.mockResolvedValue({ status: 'sent', sent: 1, failed: 0 });
 });
 
@@ -183,6 +183,7 @@ describe('bugfix: a failed push lost the follow-up for good', () => {
     expect(mocks.release).toHaveBeenCalledWith({
       merchantId: MERCHANT,
       reminderId: reminder(1).reminder_id,
+      take: 2,
     });
   });
 
@@ -224,6 +225,7 @@ describe('bugfix: a store with no registered device used up the follow-up', () =
     expect(mocks.release).toHaveBeenCalledWith({
       merchantId: MERCHANT,
       reminderId: reminder(1).reminder_id,
+      take: 2,
     });
   });
 
@@ -251,6 +253,7 @@ describe('bugfix: a push skipped for missing configuration was not put back', ()
     expect(mocks.release).toHaveBeenCalledWith({
       merchantId: MERCHANT,
       reminderId: reminder(1).reminder_id,
+      take: 2,
     });
   });
 

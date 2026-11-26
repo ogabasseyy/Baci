@@ -2,7 +2,8 @@
 -- push that failed would otherwise be lost. When the server KNOWS the push
 -- never reached the delivery provider, it puts the reminder back for the next
 -- sweep (same proof model and secret as the other sweep functions, its own
--- label). A push that may have left is never put back: never twice. The second
+-- label). The caller names the take it is giving up, so it can never undo a
+-- later one. A push that may have left is never put back: never twice. The second
 -- function records that sending began, which is how a run that stopped before
 -- that point is told apart.
 BEGIN;
@@ -11,41 +12,42 @@ CREATE OR REPLACE FUNCTION public.release_chat_follow_up_reminder(
   p_proof text,
   p_issued_at bigint,
   p_merchant_id uuid,
-  p_reminder_id uuid
+  p_reminder_id uuid,
+  p_take integer
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
-  IF p_merchant_id IS NULL OR p_reminder_id IS NULL THEN
+  IF p_merchant_id IS NULL OR p_reminder_id IS NULL OR p_take IS NULL OR p_take < 1 THEN
     RAISE EXCEPTION 'invalid_chat_event' USING ERRCODE = '22023';
   END IF;
   PERFORM private.chat_event_require_proof(
     pg_catalog.concat_ws(
       '|', 'chat-follow-up-release:v1', p_issued_at::text, p_merchant_id::text,
-      p_reminder_id::text
+      p_reminder_id::text, p_take::text
     ),
     p_proof, p_issued_at
   );
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('chat-events:' || p_merchant_id::text, 0)
   );
-  -- Already put back (by the list's own recovery): the retry stands.
+  -- This take is already put back (by the list's own recovery): the retry stands.
   IF EXISTS (
     SELECT 1 FROM public.chat_follow_up_reminders r
     WHERE r.id = p_reminder_id AND r.merchant_id = p_merchant_id
-      AND r.processed_at IS NULL AND r.attempts > 0
+      AND r.processed_at IS NULL AND r.attempts = p_take
   ) THEN
     RETURN true;
   END IF;
-  RETURN private.requeue_chat_follow_up_reminder(p_merchant_id, p_reminder_id);
+  RETURN private.requeue_chat_follow_up_reminder(p_merchant_id, p_reminder_id, p_take);
 END;
 $$;
 
-COMMENT ON FUNCTION public.release_chat_follow_up_reminder(text, bigint, uuid, uuid) IS
+COMMENT ON FUNCTION public.release_chat_follow_up_reminder(text, bigint, uuid, uuid, integer) IS
   'Cron sweep: verifies a server HMAC proof, then puts back a follow-up reminder whose push never left the server (at most three takes).';
 
 -- Reachable without a session, but useless without a valid proof.
-REVOKE ALL ON FUNCTION public.release_chat_follow_up_reminder(text, bigint, uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.release_chat_follow_up_reminder(text, bigint, uuid, uuid) TO anon, service_role;
+REVOKE ALL ON FUNCTION public.release_chat_follow_up_reminder(text, bigint, uuid, uuid, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.release_chat_follow_up_reminder(text, bigint, uuid, uuid, integer) TO anon, service_role;
 
 -- Called by the push claim holder just before the first request to the delivery
 -- provider (same proof and live claim as the other push wrappers, action

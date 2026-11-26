@@ -49,11 +49,13 @@ CREATE FUNCTION pg_temp.push_proof(p_key text, p_claim uuid, p_action text) RETU
   SELECT encode(extensions.hmac(concat_ws('|', 'chat-event-push:v1', extract(epoch FROM now())::bigint::text, 'c4a73000-0000-4000-8000-0000000000b1', p_key, p_claim::text, p_action),
     'synthetic-chat-event-secret-0123456789abcdef', 'sha256'), 'hex');
 $$;
-CREATE FUNCTION pg_temp.release(p_reminder uuid, p_merchant uuid DEFAULT 'c4a73000-0000-4000-8000-0000000000b1', p_secret text DEFAULT 'synthetic-chat-event-secret-0123456789abcdef')
+-- Without p_take, releases the reminder's latest take (1 when never taken).
+CREATE FUNCTION pg_temp.release(p_reminder uuid, p_merchant uuid DEFAULT 'c4a73000-0000-4000-8000-0000000000b1', p_secret text DEFAULT 'synthetic-chat-event-secret-0123456789abcdef', p_take integer DEFAULT NULL)
 RETURNS boolean LANGUAGE sql AS $$
   SELECT public.release_chat_follow_up_reminder(
-    encode(extensions.hmac(concat_ws('|', 'chat-follow-up-release:v1', extract(epoch FROM now())::bigint::text, p_merchant::text, p_reminder::text), p_secret, 'sha256'), 'hex'),
-    extract(epoch FROM now())::bigint, p_merchant, p_reminder);
+    encode(extensions.hmac(concat_ws('|', 'chat-follow-up-release:v1', extract(epoch FROM now())::bigint::text, p_merchant::text, p_reminder::text, t.take::text), p_secret, 'sha256'), 'hex'),
+    extract(epoch FROM now())::bigint, p_merchant, p_reminder, t.take)
+  FROM (SELECT COALESCE(p_take, GREATEST((SELECT attempts::integer FROM public.chat_follow_up_reminders WHERE id = p_reminder), 1)) AS take) t;
 $$;
 CREATE FUNCTION pg_temp.mark(p_key text, p_claim uuid) RETURNS boolean LANGUAGE sql AS $$
   SELECT public.chat_event_mark_push_dispatch(pg_temp.push_proof(p_key, p_claim, 'dispatch'),

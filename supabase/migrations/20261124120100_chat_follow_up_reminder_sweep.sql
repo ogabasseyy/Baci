@@ -51,17 +51,20 @@ REVOKE ALL ON FUNCTION private.chat_event_require_proof(text, text, bigint) FROM
 -- anything is handed to the delivery provider, so nothing can have left the
 -- server, and a run marking it late finds no event and sends nothing. A marked
 -- push is never put back, whoever asks. A muted or stale reminder has no
--- notified event and is never put back either. updated_at is left as the last
--- take: it spaces the retries.
+-- notified event and is never put back either. Only the take being given up
+-- (its number) is put back: every take reuses the event key, so a late caller
+-- must not remove a newer take's event. updated_at is left as the last take: it
+-- spaces the retries.
 CREATE OR REPLACE FUNCTION private.requeue_chat_follow_up_reminder(
   p_merchant_id uuid,
-  p_reminder_id uuid
+  p_reminder_id uuid,
+  p_take integer
 ) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   PERFORM 1 FROM public.chat_follow_up_reminders r
   WHERE r.id = p_reminder_id AND r.merchant_id = p_merchant_id
-    AND r.processed_at IS NOT NULL AND r.attempts < 3
+    AND r.processed_at IS NOT NULL AND r.attempts = p_take AND r.attempts < 3
     AND r.due_at > pg_catalog.now() - interval '24 hours'
   FOR UPDATE;
   IF NOT FOUND THEN RETURN false; END IF;
@@ -79,7 +82,7 @@ BEGIN
   RETURN true;
 END;
 $$;
-REVOKE ALL ON FUNCTION private.requeue_chat_follow_up_reminder(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.requeue_chat_follow_up_reminder(uuid, uuid, integer) FROM PUBLIC, anon, authenticated, service_role;
 
 -- 1. The reminders that came due in the last 24 hours and nobody handled yet,
 -- never-listed first, then oldest. A reminder older than a day is never listed,
@@ -117,9 +120,9 @@ BEGIN
   -- A run stopped between taking a reminder and starting to send sent
   -- nothing: after ten minutes (far longer than a run lasts) it is put back,
   -- but not while its push claim is still live (ten minutes from the claim).
-  PERFORM private.requeue_chat_follow_up_reminder(lost.merchant_id, lost.id)
+  PERFORM private.requeue_chat_follow_up_reminder(lost.merchant_id, lost.id, lost.attempts)
   FROM (
-    SELECT r.merchant_id, r.id
+    SELECT r.merchant_id, r.id, r.attempts
     FROM public.chat_follow_up_reminders r
     JOIN public.chat_message_events e
       ON e.merchant_id = r.merchant_id
@@ -167,7 +170,8 @@ $$;
 -- p_send = false consumes a reminder the server found stale (the chat was
 -- finished or its follow-up changed outside the app). The answer is:
 --   notified: the event row exists and may be pushed (claim it with the push
---             wrappers), muted: the store turned chat alerts off,
+--             wrappers); "take" numbers this take, for a later put back,
+--   muted: the store turned chat alerts off,
 --   ignored:  not due, already handled, replaced or removed, or not to be sent.
 -- The reminder is only taken while it is due and inside the 24-hour window,
 -- and only under the exact id the sweep listed, so a follow-up that was
@@ -229,6 +233,9 @@ BEGIN
     p_merchant_id, v_row.conversation_id, v_outcome, 'follow_up'
   );
 
+  IF v_outcome = 'notified' THEN
+    RETURN pg_catalog.jsonb_build_object('outcome', v_outcome, 'take', v_row.attempts);
+  END IF;
   RETURN pg_catalog.jsonb_build_object('outcome', v_outcome);
 END;
 $$;

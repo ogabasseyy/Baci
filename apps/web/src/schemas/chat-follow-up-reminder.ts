@@ -20,14 +20,21 @@ export type DueChatFollowUpReminder = z.infer<
   typeof dueChatFollowUpReminderSchema
 >;
 
-/** Answer of `record_chat_follow_up_reminder`. */
-export const chatFollowUpRecordResultSchema = z.object({
-  outcome: z.enum(['notified', 'muted', 'ignored']),
-});
+/**
+ * Answer of `record_chat_follow_up_reminder`. A take that may be pushed is
+ * numbered, so only that take can be put back.
+ */
+export const chatFollowUpRecordResultSchema = z.discriminatedUnion('outcome', [
+  z.object({
+    outcome: z.literal('notified'),
+    take: z.number().int().min(1).max(3),
+  }),
+  z.object({ outcome: z.enum(['muted', 'ignored']) }),
+]);
 
-export type ChatFollowUpRecordOutcome = z.infer<
+export type ChatFollowUpRecordResult = z.infer<
   typeof chatFollowUpRecordResultSchema
->['outcome'];
+>;
 
 /** Why a sweep database call produced no answer. */
 export type ChatFollowUpIntakeFailure = {

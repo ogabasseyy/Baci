@@ -436,6 +436,54 @@ describe('submitBnplCheckout', () => {
     );
   });
 
+  it('finances only the net of wallet and savings credit together (triple-stack with a zero-priced voucher line)', async () => {
+    const params = {
+      ...createParams(),
+      selectedPayment: 'klump' as const,
+      liveWalletSelection: { use: true, amount: 5000 },
+      liveSavingsSelection: { use: true, goalId: 'goal-1', amount: 3000 },
+    };
+    mockCreateOrder.mockResolvedValueOnce({
+      amountDueToGateway: 13500,
+      order: {
+        created_at: '2026-05-30T12:00:00.000Z',
+        id: 'order-1',
+        order_number: 'BAC-001',
+        payment_status: 'pending',
+        shipping_status: 'pending',
+        total: 21500,
+        tracking_token: 'tracking-token',
+      },
+      savings: { amountUsed: 3000, goalId: 'goal-1', redemptionId: 'sr-1' },
+      wallet: { amountUsed: 5000, newBalance: 0, transactionId: null },
+    });
+    const mockFetch = global.fetch as jest.Mock;
+    mockFetch.mockImplementationOnce(async () => ({
+      ok: true,
+      json: async () => ({
+        success: true,
+        authorization_url: 'https://klump.example/pay',
+        reference: 'klump-ref-1',
+      }),
+    }));
+    mockBuildKlumpBnplRouteParams.mockReturnValue({ amount: '13500.00' });
+
+    await submitBnplCheckout(params);
+
+    expect(mockCreateOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        use_wallet_credit: true,
+        wallet_amount: 5000,
+      }),
+      expect.anything()
+    );
+    const financed = mockBuildKlumpBnplRouteParams.mock.calls[0]?.[0] as {
+      amount: number;
+    };
+    expect(financed.amount).toBe(13500);
+    expect(financed.amount).toBeLessThanOrEqual(21500 - 5000 - 3000);
+  });
+
   it('aborts BNPL submission when store credit covers 100% of the order', async () => {
     const params = {
       ...createParams(),

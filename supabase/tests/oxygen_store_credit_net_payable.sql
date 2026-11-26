@@ -198,6 +198,11 @@ BEGIN
     PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000001"}',true);
   END;
 
+  -- order_net_payable_for_order is revoked from authenticated; call it as the owner role.
+  RESET ROLE;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role','service_role',true);
+  PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"service_role"}',true);
+
   -- Settled orders ('paid' / 'bnpl_approved') with amount_paid = total must not treat settled payment as store credit.
   IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 50000, 0, 'paid') IS DISTINCT FROM 50000 THEN
     RAISE EXCEPTION 'Expected paid order net payable 50000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 50000, 0, 'paid');

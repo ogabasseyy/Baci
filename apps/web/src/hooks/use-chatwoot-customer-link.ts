@@ -185,6 +185,8 @@ export function useChatwootCustomerLink(
 
     void sync('initial');
     const unsubscribe = subscribeCustomerIdentityChange(() => {
+      // A check scheduled for the previous identity must not touch the next one.
+      cancelTrailing();
       const live = getLiveCustomerIdentity();
       if (!live.userId && !live.customerId) {
         // Signed out: drop any request in flight and remove the note now.

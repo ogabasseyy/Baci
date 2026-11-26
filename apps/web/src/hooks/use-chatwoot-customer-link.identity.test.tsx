@@ -28,6 +28,7 @@ import {
   json,
   listenerCounts,
   MARKER,
+  notifyOtherTab,
   publishIdentity,
   setNote,
   uninstallHarness,
@@ -205,5 +206,28 @@ describe('useChatwootCustomerLink: same-tab sign-in, sign-out and account switch
       expect(deleteNote).toHaveBeenCalledWith('baci_customer_link')
     );
     expect(setNote).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['switches account', 'u2', 2],
+    ['signs out', null, 1],
+  ])('bugfix: drops a check scheduled for the previous account when the shopper %s here', async (_change, userId, checks) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(8_000_000);
+    mocks.fetch.mockResolvedValue(json(200, { token: 'signed.token' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
+
+    vi.setSystemTime(8_001_000);
+    notifyOtherTab(); // inside the wait: a later check is scheduled
+    mocks.live.mockReturnValue({
+      customerId: userId,
+      merchantSlug: 'ogabassey',
+      userId,
+    });
+    publishIdentity();
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(mocks.fetch).toHaveBeenCalledTimes(checks);
   });
 });

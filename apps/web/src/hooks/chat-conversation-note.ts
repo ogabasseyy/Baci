@@ -43,6 +43,9 @@ function write(value: string | null): boolean {
  * contact: the chat engine merges contacts when anyone types a known email or
  * phone number, which would show a contact's note on that person's chat.
  *
+ * In the chat engine (Chatwoot v4.19.1) a write replaces ALL of the
+ * conversation's custom attributes, so nothing else may rely on them here.
+ *
  * The widget writes only to the conversation it has loaded, so the latest state
  * (the note, or no note) is sent again shortly after, when the chat is opened,
  * and once for each conversation a message arrives on.

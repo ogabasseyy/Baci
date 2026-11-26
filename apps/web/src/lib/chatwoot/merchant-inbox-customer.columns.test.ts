@@ -53,6 +53,30 @@ describe('bugfix: an undated order could push a recent one off the card', () => 
   });
 });
 
+describe('bugfix: a blank order status left an empty line on the card', () => {
+  it('shows it as unknown, like a missing one', async () => {
+    const { client } = db({
+      customers: { data: { id: A, full_name: 'Ada' } },
+      orders: {
+        data: [
+          { order_number: 'ORD-1', payment_status: '', shipping_status: '  ' },
+        ],
+      },
+    });
+
+    const profile = await loadCustomerProfile({
+      supabase: client,
+      merchantId: MERCHANT,
+      token: 'token',
+      includeOrders: true,
+    });
+
+    expect(profile).toMatchObject({
+      recentOrders: [{ paymentStatus: 'unknown', shippingStatus: 'unknown' }],
+    });
+  });
+});
+
 describe('bugfix: the badge read could outlast the Customers scan', () => {
   it('gives the customer read a time limit of its own', async () => {
     const { client, seen } = db({ customers: { data: [{ id: A }] } });

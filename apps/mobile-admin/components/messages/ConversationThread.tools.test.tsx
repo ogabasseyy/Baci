@@ -252,25 +252,21 @@ describe('ConversationThread customer card', () => {
     ).toBeNull();
   });
 
-  it('keeps showing the last known customer when only a later check fails', () => {
-    mocks.customer.mockReturnValue({
-      data: {
-        name: 'Ada Obi',
-        currency: 'NGN',
-        memberSince: '2025-01-02T00:00:00Z',
-        orderCount: 2,
-        totalSpent: 1000,
-        loyaltyPoints: 0,
-        recentOrders: [],
-      },
-      isError: true,
-      refetch: vi.fn(),
-    });
+  it('bugfix: keeps the last known customer but says it may be old when a later check fails', () => {
+    const refetch = vi.fn();
+    mocks.customer.mockReturnValue({ data: profile, isError: true, refetch });
     renderThread();
 
     expect(screen.getByText('Ada Obi')).toBeInTheDocument();
     expect(
+      screen.getByText('These customer details may be out of date.')
+    ).toBeInTheDocument();
+    expect(
       screen.queryByText('Customer details could not be loaded.')
     ).toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retry loading customer details' })
+    );
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

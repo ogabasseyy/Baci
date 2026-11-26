@@ -154,6 +154,34 @@ describe('useChatwootCustomerLink: other tabs, focus bursts and rechecks', () =>
     );
   });
 
+  it('bugfix: takes the old note off at once when another tab changes the account inside the wait', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(4_500_000);
+    mocks.fetch.mockResolvedValue(json(200, { token: 'account.a' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
+
+    vi.setSystemTime(4_501_000);
+    notifyOtherTab();
+
+    // No second check yet, and the old account's note is already gone.
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(deleteNote).toHaveBeenCalledWith('baci_customer_link');
+  });
+
+  it('keeps the note when this tab is only looked at again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(4_600_000);
+    mocks.fetch.mockResolvedValue(json(200, { token: 'account.a' }));
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await waitFor(() => expect(setNote).toHaveBeenCalled());
+
+    vi.setSystemTime(4_601_000);
+    notifyOtherTab('resume');
+
+    expect(deleteNote).not.toHaveBeenCalled();
+  });
+
   it('cancels a scheduled check when another tab then signs out', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(5_000_000);

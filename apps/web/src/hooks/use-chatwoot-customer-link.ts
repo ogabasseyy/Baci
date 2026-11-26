@@ -197,7 +197,7 @@ export function useChatwootCustomerLink(
     });
     // Another tab signed out or switched account: the cookies are shared, so
     // the session hint and the server session already show the new state.
-    const crossTab = subscribeCustomerIdentityInvalidation(() => {
+    const crossTab = subscribeCustomerIdentityInvalidation((source) => {
       const hint = readCustomerSessionHint();
       const changed = hint !== lastHint;
       lastHint = hint;
@@ -208,6 +208,10 @@ export function useChatwootCustomerLink(
         clearLink(true);
         return;
       }
+      // Another tab changed something and the hint still says signed in: it may
+      // be a different account, so the note comes off until the server says who
+      // this is. A mere refocus keeps it.
+      if (source !== 'resume') clearLink();
       const wait = RESYNC_MIN_MS - (Date.now() - lastSyncAt);
       if (changed || wait <= 0) {
         cancelTrailing();

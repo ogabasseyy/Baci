@@ -8,14 +8,17 @@ import {
 
 /**
  * Shown above a chat when the customer lookup failed, so a store outage is not
- * mistaken for a guest chat. Retrying asks for the customer again.
+ * mistaken for a guest chat, nor an old answer for a current one (`stale`: the
+ * last known customer is still shown). Retrying asks for the customer again.
  */
 export function CustomerUnavailable({
   colors,
   onRetry,
+  stale = false,
 }: {
   colors: ThemeColors;
   onRetry: () => void;
+  stale?: boolean;
 }) {
   return (
     <View
@@ -25,7 +28,9 @@ export function CustomerUnavailable({
       ]}
     >
       <Text style={[styles.text, { color: colors.textSecondary }]}>
-        Customer details could not be loaded.
+        {stale
+          ? 'These customer details may be out of date.'
+          : 'Customer details could not be loaded.'}
       </Text>
       <Pressable
         accessibilityLabel="Retry loading customer details"

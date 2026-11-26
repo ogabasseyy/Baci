@@ -18,4 +18,17 @@ describe('CustomerUnavailable', () => {
 
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
+
+  it('says the shown details may be old when only a later check failed', () => {
+    render(
+      <CustomerUnavailable colors={LIGHT_COLORS} onRetry={vi.fn()} stale />
+    );
+
+    expect(
+      screen.getByText('These customer details may be out of date.')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Customer details could not be loaded.')
+    ).toBeNull();
+  });
 });

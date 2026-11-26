@@ -10,12 +10,13 @@ export const json = (status: number, body: unknown = {}) => ({
   json: () => Promise.resolve(body),
 });
 
-const crossTabListeners: Array<() => void> = [];
+type CrossTabListener = (source: 'notice' | 'resume') => void;
+const crossTabListeners: CrossTabListener[] = [];
 const identityListeners: Array<() => void> = [];
 
-/** Simulates a notice from another tab (or a focus/visibility event). */
-export const notifyOtherTab = () => {
-  for (const listener of [...crossTabListeners]) listener();
+/** Simulates another tab's notice, or ('resume') this tab being refocused. */
+export const notifyOtherTab = (source: 'notice' | 'resume' = 'notice') => {
+  for (const listener of [...crossTabListeners]) listener(source);
 };
 
 /** Simulates the auth context publishing an identity change. */
@@ -54,7 +55,7 @@ export function installHarness(mocks: Mocks): void {
   });
   identityListeners.length = 0;
   crossTabListeners.length = 0;
-  mocks.crossTab.mockImplementation((listener: () => void) => {
+  mocks.crossTab.mockImplementation((listener: CrossTabListener) => {
     crossTabListeners.push(listener);
     return {
       available: true,

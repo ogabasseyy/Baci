@@ -96,6 +96,12 @@ export async function loadCustomerBadges(input: {
   return badges;
 }
 
+/** A missing or blank status reads as "unknown", never as "null" or nothing. */
+const statusText = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .slice(0, 40) || 'unknown';
+
 const DEFAULT_CURRENCY = 'NGN';
 const currencyCode = (value: unknown, fallback: string): string =>
   typeof value === 'string' && /^[A-Za-z]{3}$/.test(value.trim())
@@ -187,12 +193,8 @@ export async function loadCustomerProfile(input: {
           orderNumber,
           total: toNumber(order.total),
           currency: currencyCode(order.currency, storeCurrency),
-          // A missing status reads as "unknown", never as the text "null".
-          paymentStatus: String(order.payment_status ?? 'unknown').slice(0, 40),
-          shippingStatus: String(order.shipping_status ?? 'unknown').slice(
-            0,
-            40
-          ),
+          paymentStatus: statusText(order.payment_status),
+          shippingStatus: statusText(order.shipping_status),
           createdAt: order.created_at,
         },
       ];

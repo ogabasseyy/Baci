@@ -95,18 +95,20 @@ export function ConversationThread({
               onUpdate={manage.update}
             />
           ) : null}
-          {customer.data ? (
-            <CustomerCard colors={colors} customer={customer.data} />
-          ) : customer.isError && customer.data === undefined ? (
-            // Only while the lookup has never answered: a chat already
-            // confirmed as a guest (null) stays quiet when a later check
-            // fails, since there is nothing to hide or retry.
+          {/* A failed check says so: never loaded, or the card below may be
+              old. A chat already confirmed as a guest (null) stays quiet, with
+              nothing to hide or retry. */}
+          {customer.isError && customer.data !== null ? (
             <CustomerUnavailable
               colors={colors}
               onRetry={() => {
                 customer.refetch();
               }}
+              stale={!!customer.data}
             />
+          ) : null}
+          {customer.data ? (
+            <CustomerCard colors={colors} customer={customer.data} />
           ) : null}
           <FlatList
             contentContainerStyle={styles.list}

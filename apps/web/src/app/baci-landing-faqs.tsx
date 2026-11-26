@@ -3,6 +3,49 @@ import { FAQItem } from '@/components/landing/faq-item';
 import { JsonLd } from '@/components/seo/json-ld';
 import { Button } from '@/components/ui/button';
 
+const LANDING_FAQS = [
+  {
+    question: 'Do I need coding skills to use Baci?',
+    answer:
+      'Not at all! Baci is designed for everyone. Our AI handles store setup, branding, and copy—you just answer a few questions about your business, then customize visually with 29+ drag-and-drop blocks.',
+  },
+  {
+    question: 'How long does it take to launch my store?',
+    answer:
+      'Most merchants go live in under 10 minutes. AI generates your store, logo, and brand colors in seconds, and you can connect payments and publish immediately.',
+  },
+  {
+    question: 'Can customers negotiate prices or use discount codes?',
+    answer:
+      'Yes! Baci has built-in price negotiations (single-item and whole-cart offers with margin-protected counter-offers and real-time mobile approvals), plus percentage or fixed-amount discount codes, promo vouchers, and tiered loyalty rewards.',
+  },
+  {
+    question: 'What payment methods can I accept?',
+    answer:
+      'Baci supports Paystack, Korapay, Dedicated Virtual Bank Accounts (DVA), Pay on Delivery, Pay-for-Me links, USDT/USDC crypto via Juicyway, and Buy Now Pay Later through CredPal, Credit Direct, and Klump—plus Ship on Credit and branch Virtual Terminals.',
+  },
+  {
+    question: 'Can I buy or connect my own domain name and email?',
+    answer:
+      'Yes! You can search and buy a custom domain right inside Baci with automatic SSL and DNS management, connect an existing domain, or start with a free subdomain. You can also verify a custom sender email domain (like noreply@yourstore.com).',
+  },
+  {
+    question: 'Can I migrate my existing products and orders?',
+    answer:
+      'Yes. You can import historical orders and catalogs from Bumpa CSV exports (with automated customer receipt-claim campaigns), sync a live Google Sheet, upload CSVs, or paste raw WhatsApp price lists for AI parsing.',
+  },
+  {
+    question: 'Can I manage my store from my phone?',
+    answer:
+      'Yes! The Baci Mobile Admin app lets you approve price negotiations, follow up on abandoned checkouts via WhatsApp, scan barcodes, track serialized units, log expenses, view true profit, and export PDF invoices and tax ledgers.',
+  },
+  {
+    question: 'Is there a free plan or trial?',
+    answer:
+      'Yes! Start free with no credit card required. Build your store, test your checkout, and upgrade whenever your business is ready to unlock unlimited products, custom domains, and pro analytics.',
+  },
+] as const;
+
 export function BaciLandingFaqs() {
   return (
     <section
@@ -26,48 +69,7 @@ export function BaciLandingFaqs() {
         </div>
 
         <dl className="max-w-4xl mx-auto space-y-6">
-          {[
-            {
-              question: 'Do I need coding skills to use Baci?',
-              answer:
-                'Not at all! Baci is designed for everyone. Our AI handles all the technical work—you just answer a few questions about your business, and we create your entire store automatically.',
-            },
-            {
-              question: 'How long does it take to launch my store?',
-              answer:
-                'Most merchants go live in under 10 minutes. The AI generates your store in seconds, and you can customize and launch immediately. No waiting for developers or designers.',
-            },
-            {
-              question: 'Can I use my own domain name?',
-              answer:
-                'Yes! You can connect your custom domain or use a free Baci subdomain. We provide step-by-step instructions to connect your domain from providers like GoDaddy, Namecheap, or Google Domains.',
-            },
-            {
-              question: 'What payment methods can I accept?',
-              answer:
-                'Baci integrates with major payment processors including Stripe, PayPal, and local payment methods. Accept credit cards, debit cards, digital wallets, and more—all with secure, PCI-compliant checkout.',
-            },
-            {
-              question: 'Is there a free trial?',
-              answer:
-                "Yes! Start with our 14-day free trial. No credit card required. Test all features, build your store, and only pay when you're ready to go live.",
-            },
-            {
-              question: 'Can I migrate from another platform?',
-              answer:
-                'Absolutely. We offer free migration assistance for stores moving from Shopify, WooCommerce, or other platforms. Our team will help you import your products, customers, and orders seamlessly.',
-            },
-            {
-              question: 'Do you offer customer support?',
-              answer:
-                'Yes! We provide 24/7 email support for all plans, plus live chat and priority support for premium customers. Our comprehensive knowledge base and video tutorials are also available anytime.',
-            },
-            {
-              question: 'Can I sell physical and digital products?',
-              answer:
-                'Yes! Baci supports both physical products (with inventory tracking and shipping) and digital products (instant delivery via secure download links). You can sell both types in the same store.',
-            },
-          ].map((faq) => (
+          {LANDING_FAQS.map((faq) => (
             <FAQItem
               key={faq.question}
               question={faq.question}
@@ -78,7 +80,7 @@ export function BaciLandingFaqs() {
 
         <div className="mt-12 text-center animate-fade-in">
           <p className="text-muted-foreground mb-4">
-            Still have questions? We're here to help.
+            Still have questions? We&apos;re here to help.
           </p>
           <Button
             asChild
@@ -94,72 +96,14 @@ export function BaciLandingFaqs() {
           data={{
             '@context': 'https://schema.org',
             '@type': 'FAQPage',
-            mainEntity: [
-              {
-                '@type': 'Question',
-                name: 'Do I need coding skills to use Baci?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Not at all! Baci is designed for everyone. Our AI handles all the technical work—you just answer a few questions about your business, and we create your entire store automatically.',
-                },
+            mainEntity: LANDING_FAQS.map((faq) => ({
+              '@type': 'Question',
+              name: faq.question,
+              acceptedAnswer: {
+                '@type': 'Answer',
+                text: faq.answer,
               },
-              {
-                '@type': 'Question',
-                name: 'How long does it take to launch my store?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Most merchants go live in under 10 minutes. The AI generates your store in seconds, and you can customize and launch immediately. No waiting for developers or designers.',
-                },
-              },
-              {
-                '@type': 'Question',
-                name: 'Can I use my own domain name?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Yes! You can connect your custom domain or use a free Baci subdomain. We provide step-by-step instructions to connect your domain from providers like GoDaddy, Namecheap, or Google Domains.',
-                },
-              },
-              {
-                '@type': 'Question',
-                name: 'What payment methods can I accept?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Baci integrates with major payment processors including Stripe, PayPal, and local payment methods. Accept credit cards, debit cards, digital wallets, and more—all with secure, PCI-compliant checkout.',
-                },
-              },
-              {
-                '@type': 'Question',
-                name: 'Is there a free trial?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: "Yes! Start with our 14-day free trial. No credit card required. Test all features, build your store, and only pay when you're ready to go live.",
-                },
-              },
-              {
-                '@type': 'Question',
-                name: 'Can I migrate from another platform?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Absolutely. We offer free migration assistance for stores moving from Shopify, WooCommerce, or other platforms. Our team will help you import your products, customers, and orders seamlessly.',
-                },
-              },
-              {
-                '@type': 'Question',
-                name: 'Do you offer customer support?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Yes! We provide 24/7 email support for all plans, plus live chat and priority support for premium customers. Our comprehensive knowledge base and video tutorials are also available anytime.',
-                },
-              },
-              {
-                '@type': 'Question',
-                name: 'Can I sell physical and digital products?',
-                acceptedAnswer: {
-                  '@type': 'Answer',
-                  text: 'Yes! Baci supports both physical products (with inventory tracking and shipping) and digital products (instant delivery via secure download links). You can sell both types in the same store.',
-                },
-              },
-            ],
+            })),
           }}
         />
       </div>

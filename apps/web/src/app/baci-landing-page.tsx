@@ -67,10 +67,11 @@ export function BaciLandingPage({ metrics }: { metrics: LandingMetrics }) {
                 </span>
               </h1>
 
-              <p className="mx-auto max-w-[700px] text-muted-foreground text-base md:text-lg leading-relaxed">
-                Launch a professional e-commerce store powered by AI in seconds.
-                No coding required. Perfect for retail businesses ready to
-                scale.
+              <p className="mx-auto max-w-[720px] text-muted-foreground text-base md:text-lg leading-relaxed">
+                Launch an AI-powered store in seconds—with built-in price
+                negotiations, discount codes, local &amp; crypto payments,
+                agentic commerce, and a mobile admin app to run your business
+                from anywhere.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto pt-4">

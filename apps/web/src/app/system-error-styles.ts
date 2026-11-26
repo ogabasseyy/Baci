@@ -244,10 +244,8 @@ export const systemErrorStyleSheet = `
   .replace(/\s+/g, ' ')
   .replace(/\s*([{};,])\s*/g, '$1')
   .replace(/;\}/g, '}')
-  .replace(/:\s+/g, (match, offset, source) => {
-    const lastOpen = source.lastIndexOf('(', offset);
-    const lastClose = source.lastIndexOf(')', offset);
-    // Keep the space inside media queries such as `@media (max-width: 520px)`.
-    return lastOpen > lastClose ? match : ':';
+  .replace(/:\s+/g, ':')
+  .replace(/@media\s*\(([^)]+)\)/g, (_match, features: string) => {
+    return `@media (${features.replace(/:\s*/g, ': ')})`;
   })
   .trim();

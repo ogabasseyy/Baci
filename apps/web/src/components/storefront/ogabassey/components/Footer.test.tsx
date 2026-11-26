@@ -289,7 +289,7 @@ describe('Ogabassey Footer', () => {
       'justify-center'
     );
     expect(screen.getByRole('link', { name: 'Instagram' })).toHaveClass('min-h-6', 'min-w-6');
-    expect(screen.getByRole('link', { name: merchantFixture.email })).toHaveClass('min-h-6', 'min-w-6');
-    expect(screen.getByRole('link', { name: merchantFixture.phone })).toHaveClass('min-h-6', 'min-w-6');
+    expect(screen.getByRole('link', { name: merchantFixture.email })).toHaveClass('min-h-6', 'min-w-6', 'leading-6');
+    expect(screen.getByRole('link', { name: merchantFixture.phone })).toHaveClass('min-h-6', 'min-w-6', 'leading-6');
   });
 });

@@ -240,7 +240,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={`Open ${contactAddress} in Google Maps`}
-                  className="inline-flex min-h-6 min-w-6 items-center hover:text-current transition-colors"
+                  className="inline-block min-h-6 min-w-6 leading-6 hover:text-current transition-colors"
                 >
                   {contactAddress}
                 </a>
@@ -249,7 +249,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                 <Phone className="shrink-0 text-store-primary" size={16} />
                 <a
                   href={`tel:${contactPhone.replace(/\s/g, '')}`}
-                  className="inline-flex min-h-6 min-w-6 items-center hover:text-current transition-colors"
+                  className="inline-block min-h-6 min-w-6 leading-6 hover:text-current transition-colors"
                 >
                   {contactPhone}
                 </a>
@@ -258,7 +258,7 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
                 <Mail className="shrink-0 text-store-primary" size={16} />
                 <a
                   href={`mailto:${contactEmail}`}
-                  className="inline-flex min-h-6 min-w-6 items-center hover:text-current transition-colors"
+                  className="inline-block min-h-6 min-w-6 leading-6 hover:text-current transition-colors"
                 >
                   {contactEmail}
                 </a>

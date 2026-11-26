@@ -245,6 +245,14 @@ export async function handleAdminPublish(
       existing?.mode === 'update' && existing.updateId !== updateId
         ? existing.updateId
         : existing?.previousUpdateId;
+    const previousMode =
+      existing?.mode === 'rollback_to_embedded'
+        ? 'rollback_to_embedded'
+        : existing?.mode === 'update'
+          ? existing.updateId !== updateId
+            ? 'update'
+            : existing.previousMode
+          : undefined;
     const recentRollbacks = mergeRollbackHistory(existing);
     return {
       kind: 'write',
@@ -252,6 +260,7 @@ export async function handleAdminPublish(
         mode: 'update',
         updateId,
         activeSourceUpdateId: updateId,
+        ...(previousMode ? { previousMode } : {}),
         ...(previousUpdateId ? { previousUpdateId } : {}),
         updatedAt: effectiveCreatedAt,
         ...(existing?.lastRollback
@@ -276,6 +285,9 @@ export async function handleAdminPublish(
     platform: payload.platform,
     runtimeVersion: payload.runtimeVersion,
     updateId,
+    ...(state.mode === 'update' && state.previousMode
+      ? { previousMode: state.previousMode }
+      : {}),
     ...(state.previousUpdateId
       ? { previousUpdateId: state.previousUpdateId }
       : {}),

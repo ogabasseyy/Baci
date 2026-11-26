@@ -97,6 +97,13 @@ export function parseStoredPointer(raw: unknown): ChannelCurrentState | null {
     return null;
   }
   if (
+    raw.previousMode !== undefined &&
+    raw.previousMode !== 'update' &&
+    raw.previousMode !== 'rollback_to_embedded'
+  ) {
+    return null;
+  }
+  if (
     raw.activeSourceUpdateId !== undefined &&
     !isValidUuidString(raw.activeSourceUpdateId)
   ) {

@@ -369,4 +369,97 @@ describe('admin publish and rollback endpoints', () => {
     const bodyText = parts[0]?.body ?? '';
     expect(bodyText).toContain('"__proto__":"storefront"');
   });
+
+  it('reports previousMode rollback_to_embedded when publishing after an embedded rollback', async () => {
+    const { env } = createEnv();
+    const assetBytes = new TextEncoder().encode('mode-transition-bundle');
+    const shaHex = createHash('sha256').update(assetBytes).digest('hex');
+    const shaB64 = createHash('sha256').update(assetBytes).digest('base64url');
+
+    const uploadResp = await worker.fetch(
+      new Request(
+        'https://ota.usebaci.com/api/admin/assets/bundles/ios/mode.hbc',
+        {
+          method: 'PUT',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/javascript',
+            'x-asset-sha256': shaHex,
+          },
+          body: assetBytes,
+        }
+      ),
+      env
+    );
+    expect(uploadResp.status).toBe(200);
+
+    const publishUpdate = (updateId: string) =>
+      worker.fetch(
+        new Request('https://ota.usebaci.com/api/admin/publish', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            channel: 'production',
+            platform: 'ios',
+            runtimeVersion: RUNTIME,
+            updateId,
+            sourceSha: SOURCE_SHA,
+            launchAsset: {
+              hash: shaB64,
+              key: shaHex,
+              contentType: 'application/javascript',
+              r2Key: 'bundles/ios/mode.hbc',
+            },
+          }),
+        }),
+        env
+      );
+
+    const firstResp = await publishUpdate(UPDATE_1);
+    expect(firstResp.status).toBe(200);
+    expect(await firstResp.json()).toMatchObject({
+      ok: true,
+      updateId: UPDATE_1,
+    });
+
+    const secondResp = await publishUpdate(UPDATE_2);
+    expect(secondResp.status).toBe(200);
+    expect(await secondResp.json()).toMatchObject({
+      ok: true,
+      updateId: UPDATE_2,
+      previousMode: 'update',
+      previousUpdateId: UPDATE_1,
+    });
+
+    const embeddedResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          toEmbedded: true,
+        }),
+      }),
+      env
+    );
+    expect(embeddedResp.status).toBe(200);
+
+    const UPDATE_3 = '33333333-3333-4333-8333-333333333333';
+    const postEmbeddedResp = await publishUpdate(UPDATE_3);
+    expect(postEmbeddedResp.status).toBe(200);
+    expect(await postEmbeddedResp.json()).toMatchObject({
+      ok: true,
+      updateId: UPDATE_3,
+      previousMode: 'rollback_to_embedded',
+      previousUpdateId: UPDATE_2,
+    });
+  });
 });

@@ -389,6 +389,7 @@ jobs:
           echo "$result_json"
           if ! OTA_OPERATION_RESULT="$result_json" node "$RUNNER_TEMP/smoke-check-ota-manifest.mjs"; then
             echo "::error::Manifest smoke check failed after publish; attempting compensating rollback." >&2
+            prev_mode="$(node -e 'const r = JSON.parse(process.argv[1]); process.stdout.write(typeof r.previousMode === "string" ? r.previousMode : "");' "$result_json")"
             prev_id="$(node -e 'const r = JSON.parse(process.argv[1]); process.stdout.write(typeof r.previousUpdateId === "string" ? r.previousUpdateId : "");' "$result_json")"
             rb_args=(
               --rollback
@@ -397,10 +398,10 @@ jobs:
               --channel "$CHANNEL"
               --idempotency-key "gh-smoke-compensate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             )
-            if [[ -n "$prev_id" ]]; then
-              rb_args+=(--update-id "$prev_id")
-            else
+            if [[ "$prev_mode" == "rollback_to_embedded" || -z "$prev_id" ]]; then
               rb_args+=(--to-embedded)
+            else
+              rb_args+=(--update-id "$prev_id")
             fi
             node "$RUNNER_TEMP/publish-ota.mjs" "${rb_args[@]}" || true
             exit 1

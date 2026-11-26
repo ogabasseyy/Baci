@@ -115,6 +115,7 @@ export type ChannelCurrentState =
       mode: 'update';
       updateId: string;
       activeSourceUpdateId?: string;
+      previousMode?: 'update' | 'rollback_to_embedded';
       previousUpdateId?: string;
       updatedAt: string;
       lastRollback?: RollbackHistoryEntry;

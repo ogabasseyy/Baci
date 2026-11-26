@@ -23,28 +23,49 @@ test('publish workflow fails closed when signing is enabled without a client-emb
     workflowText,
     /if \[\[ "\$base_url" != "https:\/\/ota\.usebaci\.com" \]\]; then/
   );
+  assert.match(
+    workflowText,
+    /if \[\[ "\$prev_mode" == "rollback_to_embedded" \|\| -z "\$prev_id" \]\]; then/
+  );
 });
 
 test('smoke-check and verify test files copied flat into RUNNER_TEMP run cleanly outside repo layout', () => {
+  const workflowText = readFileSync(WORKFLOW_PATH, 'utf8');
+  const copiedScripts = [
+    ...workflowText.matchAll(
+      /cp \.github\/scripts\/([^\s"]+\.mjs) "\$RUNNER_TEMP\/"/g
+    ),
+  ].map((match) => match[1]);
+  assert.ok(
+    copiedScripts.includes('verify-storefront-self-hosted-ota-export.test.mjs'),
+    'Workflow must copy verify-storefront-self-hosted-ota-export.test.mjs to RUNNER_TEMP'
+  );
+  assert.ok(
+    copiedScripts.includes('smoke-check-ota-manifest.test.mjs'),
+    'Workflow must copy smoke-check-ota-manifest.test.mjs to RUNNER_TEMP'
+  );
+
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'ota-runner-temp-'));
   try {
-    for (const file of [
-      'storefront-ota-secret-scan.mjs',
-      'verify-storefront-self-hosted-ota-export.mjs',
-      'verify-storefront-self-hosted-ota-export.test.mjs',
-      'smoke-check-ota-manifest.mjs',
-      'smoke-check-ota-manifest.test.mjs',
-    ]) {
+    for (const file of copiedScripts) {
       copyFileSync(path.join(SCRIPTS_DIR, file), path.join(tempDir, file));
     }
-    execFileSync(
+    const childEnv = { ...process.env };
+    delete childEnv.NODE_TEST_CONTEXT;
+    const output = execFileSync(
       process.execPath,
       [
         '--test',
         path.join(tempDir, 'smoke-check-ota-manifest.test.mjs'),
         path.join(tempDir, 'verify-storefront-self-hosted-ota-export.test.mjs'),
       ],
-      { cwd: tempDir, stdio: 'pipe' }
+      { cwd: tempDir, env: childEnv, encoding: 'utf8' }
+    );
+    assert.match(output, /ℹ fail 0\b/);
+    const passMatch = /ℹ pass (\d+)\b/.exec(output);
+    assert.ok(
+      passMatch && Number(passMatch[1]) >= 4,
+      `Expected >= 4 passing tests in RUNNER_TEMP, got:\n${output}`
     );
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

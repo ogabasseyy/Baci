@@ -109,6 +109,7 @@ export function PaymentMethodSelector({
     onSelectTab,
   ]);
 
+  const walletIsActive = walletSelection?.use === true;
   const savingsShouldRender =
     Boolean(savingsGoalId) &&
     savingsBalance > 0 &&
@@ -120,8 +121,19 @@ export function PaymentMethodSelector({
   const savingsPortion = savingsShouldRender
     ? Math.min(savingsBalance, orderTotal)
     : 0;
+  const activeWalletTowardSavingsResidual = walletIsActive
+    ? Math.min(
+        walletBalance > 0
+          ? walletBalance
+          : Math.max(0, walletSelection?.amount ?? 0),
+        Math.max(orderTotal - savingsPortion, 0)
+      )
+    : 0;
   const savingsResidualToGateway = savingsShouldRender
-    ? Math.max(orderTotal - savingsBalance, 0)
+    ? Math.max(
+        orderTotal - savingsPortion - activeWalletTowardSavingsResidual,
+        0
+      )
     : 0;
   const savingsIsActive =
     savingsSelection?.use === true &&
@@ -171,7 +183,6 @@ export function PaymentMethodSelector({
   const walletResidualToCard = walletShouldRender
     ? Math.max(walletEffectiveTotal - walletBalance, 0)
     : 0;
-  const walletIsActive = walletSelection?.use === true;
 
   // Selecting an intent projects onto the existing (tab, method) state. For the
   // two terminal `pay_later` intents we also pin the specific method, because

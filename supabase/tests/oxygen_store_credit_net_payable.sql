@@ -38,7 +38,8 @@ VALUES
  ('ec310000-0000-4000-8000-000000000010','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PARTIAL',50000,50000,'NGN','unpaid','oxygen',0,0,15000,15000),
  ('ec310000-0000-4000-8000-000000000011','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-ZERO',50000,50000,'NGN','unpaid','oxygen',0,0,50000,50000),
  ('ec310000-0000-4000-8000-000000000012','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-LEDGER-PARTIAL',50000,50000,'NGN','unpaid','oxygen',0,0,0,0),
- ('ec310000-0000-4000-8000-000000000013','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-LEDGER-ZERO',50000,50000,'NGN','unpaid','oxygen',0,0,0,0);
+ ('ec310000-0000-4000-8000-000000000013','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-LEDGER-ZERO',50000,50000,'NGN','unpaid','oxygen',0,0,0,0),
+ ('ec310000-0000-4000-8000-000000000017','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PENDING-PARTIAL',50000,50000,'NGN','pending','oxygen',0,0,15000,15000);
 
 DO $ledger$
 BEGIN
@@ -162,8 +163,30 @@ BEGIN
     RAISE EXCEPTION 'Expected ledger-reduced productAmount 35000, got %', v_claim->'context'->>'productAmount';
   END IF;
 
+  -- Payment orders transitioned to 'pending' (partial wallet/savings hold) must also admit Oxygen workflows for the net payable amount.
+  DECLARE
+    v_pending_wf jsonb;
+    v_pending_wf_id uuid;
+    v_pending_cmd jsonb;
+    v_pending_claim jsonb;
+  BEGIN
+    PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+    v_pending_wf := public.oxygen_start_workflow('ec310000-0000-4000-8000-000000000017', 'web');
+    v_pending_wf_id := (v_pending_wf->>'id')::uuid;
+    v_pending_cmd := public.oxygen_runtime('enqueue', v_pending_wf_id, jsonb_build_object(
+      'idempotencyKey', 'ec310000-0000-4000-8000-000000000027',
+      'version', (v_pending_wf->>'version')::integer,
+      'command', jsonb_build_object('action', 'start_application')
+    ));
+    PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000002',true);
+    v_pending_claim := public.oxygen_runtime('claim', (v_pending_cmd->>'commandId')::uuid, jsonb_build_object('commandId', v_pending_cmd->>'commandId'));
+    IF (v_pending_claim->'context'->>'productAmount')::numeric IS DISTINCT FROM 35000 THEN
+      RAISE EXCEPTION 'Expected pending partial-credit productAmount 35000, got %', v_pending_claim->'context'->>'productAmount';
+    END IF;
+    PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+  END;
+
   -- Settled orders ('paid' / 'bnpl_approved') with amount_paid = total must not treat settled payment as store credit.
-  RESET ROLE;
   INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
   VALUES
    ('ec310000-0000-4000-8000-000000000014','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PAID',50000,50000,'NGN','paid','oxygen',0,0,50000,0),

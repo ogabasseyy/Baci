@@ -54,16 +54,25 @@ export function usePaymentMethodAvailability(
 
   const hasValidTotal =
     orderTotal != null && Number.isFinite(orderTotal) && orderTotal > 0;
-  const activeWalletAmount =
-    walletSelection?.use === true
-      ? Math.max(0, walletSelection.amount ?? 0)
-      : 0;
-  const activeSavingsAmount =
+  const rawSavingsAmount =
     savingsSelection?.use === true
       ? Math.max(0, savingsSelection.amount ?? 0)
       : 0;
+  const activeSavingsAmount = hasValidTotal
+    ? Math.min(rawSavingsAmount, orderTotal)
+    : 0;
+  const walletResidualAfterSavings = hasValidTotal
+    ? Math.max(orderTotal - activeSavingsAmount, 0)
+    : 0;
+  const rawWalletAmount =
+    walletSelection?.use === true
+      ? Math.max(0, walletSelection.amount ?? 0)
+      : 0;
+  const activeWalletAmount = hasValidTotal
+    ? Math.min(rawWalletAmount, walletResidualAfterSavings)
+    : 0;
   const netPayableAmount = hasValidTotal
-    ? Math.max(orderTotal - activeWalletAmount - activeSavingsAmount, 0)
+    ? Math.max(orderTotal - activeSavingsAmount - activeWalletAmount, 0)
     : 0;
   const klumpMinAmount = klumpLimits?.minAmount ?? BNPL_MIN_AMOUNT;
   const klumpMaxAmount = klumpLimits?.maxAmount ?? BNPL_MAX_AMOUNT;

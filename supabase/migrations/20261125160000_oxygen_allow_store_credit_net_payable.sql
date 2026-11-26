@@ -294,7 +294,8 @@ BEGIN
   END IF;
   IF oxygen_private.order_net_payable_for_order(v_order.id, v_order.total, v_order.amount_paid, v_order.wallet_amount_used, v_order.payment_status) <= 0
     OR v_order.currency IS DISTINCT FROM 'NGN'
-    OR v_order.payment_status <> 'unpaid' OR v_order.cancelled_at IS NOT NULL THEN
+    OR COALESCE(NULLIF(pg_catalog.lower(pg_catalog.btrim(v_order.payment_status)), ''), 'unpaid') NOT IN ('unpaid', 'pending')
+    OR v_order.cancelled_at IS NOT NULL THEN
     RAISE EXCEPTION 'Order unavailable' USING ERRCODE = '22023';
   END IF;
   SELECT b.environment INTO v_environment FROM oxygen_private.runtime_bindings b

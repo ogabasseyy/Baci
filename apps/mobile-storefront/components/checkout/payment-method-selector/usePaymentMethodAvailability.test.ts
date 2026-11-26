@@ -190,4 +190,35 @@ describe('usePaymentMethodAvailability', () => {
     expect(disabledKlump?.disabledReason).toContain('Minimum order');
     expect(disabledKlump?.disabledReason).toContain('15,000');
   });
+
+  it('caps wallet against residual after savings when both wallet and savings are active', () => {
+    const partialResult = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      methodDisabledReasons: {},
+      orderTotal: 100_000,
+      savingsSelection: { amount: 40_000, goalId: 'goal-1', use: true },
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 30_000, use: true },
+    });
+    expect(partialResult.isBNPLEligible).toBe(true);
+    expect(
+      partialResult.filteredMethods.find((m) => m.id === 'klump')?.disabled
+    ).toBeUndefined();
+
+    const fullyCoveredResult = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      methodDisabledReasons: {},
+      orderTotal: 100_000,
+      savingsSelection: { amount: 60_000, goalId: 'goal-1', use: true },
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 100_000, use: true },
+    });
+    expect(fullyCoveredResult.isBNPLEligible).toBe(false);
+    expect(
+      fullyCoveredResult.filteredMethods.find((m) => m.id === 'klump')
+        ?.disabledReason
+    ).toBe('No payable balance remains for installment financing');
+  });
 });

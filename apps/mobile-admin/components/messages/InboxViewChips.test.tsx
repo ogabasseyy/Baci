@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { LIGHT_COLORS } from '@/constants/theme';
+import { LIGHT_COLORS, SPACING } from '@/constants/theme';
 import { InboxViewChips } from './InboxViewChips';
 
 describe('InboxViewChips', () => {
@@ -51,5 +51,19 @@ describe('InboxViewChips', () => {
     );
     // The outer scroll view must not grow (a horizontal ScrollView does by default).
     expect(container.firstElementChild).toHaveStyle({ flexGrow: '0' });
+  });
+
+  it('bugfix: every chip is tall enough to tap', () => {
+    render(
+      <InboxViewChips
+        colors={LIGHT_COLORS}
+        onChange={vi.fn()}
+        value="needs_reply"
+      />
+    );
+
+    for (const chip of screen.getAllByRole('button')) {
+      expect(chip).toHaveStyle({ minHeight: `${SPACING.touchTarget}px` });
+    }
   });
 });

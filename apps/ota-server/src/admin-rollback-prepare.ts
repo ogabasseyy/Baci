@@ -4,7 +4,6 @@ import {
   type PointerCasAction,
   putImmutableRelease,
 } from './admin-storage';
-import { deriveDeterministicUuid } from './crypto';
 import { readStoredReleaseOrError } from './stored-record-parser';
 import type {
   ChannelCurrentState,
@@ -31,7 +30,6 @@ export async function prepareRollbackRelease(
   env: OtaWorkerEnv,
   channel: string,
   payload: RollbackPayload,
-  initialObj: { etag?: string; httpEtag?: string } | null,
   initialState: ChannelCurrentState | null,
   idempotencyKey?: string
 ): Promise<RollbackPreparation | Response> {
@@ -99,15 +97,7 @@ export async function prepareRollbackRelease(
     throw err;
   }
 
-  const pointerGeneration =
-    initialObj?.etag ??
-    initialObj?.httpEtag?.replace(/^"(.*)"$/, '$1') ??
-    'none';
-  const releaseId = idempotencyKey
-    ? deriveDeterministicUuid(
-        `rollback:${channel}:${payload.platform}:${payload.runtimeVersion}:${pointerGeneration}:${initialState?.updatedAt ?? 'initial'}:${sourceTargetId}:${idempotencyKey}`
-      )
-    : crypto.randomUUID().toLowerCase();
+  const releaseId = crypto.randomUUID().toLowerCase();
 
   const rollbackRelease: StoredReleaseRecord = {
     ...sourceRelease,
@@ -119,8 +109,7 @@ export async function prepareRollbackRelease(
   const releaseResult = await putImmutableRelease(
     env,
     releaseKey,
-    rollbackRelease,
-    { ignoreCreatedAtOnMatch: Boolean(idempotencyKey) }
+    rollbackRelease
   );
   if (releaseResult.status === 'conflict') {
     return errorResponse('Rollback release ID collision; retry', 409);
@@ -167,6 +156,69 @@ export function buildRollbackNoopCasAction(
       recentRollbacks: mergeRollbackHistory(existing, entry),
     },
   };
+}
+
+export function buildEmbeddedRollbackAction(
+  existing: ChannelCurrentState | null,
+  channel: string,
+  platform: RollbackPayload['platform'],
+  runtimeVersion: string,
+  priorActiveId: string | undefined,
+  idempotencyKey: string | undefined,
+  fingerprint: string
+): PointerCasAction {
+  let now: string;
+  try {
+    now = nextMonotonicTimestamp(existing?.updatedAt);
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      return {
+        kind: 'error',
+        response: errorResponse(err.message, err.status),
+      };
+    }
+    throw err;
+  }
+  const response: RollbackOperationResult = {
+    ok: true,
+    mode: 'rollback_to_embedded',
+    channel,
+    platform,
+    runtimeVersion,
+    commitTime: now,
+  };
+  const entry = idempotencyKey
+    ? { key: idempotencyKey, fingerprint, response }
+    : undefined;
+  return {
+    kind: 'write',
+    state: {
+      mode: 'rollback_to_embedded',
+      commitTime: now,
+      ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
+      updatedAt: now,
+      ...(entry ? { lastRollback: entry } : {}),
+      recentRollbacks: mergeRollbackHistory(existing, entry),
+    },
+  };
+}
+
+export function checkExpectedCurrentUpdate(
+  payload: RollbackPayload,
+  state: ChannelCurrentState | null | undefined
+): Response | null {
+  if (
+    payload.expectedCurrentUpdateId !== undefined &&
+    (state?.mode !== 'update' ||
+      state.updateId !== payload.expectedCurrentUpdateId)
+  ) {
+    return errorResponse(
+      'Channel current update changed before rollback; aborting compensation',
+      409,
+      'EXPECTED_CURRENT_UPDATE_MISMATCH'
+    );
+  }
+  return null;
 }
 
 export function shouldTargetRollbackToEmbedded(

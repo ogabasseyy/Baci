@@ -18,6 +18,7 @@ export interface PublishCliOptions {
   runtimeVersion?: string;
   sourceSha?: string;
   updateId?: string;
+  expectedCurrentUpdateId?: string;
   idempotencyKey?: string;
 }
 
@@ -67,6 +68,7 @@ export function rollbackOta(
     channel?: string;
     toEmbedded?: boolean;
     updateId?: string;
+    expectedCurrentUpdateId?: string;
     idempotencyKey?: string;
     serverUrl: string;
     token: string;

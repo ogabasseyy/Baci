@@ -222,6 +222,14 @@ export function parseRollbackPayload(body: unknown): RollbackPayload {
           typeof body.targetUpdateId === 'string' ? body.targetUpdateId : ''
         )
       : undefined;
+  const expectedCurrentUpdateId =
+    body.expectedCurrentUpdateId !== undefined
+      ? validateUpdateId(
+          typeof body.expectedCurrentUpdateId === 'string'
+            ? body.expectedCurrentUpdateId
+            : ''
+        )
+      : undefined;
   const toEmbedded = body.toEmbedded === true;
   const idempotencyKey = parseIdempotencyKey(body.idempotencyKey);
 
@@ -239,6 +247,7 @@ export function parseRollbackPayload(body: unknown): RollbackPayload {
     platform,
     runtimeVersion,
     ...(targetUpdateId ? { targetUpdateId } : {}),
+    ...(expectedCurrentUpdateId ? { expectedCurrentUpdateId } : {}),
     toEmbedded,
     ...(idempotencyKey ? { idempotencyKey } : {}),
   };

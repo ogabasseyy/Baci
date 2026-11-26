@@ -919,4 +919,159 @@ describe('admin payload validation and rollback safety', () => {
     ).length;
     expect(releasesAfterIdemReap).toBe(releasesBeforeIdemReap);
   });
+
+  it('guards compensating rollback with expectedCurrentUpdateId, preserves embedded previousMode across explicit rollback, and rejects concurrent embedded switches', async () => {
+    const { bucket, env } = await setupChannelWithTwoReleases();
+    const pointerKey = `channels/production/ios/${RUNTIME}/current.json`;
+    const UPDATE_C = '33333333-3333-4333-8333-333333333333';
+
+    const mismatchResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+          expectedCurrentUpdateId: UPDATE_C,
+        }),
+      }),
+      env
+    );
+    expect(mismatchResp.status).toBe(409);
+    expect(await mismatchResp.json()).toMatchObject({
+      code: 'EXPECTED_CURRENT_UPDATE_MISMATCH',
+    });
+
+    const matchResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+          expectedCurrentUpdateId: UPDATE_B,
+        }),
+      }),
+      env
+    );
+    expect(matchResp.status).toBe(200);
+
+    await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          toEmbedded: true,
+        }),
+      }),
+      env
+    );
+
+    const explicitFromEmbedded = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+        }),
+      }),
+      env
+    );
+    expect(explicitFromEmbedded.status).toBe(200);
+
+    const targetlessAfterExplicit = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'targetless-restore-embedded-2',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+        }),
+      }),
+      env
+    );
+    expect(targetlessAfterExplicit.status).toBe(200);
+    expect(await targetlessAfterExplicit.json()).toMatchObject({
+      ok: true,
+      mode: 'rollback_to_embedded',
+    });
+
+    // Targetless rollback that prepared an update release rejects 409 if concurrent state switched to post-embedded publish.
+    await bucket.put(
+      pointerKey,
+      JSON.stringify({
+        mode: 'update',
+        updateId: UPDATE_B,
+        previousUpdateId: UPDATE_A,
+        updatedAt: new Date(Date.now() + 240_000).toISOString(),
+      })
+    );
+    bucket.onBeforePut = (key) => {
+      if (key === pointerKey) {
+        bucket.onBeforePut = undefined;
+        bucket.store.set(pointerKey, {
+          etag: 'concurrent-post-embedded-switch',
+          bytes: new TextEncoder().encode(
+            JSON.stringify({
+              mode: 'update',
+              updateId: UPDATE_C,
+              previousMode: 'rollback_to_embedded',
+              previousUpdateId: UPDATE_B,
+              updatedAt: new Date(Date.now() + 250_000).toISOString(),
+            })
+          ),
+        });
+      }
+    };
+    const raceResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': 'concurrent-post-embedded-race-1',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+        }),
+      }),
+      env
+    );
+    expect(raceResp.status).toBe(409);
+    const racePointer = await (await bucket.get(pointerKey))?.json<{
+      mode: string;
+      updateId: string;
+    }>();
+    expect(racePointer?.mode).toBe('update');
+    expect(racePointer?.updateId).toBe(UPDATE_C);
+  });
 });

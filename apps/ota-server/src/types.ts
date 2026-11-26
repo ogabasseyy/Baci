@@ -149,6 +149,7 @@ export interface RollbackPayload {
   platform: OtaPlatform;
   runtimeVersion: string;
   targetUpdateId?: string;
+  expectedCurrentUpdateId?: string;
   toEmbedded?: boolean;
   idempotencyKey?: string;
 }

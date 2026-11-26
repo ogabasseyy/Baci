@@ -33,6 +33,7 @@ const VALUE_FLAGS = {
   '--channel': 'channel',
   '--source-sha': 'sourceSha',
   '--update-id': 'updateId',
+  '--expected-current-update-id': 'expectedCurrentUpdateId',
   '--idempotency-key': 'idempotencyKey',
   '--server': 'serverUrl',
   '--token': 'token',
@@ -105,6 +106,15 @@ export function parseCliArgs(argv) {
   }
   if (options.updateId !== undefined && !UUID_REGEX.test(options.updateId.trim())) {
     throw new Error('--update-id must be a valid UUID');
+  }
+  if (
+    options.expectedCurrentUpdateId !== undefined &&
+    !UUID_REGEX.test(options.expectedCurrentUpdateId.trim())
+  ) {
+    throw new Error('--expected-current-update-id must be a valid UUID');
+  }
+  if (options.expectedCurrentUpdateId !== undefined && !options.rollback) {
+    throw new Error('--expected-current-update-id requires --rollback');
   }
   if (
     options.idempotencyKey !== undefined &&
@@ -523,6 +533,9 @@ export async function rollbackOta(options, fetchImpl = fetch) {
     runtimeVersion: options.runtimeVersion,
     ...(options.toEmbedded ? { toEmbedded: true } : {}),
     ...(options.updateId ? { targetUpdateId: options.updateId } : {}),
+    ...(options.expectedCurrentUpdateId?.trim()
+      ? { expectedCurrentUpdateId: options.expectedCurrentUpdateId.trim() }
+      : {}),
   };
   if (options.dryRun) {
     return { dryRun: true, payload: body };

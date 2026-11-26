@@ -5,7 +5,9 @@ import {
   parseRollbackPayload,
 } from './admin-auth';
 import {
+  buildEmbeddedRollbackAction,
   buildRollbackNoopCasAction,
+  checkExpectedCurrentUpdate,
   cleanupPreparedRollbackArtifacts,
   type PreparedRollbackRelease,
   prepareRollbackRelease,
@@ -14,7 +16,6 @@ import {
 import {
   findRecordedRollback,
   mergeRollbackHistory,
-  nextMonotonicTimestamp,
   updateChannelPointerCas,
 } from './admin-storage';
 import { readStoredPointerOrError } from './stored-record-parser';
@@ -79,6 +80,9 @@ export async function handleAdminRollback(
   const channel = payload.channel ?? 'production';
   const fingerprint = JSON.stringify({
     targetUpdateId: payload.targetUpdateId ?? null,
+    ...(payload.expectedCurrentUpdateId
+      ? { expectedCurrentUpdateId: payload.expectedCurrentUpdateId }
+      : {}),
     toEmbedded: Boolean(payload.toEmbedded),
   });
   const pointerKey = `channels/${channel}/${payload.platform}/${payload.runtimeVersion}/current.json`;
@@ -87,7 +91,7 @@ export async function handleAdminRollback(
   if (pointerRead instanceof Response) {
     return pointerRead;
   }
-  const { obj: initialObj, state: initialState } = pointerRead;
+  const { state: initialState } = pointerRead;
 
   const earlyRecorded = idempotencyKey
     ? findRecordedRollback(initialState, idempotencyKey, fingerprint)
@@ -102,6 +106,10 @@ export async function handleAdminRollback(
   if (earlyRecorded?.status === 'match') {
     return jsonResponse(earlyRecorded.response);
   }
+  const earlyExpectedErr = checkExpectedCurrentUpdate(payload, initialState);
+  if (earlyExpectedErr) {
+    return earlyExpectedErr;
+  }
 
   let prepared: PreparedRollbackRelease | null = null;
   if (!shouldTargetRollbackToEmbedded(payload, initialState)) {
@@ -109,7 +117,6 @@ export async function handleAdminRollback(
       env,
       channel,
       payload,
-      initialObj,
       initialState,
       idempotencyKey
     );
@@ -138,46 +145,34 @@ export async function handleAdminRollback(
     if (recorded?.status === 'match') {
       return { kind: 'idempotent', result: recorded.response };
     }
+    const casExpectedErr = checkExpectedCurrentUpdate(payload, existing);
+    if (casExpectedErr) {
+      return { kind: 'error', response: casExpectedErr };
+    }
 
     const priorActiveId =
       existing?.mode === 'update'
         ? existing.updateId
         : existing?.previousUpdateId;
     if (shouldTargetRollbackToEmbedded(payload, existing)) {
-      let now: string;
-      try {
-        now = nextMonotonicTimestamp(existing?.updatedAt);
-      } catch (err) {
-        if (err instanceof ValidationError) {
-          return {
-            kind: 'error',
-            response: errorResponse(err.message, err.status),
-          };
-        }
-        throw err;
+      if (prepared) {
+        return {
+          kind: 'error',
+          response: errorResponse(
+            'Concurrent channel state changed during targetless rollback; retry',
+            409
+          ),
+        };
       }
-      const response: RollbackOperationResult = {
-        ok: true,
-        mode: 'rollback_to_embedded',
+      return buildEmbeddedRollbackAction(
+        existing,
         channel,
-        platform: payload.platform,
-        runtimeVersion: payload.runtimeVersion,
-        commitTime: now,
-      };
-      const entry = idempotencyKey
-        ? { key: idempotencyKey, fingerprint, response }
-        : undefined;
-      return {
-        kind: 'write',
-        state: {
-          mode: 'rollback_to_embedded',
-          commitTime: now,
-          ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
-          updatedAt: now,
-          ...(entry ? { lastRollback: entry } : {}),
-          recentRollbacks: mergeRollbackHistory(existing, entry),
-        },
-      };
+        payload.platform,
+        payload.runtimeVersion,
+        priorActiveId,
+        idempotencyKey,
+        fingerprint
+      );
     }
 
     if (
@@ -250,6 +245,7 @@ export async function handleAdminRollback(
         mode: 'update',
         updateId: prepared.releaseId,
         activeSourceUpdateId: prepared.sourceTargetId,
+        ...(existing?.mode ? { previousMode: existing.mode } : {}),
         ...(priorActiveId ? { previousUpdateId: priorActiveId } : {}),
         updatedAt: prepared.createdAt,
         ...(entry ? { lastRollback: entry } : {}),

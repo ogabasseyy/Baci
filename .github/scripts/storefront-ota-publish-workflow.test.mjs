@@ -35,6 +35,10 @@ test('publish workflow fails closed when signing is enabled without a client-emb
     workflowText,
     /if \[\[ "\$ACTION" == "publish" && "\$CHANNEL" == "production" && "\$ALLOW_UNSIGNED" != "true" \]\]; then/
   );
+  assert.match(
+    workflowText,
+    /rb_args\+=\(--expected-current-update-id "\$published_id"\)/
+  );
 });
 
 test('smoke-check and verify test files copied flat into RUNNER_TEMP run cleanly outside repo layout', () => {

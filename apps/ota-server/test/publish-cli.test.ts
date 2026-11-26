@@ -732,4 +732,58 @@ describe('publish-ota CLI', () => {
     expect(payload.assets[0]?.hash).toBe(payload.assets[1]?.hash);
     expect(payload.launchAsset).not.toHaveProperty('fileExtension');
   });
+
+  it('forwards --expected-current-update-id on rollback CLI and rejects it outside --rollback', async () => {
+    const parsed = parseCliArgs([
+      '--rollback',
+      '--platform',
+      'ios',
+      '--runtime',
+      '2.1.663',
+      '--update-id',
+      '11111111-1111-4111-8111-111111111111',
+      '--expected-current-update-id',
+      '22222222-2222-4222-8222-222222222222',
+      '--token',
+      'secret-token',
+    ]);
+    expect(parsed.expectedCurrentUpdateId).toBe(
+      '22222222-2222-4222-8222-222222222222'
+    );
+    expect(() =>
+      parseCliArgs([
+        '--dist',
+        '/tmp/dist',
+        '--platform',
+        'ios',
+        '--runtime',
+        '2.1.663',
+        '--expected-current-update-id',
+        '22222222-2222-4222-8222-222222222222',
+        '--token',
+        'secret-token',
+      ])
+    ).toThrow(/requires --rollback/);
+
+    let sentBody: unknown;
+    const spyFetch: OtaFetch = async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body ?? '{}'));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+    await rollbackOta(
+      {
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        updateId: '11111111-1111-4111-8111-111111111111',
+        expectedCurrentUpdateId: '22222222-2222-4222-8222-222222222222',
+        serverUrl: 'https://ota.usebaci.com',
+        token: 'secret-token',
+      },
+      spyFetch
+    );
+    expect(sentBody).toMatchObject({
+      targetUpdateId: '11111111-1111-4111-8111-111111111111',
+      expectedCurrentUpdateId: '22222222-2222-4222-8222-222222222222',
+    });
+  });
 });

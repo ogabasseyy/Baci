@@ -1,4 +1,5 @@
 import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
+import { getBnplRemainingAmount } from '@/lib/klump-utils';
 import { apiPost } from '@/lib/api-client';
 import {
     clearCreditDirectPopupMarker,
@@ -35,7 +36,7 @@ export async function launchCreditDirectCheckout({
     setErrorMessage,
     setCreditDirectPopupMarker,
 }: BnplLaunchOrderContext): Promise<void> {
-    const normalizedAmount = Number(order.total);
+    const normalizedAmount = getBnplRemainingAmount(order);
     if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
         throw new Error('Invalid order total for Credit Direct checkout.');
     }

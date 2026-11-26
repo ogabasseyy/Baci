@@ -121,6 +121,7 @@ export function CheckoutScreenView({
     walletBalance,
     walletSelection,
   } = useCheckoutScreenPayment({
+    appliedDiscountCode: appliedDiscount?.code ?? null,
     customerId: customer?.id,
     customerPhone: customer?.phone,
     deliveryFee,

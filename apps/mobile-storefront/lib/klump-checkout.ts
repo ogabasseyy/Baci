@@ -39,29 +39,25 @@ export function formatKlumpAmount(amount: number) {
 
 export function getKlumpDisabledReason(
   settings: KlumpPaymentSettings | undefined | null,
-  orderTotal: number,
-  walletSelection?: WalletSelection,
-  savingsSelection?: SavingsSelection
+  payableAmount: number,
+  _walletSelection?: WalletSelection,
+  _savingsSelection?: SavingsSelection
 ): string | undefined {
-  if (walletSelection?.use === true && (walletSelection.amount ?? 0) > 0) {
-    return 'Wallet credit cannot be combined with Klump';
-  }
-
-  if (savingsSelection?.use === true && (savingsSelection.amount ?? 0) > 0) {
-    return 'Savings plan cannot be combined with Klump';
-  }
-
   if (!settings?.klump_enabled) {
     return 'Klump is not available for this merchant';
   }
 
+  if (!Number.isFinite(payableAmount) || payableAmount <= 0) {
+    return 'No payable balance remains for Klump checkout';
+  }
+
   const minAmount = settings.klump_min_amount ?? 10_000;
-  if (orderTotal < minAmount) {
+  if (payableAmount < minAmount) {
     return `Minimum order: ${formatKlumpAmount(minAmount)}`;
   }
 
   const maxAmount = settings.klump_max_amount ?? KLUMP_DEFAULT_MAX_AMOUNT;
-  if (orderTotal > maxAmount) {
+  if (payableAmount > maxAmount) {
     return `Maximum order: ${formatKlumpAmount(maxAmount)}`;
   }
 

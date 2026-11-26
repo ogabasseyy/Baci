@@ -67,6 +67,7 @@ import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 import { initializeBankCardOfferRequest } from './initialize-bank-card-offer-request';
+import { readOrderPayableState } from './read-order-payable-state';
 import { retiredGatewayResponse } from './retired-gateway';
 
 // Types & Constants
@@ -1325,70 +1326,25 @@ export async function POST(request: NextRequest) {
         ? orderSnapshot.currency.trim().toUpperCase()
         : 'NGN';
 
-    // REDVAULT requests run through the scoped storefront client
-    // (authenticated role with no sub for guests), which has no grant on
-    // public.orders. Read the wallet amount from the bounded SECURITY DEFINER
-    // snapshot instead of a direct table lookup that RLS would hide.
-    let walletAmountUsed: number;
-    if (redvaultRequested) {
-      walletAmountUsed = Math.max(
-        numberOrDefault(
-          (orderSnapshot as { wallet_amount_used?: unknown })
-            .wallet_amount_used,
-          0
-        ),
-        0
-      );
-    } else {
-      const { data: orderPaymentRow, error: orderPaymentError } =
-        await paymentDataClient
-          .from('orders')
-          .select('wallet_amount_used')
-          .eq('id', data.order_id)
-          .eq('merchant_id', merchantId)
-          .single();
-
-      if (orderPaymentError || !orderPaymentRow) {
-        return createErrorResponse(
-          'Unable to verify order payment amount',
-          'ORDER_AMOUNT_LOOKUP_FAILED',
-          500
-        );
-      }
-
-      walletAmountUsed = Math.max(
-        numberOrDefault(
-          (orderPaymentRow as { wallet_amount_used?: unknown })
-            .wallet_amount_used,
-          0
-        ),
-        0
-      );
-    }
-
-    const { data: savingsRows, error: savingsError } = await paymentDataClient
-      .from('customer_savings_redemptions')
-      .select('amount')
-      .eq('order_id', data.order_id)
-      .eq('merchant_id', merchantId);
-
-    if (savingsError) {
+    const initialPayableState = await readOrderPayableState({
+      paymentDataClient,
+      orderId: data.order_id,
+      merchantId,
+      customerEmail: data.customer_email,
+      redvaultRequested,
+      initialOrderSnapshot: orderSnapshot,
+      snapshotTotal,
+    });
+    if (!initialPayableState.ok) {
       return createErrorResponse(
-        'Unable to verify order savings amount',
-        'ORDER_SAVINGS_LOOKUP_FAILED',
-        500
+        initialPayableState.message,
+        initialPayableState.code,
+        initialPayableState.status
       );
     }
 
-    const savingsAmountUsed = Array.isArray(savingsRows)
-      ? savingsRows.reduce((sum, row) => {
-          const amount =
-            row && typeof row === 'object'
-              ? (row as { amount?: unknown }).amount
-              : 0;
-          return sum + Math.max(numberOrDefault(amount, 0), 0);
-        }, 0)
-      : 0;
+    const { payableAmount, walletAmountUsed, savingsAmountUsed } =
+      initialPayableState;
 
     const pilotFundingRejection = rejectInvalidRedvaultLivePilotFunding({
       redvaultRequested,
@@ -1401,6 +1357,25 @@ export async function POST(request: NextRequest) {
         pilotFundingRejection.message,
         pilotFundingRejection.code,
         pilotFundingRejection.status
+      );
+    }
+
+    if (payableAmount <= 0) {
+      return createErrorResponse(
+        'No payable amount remains for this order',
+        'NO_PAYABLE_AMOUNT',
+        400
+      );
+    }
+
+    if (
+      orderRequiresRedvault &&
+      (walletAmountUsed > 0 || savingsAmountUsed > 0)
+    ) {
+      return createErrorResponse(
+        'REDVAULT orders cannot use wallet or savings store credit',
+        'REDVAULT_STORE_CREDIT_UNSUPPORTED',
+        400
       );
     }
 
@@ -1581,22 +1556,11 @@ export async function POST(request: NextRequest) {
 
     const chargeCurrency = currencyResolution.currency;
 
-    const payableAmount =
-      gateway === 'klump'
-        ? snapshotTotal
-        : Math.max(snapshotTotal - walletAmountUsed - savingsAmountUsed, 0);
-
-    if (payableAmount <= 0) {
-      return createErrorResponse(
-        'No payable amount remains for this order',
-        'NO_PAYABLE_AMOUNT',
-        400
-      );
-    }
+    const klumpChargeAmount = toKlumpIntegerAmount(payableAmount);
 
     const paymentData: AuthorizedPaymentInitRequest = {
       ...data,
-      amount: payableAmount,
+      amount: gateway === 'klump' ? klumpChargeAmount : payableAmount,
       currency: chargeCurrency,
     };
 
@@ -1616,8 +1580,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const klumpChargeAmount = toKlumpIntegerAmount(snapshotTotal);
-
     if (gateway === 'klump') {
       if (!gatewaySettings.klump_enabled) {
         return createErrorResponse(
@@ -1633,14 +1595,6 @@ export async function POST(request: NextRequest) {
         return createErrorResponse(
           'Klump only supports NGN payments',
           'UNSUPPORTED_CURRENCY',
-          400
-        );
-      }
-
-      if (walletAmountUsed > 0 || savingsAmountUsed > 0) {
-        return createErrorResponse(
-          'Klump requires the full order total; wallet-composed Klump payments are not supported',
-          'AMOUNT_COMPOSITION_UNSUPPORTED',
           400
         );
       }
@@ -1745,7 +1699,10 @@ export async function POST(request: NextRequest) {
                   : 'paystack_no_subaccount',
         p_reference: reference,
         p_currency: chargeCurrency,
-        p_expected_amount_minor: Math.round(payableAmount * 100),
+        p_expected_amount_minor:
+          gateway === 'klump'
+            ? klumpChargeAmount * 100
+            : Math.round(payableAmount * 100),
         p_platform_fee_minor: preparedPaystack?.fees.platformFee ?? null,
         p_retained_shipping_minor:
           preparedPaystack?.retainedShippingKobo ?? null,
@@ -1790,6 +1747,36 @@ export async function POST(request: NextRequest) {
     }
 
     const integrationWalletCheckout = amendmentClaim === 'claimed_integration';
+
+    // Re-verify live store credit immediately before charging any external gateway
+    // so a concurrent wallet redemption or reversal cannot initialize a stale net amount.
+    const reverifiedPayableState = await readOrderPayableState({
+      paymentDataClient,
+      orderId: data.order_id,
+      merchantId,
+      customerEmail: data.customer_email,
+      redvaultRequested,
+      recheckSnapshot: true,
+      initialOrderSnapshot: orderSnapshot,
+      snapshotTotal,
+    });
+    if (!reverifiedPayableState.ok) {
+      return createErrorResponse(
+        reverifiedPayableState.message,
+        reverifiedPayableState.code,
+        reverifiedPayableState.status
+      );
+    }
+    if (
+      reverifiedPayableState.payableAmount !== payableAmount ||
+      reverifiedPayableState.payableAmount <= 0
+    ) {
+      return createErrorResponse(
+        'The order payment details changed. Please try again.',
+        'CHECKOUT_PAYMENT_DETAILS_CHANGED',
+        409
+      );
+    }
 
     // Initialize payment based on gateway
     let paymentResult: PaymentResult;
@@ -2102,6 +2089,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Re-verify store credit and order total after the external gateway call
+    // so a concurrent wallet redemption or reversal during gateway init never
+    // creates a transaction or returns an authorization URL for a stale amount.
+    const postGatewayPayableState = await readOrderPayableState({
+      paymentDataClient,
+      orderId: data.order_id,
+      merchantId,
+      customerEmail: data.customer_email,
+      redvaultRequested,
+      recheckSnapshot: true,
+      initialOrderSnapshot: orderSnapshot,
+      snapshotTotal,
+    });
+    if (!postGatewayPayableState.ok) {
+      return createErrorResponse(
+        postGatewayPayableState.message,
+        postGatewayPayableState.code,
+        postGatewayPayableState.status
+      );
+    }
+    if (
+      postGatewayPayableState.payableAmount !== payableAmount ||
+      postGatewayPayableState.payableAmount <= 0
+    ) {
+      return createErrorResponse(
+        'The order payment details changed. Please try again.',
+        'CHECKOUT_PAYMENT_DETAILS_CHANGED',
+        409
+      );
+    }
+
     // Juicyway is a stablecoin rail: the webhook reports the settled amount in
     // the session currency (USDT/USDC cents), which is NOT comparable to the
     // NGN order total. Persist the expected settlement amount + locked FX rate
@@ -2119,7 +2137,7 @@ export async function POST(request: NextRequest) {
       {
         p_merchant_id: merchantId,
         p_order_id: paymentData.order_id,
-        p_amount: gateway === 'klump' ? snapshotTotal : paymentData.amount, // Klump keeps decimal total; p_merchant_amount stores rounded integer.
+        p_amount: paymentData.amount,
         p_currency: paymentData.currency,
         p_gateway: gateway,
         p_reference: paymentResult.reference,

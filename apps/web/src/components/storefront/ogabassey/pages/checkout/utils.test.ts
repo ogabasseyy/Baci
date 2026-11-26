@@ -226,18 +226,25 @@ describe('isGatewayAmountDifferentFromOrderTotal', () => {
 });
 
 describe('isKlumpUnavailableForGatewayAmount', () => {
-  it('returns true only for Klump gateway amount mismatches', () => {
+  it('returns true only when Klump has zero or non-finite payable amount', () => {
     expect(
       isKlumpUnavailableForGatewayAmount({
         paymentMethod: 'klump',
         payableAmount: 45_000,
         orderAmount: 50_000,
       }),
+    ).toBe(false);
+    expect(
+      isKlumpUnavailableForGatewayAmount({
+        paymentMethod: 'klump',
+        payableAmount: 0,
+        orderAmount: 50_000,
+      }),
     ).toBe(true);
     expect(
       isKlumpUnavailableForGatewayAmount({
         paymentMethod: 'paystack',
-        payableAmount: 45_000,
+        payableAmount: 0,
         orderAmount: 50_000,
       }),
     ).toBe(false);

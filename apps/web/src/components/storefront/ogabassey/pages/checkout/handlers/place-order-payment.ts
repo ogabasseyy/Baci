@@ -44,6 +44,20 @@ export async function routePlaceOrderPayment(
     ? `&trackingToken=${order.tracking_token}`
     : '';
 
+  if (walletResult?.amountUsed) {
+    setWalletBalance(walletResult.newBalance);
+  }
+
+  // 2. Route to payment gateway
+  if (paymentAmount <= 0) {
+    clearCheckoutSession();
+    routerPush(
+      getHref(`/order-success?orderId=${order.id}&wallet=true${trackingParam}`)
+    );
+    setTimeout(clearCart, 500);
+    return;
+  }
+
   if (
     isKlumpUnavailableForGatewayAmount({
       paymentMethod,
@@ -57,22 +71,8 @@ export async function routePlaceOrderPayment(
     return;
   }
 
-  if (walletResult?.amountUsed) {
-    setWalletBalance(walletResult.newBalance);
-  }
-
   if (paymentMethod === 'oxygen') {
     navigateToOxygenOrder(order.id);
-    return;
-  }
-
-  // 2. Route to payment gateway
-  if (paymentAmount <= 0) {
-    clearCheckoutSession();
-    routerPush(
-      getHref(`/order-success?orderId=${order.id}&wallet=true${trackingParam}`)
-    );
-    setTimeout(clearCart, 500);
     return;
   }
 

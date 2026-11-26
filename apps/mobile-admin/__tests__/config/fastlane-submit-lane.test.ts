@@ -86,6 +86,17 @@ describe('admin iOS submit lane', () => {
     expect(guard).toBeLessThan(submitLane.indexOf('set_changelog('));
   });
 
+  it('bugfix: checks again after the wait, just before editing', () => {
+    // A version can reach Apple during the 40 minute processing wait.
+    const recheck = submitLane.lastIndexOf(
+      'next if pending_review_blocks_submission?'
+    );
+    expect(recheck).toBeGreaterThan(
+      submitLane.indexOf('wait_for_app_store_build_processing!(')
+    );
+    expect(recheck).toBeLessThan(submitLane.indexOf('set_changelog('));
+  });
+
   it('submits when the store version can still be edited', () => {
     expect(runGuard({ editable: true })).toContain('blocked=false');
   });

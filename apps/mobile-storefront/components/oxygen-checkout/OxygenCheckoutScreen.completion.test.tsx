@@ -1,6 +1,13 @@
-import { act, render, screen, waitFor } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import { useState } from 'react';
 import { ScrollView } from 'react-native';
+import { ZeroBalanceOxygenOrderError } from '@/services/oxygen/owned-order';
 import {
   OxygenCheckoutScreen,
   oxygenNativeSession,
@@ -84,6 +91,33 @@ describe('saved native Oxygen checkout completion', () => {
     });
     result.rerender(<OxygenCheckoutScreen orderId="order" />);
     expect(router.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders store-credit completion instead of retry error when an unpaid Oxygen order is 100% covered', async () => {
+    jest
+      .mocked(readOwnedOxygenOrder)
+      .mockRejectedValueOnce(
+        new ZeroBalanceOxygenOrderError('order', 'ORD-ZERO-1')
+      );
+    render(<OxygenCheckoutScreen orderId="order" />);
+
+    expect(
+      await screen.findByText(
+        'This order is fully covered by store credit. No Oxygen financing or additional payment is required.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText('Try again')).toBeNull();
+    expect(screen.queryByText('Saved workflow')).toBeNull();
+
+    fireEvent.press(screen.getByText('View order confirmation'));
+    expect(router.replace).toHaveBeenCalledWith({
+      pathname: '/order-success',
+      params: {
+        orderId: 'order',
+        orderNumber: 'ORD-ZERO-1',
+        paymentMethod: 'oxygen',
+      },
+    });
   });
 });
 

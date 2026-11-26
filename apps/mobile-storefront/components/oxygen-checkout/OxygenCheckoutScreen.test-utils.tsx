@@ -73,6 +73,9 @@ jest.mock('@/services/oxygen/native-session', () => ({
   oxygenNativeSession: jest.fn(),
 }));
 jest.mock('@/services/oxygen/owned-order', () => ({
+  ...jest.requireActual<typeof import('@/services/oxygen/owned-order')>(
+    '@/services/oxygen/owned-order'
+  ),
   readOwnedOxygenOrder: jest.fn(),
 }));
 jest.mock('./use-oxygen-workflow', () => ({ useOxygenWorkflow: jest.fn() }));

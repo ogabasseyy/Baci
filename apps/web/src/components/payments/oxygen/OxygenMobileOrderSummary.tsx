@@ -5,6 +5,7 @@ import type { CartItem } from '@/hooks/cart';
 import {
   getOxygenOrderNetPayable,
   getOxygenOrderPreGatewayPaid,
+  isOxygenPreGatewayStatus,
   type oxygenCheckoutOrderSchema,
 } from '@/schemas/oxygen-checkout-order';
 import { oxygenOrderItemImage } from './oxygen-order-item-image';
@@ -17,7 +18,7 @@ export function OxygenMobileOrderSummary({
 }) {
   const preGatewayPaid = getOxygenOrderPreGatewayPaid(order);
   const netPayable = getOxygenOrderNetPayable(order);
-  const isPaid = (order.payment_status ?? '').trim().toLowerCase() === 'paid';
+  const isSettled = !isOxygenPreGatewayStatus(order.payment_status);
   const cart: CartItem[] = order.order_items.map((item) => ({
     id: item.id,
     cartItemId: item.id,
@@ -46,7 +47,7 @@ export function OxygenMobileOrderSummary({
       walletBalance={preGatewayPaid}
       payWithWallet={preGatewayPaid > 0}
       walletAmountUsed={preGatewayPaid}
-      remainingAmount={isPaid ? 0 : netPayable}
+      remainingAmount={isSettled ? 0 : netPayable}
       taxAmount={order.tax_amount}
     />
   );

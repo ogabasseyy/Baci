@@ -92,3 +92,30 @@ it('shows zero remaining amount when a credited Oxygen order is already paid', (
   const toggle = screen.getByRole('button', { name: /show order summary/i });
   expect(toggle).toHaveTextContent('₦0');
 });
+
+it('shows zero remaining amount when a credited Oxygen order is bnpl_approved without double-counting store credit', () => {
+  const id = '6974e8cc-4e90-4ca9-b2cf-aa2abaf461df';
+  render(
+    <OxygenMobileOrderSummary
+      order={{
+        id,
+        customer_name: 'Test buyer',
+        customer_email: 'test@example.com',
+        currency: 'NGN',
+        subtotal: 400000,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 400000,
+        payment_status: 'bnpl_approved',
+        amount_paid: 400000,
+        wallet_amount_used: 100000,
+        wallet_ledger_used: 100000,
+        order_items: [{ id, name: 'Saved phone', price: 400000, quantity: 1 }],
+      }}
+    />
+  );
+  const toggle = screen.getByRole('button', { name: /show order summary/i });
+  expect(toggle).toHaveTextContent('₦0');
+  fireEvent.click(toggle);
+  expect(screen.getByText('-₦100,000')).toBeInTheDocument();
+});

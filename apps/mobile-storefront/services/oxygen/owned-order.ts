@@ -22,6 +22,18 @@ const orderSchema = z.object({
   shipping_address: z.unknown().optional(),
   delivery_method: z.unknown().optional(),
 });
+export class ZeroBalanceOxygenOrderError extends Error {
+  readonly orderId: string;
+  readonly orderNumber?: string;
+
+  constructor(orderId: string, orderNumber?: string | null) {
+    super('Choose another payment option for this zero-balance order.');
+    this.name = 'ZeroBalanceOxygenOrderError';
+    this.orderId = orderId;
+    this.orderNumber = orderNumber ?? undefined;
+  }
+}
+
 export async function readOwnedOxygenOrder(
   orderId: string,
   customerId: string,
@@ -90,9 +102,7 @@ export async function readOwnedOxygenOrder(
     walletReversedCredit: walletSummary.reversedCredit,
   });
   if (isPreGateway && payableTotal <= 0) {
-    throw new Error(
-      'Choose another payment option for this zero-balance order.'
-    );
+    throw new ZeroBalanceOxygenOrderError(order.id, order.order_number);
   }
   return {
     ...order,

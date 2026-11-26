@@ -12,7 +12,10 @@ import { AddressSuggestionsProvider } from '@/components/ui/address-suggestions-
 import { oxygenLinkedCustomerPrefill } from '@/services/oxygen/customer-prefill';
 import { OxygenClientError } from '@/services/oxygen/errors';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
-import { readOwnedOxygenOrder } from '@/services/oxygen/owned-order';
+import {
+  readOwnedOxygenOrder,
+  ZeroBalanceOxygenOrderError,
+} from '@/services/oxygen/owned-order';
 import { useAuthStore } from '@/stores/auth-store';
 import { OxygenActionFooterProvider } from './OxygenActionFooter';
 import { OxygenApplicationLoading } from './OxygenApplicationLoading';
@@ -68,12 +71,17 @@ function CheckoutSession({
     orderPaymentStatus: string;
     prefill?: OxygenFields;
   } | null>(null);
+  const [zeroDueOrder, setZeroDueOrder] = useState<{
+    orderId: string;
+    orderNumber?: string;
+  } | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt is an explicit user retry trigger.
   useEffect(() => {
     let live = true;
     setError('');
+    setZeroDueOrder(null);
     void (async () => {
       const session = oxygenNativeSession();
       await session.capabilities(false).catch((failure: unknown) => {
@@ -109,11 +117,18 @@ function CheckoutSession({
             order.prefill
           ),
         });
-    })().catch(() => {
-      if (live)
-        setError(
-          'Could not load your saved Oxygen order. Check your account and connection.'
-        );
+    })().catch((failure: unknown) => {
+      if (!live) return;
+      if (failure instanceof ZeroBalanceOxygenOrderError) {
+        setZeroDueOrder({
+          orderId: failure.orderId,
+          orderNumber: failure.orderNumber,
+        });
+        return;
+      }
+      setError(
+        'Could not load your saved Oxygen order. Check your account and connection.'
+      );
     });
     return () => {
       live = false;
@@ -154,6 +169,31 @@ function CheckoutSession({
                 <OxygenAction
                   label="Try again"
                   onPress={() => setAttempt((n) => n + 1)}
+                />
+              </>
+            ) : zeroDueOrder ? (
+              <>
+                <Text style={{ color: colors.text }}>
+                  This order is fully covered by store credit. No Oxygen
+                  financing or additional payment is required.
+                </Text>
+                <OxygenAction
+                  label="View order confirmation"
+                  onPress={() =>
+                    router.replace({
+                      pathname: '/order-success',
+                      params: {
+                        orderId: zeroDueOrder.orderId,
+                        orderNumber: zeroDueOrder.orderNumber,
+                        paymentMethod: 'oxygen',
+                      },
+                    })
+                  }
+                />
+                <OxygenAction
+                  label="View my orders"
+                  secondary
+                  onPress={() => router.push('/orders')}
                 />
               </>
             ) : context && focused ? (

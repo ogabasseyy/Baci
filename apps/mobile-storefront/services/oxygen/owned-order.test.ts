@@ -138,7 +138,11 @@ it('rejects an unpaid zero-balance Oxygen order covered 100% by store credit', a
   });
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).rejects.toThrow('zero-balance order');
+  ).rejects.toMatchObject({
+    name: 'ZeroBalanceOxygenOrderError',
+    orderId,
+    message: expect.stringContaining('zero-balance order'),
+  });
 });
 
 it('does not treat settled amount_paid as store credit for paid or bnpl_approved orders', async () => {
@@ -238,7 +242,11 @@ it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen o
   );
   await expect(
     readOwnedOxygenOrder(orderId, customerId, merchantId)
-  ).rejects.toThrow('zero-balance order');
+  ).rejects.toMatchObject({
+    name: 'ZeroBalanceOxygenOrderError',
+    orderId,
+    message: expect.stringContaining('zero-balance order'),
+  });
 });
 
 it('subtracts partial pre-gateway amount_paid on pending orders and ignores reversed ledger credit', async () => {

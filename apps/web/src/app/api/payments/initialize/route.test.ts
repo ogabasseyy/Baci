@@ -2848,5 +2848,45 @@ describe('POST /api/payments/initialize', () => {
         onAmendmentClaim = undefined;
       }
     });
+
+    it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED when orders.total changes before gateway initialization', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      orderPaymentResult = {
+        data: {
+          total: 5000,
+          wallet_amount_used: 0,
+          amount_paid: 0,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      onAmendmentClaim = () => {
+        orderPaymentResult = {
+          data: {
+            total: 6000,
+            wallet_amount_used: 0,
+            amount_paid: 0,
+            payment_status: 'unpaid',
+          },
+          error: null,
+        };
+      };
+
+      try {
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(409);
+        expect(json.code).toBe('CHECKOUT_PAYMENT_DETAILS_CHANGED');
+        expect(mockInitializePaystack).not.toHaveBeenCalled();
+        expect(
+          rpcCalls.some((call) => call.name === 'create_payment_transaction')
+        ).toBe(false);
+      } finally {
+        onAmendmentClaim = undefined;
+      }
+    });
   });
 });

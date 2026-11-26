@@ -115,7 +115,7 @@ export async function readOrderPayableState(params: {
     const { data: orderPaymentRow, error: orderPaymentError } =
       await paymentDataClient
         .from('orders')
-        .select('wallet_amount_used, amount_paid, payment_status')
+        .select('total, wallet_amount_used, amount_paid, payment_status')
         .eq('id', orderId)
         .eq('merchant_id', merchantId)
         .single();
@@ -127,6 +127,22 @@ export async function readOrderPayableState(params: {
         code: 'ORDER_AMOUNT_LOOKUP_FAILED',
         status: 500,
       };
+    }
+
+    if (
+      recheckSnapshot &&
+      (orderPaymentRow as { total?: unknown }).total != null
+    ) {
+      const freshTotal = Number((orderPaymentRow as { total?: unknown }).total);
+      if (!Number.isFinite(freshTotal) || freshTotal <= 0) {
+        return {
+          ok: false,
+          message: 'Invalid order total',
+          code: 'INVALID_ORDER_TOTAL',
+          status: 400,
+        };
+      }
+      total = freshTotal;
     }
 
     const { data: walletRows, error: walletError } = await paymentDataClient

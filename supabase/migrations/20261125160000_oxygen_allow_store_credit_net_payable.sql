@@ -140,14 +140,34 @@ BEGIN
     IF TG_OP = 'UPDATE' AND (OLD.source_id, OLD.source_type, OLD.type, OLD.amount, OLD.status) IS NOT DISTINCT FROM (NEW.source_id, NEW.source_type, NEW.type, NEW.amount, NEW.status) THEN
       RETURN NEW;
     END IF;
-    IF TG_OP IN ('UPDATE', 'DELETE') AND ((OLD.source_type = 'order_redemption' AND OLD.type = 'redemption') OR OLD.source_type = 'order_reversal') THEN
+    -- Allow adding or completing order_reversal refunds even after an Oxygen
+    -- workflow exists so cancellations/refunds cannot trap customer credit;
+    -- only guard un-reversing/deleting completed reversals and any redemption writes.
+    IF TG_OP = 'INSERT' AND NEW.source_type = 'order_reversal' THEN
+      RETURN NEW;
+    END IF;
+    IF TG_OP = 'UPDATE'
+       AND OLD.source_type = 'order_reversal'
+       AND NEW.source_type = 'order_reversal'
+       AND OLD.source_id IS NOT DISTINCT FROM NEW.source_id
+       AND NEW.status = 'completed'
+       AND (OLD.status IS DISTINCT FROM 'completed' OR NEW.amount >= OLD.amount) THEN
+      RETURN NEW;
+    END IF;
+    IF TG_OP IN ('UPDATE', 'DELETE') AND ((OLD.source_type = 'order_redemption' AND OLD.type = 'redemption') OR (OLD.source_type = 'order_reversal' AND OLD.status = 'completed')) THEN
       v_old := OLD.source_id;
     END IF;
-    IF TG_OP <> 'DELETE' AND ((NEW.source_type = 'order_redemption' AND NEW.type = 'redemption') OR NEW.source_type = 'order_reversal') THEN
+    IF TG_OP <> 'DELETE' AND ((NEW.source_type = 'order_redemption' AND NEW.type = 'redemption') OR (NEW.source_type = 'order_reversal' AND OLD.source_type = 'order_reversal')) THEN
       v_new := NEW.source_id;
     END IF;
   ELSE
     IF TG_OP = 'UPDATE' AND (OLD.order_id, OLD.amount, OLD.metadata) IS NOT DISTINCT FROM (NEW.order_id, NEW.amount, NEW.metadata) THEN
+      RETURN NEW;
+    END IF;
+    -- Allow stamping metadata.reversed_at on savings redemptions when an order or goal is refunded/cancelled.
+    IF TG_OP = 'UPDATE'
+       AND (OLD.order_id, OLD.amount) IS NOT DISTINCT FROM (NEW.order_id, NEW.amount)
+       AND NULLIF(COALESCE(NEW.metadata, '{}'::jsonb) ->> 'reversed_at', '') IS NOT NULL THEN
       RETURN NEW;
     END IF;
     IF TG_OP IN ('UPDATE', 'DELETE') THEN

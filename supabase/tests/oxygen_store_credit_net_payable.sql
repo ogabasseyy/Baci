@@ -379,6 +379,23 @@ BEGIN
     IF v_net IS DISTINCT FROM 30000 THEN
       RAISE EXCEPTION 'Expected partially_paid reversed-wallet + gateway net payable 30000, got %', v_net;
     END IF;
+
+    -- Reversals/refunds remain permitted after an Oxygen workflow exists so customer credit is never trapped,
+    -- while new redemptions still fail closed under the workflow freeze.
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'customer_wallet_transactions'
+        AND column_name = 'wallet_id'
+    ) THEN
+      INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
+      VALUES ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',10000,10000,'order_reversal','ec310000-0000-4000-8000-000000000010');
+
+      UPDATE public.customer_savings_redemptions
+      SET metadata = jsonb_build_object('reversed_at', '2026-11-26T00:00:00Z')
+      WHERE order_id = 'ec310000-0000-4000-8000-000000000010';
+    END IF;
   END;
 END $test$;
 RESET ROLE;

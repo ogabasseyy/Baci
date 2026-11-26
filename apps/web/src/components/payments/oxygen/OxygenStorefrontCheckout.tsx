@@ -109,8 +109,8 @@ export async function OxygenStorefrontCheckout({
     savings_ledger_used: sumActiveSavingsLedgerCredit(savingsLedgerRows),
   };
   const netPayable = getOxygenOrderNetPayable(order);
-  const isZeroDuePreGateway =
-    isOxygenPreGatewayStatus(order.payment_status) && netPayable <= 0;
+  const isPreGateway = isOxygenPreGatewayStatus(order.payment_status);
+  const isZeroDuePreGateway = isPreGateway && netPayable <= 0;
   const names = order.customer_name?.trim().split(/\s+/) ?? [];
   const checkoutContact = oxygenCustomerPrefillSchema.safeParse({
     ...prefill,
@@ -138,7 +138,12 @@ export async function OxygenStorefrontCheckout({
             summary="Delivery selection saved with this order"
           />
           <CheckoutStepCard number={3} title="Payment Method" active>
-            {isZeroDuePreGateway ? (
+            {!isPreGateway ? (
+              <p className="text-sm text-muted-foreground">
+                This order has already been completed. No additional financing
+                or payment is required.
+              </p>
+            ) : isZeroDuePreGateway ? (
               <p className="text-sm text-muted-foreground">
                 This order is fully covered by store credit. No financing or
                 additional payment is required.

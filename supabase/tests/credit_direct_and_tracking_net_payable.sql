@@ -49,6 +49,14 @@ VALUES
   ('cd710000-0000-4000-8000-000000000014', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 30000, 10000, 'guest@example.test', 'cd-track-pp'),
   ('cd710000-0000-4000-8000-000000000015', 'cd710000-0000-4000-8000-000000000002', 'cd710000-0000-4000-8000-000000000003', 'CD-PARTIAL-PAID-GW-REV', 50000, 50000, 'NGN', 'partially_paid', 'credit_direct', 0, 0, 40000, 20000, 'guest@example.test', 'cd-track-pp-gw-rev');
 
+INSERT INTO public.order_items(order_id, product_id, name, price, quantity)
+VALUES
+  ('cd710000-0000-4000-8000-000000000010', 'cd710000-0000-4000-8000-000000000004', 'Credit Direct Phone', 50000, 1),
+  ('cd710000-0000-4000-8000-000000000011', 'cd710000-0000-4000-8000-000000000004', 'Credit Direct Phone', 50000, 1),
+  ('cd710000-0000-4000-8000-000000000012', 'cd710000-0000-4000-8000-000000000004', 'Credit Direct Phone', 50000, 1),
+  ('cd710000-0000-4000-8000-000000000013', 'cd710000-0000-4000-8000-000000000004', 'Credit Direct Phone', 50000, 1),
+  ('cd710000-0000-4000-8000-000000000014', 'cd710000-0000-4000-8000-000000000004', 'Credit Direct Phone', 50000, 1);
+
 INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, status, amount, balance_after, source_type, source_id)
 VALUES
   ('cd710000-0000-4000-8000-000000000005', 'cd710000-0000-4000-8000-000000000003', 'cd710000-0000-4000-8000-000000000002', 'redemption', 'completed', 10000, 0, 'order_redemption', 'cd710000-0000-4000-8000-000000000010'),
@@ -344,6 +352,7 @@ BEGIN
   ON CONFLICT (merchant_id) DO NOTHING;
 
   PERFORM set_config('request.jwt.claim.role', 'anon', true);
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
   IF public.claim_checkout_for_paid_order_amendment(
     'cd710000-0000-4000-8000-000000000010',
     'cd-track-partial',
@@ -432,6 +441,7 @@ BEGIN
   END;
 
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
+  PERFORM set_config('request.jwt.claims', '{"role":"service_role"}', true);
   v_tx_id := public.create_payment_transaction(
     'cd710000-0000-4000-8000-000000000002',
     'cd710000-0000-4000-8000-000000000010',

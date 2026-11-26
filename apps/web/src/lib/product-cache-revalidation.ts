@@ -10,7 +10,7 @@ import {
   getProductSlugSetCacheTag,
 } from '@/lib/product-cache-tags';
 import { sanitizeForLog } from '@/lib/sanitize-core';
-import { buildStorefrontProductsCacheTags } from '@/lib/storefront-products-cache-key';
+import { getStorefrontProductsCacheTag } from '@/lib/storefront-products-cache-key';
 
 export interface ProductRevalidationOptions {
   expireImmediately?: boolean;
@@ -164,10 +164,10 @@ function revalidateProducts(
 
   const entries: ProductTagEntry[] = [
     { profile: productsProfile, tag: `products-${normalizedMerchantId}` },
-    ...buildStorefrontProductsCacheTags(normalizedMerchantId).map((tag) => ({
+    {
       profile: productsProfile,
-      tag,
-    })),
+      tag: getStorefrontProductsCacheTag(normalizedMerchantId),
+    },
   ];
 
   const normalizedProductSlug = productSlug?.trim().toLowerCase();

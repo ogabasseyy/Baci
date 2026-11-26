@@ -15,6 +15,7 @@ type CartItems = ReturnType<typeof useCartStore.getState>['items'];
  * Extracted so CheckoutScreenView stays within the module-size cap.
  */
 export function useCheckoutScreenPayment({
+  appliedDiscountCode,
   customerId,
   customerPhone,
   deliveryFee,
@@ -25,6 +26,7 @@ export function useCheckoutScreenPayment({
   subtotal,
   userId,
 }: {
+  appliedDiscountCode?: string | null;
   customerId?: string;
   customerPhone?: string | null;
   deliveryFee: number;
@@ -37,6 +39,7 @@ export function useCheckoutScreenPayment({
 }) {
   const assuranceFee = calculateCheckoutAssuranceFee(items);
   const paymentController = useCheckoutPaymentController({
+    ...(appliedDiscountCode !== undefined ? { appliedDiscountCode } : {}),
     assuranceFee,
     customerId,
     customerPhone,

@@ -144,6 +144,7 @@ export async function drainStorefrontCacheInvalidation(
     }
     revalidateCategories(claim.merchant_id, undefined, {
       expireImmediately: true,
+      omitSharedProductTags: true,
     });
     for (const tag of [...dataTags, ...productTags]) {
       revalidateTag(tag, { expire: 0 });
@@ -158,6 +159,7 @@ export async function drainStorefrontCacheInvalidation(
       ...dataTags,
       ...productTags,
       ...buildStorefrontPublicationCacheTags(identity),
+      `merchant-feed-${claim.merchant_id}`,
     ],
     vercelTimeoutMs
   );

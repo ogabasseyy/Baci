@@ -26,7 +26,6 @@ import {
   getStorefrontLocale,
 } from '@/lib/storefront-localization';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
-import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import {
   buildProductComparisonMatrix,
   type ProductComparisonMatrix,
@@ -53,7 +52,7 @@ import {
   type CompareCategoryInventoryProduct,
   getCachedCompareCategoryInventory,
 } from './get-cached-compare-category-inventory';
-import { isSelfComparePair } from './is-self-compare-pair';
+import { prevalidateCompareRequest } from './prevalidate-compare-request';
 
 interface CompareBreadcrumbItem {
   name: string;
@@ -290,11 +289,24 @@ type CachedComparePageCore =
     > &
       CanonicalCompareIndexability & { overlay: BrandCompareOverlayContext });
 
+const COMPARE_PAGE_CACHE_LIFE = {
+  stale: 3600,
+  revalidate: 86400,
+  expire: 604800,
+} as const;
+
 export async function loadComparePage(args: {
   merchantSlug: string;
   categorySlug: string;
   comparisonSlug: string;
 }): Promise<ProductComparePageModel | BrandComparePageModel | null> {
+  // Fast-path reject malformed, overly long, or duplicate (`a-vs-a`) compare
+  // inputs BEFORE any DB or `'use cache'` lookup (including merchant resolution).
+  const parsed = prevalidateCompareRequest(args, logCompareRouteMiss);
+  if (!parsed) {
+    return null;
+  }
+
   // Resolve the merchant BEFORE any compare cache key is formed: unknown or
   // over-long identifiers exit here (bounded inside getMerchantByIdentifier),
   // so they never become `'use cache'` cache keys — and the resolved tenant id
@@ -312,7 +324,8 @@ export async function loadComparePage(args: {
     merchant.id,
     args.merchantSlug,
     args.categorySlug,
-    args.comparisonSlug
+    args.comparisonSlug,
+    parsed.canonicalSlug
   );
 }
 
@@ -321,13 +334,15 @@ const loadComparePageForRoute = cache(
     merchantId: string,
     merchantSlug: string,
     categorySlug: string,
-    comparisonSlug: string
+    comparisonSlug: string,
+    canonicalSlug: string
   ) =>
     loadComparePageForRequest({
       merchantId,
       merchantSlug,
       categorySlug,
       comparisonSlug,
+      canonicalSlug,
     })
 );
 
@@ -369,65 +384,8 @@ async function loadComparePageForRequest(args: {
   merchantSlug: string;
   categorySlug: string;
   comparisonSlug: string;
+  canonicalSlug: string;
 }): Promise<ProductComparePageModel | BrandComparePageModel | null> {
-  // Over-long / repeatedly-encoded bot categories can never match; bail before
-  // getCachedComparePageModel -> getCachedCompareCategoryInventory
-  // (local `'use cache'`, keyed on categorySlug) runs with an unbounded key.
-  // comparisonSlug is NOT gated here: it's a composite `${left}-vs-${right}` of
-  // two product slugs (each up to 200 chars), so the single-slug bound would
-  // wrongly 404 legitimate long compare URLs. The parsed halves are gated after
-  // parsing instead.
-  if (!evaluateStorefrontSlugSafety(args.categorySlug).safe) {
-    // Bound the logged slugs — an unsafe segment can be multi-KB and must not
-    // bloat the log line (the other misses log post-gate, already-bounded slugs).
-    logCompareRouteMiss({
-      merchantSlug: args.merchantSlug,
-      categorySlug: args.categorySlug.slice(0, 120),
-      comparisonSlug: args.comparisonSlug.slice(0, 120),
-      reason: 'unsafe_slug',
-    });
-    return null;
-  }
-
-  const parsed = parseCompareSlug(args.comparisonSlug);
-
-  if (!parsed) {
-    logCompareRouteMiss({
-      ...args,
-      reason: 'invalid_compare_slug',
-    });
-    return null;
-  }
-
-  // Gate the parsed halves (each a single product slug) before either reaches
-  // getCachedProductWithDetails (`'use cache'`) or becomes part of the cached
-  // compare model key. A valid product slug (<=200) passes; an over-long /
-  // repeatedly-encoded half from a bot `-vs-` blob does not, so the unbounded
-  // value never enters a cache key.
-  if (
-    !evaluateStorefrontSlugSafety(parsed.leftKey).safe ||
-    !evaluateStorefrontSlugSafety(parsed.rightKey).safe
-  ) {
-    logCompareRouteMiss({
-      merchantSlug: args.merchantSlug,
-      categorySlug: args.categorySlug.slice(0, 120),
-      comparisonSlug: args.comparisonSlug.slice(0, 120),
-      reason: 'unsafe_compare_key',
-    });
-    return null;
-  }
-
-  // This is the only missing-pair outcome known from the URL alone. Alias
-  // equivalence requires inventory/detail authority, so do not reject merely
-  // similar or canonicalized keys before the normal resolution path.
-  if (isSelfComparePair(parsed)) {
-    logCompareRouteMiss({
-      ...args,
-      reason: 'self_compare_pair',
-    });
-    return null;
-  }
-
   let core: CachedComparePageCore | null;
 
   try {
@@ -435,7 +393,7 @@ async function loadComparePageForRequest(args: {
       args.merchantId,
       args.merchantSlug,
       args.categorySlug,
-      parsed.canonicalSlug
+      args.canonicalSlug
     );
   } catch (error) {
     // Degrade the single failing request instead of poisoning the cache (the
@@ -460,14 +418,14 @@ async function loadComparePageForRequest(args: {
   // fallback indexability for this one request without caching it or 404ing.
   const model = await applyComparePageOverlay(core, args.merchantId);
 
-  const isCanonicalSlugRequest = args.comparisonSlug === parsed.canonicalSlug;
+  const isCanonicalSlugRequest = args.comparisonSlug === args.canonicalSlug;
 
   if (!(isCanonicalSlugRequest && model.isCanonicalSlugCurated)) {
     logNonCuratedCompareFallback({
       merchantSlug: args.merchantSlug,
       categorySlug: args.categorySlug,
       comparisonSlug: args.comparisonSlug,
-      canonicalSlug: parsed.canonicalSlug,
+      canonicalSlug: args.canonicalSlug,
     });
   }
 
@@ -588,12 +546,10 @@ async function getCachedComparePageModel(
   // same RemoteCacheHandler failures.
   'use cache';
   try {
-    // 'categories' (revalidate 3600): as a LOCAL entry, tag revalidation only
-    // evicts the instance that handled the mutation — other instances serve the
-    // prior snapshot until their window lapses. Extending this from 'products'
-    // (1800) to 'categories' (3600) cuts cold-fill CPU churn on compare pages
-    // while bounding cross-instance staleness to 1 hour.
-    cacheLife('categories');
+    // Compare pages change rarely and mutations already invalidate product,
+    // category, and merchant tags, so keep a long 24h revalidate / 7d expire
+    // window to cut cold-fill CPU churn.
+    cacheLife(COMPARE_PAGE_CACHE_LIFE);
   } catch {
     // Unit tests do not run with Next cacheComponents enabled.
   }

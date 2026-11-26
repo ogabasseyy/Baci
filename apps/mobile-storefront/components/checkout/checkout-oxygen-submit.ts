@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { type CreateOrderRequest, createOrder } from '@/services/orders';
+import {
+  type CreateOrderRequest,
+  createOrder,
+  OrderError,
+} from '@/services/orders';
 
 type Input = {
   request: CreateOrderRequest;
@@ -18,31 +22,32 @@ type OxygenOrderItem = CreateOrderRequest['items'][number] & {
   voucherAwardId?: unknown;
 };
 
-function prepareOxygenOrderItem({
-  voucher_token,
-  voucher_award_id,
-  voucherToken,
-  voucherAwardId,
-  ...item
-}: OxygenOrderItem) {
-  for (const [voucherField, value] of Object.entries({
-    voucher_token,
-    voucher_award_id,
-    voucherToken,
-    voucherAwardId,
-  })) {
+const OXYGEN_VOUCHER_FIELDS = [
+  'voucher_token',
+  'voucher_award_id',
+  'voucherToken',
+  'voucherAwardId',
+] as const;
+
+function prepareOxygenOrderItem(
+  item: OxygenOrderItem
+): CreateOrderRequest['items'][number] {
+  const cleanedItem: Record<string, unknown> = { ...item };
+  for (const voucherField of OXYGEN_VOUCHER_FIELDS) {
+    const value = cleanedItem[voucherField];
     if (value === undefined || value === null) continue;
-    // The field name helps diagnose malformed carts without logging the code.
-    const options = { cause: voucherField };
-    if (typeof value !== 'string')
-      throw new Error('Invalid voucher identifier', options);
-    if (value.trim())
-      throw new Error(
-        'Oxygen requires a cart without vouchers or store credit',
-        options
-      );
+    if (typeof value !== 'string') {
+      // Preserve cause field name for malformed cart diagnostics without logging the code.
+      throw new Error('Invalid voucher identifier', { cause: voucherField });
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      delete cleanedItem[voucherField];
+      continue;
+    }
+    cleanedItem[voucherField] = trimmed;
   }
-  return item;
+  return cleanedItem as CreateOrderRequest['items'][number];
 }
 
 export async function submitOxygenCheckout(
@@ -50,21 +55,12 @@ export async function submitOxygenCheckout(
   dependencies?: Dependencies
 ) {
   // This client check provides early feedback. POST /api/orders enforces admission.
-  if (
-    !input.isAuthenticated ||
-    input.hasVoucher ||
-    input.hasCredits ||
-    input.request.payment_method !== 'oxygen' ||
-    input.request.use_wallet_credit ||
-    input.request.use_savings_credit ||
-    (input.request.wallet_amount ?? 0) > 0 ||
-    (input.request.savings_amount ?? 0) > 0
-  ) {
-    throw new Error(
-      'Oxygen requires a signed-in customer and a cart without vouchers or store credit'
-    );
+  if (!input.isAuthenticated || input.request.payment_method !== 'oxygen') {
+    throw new Error('Oxygen requires a signed-in customer');
   }
-  const items = input.request.items.map(prepareOxygenOrderItem);
+  const items = input.request.items.map((item) =>
+    prepareOxygenOrderItem(item as OxygenOrderItem)
+  );
   const deps = dependencies ?? {
     readOwner: async () => {
       const { oxygenNativeSession } = await import(
@@ -102,9 +98,38 @@ export async function submitOxygenCheckout(
     throw new Error(
       'Could not confirm the saved Oxygen order. Please try again.'
     );
-  if (order.total <= 0)
-    throw new Error(
-      'Choose another payment option for this zero-balance order.'
-    );
-  return result;
+  const appliedCredit =
+    (result.wallet?.amountUsed ?? 0) + (result.savings?.amountUsed ?? 0);
+  const resolvedAmountDue =
+    result.amountDueToGateway ?? Math.max(0, order.total - appliedCredit);
+  if (order.total <= 0 || resolvedAmountDue <= 0) {
+    const normalizedPaymentStatus =
+      order.payment_status?.trim().toLowerCase() ?? '';
+    if (
+      normalizedPaymentStatus !== 'paid' &&
+      normalizedPaymentStatus !== 'bnpl_approved'
+    ) {
+      throw new OrderError(
+        'Your store credit could not complete this order. Please try again.',
+        'STORE_CREDIT_NOT_SETTLED'
+      );
+    }
+    return {
+      ...result,
+      order:
+        normalizedPaymentStatus === order.payment_status
+          ? order
+          : {
+              ...order,
+              payment_status: normalizedPaymentStatus,
+            },
+      amountDueToGateway: 0,
+    };
+  }
+  return result.amountDueToGateway !== undefined
+    ? result
+    : {
+        ...result,
+        amountDueToGateway: resolvedAmountDue,
+      };
 }

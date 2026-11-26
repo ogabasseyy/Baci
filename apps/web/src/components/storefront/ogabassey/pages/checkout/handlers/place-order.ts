@@ -69,17 +69,19 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     return;
   }
 
+  const clientPayableAmount = payWithWallet ? total - walletAmountUsed : total;
+
   if (
     paymentMethod === 'oxygen' &&
-    ((!isOxygenStorefrontStagingEnabled() && !(await checkOxygenStorefrontAvailability(merchant.id))) ||
+    clientPayableAmount > 0 &&
+    ((!isOxygenStorefrontStagingEnabled() &&
+      !(await checkOxygenStorefrontAvailability(merchant.id))) ||
       currency !== 'NGN' ||
-      !user ||
-      payWithWallet)
+      !user)
   ) {
     toast({
       title: 'Oxygen setup unavailable',
-      description:
-        'Sign in and use the full order amount to continue with Oxygen.',
+      description: 'Sign in with your account to continue with Oxygen.',
       variant: 'destructive',
     });
     isOrderInFlightRef.current = false;
@@ -153,7 +155,6 @@ export async function handlePlaceOrder(opts: PlaceOrderOptions): Promise<void> {
     return;
   }
   const shippingProvider = shippingProviderResolution.provider;
-  const clientPayableAmount = payWithWallet ? total - walletAmountUsed : total;
   const billingAddressLine1 =
     deliveryMethod === 'door' && isNewAddressMode
       ? newAddressStreet

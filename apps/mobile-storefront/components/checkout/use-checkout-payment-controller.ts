@@ -22,10 +22,10 @@ import {
   getKlumpDisabledReason,
   shouldHideKlumpPaymentMethod,
 } from '@/lib/klump-checkout';
-import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
 import type { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { computeCheckoutDisplayAndKlumpGateTotals } from './checkout-store-credit';
 import { isEligibleForWalletFundedBankTransfer } from './is-eligible-for-wallet-funded-bank-transfer';
 import { submitWalletTransferChecks } from './is-submit-wallet-transfer-held';
 import { useOxygenCheckoutAvailability } from './use-oxygen-checkout-availability';
@@ -35,6 +35,7 @@ import { useTransferModeAtSelection } from './use-transfer-mode-at-selection';
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
 
 interface UseCheckoutPaymentControllerParams {
+  appliedDiscountCode?: string | null;
   assuranceFee: number;
   customerId?: string;
   customerPhone?: string | null;
@@ -49,6 +50,7 @@ interface UseCheckoutPaymentControllerParams {
 }
 
 export function useCheckoutPaymentController({
+  appliedDiscountCode,
   assuranceFee,
   customerId,
   customerPhone,
@@ -122,10 +124,6 @@ export function useCheckoutPaymentController({
 
   const transferMode = useTransferModeAtSelection(setSelectedPaymentState);
   const handleSelectPaymentMethod = (method: PaymentMethodType) => {
-    if (method === 'oxygen') {
-      setWalletSelection(undefined);
-      savings.setSavingsSelection(undefined);
-    }
     transferMode.capture(method, walletFundedBankTransferOptionEnabled);
     setSelectedPaymentState(method);
     setPaymentTab(getPaymentTabForMethod(method));
@@ -213,56 +211,41 @@ export function useCheckoutPaymentController({
             walletQuery.isRefetching ||
             walletQuery.isError)),
     });
-  const storeCreditCompatible = isStoreCreditCompatiblePayment({
-    paymentTab,
-    selectedPayment,
-  });
-  const liveSavingsSelectionForKlumpGate = savings.getLiveSavingsSelection({
-    isStoreCreditCompatible: storeCreditCompatible,
+  const {
+    liveSavingsSelectionForKlumpGate,
+    liveWalletSelectionForKlumpGate,
+    netPayableForKlumpGate,
+    stepDisplayTotal,
+  } = computeCheckoutDisplayAndKlumpGateTotals({
+    appliedDiscountCode,
+    assuranceFee,
+    checkoutSavingsBalance: savings.checkoutSavingsBalance,
+    deliveryFee,
+    getLiveSavingsSelection: savings.getLiveSavingsSelection,
     items,
-    orderTotal: total,
+    paymentTab,
+    savingsSelectionUse: savings.savingsSelection?.use === true,
+    selectedPayment,
+    step,
+    subtotal,
+    total,
+    walletBalance,
+    walletSelection,
   });
-  const walletResidualForKlumpGate = Math.max(
-    total - (liveSavingsSelectionForKlumpGate?.amount ?? 0),
-    0
-  );
-  const liveWalletSelectionForKlumpGate: WalletSelection | undefined =
-    walletSelection?.use === true && storeCreditCompatible
-      ? {
-          use: true,
-          amount: Math.max(
-            0,
-            Math.min(walletBalance, walletResidualForKlumpGate)
-          ),
-        }
-      : undefined;
-
-  const baseTotal =
-    step === 'review' ? total : subtotal + deliveryFee + assuranceFee;
-  const activeSavings =
-    storeCreditCompatible && savings.savingsSelection?.use === true
-      ? Math.min(savings.checkoutSavingsBalance, baseTotal)
-      : 0;
-  const baseResidualAfterSavings = Math.max(baseTotal - activeSavings, 0);
-  const activeWallet =
-    storeCreditCompatible && walletSelection?.use === true
-      ? Math.min(walletBalance, baseResidualAfterSavings)
-      : 0;
-  const stepDisplayTotal = Math.max(
-    baseTotal - activeSavings - activeWallet,
-    0
-  );
 
   return {
     availablePaymentMethods,
     displayTotal: stepDisplayTotal,
     handleSelectPaymentTab,
-    hiddenPaymentMethods: shouldHideKlumpPaymentMethod(paymentSettings, total)
+    hiddenPaymentMethods: shouldHideKlumpPaymentMethod(
+      paymentSettings,
+      netPayableForKlumpGate
+    )
       ? (['klump'] satisfies PaymentMethodType[])
       : [],
     klumpDisabledReason: getKlumpDisabledReason(
       paymentSettings,
-      total,
+      netPayableForKlumpGate,
       liveWalletSelectionForKlumpGate,
       liveSavingsSelectionForKlumpGate
     ),

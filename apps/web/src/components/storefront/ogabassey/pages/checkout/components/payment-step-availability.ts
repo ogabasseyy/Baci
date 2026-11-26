@@ -1,6 +1,5 @@
 import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import type { PaymentMethod } from '../types';
-import { isGatewayAmountDifferentFromOrderTotal } from '../utils';
 
 const DEFAULT_KLUMP_MIN_AMOUNT = 10_000;
 const DEFAULT_KLUMP_MAX_AMOUNT = 1_000_000;
@@ -37,8 +36,13 @@ export function isNgnChargeCurrency(currency?: string | null): boolean {
   );
 }
 
-function isOxygenEligible(input: { oxygenAllowed: boolean; currency?: string | null; orderAmount: number; payableAmount: number }): boolean {
-  return (input.oxygenAllowed || isOxygenStorefrontStagingEnabled()) && isNgnChargeCurrency(input.currency) && input.payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(input.payableAmount, input.orderAmount);
+function isOxygenEligible(input: { oxygenAllowed: boolean; currency?: string | null; orderAmount?: number; payableAmount: number }): boolean {
+  return (
+    (input.oxygenAllowed || isOxygenStorefrontStagingEnabled()) &&
+    isNgnChargeCurrency(input.currency) &&
+    Number.isFinite(input.payableAmount) &&
+    input.payableAmount > 0
+  );
 }
 
 function toAmountLimit(
@@ -66,12 +70,11 @@ function toAmountLimit(
 export function isKlumpEligible({
   featureSettings,
   currency,
-  orderAmount,
   payableAmount,
 }: {
   featureSettings?: FeatureSettings | null;
   currency?: string | null;
-  orderAmount: number;
+  orderAmount?: number;
   payableAmount: number;
 }): boolean {
   if (featureSettings?.klump_enabled !== true) {
@@ -82,7 +85,7 @@ export function isKlumpEligible({
     return false;
   }
 
-  if (isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) {
+  if (!Number.isFinite(payableAmount) || payableAmount <= 0) {
     return false;
   }
 
@@ -101,12 +104,11 @@ export function isKlumpEligible({
 export function isCreditDirectEligible({
   featureSettings,
   currency,
-  orderAmount,
   payableAmount,
 }: {
   featureSettings?: FeatureSettings | null;
   currency?: string | null;
-  orderAmount: number;
+  orderAmount?: number;
   payableAmount: number;
 }): boolean {
   if (featureSettings?.credit_direct_enabled !== true) {
@@ -117,7 +119,7 @@ export function isCreditDirectEligible({
     return false;
   }
 
-  if (isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) {
+  if (!Number.isFinite(payableAmount) || payableAmount <= 0) {
     return false;
   }
 

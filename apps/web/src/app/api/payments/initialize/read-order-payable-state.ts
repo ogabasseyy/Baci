@@ -57,12 +57,9 @@ export async function readOrderPayableState(params: {
   } = params;
 
   let total = snapshotTotal;
-  let walletAmountUsed = 0;
-  let walletLedgerUsed = 0;
-  let walletReversedCredit = 0;
+  let walletFromOrderRow = 0;
   let amountPaidFromOrderRow = 0;
   let orderPaymentStatus = 'unpaid';
-  let hasWalletReversal = false;
 
   if (redvaultRequested) {
     let snapshot: OrderSnapshotPaymentFields = initialOrderSnapshot;
@@ -99,7 +96,7 @@ export async function readOrderPayableState(params: {
       }
       total = freshTotal;
     }
-    walletAmountUsed = Math.max(
+    walletFromOrderRow = Math.max(
       numberOrDefault(snapshot.wallet_amount_used, 0),
       0
     );
@@ -143,21 +140,6 @@ export async function readOrderPayableState(params: {
       total = freshTotal;
     }
 
-    const { data: walletRows, error: walletError } = await paymentDataClient
-      .from('customer_wallet_transactions')
-      .select('amount, status, source_type, type')
-      .eq('source_id', orderId)
-      .eq('merchant_id', merchantId);
-
-    if (walletError) {
-      return {
-        ok: false,
-        message: 'Unable to verify order wallet amount',
-        code: 'ORDER_WALLET_LOOKUP_FAILED',
-        status: 500,
-      };
-    }
-
     const typedOrderPaymentRow = orderPaymentRow as {
       wallet_amount_used?: unknown;
       amount_paid?: unknown;
@@ -172,18 +154,10 @@ export async function readOrderPayableState(params: {
         ? typedOrderPaymentRow.payment_status
         : 'unpaid';
 
-    const walletFromOrderRow = Math.max(
+    walletFromOrderRow = Math.max(
       numberOrDefault(typedOrderPaymentRow.wallet_amount_used, 0),
       0
     );
-    const walletSummary = summarizeWalletLedgerCredit(walletRows);
-    walletLedgerUsed = walletSummary.netCredit;
-    walletReversedCredit = walletSummary.reversedCredit;
-    hasWalletReversal = walletSummary.hasCompletedReversal;
-
-    walletAmountUsed = hasWalletReversal
-      ? walletLedgerUsed
-      : Math.max(walletFromOrderRow, walletLedgerUsed);
   }
 
   const normalizedOrderPaymentStatus = orderPaymentStatus.trim().toLowerCase();
@@ -203,11 +177,30 @@ export async function readOrderPayableState(params: {
     };
   }
 
-  const { data: savingsRows, error: savingsError } = await paymentDataClient
-    .from('customer_savings_redemptions')
-    .select('amount, metadata')
-    .eq('order_id', orderId)
-    .eq('merchant_id', merchantId);
+  const [
+    { data: walletRows, error: walletError },
+    { data: savingsRows, error: savingsError },
+  ] = await Promise.all([
+    paymentDataClient
+      .from('customer_wallet_transactions')
+      .select('amount, status, source_type, type')
+      .eq('source_id', orderId)
+      .eq('merchant_id', merchantId),
+    paymentDataClient
+      .from('customer_savings_redemptions')
+      .select('amount, metadata')
+      .eq('order_id', orderId)
+      .eq('merchant_id', merchantId),
+  ]);
+
+  if (walletError) {
+    return {
+      ok: false,
+      message: 'Unable to verify order wallet amount',
+      code: 'ORDER_WALLET_LOOKUP_FAILED',
+      status: 500,
+    };
+  }
 
   if (savingsError) {
     return {
@@ -218,12 +211,19 @@ export async function readOrderPayableState(params: {
     };
   }
 
+  const walletSummary = summarizeWalletLedgerCredit(walletRows);
+  const walletLedgerUsed = walletSummary.netCredit;
+  const walletReversedCredit = walletSummary.reversedCredit;
+  const hasWalletReversal = walletSummary.hasCompletedReversal;
+  const walletAmountUsed = hasWalletReversal
+    ? walletLedgerUsed
+    : Math.max(walletFromOrderRow, walletLedgerUsed);
   const savingsAmountUsed = sumActiveSavingsLedgerCredit(savingsRows);
   const payableAmount = computeOrderNetPayable({
     total,
     amountPaid: amountPaidFromOrderRow,
     walletAmountUsed,
-    walletLedgerUsed: redvaultRequested ? walletAmountUsed : walletLedgerUsed,
+    walletLedgerUsed,
     walletReversedCredit,
     savingsLedgerUsed: savingsAmountUsed,
     paymentStatus: orderPaymentStatus,

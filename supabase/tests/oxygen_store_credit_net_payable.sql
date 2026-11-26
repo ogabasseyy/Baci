@@ -380,6 +380,30 @@ BEGIN
       RAISE EXCEPTION 'Expected partially_paid reversed-wallet + gateway net payable 30000, got %', v_net;
     END IF;
 
+    -- Cross-merchant ledger rows with the same order id are ignored by order_net_payable_for_order.
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'customer_wallet_transactions'
+        AND column_name = 'wallet_id'
+    ) THEN
+      INSERT INTO public.merchants(id,user_id,email,business_name,slug)
+      VALUES ('ec310000-0000-4000-8000-000000000092','ec310000-0000-4000-8000-000000000001','foreign@example.com','Foreign Store','foreign-store')
+      ON CONFLICT (id) DO NOTHING;
+
+      INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
+      VALUES ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000092','redemption','completed',30000,0,'order_redemption','ec310000-0000-4000-8000-000000000010');
+
+      INSERT INTO public.customer_savings_redemptions(goal_id,merchant_id,customer_id,order_id,amount,idempotency_key)
+      VALUES ('ec310000-0000-4000-8000-000000000032','ec310000-0000-4000-8000-000000000092','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000010',15000,'oxy-foreign-merchant');
+
+      v_net := oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000010', 50000, 15000, 10000, 'unpaid');
+      IF v_net IS DISTINCT FROM 35000 THEN
+        RAISE EXCEPTION 'Cross-merchant ledger rows leaked into order_net_payable_for_order: got %', v_net;
+      END IF;
+    END IF;
+
     -- Reversals/refunds remain permitted after an Oxygen workflow exists so customer credit is never trapped,
     -- while new redemptions still fail closed under the workflow freeze.
     IF EXISTS (

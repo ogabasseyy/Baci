@@ -19,6 +19,7 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
+  v_merchant_id uuid;
   v_wallet_ledger numeric := 0;
   v_wallet_reversed numeric := 0;
   v_has_wallet_reversal boolean := false;
@@ -33,6 +34,11 @@ BEGIN
   END IF;
 
   IF p_order_id IS NOT NULL THEN
+    SELECT o.merchant_id
+      INTO v_merchant_id
+    FROM public.orders o
+    WHERE o.id = p_order_id;
+
     SELECT
       GREATEST(
         COALESCE(SUM(GREATEST(t.amount, 0)) FILTER (
@@ -56,12 +62,16 @@ BEGIN
       INTO v_wallet_ledger, v_wallet_reversed, v_has_wallet_reversal
     FROM public.customer_wallet_transactions t
     WHERE t.source_id = p_order_id
+      AND v_merchant_id IS NOT NULL
+      AND t.merchant_id = v_merchant_id
       AND t.source_type IN ('order_redemption', 'order_reversal');
 
     SELECT COALESCE(SUM(GREATEST(r.amount, 0)), 0)
       INTO v_savings_ledger
     FROM public.customer_savings_redemptions r
     WHERE r.order_id = p_order_id
+      AND v_merchant_id IS NOT NULL
+      AND r.merchant_id = v_merchant_id
       AND NOT (COALESCE(r.metadata, '{}'::jsonb) ? 'reversed_at');
   END IF;
 

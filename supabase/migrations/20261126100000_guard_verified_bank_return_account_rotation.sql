@@ -37,6 +37,28 @@ CREATE TRIGGER paid_order_bank_account_rotation_guard
 BEFORE UPDATE OF bank_account_id ON private.paid_order_amendment_config
 FOR EACH ROW EXECUTE FUNCTION private.prevent_bank_account_rotation_with_open_return_claim();
 
+-- Defense in depth for direct RPC callers: new POS tender evidence must match
+-- the public 8-100 character receipt-reference contract. Existing rows remain
+-- readable so exact replay of previously accepted references is preserved.
+CREATE FUNCTION private.validate_paid_order_pos_receipt_reference()
+RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  reference text;
+BEGIN
+  IF NEW.collection_method = 'pos' AND NEW.bank_transaction_id LIKE 'tender:pos:%' THEN
+    reference := substring(NEW.bank_transaction_id FROM length('tender:pos:') + 1);
+    IF reference !~ '^[A-Za-z0-9][A-Za-z0-9_.:/-]{7,99}$' THEN
+      RAISE EXCEPTION 'invalid_amendment_confirmation' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER paid_order_pos_receipt_reference_guard
+BEFORE INSERT ON private.paid_order_bank_evidence
+FOR EACH ROW EXECUTE FUNCTION private.validate_paid_order_pos_receipt_reference();
+
 CREATE OR REPLACE FUNCTION public.register_paid_order_tender_receipt(
   p_order_id uuid,p_method text,p_receipt_reference text,p_reconciliation_reference text,
   p_amount_minor bigint,p_occurred_at timestamptz

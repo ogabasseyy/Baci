@@ -59,6 +59,7 @@ BEGIN
       END;
       FOREACH payload IN ARRAY ARRAY[
         jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('SHORT7'::text)),
+        -- Seven characters must be rejected by the database guard.
         jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('ABCDEFG'::text)),
         jsonb_set(payload,'{staffTopUp,receiptReference}',to_jsonb('-POS-12345'::text))
       ] LOOP

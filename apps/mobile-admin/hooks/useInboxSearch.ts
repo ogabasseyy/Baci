@@ -52,7 +52,9 @@ export function useInboxSearch(rawTerm: string) {
   const pages = query.data?.pages.length ?? 0;
   // A failed page keeps its data and `hasNextPage`: stop auto-skipping there
   // (the retry is the person's), or the same failing request would repeat.
-  const failed = query.isError || query.isFetchNextPageError;
+  // Only for the term on screen: while the next one is being typed, the last
+  // one's failure is not its failure.
+  const failed = current && (query.isError || query.isFetchNextPageError);
   const skipping =
     current &&
     !failed &&
@@ -83,13 +85,14 @@ export function useInboxSearch(rawTerm: string) {
     loadMoreFailed: query.isFetchNextPageError && results.length > 0,
     loadMore: () => {
       // Not while any fetch runs: asking for the next page cancels a refresh of
-      // the cached pages and keeps their outdated snapshot.
+      // the cached pages and keeps their outdated snapshot. One can start
+      // before this render hears of it, so the request joins it instead.
       if (
         query.hasNextPage &&
         !query.isFetching &&
         !query.isFetchNextPageError
       ) {
-        query.fetchNextPage();
+        query.fetchNextPage({ cancelRefetch: false });
       }
     },
     /**

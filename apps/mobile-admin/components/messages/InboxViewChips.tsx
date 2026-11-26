@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 36,
+    minHeight: SPACING.touchTarget,
     paddingHorizontal: SPACING.md + 2,
   },
   label: {

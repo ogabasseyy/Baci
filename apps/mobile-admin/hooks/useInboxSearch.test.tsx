@@ -109,6 +109,25 @@ describe('useInboxSearch', () => {
     expect(result.current.results).toEqual([]);
   });
 
+  it("bugfix: does not show the last term's error while the next one is typed", async () => {
+    mocks.search.mockRejectedValue(new Error('down'));
+    const { result, rerender } = renderHook(
+      ({ term }) => useInboxSearch(term),
+      { initialProps: { term: 'order' }, wrapper }
+    );
+    await settle(DEBOUNCE + 100);
+    expect(result.current.isError).toBe(true);
+
+    rerender({ term: 'orders' });
+
+    expect(result.current.isError).toBe(false);
+    expect(result.current.isPending).toBe(true);
+    await settle(DEBOUNCE + 100);
+    // Searched and failed in its own right: now the error is about this term.
+    expect(mocks.search).toHaveBeenLastCalledWith('orders', 1);
+    expect(result.current.isError).toBe(true);
+  });
+
   it('does not search until the merchant is known', async () => {
     mocks.merchant.mockReturnValue({ merchant: null });
     renderHook(() => useInboxSearch('order'), { wrapper });

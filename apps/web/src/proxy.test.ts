@@ -3066,7 +3066,7 @@ describe('Middleware Proxy', () => {
       'public, max-age=0, must-revalidate'
     );
     expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe(
-      'max-age=300, stale-while-revalidate=86400'
+      'max-age=3600, stale-while-revalidate=86400'
     );
     expect(res.headers.get('CDN-Cache-Control')).toBe(
       'max-age=3600, stale-while-revalidate=86400, stale-if-error=86400'
@@ -3226,6 +3226,7 @@ describe('Middleware Proxy', () => {
         'max-age=300, stale-while-revalidate=86400, stale-if-error=86400',
       edgeCached: true,
       url: 'https://ogabassey.com/smartphones/samsung-galaxy-z-fold-4',
+      vercelCacheControl: 'max-age=300, stale-while-revalidate=86400',
     },
     // Nested SEO listing subroutes keep their own (legacy) cacheable header.
     {
@@ -3240,6 +3241,7 @@ describe('Middleware Proxy', () => {
     downstreamCacheControl = 'max-age=3600, stale-while-revalidate=86400, stale-if-error=86400',
     edgeCached,
     url,
+    vercelCacheControl = 'max-age=3600, stale-while-revalidate=86400',
   }) => {
     const req = new NextRequest(url);
     req.headers.set('host', new URL(url).host);
@@ -3252,7 +3254,7 @@ describe('Middleware Proxy', () => {
     if (edgeCached) {
       expect(cacheControl).toBe('public, max-age=0, must-revalidate');
       expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe(
-        'max-age=300, stale-while-revalidate=86400'
+        vercelCacheControl
       );
       expect(res.headers.get('CDN-Cache-Control')).toBe(downstreamCacheControl);
     } else {

@@ -22,7 +22,10 @@ import { sanitizeForLog } from '@/lib/sanitize-core';
 export function revalidateCategories(
   merchantId: string,
   categorySlug?: string,
-  options: { expireImmediately?: boolean } = {}
+  options: {
+    expireImmediately?: boolean;
+    omitSharedProductTags?: boolean;
+  } = {}
 ) {
   const normalizedMerchantId = normalizeMerchantId(merchantId);
   if (!normalizedMerchantId) {
@@ -46,18 +49,20 @@ export function revalidateCategories(
 
   revalidateTag(`categories-${normalizedMerchantId}`, profile);
   revalidateTag(`navigation-categories-${normalizedMerchantId}`, profile);
-  revalidateTag(
-    getCategoryPageDataCacheTag(normalizedMerchantId),
-    storefrontProfile
-  );
-  revalidateTag(
-    getProductCanonicalRedirectCacheTag(normalizedMerchantId),
-    productProfile
-  );
-  revalidateTag(
-    getProductLegacyRedirectCacheTag(normalizedMerchantId),
-    productProfile
-  );
+  if (!options.omitSharedProductTags) {
+    revalidateTag(
+      getCategoryPageDataCacheTag(normalizedMerchantId),
+      storefrontProfile
+    );
+    revalidateTag(
+      getProductCanonicalRedirectCacheTag(normalizedMerchantId),
+      productProfile
+    );
+    revalidateTag(
+      getProductLegacyRedirectCacheTag(normalizedMerchantId),
+      productProfile
+    );
+  }
 
   if (categorySlug) {
     revalidateTag(`category-${normalizedMerchantId}-${categorySlug}`, profile);

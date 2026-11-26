@@ -75,6 +75,7 @@ export async function PATCH(
   await recoverAcceptedFollowUpReminder(resolved.supabase, resolved.binding, {
     conversationId: conversationId.data,
     update: update.data,
+    sent: 'followUpSent' in result ? result.followUpSent : undefined,
   });
   return merchantInboxError(
     503,

@@ -146,6 +146,22 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
     });
   });
 
+  it('bugfix: records an applied follow-up when the chat cannot be read back', async () => {
+    mocks.update.mockResolvedValue({
+      ok: false,
+      code: 'unavailable',
+      followUpSent: { state: 'applied', customerName: 'Ada' },
+    });
+    mocks.read.mockResolvedValue({ ok: false, code: 'unavailable' });
+
+    const update = { followUpAt: '2026-11-25T09:00:00Z' };
+    expect((await patch('7', update)).status).toBe(503);
+    expect(mocks.sync).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ update, customerName: 'Ada' })
+    );
+  });
+
   it.each([
     ['an empty change', {}],
     ['an unknown key', { status: 'open', merchantId: 'other' }],

@@ -75,6 +75,15 @@ async function providerPost(
 const unavailable: MerchantInboxFailure = { ok: false, code: 'unavailable' };
 
 /**
+ * On a failure that came after a snooze was sent and not refused: `applied`
+ * when the engine took it, `unconfirmed` when it may still land.
+ */
+export type SentFollowUp = {
+  state: 'applied' | 'unconfirmed';
+  customerName: string;
+};
+
+/**
  * Reads the live labels, applies the change and writes the whole list back
  * (the provider replaces it). The engine has no conditional update, so two
  * writers changing one chat's labels in the same instant can overwrite each
@@ -146,7 +155,7 @@ export async function updateMerchantInboxConversation(
   }
 ): Promise<
   | { ok: true; conversation: MerchantInboxConversation }
-  | MerchantInboxFailure
+  | (MerchantInboxFailure & { followUpSent?: SentFollowUp })
   | { ok: false; code: 'invalid_follow_up' }
 > {
   const { conversationId, update } = input;
@@ -158,6 +167,9 @@ export async function updateMerchantInboxConversation(
   const tagChange = { addTags: update.addTags, removeTags: update.removeTags };
   let followUp: boolean | undefined;
   let labelsSaved = false;
+  let sent: SentFollowUp | undefined;
+  const fail = (result: MerchantInboxFailure = unavailable) =>
+    sent ? { ...result, followUpSent: sent } : result;
 
   if (update.status === 'resolved') {
     if (
@@ -196,12 +208,13 @@ export async function updateMerchantInboxConversation(
     // applied, or may still land after any check made now, so the label is
     // never taken back off; a chat that shows in the Follow-up view beats one
     // that vanished. If the engine shows it as snoozed, carry on.
-    if (
-      snooze === 'unknown' &&
-      !(await snoozeApplied(binding, conversationId, at))
-    ) {
-      return unavailable;
-    }
+    const applied =
+      snooze === 'ok' || (await snoozeApplied(binding, conversationId, at));
+    sent = {
+      state: applied ? 'applied' : 'unconfirmed',
+      customerName: owned.conversation.customerName,
+    };
+    if (!applied) return fail();
   } else if (update.status === 'open' || followUpAt === null) {
     // Reopening is for an explicit "open" or for a snoozed chat whose
     // follow-up is being cleared. Clearing a follow-up never reopens finished
@@ -229,16 +242,16 @@ export async function updateMerchantInboxConversation(
         priority: update.priority,
       }))
     )
-      return unavailable;
+      return fail();
   }
 
   const tagsChange =
     (update.addTags?.length ?? 0) > 0 || (update.removeTags?.length ?? 0) > 0;
   if (!labelsSaved && (tagsChange || followUp !== undefined)) {
     const failed = await writeLabels(binding, base, { ...tagChange, followUp });
-    if (failed) return failed;
+    if (failed) return fail(failed);
   }
 
   const fresh = await getMerchantInboxConversation(binding, conversationId);
-  return fresh.ok ? fresh : unavailable;
+  return fresh.ok ? fresh : fail();
 }

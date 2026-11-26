@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), sync: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  read: vi.fn(),
+  sync: vi.fn(),
+  hold: vi.fn(),
+}));
 vi.mock('server-only', () => ({}));
 vi.mock('./merchant-inbox-client', () => ({
   getMerchantInboxConversation: mocks.read,
+}));
+vi.mock('./chat-follow-up-reminder-hold', () => ({
+  holdUnconfirmedChatFollowUpReminder: mocks.hold,
 }));
 vi.mock('./chat-follow-up-reminder-sync', () => ({
   syncChatFollowUpReminder: mocks.sync,
@@ -21,11 +28,17 @@ const engine = (conversation: Record<string, unknown>) =>
     ok: true,
     conversation: { id: 7, customerName: 'Ada', ...conversation },
   });
-const recover = (followUpAt?: string | null) =>
+const recover = (
+  followUpAt?: string | null,
+  sent?: { state: 'applied' | 'unconfirmed'; customerName: string }
+) =>
   recoverAcceptedFollowUpReminder(client, binding, {
     conversationId: 7,
     update: { followUpAt, priority: 'high' },
+    sent,
   });
+const unreadable = () =>
+  mocks.read.mockResolvedValue({ ok: false, code: 'unavailable' });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -79,5 +92,39 @@ describe('recoverAcceptedFollowUpReminder', () => {
     await recover(followUpAt);
     expect(mocks.read).not.toHaveBeenCalled();
     expect(mocks.sync).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: records an applied follow-up even when the chat cannot be read back', async () => {
+    unreadable();
+    await recover(requested, { state: 'applied', customerName: 'Ada' });
+    expect(mocks.sync).toHaveBeenCalledWith(client, {
+      merchantId: 'm',
+      conversationId: 7,
+      update: { followUpAt: requested, priority: 'high' },
+      customerName: 'Ada',
+      observed: undefined,
+    });
+    expect(mocks.hold).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the snooze has not landed yet', () => engine({ status: 'open' })],
+    ['the chat cannot be read', unreadable],
+  ])('bugfix: holds an unconfirmed follow-up when %s', async (_label, arrange) => {
+    arrange();
+    await recover(requested, { state: 'unconfirmed', customerName: 'Ada' });
+    expect(mocks.hold).toHaveBeenCalledWith(client, {
+      merchantId: 'm',
+      conversationId: 7,
+      dueAt: '2026-11-25T09:00:00.000Z',
+      customerName: 'Ada',
+    });
+    expect(mocks.sync).not.toHaveBeenCalled();
+  });
+
+  it('records an unconfirmed follow-up as usual once the chat shows it', async () => {
+    await recover(requested, { state: 'unconfirmed', customerName: 'Ada' });
+    expect(mocks.sync).toHaveBeenCalledTimes(1);
+    expect(mocks.hold).not.toHaveBeenCalled();
   });
 });

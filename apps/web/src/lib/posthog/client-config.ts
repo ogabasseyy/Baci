@@ -7,6 +7,7 @@ import {
   type PostHogEnv,
 } from '@/lib/posthog/config';
 import { sanitizePostHogExceptionText } from '@/lib/posthog/exception-text';
+import { PLATFORM_ROOT_ROUTE_SEGMENTS } from '@/lib/posthog/platform-root-routes';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
 import { getPostHogTracingHeaderHostnames } from '@/lib/posthog/tracing-hostnames';
 
@@ -60,42 +61,6 @@ const RESERVED_WEB_TENANT_SUBDOMAINS = new Set([
   'dashboard',
   'mail',
   'smtp',
-]);
-const PLATFORM_ROOT_ROUTE_SEGMENTS = new Set([
-  '',
-  '_next',
-  'about',
-  'admin',
-  'api',
-  'auth',
-  'blog',
-  'builder',
-  'cart',
-  'checkout',
-  'contact',
-  'dashboard',
-  'debug-auth',
-  'delete-account',
-  'demo',
-  'developers',
-  'favicon.ico',
-  'features',
-  'feeds',
-  'invite',
-  'login',
-  'manifest.webmanifest',
-  'onboarding',
-  'pricing',
-  'privacy',
-  'products',
-  'reset-password',
-  'robots.txt',
-  'signup',
-  'sitemap.xml',
-  'staff',
-  'template-preview',
-  'terms',
-  'track',
 ]);
 const VALID_MERCHANT_SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const TENANT_CONTEXT_PROPERTY_KEYS = [
@@ -571,9 +536,14 @@ const LIGHTWEIGHT_PUBLIC_BLOG_CONFIG_OVERRIDES: Partial<PostHogConfig> = {
   capture_heatmaps: false,
   capture_performance: false,
   disable_session_recording: true,
+  disable_surveys: true,
   rageclick: false,
 };
 
+/**
+ * Builds the PostHog browser client configuration with storefront privacy,
+ * sampling, and external script restrictions applied.
+ */
 export function buildPostHogClientConfig(
   env: PostHogEnv = process.env,
   projectToken: string | undefined = getPublicPostHogProjectToken(),
@@ -613,11 +583,12 @@ export function buildPostHogClientConfig(
     // transitions.
     capture_performance: false,
     disable_session_recording: options.sessionRecording !== true,
+    disable_surveys: true,
     session_recording: {
       maskAllInputs: true,
       maskTextFn: () => REDACTED_VALUE,
       maskTextSelector: 'body',
-      blockSelector: '[data-ph-block], [data-session-replay-block]',
+      blockSelector: 'iframe, [data-ph-block], [data-session-replay-block]',
       sampleRate: CHECKOUT_SESSION_RECORDING_SAMPLE_RATE,
     },
     // Project credential keys are intentionally absent here:

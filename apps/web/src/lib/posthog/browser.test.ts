@@ -389,6 +389,13 @@ describe('initializePostHogBrowser', () => {
         sampling: true,
       });
 
+      initializePostHogBrowser(env, console, {
+        lightweight: false,
+        pathname: '/checkout/bnpl',
+        hostname: 'ogabassey.com',
+      });
+      expect(mocks.posthogStopSessionRecording).not.toHaveBeenCalled();
+
       mocks.posthogSessionRecordingStarted.mockReturnValue(true);
       initializePostHogBrowser(env, console, {
         lightweight: false,

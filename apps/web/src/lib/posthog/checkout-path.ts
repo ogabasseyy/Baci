@@ -1,18 +1,4 @@
-const PLATFORM_RESERVED_FIRST_SEGMENTS = new Set([
-  '_next',
-  'admin',
-  'api',
-  'auth',
-  'builder',
-  'blog',
-  'cart',
-  'dashboard',
-  'feeds',
-  'login',
-  'logout',
-  'products',
-  'track',
-]);
+import { PLATFORM_ROOT_ROUTE_SEGMENTS } from '@/lib/posthog/platform-root-routes';
 
 const PLATFORM_PATH_MODE_HOSTS = new Set([
   '127.0.0.1',
@@ -70,7 +56,7 @@ export function isCheckoutPathname(
     return true;
   }
 
-  if (PLATFORM_RESERVED_FIRST_SEGMENTS.has(firstSegment)) {
+  if (PLATFORM_ROOT_ROUTE_SEGMENTS.has(firstSegment)) {
     return false;
   }
 

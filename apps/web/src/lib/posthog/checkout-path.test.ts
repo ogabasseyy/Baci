@@ -51,6 +51,24 @@ describe('isCheckoutPathname', () => {
       })
     ).toBe(false);
     expect(
+      isCheckoutPathname('/signup/checkout', {
+        hostname: 'usebaci.com',
+        rootDomain: 'usebaci.com',
+      })
+    ).toBe(false);
+    expect(
+      isCheckoutPathname('/onboarding/checkout', {
+        hostname: 'usebaci.com',
+        rootDomain: 'usebaci.com',
+      })
+    ).toBe(false);
+    expect(
+      isCheckoutPathname('/pricing/checkout', {
+        hostname: 'usebaci.com',
+        rootDomain: 'usebaci.com',
+      })
+    ).toBe(false);
+    expect(
       isCheckoutPathname('/ogabassey/checkout', {
         hostname: 'ogabassey.com',
         rootDomain: 'usebaci.com',

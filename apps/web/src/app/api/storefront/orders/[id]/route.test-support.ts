@@ -53,6 +53,8 @@ export const mockAnonClient = {
 export function createLedgerQueryMock(
   rows: Array<{
     amount: number;
+    merchant_id?: string;
+    customer_id?: string | null;
     source_type?: string;
     type?: string;
     status?: string;
@@ -60,10 +62,36 @@ export function createLedgerQueryMock(
   }> = [],
   error: unknown = null
 ) {
-  const chain = Object.assign(Promise.resolve({ data: rows, error }), {
+  const filters: [string, unknown][] = [];
+  const getResult = () => {
+    if (error) return { data: null, error };
+    const filtered = rows.filter((row) =>
+      filters.every(([column, value]) => {
+        if (column === 'merchant_id' && row.merchant_id !== undefined) {
+          return row.merchant_id === value;
+        }
+        if (column === 'customer_id' && row.customer_id !== undefined) {
+          return row.customer_id === value;
+        }
+        return true;
+      })
+    );
+    return { data: filtered, error: null };
+  };
+  const chain: {
+    select: ReturnType<typeof vi.fn>;
+    eq: ReturnType<typeof vi.fn>;
+    then: Promise<{ data: unknown; error: unknown }>['then'];
+  } = {
     select: vi.fn(() => chain),
-    eq: vi.fn(() => chain),
-  });
+    eq: vi.fn((column: string, value: unknown) => {
+      filters.push([column, value]);
+      return chain;
+    }),
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query builder is awaitable.
+    then: (onFulfilled, onRejected) =>
+      Promise.resolve(getResult()).then(onFulfilled, onRejected),
+  };
   return chain;
 }
 
@@ -72,12 +100,16 @@ export function createStorefrontFromMock(
   ledger?: {
     walletRows?: Array<{
       amount: number;
+      merchant_id?: string;
+      customer_id?: string | null;
       source_type?: string;
       type?: string;
       status?: string;
     }>;
     savingsRows?: Array<{
       amount: number;
+      merchant_id?: string;
+      customer_id?: string | null;
       metadata?: Record<string, unknown> | null;
     }>;
   }

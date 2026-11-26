@@ -66,6 +66,7 @@ export function resolveCheckoutStoreCreditSelections({
 }
 
 export function computeCheckoutDisplayAndKlumpGateTotals({
+  appliedDiscountCode,
   assuranceFee,
   checkoutSavingsBalance,
   deliveryFee,
@@ -80,6 +81,7 @@ export function computeCheckoutDisplayAndKlumpGateTotals({
   walletBalance,
   walletSelection,
 }: {
+  appliedDiscountCode?: string | null;
   assuranceFee: number;
   checkoutSavingsBalance: number;
   deliveryFee: number;
@@ -98,11 +100,13 @@ export function computeCheckoutDisplayAndKlumpGateTotals({
     paymentTab,
     selectedPayment,
   });
-  const liveSavingsSelectionForKlumpGate = getLiveSavingsSelection({
-    isStoreCreditCompatible: storeCreditCompatible,
-    items,
-    orderTotal: total,
-  });
+  const liveSavingsSelectionForKlumpGate = appliedDiscountCode
+    ? undefined
+    : getLiveSavingsSelection({
+        isStoreCreditCompatible: storeCreditCompatible,
+        items,
+        orderTotal: total,
+      });
   const walletResidualForKlumpGate = Math.max(
     total - (liveSavingsSelectionForKlumpGate?.amount ?? 0),
     0
@@ -121,7 +125,7 @@ export function computeCheckoutDisplayAndKlumpGateTotals({
   const baseTotal =
     step === 'review' ? total : subtotal + deliveryFee + assuranceFee;
   const activeSavings =
-    storeCreditCompatible && savingsSelectionUse
+    !appliedDiscountCode && storeCreditCompatible && savingsSelectionUse
       ? Math.min(checkoutSavingsBalance, baseTotal)
       : 0;
   const baseResidualAfterSavings = Math.max(baseTotal - activeSavings, 0);

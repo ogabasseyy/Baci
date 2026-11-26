@@ -13,13 +13,16 @@ jest.mock('./use-oxygen-checkout-availability', () => ({
   useOxygenCheckoutAvailability: () => mockOxygen,
 }));
 const mockSetSavingsSelection = jest.fn();
+const mockGetLiveSavingsSelection = jest.fn<() => unknown>(() => undefined);
+let mockCheckoutSavingsBalance = 0;
+let mockSavingsSelection: unknown;
 let mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
   useCheckoutSavings: () => ({
-    checkoutSavingsBalance: 0,
-    getLiveSavingsSelection: () => undefined,
-    savingsSelection: undefined,
+    checkoutSavingsBalance: mockCheckoutSavingsBalance,
+    getLiveSavingsSelection: () => mockGetLiveSavingsSelection(),
+    savingsSelection: mockSavingsSelection,
     setSavingsSelection: mockSetSavingsSelection,
   }),
 }));
@@ -75,6 +78,10 @@ describe('useCheckoutPaymentController selection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockOxygen = { visible: false };
+    mockCheckoutSavingsBalance = 0;
+    mockSavingsSelection = undefined;
+    mockGetLiveSavingsSelection.mockReset();
+    mockGetLiveSavingsSelection.mockReturnValue(undefined);
     mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
     mockCalculateCommerce.mockImplementation(() =>
       Promise.reject(new Error('offline'))
@@ -294,5 +301,40 @@ describe('useCheckoutPaymentController selection', () => {
     rerender({});
 
     expect(result.current.paymentTab).toBeNull();
+  });
+
+  it('ignores live savings in displayTotal and Klump gate when appliedDiscountCode is set', () => {
+    mockEnabledPaymentMethods = ['klump'];
+    mockCheckoutSavingsBalance = 15_000;
+    mockSavingsSelection = {
+      amount: 15_000,
+      goalId: 'goal-1',
+      use: true,
+    };
+    mockGetLiveSavingsSelection.mockReturnValue({
+      amount: 15_000,
+      goalId: 'goal-1',
+      use: true,
+    });
+    const { result } = renderHook(() =>
+      useCheckoutPaymentController({
+        appliedDiscountCode: 'SAVE10',
+        assuranceFee: 0,
+        deliveryFee: 0,
+        isAuthenticated: true,
+        items: [{ ...items[0], price: 15_000 }],
+        merchantId: 'merchant-1',
+        merchantSlug: 'ogabassey',
+        step: 'review',
+        subtotal: 15_000,
+      })
+    );
+
+    act(() => {
+      result.current.setSelectedPayment('klump');
+    });
+
+    expect(result.current.displayTotal).toBe(15_000);
+    expect(result.current.hiddenPaymentMethods).toEqual([]);
   });
 });

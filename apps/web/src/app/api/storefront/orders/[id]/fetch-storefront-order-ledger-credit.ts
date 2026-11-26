@@ -36,21 +36,31 @@ export function requiresStorefrontOrderLedgerCredit(
  */
 export async function fetchStorefrontOrderLedgerCredit(
   supabase: Pick<SupabaseClient, 'from'>,
-  orderId: string
+  orderId: string,
+  scope?: { merchantId?: string | null; customerId?: string | null }
 ): Promise<StorefrontOrderLedgerCreditResult> {
+  let walletQuery = supabase
+    .from('customer_wallet_transactions')
+    .select('amount, status, source_type, type')
+    .eq('source_id', orderId);
+  let savingsQuery = supabase
+    .from('customer_savings_redemptions')
+    .select('amount, metadata')
+    .eq('order_id', orderId);
+
+  if (scope?.merchantId) {
+    walletQuery = walletQuery.eq('merchant_id', scope.merchantId);
+    savingsQuery = savingsQuery.eq('merchant_id', scope.merchantId);
+  }
+  if (scope?.customerId) {
+    walletQuery = walletQuery.eq('customer_id', scope.customerId);
+    savingsQuery = savingsQuery.eq('customer_id', scope.customerId);
+  }
+
   const [
     { data: walletRows, error: walletError },
     { data: savingsRows, error: savingsError },
-  ] = await Promise.all([
-    supabase
-      .from('customer_wallet_transactions')
-      .select('amount, status, source_type, type')
-      .eq('source_id', orderId),
-    supabase
-      .from('customer_savings_redemptions')
-      .select('amount, metadata')
-      .eq('order_id', orderId),
-  ]);
+  ] = await Promise.all([walletQuery, savingsQuery]);
 
   if (walletError || savingsError) {
     console.error('[API/Orders] Ledger credit lookup failed:', {

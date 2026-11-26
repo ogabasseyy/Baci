@@ -35,6 +35,7 @@ import { useTransferModeAtSelection } from './use-transfer-mode-at-selection';
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
 
 interface UseCheckoutPaymentControllerParams {
+  appliedDiscountCode?: string | null;
   assuranceFee: number;
   customerId?: string;
   customerPhone?: string | null;
@@ -49,6 +50,7 @@ interface UseCheckoutPaymentControllerParams {
 }
 
 export function useCheckoutPaymentController({
+  appliedDiscountCode,
   assuranceFee,
   customerId,
   customerPhone,
@@ -215,6 +217,7 @@ export function useCheckoutPaymentController({
     netPayableForKlumpGate,
     stepDisplayTotal,
   } = computeCheckoutDisplayAndKlumpGateTotals({
+    appliedDiscountCode,
     assuranceFee,
     checkoutSavingsBalance: savings.checkoutSavingsBalance,
     deliveryFee,

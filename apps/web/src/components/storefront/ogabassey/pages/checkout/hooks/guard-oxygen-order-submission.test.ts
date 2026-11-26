@@ -22,6 +22,8 @@ function makeContext(overrides?: {
   currencyCode?: string;
   total?: number;
   walletAmount?: number;
+  remainingAmount?: number;
+  savingsAmount?: number;
   omitOpenAuthModal?: boolean;
 }) {
   const openAuthModal = vi.fn();
@@ -43,7 +45,15 @@ function makeContext(overrides?: {
       session: {
         method: overrides?.method ?? 'oxygen',
         total: overrides?.total ?? 50_000,
-        wallet: { amountUsed: overrides?.walletAmount ?? 0 },
+        wallet: {
+          amountUsed: overrides?.walletAmount ?? 0,
+          ...(overrides?.remainingAmount !== undefined
+            ? { remainingAmount: overrides.remainingAmount }
+            : {}),
+        },
+        ...(overrides?.savingsAmount !== undefined
+          ? { savings: { amountUsed: overrides.savingsAmount } }
+          : {}),
       },
     },
     processing: { releaseSubmission },
@@ -117,4 +127,22 @@ describe('guardOxygenOrderSubmission', () => {
     ).resolves.toBe(false);
     expect(openAuthModal).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'skips Oxygen submission guard when device savings cover 100%% of total (authenticated=%s)',
+    async (authenticated) => {
+      const { context, openAuthModal, releaseSubmission } = makeContext({
+        authenticated,
+        total: 50_000,
+        walletAmount: 0,
+        savingsAmount: 50_000,
+      });
+      await expect(
+        guardOxygenOrderSubmission(context, 'merchant-1')
+      ).resolves.toBe(false);
+      expect(openAuthModal).not.toHaveBeenCalled();
+      expect(releaseSubmission).not.toHaveBeenCalled();
+      expect(mocks.checkAvailability).not.toHaveBeenCalled();
+    }
+  );
 });

@@ -532,6 +532,96 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
     );
   });
 
+  it('scopes wallet and savings ledger lookups to the authorized order merchant_id and customer_id', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          merchant_id: 'merchant-uuid-456',
+          customer_id: 'customer-uuid-123',
+          payment_method: 'credit_direct',
+          payment_status: 'unpaid',
+          amount_paid: 0,
+          wallet_amount_used: 0,
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock(
+        {
+          orders: mockOrderQuery,
+          order_items: mockItemsQuery,
+        },
+        {
+          walletRows: [
+            {
+              amount: 3000,
+              merchant_id: 'merchant-uuid-456',
+              customer_id: 'customer-uuid-123',
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'completed',
+            },
+            {
+              amount: 9000,
+              merchant_id: 'other-merchant',
+              customer_id: 'customer-uuid-123',
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'completed',
+            },
+            {
+              amount: 7000,
+              merchant_id: 'merchant-uuid-456',
+              customer_id: 'other-customer',
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'completed',
+            },
+          ],
+          savingsRows: [
+            {
+              amount: 2000,
+              merchant_id: 'merchant-uuid-456',
+              customer_id: 'customer-uuid-123',
+              metadata: {},
+            },
+            {
+              amount: 5000,
+              merchant_id: 'other-merchant',
+              customer_id: 'customer-uuid-123',
+              metadata: {},
+            },
+          ],
+        }
+      )
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.customer_id).toBeUndefined();
+    expect(data.wallet_ledger_used).toBe(3000);
+    expect(data.savings_ledger_used).toBe(2000);
+  });
+
   it('returns 500 when the store-credit ledger lookup fails for a BNPL/Oxygen order instead of zeroing credit', async () => {
     const request = new NextRequest(
       'http://localhost/api/storefront/orders/order-uuid-123'

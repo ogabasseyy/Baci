@@ -21,5 +21,6 @@ id,
             external_source,
             import_job_id,
             merchant_id,
+            customer_id,
             fulfillment_details
 `;

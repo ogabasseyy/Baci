@@ -103,17 +103,32 @@ export function OxygenBookedAddress({
     address.house_number,
   ].every((v) => v.trim());
   const file = picked.proof ?? (!edit ? prepared : undefined);
+  const addressDone = snapshot.state.kyc?.address_status === 'DONE';
   const waiting =
     snapshot.state.kyc?.address_status === 'PROCESSING' ||
     snapshot.pending?.action === 'submit_address';
   async function submit() {
-    if (!file || !complete || (requiresConfirmation && !confirmed)) return;
+    if (
+      addressDone ||
+      !file ||
+      !complete ||
+      (requiresConfirmation && !confirmed)
+    )
+      return;
     await onExecute({ action: 'submit_address', ...address }, file);
   }
   return (
     <View style={{ gap: 12 }}>
       <OxygenAddressReview
-        status={waiting ? 'reviewing' : file ? 'ready' : 'missing_proof'}
+        status={
+          addressDone
+            ? 'received'
+            : waiting
+              ? 'reviewing'
+              : file
+                ? 'ready'
+                : 'missing_proof'
+        }
         busy={busy || !loaded}
         showRefresh={loaded && !snapshot.pending}
         showSelectProof={false}
@@ -157,7 +172,7 @@ export function OxygenBookedAddress({
           />
         </>
       ) : null}
-      {!waiting && loaded ? (
+      {!waiting && !addressDone && loaded ? (
         <>
           {!complete || edit || recovered ? (
             <OxygenHomeAddress

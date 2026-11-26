@@ -72,7 +72,7 @@ export function CustomerFormFields({
   }, [onProgress, step]);
   function capture(nextStep = step) {
     if (!formRef.current) return;
-    saveDraft(oxygenCustomerDraft(formRef.current, nextStep));
+    saveDraft(oxygenCustomerDraft(formRef.current, nextStep, defaults));
   }
   const { formError, setFormError } = useOxygenFormError(saveStatus);
   const formErrorId = useId();

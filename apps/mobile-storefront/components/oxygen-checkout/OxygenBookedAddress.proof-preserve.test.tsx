@@ -171,3 +171,42 @@ it('clears the selected utility bill when a material address field changes at bo
   ).toBeNull();
   expect(screen.getByRole('button', { name: 'Choose file' })).toBeTruthy();
 });
+
+it('prevents duplicate booked address submission after address verification is DONE', async () => {
+  const snapshot = {
+    workflowId: '11111111-1111-4111-8111-111111111111',
+    version: 2,
+    stage: 'booked',
+    executionEnabled: true,
+    state: { bookingReference: 'booking', kyc: { address_status: 'DONE' } },
+  } as OxygenRuntimeSnapshot;
+  const client = {
+    draft: { read: jest.fn().mockResolvedValue({ draft: null }) },
+  } as unknown as OxygenClient;
+  const proof = {
+    bytes: new Uint8Array([1, 2, 3]),
+    type: 'image/png',
+    name: 'proof.png',
+  };
+  render(
+    <OxygenBookedAddress
+      snapshot={snapshot}
+      client={client}
+      proof={proof}
+      busy={false}
+      onExecute={jest.fn()}
+      onRefresh={jest.fn()}
+    />
+  );
+  await act(async () => {});
+  expect(
+    screen.queryByRole('button', {
+      name: 'Submit saved home address and proof',
+    })
+  ).toBeNull();
+  expect(
+    screen.getByText(
+      'Oxygen has received your address proof. Your progress is saved.'
+    )
+  ).toBeTruthy();
+});

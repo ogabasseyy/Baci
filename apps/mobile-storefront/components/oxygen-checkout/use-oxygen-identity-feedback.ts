@@ -1,7 +1,7 @@
 import { useState } from 'react';
+import { oxygenEmploymentErrors } from './oxygen-employment-errors';
 import type { OxygenFields } from './oxygen-form-utils';
 import { oxygenIdentityErrors } from './oxygen-identity-validation';
-import { oxygenEmploymentErrors } from './prepare-oxygen-application';
 
 /** Recheck only errors already shown; editing never triggers a save or lookup. */
 export function useOxygenIdentityFeedback(fields: OxygenFields, phone: string) {

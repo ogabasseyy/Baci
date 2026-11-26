@@ -48,6 +48,7 @@ export function OxygenResidentialFields({
     residentialKeys.filter((key) => key === 'landmark' || !initial[key])
   );
   const [search, setSearch] = useState('');
+  const [searchPending, setSearchPending] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const [error, setError] = useState('');
   function update(next: ResidentialAddress) {
@@ -69,6 +70,7 @@ export function OxygenResidentialFields({
       residentialKeys.filter((key) => key === 'landmark' || !next[key])
     );
     setSearch(place.formattedAddress);
+    setSearchPending(false);
     setEditing('search');
   }
   return (
@@ -126,6 +128,7 @@ export function OxygenResidentialFields({
             className="min-h-11 shrink-0 px-2 text-sm font-semibold text-store-primary"
             onClick={() => {
               setEditing('search');
+              setSearchPending(false);
               setSearch(
                 [
                   address.house_number,
@@ -145,6 +148,11 @@ export function OxygenResidentialFields({
       {/* Editable details stay available even when search has no results or fails. */}
       {editing && (
         <div className="mb-4 space-y-3">
+          <input
+            type="hidden"
+            name="home_search_pending"
+            value={editing === 'search' && searchPending ? '1' : ''}
+          />
           <label
             htmlFor={`${id}-search`}
             className="text-xs font-semibold text-gray-700"
@@ -159,6 +167,7 @@ export function OxygenResidentialFields({
             placeholder="Search street or area"
             onChange={(value) => {
               setSearch(typeof value === 'string' ? value : value.target.value);
+              setSearchPending(true);
             }}
             onSelect={select}
             onError={setSearchFailed}
@@ -175,7 +184,10 @@ export function OxygenResidentialFields({
           <button
             type="button"
             disabled={disabled}
-            onClick={() => setEditing(manual ? 'search' : 'manual')}
+            onClick={() => {
+              setSearchPending(false);
+              setEditing(manual ? 'search' : 'manual');
+            }}
             className="min-h-11 text-xs font-semibold text-store-primary"
           >
             {manual ? 'Use address search' : 'Enter address manually'}

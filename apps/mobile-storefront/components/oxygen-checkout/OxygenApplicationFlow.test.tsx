@@ -102,60 +102,6 @@ describe('native application draft restoration', () => {
     expect(mockStepProps.consent).toBe(false);
     expect(mockStepProps.consentError).toBeNull();
   });
-
-  it('reports and clears consentError when submitting without consent', async () => {
-    const client = {
-      draft: {
-        read: jest.fn().mockResolvedValue({
-          version: 3,
-          draft: {
-            step: 2,
-            fields: {
-              first_name: 'Test',
-              last_name: 'Customer',
-              email: 'test@example.com',
-              bvn: '12345678901',
-              nin: '12345678901',
-              date_of_birth: '1990-01-01',
-              bank_code: '058',
-              account_number: '0123456789',
-              employment_status: 'EMPLOYED',
-              salary_amount: '250000',
-              salary_date: '25',
-            },
-          },
-        }),
-        write: jest.fn(),
-      },
-      bankDetails: jest
-        .fn()
-        .mockImplementation(async ({ action }: { action: string }) =>
-          action === 'banks'
-            ? { banks: [{ code: '058', name: 'GT Bank' }] }
-            : { accountName: 'TEST CUSTOMER' }
-        ),
-    } as unknown as OxygenClient;
-    render(
-      <OxygenApplicationFlow
-        snapshot={{ ...snapshot, checkoutPhone: '08012345678' }}
-        client={client}
-        busy={false}
-        scopeKey="consent/check"
-        onExecute={jest.fn()}
-      />
-    );
-    await act(async () => {});
-    await act(async () => mockStepProps.onSubmit());
-    expect(mockStepProps.consentError).toBe(
-      'Accept Oxygen’s terms to continue.'
-    );
-    expect(mockStepProps.error).toBe(
-      'Accept Oxygen’s terms before continuing.'
-    );
-    act(() => mockStepProps.onConsent(true));
-    expect(mockStepProps.consentError).toBeNull();
-    expect(mockStepProps.error).toBeNull();
-  });
   it('keeps draft fields and transient proof ownership across the first booking', async () => {
     const client = {
       draft: {

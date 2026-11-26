@@ -48,6 +48,12 @@ export function OxygenResidentialForm({
           return;
         }
         const values = new FormData(event.currentTarget);
+        if (values.get('home_search_pending') === '1') {
+          setError(
+            'Select an address from search or enter your address manually.'
+          );
+          return;
+        }
         const address = residentialAddress(
           Object.fromEntries(
             residentialKeys.map((key) => [

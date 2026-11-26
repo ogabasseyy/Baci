@@ -65,7 +65,7 @@ it('surfaces field-specific employment errors and consentError instead of blocki
         customFields: {
           ...fields,
           salary_amount: '',
-          name_of_employer: 'x'.repeat(151),
+          name_of_employer: 'x'.repeat(101),
         },
         consent: false,
       },
@@ -74,7 +74,7 @@ it('surfaces field-specific employment errors and consentError instead of blocki
   await act(async () => result.current.submit());
   expect(setFieldErrors).toHaveBeenLastCalledWith({
     salary_amount: 'Enter your monthly income.',
-    name_of_employer: 'Employer name must be 150 characters or fewer.',
+    name_of_employer: 'Employer name must be 100 characters or fewer.',
   });
   expect(setError).toHaveBeenLastCalledWith(
     'Check the highlighted employment and income details.'

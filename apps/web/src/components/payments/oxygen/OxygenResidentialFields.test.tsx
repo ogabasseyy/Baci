@@ -205,3 +205,54 @@ it('does not mark hidden address inputs required and keeps entered fields when s
   expect(screen.getByLabelText('Street address')).toHaveValue('Example Road');
   expect(onChange).not.toHaveBeenCalled();
 });
+
+it('clears selected proof when material address fields change but preserves it for landmark edits', () => {
+  const onFile = vi.fn();
+  const bill = new File(['bill'], 'bill.pdf', { type: 'application/pdf' });
+  render(
+    <OxygenResidentialFields
+      initial={{
+        street: 'Example Road',
+        city: 'Ikeja',
+        state: 'Lagos',
+        lga: 'Ikeja',
+        house_number: '4',
+      }}
+      file={bill}
+      onFile={onFile}
+    />
+  );
+  fireEvent.change(screen.getByLabelText('Nearby landmark'), {
+    target: { value: 'Opposite Bank' },
+  });
+  expect(onFile).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Change address' }));
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Enter address manually' })
+  );
+  fireEvent.change(screen.getByLabelText('Street address'), {
+    target: { value: 'New Road' },
+  });
+  expect(onFile).toHaveBeenCalledWith(null);
+});
+
+it('clears selected proof when choosing a different autocomplete address', () => {
+  const onFile = vi.fn();
+  const bill = new File(['bill'], 'bill.pdf', { type: 'application/pdf' });
+  render(
+    <OxygenResidentialFields
+      initial={{
+        street: 'Old Street',
+        city: 'Ikeja',
+        state: 'Lagos',
+        lga: 'Ikeja',
+        house_number: '1',
+      }}
+      file={bill}
+      onFile={onFile}
+    />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Change address' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Select with LGA' }));
+  expect(onFile).toHaveBeenCalledWith(null);
+});

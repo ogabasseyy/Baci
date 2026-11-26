@@ -1,7 +1,7 @@
 'use client';
 // Interactive address search and editable form values; no map SDK is loaded.
 import { FileCheck2, House, Upload } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
   AddressAutocomplete,
   type PlaceDetails,
@@ -51,7 +51,24 @@ export function OxygenResidentialFields({
   const [searchPending, setSearchPending] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const summary = [
+    address.house_number,
+    address.street,
+    address.city,
+    address.state,
+  ]
+    .filter(Boolean)
+    .join(', ');
   function update(next: ResidentialAddress) {
+    const materialChanged = (
+      ['street', 'city', 'lga', 'state', 'house_number'] as const
+    ).some((key) => next[key] !== address[key]);
+    if (file && materialChanged) {
+      onFile(null);
+      setError('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
     setAddress(next);
     onChange?.(next);
   }
@@ -111,16 +128,7 @@ export function OxygenResidentialFields({
             <p className="text-xs font-medium text-gray-500">
               {checkout ? 'From your checkout' : 'Your address'}
             </p>
-            <p className="mt-1 text-sm text-gray-900">
-              {[
-                address.house_number,
-                address.street,
-                address.city,
-                address.state,
-              ]
-                .filter(Boolean)
-                .join(', ')}
-            </p>
+            <p className="mt-1 text-sm text-gray-900">{summary}</p>
           </div>
           <button
             type="button"
@@ -129,16 +137,7 @@ export function OxygenResidentialFields({
             onClick={() => {
               setEditing('search');
               setSearchPending(false);
-              setSearch(
-                [
-                  address.house_number,
-                  address.street,
-                  address.city,
-                  address.state,
-                ]
-                  .filter(Boolean)
-                  .join(', ')
-              );
+              setSearch(summary);
             }}
           >
             Change address
@@ -255,6 +254,7 @@ export function OxygenResidentialFields({
             </span>
           )}
           <input
+            ref={fileInputRef}
             aria-label="Proof of address"
             type="file"
             accept="application/pdf,image/jpeg,image/png"

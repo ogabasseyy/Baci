@@ -9,6 +9,7 @@ import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { invalidateMerchantSlugRename } from '@/lib/invalidate-merchant-slug-rename';
 import { logger } from '@/lib/logger';
 import { normalizeBusinessName } from '@/lib/normalize-business-name';
+import { isUserScopedOnboardingLogoUrl } from '@/lib/onboarding-logo-url';
 import { DEFAULT_CURATED_BRAND_COLORS } from '@/lib/storefront-defaults/default-curated-brand-colors';
 import { provisionCuratedHomepage } from '@/lib/storefront-defaults/provision-curated-homepage';
 import { createClient } from '@/lib/supabase/server';
@@ -119,6 +120,16 @@ export async function runSubmitOnboardingWorkflow(
         code: 'auth_required',
         message: userResolution.message,
       };
+    const normalizedLogoUrl = logoUrl?.trim();
+    if (
+      normalizedLogoUrl &&
+      !isUserScopedOnboardingLogoUrl(normalizedLogoUrl, userResolution.user.id)
+    ) {
+      return {
+        success: false,
+        message: 'Logo URL must be a valid uploaded onboarding logo.',
+      };
+    }
     const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
     if (
       (firstName || lastName) &&

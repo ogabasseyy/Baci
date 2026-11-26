@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { runGuideBusinessOnboarding } from '@/ai/flows/guide-business-onboarding.core';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
+import { isUserScopedOnboardingLogoUrl } from '@/lib/onboarding-logo-url';
 import { applyRateLimit, getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { createClient } from '@/lib/supabase/server';
 import { guideBusinessOnboardingInputSchema } from '@/schemas/ai-guide-business-onboarding';
@@ -46,32 +47,6 @@ const WEB_ONBOARDING_IP_COLOR_LIMIT = {
 };
 
 const RASTER_DATA_URI_PATTERN = /^data:image\/(png|jpeg|webp);base64,/i;
-const IMAGES_ONBOARDING_PREFIX = '/storage/v1/object/public/images/onboarding/';
-
-function isUserScopedOnboardingLogoUrl(
-  logoUrl: string,
-  userId: string
-): boolean {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl) return false;
-  try {
-    const allowedOrigin = new URL(supabaseUrl).origin;
-    const candidate = new URL(logoUrl);
-    if (
-      candidate.origin !== allowedOrigin ||
-      !candidate.pathname.startsWith(IMAGES_ONBOARDING_PREFIX)
-    ) {
-      return false;
-    }
-    const relativePath = candidate.pathname.slice(
-      IMAGES_ONBOARDING_PREFIX.length
-    );
-    const [ownerId, ...rest] = relativePath.split('/').filter(Boolean);
-    return ownerId === userId && rest.length > 0;
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(request: NextRequest) {
   const supabase = createClient(await cookies());

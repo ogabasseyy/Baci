@@ -12,7 +12,10 @@ import {
   isCommonPassword,
   MIN_ACCEPTABLE_PASSWORD_STRENGTH,
 } from '@/lib/utils';
-import type { WebChatStep } from './web-onboarding-chat-helpers';
+import {
+  submitWebEmailPasswordAuth,
+  type WebChatStep,
+} from './web-onboarding-chat-helpers';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -197,10 +200,7 @@ export async function runWebAuthTextInput(
       setIsBusy(false);
       appendMessages(
         { role: 'user', text: email },
-        {
-          role: result.success ? 'assistant' : 'system',
-          text: result.message,
-        }
+        { role: result.success ? 'assistant' : 'system', text: result.message }
       );
       if (result.success) setStep('auth_check_email');
       return;
@@ -256,29 +256,29 @@ export async function runWebAuthTextInput(
     }
     setIsBusy(true);
     try {
-      const parsedName = parseFullNameInput(authDraft.fullName);
-      const supabase = createClient();
-      const { data: signUpData, error } = await supabase.auth.signUp({
+      const outcome = await submitWebEmailPasswordAuth({
         email: authDraft.email,
         password: rawText,
-        options: {
-          data: {
-            full_name: authDraft.fullName,
-            first_name: parsedName?.firstName ?? '',
-            last_name: parsedName?.lastName ?? '',
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
-        },
+        fullName: authDraft.fullName,
       });
-      if (error) {
-        appendMessages({
-          role: 'system',
-          text: error.message || 'Could not create your account. Try again.',
-        });
+      if (outcome.status === 'authenticated') {
+        enterStoreSetup(outcome.user);
         return;
       }
-      if (signUpData.session && signUpData.user) {
-        enterStoreSetup(signUpData.user);
+      if (outcome.status === 'existing_wrong_password') {
+        setAuthDraft((prev) => ({ ...prev, password: '' }));
+        appendMessages(
+          { role: 'user', text: masked },
+          {
+            role: 'system',
+            text: `An account for ${authDraft.email} already exists, and that password didn't match. Sign in with Magic link or Google, or use another email.`,
+          }
+        );
+        setStep('auth_choice');
+        return;
+      }
+      if (outcome.status === 'error') {
+        appendMessages({ role: 'system', text: outcome.message });
         return;
       }
       appendMessages(

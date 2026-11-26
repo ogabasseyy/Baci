@@ -8,6 +8,7 @@ import {
 
 const mockSignInWithOAuth = vi.fn();
 const mockSignUp = vi.fn();
+const mockSignInWithPassword = vi.fn();
 const mockGetUser = vi.fn();
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -15,6 +16,7 @@ vi.mock('@/lib/supabase/client', () => ({
     auth: {
       signInWithOAuth: mockSignInWithOAuth,
       signUp: mockSignUp,
+      signInWithPassword: mockSignInWithPassword,
       getUser: mockGetUser,
     },
   })),
@@ -119,5 +121,68 @@ describe('web-onboarding-auth-handlers', () => {
     );
 
     expect(ctx.setStep).toHaveBeenCalledWith('auth_magic_email');
+  });
+
+  it('falls back to signInWithPassword when signUp returns an obfuscated existing account (identities: [])', async () => {
+    const existingUser = {
+      id: 'u-existing',
+      email: 'ada@example.com',
+    } as never;
+    mockSignUp.mockResolvedValueOnce({
+      data: { user: { id: 'u-existing', identities: [] }, session: null },
+      error: null,
+    });
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: existingUser, session: { access_token: 'tok' } },
+      error: null,
+    });
+    const ctx = makeCtx({
+      step: 'auth_confirm',
+      authDraft: {
+        fullName: 'Ada Okafor',
+        email: 'ada@example.com',
+        password: 'StrongPassword!2026',
+      },
+    });
+
+    await runWebAuthTextInput('StrongPassword!2026', ctx);
+
+    expect(mockSignInWithPassword).toHaveBeenCalledWith({
+      email: 'ada@example.com',
+      password: 'StrongPassword!2026',
+    });
+    expect(ctx.enterStoreSetup).toHaveBeenCalledWith(existingUser);
+    expect(ctx.setStep).not.toHaveBeenCalledWith('auth_check_email');
+  });
+
+  it('guides returning users back to auth_choice when existing-account sign-in fails with wrong password', async () => {
+    mockSignUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: {
+        code: 'user_already_exists',
+        message: 'User already registered',
+      },
+    });
+    mockSignInWithPassword.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { message: 'Invalid login credentials' },
+    });
+    const ctx = makeCtx({
+      step: 'auth_confirm',
+      authDraft: {
+        fullName: 'Ada Okafor',
+        email: 'ada@example.com',
+        password: 'WrongPassword!2026',
+      },
+    });
+
+    await runWebAuthTextInput('WrongPassword!2026', ctx);
+
+    expect(mockSignInWithPassword).toHaveBeenCalledWith({
+      email: 'ada@example.com',
+      password: 'WrongPassword!2026',
+    });
+    expect(ctx.setStep).toHaveBeenCalledWith('auth_choice');
+    expect(ctx.enterStoreSetup).not.toHaveBeenCalled();
   });
 });

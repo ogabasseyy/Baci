@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  DEFAULT_BRAND_COLORS,
   type OnboardingChatData,
   type OnboardingChatMessage,
   type OnboardingChatStep,
@@ -20,6 +19,8 @@ import {
   runWebAuthTextInput,
 } from './web-onboarding-auth-handlers';
 import {
+  buildInitialWebStoreData,
+  extractUserNames,
   WEB_BUSINESS_TYPES,
   WEB_COUNTRIES,
   type WebChatStep,
@@ -31,35 +32,6 @@ import {
   runWebNameSuggestion,
   runWebStoreLaunch,
 } from './web-onboarding-store-actions';
-
-function namesFromUser(user: User): { firstName: string; lastName: string } {
-  const meta = user.user_metadata ?? {};
-  const full = String(meta.full_name || meta.name || '').trim();
-  const parts = full.split(/\s+/).filter(Boolean);
-  return {
-    firstName: String(meta.first_name || parts[0] || '').trim(),
-    lastName: String(meta.last_name || parts.slice(1).join(' ') || '').trim(),
-  };
-}
-
-function initialStoreData(user: User | null): OnboardingChatData {
-  const { firstName, lastName } = user
-    ? namesFromUser(user)
-    : { firstName: '', lastName: '' };
-  return {
-    firstName,
-    lastName,
-    phone: '',
-    businessName: '',
-    businessType: '',
-    otherBusinessType: '',
-    country: 'NG',
-    slug: '',
-    slugIsCustom: false,
-    logoUrl: '',
-    brandColors: DEFAULT_BRAND_COLORS,
-  };
-}
 
 async function hasCompletedMerchant(
   supabase: ReturnType<typeof createClient>,
@@ -83,7 +55,7 @@ export function useWebOnboardingChat() {
   const [isHydrating, setIsHydrating] = useState(true);
   const [step, setStep] = useState<WebChatStep>('auth_choice');
   const [data, setData] = useState<OnboardingChatData>(() =>
-    initialStoreData(null)
+    buildInitialWebStoreData(null)
   );
   const [messages, setMessages] = useState<OnboardingChatMessage[]>([
     {
@@ -108,6 +80,7 @@ export function useWebOnboardingChat() {
   const [isLaunching, setIsLaunching] = useState(false);
 
   const counterRef = useRef(1);
+  const draftOwnerIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const appendMessages = (...items: Omit<OnboardingChatMessage, 'id'>[]) => {
@@ -121,8 +94,9 @@ export function useWebOnboardingChat() {
   };
 
   const applyStoreWelcomeState = (nextUser: User) => {
-    const nextData = initialStoreData(nextUser);
+    const nextData = buildInitialWebStoreData(nextUser);
     const needsName = !nextData.firstName || !nextData.lastName;
+    draftOwnerIdRef.current = nextUser.id;
     setAuthDraft({ fullName: '', email: '', password: '' });
     setUser(nextUser);
     setData(nextData);
@@ -145,9 +119,29 @@ export function useWebOnboardingChat() {
 
   const enterStoreSetup = (nextUser: User) => {
     const supabase = createClient();
+    const hasPreservableDraft =
+      Boolean(data.businessName) &&
+      (!draftOwnerIdRef.current || draftOwnerIdRef.current === nextUser.id);
     const run = async () => {
       if (await hasCompletedMerchant(supabase, nextUser.id)) {
         window.location.href = '/dashboard';
+        return;
+      }
+      if (hasPreservableDraft) {
+        const { firstName, lastName } = extractUserNames(nextUser);
+        draftOwnerIdRef.current = nextUser.id;
+        setAuthDraft({ fullName: '', email: '', password: '' });
+        setUser(nextUser);
+        setData((prev) => ({
+          ...prev,
+          firstName: prev.firstName || firstName,
+          lastName: prev.lastName || lastName,
+        }));
+        setStep('summary');
+        appendMessages({
+          role: 'assistant',
+          text: "You're signed back in! Your store details are still ready — tap Launch my store whenever you're ready.",
+        });
         return;
       }
       applyStoreWelcomeState(nextUser);
@@ -221,7 +215,7 @@ export function useWebOnboardingChat() {
     } else if (result.sideEffect?.type === 'launch_store') {
       void runWebStoreLaunch(storeCtx);
     } else if (result.sideEffect?.type === 'restart' && user) {
-      enterStoreSetup(user);
+      applyStoreWelcomeState(user);
     }
   };
 

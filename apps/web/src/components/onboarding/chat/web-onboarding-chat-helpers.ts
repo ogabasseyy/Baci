@@ -1,8 +1,12 @@
-import type {
-  OnboardingBrandColors,
-  OnboardingBusinessTypeOption,
-  OnboardingChatStep,
+import {
+  DEFAULT_BRAND_COLORS,
+  type OnboardingBrandColors,
+  type OnboardingBusinessTypeOption,
+  type OnboardingChatData,
+  type OnboardingChatStep,
+  parseFullNameInput,
 } from '@baci/shared/onboarding-chat';
+import type { User } from '@supabase/supabase-js';
 import { BUSINESS_TYPES } from '@/config/business-types';
 import { COUNTRIES, getCountryByCode } from '@/lib/countries';
 import { buildCsrfHeaders } from '@/lib/csrf';
@@ -76,6 +80,40 @@ export function getWebBusinessTypeLabel(
 
 export function getWebCountryName(code: string): string {
   return getCountryByCode(code)?.name ?? code;
+}
+
+export function extractUserNames(user: User): {
+  firstName: string;
+  lastName: string;
+} {
+  const meta = user.user_metadata ?? {};
+  const full = String(meta.full_name || meta.name || '').trim();
+  const parts = full.split(/\s+/).filter(Boolean);
+  return {
+    firstName: String(meta.first_name || parts[0] || '').trim(),
+    lastName: String(meta.last_name || parts.slice(1).join(' ') || '').trim(),
+  };
+}
+
+export function buildInitialWebStoreData(
+  user: User | null
+): OnboardingChatData {
+  const { firstName, lastName } = user
+    ? extractUserNames(user)
+    : { firstName: '', lastName: '' };
+  return {
+    firstName,
+    lastName,
+    phone: '',
+    businessName: '',
+    businessType: '',
+    otherBusinessType: '',
+    country: 'NG',
+    slug: '',
+    slugIsCustom: false,
+    logoUrl: '',
+    brandColors: DEFAULT_BRAND_COLORS,
+  };
 }
 
 export function isAllowedWebLogoFile(file: File): boolean {
@@ -167,4 +205,73 @@ export async function requestWebOnboardingAssist(
   }
 
   return (await response.json()) as WebOnboardingAssistResponse;
+}
+
+function isDuplicateSignupError(error: {
+  code?: string;
+  message?: string;
+}): boolean {
+  return (
+    error.code === 'user_already_exists' ||
+    /already\s+(exists|registered)|user\s+already/i.test(error.message ?? '')
+  );
+}
+
+export type WebEmailPasswordAuthOutcome =
+  | { status: 'authenticated'; user: User }
+  | { status: 'existing_wrong_password' }
+  | { status: 'confirm_email' }
+  | { status: 'error'; message: string };
+
+/**
+ * Creates a new email/password account or signs into an existing confirmed
+ * account when Supabase reports a duplicate registration (either explicitly
+ * or via an obfuscated `identities: []` response).
+ */
+export async function submitWebEmailPasswordAuth(input: {
+  email: string;
+  password: string;
+  fullName: string;
+}): Promise<WebEmailPasswordAuthOutcome> {
+  const parsedName = parseFullNameInput(input.fullName);
+  const supabase = createClient();
+  const { data: signUpData, error } = await supabase.auth.signUp({
+    email: input.email,
+    password: input.password,
+    options: {
+      data: {
+        full_name: input.fullName,
+        first_name: parsedName?.firstName ?? '',
+        last_name: parsedName?.lastName ?? '',
+      },
+      emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+    },
+  });
+  const isExistingAccount =
+    (error ? isDuplicateSignupError(error) : false) ||
+    (!error &&
+      !signUpData.session &&
+      Array.isArray(signUpData.user?.identities) &&
+      signUpData.user.identities.length === 0);
+  if (isExistingAccount) {
+    const { data: signInData, error: signInError } =
+      await supabase.auth.signInWithPassword({
+        email: input.email,
+        password: input.password,
+      });
+    if (!signInError && signInData.user) {
+      return { status: 'authenticated', user: signInData.user };
+    }
+    return { status: 'existing_wrong_password' };
+  }
+  if (error) {
+    return {
+      status: 'error',
+      message: error.message || 'Could not create your account. Try again.',
+    };
+  }
+  if (signUpData.session && signUpData.user) {
+    return { status: 'authenticated', user: signUpData.user };
+  }
+  return { status: 'confirm_email' };
 }

@@ -347,4 +347,68 @@ describe('runSubmitOnboardingWorkflow', () => {
     });
     expect(mocks.provisionCuratedHomepage).not.toHaveBeenCalled();
   });
+
+  it('rejects another user or external logoUrl at submit while allowing empty or caller-scoped storage URLs', async () => {
+    const previousSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://project.supabase.co';
+    try {
+      const otherUserFd = makeOnboardingFormData('kicks-hub');
+      otherUserFd.set(
+        'logoUrl',
+        'https://project.supabase.co/storage/v1/object/public/images/onboarding/other-user/logo.png'
+      );
+      const otherUserResult = await runSubmitOnboardingWorkflow(
+        { success: false, message: '' },
+        otherUserFd
+      );
+      expect(otherUserResult).toEqual({
+        success: false,
+        message: 'Logo URL must be a valid uploaded onboarding logo.',
+      });
+
+      const externalFd = makeOnboardingFormData('kicks-hub');
+      externalFd.set('logoUrl', 'https://evil.example/tracker.png');
+      const externalResult = await runSubmitOnboardingWorkflow(
+        { success: false, message: '' },
+        externalFd
+      );
+      expect(externalResult).toEqual({
+        success: false,
+        message: 'Logo URL must be a valid uploaded onboarding logo.',
+      });
+      expect(mocks.upsertOnboardingMerchant).not.toHaveBeenCalled();
+
+      mocks.upsertOnboardingMerchant.mockResolvedValueOnce({
+        status: 'saved',
+        businessName: 'Kicks Hub',
+        businessType: 'fashion',
+        merchant: {
+          id: 'merchant-1',
+          business_name: 'Kicks Hub',
+          business_type: 'fashion',
+          slug: 'kicks-hub',
+          logo_url:
+            'https://project.supabase.co/storage/v1/object/public/images/onboarding/user-1/logo.png',
+          brand_colors: null,
+        },
+      });
+      mocks.ensureOnboardingDomain.mockResolvedValueOnce({ status: 'created' });
+
+      const ownFd = makeOnboardingFormData('kicks-hub');
+      ownFd.set(
+        'logoUrl',
+        'https://project.supabase.co/storage/v1/object/public/images/onboarding/user-1/logo.png'
+      );
+      const ownResult = await runSubmitOnboardingWorkflow(
+        { success: false, message: '' },
+        ownFd
+      );
+      expect(ownResult).toMatchObject({
+        success: true,
+        merchantId: 'merchant-1',
+      });
+    } finally {
+      process.env.NEXT_PUBLIC_SUPABASE_URL = previousSupabaseUrl;
+    }
+  });
 });

@@ -5,6 +5,7 @@ import {
 } from '@/lib/chatwoot/commerce-context-bindings';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { getPostHogRelayUrl } from '@/lib/posthog/config';
+import { getAutocompleteOrigin } from '@/lib/storefront-autocomplete-endpoint';
 import { getExperienceExecutionOrigin } from '../experience/execution-origin-runtime';
 import { isOxygenPaymentSurface } from './oxygen-payment-surface';
 import { buildProxyRequestHeaders } from './request-headers';
@@ -30,6 +31,7 @@ export function generateCSP(
       : [];
   const executionOrigin = getExperienceExecutionOrigin();
   const posthogRelayOrigin = getConfiguredPostHogRelayOrigin();
+  const autocompleteOrigin = getAutocompleteOrigin() ?? null;
   const builderExperiencePreview = isExperienceBuilderPreviewPath(
     pathname ?? ''
   );
@@ -110,7 +112,13 @@ export function generateCSP(
         (key === 'connect-src' || key === 'script-src')
           ? `${withChatwoot} ${posthogRelayOrigin}`
           : withChatwoot;
-      return (withPostHogRelay ? `${key} ${withPostHogRelay}` : key).trim();
+      const withAutocomplete =
+        autocompleteOrigin &&
+        routeType === 'storefront' &&
+        key === 'connect-src'
+          ? `${withPostHogRelay} ${autocompleteOrigin}`
+          : withPostHogRelay;
+      return (withAutocomplete ? `${key} ${withAutocomplete}` : key).trim();
     })
     .join('; ');
 }

@@ -10,7 +10,12 @@ describe('CACHE_LIFE_PROFILES', () => {
     });
     expect(CACHE_LIFE_PROFILES.products).toEqual({
       stale: 300,
-      revalidate: 1800,
+      revalidate: 3600,
+      expire: 86400,
+    });
+    expect(CACHE_LIFE_PROFILES['storefront-page']).toEqual({
+      stale: 300,
+      revalidate: 3600,
       expire: 86400,
     });
     expect(CACHE_LIFE_PROFILES.blog).toEqual({

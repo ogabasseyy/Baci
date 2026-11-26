@@ -1,0 +1,8 @@
+name = "baci-autocomplete-proxy"
+main = "src/index.mjs"
+compatibility_date = "2026-04-01"
+
+[vars]
+# Optional comma-separated origin allowlist (empty = allow any HTTPS storefront origin)
+ALLOWED_ORIGINS = ""
+# Public Supabase URL & anon key are configured via `wrangler secret put` or [vars]

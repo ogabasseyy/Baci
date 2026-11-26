@@ -8,7 +8,10 @@ import {
   trackMerchantSignupCompleted,
   trackMerchantSignupStarted,
 } from '@/components/analytics/platform-analytics-provider';
-import { requestWebOnboardingAssist } from './web-onboarding-chat-helpers';
+import {
+  requestWebOnboardingAssist,
+  uploadWebDataUriLogo,
+} from './web-onboarding-chat-helpers';
 import {
   runWebLogoGeneration,
   runWebNameSuggestion,
@@ -135,6 +138,23 @@ describe('web-onboarding-store-actions', () => {
         text: 'An account may already exist. Please log in to continue.',
       })
     );
+  });
+
+  it('clears an oversized generated logo and returns to the logo step instead of dead-ending on summary', async () => {
+    vi.mocked(uploadWebDataUriLogo).mockRejectedValueOnce(
+      new Error('Logo image must be smaller than 4 MB.')
+    );
+    const ctx = makeCtx();
+    ctx.data = {
+      ...DATA,
+      logoUrl: 'data:image/png;base64,AAAA',
+    };
+    await runWebStoreLaunch(ctx);
+
+    expect(ctx.setLogoDraft).toHaveBeenCalledWith(null);
+    expect(ctx.setData).toHaveBeenCalledOnce();
+    expect(ctx.setStep).toHaveBeenCalledWith('logo');
+    expect(submitOnboarding).not.toHaveBeenCalled();
   });
 
   it('fires signup started and completed analytics and notifies when server de-dupes the assigned slug', async () => {

@@ -184,10 +184,21 @@ export async function runWebStoreLaunch(
   try {
     let persistedLogoUrl = ctx.data.logoUrl;
     if (persistedLogoUrl.startsWith('data:image/')) {
-      persistedLogoUrl = await uploadWebDataUriLogo(
-        persistedLogoUrl,
-        ctx.user.id
-      );
+      try {
+        persistedLogoUrl = await uploadWebDataUriLogo(
+          persistedLogoUrl,
+          ctx.user.id
+        );
+      } catch (logoError) {
+        ctx.setLogoDraft(null);
+        ctx.setData((prev) => ({ ...prev, logoUrl: '' }));
+        ctx.setStep('logo');
+        ctx.appendMessages({
+          role: 'system',
+          text: `${logoError instanceof Error ? logoError.message : 'Could not save your generated logo.'} Please upload a smaller logo, generate another, or skip for now.`,
+        });
+        return;
+      }
     }
 
     const formData = new FormData();

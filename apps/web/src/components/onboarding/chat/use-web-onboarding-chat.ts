@@ -61,6 +61,19 @@ function initialStoreData(user: User | null): OnboardingChatData {
   };
 }
 
+async function hasCompletedMerchant(
+  supabase: ReturnType<typeof createClient>,
+  userId: string
+): Promise<boolean> {
+  if (typeof supabase.from !== 'function') return false;
+  const { data: existingMerchant } = await supabase
+    .from('merchants')
+    .select('business_name')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return Boolean(existingMerchant?.business_name);
+}
+
 export function useWebOnboardingChat() {
   const [user, setUser] = useState<User | null>(null);
   const [isHydrating, setIsHydrating] = useState(true);
@@ -103,7 +116,7 @@ export function useWebOnboardingChat() {
     ]);
   };
 
-  const enterStoreSetup = (nextUser: User) => {
+  const applyStoreWelcomeState = (nextUser: User) => {
     const nextData = initialStoreData(nextUser);
     const needsName = !nextData.firstName || !nextData.lastName;
     setAuthDraft({ fullName: '', email: '', password: '' });
@@ -126,6 +139,23 @@ export function useWebOnboardingChat() {
     ]);
   };
 
+  const enterStoreSetup = (nextUser: User) => {
+    const supabase = createClient();
+    const run = async () => {
+      try {
+        if (await hasCompletedMerchant(supabase, nextUser.id)) {
+          window.location.href = '/dashboard';
+          return;
+        }
+      } catch {
+        // Fall through to store setup if the lookup fails transiently.
+      }
+      applyStoreWelcomeState(nextUser);
+    };
+    void run();
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hydration runs once on mount; applyStoreWelcomeState only calls stable state setters
   useEffect(() => {
     let active = true;
     const supabase = createClient();
@@ -133,38 +163,16 @@ export function useWebOnboardingChat() {
       try {
         const { data: authData } = await supabase.auth.getUser();
         if (!active || !authData.user) return;
-        const nextUser = authData.user;
-        if (typeof supabase.from === 'function') {
-          const { data: existingMerchant } = await supabase
-            .from('merchants')
-            .select('business_name')
-            .eq('user_id', nextUser.id)
-            .maybeSingle();
-          if (!active) return;
-          if (existingMerchant?.business_name) {
-            window.location.href = '/dashboard';
-            return;
-          }
+        const completed = await hasCompletedMerchant(
+          supabase,
+          authData.user.id
+        );
+        if (!active) return;
+        if (completed) {
+          window.location.href = '/dashboard';
+          return;
         }
-        const nextData = initialStoreData(nextUser);
-        const needsName = !nextData.firstName || !nextData.lastName;
-        setUser(nextUser);
-        setData(nextData);
-        setSuggestedNames([]);
-        setLogoDraft(null);
-        setIsCustomizingSlug(false);
-        setReturnToSummary(false);
-        setRejectedSlug(null);
-        setStep(needsName ? 'owner_name' : 'country');
-        setMessages([
-          {
-            id: 'store-welcome',
-            role: 'assistant',
-            text: needsName
-              ? "Welcome to Baci! Let's set up your store together. First, what's your full name?"
-              : `Welcome to Baci, ${nextData.firstName}! Let's set up your store together. Where is your business based?`,
-          },
-        ]);
+        applyStoreWelcomeState(authData.user);
       } finally {
         if (active) setIsHydrating(false);
       }

@@ -5,13 +5,15 @@ import OnboardingClient from './onboarding-client';
 vi.mock('next/dynamic', () => ({
   default: () =>
     function MockDynamicChat() {
-      return <div data-testid="web-onboarding-chat">Chat</div>;
+      return <section aria-label="Web onboarding chat">Chat</section>;
     },
 }));
 
 describe('OnboardingClient', () => {
   it('renders the dynamically loaded WebOnboardingChat', () => {
     render(<OnboardingClient />);
-    expect(screen.getByTestId('web-onboarding-chat')).toBeTruthy();
+    expect(
+      screen.getByRole('region', { name: 'Web onboarding chat' })
+    ).toBeTruthy();
   });
 });

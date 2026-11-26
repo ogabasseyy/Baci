@@ -4,6 +4,8 @@
 import { readJob, readJobIds, readStep, readStepNames } from './storefront-release-gate-workflows.mjs';
 
 export const OTA_GUARD_STEP = 'Refuse sources held by the storefront release gate';
+export const OTA_ROLLBACK_GUARD_STEP = 'Refuse rollback target held by the storefront release gate';
+const OTA_ROLLBACK_STEP = 'Rollback OTA update on ota.usebaci.com and smoke-check manifest';
 const OTA_SELECTION_STEP = 'Validate and select reviewed source';
 export const RELEASE_GUARD_STEP = 'Refuse release sources that are not on main';
 const CHECKOUT_STEP = 'Checkout';
@@ -57,19 +59,19 @@ function keepsOtaRefusal(run, marker) {
 }
 
 /** The iOS OTA export must refuse sources that carry `marker` before it selects one. */
-export function otaGuardFailures(workflow, text, marker) {
-  const job = readJob(text, 'export') ?? '';
+export function otaGuardFailures(workflow, text, marker, jobId = 'export') {
+  const job = readJob(text, jobId) ?? '';
   const names = readStepNames(job);
   const guardAt = names.indexOf(OTA_GUARD_STEP);
   const selectionAt = names.indexOf(OTA_SELECTION_STEP);
   // Counting unnamed steps too: nothing but the checkout may run before the guard.
   if (guardAt !== 1 || selectionAt === -1 || guardAt > selectionAt) {
-    return [`${workflow} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "${OTA_SELECTION_STEP}" in its export job`];
+    return [`${workflow} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "${OTA_SELECTION_STEP}" in its ${jobId} job`];
   }
   // Step zero must be the checkout itself, or work could run before the guard and not be undone by it.
   const first = job.split(/^ {6}- /m)[1] ?? '';
   if (!/^\s*uses:\s*actions\/checkout@/m.test(first)) {
-    return [`${workflow} must start its export job with an actions/checkout step: nothing may run before the guard`];
+    return [`${workflow} must start its ${jobId} job with an actions/checkout step: nothing may run before the guard`];
   }
   const guard = readStep(job, OTA_GUARD_STEP);
   const failures = [];
@@ -81,6 +83,44 @@ export function otaGuardFailures(workflow, text, marker) {
   }
   if (CONDITION.test(guard.text)) {
     failures.push(`${workflow} "${OTA_GUARD_STEP}" must run unconditionally and fail the export`);
+  }
+  return failures;
+}
+
+/** OTA update-target rollbacks must refuse updates whose sourceSha carries `marker`. */
+export function otaRollbackGuardFailures(workflow, text, marker, jobId = 'publish') {
+  const job = readJob(text, jobId) ?? '';
+  const names = readStepNames(job);
+  const guardAt = names.indexOf(OTA_ROLLBACK_GUARD_STEP);
+  const rollbackAt = names.indexOf(OTA_ROLLBACK_STEP);
+  if (guardAt === -1 || rollbackAt === -1 || guardAt > rollbackAt) {
+    return [`${workflow} must run "${OTA_ROLLBACK_GUARD_STEP}" before "${OTA_ROLLBACK_STEP}" in its ${jobId} job`];
+  }
+  const guard = readStep(job, OTA_ROLLBACK_GUARD_STEP);
+  const failures = [];
+  if (CONDITION.test(guard.text)) {
+    failures.push(`${workflow} "${OTA_ROLLBACK_GUARD_STEP}" must run unconditionally and fail gated rollbacks`);
+  }
+  const lines = codeLines(guard.run);
+  const requiredInOrder = [
+    'set -euo pipefail',
+    'if ! git cat-file -e "${source_sha}^{commit}" 2>/dev/null; then',
+    `held_target="$(git ls-tree --full-tree --name-only "$source_sha" -- ${marker})"`,
+    'if [[ -n "$held_target" ]]; then',
+  ];
+  let from = 0;
+  let validRefusal = true;
+  for (const required of requiredInOrder) {
+    const at = lines.indexOf(required, from);
+    if (at === -1 || (required.startsWith('if ') && !refusesInBlock(lines, at))) {
+      validRefusal = false;
+      break;
+    }
+    from = at + 1;
+  }
+  const reassigned = lines.filter((line) => /^held_target=/.test(line)).length;
+  if (!validRefusal || reassigned !== 1 || lines.some((line) => /\bset\s+\+e\b|\|\|\s*true\b/.test(line))) {
+    failures.push(`${workflow} "${OTA_ROLLBACK_GUARD_STEP}" must refuse rollback targets that carry ${marker}`);
   }
   return failures;
 }

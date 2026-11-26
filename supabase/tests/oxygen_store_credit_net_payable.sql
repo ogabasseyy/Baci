@@ -404,8 +404,8 @@ BEGIN
       END IF;
     END IF;
 
-    -- Reversals/refunds remain permitted after an Oxygen workflow exists so customer credit is never trapped,
-    -- while new redemptions still fail closed under the workflow freeze.
+    -- Active Oxygen workflows on live orders block reversals so booked principal cannot drift,
+    -- while cancelled/refunded orders (or ended/activated workflows) allow reversals/refunds cleanly.
     IF EXISTS (
       SELECT 1
       FROM information_schema.columns
@@ -413,6 +413,18 @@ BEGIN
         AND table_name = 'customer_wallet_transactions'
         AND column_name = 'wallet_id'
     ) THEN
+      BEGIN
+        INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
+        VALUES ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',10000,10000,'order_reversal','ec310000-0000-4000-8000-000000000012');
+        RAISE EXCEPTION 'Active workflow reversal unexpectedly bypassed freeze guard';
+      EXCEPTION WHEN check_violation THEN
+        IF SQLERRM <> 'oxygen_local_credit_in_use' THEN RAISE; END IF;
+      END;
+
+      UPDATE public.orders
+         SET cancelled_at = now(), payment_status = 'refunded'
+       WHERE id = 'ec310000-0000-4000-8000-000000000010';
+
       INSERT INTO public.customer_wallet_transactions(wallet_id,customer_id,merchant_id,type,status,amount,balance_after,source_type,source_id)
       VALUES ('ec310000-0000-4000-8000-000000000030','ec310000-0000-4000-8000-000000000004','ec310000-0000-4000-8000-000000000003','credit','completed',10000,10000,'order_reversal','ec310000-0000-4000-8000-000000000010');
 

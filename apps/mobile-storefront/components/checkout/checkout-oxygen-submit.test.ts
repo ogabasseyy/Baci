@@ -202,6 +202,28 @@ describe('native Oxygen order admission', () => {
 
     createOrder.mockResolvedValueOnce({
       order: receipt,
+      wallet: { amountUsed: 5000, newBalance: 0, transactionId: 'tx-1' },
+      savings: { amountUsed: 15000, goalId: 'g-1', redemptionId: 'sr-1' },
+    });
+    await expect(
+      submitOxygenCheckout(
+        {
+          request,
+          checkoutGeneration: 'g',
+          isAuthenticated: true,
+          hasVoucher: true,
+          hasCredits: true,
+        },
+        { readOwner, createOrder }
+      )
+    ).resolves.toMatchObject({
+      amountDueToGateway: 0,
+      order: receipt,
+    });
+
+    createOrder.mockResolvedValueOnce({
+      order: receipt,
+      wallet: { amountUsed: 5000, newBalance: 0, transactionId: 'tx-2' },
     });
     await expect(
       submitOxygenCheckout(
@@ -214,7 +236,10 @@ describe('native Oxygen order admission', () => {
         },
         { readOwner, createOrder }
       )
-    ).rejects.toThrow('Could not confirm the saved Oxygen order');
+    ).resolves.toMatchObject({
+      amountDueToGateway: 15000,
+      order: receipt,
+    });
   });
 
   it.each([

@@ -75,19 +75,20 @@ export async function submitOxygenCheckout(
     throw new Error(
       'Could not confirm the saved Oxygen order. Please try again.'
     );
-  if (
-    (input.hasVoucher || input.hasCredits) &&
-    result.amountDueToGateway === undefined
-  ) {
-    throw new Error(
-      'Could not confirm the saved Oxygen order. Please try again.'
-    );
-  }
-  if (order.total <= 0 || (result.amountDueToGateway ?? order.total) <= 0) {
+  const appliedCredit =
+    (result.wallet?.amountUsed ?? 0) + (result.savings?.amountUsed ?? 0);
+  const resolvedAmountDue =
+    result.amountDueToGateway ?? Math.max(0, order.total - appliedCredit);
+  if (order.total <= 0 || resolvedAmountDue <= 0) {
     return {
       ...result,
       amountDueToGateway: 0,
     };
   }
-  return result;
+  return result.amountDueToGateway !== undefined
+    ? result
+    : {
+        ...result,
+        amountDueToGateway: resolvedAmountDue,
+      };
 }

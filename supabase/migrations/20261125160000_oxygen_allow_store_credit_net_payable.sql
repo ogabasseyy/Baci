@@ -145,46 +145,52 @@ DECLARE
   v_old uuid;
   v_new uuid;
   v_order uuid;
+  v_is_reversal boolean := false;
 BEGIN
   IF TG_TABLE_NAME = 'customer_wallet_transactions' THEN
     IF TG_OP = 'UPDATE' AND (OLD.source_id, OLD.source_type, OLD.type, OLD.amount, OLD.status) IS NOT DISTINCT FROM (NEW.source_id, NEW.source_type, NEW.type, NEW.amount, NEW.status) THEN
       RETURN NEW;
     END IF;
-    -- Allow adding or completing order_reversal refunds even after an Oxygen
-    -- workflow exists so cancellations/refunds cannot trap customer credit;
-    -- only guard un-reversing/deleting completed reversals and any redemption writes.
+    -- Allow adding or completing order_reversal refunds once the order is cancelled/refunded
+    -- or the workflow has finished/ended, while blocking reversals mid-workflow on live orders
+    -- so booked product_amount cannot drift from order_net_payable_for_order.
     IF TG_OP = 'INSERT' AND NEW.source_type = 'order_reversal' THEN
-      RETURN NEW;
-    END IF;
-    IF TG_OP = 'UPDATE'
+      v_is_reversal := true;
+      v_new := NEW.source_id;
+    ELSIF TG_OP = 'UPDATE'
        AND OLD.source_type = 'order_reversal'
        AND NEW.source_type = 'order_reversal'
        AND OLD.source_id IS NOT DISTINCT FROM NEW.source_id
        AND NEW.status = 'completed'
        AND (OLD.status IS DISTINCT FROM 'completed' OR NEW.amount >= OLD.amount) THEN
-      RETURN NEW;
-    END IF;
-    IF TG_OP IN ('UPDATE', 'DELETE') AND ((OLD.source_type = 'order_redemption' AND OLD.type = 'redemption') OR (OLD.source_type = 'order_reversal' AND OLD.status = 'completed')) THEN
-      v_old := OLD.source_id;
-    END IF;
-    IF TG_OP <> 'DELETE' AND ((NEW.source_type = 'order_redemption' AND NEW.type = 'redemption') OR (NEW.source_type = 'order_reversal' AND OLD.source_type = 'order_reversal')) THEN
+      v_is_reversal := true;
       v_new := NEW.source_id;
+    ELSE
+      IF TG_OP IN ('UPDATE', 'DELETE') AND ((OLD.source_type = 'order_redemption' AND OLD.type = 'redemption') OR (OLD.source_type = 'order_reversal' AND OLD.status = 'completed')) THEN
+        v_old := OLD.source_id;
+      END IF;
+      IF TG_OP <> 'DELETE' AND ((NEW.source_type = 'order_redemption' AND NEW.type = 'redemption') OR (NEW.source_type = 'order_reversal' AND OLD.source_type = 'order_reversal')) THEN
+        v_new := NEW.source_id;
+      END IF;
     END IF;
   ELSE
     IF TG_OP = 'UPDATE' AND (OLD.order_id, OLD.amount, OLD.metadata) IS NOT DISTINCT FROM (NEW.order_id, NEW.amount, NEW.metadata) THEN
       RETURN NEW;
     END IF;
-    -- Allow stamping metadata.reversed_at on savings redemptions when an order or goal is refunded/cancelled.
+    -- Allow stamping metadata.reversed_at on savings redemptions once the order/workflow is
+    -- cancelled/refunded/ended, while blocking mid-workflow reversals on live orders.
     IF TG_OP = 'UPDATE'
        AND (OLD.order_id, OLD.amount) IS NOT DISTINCT FROM (NEW.order_id, NEW.amount)
        AND NULLIF(COALESCE(NEW.metadata, '{}'::jsonb) ->> 'reversed_at', '') IS NOT NULL THEN
-      RETURN NEW;
-    END IF;
-    IF TG_OP IN ('UPDATE', 'DELETE') THEN
-      v_old := OLD.order_id;
-    END IF;
-    IF TG_OP <> 'DELETE' THEN
+      v_is_reversal := true;
       v_new := NEW.order_id;
+    ELSE
+      IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        v_old := OLD.order_id;
+      END IF;
+      IF TG_OP <> 'DELETE' THEN
+        v_new := NEW.order_id;
+      END IF;
     END IF;
   END IF;
 
@@ -194,7 +200,20 @@ BEGIN
     SELECT DISTINCT x FROM unnest(ARRAY[v_old, v_new]) AS t(x) WHERE x IS NOT NULL ORDER BY x
   LOOP
     PERFORM oxygen_private.credit_admission_lock(v_order);
-    IF EXISTS (SELECT 1 FROM public.oxygen_workflows WHERE order_id = v_order) THEN
+    IF v_is_reversal THEN
+      IF EXISTS (
+        SELECT 1
+        FROM public.oxygen_workflows w
+        JOIN public.orders o
+          ON o.id = w.order_id
+        WHERE w.order_id = v_order
+          AND o.cancelled_at IS NULL
+          AND COALESCE(o.payment_status, '') NOT IN ('refunded', 'cancelled')
+          AND w.stage NOT IN ('activated', 'cancelled', 'expired', 'failed')
+      ) THEN
+        RAISE EXCEPTION 'oxygen_local_credit_in_use' USING ERRCODE = '23514';
+      END IF;
+    ELSIF EXISTS (SELECT 1 FROM public.oxygen_workflows WHERE order_id = v_order) THEN
       RAISE EXCEPTION 'oxygen_local_credit_in_use' USING ERRCODE = '23514';
     END IF;
   END LOOP;

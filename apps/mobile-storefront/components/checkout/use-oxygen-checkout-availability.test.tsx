@@ -68,13 +68,13 @@ it.each([
   { voucher_token: 'test-token', voucher_award_id: 'award-id' },
   { voucher_token: 'test-token' },
   { voucher_award_id: 'award-id' },
-])('does not probe when the cart has voucher identifiers %j', async (identifiers) => {
+])('probes and keeps Oxygen available when the cart has voucher identifiers %j', async (identifiers) => {
   const { result } = renderHook(() =>
     useOxygenCheckoutAvailability([identifiers as CartItem])
   );
-  await act(async () => {});
-  expect(result.current.disabledReason).toContain('voucher');
-  expect(oxygenNativeSession).not.toHaveBeenCalled();
+  await waitFor(() => expect(result.current.disabledReason).toBeUndefined());
+  expect(result.current.visible).toBe(true);
+  expect(oxygenNativeSession).toHaveBeenCalled();
 });
 
 it('does not probe for a mismatched staging customer', async () => {

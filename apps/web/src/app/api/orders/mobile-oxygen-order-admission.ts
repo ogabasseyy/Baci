@@ -28,8 +28,8 @@ function isMobileOxygenOrder(
 }
 
 export function rejectMobileOxygenCreditCombination(
-  request: Request,
-  order: Pick<
+  _request: Request,
+  _order: Pick<
     OrderCreateInput,
     | 'payment_method'
     | 'source'
@@ -38,29 +38,11 @@ export function rejectMobileOxygenCreditCombination(
     | 'use_savings_credit'
     | 'savings_amount'
   >,
-  hasVoucherItem: boolean
+  _hasVoucherItem: boolean
 ): NextResponse | null {
-  if (!isMobileOxygenOrder(request, order.payment_method, order.source))
-    return null;
-  // Checkout may apply a server-validated merchant or loyalty discount.
-  // Prize vouchers require a voucher-bearing line and use a separate RPC.
-  if (
-    !hasVoucherItem &&
-    !order.use_wallet_credit &&
-    order.wallet_amount === 0 &&
-    !order.use_savings_credit &&
-    (order.savings_amount ?? 0) === 0
-  ) {
-    return null;
-  }
-  return NextResponse.json(
-    {
-      code: 'OXYGEN_MOBILE_COMBINATION_UNSUPPORTED',
-      error:
-        'Oxygen cannot be combined with vouchers, wallet credit, or savings.',
-    },
-    { status: 400 }
-  );
+  // Vouchers, wallet credit, and savings never suppress Oxygen on mobile.
+  // Net remaining payable (> 0) and 100%-credit settlement are handled server-side.
+  return null;
 }
 
 export async function rejectUnavailableMobileOxygenOrder({

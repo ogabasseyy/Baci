@@ -124,6 +124,50 @@ describe('GET /api/merchant/inbox/conversations/[conversationId]/messages', () =
 });
 
 describe('POST /api/merchant/inbox/conversations/[conversationId]/messages', () => {
+  const STORE_A = '11111111-1111-4111-8111-111111111111';
+  const STORE_B = '22222222-2222-4222-8222-222222222222';
+
+  it('bugfix: refuses a reply meant for another store without sending it', async () => {
+    mocks.resolve.mockResolvedValue({
+      ok: true,
+      binding: { ...binding, merchantId: STORE_B },
+    });
+
+    const response = await reply('7', { content: 'Hi', merchantId: STORE_A });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'merchant_mismatch' });
+    expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
+  it('sends a reply that names the store this session is signed in to', async () => {
+    mocks.resolve.mockResolvedValue({
+      ok: true,
+      binding: { ...binding, merchantId: STORE_A },
+    });
+
+    const response = await reply('7', {
+      content: 'Hi',
+      merchantId: STORE_A.toUpperCase(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mocks.sendReply).toHaveBeenCalledTimes(1);
+  });
+
+  it('still sends a reply that names no store (the in-app chat)', async () => {
+    const response = await reply('7', { content: 'Hi' });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('rejects a store id that is not an id', async () => {
+    const response = await reply('7', { content: 'Hi', merchantId: 'nope' });
+
+    expect(response.status).toBe(400);
+    expect(mocks.sendReply).not.toHaveBeenCalled();
+  });
+
   it('sends a trimmed reply with edit permission', async () => {
     const response = await reply('7', { content: '  Yes, in stock.  ' });
 

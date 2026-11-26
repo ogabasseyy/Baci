@@ -2,7 +2,12 @@
 import type { z } from 'zod';
 import { MobileOrderSummary } from '@/components/storefront/ogabassey/components/MobileCheckoutComponents';
 import type { CartItem } from '@/hooks/cart';
-import type { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
+import {
+  getOxygenOrderNetPayable,
+  getOxygenOrderPreGatewayPaid,
+  isOxygenSettledStatus,
+  type oxygenCheckoutOrderSchema,
+} from '@/schemas/oxygen-checkout-order';
 import { oxygenOrderItemImage } from './oxygen-order-item-image';
 
 /** The actual checkout's mobile summary, populated from the saved order. */
@@ -11,6 +16,9 @@ export function OxygenMobileOrderSummary({
 }: {
   order: z.infer<typeof oxygenCheckoutOrderSchema>;
 }) {
+  const preGatewayPaid = getOxygenOrderPreGatewayPaid(order);
+  const netPayable = getOxygenOrderNetPayable(order);
+  const isSettled = isOxygenSettledStatus(order.payment_status);
   const cart: CartItem[] = order.order_items.map((item) => ({
     id: item.id,
     cartItemId: item.id,
@@ -36,10 +44,10 @@ export function OxygenMobileOrderSummary({
       deliveryCost={order.shipping_fee}
       deliveryMethod={null}
       giftWrappingCost={0}
-      walletBalance={0}
-      payWithWallet={false}
-      walletAmountUsed={0}
-      remainingAmount={order.total}
+      walletBalance={preGatewayPaid}
+      payWithWallet={preGatewayPaid > 0}
+      walletAmountUsed={preGatewayPaid}
+      remainingAmount={isSettled ? 0 : netPayable}
       taxAmount={order.tax_amount}
     />
   );

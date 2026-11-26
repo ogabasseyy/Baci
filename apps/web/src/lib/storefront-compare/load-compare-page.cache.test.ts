@@ -97,7 +97,7 @@ describe('loadComparePage cache directives', () => {
     mockGetPublishedClusterPosts.mockResolvedValue([]);
   });
 
-  it('uses the categories cacheLife profile and tenant-scoped cache tags without global tags', async () => {
+  it('uses an extended compare cacheLife and tenant-scoped cache tags without global tags', async () => {
     const { loadComparePage } = await import('./load-compare-page');
 
     const result = await loadComparePage({
@@ -108,7 +108,11 @@ describe('loadComparePage cache directives', () => {
 
     expect(result?.kind).toBe('product');
     expect(mockCacheLife).toHaveBeenCalledTimes(1);
-    expect(mockCacheLife).toHaveBeenCalledWith('categories');
+    expect(mockCacheLife).toHaveBeenCalledWith({
+      stale: 3600,
+      revalidate: 86400,
+      expire: 604800,
+    });
 
     const allTags = mockCacheTag.mock.calls.flat();
     expect(allTags).toEqual(

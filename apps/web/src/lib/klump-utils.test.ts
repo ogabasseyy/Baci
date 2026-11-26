@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildKlumpItems,
+  getBnplRemainingAmount,
   getUnmaskedValue,
   normalizeKlumpPhone,
   toCurrencyAmount,
@@ -148,5 +149,131 @@ describe('klump-utils', () => {
         ],
       })
     ).toEqual([{ name: 'First tiny item', quantity: 1, unit_price: 1 }]);
+  });
+
+  it('computes net remaining payable amount and balances Klump items to it when pre-gateway credit was applied', () => {
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        amount_paid: 15_000,
+        wallet_amount_used: 15_000,
+      })
+    ).toBe(35_000);
+
+    expect(
+      buildKlumpItems({
+        id: 'order-1',
+        total: 50_000,
+        amount_paid: 15_000,
+        items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+      })
+    ).toEqual([{ name: 'Phone', quantity: 1, unit_price: 35_000 }]);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        amount_paid: 0,
+        wallet_amount_used: 0,
+        wallet_ledger_used: 10_000,
+        savings_ledger_used: 5_000,
+      })
+    ).toBe(35_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'pending',
+        amount_paid: 15_000,
+        wallet_amount_used: 0,
+      })
+    ).toBe(35_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'unpaid',
+        amount_paid: 20_000,
+        wallet_amount_used: 20_000,
+        wallet_ledger_used: 0,
+        savings_ledger_used: 5_000,
+        wallet_reversal_completed: true,
+      })
+    ).toBe(45_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'partially_paid',
+        amount_paid: 15_000,
+        wallet_amount_used: 0,
+        wallet_ledger_used: null,
+        savings_ledger_used: null,
+      })
+    ).toBe(35_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'partially_paid',
+        amount_paid: 30_000,
+        wallet_amount_used: 10_000,
+        wallet_ledger_used: 10_000,
+        savings_ledger_used: 5_000,
+      })
+    ).toBe(20_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'partially_paid',
+        amount_paid: 40_000,
+        wallet_amount_used: 20_000,
+        wallet_ledger_used: 0,
+        savings_ledger_used: 0,
+        wallet_reversal_completed: true,
+        wallet_reversed_credit: 20_000,
+      })
+    ).toBe(30_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'partially_paid',
+        amount_paid: 40_000,
+        wallet_amount_used: 20_000,
+        wallet_reversal_completed: true,
+        wallet_reversed_credit: 20_000,
+      })
+    ).toBe(30_000);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'bnpl_approved',
+        amount_paid: 35_000,
+        wallet_amount_used: 15_000,
+        wallet_ledger_used: 15_000,
+        savings_ledger_used: 0,
+      })
+    ).toBe(0);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'bnpl_approved',
+        amount_paid: 35_000,
+        wallet_amount_used: 15_000,
+      })
+    ).toBe(0);
+
+    expect(
+      getBnplRemainingAmount({
+        total: 50_000,
+        payment_status: 'paid',
+        amount_paid: 50_000,
+        wallet_ledger_used: 0,
+        savings_ledger_used: 0,
+      })
+    ).toBe(0);
   });
 });

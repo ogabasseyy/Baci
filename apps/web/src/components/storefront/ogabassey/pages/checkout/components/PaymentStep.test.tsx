@@ -159,7 +159,7 @@ describe('PaymentStep', () => {
       );
     });
 
-    it('hides Oxygen when wallet credit reduces the amount due', () => {
+    it('keeps Oxygen visible when partial wallet credit leaves positive amount due and hides it at zero', () => {
       vi.stubEnv('NODE_ENV', 'development');
       vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
       vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:3451');
@@ -174,6 +174,14 @@ describe('PaymentStep', () => {
             {...defaultProps}
             paymentTab="installments"
             remainingAmount={9000}
+          />,
+        );
+        expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
+        view.rerender(
+          <PaymentStep
+            {...defaultProps}
+            paymentTab="installments"
+            remainingAmount={0}
           />,
         );
         expect(screen.queryByRole('radio', { name: /oxygen/i })).toBeNull();
@@ -733,18 +741,30 @@ describe('PaymentStep', () => {
       expect(screen.getByText('Klump')).toBeInTheDocument();
     });
 
-    it('hides Klump when wallet credit reduces the payable amount', () => {
+    it('keeps Klump visible when partial wallet credit reduces the payable amount within limits and hides at zero', () => {
       const merchant = {
         feature_settings: { klump_enabled: true } as FeatureSettings,
       };
 
-      render(
+      const view = render(
         <PaymentStep
           {...defaultProps}
           merchant={merchant}
           paymentTab="installments"
           orderAmount={50_000}
           remainingAmount={45_000}
+        />
+      );
+
+      expect(screen.getByText('Klump')).toBeInTheDocument();
+
+      view.rerender(
+        <PaymentStep
+          {...defaultProps}
+          merchant={merchant}
+          paymentTab="installments"
+          orderAmount={50_000}
+          remainingAmount={0}
         />
       );
 
@@ -979,13 +999,13 @@ describe('PaymentStep', () => {
       }
     );
 
-    it('clears a stale Klump selection when wallet credit makes it ineligible', () => {
+    it('clears a stale Klump selection only when wallet credit leaves nothing payable', () => {
       const setPaymentMethod = vi.fn();
       const merchant = {
         feature_settings: { klump_enabled: true } as FeatureSettings,
       };
 
-      render(
+      const view = render(
         <PaymentStep
           {...defaultProps}
           merchant={merchant}
@@ -994,6 +1014,20 @@ describe('PaymentStep', () => {
           setPaymentMethod={setPaymentMethod}
           orderAmount={50_000}
           remainingAmount={45_000}
+        />
+      );
+
+      expect(setPaymentMethod).not.toHaveBeenCalled();
+
+      view.rerender(
+        <PaymentStep
+          {...defaultProps}
+          merchant={merchant}
+          paymentTab="installments"
+          paymentMethod="klump"
+          setPaymentMethod={setPaymentMethod}
+          orderAmount={50_000}
+          remainingAmount={0}
         />
       );
 

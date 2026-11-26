@@ -60,8 +60,14 @@ describe('drainStorefrontCacheInvalidation', () => {
       expect.arrayContaining([
         'merchant-ogabassey.com',
         'product-lcp-image-22222222-2222-4222-8222-222222222222-cache-phone',
+        'merchant-feed-22222222-2222-4222-8222-222222222222',
       ]),
       { mode: 'delete' }
+    );
+    expect(mocks.products).toHaveBeenCalledWith(
+      '22222222-2222-4222-8222-222222222222',
+      undefined,
+      { expireImmediately: true, feedScope: 'merchant' }
     );
     expect(mocks.vercel).not.toHaveBeenCalledWith(
       expect.arrayContaining(['product-lcp-image'])

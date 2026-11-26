@@ -27,6 +27,24 @@ describe('isStoreCreditCompatiblePayment', () => {
     ).toBe(true);
     expect(
       isStoreCreditCompatiblePayment({
+        paymentTab: 'installments',
+        selectedPayment: 'oxygen',
+      })
+    ).toBe(true);
+    expect(
+      isStoreCreditCompatiblePayment({
+        paymentTab: 'installments',
+        selectedPayment: 'klump',
+      })
+    ).toBe(true);
+    expect(
+      isStoreCreditCompatiblePayment({
+        paymentTab: 'installments',
+        selectedPayment: 'credit_direct',
+      })
+    ).toBe(true);
+    expect(
+      isStoreCreditCompatiblePayment({
         paymentTab: 'pay_later',
         selectedPayment: 'invoice',
       })

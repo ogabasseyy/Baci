@@ -15,6 +15,7 @@ describe('payment method setting definitions', () => {
       'credpal',
       'credit_direct',
       'klump',
+      'oxygen',
       'pay_on_delivery',
     ]);
   });
@@ -44,6 +45,12 @@ describe('payment method setting definitions', () => {
           enabledField: 'klump_enabled',
           id: 'klump',
           name: 'Klump',
+        }),
+        expect.objectContaining({
+          category: 'bnpl',
+          enabledField: 'oxygen_enabled',
+          id: 'oxygen',
+          name: 'Oxygen',
         }),
       ])
     );

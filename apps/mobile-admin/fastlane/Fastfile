@@ -1,6 +1,9 @@
 default_platform(:ios)
 
 require "English"
+# `import`, as in the storefront Fastfile: fastlane runs this file as a string,
+# which can leave require_relative without a base path.
+import("pending_review_guard.rb")
 
 WORKSPACE = "ios/BaciTheEcommerceBuilder.xcworkspace"
 SCHEME = "BaciTheEcommerceBuilder"
@@ -257,7 +260,8 @@ platform :ios do
       submit_for_review: true,
       automatic_release: true,
       force: true,
-      reject_if_possible: true,
+      # Never withdraw a review that is already queued; see pending_review_guard.
+      reject_if_possible: false,
       precheck_include_in_app_purchases: false,
       # IDFA: the admin app uses the advertiser identifier for ad-attribution of
       # Baci's own acquisition marketing (TikTok Business SDK install/action
@@ -291,11 +295,19 @@ platform :ios do
     deliver_opts[:build_number] = build_number unless build_number.empty?
     deliver_opts[:app_version] = app_version unless app_version.empty?
 
+    # Checked before the processing wait, so a skip costs no runner time.
+    # asc_api_key above has already authorised Spaceship.
+    next if pending_review_blocks_submission?(app_id: BUNDLE_ID)
+
     wait_for_app_store_build_processing!(
       api_key: api_key,
       app_version: app_version,
       build_number: build_number
     )
+
+    # And again: a version can reach Apple during the wait, and set_changelog
+    # would rename a version Apple is still holding.
+    next if pending_review_blocks_submission?(app_id: BUNDLE_ID)
 
     changelog_opts = { api_key: api_key, changelog: release_notes_text }
     changelog_opts[:version] = app_version unless app_version.empty?

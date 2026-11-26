@@ -52,7 +52,6 @@ describe('native application draft restoration', () => {
           busy={false}
           scopeKey="typing/owner"
           onExecute={jest.fn()}
-          onProof={jest.fn()}
         />
       );
       await act(async () => {});
@@ -171,7 +170,6 @@ describe('native application draft restoration', () => {
       busy: false,
       scopeKey: 'user/merchant/workflow',
       onExecute: jest.fn(),
-      onProof: jest.fn(),
     };
     const view = render(<OxygenApplicationFlow {...props} />);
     await act(async () => {});
@@ -209,7 +207,6 @@ describe('canonical server phone prerequisite', () => {
       busy: false,
       scopeKey: 'owned/workflow',
       onExecute: jest.fn(),
-      onProof: jest.fn(),
       phoneSentAt: new Date().toISOString(),
     };
     const view = render(<OxygenApplicationFlow {...props} />);
@@ -256,7 +253,6 @@ it('reconfirms the saved account when reopening directly on Income, without subm
       busy={false}
       scopeKey="restored/account"
       onExecute={onExecute}
-      onProof={jest.fn()}
     />
   );
   await act(async () => {});
@@ -301,7 +297,6 @@ it('blocks leaving Identity for an incomplete BVN and highlights that field', as
       busy={false}
       scopeKey="invalid/identity"
       onExecute={onExecute}
-      onProof={jest.fn()}
     />
   );
   await act(async () => {});

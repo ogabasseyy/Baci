@@ -26,7 +26,6 @@ export interface OxygenApplicationFlowProps {
     command: OxygenRuntimeAction,
     file?: OxygenTransientFile
   ) => Promise<void>;
-  onProof?: (file: OxygenTransientFile | undefined) => void;
   scopeKey: string;
   onResendPhone?: () => Promise<void>;
   phoneSentAt?: string | null;
@@ -39,7 +38,7 @@ export interface OxygenApplicationFlowProps {
     fields: OxygenFields;
   } | null;
 }
-/** Mount for the workflow's full lifetime so the first booking retains its proof. */
+/** Collects identity, bank, employment, and consent for Step 1. */
 export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
   const { snapshot, client, busy, onExecute, scopeKey } = props;
   const colors = useOxygenColors();

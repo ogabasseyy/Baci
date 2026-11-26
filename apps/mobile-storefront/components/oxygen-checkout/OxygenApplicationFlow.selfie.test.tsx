@@ -40,7 +40,6 @@ it('keeps the verified OTP screen while the selfie link loads, with one loading 
       busy
       scopeKey="owned/selfie"
       onExecute={onExecute}
-      onProof={jest.fn()}
       selfieRequired
       selfieLoading
       onContinueSelfie={jest.fn()}

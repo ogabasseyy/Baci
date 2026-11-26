@@ -44,7 +44,17 @@ export function OxygenBookedAddress({
   const [confirmed, setConfirmed] = useState(false);
   const [recovered, setRecovered] = useState(false);
   const colors = useOxygenColors();
-  const picked = useOxygenProof(snapshot.workflowId);
+  // Scope proof to workflow and material address fields so optional landmark
+  // edits preserve the selected bill while street/location changes require a fresh match.
+  const proofScope = JSON.stringify([
+    snapshot.workflowId,
+    fields.home_state ?? '',
+    fields.home_lga ?? '',
+    fields.home_city ?? '',
+    fields.home_street ?? '',
+    fields.home_house_number ?? '',
+  ]);
+  const picked = useOxygenProof(proofScope);
   useEffect(() => {
     if (loadFailed) return;
     let live = true;

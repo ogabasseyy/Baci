@@ -95,7 +95,6 @@ export function CustomerFormFields({
       bankSelection,
       checkingAccount,
       bankVerified,
-      requiresResidentialFile: false,
     });
     if (!result.ok) {
       if (result.field) highlightField(result.field);

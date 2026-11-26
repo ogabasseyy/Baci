@@ -1,7 +1,6 @@
 import type {
   OxygenMobileCapabilities,
   OxygenRuntimeSnapshot,
-  OxygenTransientFile,
 } from '@baci/shared/oxygen';
 import { type RefObject, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -62,7 +61,6 @@ export function OxygenWorkflowBody({
   prefill?: OxygenFields;
 }) {
   const colors = useOxygenColors();
-  const [proof, setProof] = useState<OxygenTransientFile | undefined>();
   const phoneMarker = useOxygenPhoneMarker(
     `${scopeKey}:${snapshot.workflowId}`
   );
@@ -145,7 +143,6 @@ export function OxygenWorkflowBody({
         client={client}
         busy={disabled}
         onExecute={controller.execute}
-        onProof={setProof}
         scopeKey={snapshot.workflowId}
         phoneSentAt={phoneMarker.sentAt}
         onPhoneSentAt={phoneMarker.mark}
@@ -207,7 +204,6 @@ export function OxygenWorkflowBody({
         <OxygenBookedAddress
           snapshot={snapshot}
           client={client}
-          proof={proof}
           checkoutAddress={
             prefill?.home_street ? { kind: 'delivery', fields: prefill } : null
           }

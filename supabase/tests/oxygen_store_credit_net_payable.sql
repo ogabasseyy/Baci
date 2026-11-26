@@ -1,6 +1,8 @@
 -- Rollback-only SQL regression coverage for Oxygen store credit + net payable invariants.
 BEGIN;
 SELECT pg_catalog.set_config('app.audit_actor_user_id','ec310000-0000-4000-8000-000000000001',true);
+SELECT pg_catalog.set_config('request.jwt.claim.role','service_role',true);
+SELECT pg_catalog.set_config('request.jwt.claims','{"role":"service_role"}',true);
 INSERT INTO auth.users(id,instance_id,aud,role,email,encrypted_password,email_confirmed_at,created_at,updated_at,raw_app_meta_data,raw_user_meta_data)
 VALUES
  ('ec310000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000000','authenticated','authenticated','oxygen-net-customer@example.test','test',now(),now(),now(),'{}','{}'),
@@ -39,6 +41,8 @@ VALUES
  ('ec310000-0000-4000-8000-000000000011','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-ZERO',50000,50000,'NGN','unpaid','oxygen',0,0,50000,50000),
  ('ec310000-0000-4000-8000-000000000012','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-LEDGER-PARTIAL',50000,50000,'NGN','unpaid','oxygen',0,0,0,0),
  ('ec310000-0000-4000-8000-000000000013','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-LEDGER-ZERO',50000,50000,'NGN','unpaid','oxygen',0,0,0,0),
+ ('ec310000-0000-4000-8000-000000000014','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PAID',50000,50000,'NGN','paid','oxygen',0,0,50000,0),
+ ('ec310000-0000-4000-8000-000000000015','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-APPROVED-WALLET',50000,50000,'NGN','bnpl_approved','oxygen',0,0,50000,15000),
  ('ec310000-0000-4000-8000-000000000017','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PENDING-PARTIAL',50000,50000,'NGN','pending','oxygen',0,0,15000,15000);
 
 DO $ledger$
@@ -99,7 +103,9 @@ DECLARE
   v_cmd jsonb;
   v_claim jsonb;
 BEGIN
+  PERFORM pg_catalog.set_config('request.jwt.claim.role','authenticated',true);
   PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+  PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000001"}',true);
 
   -- 100%-covered order cannot start an Oxygen workflow.
   BEGIN
@@ -187,11 +193,6 @@ BEGIN
   END;
 
   -- Settled orders ('paid' / 'bnpl_approved') with amount_paid = total must not treat settled payment as store credit.
-  INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
-  VALUES
-   ('ec310000-0000-4000-8000-000000000014','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-PAID',50000,50000,'NGN','paid','oxygen',0,0,50000,0),
-   ('ec310000-0000-4000-8000-000000000015','ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OXY-APPROVED-WALLET',50000,50000,'NGN','bnpl_approved','oxygen',0,0,50000,15000);
-
   IF oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 50000, 0, 'paid') IS DISTINCT FROM 50000 THEN
     RAISE EXCEPTION 'Expected paid order net payable 50000, got %', oxygen_private.order_net_payable_for_order('ec310000-0000-4000-8000-000000000014', 50000, 50000, 0, 'paid');
   END IF;
@@ -206,6 +207,9 @@ BEGIN
   END IF;
 
   -- Reversed wallet redemptions, non-completed wallet rows, and reversed savings rows do not reduce net payable.
+  RESET ROLE;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role','service_role',true);
+  PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"service_role"}',true);
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -283,7 +287,10 @@ BEGIN
 
   -- Patched Oxygen helper/activation functions evaluate partial-credit orders without
   -- missing-column errors and respect net payable (35,000 rather than 50,000).
+  SET LOCAL ROLE authenticated;
+  PERFORM pg_catalog.set_config('request.jwt.claim.role','authenticated',true);
   PERFORM pg_catalog.set_config('request.jwt.claim.sub','ec310000-0000-4000-8000-000000000001',true);
+  PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"authenticated","sub":"ec310000-0000-4000-8000-000000000001"}',true);
   IF public.oxygen_nin_attempt_status(v_wf_id, (v_wf->>'version')::integer) IS DISTINCT FROM 'blocked' THEN
     RAISE EXCEPTION 'Expected blocked NIN status for fresh partial-credit workflow';
   END IF;
@@ -382,6 +389,8 @@ BEGIN
     v_net numeric;
   BEGIN
     RESET ROLE;
+    PERFORM pg_catalog.set_config('request.jwt.claim.role','service_role',true);
+    PERFORM pg_catalog.set_config('request.jwt.claims','{"role":"service_role"}',true);
     INSERT INTO public.orders(id,merchant_id,customer_id,order_number,subtotal,total,currency,payment_status,payment_method,shipping_fee,discount_amount,amount_paid,wallet_amount_used)
     VALUES
       (v_pp_gw,'ec310000-0000-4000-8000-000000000003','ec310000-0000-4000-8000-000000000004','OX-PP-GW',50000,50000,'NGN','partially_paid','oxygen',0,0,30000,10000),

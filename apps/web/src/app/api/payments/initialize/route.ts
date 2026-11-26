@@ -2089,6 +2089,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Re-verify store credit and order total after the external gateway call
+    // so a concurrent wallet redemption or reversal during gateway init never
+    // creates a transaction or returns an authorization URL for a stale amount.
+    const postGatewayPayableState = await readOrderPayableState({
+      paymentDataClient,
+      orderId: data.order_id,
+      merchantId,
+      customerEmail: data.customer_email,
+      redvaultRequested,
+      recheckSnapshot: true,
+      initialOrderSnapshot: orderSnapshot,
+      snapshotTotal,
+    });
+    if (!postGatewayPayableState.ok) {
+      return createErrorResponse(
+        postGatewayPayableState.message,
+        postGatewayPayableState.code,
+        postGatewayPayableState.status
+      );
+    }
+    if (
+      postGatewayPayableState.payableAmount !== payableAmount ||
+      postGatewayPayableState.payableAmount <= 0
+    ) {
+      return createErrorResponse(
+        'The order payment details changed. Please try again.',
+        'CHECKOUT_PAYMENT_DETAILS_CHANGED',
+        409
+      );
+    }
+
     // Juicyway is a stablecoin rail: the webhook reports the settled amount in
     // the session currency (USDT/USDC cents), which is NOT comparable to the
     // NGN order total. Persist the expected settlement amount + locked FX rate

@@ -202,6 +202,55 @@ it('does not treat settled amount_paid as store credit for paid or bnpl_approved
   });
 });
 
+it('derives financedPrincipal for settled paid and bnpl_approved orders from settled amount_paid minus pre-gateway credit', async () => {
+  mockOrderQuery({
+    id: orderId,
+    total: 198000,
+    amount_paid: 170000,
+    wallet_amount_used: 48000,
+    payment_method: 'oxygen',
+    payment_status: 'paid',
+    shipping_status: 'pending',
+  });
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 0,
+    financedPrincipal: 122000,
+  });
+
+  mockOrderQuery(
+    {
+      id: orderId,
+      total: 198000,
+      amount_paid: 168000,
+      wallet_amount_used: 0,
+      payment_method: 'oxygen',
+      payment_status: 'bnpl_approved',
+      shipping_status: 'pending',
+    },
+    {
+      walletRows: [
+        {
+          amount: 30000,
+          source_type: 'order_redemption',
+          type: 'redemption',
+          status: 'completed',
+        },
+      ],
+      savingsRows: [{ amount: 18000, metadata: {} }],
+    }
+  );
+  await expect(
+    readOwnedOxygenOrder(orderId, customerId, merchantId)
+  ).resolves.toMatchObject({
+    total: 198000,
+    payableTotal: 0,
+    financedPrincipal: 120000,
+  });
+});
+
 it('falls back to wallet and savings ledger rows for unpaid and settled Oxygen orders', async () => {
   mockOrderQuery(
     {

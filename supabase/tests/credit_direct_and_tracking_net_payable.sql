@@ -3,6 +3,8 @@
 BEGIN;
 
 SELECT pg_catalog.set_config('app.audit_actor_user_id', 'cd710000-0000-4000-8000-000000000001', true);
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+SELECT pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 INSERT INTO auth.users(id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 VALUES ('cd710000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000000', 'authenticated', 'authenticated', 'cd-ledger-merchant@example.test', 'test', now(), now(), now(), '{}', '{}');
@@ -237,6 +239,45 @@ BEGIN
     RAISE EXCEPTION 'Expected net-payable create_payment_transaction to return transaction id';
   END IF;
 
+  -- Idempotent retry with the same BNPL reference returns the existing transaction id.
+  IF public.create_payment_transaction(
+    'cd710000-0000-4000-8000-000000000002',
+    'cd710000-0000-4000-8000-000000000010',
+    35000,
+    'NGN',
+    'klump',
+    'BAC-CD-NET-001',
+    0,
+    35000,
+    'guest@example.test',
+    'Credit Guest',
+    NULL,
+    '{}'::jsonb
+  ) IS DISTINCT FROM v_tx_id THEN
+    RAISE EXCEPTION 'Expected idempotent BNPL retry to return existing transaction id';
+  END IF;
+
+  -- Reject a second distinct BNPL transaction while order is bnpl_pending with a prior pending BNPL transaction.
+  BEGIN
+    PERFORM public.create_payment_transaction(
+      'cd710000-0000-4000-8000-000000000002',
+      'cd710000-0000-4000-8000-000000000010',
+      35000,
+      'NGN',
+      'klump',
+      'BAC-CD-BNPL-DUP-001',
+      0,
+      35000,
+      'guest@example.test',
+      'Credit Guest',
+      NULL,
+      '{}'::jsonb
+    );
+    RAISE EXCEPTION 'bnpl_pending order with active pending BNPL transaction accepted a second transaction';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amount_invalid' THEN RAISE; END IF;
+  END;
+
   -- Reject duplicate pending transactions on already-settled orders ('paid' and 'bnpl_approved').
   UPDATE public.orders
   SET payment_status = 'paid', amount_paid = 50000
@@ -289,6 +330,11 @@ BEGIN
   -- Partial wallet-funded and BNPL orders on an amendment-configured merchant must
   -- pass net-payable verification as 'untracked' instead of raising amendment_ineligible,
   -- while stale pre-credit amounts and unqualified DVA channels stay blocked.
+  UPDATE public.transactions
+  SET status = 'failed'
+  WHERE order_id = 'cd710000-0000-4000-8000-000000000010'
+    AND gateway_reference = 'BAC-CD-NET-001';
+
   UPDATE public.orders
   SET payment_status = 'unpaid', amount_paid = 15000, wallet_amount_used = 10000
   WHERE id = 'cd710000-0000-4000-8000-000000000010';
@@ -444,6 +490,25 @@ BEGIN
   ) IS DISTINCT FROM 'partially_paid' THEN
     RAISE EXCEPTION 'create_payment_transaction downgraded partially_paid order status';
   END IF;
+
+  -- Concurrent BNPL transaction on a partially_paid order with a prior pending BNPL transaction is rejected.
+  BEGIN
+    PERFORM public.create_payment_transaction(
+      'cd710000-0000-4000-8000-000000000002',
+      'cd710000-0000-4000-8000-000000000014',
+      20000,
+      'NGN',
+      'klump',
+      'BAC-PP-KLUMP-02',
+      0,
+      20000,
+      'guest@example.test',
+      'Partial Buyer'
+    );
+    RAISE EXCEPTION 'partially_paid order with active pending BNPL transaction accepted a second BNPL transaction';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'amount_invalid' THEN RAISE; END IF;
+  END;
 
   -- 12. Mixed-case payment_status normalization matches TypeScript trim().toLowerCase().
   IF private.credit_direct_net_payable(

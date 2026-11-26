@@ -3115,6 +3115,58 @@ describe('POST /api/payments/initialize', () => {
       }
     });
 
+    it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED with no authorization URL when store credit changes during gateway initialization', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 1000,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      mockInitializePaystack.mockImplementationOnce(async () => {
+        walletTransactionsResult = {
+          data: [
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_redemption',
+              type: 'redemption',
+            },
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_reversal',
+              type: 'credit',
+            },
+          ],
+          error: null,
+        };
+        return {
+          authorization_url: 'https://checkout.paystack.com/stale-session',
+          access_code: 'stale-code',
+          reference: 'BAC-ABCD12345678',
+        };
+      });
+
+      const res = await POST(
+        makeRequest({ ...validBody, gateway: 'paystack' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('CHECKOUT_PAYMENT_DETAILS_CHANGED');
+      expect(json.authorization_url).toBeUndefined();
+      expect(json.checkout_url).toBeUndefined();
+      expect(
+        rpcCalls.some((call) => call.name === 'create_payment_transaction')
+      ).toBe(false);
+    });
+
     it('returns 400 INVALID_ORDER_TOTAL when non-REDVAULT recheck reads a null orders.total', async () => {
       amendmentCheckoutClaimResult = { data: 'untracked', error: null };
       orderPaymentResult = {

@@ -104,11 +104,23 @@ export async function readOwnedOxygenOrder(
   if (isPreGateway && payableTotal <= 0) {
     throw new ZeroBalanceOxygenOrderError(order.id, order.order_number);
   }
+  const effectiveWalletCredit = walletSummary.hasCompletedReversal
+    ? walletSummary.netCredit
+    : Math.max(order.wallet_amount_used ?? 0, walletSummary.netCredit);
+  const preGatewayCreditUsed =
+    Math.max(effectiveWalletCredit, 0) + savingsLedgerUsed;
+  const settledFinancedPrincipal =
+    typeof order.amount_paid === 'number' && order.amount_paid > 0
+      ? Math.max(
+          Math.round((order.amount_paid - preGatewayCreditUsed) * 100) / 100,
+          0
+        )
+      : payableTotal;
   return {
     ...order,
     // Settled orders have 0 remaining payable balance; preserve financedPrincipal separately.
     payableTotal: isPreGateway ? payableTotal : 0,
-    financedPrincipal: payableTotal,
+    financedPrincipal: isPreGateway ? payableTotal : settledFinancedPrincipal,
     prefill: oxygenOrderPrefill(order),
   };
 }

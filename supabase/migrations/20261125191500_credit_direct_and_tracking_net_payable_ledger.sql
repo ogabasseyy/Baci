@@ -1040,6 +1040,27 @@ BEGIN
     END IF;
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.transactions t
+    WHERE t.order_id = p_order_id
+      AND t.merchant_id = p_merchant_id
+      AND t.gateway_reference = v_reference
+  ) AND (
+    lower(trim(COALESCE(v_order_current_payment_status, ''))) = 'bnpl_pending'
+    OR EXISTS (
+      SELECT 1
+      FROM public.transactions t
+      WHERE t.order_id = p_order_id
+        AND t.transaction_type = 'payment'
+        AND t.gateway IN ('klump', 'credit_direct')
+        AND t.status IN ('pending', 'processing')
+        AND t.gateway_reference IS DISTINCT FROM v_reference
+    )
+  ) THEN
+    RAISE EXCEPTION 'amount_invalid';
+  END IF;
+
   v_order_payment_status := CASE
     WHEN v_gateway IN ('klump', 'credit_direct') THEN 'bnpl_pending'
     ELSE 'pending'

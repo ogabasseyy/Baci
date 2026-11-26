@@ -20,7 +20,10 @@ import type {
   ServerActionState,
 } from './onboarding-action-types';
 import { resolveOnboardingUser } from './resolve-onboarding-user';
-import { upsertOnboardingMerchant } from './upsert-onboarding-merchant';
+import {
+  OnboardingSlugUnavailableError,
+  upsertOnboardingMerchant,
+} from './upsert-onboarding-merchant';
 
 export function buildOnboardingRedirectUrl(search = ''): string {
   const appUrl = getConfiguredAppUrl() ?? (isProduction() ? null : getAppUrl());
@@ -85,6 +88,9 @@ export async function runSubmitOnboardingWorkflow(
     country,
     logoUrl,
     brandColors: rawBrandColors,
+    phone,
+    slug,
+    slugIsCustom,
   } = validationResult.data;
   const businessName = normalizeBusinessName(rawBusinessName);
   const { brandColors, brandColorsParsed } =
@@ -112,6 +118,9 @@ export async function runSubmitOnboardingWorkflow(
       logoUrl,
       brandColors,
       brandColorsParsed,
+      phone,
+      slug,
+      slugIsCustom,
     });
     const merchant = persisted.merchant;
     if (!merchant.slug)
@@ -122,7 +131,10 @@ export async function runSubmitOnboardingWorkflow(
       slug: merchant.slug,
       rootDomain: getRootDomain() || 'usebaci.com',
     });
-    if (domain.status === 'conflict' || domain.status === 'failed')
+    if (domain.status === 'conflict') {
+      throw new OnboardingSlugUnavailableError();
+    }
+    if (domain.status === 'failed')
       throw new Error('Could not finish store setup. Please try again.');
     const homepage = await provisionCuratedHomepage({
       supabase,
@@ -158,6 +170,13 @@ export async function runSubmitOnboardingWorkflow(
       merchantId: merchant.id,
     };
   } catch (error) {
+    if (error instanceof OnboardingSlugUnavailableError) {
+      return {
+        success: false,
+        code: 'slug_unavailable',
+        message: error.message,
+      };
+    }
     logger.error({
       message: 'Onboarding setup failed',
       stage: 'setup',

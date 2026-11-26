@@ -3,6 +3,7 @@ import type { BrandColors } from '@/types';
 export type ServerActionState = {
   message: string;
   success: boolean;
+  code?: string;
   businessName?: string;
   merchantId?: string;
   errors?: { fieldErrors: Record<string, string[] | undefined> };

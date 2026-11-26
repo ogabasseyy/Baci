@@ -1,0 +1,94 @@
+import { describe, expect, it } from 'vitest';
+import {
+  DEFAULT_BRAND_COLORS,
+  isValidOnboardingPhone,
+  isValidStoreSlug,
+  normalizePersonName,
+  type OnboardingChatData,
+  sanitizeSlugInput,
+  slugifyBusinessName,
+  transitionFromQuickReply,
+  transitionFromTextInput,
+} from './index';
+
+const COUNTRIES = [
+  { code: 'NG', name: 'Nigeria' },
+  { code: 'GB', name: 'United Kingdom' },
+] as const;
+
+const BUSINESS_TYPES = [
+  { id: 'fashion', label: 'Fashion & Apparel' },
+  { id: 'other', label: 'Other' },
+] as const;
+
+const BASE_DATA: OnboardingChatData = {
+  firstName: 'Ada',
+  lastName: 'Okafor',
+  phone: '',
+  businessName: 'SoleLux',
+  businessType: 'fashion',
+  otherBusinessType: '',
+  country: 'NG',
+  slug: 'solelux',
+  slugIsCustom: false,
+  logoUrl: '',
+  brandColors: DEFAULT_BRAND_COLORS,
+};
+
+describe('@baci/shared/onboarding-chat', () => {
+  it('validates and normalizes slugs, names, and phone numbers', () => {
+    expect(sanitizeSlugInput('--Kicks--Hub--')).toBe('kicks-hub');
+    expect(isValidStoreSlug('kicks-hub')).toBe(true);
+    expect(isValidStoreSlug('ab')).toBe(false);
+    expect(isValidStoreSlug('a'.repeat(64))).toBe(false);
+    expect(slugifyBusinessName('AB')).toBe('ab-store');
+    expect(normalizePersonName("mary O'Brien McDonald")).toBe(
+      "Mary O'Brien McDonald"
+    );
+    expect(normalizePersonName('ADA OKAFOR')).toBe('Ada Okafor');
+    expect(isValidOnboardingPhone('+234 801 234 5678')).toBe(true);
+    expect(isValidOnboardingPhone('abc')).toBe(false);
+  });
+
+  it('handles logo intent, negation, slug confirmation, and summary edits cleanly', () => {
+    const upload = transitionFromTextInput({
+      step: 'logo',
+      rawText: 'choose another',
+      data: BASE_DATA,
+      countries: COUNTRIES,
+      businessTypes: BUSINESS_TYPES,
+    });
+    expect(upload.sideEffect).toEqual({ type: 'upload_logo' });
+
+    const negatedOffer = transitionFromTextInput({
+      step: 'logo_generate_offer',
+      rawText: "Don't generate",
+      data: BASE_DATA,
+      countries: COUNTRIES,
+      businessTypes: BUSINESS_TYPES,
+    });
+    expect(negatedOffer.nextStep).toBe('slug');
+    expect(negatedOffer.nextData).toEqual({
+      logoUrl: '',
+      brandColors: DEFAULT_BRAND_COLORS,
+    });
+
+    const confirm = transitionFromTextInput({
+      step: 'slug',
+      rawText: 'Looks good!',
+      data: BASE_DATA,
+      countries: COUNTRIES,
+      businessTypes: BUSINESS_TYPES,
+    });
+    expect(confirm.nextStep).toBe('summary');
+
+    const editPhone = transitionFromQuickReply({
+      option: { id: 'summary:edit_phone', label: 'Change phone' },
+      data: BASE_DATA,
+      previewLogoUri: null,
+      previewColors: null,
+    });
+    expect(editPhone.returnToSummary).toBe(true);
+    expect(editPhone.nextStep).toBe('phone');
+  });
+});

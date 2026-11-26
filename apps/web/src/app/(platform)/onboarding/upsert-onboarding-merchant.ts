@@ -26,8 +26,28 @@ interface UpsertOnboardingMerchantInput {
   email: string;
   logoUrl?: string;
   otherBusinessType?: string;
+  phone?: string;
+  slug?: string;
+  slugIsCustom?: boolean;
   supabase: OnboardingMerchantClient;
   user: User;
+}
+
+export class OnboardingSlugUnavailableError extends Error {
+  constructor() {
+    super('That store link is already taken. Please choose another.');
+    this.name = 'OnboardingSlugUnavailableError';
+  }
+}
+
+function isSlugUniqueViolation(error: {
+  code?: string;
+  message: string;
+}): boolean {
+  return (
+    error.code === '23505' ||
+    /duplicate key value violates unique constraint.*slug/i.test(error.message)
+  );
 }
 
 export type UpsertOnboardingMerchantResult =
@@ -53,9 +73,14 @@ export async function upsertOnboardingMerchant({
   email,
   logoUrl,
   otherBusinessType,
+  phone,
+  slug: requestedSlug,
+  slugIsCustom,
   supabase,
   user,
 }: UpsertOnboardingMerchantInput): Promise<UpsertOnboardingMerchantResult> {
+  const normalizedLogoUrl = logoUrl?.trim() ? logoUrl.trim() : null;
+  const normalizedPhone = phone?.trim() ? phone.trim() : undefined;
   const finalBusinessType =
     businessType === 'other' ? otherBusinessType || businessType : businessType;
   const payoutCurrency = getCountryByCode(country)?.currency ?? 'USD';
@@ -118,10 +143,13 @@ export async function upsertOnboardingMerchant({
   }
 
   let merchant: OnboardingMerchant | null;
+  const useCustomSlug = Boolean(slugIsCustom && requestedSlug?.trim());
   if (existing) {
-    const resolvedSlug = hasEstablishedOnboardingSlug(existing.slug)
-      ? null
-      : await resolveOnboardingMerchantSlug(supabase, businessName);
+    const resolvedSlug = useCustomSlug
+      ? requestedSlug?.trim()
+      : hasEstablishedOnboardingSlug(existing.slug)
+        ? null
+        : await resolveOnboardingMerchantSlug(supabase, businessName);
     const { data, error } = await merchants
       .update({
         email,
@@ -129,8 +157,9 @@ export async function upsertOnboardingMerchant({
         business_type: finalBusinessType,
         country,
         payout_currency: payoutCurrency,
-        logo_url: logoUrl,
-        favicon_png_192_url: logoUrl,
+        logo_url: normalizedLogoUrl,
+        favicon_png_192_url: normalizedLogoUrl,
+        ...(normalizedPhone ? { phone: normalizedPhone } : {}),
         ...(brandColorsParsed ? { brand_colors: brandColors } : {}),
         ...(resolvedSlug ? { slug: resolvedSlug } : {}),
       })
@@ -138,10 +167,18 @@ export async function upsertOnboardingMerchant({
       .eq('user_id', user.id)
       .select('id, slug, brand_colors, hero_image_ids, logo_url')
       .single();
-    if (error) throw new Error(`Failed to update merchant: ${error.message}`);
+    if (error) {
+      if (isSlugUniqueViolation(error)) {
+        throw new OnboardingSlugUnavailableError();
+      }
+      throw new Error(`Failed to update merchant: ${error.message}`);
+    }
     merchant = data;
   } else {
-    const slug = await resolveOnboardingMerchantSlug(supabase, businessName);
+    const slug = useCustomSlug
+      ? (requestedSlug?.trim() ??
+        (await resolveOnboardingMerchantSlug(supabase, businessName)))
+      : await resolveOnboardingMerchantSlug(supabase, businessName);
     const { data, error } = await merchants
       .insert({
         user_id: user.id,
@@ -150,8 +187,9 @@ export async function upsertOnboardingMerchant({
         business_type: finalBusinessType,
         country,
         payout_currency: payoutCurrency,
-        logo_url: logoUrl,
-        favicon_png_192_url: logoUrl,
+        logo_url: normalizedLogoUrl,
+        favicon_png_192_url: normalizedLogoUrl,
+        ...(normalizedPhone ? { phone: normalizedPhone } : {}),
         ...(brandColorsParsed ? { brand_colors: brandColors } : {}),
         slug,
         template_id: 'puck',
@@ -159,7 +197,12 @@ export async function upsertOnboardingMerchant({
       })
       .select('id, slug, brand_colors, hero_image_ids, logo_url')
       .single();
-    if (error) throw new Error(`Merchant creation failed: ${error.message}`);
+    if (error) {
+      if (isSlugUniqueViolation(error)) {
+        throw new OnboardingSlugUnavailableError();
+      }
+      throw new Error(`Merchant creation failed: ${error.message}`);
+    }
     merchant = data;
   }
   if (!merchant) throw new Error('Failed to create merchant record.');

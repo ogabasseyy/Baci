@@ -289,4 +289,56 @@ describe('runSubmitOnboardingWorkflow', () => {
     });
     expect(mocks.invalidateMerchantSlugRename).not.toHaveBeenCalled();
   });
+
+  it('rolls back the renamed slug and invalidates caches when post-rename ensureOnboardingDomain fails', async () => {
+    mocks.upsertOnboardingMerchant.mockResolvedValueOnce({
+      status: 'completed',
+      businessName: 'Kicks Hub',
+      businessType: 'fashion',
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Kicks Hub',
+        business_type: 'fashion',
+        slug: 'taken-domain',
+        logo_url: null,
+        brand_colors: null,
+      },
+    });
+    mocks.ensureOnboardingDomain
+      .mockResolvedValueOnce({ status: 'conflict' })
+      .mockResolvedValueOnce({ status: 'failed', stage: 'insert' });
+    mocks.rpc
+      .mockResolvedValueOnce({
+        data: { slug: 'kicks-hub-ng', retired_slug: 'taken-domain' },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { slug: 'taken-domain', retired_slug: 'kicks-hub-ng' },
+        error: null,
+      });
+
+    const result = await runSubmitOnboardingWorkflow(
+      { success: false, message: '' },
+      makeOnboardingFormData('kicks-hub-ng')
+    );
+
+    expect(result).toEqual({
+      success: false,
+      message: 'Could not finish store setup. Please try again.',
+    });
+    expect(mocks.rpc).toHaveBeenNthCalledWith(1, 'rename_merchant_slug', {
+      p_merchant_id: 'merchant-1',
+      p_new_slug: 'kicks-hub-ng',
+    });
+    expect(mocks.rpc).toHaveBeenNthCalledWith(2, 'rename_merchant_slug', {
+      p_merchant_id: 'merchant-1',
+      p_new_slug: 'taken-domain',
+    });
+    expect(mocks.invalidateMerchantSlugRename).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      finalSlug: 'taken-domain',
+      retiredSlug: 'kicks-hub-ng',
+    });
+    expect(mocks.provisionCuratedHomepage).not.toHaveBeenCalled();
+  });
 });

@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { getCountryByCode } from '@/lib/countries';
+import { invalidateMerchantSlugRename } from '@/lib/invalidate-merchant-slug-rename';
 import type { createClient as createServerClient } from '@/lib/supabase/server';
 import { isReservedMerchantSlug } from '@/lib/validation';
 import type {
@@ -81,7 +82,6 @@ export type UpsertOnboardingMerchantResult =
       businessName: string;
       businessType: string;
       merchant: OnboardingMerchant;
-      retiredSlug?: string | null;
     };
 
 export async function upsertOnboardingMerchant({
@@ -163,7 +163,6 @@ export async function upsertOnboardingMerchant({
   }
 
   let merchant: OnboardingMerchant | null;
-  let retiredSlug: string | null = null;
   const normalizedRequestedSlug =
     requestedSlug?.trim().toLowerCase() || undefined;
   const customSlug = slugIsCustom ? normalizedRequestedSlug : undefined;
@@ -218,11 +217,18 @@ export async function upsertOnboardingMerchant({
           `Failed to update merchant slug: ${renameAttempt.error.message}`
         );
       }
-      retiredSlug = extractRenamedSlugResult(
+      const renamed = extractRenamedSlugResult(
         renameAttempt.data,
         targetSlug,
         existing.slug
-      ).retiredSlug;
+      );
+      // Invalidate caches immediately after the RPC commits so even if the
+      // subsequent merchant UPDATE fails, caches stay consistent with the DB.
+      invalidateMerchantSlugRename({
+        merchantId: existing.id,
+        finalSlug: renamed.finalSlug,
+        retiredSlug: renamed.retiredSlug,
+      });
     }
     const resolvedSlug = hasEstablishedSlug
       ? null
@@ -288,6 +294,5 @@ export async function upsertOnboardingMerchant({
     businessName,
     businessType: finalBusinessType,
     merchant,
-    ...(retiredSlug ? { retiredSlug } : {}),
   };
 }

@@ -13,6 +13,7 @@ import {
   invalidateReverseDomainCacheForSlug,
 } from '@/lib/domain-cache-simple';
 import { triggerDomainEdgeConfigSync } from '@/lib/edge-config-sync';
+import { logger } from '@/lib/logger';
 import { invalidateAliasCacheForSlug } from '@/lib/slug-alias-cache';
 
 export interface InvalidateMerchantSlugRenameInput {
@@ -50,6 +51,13 @@ export function invalidateMerchantSlugRename({
   try {
     after(() => triggerDomainEdgeConfigSync());
   } catch {
-    void triggerDomainEdgeConfigSync();
+    void triggerDomainEdgeConfigSync().catch((error: unknown) => {
+      logger.warn({
+        message: 'Edge Config sync fallback failed after slug rename',
+        merchantId,
+        finalSlug,
+        error,
+      });
+    });
   }
 }

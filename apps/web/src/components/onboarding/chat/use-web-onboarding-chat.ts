@@ -106,6 +106,7 @@ export function useWebOnboardingChat() {
   const enterStoreSetup = (nextUser: User) => {
     const nextData = initialStoreData(nextUser);
     const needsName = !nextData.firstName || !nextData.lastName;
+    setAuthDraft({ fullName: '', email: '', password: '' });
     setUser(nextUser);
     setData(nextData);
     setSuggestedNames([]);

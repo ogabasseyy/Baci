@@ -134,13 +134,6 @@ export async function runSubmitOnboardingWorkflow(
     let merchantSlug = merchant.slug;
     const rootDomain = getRootDomain() || 'usebaci.com';
     let recoveredFromDomainConflict = false;
-    if (persisted.status === 'saved' && persisted.retiredSlug) {
-      invalidateMerchantSlugRename({
-        merchantId: merchant.id,
-        finalSlug: merchantSlug,
-        retiredSlug: persisted.retiredSlug,
-      });
-    }
     let domain = await ensureOnboardingDomain({
       supabase,
       merchantId: merchant.id,
@@ -180,19 +173,35 @@ export async function runSubmitOnboardingWorkflow(
         candidateSlug,
         merchantSlug
       );
-      merchantSlug = finalSlug;
-      recoveredFromDomainConflict = true;
-      invalidateMerchantSlugRename({
-        merchantId: merchant.id,
-        finalSlug,
-        retiredSlug,
-      });
       domain = await ensureOnboardingDomain({
         supabase,
         merchantId: merchant.id,
-        slug: merchantSlug,
+        slug: finalSlug,
         rootDomain,
       });
+      if (domain.status !== 'created' && domain.status !== 'already_exists') {
+        let rolledBack = false;
+        if (retiredSlug && retiredSlug !== finalSlug) {
+          const rollback = await supabase.rpc('rename_merchant_slug', {
+            p_merchant_id: merchant.id,
+            p_new_slug: retiredSlug,
+          });
+          rolledBack = !rollback.error;
+        }
+        invalidateMerchantSlugRename({
+          merchantId: merchant.id,
+          finalSlug: rolledBack && retiredSlug ? retiredSlug : finalSlug,
+          retiredSlug: rolledBack ? finalSlug : retiredSlug,
+        });
+      } else {
+        merchantSlug = finalSlug;
+        recoveredFromDomainConflict = true;
+        invalidateMerchantSlugRename({
+          merchantId: merchant.id,
+          finalSlug,
+          retiredSlug,
+        });
+      }
     }
     if (domain.status === 'conflict') {
       throw new OnboardingSlugUnavailableError();

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   invalidateReverseDomainCacheForSlug: vi.fn(),
   invalidateAliasCacheForSlug: vi.fn(),
   triggerDomainEdgeConfigSync: vi.fn().mockResolvedValue(undefined),
+  loggerWarn: vi.fn(),
 }));
 
 vi.mock('next/server', () => ({
@@ -43,6 +44,10 @@ vi.mock('@/lib/slug-alias-cache', () => ({
 
 vi.mock('@/lib/edge-config-sync', () => ({
   triggerDomainEdgeConfigSync: mocks.triggerDomainEdgeConfigSync,
+}));
+
+vi.mock('@/lib/logger', () => ({
+  logger: { warn: mocks.loggerWarn },
 }));
 
 import { invalidateMerchantSlugRename } from './invalidate-merchant-slug-rename';
@@ -100,10 +105,13 @@ describe('invalidateMerchantSlugRename', () => {
     );
   });
 
-  it('falls back to calling triggerDomainEdgeConfigSync when after() throws outside request scope', () => {
+  it('falls back to calling triggerDomainEdgeConfigSync and logs if it rejects when after() throws', async () => {
     mocks.after.mockImplementationOnce(() => {
       throw new Error('after called outside request scope');
     });
+    mocks.triggerDomainEdgeConfigSync.mockRejectedValueOnce(
+      new Error('edge config unavailable')
+    );
 
     invalidateMerchantSlugRename({
       merchantId: 'merchant-1',
@@ -111,6 +119,16 @@ describe('invalidateMerchantSlugRename', () => {
       retiredSlug: null,
     });
 
+    await Promise.resolve();
+    await Promise.resolve();
+
     expect(mocks.triggerDomainEdgeConfigSync).toHaveBeenCalledOnce();
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Edge Config sync fallback failed after slug rename',
+        merchantId: 'merchant-1',
+        finalSlug: 'new-slug',
+      })
+    );
   });
 });

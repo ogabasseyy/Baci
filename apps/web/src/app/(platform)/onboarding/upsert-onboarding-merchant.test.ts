@@ -1,10 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { invalidateMerchantSlugRename } from '@/lib/invalidate-merchant-slug-rename';
 import {
   OnboardingSlugUnavailableError,
   upsertOnboardingMerchant,
 } from './upsert-onboarding-merchant';
 
+vi.mock('@/lib/invalidate-merchant-slug-rename', () => ({
+  invalidateMerchantSlugRename: vi.fn(),
+}));
+
 describe('upsertOnboardingMerchant', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   it('creates a web merchant with the authenticated owner and generated slug', async () => {
     const single = vi.fn().mockResolvedValue({
       data: { id: 'merchant-1', slug: 'baci-food' },
@@ -230,8 +238,65 @@ describe('upsertOnboardingMerchant', () => {
       phone: null,
     });
     expect(updatePayload).not.toHaveProperty('slug');
+    expect(invalidateMerchantSlugRename).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      finalSlug: 'fresh-custom',
+      retiredSlug: 'old-draft',
+    });
     expect(result).toMatchObject({
       status: 'saved',
+      merchant: { id: 'merchant-1', slug: 'fresh-custom' },
+    });
+  });
+
+  it('still invalidates caches when rename_merchant_slug succeeds and the subsequent merchant UPDATE fails', async () => {
+    const single = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'XX000', message: 'db write failure' },
+    });
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({ single }),
+        }),
+      }),
+    });
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: { id: 'merchant-1', business_name: null, slug: 'old-draft' },
+      error: null,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { slug: 'fresh-custom', retired_slug: 'old-draft' },
+      error: null,
+    });
+    const supabase = {
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({ maybeSingle }),
+        }),
+        update,
+      }),
+      rpc,
+    };
+
+    await expect(
+      upsertOnboardingMerchant({
+        supabase: supabase as never,
+        user: { id: 'user-1' } as never,
+        email: 'merchant@example.com',
+        businessName: 'Fresh Custom',
+        businessType: 'fashion',
+        country: 'NG',
+        slug: 'fresh-custom',
+        slugIsCustom: true,
+        brandColors: null,
+        brandColorsParsed: false,
+      })
+    ).rejects.toThrow('Failed to update merchant: db write failure');
+
+    expect(invalidateMerchantSlugRename).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      finalSlug: 'fresh-custom',
       retiredSlug: 'old-draft',
     });
   });
@@ -333,9 +398,14 @@ describe('upsertOnboardingMerchant', () => {
     });
     const updatePayload = update.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(updatePayload).not.toHaveProperty('slug');
+    expect(invalidateMerchantSlugRename).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      finalSlug: 'kicks-hub',
+      retiredSlug: 'mobile-draft-1',
+    });
     expect(result).toMatchObject({
       status: 'saved',
-      retiredSlug: 'mobile-draft-1',
+      merchant: { id: 'merchant-1', slug: 'kicks-hub' },
     });
   });
 

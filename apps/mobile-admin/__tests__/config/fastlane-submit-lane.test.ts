@@ -62,6 +62,13 @@ function runGuard({ review, pastSubmissions = [], editable, latest }: Store) {
 const warning = '::warning title=Not submitted to App Review::';
 
 describe('admin iOS submit lane', () => {
+  it('loads the guard with fastlane import, as the storefront does', () => {
+    expect(code).toContain('import("pending_review_guard.rb")');
+    // Fastlane runs the Fastfile as a string, which can leave Ruby without
+    // a base path for require_relative.
+    expect(code).not.toContain('require_relative');
+  });
+
   it('bugfix: never withdraws the submission already with App Review', () => {
     expect(submitLane).toContain('reject_if_possible: false');
     expect(code).not.toContain('reject_if_possible: true');

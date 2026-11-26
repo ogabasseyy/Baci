@@ -1,7 +1,9 @@
 default_platform(:ios)
 
 require "English"
-require_relative "pending_review_guard"
+# `import`, as in the storefront Fastfile: fastlane runs this file as a string,
+# which can leave require_relative without a base path.
+import("pending_review_guard.rb")
 
 WORKSPACE = "ios/BaciTheEcommerceBuilder.xcworkspace"
 SCHEME = "BaciTheEcommerceBuilder"

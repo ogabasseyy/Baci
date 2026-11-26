@@ -48,6 +48,8 @@ BEGIN
 
     receipt := (f->>'bankEvidenceId')::uuid;
     IF method IN ('cash','pos') THEN
+      SELECT bank_account_id INTO STRICT bank_account
+      FROM private.paid_order_amendment_config WHERE merchant_id = m;
       DELETE FROM private.paid_order_bank_evidence WHERE id = receipt;
       PERFORM set_config('request.jwt.claim.role','service_role',true);
       IF method = 'pos' THEN
@@ -80,6 +82,9 @@ BEGIN
           o,method,'-POS-12345','AUDITED-REGISTER-' || o,2000000,now()) <> receipt THEN
           RAISE EXCEPTION 'Previously accepted punctuation-led POS reference did not replay';
         END IF;
+        UPDATE private.paid_order_bank_evidence
+        SET bank_transaction_id = 'tender:pos:' || upper('FIXTURE-' || o)
+        WHERE id = receipt;
       END IF;
       BEGIN
         PERFORM public.register_paid_order_tender_receipt(o,method,'FIXTURE-' || o,'AUDITED-REGISTER-' || o,1999999,now());
@@ -87,6 +92,18 @@ BEGIN
       EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'bank_evidence_conflict' THEN RAISE; END IF;
       END;
+      BEGIN
+        UPDATE private.paid_order_amendment_config
+        SET bank_account_id = gen_random_uuid(),bank_evidence_cutover = now()
+        WHERE merchant_id = m;
+        RAISE EXCEPTION 'Bank account rotated with an unresolved tender receipt';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'bank_return_claim_open' THEN RAISE; END IF;
+      END;
+      IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+        IS DISTINCT FROM bank_account THEN
+        RAISE EXCEPTION 'Rejected unresolved-tender rotation changed the configured account';
+      END IF;
     END IF;
 
     PERFORM set_config('request.jwt.claim.role','authenticated',true);
@@ -114,6 +131,17 @@ BEGIN
     amendment := (result->>'amendmentId')::uuid;
     IF public.confirm_paid_order_amendment(o,payload) IS DISTINCT FROM result THEN
       RAISE EXCEPTION 'Confirmation replay drift';
+    END IF;
+    IF method IN ('cash','pos') THEN
+      rotation_account := gen_random_uuid();
+      rotation_cutover := now() + interval '1 second';
+      UPDATE private.paid_order_amendment_config
+      SET bank_account_id = rotation_account,bank_evidence_cutover = rotation_cutover
+      WHERE merchant_id = m;
+      IF public.register_paid_order_tender_receipt(
+        o,method,'FIXTURE-' || o,'AUDITED-REGISTER-' || o,2000000,now()) IS DISTINCT FROM receipt THEN
+        RAISE EXCEPTION 'Exact tender receipt replay changed across account rotation';
+      END IF;
     END IF;
 
     IF method = 'downgrade' THEN

@@ -258,7 +258,7 @@ export async function handleAdminRollback(
     };
   });
 
-  await cleanupPreparedRollbackArtifacts(env, prepared, result, idempotencyKey);
+  await cleanupPreparedRollbackArtifacts(env, prepared, result);
 
   if (result instanceof Response) {
     return result;

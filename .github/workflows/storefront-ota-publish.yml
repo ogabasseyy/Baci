@@ -175,17 +175,17 @@ jobs:
           set -euo pipefail
           if [[ -n "$CERT_PATH" || -n "$CERT_PEM" || -n "$KEY_ID" ]]; then
             effective_key_id="${KEY_ID:-main}"
-            if [[ -z "$CERT_PEM" && -z "$CERT_PATH" ]]; then
-              echo '::error::OTA signing keyid is configured, but neither EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH nor OTA_CODE_SIGNING_CERTIFICATE_PEM is set.' >&2
+            if [[ -z "$CERT_PATH" ]]; then
+              echo '::error::OTA code signing is configured, but EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH is missing. A client-embeddable certificate path is required so shipped builds verify signatures.' >&2
               exit 1
             fi
-            if [[ -n "$CERT_PATH" && -z "$CERT_PEM" && ! -f "apps/mobile-storefront/$CERT_PATH" ]]; then
+            if [[ ! -f "apps/mobile-storefront/$CERT_PATH" ]]; then
               echo "::error::Configured code-signing certificate apps/mobile-storefront/$CERT_PATH was not found." >&2
               exit 1
             fi
             {
               echo "EFFECTIVE_OTA_SIGNING_KEY_ID=${effective_key_id}"
-              echo "EFFECTIVE_OTA_CERT_PATH=${CERT_PATH:+apps/mobile-storefront/${CERT_PATH}}"
+              echo "EFFECTIVE_OTA_CERT_PATH=apps/mobile-storefront/${CERT_PATH}"
             } >> "$GITHUB_ENV"
           else
             {

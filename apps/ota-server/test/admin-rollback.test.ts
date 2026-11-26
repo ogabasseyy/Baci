@@ -769,6 +769,66 @@ describe('admin payload validation and rollback safety', () => {
     expect(await replayNoop.json()).toEqual(keyedNoopBody);
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pointerKeyCas = `channels/production/ios/${RUNTIME}/current.json`;
+    const releasePrefix = `releases/production/ios/${RUNTIME}/`;
+    const releasesBeforeAbort = [...bucket.store.keys()].filter((k) =>
+      k.startsWith(releasePrefix)
+    ).length;
+    const origDelete = bucket.delete?.bind(bucket);
+    bucket.onBeforePut = (key) => {
+      if (key === pointerKeyCas) {
+        bucket.onBeforePut = undefined;
+        bucket.store.set(pointerKeyCas, {
+          etag: 'advance-for-abort-cleanup',
+          bytes: new TextEncoder().encode(
+            JSON.stringify({
+              mode: 'update',
+              updateId: UPDATE_B,
+              activeSourceUpdateId: UPDATE_B,
+              updatedAt: new Date(Date.now() + 60_000).toISOString(),
+            })
+          ),
+        });
+      }
+    };
+    const abortCleanResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/rollback', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel: 'production',
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          targetUpdateId: UPDATE_A,
+        }),
+      }),
+      env
+    );
+    expect(abortCleanResp.status).toBe(409);
+    const releasesAfterAbort = [...bucket.store.keys()].filter((k) =>
+      k.startsWith(releasePrefix)
+    ).length;
+    expect(releasesAfterAbort).toBe(releasesBeforeAbort);
+
+    bucket.onBeforePut = (key) => {
+      if (key === pointerKeyCas) {
+        bucket.onBeforePut = undefined;
+        bucket.store.set(pointerKeyCas, {
+          etag: 'advance-for-delete-outage',
+          bytes: new TextEncoder().encode(
+            JSON.stringify({
+              mode: 'update',
+              updateId: UPDATE_B,
+              activeSourceUpdateId: UPDATE_B,
+              updatedAt: new Date(Date.now() + 120_000).toISOString(),
+            })
+          ),
+        });
+      }
+    };
     bucket.delete = async () => {
       throw new Error('R2 transient delete outage');
     };
@@ -789,9 +849,10 @@ describe('admin payload validation and rollback safety', () => {
         }),
         env
       );
-      expect(rbWithDeleteOutage.status).toBe(200);
+      expect(rbWithDeleteOutage.status).toBe(409);
       expect(warnSpy).toHaveBeenCalled();
     } finally {
+      bucket.delete = origDelete;
       warnSpy.mockRestore();
     }
   });

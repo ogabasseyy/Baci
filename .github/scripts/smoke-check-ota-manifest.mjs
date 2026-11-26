@@ -1,4 +1,4 @@
-import { createPublicKey, createVerify } from 'node:crypto';
+import { createHash, createPublicKey, createVerify } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -85,6 +85,80 @@ function verifyPartSignature(part, expectSignatureKeyId, publicKeyOrCertPem) {
   verifier.update(part.rawBody, 'utf8');
   if (!verifier.verify(key, Buffer.from(sig, 'base64'))) {
     throw new Error('Cryptographic verification failed for expo-signature');
+  }
+}
+
+async function verifyManifestAssets(manifest, fetchImpl) {
+  const launchAsset = manifest.launchAsset;
+  if (
+    !launchAsset ||
+    typeof launchAsset !== 'object' ||
+    typeof launchAsset.url !== 'string' ||
+    typeof launchAsset.hash !== 'string'
+  ) {
+    throw new Error(
+      `Manifest missing launchAsset.url or launchAsset.hash: ${JSON.stringify(manifest)}`
+    );
+  }
+  const launchResp = await fetchImpl(launchAsset.url, {
+    method: 'GET',
+    redirect: 'error',
+  });
+  if (launchResp.status !== 200) {
+    throw new Error(
+      `Launch asset smoke fetch failed (${launchResp.status}) for ${launchAsset.url}`
+    );
+  }
+  const actualLaunchType = (launchResp.headers.get('content-type') ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  const expectedLaunchType = (launchAsset.contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (expectedLaunchType && actualLaunchType !== expectedLaunchType) {
+    throw new Error(
+      `Launch asset content-type mismatch for ${launchAsset.url}: expected "${expectedLaunchType}", got "${actualLaunchType}"`
+    );
+  }
+  const launchBytes = new Uint8Array(await launchResp.arrayBuffer());
+  const actualLaunchHash = createHash('sha256')
+    .update(launchBytes)
+    .digest('base64url');
+  if (actualLaunchHash !== launchAsset.hash) {
+    throw new Error(
+      `Launch asset SHA-256 mismatch for ${launchAsset.url}: expected "${launchAsset.hash}", got "${actualLaunchHash}"`
+    );
+  }
+  for (const asset of manifest.assets ?? []) {
+    if (!asset || typeof asset !== 'object' || typeof asset.url !== 'string') {
+      throw new Error(
+        `Manifest contains invalid asset entry: ${JSON.stringify(asset)}`
+      );
+    }
+    const assetResp = await fetchImpl(asset.url, {
+      method: 'HEAD',
+      redirect: 'error',
+    });
+    if (assetResp.status !== 200) {
+      throw new Error(
+        `Asset smoke HEAD failed (${assetResp.status}) for ${asset.url}`
+      );
+    }
+    const actualAssetType = (assetResp.headers.get('content-type') ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    const expectedAssetType = (asset.contentType ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (expectedAssetType && actualAssetType !== expectedAssetType) {
+      throw new Error(
+        `Asset content-type mismatch for ${asset.url}: expected "${expectedAssetType}", got "${actualAssetType}"`
+      );
+    }
   }
 }
 
@@ -183,6 +257,7 @@ export async function smokeCheckManifestEndpoint(
       `Expected active manifest id ${expectedUpdateId}, got: ${JSON.stringify(first)}`
     );
   }
+  await verifyManifestAssets(first, fetchImpl);
   return first;
 }
 

@@ -18,7 +18,6 @@ import { errorResponse, jsonResponse, ValidationError } from './validation';
 export interface PreparedRollbackRelease {
   releaseId: string;
   releaseKey: string;
-  preparedKey: string;
   createdByRequest: boolean;
   createdAt: string;
   sourceTargetId: string;
@@ -116,17 +115,6 @@ export async function prepareRollbackRelease(
     createdAt,
     rollbackOfUpdateId: sourceTargetId,
   };
-  const preparedKey = `prepared-releases/${channel}/${payload.platform}/${payload.runtimeVersion}/${releaseId}.json`;
-  await env.OTA_BUCKET.put(
-    preparedKey,
-    JSON.stringify({
-      releaseId,
-      sourceTargetId,
-      createdAt,
-    }),
-    { httpMetadata: { contentType: 'application/json; charset=utf-8' } }
-  );
-
   const releaseKey = `releases/${channel}/${payload.platform}/${payload.runtimeVersion}/${releaseId}.json`;
   const releaseResult = await putImmutableRelease(
     env,
@@ -141,7 +129,6 @@ export async function prepareRollbackRelease(
   return {
     releaseId,
     releaseKey,
-    preparedKey,
     createdByRequest: releaseResult.status === 'created',
     createdAt: releaseResult.createdAt,
     sourceTargetId,
@@ -188,30 +175,19 @@ export async function cleanupPreparedRollbackArtifacts(
   result:
     | { state: ChannelCurrentState }
     | { idempotentResult: RollbackOperationResult }
-    | Response,
-  idempotencyKey?: string
+    | Response
 ): Promise<void> {
   if (!prepared || !env.OTA_BUCKET.delete) {
     return;
   }
-  const committedThisRelease =
-    !(result instanceof Response) &&
-    'state' in result &&
-    result.state.mode === 'update' &&
-    result.state.updateId === prepared.releaseId;
+  const shouldReapCreatedRelease =
+    result instanceof Response && prepared.createdByRequest;
+  if (!shouldReapCreatedRelease) {
+    return;
+  }
   try {
-    if (committedThisRelease) {
-      await env.OTA_BUCKET.delete(prepared.preparedKey);
-    } else if (!idempotencyKey && prepared.createdByRequest) {
-      await env.OTA_BUCKET.delete(prepared.releaseKey);
-      await env.OTA_BUCKET.delete(prepared.preparedKey);
-    }
+    await env.OTA_BUCKET.delete(prepared.releaseKey);
   } catch (err) {
-    console.warn(
-      committedThisRelease
-        ? 'Failed to clean up committed rollback marker'
-        : 'Failed to clean up aborted rollback artifacts',
-      err
-    );
+    console.warn('Failed to clean up aborted rollback release', err);
   }
 }

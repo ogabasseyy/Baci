@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
-import { createSign, generateKeyPairSync } from 'node:crypto';
+import { createHash, createSign, generateKeyPairSync } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { smokeCheckManifestEndpoint } from './smoke-check-ota-manifest.mjs';
+
+const BUNDLE_BYTES = Buffer.from('console.log("smoke-bundle");');
+const BUNDLE_HASH = createHash('sha256').update(BUNDLE_BYTES).digest('base64url');
+const LAUNCH_URL = 'https://ota.usebaci.com/api/assets/bundles/ios/b.hbc';
+const ASSET_URL = 'https://ota.usebaci.com/api/assets/blobs/logo.png';
+
+function buildManifestPayload(id) {
+  return {
+    id,
+    launchAsset: {
+      url: LAUNCH_URL,
+      contentType: 'application/javascript',
+      hash: BUNDLE_HASH,
+    },
+    assets: [
+      {
+        url: ASSET_URL,
+        contentType: 'image/png',
+        hash: BUNDLE_HASH,
+      },
+    ],
+  };
+}
 
 function multipartResponse(jsonBody, extraHeaders = [], dispositionName = 'manifest') {
   const boundary = 'ota-smoke-boundary';
@@ -24,7 +50,28 @@ function multipartResponse(jsonBody, extraHeaders = [], dispositionName = 'manif
   });
 }
 
-test('smoke check verifies active manifest updateId and rollBackToEmbedded directive', async () => {
+function assetAwareFetch(manifestFactory, overrides = {}) {
+  return async (url, init) => {
+    const u = String(url);
+    if (u === LAUNCH_URL) {
+      if (overrides.launch) return overrides.launch(u, init);
+      return new Response(BUNDLE_BYTES, {
+        status: 200,
+        headers: { 'content-type': 'application/javascript' },
+      });
+    }
+    if (u === ASSET_URL) {
+      if (overrides.asset) return overrides.asset(u, init);
+      return new Response(null, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+    }
+    return manifestFactory(u, init);
+  };
+}
+
+test('smoke check verifies active manifest, asset downloads, and rollBackToEmbedded directive', async () => {
   const updateId = '11111111-1111-4111-8111-111111111111';
   const manifestResult = await smokeCheckManifestEndpoint(
     {
@@ -35,7 +82,7 @@ test('smoke check verifies active manifest updateId and rollBackToEmbedded direc
       expectedMode: 'update',
       expectedUpdateId: updateId,
     },
-    async () => multipartResponse({ id: updateId })
+    assetAwareFetch(() => multipartResponse(buildManifestPayload(updateId)))
   );
   assert.equal(manifestResult.id, updateId);
 
@@ -57,7 +104,8 @@ test('smoke check verifies active manifest updateId and rollBackToEmbedded direc
   assert.equal(rollbackResult.type, 'rollBackToEmbedded');
 });
 
-test('smoke check fails on HTTP 500 or unexpected update id', async () => {
+test('smoke check fails on HTTP 500, unexpected update id, missing asset, or hash mismatch', async () => {
+  const updateId = '11111111-1111-4111-8111-111111111111';
   await assert.rejects(
     smokeCheckManifestEndpoint(
       {
@@ -66,7 +114,7 @@ test('smoke check fails on HTTP 500 or unexpected update id', async () => {
         runtimeVersion: '2.1.663',
         channel: 'production',
         expectedMode: 'update',
-        expectedUpdateId: '11111111-1111-4111-8111-111111111111',
+        expectedUpdateId: updateId,
       },
       async () => new Response('Signing error', { status: 500 })
     ),
@@ -81,17 +129,72 @@ test('smoke check fails on HTTP 500 or unexpected update id', async () => {
         runtimeVersion: '2.1.663',
         channel: 'production',
         expectedMode: 'update',
-        expectedUpdateId: '11111111-1111-4111-8111-111111111111',
+        expectedUpdateId: updateId,
       },
-      async () => multipartResponse({ id: '22222222-2222-4222-8222-222222222222' })
+      async () => multipartResponse(buildManifestPayload('22222222-2222-4222-8222-222222222222'))
     ),
     /Expected active manifest id/
   );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+      },
+      assetAwareFetch(() => multipartResponse(buildManifestPayload(updateId)), {
+        launch: () => new Response('Not found', { status: 404 }),
+      })
+    ),
+    /Launch asset smoke fetch failed \(404\)/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+      },
+      assetAwareFetch(() => multipartResponse(buildManifestPayload(updateId)), {
+        launch: () =>
+          new Response('tampered-bytes', {
+            status: 200,
+            headers: { 'content-type': 'application/javascript' },
+          }),
+      })
+    ),
+    /Launch asset SHA-256 mismatch/
+  );
+
+  await assert.rejects(
+    smokeCheckManifestEndpoint(
+      {
+        manifestUrl: 'https://ota.usebaci.com/api/manifest',
+        platform: 'ios',
+        runtimeVersion: '2.1.663',
+        channel: 'production',
+        expectedMode: 'update',
+        expectedUpdateId: updateId,
+      },
+      assetAwareFetch(() => multipartResponse(buildManifestPayload(updateId)), {
+        asset: () => new Response(null, { status: 404 }),
+      })
+    ),
+    /Asset smoke HEAD failed \(404\)/
+  );
 });
 
-test('smoke check verifies expo-signature keyid and cryptographic signature when requested', async () => {
+test('smoke check verifies expo-signature keyid, multipart disposition, and cryptographic signature', async () => {
   const updateId = '11111111-1111-4111-8111-111111111111';
-  const payload = { id: updateId };
+  const payload = buildManifestPayload(updateId);
   const serialized = JSON.stringify(payload);
   const { publicKey, privateKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -113,10 +216,11 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
       expectSignatureKeyId: 'baci-prod-1',
       publicKeyOrCertPem: publicKey,
     },
-    async () =>
+    assetAwareFetch(() =>
       multipartResponse(payload, [
         `expo-signature: sig="${sig}", keyid="baci-prod-1", alg="rsa-v1_5-sha256"`,
       ])
+    )
   );
   assert.equal(ok.id, updateId);
 
@@ -187,7 +291,7 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
       },
       async () =>
         multipartResponse(
-          { id: updateId, tampered: true },
+          { ...payload, tampered: true },
           [
             `expo-signature: sig="${sig}", keyid="baci-prod-1", alg="rsa-v1_5-sha256"`,
           ]
@@ -213,7 +317,7 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
           'content-type: application/json; charset=utf-8',
           'content-disposition: form-data; name="manifest"',
           '',
-          JSON.stringify({ id: updateId }),
+          JSON.stringify(payload),
           `--${boundary}`,
           'content-type: application/json; charset=utf-8',
           'content-disposition: form-data; name="extra"',
@@ -241,7 +345,7 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
         expectedMode: 'update',
         expectedUpdateId: updateId,
       },
-      async () => multipartResponse({ id: updateId }, [], 'directive')
+      async () => multipartResponse(payload, [], 'directive')
     ),
     /Expected multipart content-disposition name="manifest"/
   );
@@ -256,8 +360,21 @@ test('smoke check verifies expo-signature keyid and cryptographic signature when
         expectedMode: 'update',
         expectedUpdateId: updateId,
       },
-      async () => multipartResponse({ id: updateId }, [], null)
+      async () => multipartResponse(payload, [], null)
     ),
     /Expected multipart content-disposition name="manifest"/
+  );
+});
+
+test('publish workflow fails closed when signing is enabled without a client-embeddable cert path', () => {
+  const workflowPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../workflows/storefront-ota-publish.yml'
+  );
+  const workflowText = readFileSync(workflowPath, 'utf8');
+  assert.match(workflowText, /if \[\[ -z "\$CERT_PATH" \]\]; then/);
+  assert.match(
+    workflowText,
+    /EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH is missing/
   );
 });

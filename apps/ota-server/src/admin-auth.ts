@@ -155,6 +155,21 @@ export function parsePublishPayload(body: unknown): PublishPayload {
     );
   }
 
+  const seenAssetKeys = new Set<string>([launchAsset.key]);
+  const seenAssetHashes = new Set<string>([launchAsset.hash]);
+  for (let idx = 0; idx < assets.length; idx += 1) {
+    const asset = assets[idx];
+    if (!asset) continue;
+    if (seenAssetKeys.has(asset.key)) {
+      throw new ValidationError(`Duplicate asset key at assets[${idx}]`);
+    }
+    if (seenAssetHashes.has(asset.hash)) {
+      throw new ValidationError(`Duplicate asset hash at assets[${idx}]`);
+    }
+    seenAssetKeys.add(asset.key);
+    seenAssetHashes.add(asset.hash);
+  }
+
   const metadata = validateMetadataRecord(body.metadata);
   if (
     UTF8_ENCODER.encode(JSON.stringify(metadata)).byteLength >

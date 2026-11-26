@@ -640,4 +640,78 @@ describe('admin upload integrity and concurrent publish CAS', () => {
       error: expect.stringMatching(/content-type mismatch/i),
     });
   });
+
+  it('rejects duplicate asset key or duplicate hash across launchAsset and assets', async () => {
+    const { env } = createEnv();
+    const bytesA = new TextEncoder().encode('dup-key-bytes-a');
+    const hexA = createHash('sha256').update(bytesA).digest('hex');
+    const b64A = createHash('sha256').update(bytesA).digest('base64url');
+    const b64Other = createHash('sha256').update('other').digest('base64url');
+
+    const dupKeyResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          launchAsset: {
+            hash: b64A,
+            key: hexA,
+            contentType: 'application/javascript',
+            r2Key: 'bundles/ios/dup.hbc',
+          },
+          assets: [
+            {
+              hash: b64Other,
+              key: hexA,
+              contentType: 'image/png',
+              r2Key: 'blobs/dup.png',
+            },
+          ],
+        }),
+      }),
+      env
+    );
+    expect(dupKeyResp.status).toBe(400);
+    expect(await dupKeyResp.json()).toMatchObject({
+      error: expect.stringMatching(/duplicate asset key/i),
+    });
+
+    const dupHashResp = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          platform: 'ios',
+          runtimeVersion: RUNTIME,
+          launchAsset: {
+            hash: b64A,
+            key: hexA,
+            contentType: 'application/javascript',
+            r2Key: 'bundles/ios/dup.hbc',
+          },
+          assets: [
+            {
+              hash: b64A,
+              key: 'distinct-key',
+              contentType: 'image/png',
+              r2Key: 'blobs/dup.png',
+            },
+          ],
+        }),
+      }),
+      env
+    );
+    expect(dupHashResp.status).toBe(400);
+    expect(await dupHashResp.json()).toMatchObject({
+      error: expect.stringMatching(/duplicate asset hash/i),
+    });
+  });
 });

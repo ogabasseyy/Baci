@@ -29,7 +29,9 @@ export async function handleAdminGetRelease(
   let runtimeVersion: string;
   let updateId: string;
   try {
-    channel = validateChannelName(url.searchParams.get('channel'));
+    channel = validateChannelName(
+      url.searchParams.get('channel') ?? 'production'
+    );
     platform = validatePlatform(url.searchParams.get('platform'));
     runtimeVersion = validateRuntimeVersion(
       url.searchParams.get('runtimeVersion')

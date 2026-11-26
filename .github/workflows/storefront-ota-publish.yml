@@ -159,6 +159,10 @@ jobs:
           while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
           base_url="${base_url%/api/manifest}"
           while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
+          if [[ "$base_url" != "https://ota.usebaci.com" ]]; then
+            echo "::error::OTA_SERVER_URL must target https://ota.usebaci.com (got: ${base_url})." >&2
+            exit 1
+          fi
           echo "OTA_BASE_URL=${base_url}" >> "$GITHUB_ENV"
           echo "OTA_MANIFEST_URL=${base_url}/api/manifest" >> "$GITHUB_ENV"
 
@@ -379,7 +383,24 @@ jobs:
               --source-sha "$SOURCE_SHA"
           )"
           echo "$result_json"
-          OTA_OPERATION_RESULT="$result_json" node "$RUNNER_TEMP/smoke-check-ota-manifest.mjs"
+          if ! OTA_OPERATION_RESULT="$result_json" node "$RUNNER_TEMP/smoke-check-ota-manifest.mjs"; then
+            echo "::error::Manifest smoke check failed after publish; attempting compensating rollback." >&2
+            prev_id="$(node -e 'const r = JSON.parse(process.argv[1]); process.stdout.write(typeof r.previousUpdateId === "string" ? r.previousUpdateId : "");' "$result_json")"
+            rb_args=(
+              --rollback
+              --platform "$PLATFORM"
+              --runtime "$RUNTIME_VERSION"
+              --channel "$CHANNEL"
+              --idempotency-key "gh-smoke-compensate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            )
+            if [[ -n "$prev_id" ]]; then
+              rb_args+=(--update-id "$prev_id")
+            else
+              rb_args+=(--to-embedded)
+            fi
+            node "$RUNNER_TEMP/publish-ota.mjs" "${rb_args[@]}" || true
+            exit 1
+          fi
 
       - name: Rollback OTA update on ota.usebaci.com and smoke-check manifest
         if: inputs.action == 'rollback'

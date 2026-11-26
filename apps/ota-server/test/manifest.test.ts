@@ -100,6 +100,18 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
       env
     );
     expect(badRuntime.status).toBe(400);
+
+    const missingChannel = await worker.fetch(
+      new Request('https://ota.usebaci.com/api/manifest', {
+        headers: {
+          'expo-protocol-version': '1',
+          'expo-platform': 'ios',
+          'expo-runtime-version': RUNTIME,
+        },
+      }),
+      env
+    );
+    expect(missingChannel.status).toBe(400);
   });
 
   it('returns noUpdateAvailable directive when no release exists', async () => {

@@ -64,16 +64,14 @@ export function validatePlatform(raw: string | null | undefined): OtaPlatform {
 
 export function validateChannelName(raw: string | null | undefined): string {
   const trimmed = raw?.trim();
-  if (!trimmed) {
-    return 'production';
-  }
   if (
+    !trimmed ||
     trimmed === '.' ||
     trimmed === '..' ||
     trimmed.includes('..') ||
     !CHANNEL_REGEX.test(trimmed)
   ) {
-    throw new ValidationError('Invalid expo-channel-name');
+    throw new ValidationError('Invalid or missing expo-channel-name');
   }
   return trimmed;
 }

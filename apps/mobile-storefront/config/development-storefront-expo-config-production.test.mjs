@@ -206,26 +206,25 @@ test('rejects invalid or non-HTTPS EXPO_PUBLIC_OTA_UPDATES_URL', () => {
       }),
     /Must be a valid https URL/
   );
-  assert.throws(
-    () =>
-      loadProductionConfigWithEnv({
-        EXPO_PUBLIC_OTA_UPDATES_URL:
-          'https://user:pass@ota.usebaci.com/api/manifest',
-      }),
-    /without credentials, query, fragment, or loopback host/
-  );
-  assert.throws(
-    () =>
-      loadProductionConfigWithEnv({
-        EXPO_PUBLIC_OTA_UPDATES_URL: 'https://localhost/api/manifest',
-      }),
-    /without credentials, query, fragment, or loopback host/
-  );
-  assert.throws(
-    () =>
-      loadProductionConfigWithEnv({
-        EXPO_PUBLIC_OTA_UPDATES_URL: 'https://127.0.0.2/api/manifest',
-      }),
-    /without credentials, query, fragment, or loopback host/
-  );
+  for (const rejectedUrl of [
+    'https://user:pass@ota.usebaci.com/api/manifest',
+    'https://localhost/api/manifest',
+    'https://127.0.0.2/api/manifest',
+    'https://10.0.0.1/api/manifest',
+    'https://172.16.0.1/api/manifest',
+    'https://192.168.1.1/api/manifest',
+    'https://169.254.169.254/api/manifest',
+    'https://100.64.0.1/api/manifest',
+    'https://[::1]/api/manifest',
+    'https://[fe80::1]/api/manifest',
+    'https://[fd00::1]/api/manifest',
+  ]) {
+    assert.throws(
+      () =>
+        loadProductionConfigWithEnv({
+          EXPO_PUBLIC_OTA_UPDATES_URL: rejectedUrl,
+        }),
+      /without credentials, query, fragment, or non-public\/loopback host/
+    );
+  }
 });

@@ -139,26 +139,37 @@ if (rawUpdatesUrl) {
       `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must use https.`
     );
   }
-  const hostname = parsedUpdatesUrl.hostname.toLowerCase();
-  const isLoopbackIpv4 =
-    /^127\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/.test(
-      hostname
-    );
+  const host = parsedUpdatesUrl.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const ipv4Parts = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  let isNonPublicIp = host.includes(':');
+  if (ipv4Parts) {
+    const octets = ipv4Parts.slice(1).map((n) => Number(n));
+    const [a, b] = octets;
+    const validOctets = octets.every((o) => o >= 0 && o <= 255);
+    isNonPublicIp =
+      !validOctets ||
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224;
+  }
   if (
     parsedUpdatesUrl.username ||
     parsedUpdatesUrl.password ||
     parsedUpdatesUrl.hash ||
     parsedUpdatesUrl.search ||
-    hostname === 'localhost' ||
-    isLoopbackIpv4 ||
-    hostname === '0.0.0.0' ||
-    hostname === '[::1]' ||
-    hostname === '::1' ||
-    hostname.endsWith('.local') ||
-    hostname.endsWith('.internal')
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    isNonPublicIp
   ) {
     throw new Error(
-      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be a public https origin/path without credentials, query, fragment, or loopback host.`
+      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be a public https origin/path without credentials, query, fragment, or non-public/loopback host.`
     );
   }
   updatesUrl = rawUpdatesUrl;

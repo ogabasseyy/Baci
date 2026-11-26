@@ -153,4 +153,17 @@ describe('summarizeWalletLedgerCredit & computeOrderNetPayable', () => {
       })
     ).toBe(35000);
   });
+
+  it('caps pre-gateway credit at order total when amountPaid and ledger columns overlap', () => {
+    expect(
+      computeOrderPreGatewayPaid({
+        total: 50000,
+        amountPaid: 40000,
+        walletAmountUsed: 30000,
+        walletLedgerUsed: 30000,
+        savingsLedgerUsed: 30000,
+        paymentStatus: 'unpaid',
+      })
+    ).toBe(50000);
+  });
 });

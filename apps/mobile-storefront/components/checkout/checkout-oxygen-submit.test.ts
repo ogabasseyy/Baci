@@ -132,7 +132,7 @@ describe('native Oxygen order admission', () => {
     );
     expect(createOrder).toHaveBeenCalledWith(mixedRequest, expect.anything());
   });
-  it('keeps an old zero-balance or 100%-credit order out of the financing handoff', async () => {
+  it('routes zero-due or 100%-covered Oxygen orders back to standard non-financing completion instead of throwing', async () => {
     createOrder.mockResolvedValueOnce({
       amountDueToGateway: 0,
       order: { ...receipt, total: 0 },
@@ -148,7 +148,7 @@ describe('native Oxygen order admission', () => {
         },
         { readOwner, createOrder }
       )
-    ).rejects.toThrow('zero-balance order');
+    ).resolves.toMatchObject({ amountDueToGateway: 0 });
 
     createOrder.mockResolvedValueOnce({
       amountDueToGateway: 0,
@@ -160,12 +160,15 @@ describe('native Oxygen order admission', () => {
           request,
           checkoutGeneration: 'g',
           isAuthenticated: true,
-          hasVoucher: false,
+          hasVoucher: true,
           hasCredits: true,
         },
         { readOwner, createOrder }
       )
-    ).rejects.toThrow('zero-balance order');
+    ).resolves.toMatchObject({
+      amountDueToGateway: 0,
+      order: receipt,
+    });
 
     createOrder.mockResolvedValueOnce({
       order: receipt,

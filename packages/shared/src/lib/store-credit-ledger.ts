@@ -149,7 +149,10 @@ export function computeOrderPreGatewayPaid(
   }
 
   const effectiveAmountPaid = reversalCompleted ? 0 : amountPaid;
-  return Math.max(effectiveAmountPaid, effectiveWallet + savingsLedger, 0);
+  return Math.min(
+    Math.max(effectiveAmountPaid, effectiveWallet + savingsLedger, 0),
+    total
+  );
 }
 
 /**

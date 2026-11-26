@@ -351,7 +351,7 @@ it('passes net payable amount after store credit to OxygenApplicationDialog', as
   expect(screen.getByText('Plan amount: 250000')).toBeVisible();
 });
 
-it('rejects an unpaid Oxygen order whose store credit reduces net payable to zero', async () => {
+it('renders zero due summary without Oxygen financing when store credit reduces unpaid net payable to zero', async () => {
   mocks.one
     .mockReset()
     .mockResolvedValueOnce({
@@ -396,13 +396,17 @@ it('rejects an unpaid Oxygen order whose store credit reduces net payable to zer
       },
       error: null,
     });
-  await expect(
-    OxygenStorefrontCheckout({
-      orderId: id,
-      merchantId: 'merchant',
-      merchantSlug: 'shop',
-    })
-  ).rejects.toThrow('not found');
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  render(checkout);
+  expect(screen.queryByText(/Plan amount:/i)).toBeNull();
+  expect(screen.getByText(/fully covered by store credit/i)).toBeVisible();
+  expect(screen.getByText('Amount due').parentElement).toHaveTextContent(
+    '₦0.00'
+  );
 });
 
 it('does not treat settled gateway amount_paid as store credit for paid or bnpl_approved orders', async () => {
@@ -595,7 +599,7 @@ it('subtracts device savings ledger credit on settled bnpl_approved orders', asy
   expect(screen.getByText('Plan amount: 250000')).toBeVisible();
 });
 
-it('rejects a pending Oxygen order covered 100% by store credit', async () => {
+it('renders zero due summary without financing for a pending Oxygen order covered 100% by store credit', async () => {
   mocks.one
     .mockReset()
     .mockResolvedValueOnce({
@@ -640,13 +644,17 @@ it('rejects a pending Oxygen order covered 100% by store credit', async () => {
       },
       error: null,
     });
-  await expect(
-    OxygenStorefrontCheckout({
-      orderId: id,
-      merchantId: 'merchant',
-      merchantSlug: 'shop',
-    })
-  ).rejects.toThrow('not found');
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  render(checkout);
+  expect(screen.queryByText(/Plan amount:/i)).toBeNull();
+  expect(screen.getByText(/fully covered by store credit/i)).toBeVisible();
+  expect(screen.getByText('Amount due').parentElement).toHaveTextContent(
+    '₦0.00'
+  );
 });
 
 it('ignores reversed or non-completed wallet/savings ledger rows on Oxygen resume', async () => {

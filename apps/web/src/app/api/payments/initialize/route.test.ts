@@ -2760,6 +2760,42 @@ describe('POST /api/payments/initialize', () => {
       expect(mockInitializePaystack).not.toHaveBeenCalled();
     });
 
+    it('passes the net-of-savings amount to claim_checkout_for_paid_order_amendment and Paystack for amendment-configured merchants', async () => {
+      amendmentCheckoutClaimResult = { data: 'claimed', error: null };
+      savingsRedemptionsResult = {
+        data: [{ amount: 1500, metadata: {} }],
+        error: null,
+      };
+      mockInitializePaystack.mockResolvedValueOnce({
+        authorization_url: 'https://checkout.paystack.com/net-amendment',
+        access_code: 'ac_net_amendment',
+        reference: 'BAC-NETAMEND01',
+      });
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          gateway: 'paystack',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls).toContainEqual({
+        name: 'claim_checkout_for_paid_order_amendment',
+        args: expect.objectContaining({
+          p_expected_amount_minor: 350_000,
+        }),
+      });
+      expect(mockInitializePaystack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 350_000,
+        })
+      );
+    });
+
     it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED when concurrent ledger credit changes before gateway initialization', async () => {
       amendmentCheckoutClaimResult = { data: 'untracked', error: null };
       // Simulate concurrent wallet reversal while claim_checkout_for_paid_order_amendment

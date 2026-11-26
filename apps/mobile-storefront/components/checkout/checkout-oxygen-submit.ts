@@ -60,9 +60,11 @@ export async function submitOxygenCheckout(
       'Could not confirm the saved Oxygen order. Please try again.'
     );
   }
-  if (order.total <= 0 || (result.amountDueToGateway ?? order.total) <= 0)
-    throw new Error(
-      'Choose another payment option for this zero-balance order.'
-    );
+  if (order.total <= 0 || (result.amountDueToGateway ?? order.total) <= 0) {
+    return {
+      ...result,
+      amountDueToGateway: 0,
+    };
+  }
   return result;
 }

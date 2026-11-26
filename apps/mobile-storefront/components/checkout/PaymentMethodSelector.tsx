@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { palette } from '@/constants/Colors';
 import { formatPrice } from '@/stores/cart-store';
+import { resolvePaymentSelectorSavingsSummary } from './checkout-store-credit';
 import { InstrumentRows } from './payment-method-selector/InstrumentRows';
 import { PaymentIntentAccordion } from './payment-method-selector/PaymentIntentAccordion';
 import { PaymentMethodStatusPanels } from './payment-method-selector/PaymentMethodStatusPanels';
@@ -109,37 +110,24 @@ export function PaymentMethodSelector({
     onSelectTab,
   ]);
 
-  const walletIsActive = walletSelection?.use === true;
-  const savingsShouldRender =
-    Boolean(savingsGoalId) &&
-    savingsBalance > 0 &&
-    orderTotal > 0 &&
-    supportsPartialPayment &&
-    (selectedTab === 'full' || selectedTab === 'installments');
-  const savingsCoversFully =
-    savingsShouldRender && savingsBalance >= orderTotal;
-  const savingsPortion = savingsShouldRender
-    ? Math.min(savingsBalance, orderTotal)
-    : 0;
-  const activeWalletTowardSavingsResidual = walletIsActive
-    ? Math.min(
-        walletBalance > 0
-          ? walletBalance
-          : Math.max(0, walletSelection?.amount ?? 0),
-        Math.max(orderTotal - savingsPortion, 0)
-      )
-    : 0;
-  const savingsResidualToGateway = savingsShouldRender
-    ? Math.max(
-        orderTotal - savingsPortion - activeWalletTowardSavingsResidual,
-        0
-      )
-    : 0;
-  const savingsIsActive =
-    savingsSelection?.use === true &&
-    Boolean(savingsGoalId) &&
-    savingsSelection.goalId === savingsGoalId;
-  const activeSavingsAmount = savingsIsActive ? savingsPortion : 0;
+  const {
+    activeSavingsAmount,
+    savingsCoversFully,
+    savingsIsActive,
+    savingsPortion,
+    savingsResidualToGateway,
+    savingsShouldRender,
+    walletIsActive,
+  } = resolvePaymentSelectorSavingsSummary({
+    orderTotal,
+    savingsBalance,
+    savingsGoalId,
+    savingsSelection,
+    selectedTab,
+    supportsPartialPayment,
+    walletBalance,
+    walletSelection,
+  });
   const savingsGoalDisplayName = savingsGoalTitle ?? savingsFallbackTitle;
   const savingsAccessibilityLabel = savingsCoversFully
     ? `Pay with device savings, ${formatPrice(savingsBalance)} available`

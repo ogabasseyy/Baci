@@ -151,3 +151,65 @@ export function computeCheckoutDisplayAndKlumpGateTotals({
     stepDisplayTotal,
   };
 }
+
+interface ResolvePaymentSelectorSavingsSummaryParams {
+  orderTotal: number;
+  savingsBalance: number;
+  savingsGoalId?: string | null;
+  savingsSelection?: SavingsSelection | null;
+  selectedTab: PaymentTab | null;
+  supportsPartialPayment: boolean;
+  walletBalance: number;
+  walletSelection?: WalletSelection | null;
+}
+
+export function resolvePaymentSelectorSavingsSummary({
+  orderTotal,
+  savingsBalance,
+  savingsGoalId,
+  savingsSelection,
+  selectedTab,
+  supportsPartialPayment,
+  walletBalance,
+  walletSelection,
+}: ResolvePaymentSelectorSavingsSummaryParams) {
+  const walletIsActive = walletSelection?.use === true;
+  const savingsShouldRender =
+    Boolean(savingsGoalId) &&
+    savingsBalance > 0 &&
+    orderTotal > 0 &&
+    supportsPartialPayment &&
+    (selectedTab === 'full' || selectedTab === 'installments');
+  const savingsCoversFully =
+    savingsShouldRender && savingsBalance >= orderTotal;
+  const savingsPortion = savingsShouldRender
+    ? Math.min(savingsBalance, orderTotal)
+    : 0;
+  const activeWalletTowardSavingsResidual = walletIsActive
+    ? Math.min(
+        Math.max(walletBalance, 0),
+        Math.max(orderTotal - savingsPortion, 0)
+      )
+    : 0;
+  const savingsResidualToGateway = savingsShouldRender
+    ? Math.max(
+        orderTotal - savingsPortion - activeWalletTowardSavingsResidual,
+        0
+      )
+    : 0;
+  const savingsIsActive =
+    savingsSelection?.use === true &&
+    Boolean(savingsGoalId) &&
+    savingsSelection.goalId === savingsGoalId;
+  const activeSavingsAmount = savingsIsActive ? savingsPortion : 0;
+
+  return {
+    activeSavingsAmount,
+    savingsCoversFully,
+    savingsIsActive,
+    savingsPortion,
+    savingsResidualToGateway,
+    savingsShouldRender,
+    walletIsActive,
+  };
+}

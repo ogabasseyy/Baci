@@ -112,7 +112,11 @@ export async function runSubmitOnboardingWorkflow(
       onNewSession: () => undefined,
     });
     if (userResolution.status === 'message')
-      return { success: false, message: userResolution.message };
+      return {
+        success: false,
+        code: 'auth_required',
+        message: userResolution.message,
+      };
     const persisted = await upsertOnboardingMerchant({
       supabase,
       user: userResolution.user,
@@ -173,35 +177,22 @@ export async function runSubmitOnboardingWorkflow(
         candidateSlug,
         merchantSlug
       );
+      // Always invalidate caches for the committed rename, and intentionally
+      // keep finalSlug rather than rolling back to the known-conflicted old
+      // slug (which would also burn finalSlug as a retired alias in the RPC).
+      invalidateMerchantSlugRename({
+        merchantId: merchant.id,
+        finalSlug,
+        retiredSlug,
+      });
+      merchantSlug = finalSlug;
+      recoveredFromDomainConflict = true;
       domain = await ensureOnboardingDomain({
         supabase,
         merchantId: merchant.id,
-        slug: finalSlug,
+        slug: merchantSlug,
         rootDomain,
       });
-      if (domain.status !== 'created' && domain.status !== 'already_exists') {
-        let rolledBack = false;
-        if (retiredSlug && retiredSlug !== finalSlug) {
-          const rollback = await supabase.rpc('rename_merchant_slug', {
-            p_merchant_id: merchant.id,
-            p_new_slug: retiredSlug,
-          });
-          rolledBack = !rollback.error;
-        }
-        invalidateMerchantSlugRename({
-          merchantId: merchant.id,
-          finalSlug: rolledBack && retiredSlug ? retiredSlug : finalSlug,
-          retiredSlug: rolledBack ? finalSlug : retiredSlug,
-        });
-      } else {
-        merchantSlug = finalSlug;
-        recoveredFromDomainConflict = true;
-        invalidateMerchantSlugRename({
-          merchantId: merchant.id,
-          finalSlug,
-          retiredSlug,
-        });
-      }
     }
     if (domain.status === 'conflict') {
       throw new OnboardingSlugUnavailableError();

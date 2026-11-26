@@ -53,6 +53,7 @@ const DATA: OnboardingChatData = {
 function makeCtx(): StoreActionContext {
   return {
     user: { id: 'u-1', email: 'ada@example.com' } as never,
+    setUser: vi.fn(),
     data: DATA,
     setData: vi.fn(),
     setStep: vi.fn(),
@@ -115,6 +116,25 @@ describe('web-onboarding-store-actions', () => {
       business_type: 'fashion',
     });
     expect(trackMerchantSignupCompleted).not.toHaveBeenCalled();
+  });
+
+  it('clears user and returns to auth_choice when submitOnboarding reports auth_required', async () => {
+    vi.mocked(submitOnboarding).mockResolvedValueOnce({
+      success: false,
+      code: 'auth_required',
+      message: 'An account may already exist. Please log in to continue.',
+    });
+    const ctx = makeCtx();
+    await runWebStoreLaunch(ctx);
+
+    expect(ctx.setUser).toHaveBeenCalledWith(null);
+    expect(ctx.setStep).toHaveBeenCalledWith('auth_choice');
+    expect(ctx.appendMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'system',
+        text: 'An account may already exist. Please log in to continue.',
+      })
+    );
   });
 
   it('fires signup started and completed analytics and notifies when server de-dupes the assigned slug', async () => {

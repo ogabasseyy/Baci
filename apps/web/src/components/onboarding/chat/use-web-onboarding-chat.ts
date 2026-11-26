@@ -177,6 +177,7 @@ export function useWebOnboardingChat() {
 
   const storeCtx = {
     user,
+    setUser,
     data,
     setData,
     setStep,

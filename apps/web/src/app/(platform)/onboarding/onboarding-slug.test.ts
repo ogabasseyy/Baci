@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  extractRenamedSlugResult,
   hasEstablishedOnboardingSlug,
   isRenameSlugUnavailableError,
   resolveOnboardingMerchantSlug,
@@ -42,5 +43,24 @@ describe('resolveOnboardingMerchantSlug', () => {
           'duplicate key value violates unique constraint "domains_pkey"',
       })
     ).toBe(false);
+  });
+
+  it('preserves explicit retired_slug: null from a no-op rename RPC instead of fabricating previousSlug', () => {
+    expect(
+      extractRenamedSlugResult(
+        { slug: 'same-slug', retired_slug: null },
+        'fallback',
+        'previous-slug'
+      )
+    ).toEqual({
+      finalSlug: 'same-slug',
+      retiredSlug: null,
+    });
+    expect(extractRenamedSlugResult(null, 'fallback', 'previous-slug')).toEqual(
+      {
+        finalSlug: 'fallback',
+        retiredSlug: 'previous-slug',
+      }
+    );
   });
 });

@@ -63,9 +63,11 @@ export function extractRenamedSlugResult(
     typeof parsed?.slug === 'string' && parsed.slug.trim()
       ? parsed.slug.trim()
       : fallbackSlug;
-  const retiredSlug =
-    typeof parsed?.retired_slug === 'string' && parsed.retired_slug.trim()
+  const hasExplicitRetiredSlug = parsed !== null && 'retired_slug' in parsed;
+  const retiredSlug = hasExplicitRetiredSlug
+    ? typeof parsed.retired_slug === 'string' && parsed.retired_slug.trim()
       ? parsed.retired_slug.trim()
-      : previousSlug?.trim() || null;
+      : null
+    : previousSlug?.trim() || null;
   return { finalSlug, retiredSlug };
 }

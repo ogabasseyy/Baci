@@ -290,7 +290,7 @@ describe('runSubmitOnboardingWorkflow', () => {
     expect(mocks.invalidateMerchantSlugRename).not.toHaveBeenCalled();
   });
 
-  it('rolls back the renamed slug and invalidates caches when post-rename ensureOnboardingDomain fails', async () => {
+  it('keeps the valid renamed slug and invalidates caches without burning an alias when post-rename ensureOnboardingDomain fails', async () => {
     mocks.upsertOnboardingMerchant.mockResolvedValueOnce({
       status: 'completed',
       businessName: 'Kicks Hub',
@@ -307,15 +307,10 @@ describe('runSubmitOnboardingWorkflow', () => {
     mocks.ensureOnboardingDomain
       .mockResolvedValueOnce({ status: 'conflict' })
       .mockResolvedValueOnce({ status: 'failed', stage: 'insert' });
-    mocks.rpc
-      .mockResolvedValueOnce({
-        data: { slug: 'kicks-hub-ng', retired_slug: 'taken-domain' },
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: { slug: 'taken-domain', retired_slug: 'kicks-hub-ng' },
-        error: null,
-      });
+    mocks.rpc.mockResolvedValueOnce({
+      data: { slug: 'kicks-hub-ng', retired_slug: 'taken-domain' },
+      error: null,
+    });
 
     const result = await runSubmitOnboardingWorkflow(
       { success: false, message: '' },
@@ -326,18 +321,15 @@ describe('runSubmitOnboardingWorkflow', () => {
       success: false,
       message: 'Could not finish store setup. Please try again.',
     });
-    expect(mocks.rpc).toHaveBeenNthCalledWith(1, 'rename_merchant_slug', {
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenCalledWith('rename_merchant_slug', {
       p_merchant_id: 'merchant-1',
       p_new_slug: 'kicks-hub-ng',
     });
-    expect(mocks.rpc).toHaveBeenNthCalledWith(2, 'rename_merchant_slug', {
-      p_merchant_id: 'merchant-1',
-      p_new_slug: 'taken-domain',
-    });
     expect(mocks.invalidateMerchantSlugRename).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
-      finalSlug: 'taken-domain',
-      retiredSlug: 'kicks-hub-ng',
+      finalSlug: 'kicks-hub-ng',
+      retiredSlug: 'taken-domain',
     });
     expect(mocks.provisionCuratedHomepage).not.toHaveBeenCalled();
   });

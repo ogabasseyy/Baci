@@ -26,6 +26,7 @@ export interface LogoDraft {
 
 export interface StoreActionContext {
   user: User | null;
+  setUser: (user: User | null) => void;
   data: OnboardingChatData;
   setData: React.Dispatch<React.SetStateAction<OnboardingChatData>>;
   setStep: (step: WebChatStep) => void;
@@ -170,9 +171,11 @@ export async function runWebStoreLaunch(
   ctx: StoreActionContext
 ): Promise<void> {
   if (!ctx.user?.email) {
+    ctx.setUser(null);
+    ctx.setStep('auth_choice');
     ctx.appendMessages({
       role: 'system',
-      text: 'Your session expired. Please refresh and sign in again.',
+      text: 'Your session expired. Please sign in again to finish launching your store.',
     });
     return;
   }
@@ -225,6 +228,17 @@ export async function runWebStoreLaunch(
         });
       }
       window.location.href = '/dashboard';
+      return;
+    }
+    if (result.code === 'auth_required') {
+      ctx.setUser(null);
+      ctx.setStep('auth_choice');
+      ctx.appendMessages({
+        role: 'system',
+        text:
+          result.message ||
+          'Your session expired. Please sign in again to finish launching your store.',
+      });
       return;
     }
     if (result.code === 'slug_unavailable') {

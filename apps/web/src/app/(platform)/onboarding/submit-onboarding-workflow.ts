@@ -88,6 +88,8 @@ export async function runSubmitOnboardingWorkflow(
   const {
     email,
     password,
+    firstName,
+    lastName,
     businessName: rawBusinessName,
     businessType,
     otherBusinessType,
@@ -117,6 +119,26 @@ export async function runSubmitOnboardingWorkflow(
         code: 'auth_required',
         message: userResolution.message,
       };
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    if (
+      (firstName || lastName) &&
+      typeof supabase.auth?.updateUser === 'function'
+    ) {
+      const { error: metadataError } = await supabase.auth.updateUser({
+        data: {
+          ...(firstName ? { first_name: firstName } : {}),
+          ...(lastName ? { last_name: lastName } : {}),
+          ...(fullName ? { full_name: fullName } : {}),
+        },
+      });
+      if (metadataError) {
+        logger.warn({
+          message: 'Failed to persist onboarding owner name metadata',
+          userId: userResolution.user.id,
+          error: metadataError,
+        });
+      }
+    }
     const persisted = await upsertOnboardingMerchant({
       supabase,
       user: userResolution.user,

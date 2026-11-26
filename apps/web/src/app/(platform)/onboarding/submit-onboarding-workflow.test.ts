@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   ensureActionRateLimit: vi.fn(),
   createClient: vi.fn(),
   rpc: vi.fn(),
+  updateUser: vi.fn(),
   resolveOnboardingUser: vi.fn(),
   upsertOnboardingMerchant: vi.fn(),
   ensureOnboardingDomain: vi.fn(),
@@ -65,6 +66,8 @@ import { runSubmitOnboardingWorkflow } from './submit-onboarding-workflow';
 function makeOnboardingFormData(slug: string): FormData {
   const fd = new FormData();
   fd.set('email', 'merchant@example.com');
+  fd.set('firstName', 'Ada');
+  fd.set('lastName', 'Okafor');
   fd.set('password', 'StrongP@ss123!');
   fd.set('confirmPassword', 'StrongP@ss123!');
   fd.set('businessName', 'Kicks Hub');
@@ -89,7 +92,11 @@ describe('runSubmitOnboardingWorkflow', () => {
     vi.clearAllMocks();
     mocks.ensureActionRateLimit.mockResolvedValue(true);
     mocks.rpc.mockResolvedValue({ data: null, error: null });
-    mocks.createClient.mockReturnValue({ rpc: mocks.rpc });
+    mocks.updateUser.mockResolvedValue({ data: { user: null }, error: null });
+    mocks.createClient.mockReturnValue({
+      rpc: mocks.rpc,
+      auth: { updateUser: mocks.updateUser },
+    });
     mocks.resolveOnboardingUser.mockResolvedValue({
       status: 'authenticated',
       user: { id: 'user-1', email: 'merchant@example.com' },
@@ -187,6 +194,13 @@ describe('runSubmitOnboardingWorkflow', () => {
         merchantSlug: 'kicks-hub-ng',
       })
     );
+    expect(mocks.updateUser).toHaveBeenCalledWith({
+      data: {
+        first_name: 'Ada',
+        last_name: 'Okafor',
+        full_name: 'Ada Okafor',
+      },
+    });
     expect(secondAttempt).toEqual({
       success: true,
       message: 'Store created!',

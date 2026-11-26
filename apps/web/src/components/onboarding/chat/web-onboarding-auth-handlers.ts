@@ -38,6 +38,24 @@ export async function runWebAuthQuickReply(
 ): Promise<void> {
   const { setAuthDraft, setStep, setIsBusy, appendMessages } = ctx;
 
+  if (option.id === 'auth:check_session') {
+    setIsBusy(true);
+    try {
+      const supabase = createClient();
+      const { data: authData } = await supabase.auth.getUser();
+      if (authData.user) {
+        ctx.enterStoreSetup(authData.user);
+        return;
+      }
+      appendMessages({
+        role: 'assistant',
+        text: 'I don\'t see a confirmed session yet. Open the confirmation link in your inbox, then tap "I\'ve confirmed my email" again.',
+      });
+    } finally {
+      setIsBusy(false);
+    }
+    return;
+  }
   if (option.id === 'auth:google') {
     setIsBusy(true);
     const supabase = createClient();

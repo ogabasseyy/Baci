@@ -1,4 +1,6 @@
+import { isReservedStoreSlug } from '@baci/shared/onboarding-chat';
 import { describe, expect, it, vi } from 'vitest';
+import { isReservedMerchantSlug, RESERVED_PATHS } from '@/lib/validation';
 import {
   extractRenamedSlugResult,
   hasEstablishedOnboardingSlug,
@@ -62,5 +64,28 @@ describe('resolveOnboardingMerchantSlug', () => {
         retiredSlug: 'previous-slug',
       }
     );
+  });
+
+  it('keeps @baci/shared/onboarding-chat reserved slugs in parity with web server reserved slugs', () => {
+    const infraReserved = [
+      'www',
+      'app',
+      'api',
+      'admin',
+      'dashboard',
+      'mail',
+      'smtp',
+      'assets',
+      'static',
+      'cdn',
+      'status',
+      'support',
+      'help',
+      'chat',
+    ];
+    for (const slug of [...RESERVED_PATHS, ...infraReserved]) {
+      expect(isReservedMerchantSlug(slug)).toBe(true);
+      expect(isReservedStoreSlug(slug)).toBe(true);
+    }
   });
 });

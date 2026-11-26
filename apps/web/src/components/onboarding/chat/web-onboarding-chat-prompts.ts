@@ -159,6 +159,19 @@ export function getWebQuickRepliesForStep(params: {
         },
         { id: 'auth:edit_email', label: 'Change email' },
       ];
+    case 'auth_check_email':
+      return [
+        {
+          id: 'auth:check_session',
+          label: "I've confirmed my email",
+          variant: 'accent',
+        },
+        {
+          id: 'auth:edit_email',
+          label: 'Use another email',
+          variant: 'secondary',
+        },
+      ];
     case 'country': {
       const top = TOP_COUNTRY_CODES.map((code) => {
         const match = WEB_COUNTRIES.find((c) => c.code === code);

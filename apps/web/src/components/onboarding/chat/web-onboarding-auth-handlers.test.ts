@@ -8,12 +8,14 @@ import {
 
 const mockSignInWithOAuth = vi.fn();
 const mockSignUp = vi.fn();
+const mockGetUser = vi.fn();
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: vi.fn(() => ({
     auth: {
       signInWithOAuth: mockSignInWithOAuth,
       signUp: mockSignUp,
+      getUser: mockGetUser,
     },
   })),
 }));
@@ -93,6 +95,19 @@ describe('web-onboarding-auth-handlers', () => {
         password: 'StrongPassword!2026',
       })
     );
+    expect(ctx.enterStoreSetup).toHaveBeenCalledWith(user);
+  });
+
+  it('re-checks session on auth:check_session and enters store setup once confirmed out-of-band', async () => {
+    const user = { id: 'u-2', email: 'ada@example.com' } as never;
+    mockGetUser.mockResolvedValueOnce({ data: { user } });
+    const ctx = makeCtx({ step: 'auth_check_email' });
+
+    await runWebAuthQuickReply(
+      { id: 'auth:check_session', label: "I've confirmed my email" },
+      ctx
+    );
+
     expect(ctx.enterStoreSetup).toHaveBeenCalledWith(user);
   });
 });

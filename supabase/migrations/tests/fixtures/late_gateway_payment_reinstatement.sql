@@ -12,6 +12,9 @@ CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT current_setti
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
  SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
+CREATE FUNCTION public.is_agentic_checkout_context() RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT false
+$$;
 CREATE TABLE public.customers(
  id uuid PRIMARY KEY, merchant_id uuid, user_id uuid, email text, phone text
 );

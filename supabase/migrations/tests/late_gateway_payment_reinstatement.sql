@@ -30,6 +30,20 @@ CREATE TRIGGER zz_test_reinstatement_clamp
 BEFORE UPDATE ON public.orders
 FOR EACH ROW EXECUTE FUNCTION private.test_reinstatement_clamp();
 
+CREATE FUNCTION private.test_release_loyalty_claim() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.payment_status IS DISTINCT FROM 'cancelled'
+    AND NEW.payment_status = 'cancelled' THEN
+    DELETE FROM public.reward_redemptions WHERE used_on_order_id = OLD.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER release_loyalty_claim_on_cancel
+AFTER UPDATE OF payment_status ON public.orders
+FOR EACH ROW EXECUTE FUNCTION private.test_release_loyalty_claim();
+
 SET LOCAL request.jwt.claim.role = 'service_role';
 
 DO $$
@@ -39,6 +53,7 @@ DECLARE
   test_order_id uuid;
   capture_id uuid;
   replacement_id uuid;
+  loyalty_order_id uuid;
   provider text;
   result text;
   reinstatement_definition text;
@@ -78,6 +93,18 @@ BEGIN
     merchant_id, NULL, 'auth-user@example.test', NULL
   );
   PERFORM set_config('request.jwt.claim.sub', '', true);
+
+  -- Model the production cancellation trigger releasing a reward claim. The
+  -- pre-cancellation snapshot must still keep this order out of recovery.
+  loyalty_order_id := gen_random_uuid();
+  INSERT INTO public.orders (id, merchant_id, payment_status, source)
+  VALUES (loyalty_order_id, merchant_id, 'unpaid', 'online_store');
+  INSERT INTO public.reward_redemptions (used_on_order_id) VALUES (loyalty_order_id);
+  PERFORM public.mark_abandoned_orders(72);
+  IF EXISTS (SELECT 1 FROM public.reward_redemptions WHERE used_on_order_id = loyalty_order_id)
+    OR EXISTS (SELECT 1 FROM private.order_payment_timeouts WHERE order_id = loyalty_order_id) THEN
+    RAISE EXCEPTION 'Released loyalty claim incorrectly created timeout recovery evidence';
+  END IF;
 
   INSERT INTO public.products VALUES (product_id, merchant_id);
 

@@ -5,10 +5,15 @@ describe('CACHE_LIFE_PROFILES', () => {
   it('keeps merchant, product, and blog data fresh through targeted invalidation with long fallback TTLs', () => {
     expect(CACHE_LIFE_PROFILES.merchant).toEqual({
       stale: 300,
-      revalidate: 3600,
-      expire: 86400,
+      revalidate: 300,
+      expire: 3600,
     });
     expect(CACHE_LIFE_PROFILES.products).toEqual({
+      stale: 300,
+      revalidate: 1800,
+      expire: 86400,
+    });
+    expect(CACHE_LIFE_PROFILES['storefront-page']).toEqual({
       stale: 300,
       revalidate: 1800,
       expire: 86400,

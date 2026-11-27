@@ -214,6 +214,10 @@ export function createSupabaseReplayRuntimeFixture() {
         verified: true as const,
       })
     ),
+    writeImagePins: vi.fn((target: string) => {
+      commands.push(`pin images ${target}`);
+      return Promise.resolve();
+    }),
     writeOwnership: vi.fn(),
   };
   const replayOptions = (

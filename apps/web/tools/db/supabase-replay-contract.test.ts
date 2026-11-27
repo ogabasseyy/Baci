@@ -15,7 +15,7 @@ const outputs = {
   node: '24.11.1',
   pnpm: '11.22.0\n',
   psql: 'psql (PostgreSQL) 18.6\n',
-  supabase: '2.111.0\n',
+  supabase: '3.1.0\n',
   tsc: 'Version 7.0.2\n',
   tsx: 'tsx v4.22.4\nnode v24.11.1\n',
 };
@@ -106,7 +106,10 @@ describe('verifySupabaseReplayContract', () => {
     ['typescript', { tsc: 'Version 6.0.2\n' }],
     ['tsx', { tsx: 'tsx v4.22.3\nnode v24.11.1\n' }],
     ['tsx-node', { tsx: 'tsx v4.22.4\nnode v23.9.0\n' }],
-    ['supabase', { supabase: '2.109.1\n' }],
+    // Regression: the previous pin is refused, so a runner that still has the old CLI fails
+    // here instead of replaying with an image set the new pin files do not describe.
+    ['supabase', { supabase: '2.111.0\n' }],
+    ['supabase', { supabase: '3.0.0\n' }],
     ['psql', { psql: 'psql (PostgreSQL) 17.6\n' }],
     // Regression: CI moved to 18.6 while this contract still demanded 18.3, which would
     // have failed every replay after the toolchain step passed.

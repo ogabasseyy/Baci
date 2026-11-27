@@ -75,21 +75,47 @@ describe('Supabase replay CLI installation', () => {
     }
   });
 
-  it('verifies the archive before installing both co-located executables', () => {
-    const workflow = readInstaller();
-    const verify = workflow.indexOf(
+  it('verifies the archive before installing the single supabase executable', () => {
+    const installer = readInstaller();
+    const verify = installer.indexOf(
       `echo "\${SUPABASE_CLI_SHA256}  \${SUPABASE_ARCHIVE}" | sha256sum --check`
     );
-    const extract = workflow.indexOf(
-      `sudo tar -xz -f "\${SUPABASE_ARCHIVE}" -C /usr/local/bin supabase supabase-go`
+    const extract = installer.indexOf(
+      `sudo tar -xz --no-same-owner -f "\${SUPABASE_ARCHIVE}" -C "\${SUPABASE_CLI_DIR}"`
     );
-    const chmod = workflow.indexOf(
-      'sudo chmod 0755 /usr/local/bin/supabase /usr/local/bin/supabase-go'
+    const chmod = installer.indexOf(
+      `sudo chmod 0755 "\${SUPABASE_CLI_DIR}/supabase"`
     );
-    const check = workflow.indexOf('test -x /usr/local/bin/supabase-go');
+    const check = installer.indexOf(`test -x "\${SUPABASE_CLI_DIR}/supabase"`);
     expect(verify).toBeGreaterThanOrEqual(0);
     expect(extract).toBeGreaterThan(verify);
     expect(chmod).toBeGreaterThan(extract);
     expect(check).toBeGreaterThan(chmod);
+  });
+
+  it('keeps the pinned CLI in its own versioned folder and puts it first on PATH for this and later steps', () => {
+    const installer = readInstaller();
+    expect(installer).toContain(
+      `SUPABASE_CLI_DIR="/opt/supabase-cli/\${SUPABASE_CLI_VERSION}"`
+    );
+    const exported = installer.indexOf(
+      `export PATH="\${SUPABASE_CLI_DIR}:\${PATH}"`
+    );
+    const forLaterSteps = installer.indexOf(
+      `echo "\${SUPABASE_CLI_DIR}" >> "$GITHUB_PATH"`
+    );
+    const firstUse = installer.indexOf('supabase --version');
+    expect(exported).toBeGreaterThanOrEqual(0);
+    expect(forLaterSteps).toBeGreaterThanOrEqual(0);
+    expect(firstUse).toBeGreaterThan(exported);
+    expect(firstUse).toBeGreaterThan(forLaterSteps);
+    // Other open pull requests are still pinned to the CLI the server already has in
+    // /usr/local/bin, so installing a new release there would break them.
+    expect(installer).not.toContain('/usr/local/bin');
+  });
+
+  it('does not ask tar for the helper binary that CLI 3.x no longer ships', () => {
+    // 3.x is one executable: naming a member that is not in the archive fails the install.
+    expect(readInstaller()).not.toContain('supabase-go');
   });
 });

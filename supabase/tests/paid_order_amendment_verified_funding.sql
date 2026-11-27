@@ -32,6 +32,7 @@ UPDATE private.paid_order_amendment_config SET enabled = false
 WHERE merchant_id = (SELECT (ids->>'merchant')::uuid FROM verified_funding_cases WHERE kind = 'paused');
 UPDATE public.transactions SET amount = amount - 1
 WHERE id = (SELECT (ids#>>'{captureIds,0}')::uuid FROM verified_funding_cases WHERE kind = 'funding_mismatch');
+SELECT set_config('request.jwt.claim.role','service_role',true);
 SELECT public.register_paid_order_bank_evidence(config.bank_account_id,'SYNTHETIC-DUPLICATE','incoming',
   2000000,now()-interval '1 minute','separate exact-amount statement credit',NULL,(fixture.ids->>'order')::uuid)
 FROM verified_funding_cases fixture
@@ -60,6 +61,19 @@ BEGIN
       IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
     END;
     PERFORM set_config('request.jwt.claim.sub',fixture.ids->>'actor',true);
+    IF fixture.kind IN ('mixed_legacy','same_price_cash','same_price_unknown') THEN
+      IF public.read_paid_order_amendment_workspace(order_id)->>'canStart' IS DISTINCT FROM 'false' THEN
+        RAISE EXCEPTION 'unsupported verified funding method was advertised';
+      END IF;
+      BEGIN
+        PERFORM public.preview_paid_order_amendment(order_id,jsonb_build_object(
+          'lineId',fixture.ids->>'line','replacement',jsonb_build_object('kind','variant','id',fixture.ids->>'variant')));
+        RAISE EXCEPTION 'unsupported verified funding method was admitted';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'scenario_disabled' THEN RAISE; END IF;
+      END;
+      CONTINUE;
+    END IF;
     IF fixture.kind IN ('paused','lower_price','funding_mismatch','duplicate_transfer') THEN
       IF fixture.kind = 'paused'
         AND public.read_paid_order_amendment_workspace(order_id)->>'canStart' IS DISTINCT FROM 'false' THEN
@@ -90,18 +104,6 @@ BEGIN
       'lineId',fixture.ids->>'line','replacement',jsonb_build_object('kind','variant','id',fixture.ids->>'variant')));
     payload := jsonb_build_object('previewId',quote->>'previewId','customerAgreed',true,
       'reason','Synthetic supported swap','idempotencyKey','verified-funds-fixture');
-    IF fixture.kind IN ('same_price_cash','same_price_unknown') THEN
-      IF (quote->>'adjustmentMinor')::bigint IS DISTINCT FROM 0::bigint
-        OR jsonb_array_length(quote->'bankEvidence') IS DISTINCT FROM 0 THEN
-        RAISE EXCEPTION 'incorrect same-price verified-funds quote: %',quote;
-      END IF;
-      snapshot := public.confirm_paid_order_amendment(order_id,payload);
-      IF snapshot->>'state' IS DISTINCT FROM 'settled'
-        OR public.confirm_paid_order_amendment(order_id,payload) IS DISTINCT FROM snapshot THEN
-        RAISE EXCEPTION 'same-price verified-funds swap failed: %',snapshot;
-      END IF;
-      CONTINUE;
-    END IF;
     IF (quote->>'adjustmentMinor')::bigint IS DISTINCT FROM 2000000::bigint
       OR jsonb_array_length(quote->'bankEvidence') IS DISTINCT FROM 1 THEN
       RAISE EXCEPTION 'incorrect verified-funds quote: %',quote;
@@ -139,7 +141,7 @@ DECLARE
   original jsonb;
   revised jsonb;
 BEGIN
-  FOR f IN SELECT * FROM verified_funding_cases WHERE kind IN ('credit_direct','mixed_legacy') LOOP
+  FOR f IN SELECT * FROM verified_funding_cases WHERE kind = 'credit_direct' LOOP
     o := (f.ids->>'order')::uuid;
     SELECT id INTO STRICT a FROM private.paid_order_amendments
     WHERE order_id = o AND settlement_route = 'verified_funds';

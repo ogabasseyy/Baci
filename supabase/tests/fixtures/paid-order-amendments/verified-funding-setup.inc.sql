@@ -48,7 +48,7 @@ BEGIN
     VALUES (captures[2],m,o,'payment',10000,'NGN','completed','manual','SYNTHETIC-CASH-' || o,'{"payment_method":"cash"}');
   END IF;
   INSERT INTO private.paid_order_amendment_config(merchant_id,version,enabled,scenarios,bank_account_id,bank_evidence_cutover)
-  VALUES (m,1,true,ARRAY['verified_funds:serialized_variant:upgrade','verified_funds:serialized_variant:equal'],
+  VALUES (m,1,true,ARRAY['verified_funds:credit_direct:serialized_variant:upgrade','verified_funds:credit_direct:serialized_variant:equal'],
     bank,now()-interval '1 day');
   INSERT INTO private.paid_order_verified_funding(order_id,capture_ids,capture_digest,approval_reference)
   VALUES (o,captures,private.paid_order_verified_capture_digest(o,m,captures,old_price),'SYNTHETIC-FUNDING-APPROVAL');

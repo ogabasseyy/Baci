@@ -44,7 +44,7 @@ BEGIN
     SELECT gateway_reference INTO STRICT capture_reference FROM public.transactions WHERE id = lender;
     UPDATE private.paid_order_amendment_config SET verified_cash_pos_enabled = true,
       verified_credit_direct_refunds_enabled = true,
-      scenarios = array_append(scenarios,'verified_funds:serialized_variant:downgrade')
+      scenarios = array_append(scenarios,'verified_funds:credit_direct:serialized_variant:downgrade')
     WHERE merchant_id = m;
 
     receipt := (f->>'bankEvidenceId')::uuid;
@@ -180,6 +180,26 @@ BEGIN
     PERFORM pg_temp.assert_verified_tender_cancellation(
       f,method,o,m,lender,capture_reference,paid_leg,paid_reference,amendment,receipt,bank_account);
   END LOOP;
+
+  -- A bound cash receipt for an order that has entered fulfillment cannot
+  -- support a future amendment or return claim and must not pin the bank account.
+  f := pg_temp.verified_funding_fixture('credit_direct');
+  o := (f->>'order')::uuid;
+  m := (f->>'merchant')::uuid;
+  UPDATE private.paid_order_amendment_config SET verified_cash_pos_enabled = true
+  WHERE merchant_id = m;
+  PERFORM set_config('request.jwt.claim.role','service_role',true);
+  PERFORM public.register_paid_order_tender_receipt(
+    o,'cash','STALE-RECEIPT-' || o,'STALE-RECONCILE-' || o,2000000,now());
+  UPDATE public.orders SET shipping_status = 'shipped' WHERE id = o;
+  rotation_account := gen_random_uuid();
+  UPDATE private.paid_order_amendment_config
+  SET bank_account_id = rotation_account,bank_evidence_cutover = now() + interval '1 second'
+  WHERE merchant_id = m;
+  IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+    IS DISTINCT FROM rotation_account THEN
+    RAISE EXCEPTION 'Stale tender evidence blocked account rotation after fulfillment';
+  END IF;
 END;
 $$;
 ROLLBACK;

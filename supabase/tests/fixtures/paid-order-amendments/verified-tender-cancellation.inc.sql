@@ -65,7 +65,7 @@ BEGIN
     PERFORM set_config('request.jwt.claim.sub','',true);
     refund_amount := CASE WHEN method = 'downgrade' THEN 10986750 ELSE 12986750 END;
     PERFORM public.register_paid_order_verified_refund(o,lender,capture_reference,'cancellation',
-      'LENDER-CANCELLATION-' || o,'FINANCE-CANCELLATION-' || o,refund_amount);
+      'LENDER-CANCEL-REF-12345','FINANCE-CANCELLATION-' || o,refund_amount);
     IF method <> 'downgrade' THEN
       PERFORM set_config('request.jwt.claim.role','authenticated',true);
       PERFORM set_config('request.jwt.claim.sub',f->>'actor',true);
@@ -77,7 +77,7 @@ BEGIN
       END;
       PERFORM set_config('request.jwt.claim.role','service_role',true);
       PERFORM public.register_paid_order_verified_refund(o,paid_leg,paid_reference,'cancellation',
-        'TENDER-RETURN-' || o,'FINANCE-TENDER-RETURN-' || o,2000000);
+        'TENDER-RETURN-REF-12345','FINANCE-TENDER-RETURN-' || o,2000000);
     END IF;
     PERFORM set_config('request.jwt.claim.role','authenticated',true);
     PERFORM set_config('request.jwt.claim.sub',f->>'actor',true);

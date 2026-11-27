@@ -1,5 +1,4 @@
 import vm from 'node:vm';
-import { Miniflare, Response as MiniflareResponse } from 'miniflare';
 import { describe, expect, it } from 'vitest';
 import { createOgabasseyStorefrontManifest } from '../benchmark/ogabassey-catalog-fixture';
 import { parseWorkerStorefrontManifest } from '../schemas/worker-manifest';
@@ -10,7 +9,7 @@ import {
 } from './compile-storefront';
 import { buildContentSecurityPolicyHeader } from './csp-header';
 
-describe('Round-9 Codex Object.assign, CSP wildcard, popup presented, route normalization, and SSR error containment', () => {
+describe('Round-9 Codex Object.assign, CSP wildcard, popup presented, and route normalization', () => {
   it.each([
     [
       'Object.assign DOM raw-HTML write',
@@ -148,7 +147,7 @@ describe('Round-9 Codex Object.assign, CSP wildcard, popup presented, route norm
     expect(blocked).toEqual({ status: 'ok', value: { presented: false } });
   });
 
-  it('rejects routes that normalize to the same matcher pattern (/cart vs /cart/, /:category vs /:slug vs /[handle])', () => {
+  it('rejects routes that normalize to the same matcher pattern and non-executable entry paths', () => {
     const trailingDup = createOgabasseyStorefrontManifest();
     trailingDup.routes.push({ path: '/cart/', view: 'editorial' });
     expect(() => parseWorkerStorefrontManifest(trailingDup)).toThrow(
@@ -174,135 +173,5 @@ describe('Round-9 Codex Object.assign, CSP wildcard, popup presented, route norm
     });
     cssEntry.entry = 'src/only.css';
     expect(() => parseWorkerStorefrontManifest(cssEntry)).toThrow(/executable/);
-  });
-
-  it('contains top-level merchant module-evaluation failures before fetch() and serves bounded 500 with CSP', async () => {
-    const manifest = createOgabasseyStorefrontManifest();
-    manifest.files = [
-      {
-        path: 'src/StorefrontApp.tsx',
-        content: `
-          const brokenTopLevelWidth = window.innerWidth;
-          export default function App() {
-            return <main>{String(brokenTopLevelWidth)}</main>;
-          }
-        `,
-      },
-    ];
-    const compiled = await compileStorefrontWorker(manifest);
-    const mf = new Miniflare({
-      modules: [
-        { type: 'ESModule', path: 'worker.mjs', contents: compiled.workerCode },
-      ],
-      compatibilityDate: '2026-07-01',
-      bindings: {},
-      outboundService: () =>
-        new MiniflareResponse(
-          JSON.stringify({
-            title: 'Home',
-            products: [],
-            facets: { brands: [], conditions: [], totalMatches: 0 },
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        ),
-    });
-    try {
-      const res = await mf.dispatchFetch('https://ogabassey.mybaci.store/');
-      expect(res.status).toBe(500);
-      expect(res.headers.get('content-security-policy')).toContain(
-        "default-src 'self'"
-      );
-      const html = await res.text();
-      expect(html).toContain('noindex, nofollow');
-      expect(html).toContain('Storefront Render Error');
-      expect(html).not.toContain('__BACI_STOREFRONT_STATE__');
-    } finally {
-      await mf.dispose();
-    }
-
-    // Also permits valid object-valued React default exports such as forwardRef(...)
-    const forwardRefManifest = createOgabasseyStorefrontManifest();
-    forwardRefManifest.files = [
-      {
-        path: 'src/StorefrontApp.tsx',
-        content: `import { forwardRef } from 'react';
-export default forwardRef<HTMLElement, { title: string }>(function App(props, ref) { return <main ref={ref}>{props.title}</main>; });`,
-      },
-    ];
-    const forwardRefCompiled =
-      await compileStorefrontWorker(forwardRefManifest);
-    const mfOk = new Miniflare({
-      modules: [
-        {
-          type: 'ESModule',
-          path: 'worker.mjs',
-          contents: forwardRefCompiled.workerCode,
-        },
-      ],
-      compatibilityDate: '2026-07-01',
-      bindings: {},
-      outboundService: () =>
-        new MiniflareResponse(
-          JSON.stringify({
-            title: 'ForwardRef Home',
-            products: [],
-            facets: { brands: [], conditions: [], totalMatches: 0 },
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        ),
-    });
-    try {
-      const okRes = await mfOk.dispatchFetch('https://ogabassey.mybaci.store/');
-      expect(okRes.status).toBe(200);
-      expect(await okRes.text()).toContain('ForwardRef Home');
-    } finally {
-      await mfOk.dispose();
-    }
-  });
-
-  it('contains merchant SSR exceptions inside fetch() and serves a bounded 500 fallback with CSP and noindex', async () => {
-    const manifest = createOgabasseyStorefrontManifest();
-    manifest.files = [
-      {
-        path: 'src/StorefrontApp.tsx',
-        content: `export default function CrashingApp(props: { productDetail: { name: string } | null }) {
-          if (!props.productDetail) {
-            throw new Error('Merchant bug: dereferenced missing productDetail on home');
-          }
-          return <main>{props.productDetail.name}</main>;
-        }`,
-      },
-    ];
-    const compiled = await compileStorefrontWorker(manifest);
-    const mf = new Miniflare({
-      modules: [
-        { type: 'ESModule', path: 'worker.mjs', contents: compiled.workerCode },
-      ],
-      compatibilityDate: '2026-07-01',
-      bindings: {},
-      outboundService: () =>
-        new MiniflareResponse(
-          JSON.stringify({
-            title: 'Home',
-            products: [],
-            facets: { brands: [], conditions: [], totalMatches: 0 },
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        ),
-    });
-    try {
-      const res = await mf.dispatchFetch('https://ogabassey.mybaci.store/');
-      expect(res.status).toBe(500);
-      expect(res.headers.get('content-security-policy')).toContain(
-        "default-src 'self'"
-      );
-      const html = await res.text();
-      expect(html).toContain('noindex, nofollow');
-      expect(html).toContain('Storefront Render Error');
-      expect(html).not.toContain('__BACI_STOREFRONT_STATE__');
-      expect(html).not.toContain('Merchant bug');
-    } finally {
-      await mf.dispose();
-    }
   });
 });

@@ -5,6 +5,7 @@ import {
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
+import { createJsxTagValidator } from './jsx-tag-safety';
 import {
   classifyMemberName,
   isAllowedSensitiveRootPosition,
@@ -26,17 +27,26 @@ export function scanManifestSourceSafety(
   manifest: WorkerStorefrontManifest
 ): SourceSafetyViolation[] {
   const violations: SourceSafetyViolation[] = [];
+  const parsedFiles = new Map<string, ts.SourceFile>();
 
   for (const file of manifest.files) {
     if (file.path.endsWith('.css')) continue;
-
-    const sourceFile = ts.createSourceFile(
+    parsedFiles.set(
       file.path,
-      file.content,
-      ts.ScriptTarget.Latest,
-      true,
-      scriptKindForPath(file.path)
+      ts.createSourceFile(
+        file.path,
+        file.content,
+        ts.ScriptTarget.Latest,
+        true,
+        scriptKindForPath(file.path)
+      )
     );
+  }
+  const buildFileJsxChecker = createJsxTagValidator(parsedFiles);
+
+  for (const [filePath, sourceFile] of parsedFiles.entries()) {
+    const checkJsxTag = buildFileJsxChecker(filePath, sourceFile);
+    const file = { path: filePath };
 
     const visit = (node: ts.Node): void => {
       if (
@@ -94,17 +104,12 @@ export function scanManifestSourceSafety(
       }
 
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-        const tag = node.tagName.getText(sourceFile);
-        if (
-          tag === 'script' ||
-          tag === 'object' ||
-          tag === 'embed' ||
-          tag === 'base'
-        ) {
+        const jsxError = checkJsxTag(node.tagName);
+        if (jsxError !== null) {
           violations.push({
             filePath: file.path,
             rule: 'DANGEROUS_INNER_HTML',
-            detail: `Executable or document-base JSX element "<${tag}>" is forbidden`,
+            detail: jsxError,
           });
         }
       }
@@ -150,6 +155,8 @@ export function scanManifestSourceSafety(
           const isBenignObjectDataKey =
             ts.isPropertyAssignment(node) &&
             (node.name.text === 'assign' ||
+              node.name.text === 'write' ||
+              node.name.text === 'writeln' ||
               node.name.text === 'constructor' ||
               node.name.text === 'cookie' ||
               node.name.text === 'serviceWorker');

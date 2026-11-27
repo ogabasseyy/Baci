@@ -89,12 +89,15 @@ function matchDeclaredRoute(pathname) {
   return null;
 }
 
-async function fetchCatalogJson(endpointUrl) {
+async function fetchCatalogJson(endpointUrl, kind) {
   try {
     const res = await fetch(endpointUrl);
     if (!res.ok) return { ok: false, status: res.status };
     const data = await res.json();
-    if (!data || typeof data !== 'object') return { ok: false, status: 502 };
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false, status: 502 };
+    if (kind === 'search' && !Array.isArray(data.products)) return { ok: false, status: 502 };
+    if (kind === 'collection' && (typeof data.categoryExists !== 'boolean' || !Array.isArray(data.products))) return { ok: false, status: 502 };
+    if (kind === 'product' && (!('product' in data) || (data.product !== null && (typeof data.product !== 'object' || Array.isArray(data.product) || typeof data.product.name !== 'string')))) return { ok: false, status: 502 };
     return { ok: true, data };
   } catch {
     return { ok: false, status: 502 };
@@ -133,7 +136,7 @@ export default {
       view = 'not_found';
       title = 'Page Not Found';
     } else if (matchedRoute.view === 'home') {
-      const upstream = await fetchCatalogJson('https://catalog.baci.internal/v1/search?limit=12');
+      const upstream = await fetchCatalogJson('https://catalog.baci.internal/v1/search?limit=12', 'search');
       if (!upstream.ok) {
         status = 502;
         title = 'Catalog Temporarily Unavailable';
@@ -148,7 +151,7 @@ export default {
       const endpoint = qs
         ? \`https://catalog.baci.internal/v1/search?\${qs}\`
         : 'https://catalog.baci.internal/v1/search';
-      const upstream = await fetchCatalogJson(endpoint);
+      const upstream = await fetchCatalogJson(endpoint, 'search');
       if (!upstream.ok) {
         status = 502;
         title = 'Search Temporarily Unavailable';
@@ -161,19 +164,22 @@ export default {
       title = 'Your Cart';
     } else if (matchedRoute.view === 'editorial') {
       const paramValues = Object.values(matchedRoute.params);
-      title = matchedRoute.params.slug || matchedRoute.params.page || paramValues[0] || 'Editorial';
+      title = matchedRoute.params.pageSlug || matchedRoute.params.pageId || matchedRoute.params.page || paramValues[paramValues.length - 1] || 'Editorial';
     } else if (matchedRoute.view === 'collection') {
-      const paramValues = Object.values(matchedRoute.params);
+      const colEntries = Object.entries(matchedRoute.params);
+      const lastCol = colEntries[colEntries.length - 1];
+      const prevCol = colEntries[colEntries.length - 2];
+      const trailingFilter = lastCol && (lastCol[0] === 'brand' || lastCol[0] === 'filter' || lastCol[0] === 'page');
       const categoryParam =
         matchedRoute.params.category ||
+        matchedRoute.params.categoryId ||
         matchedRoute.params.categorySlug ||
         matchedRoute.params.collection ||
+        matchedRoute.params.collectionId ||
         matchedRoute.params.collectionSlug ||
-        matchedRoute.params.handle ||
-        matchedRoute.params.slug ||
-        paramValues[0] ||
-        '';
-      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\`);
+        (trailingFilter ? matchedRoute.params.handle || matchedRoute.params.slug || (prevCol ? prevCol[1] : '') : '') ||
+        (lastCol ? lastCol[1] : '');
+      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\`, 'collection');
       if (!upstream.ok) {
         status = 502; title = 'Category Temporarily Unavailable';
       } else if (!upstream.data.categoryExists) {
@@ -202,7 +208,8 @@ export default {
         '';
       const categoryQuery = categoryVal ? \`category=\${encodeURIComponent(categoryVal)}&\` : '';
       const upstream = await fetchCatalogJson(
-        \`https://catalog.baci.internal/v1/product?\${categoryQuery}productSlug=\${encodeURIComponent(productSlug)}\`
+        \`https://catalog.baci.internal/v1/product?\${categoryQuery}productSlug=\${encodeURIComponent(productSlug)}\`,
+        'product'
       );
       if (!upstream.ok) {
         status = 502;
@@ -240,32 +247,11 @@ export default {
     }
     const renderMs = performance.now() - renderStart;
 
-    const jsonLd =
-      status === 200 && view === 'product' && productDetail
-        ? {
-            '@context': 'https://schema.org', '@type': 'Product',
-            name: productDetail.name,
-            brand: { '@type': 'Brand', name: productDetail.brand },
-            offers: {
-              '@type': 'Offer', priceCurrency: 'NGN', price: productDetail.priceNgn,
-              availability: productDetail.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-            },
-          }
-        : {
-            '@context': 'https://schema.org',
-            '@type': view === 'collection' ? 'CollectionPage' : 'WebSite',
-            name: title, url: url.origin + url.pathname,
-          };
-
-    const robotsMeta =
-      status !== 200
-        ? '<meta name="robots" content="noindex, nofollow" />'
-        : '<meta name="robots" content="index, follow" />';
-
-    const hydrationBootstrap =
-      status >= 500
-        ? ''
-        : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;
+    const jsonLd = status === 200 && view === 'product' && productDetail
+      ? { '@context': 'https://schema.org', '@type': 'Product', name: productDetail.name, brand: { '@type': 'Brand', name: productDetail.brand }, offers: { '@type': 'Offer', priceCurrency: 'NGN', price: productDetail.priceNgn, availability: productDetail.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } }
+      : { '@context': 'https://schema.org', '@type': view === 'collection' ? 'CollectionPage' : 'WebSite', name: title, url: url.origin + url.pathname };
+    const robotsMeta = status !== 200 ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow" />';
+    const hydrationBootstrap = status >= 500 ? '' : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;
 
     const html = \`<!DOCTYPE html>
 <html lang="en">

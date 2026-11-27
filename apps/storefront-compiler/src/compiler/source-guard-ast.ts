@@ -39,6 +39,10 @@ const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set([
   'createhtml',
   'createscript',
   'createscripturl',
+  'ownerdocument',
+  'contentdocument',
+  'contentwindow',
+  'defaultview',
 ]);
 
 function isDocumentReceiver(expr: ts.Expression): boolean {
@@ -82,12 +86,14 @@ export function classifyMemberName(
   memberAccessNode?: ts.Node
 ): void {
   const lowerMember = memberName.toLowerCase();
-  if (
-    LOWERCASE_HTML_SINK_NAMES.has(lowerMember) ||
-    ((memberName === 'write' || memberName === 'writeln') &&
-      receiver !== undefined &&
-      isDocumentReceiver(receiver))
-  ) {
+  const isUnsafeWrite =
+    (memberName === 'write' || memberName === 'writeln') &&
+    (memberAccessNode === undefined ||
+      (memberAccessNode.parent !== undefined &&
+        ts.isCallExpression(memberAccessNode.parent) &&
+        memberAccessNode.parent.expression === memberAccessNode) ||
+      (receiver !== undefined && isDocumentReceiver(receiver)));
+  if (LOWERCASE_HTML_SINK_NAMES.has(lowerMember) || isUnsafeWrite) {
     violations.push({
       filePath,
       rule: 'DANGEROUS_INNER_HTML',

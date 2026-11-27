@@ -155,7 +155,11 @@ export async function updateMerchantInboxConversation(
   }
 ): Promise<
   | { ok: true; conversation: MerchantInboxConversation }
-  | (MerchantInboxFailure & { followUpSent?: SentFollowUp })
+  | (MerchantInboxFailure & {
+      followUpSent?: SentFollowUp;
+      /** Done or a reopen was sent and not refused: it took, or may yet. */
+      followUpCancelSent?: true;
+    })
   | { ok: false; code: 'invalid_follow_up' }
 > {
   const { conversationId, update } = input;
@@ -168,16 +172,23 @@ export async function updateMerchantInboxConversation(
   let followUp: boolean | undefined;
   let labelsSaved = false;
   let sent: SentFollowUp | undefined;
-  const fail = (result: MerchantInboxFailure = unavailable) =>
-    sent ? { ...result, followUpSent: sent } : result;
+  let cancelSent = false;
+  const fail = (result: MerchantInboxFailure = unavailable) => ({
+    ...result,
+    ...(sent && { followUpSent: sent }),
+    ...(cancelSent && { followUpCancelSent: true as const }),
+  });
+  /** Done or reopen, which cancel a snooze. False when it has to stop here. */
+  const writeStatus = async (status: 'open' | 'resolved') => {
+    const outcome = await providerWrite(binding, `${base}/toggle_status`, {
+      status,
+    });
+    cancelSent = outcome !== 'rejected';
+    return outcome === 'ok';
+  };
 
   if (update.status === 'resolved') {
-    if (
-      !(await providerPost(binding, `${base}/toggle_status`, {
-        status: 'resolved',
-      }))
-    )
-      return unavailable;
+    if (!(await writeStatus('resolved'))) return fail();
     followUp = false;
   } else if (typeof followUpAt === 'string') {
     const at = Date.parse(followUpAt);
@@ -223,14 +234,7 @@ export async function updateMerchantInboxConversation(
       update.status === 'open'
         ? owned.conversation.status !== 'open'
         : owned.conversation.status === 'snoozed';
-    if (
-      reopen &&
-      !(await providerPost(binding, `${base}/toggle_status`, {
-        status: 'open',
-      }))
-    ) {
-      return unavailable;
-    }
+    if (reopen && !(await writeStatus('open'))) return fail();
     // Either way no follow-up is pending any more (reopening cancels a snooze),
     // so a leftover label, say on a chat resolved outside the app, goes too.
     if (followUpAt === null || owned.conversation.followUp) followUp = false;

@@ -162,6 +162,20 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
     );
   });
 
+  it('bugfix: drops the reminder when a clear reopened the chat but a later write failed', async () => {
+    mocks.update.mockResolvedValue({
+      ok: false,
+      code: 'unavailable',
+      followUpCancelSent: true,
+    });
+
+    expect((await patch('7', { followUpAt: null })).status).toBe(503);
+    expect(mocks.sync).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ update: { followUpAt: null } })
+    );
+  });
+
   it.each([
     ['an empty change', {}],
     ['an unknown key', { status: 'open', merchantId: 'other' }],

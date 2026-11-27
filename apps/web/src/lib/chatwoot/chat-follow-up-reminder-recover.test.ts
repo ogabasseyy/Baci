@@ -128,3 +128,40 @@ describe('recoverAcceptedFollowUpReminder', () => {
     expect(mocks.hold).not.toHaveBeenCalled();
   });
 });
+
+describe('bugfix: a cancellation that failed partway still drops the reminder', () => {
+  const cancelled = (update: { followUpAt?: null; status?: 'resolved' }) =>
+    recoverAcceptedFollowUpReminder(client, binding, {
+      conversationId: 7,
+      update,
+      cancelSent: true,
+    });
+
+  it.each([
+    ['a clear', { followUpAt: null }],
+    ['Done', { status: 'resolved' as const }],
+  ])('syncs %s with what the chat shows', async (_name, update) => {
+    engine({ status: 'open', followUp: true });
+    await cancelled(update);
+    expect(mocks.sync).toHaveBeenCalledWith(client, {
+      merchantId: 'm',
+      conversationId: 7,
+      update,
+      customerName: 'Ada',
+      observed: { status: 'open', followUp: true, snoozedUntil: undefined },
+    });
+    expect(mocks.hold).not.toHaveBeenCalled();
+  });
+
+  it('syncs it when the chat cannot be read back', async () => {
+    unreadable();
+    await cancelled({ followUpAt: null });
+    expect(mocks.sync).toHaveBeenCalledWith(client, {
+      merchantId: 'm',
+      conversationId: 7,
+      update: { followUpAt: null },
+      customerName: '',
+      observed: undefined,
+    });
+  });
+});

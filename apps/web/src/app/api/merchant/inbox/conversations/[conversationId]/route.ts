@@ -71,11 +71,13 @@ export async function PATCH(
       'invalid_follow_up'
     );
   }
-  // A later write or the read-back can fail after the follow-up was accepted.
+  // A later write or the read-back can fail after the follow-up was set or
+  // cancelled.
   await recoverAcceptedFollowUpReminder(resolved.supabase, resolved.binding, {
     conversationId: conversationId.data,
     update: update.data,
     sent: 'followUpSent' in result ? result.followUpSent : undefined,
+    cancelSent: 'followUpCancelSent' in result,
   });
   return merchantInboxError(
     503,

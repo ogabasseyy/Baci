@@ -54,3 +54,61 @@ describe('bugfix: a failed change says whether the snooze was sent', () => {
     });
   });
 });
+
+describe('bugfix: a failed change says whether a cancellation was sent', () => {
+  const cancel = (next: { followUpAt?: null; status?: 'open' | 'resolved' }) =>
+    updateMerchantInboxConversation(binding, {
+      conversationId: 7,
+      update: next,
+      now: NOW,
+    });
+
+  it.each([
+    ['clearing the follow-up', { followUpAt: null }],
+    ['reopening', { status: 'open' as const }],
+  ])('marks it when %s reopens the chat but the label write fails', async (_name, next) => {
+    chatWithLabels(['follow-up'], '/labels', { status: 'snoozed' });
+
+    await expect(cancel(next)).resolves.toMatchObject({
+      ok: false,
+      followUpCancelSent: true,
+    });
+  });
+
+  it('marks it when Done gets no clear answer', async () => {
+    chatWithLabels(['follow-up'], '/toggle_status');
+
+    await expect(cancel({ status: 'resolved' })).resolves.toMatchObject({
+      ok: false,
+      followUpCancelSent: true,
+    });
+  });
+
+  it.each([
+    [
+      'the engine refuses Done',
+      '/toggle_status',
+      { failStatus: 422 },
+      { status: 'resolved' as const },
+    ],
+    [
+      'the engine refuses the reopen',
+      '/toggle_status',
+      { status: 'snoozed', failStatus: 422 },
+      { followUpAt: null },
+    ],
+    [
+      'only the label write fails on an open chat',
+      '/labels',
+      {},
+      { followUpAt: null },
+    ],
+  ])('says nothing was sent when %s', async (_name, failing, options, next) => {
+    chatWithLabels(['follow-up'], failing, options);
+
+    await expect(cancel(next)).resolves.toEqual({
+      ok: false,
+      code: 'unavailable',
+    });
+  });
+});

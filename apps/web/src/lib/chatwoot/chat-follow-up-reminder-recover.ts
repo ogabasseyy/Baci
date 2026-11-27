@@ -14,10 +14,15 @@ const SNOOZE_TOLERANCE_MS = 60_000;
 
 /**
  * For a change that ended in an error. A change is several writes, so the
- * engine may have the follow-up although a later write or the read-back failed.
- * It is recorded when the engine applied the snooze or shows it. A snooze sent
- * without a clear answer may still land, so its time is held unless another
- * reminder is pending. Otherwise nothing is touched. Best effort, never throws.
+ * engine may have taken the follow-up part although a later write or the
+ * read-back failed.
+ * - Setting a time: recorded when the engine applied the snooze or shows it. A
+ *   snooze sent without a clear answer may still land, so its time is held
+ *   unless another reminder is pending.
+ * - Done, reopen or clear: when a status change was sent and not refused, the
+ *   reminder follows the same rule as after a successful change (a chat still
+ *   shown as snoozed with its follow-up keeps it).
+ * Otherwise nothing is touched. Best effort, never throws.
  */
 export async function recoverAcceptedFollowUpReminder(
   client: Pick<SupabaseClient, 'from'>,
@@ -27,13 +32,30 @@ export async function recoverAcceptedFollowUpReminder(
     update: MerchantInboxUpdate;
     /** Set when the snooze was sent and not refused. */
     sent?: SentFollowUp;
+    /** Set when Done or a reopen was sent and not refused. */
+    cancelSent?: boolean;
   }
 ): Promise<void> {
-  const { conversationId, update, sent } = input;
+  const { conversationId, update, sent, cancelSent } = input;
   const requestedAt = update.followUpAt;
-  if (typeof requestedAt !== 'string') return;
+  if (typeof requestedAt !== 'string' && !cancelSent) return;
   const read = await getMerchantInboxConversation(binding, conversationId);
   const shown = read.ok ? read.conversation : undefined;
+  const observed = shown && {
+    status: shown.status,
+    followUp: shown.followUp,
+    snoozedUntil: shown.snoozedUntil,
+  };
+  if (typeof requestedAt !== 'string') {
+    await syncChatFollowUpReminder(client, {
+      merchantId: binding.merchantId,
+      conversationId,
+      update,
+      customerName: shown?.customerName ?? '',
+      observed,
+    });
+    return;
+  }
   const drift =
     shown?.status === 'snoozed' && shown.snoozedUntil
       ? Math.abs(Date.parse(shown.snoozedUntil) - Date.parse(requestedAt))
@@ -47,11 +69,7 @@ export async function recoverAcceptedFollowUpReminder(
       update,
       customerName,
       // A snooze to another time here means a newer change won.
-      observed: shown && {
-        status: shown.status,
-        followUp: shown.followUp,
-        snoozedUntil: shown.snoozedUntil,
-      },
+      observed,
     });
     return;
   }

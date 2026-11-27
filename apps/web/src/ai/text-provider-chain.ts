@@ -57,6 +57,10 @@ export interface TextProvider {
   vision?: boolean;
 }
 
+export function getOpenAiTextModelName(): string {
+  return process.env.OPENAI_TEXT_MODEL?.trim() || 'gpt-5.4-mini';
+}
+
 export function getCerebrasTextModelName(): string {
   return process.env.COPILOT_CEREBRAS_MODEL?.trim() || 'gemma-4-31b';
 }
@@ -118,4 +122,32 @@ export function getTextProviderChain(): TextProvider[] {
   }
 
   return chain;
+}
+
+/**
+ * Onboarding-scoped text/vision chain: places OpenAI first when
+ * `OPENAI_API_KEY` is configured and falls back to the platform-wide chain
+ * (Cerebras → Groq → Gemini), keeping other platform AI surfaces on their
+ * existing free-tier-first routing.
+ */
+export function getOnboardingTextProviderChain(): TextProvider[] {
+  const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
+  const baseChain = getTextProviderChain();
+  if (!openAiApiKey) {
+    return baseChain;
+  }
+
+  const modelName = getOpenAiTextModelName();
+  return [
+    {
+      name: `openai:${modelName}`,
+      model: createOpenAICompatible({
+        name: 'openai',
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: openAiApiKey,
+      })(modelName),
+      vision: true,
+    },
+    ...baseChain,
+  ];
 }

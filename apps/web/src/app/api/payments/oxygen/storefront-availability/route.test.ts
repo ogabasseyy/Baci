@@ -50,6 +50,16 @@ describe('Oxygen storefront availability', () => {
       { p_merchant_id: merchantId }
     );
   });
+  it('returns available: false when merchant toggle or policy denies admission', async () => {
+    mocks.rpc.mockResolvedValueOnce({ data: false, error: null });
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ available: false });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      'oxygen_storefront_pilot_available',
+      { p_merchant_id: merchantId }
+    );
+  });
   it('returns open storefront availability for guests and rejects malformed requests', async () => {
     mocks.auth.mockResolvedValueOnce({ error: 'unauthorized' });
     const guestResponse = await GET(request());

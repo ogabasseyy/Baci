@@ -93,6 +93,8 @@ jobs:
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
       - name: Test PiggyVest stuck-funds runbook CI wiring
         run: node --test .github/scripts/piggyvest-stuck-funds-runbook-ci.test.mjs
+      - name: Test self-hosted OTA scripts and publish workflow
+        run: node --test .github/scripts/storefront-ota-publish-workflow.test.mjs .github/scripts/smoke-check-ota-manifest.test.mjs .github/scripts/verify-storefront-self-hosted-ota-export.test.mjs
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3

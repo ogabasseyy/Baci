@@ -79,6 +79,7 @@ const featureSettings = {
   preferred_local_gateway: 'paystack',
   preferred_international_gateway: 'paystack',
   credit_direct_enabled: false,
+  oxygen_enabled: false,
 };
 
 describe('PaymentSettingsPage', () => {
@@ -238,5 +239,36 @@ describe('PaymentSettingsPage', () => {
     expect(screen.getByText('Local Payments (NGN)')).toBeInTheDocument();
     expect(screen.getByText(/Paystack:/i)).toHaveTextContent('₦100');
     expect(screen.getByText(/Baci charges/i)).toHaveTextContent('₦2,050');
+  });
+
+  it('persists Oxygen toggle state when saved from payment settings', async () => {
+    const user = userEvent.setup();
+    render(<PaymentSettingsPage />);
+
+    const oxygenSwitch = await screen.findByRole('switch', {
+      name: /toggle oxygen/i,
+    });
+    expect(oxygenSwitch).not.toBeChecked();
+
+    await user.click(oxygenSwitch);
+    expect(oxygenSwitch).toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => {
+      expect(fetchWithCsrf).toHaveBeenCalledWith(
+        '/api/merchant/features',
+        expect.objectContaining({
+          method: 'PATCH',
+        })
+      );
+    });
+    const lastBody = JSON.parse(
+      String(vi.mocked(fetchWithCsrf).mock.calls.at(-1)?.[1]?.body)
+    );
+    expect(lastBody).toMatchObject({
+      merchantId: 'merchant-1',
+      oxygen_enabled: true,
+    });
   });
 });

@@ -109,6 +109,18 @@ describe('resolveComparePageStatus', () => {
     expect(mockGetCachedCompareCategoryInventory).not.toHaveBeenCalled();
   });
 
+  it('returns missing for a duplicate self-compare slug without loading inventory', async () => {
+    await expect(
+      resolveComparePageStatus({
+        merchantSlug: 'ogabassey',
+        categorySlug: 'laptops',
+        comparisonSlug: 'left-laptop-vs-left-laptop',
+      })
+    ).resolves.toEqual({ kind: 'missing' });
+    expect(mockGetCachedCompareCategoryInventory).not.toHaveBeenCalled();
+    expect(mockGetCachedMaintainedCompareRouteManifest).not.toHaveBeenCalled();
+  });
+
   it('returns missing for collection inventory', async () => {
     mockGetCachedCompareCategoryInventory.mockResolvedValueOnce({
       ...inventory,

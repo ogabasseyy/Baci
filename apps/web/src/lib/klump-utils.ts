@@ -1,3 +1,5 @@
+import { computeOrderNetPayable } from '@baci/shared/lib';
+
 export interface BnplOrderItem {
   name?: string;
   product_name?: string;
@@ -8,6 +10,13 @@ export interface BnplOrderItem {
 export interface BnplOrder {
   id: string;
   total: number | string;
+  amount_paid?: number | string | null;
+  wallet_amount_used?: number | string | null;
+  wallet_ledger_used?: number | string | null;
+  savings_ledger_used?: number | string | null;
+  wallet_reversal_completed?: boolean | null;
+  wallet_reversed_credit?: number | string | null;
+  payment_status?: string | null;
   currency?: string | null;
   order_number?: string | null;
   shipping_cost?: number | string | null;
@@ -58,6 +67,53 @@ export function toCurrencyAmount(value: number | string | null | undefined) {
   }
 
   return Math.round(amount * 100) / 100;
+}
+
+/**
+ * Net remaining amount due to the BNPL gateway after subtracting any pre-gateway
+ * store credit (wallet or device savings) recorded on the order.
+ */
+export function getBnplRemainingAmount(
+  order: Pick<
+    BnplOrder,
+    | 'total'
+    | 'amount_paid'
+    | 'wallet_amount_used'
+    | 'wallet_ledger_used'
+    | 'savings_ledger_used'
+    | 'wallet_reversal_completed'
+    | 'wallet_reversed_credit'
+    | 'payment_status'
+  >
+) {
+  const normalizedStatus = (order.payment_status ?? 'unpaid')
+    .trim()
+    .toLowerCase();
+  if (
+    normalizedStatus === 'paid' ||
+    normalizedStatus === 'bnpl_approved' ||
+    normalizedStatus === 'refunded' ||
+    normalizedStatus === 'cancelled' ||
+    normalizedStatus === 'canceled'
+  ) {
+    return 0;
+  }
+
+  return toCurrencyAmount(
+    computeOrderNetPayable({
+      total: toCurrencyAmount(order.total),
+      amountPaid: toCurrencyAmount(order.amount_paid),
+      walletAmountUsed: toCurrencyAmount(order.wallet_amount_used),
+      walletLedgerUsed: toCurrencyAmount(order.wallet_ledger_used),
+      savingsLedgerUsed: toCurrencyAmount(order.savings_ledger_used),
+      walletReversalCompleted: order.wallet_reversal_completed === true,
+      walletReversedCredit:
+        order.wallet_reversed_credit != null
+          ? toCurrencyAmount(order.wallet_reversed_credit)
+          : undefined,
+      paymentStatus: order.payment_status,
+    })
+  );
 }
 
 export function toKlumpIntegerAmount(
@@ -114,7 +170,7 @@ export function buildKlumpItems(order: BnplOrder) {
     });
   }
 
-  const targetTotal = toKlumpIntegerAmount(order.total);
+  const targetTotal = toKlumpIntegerAmount(getBnplRemainingAmount(order));
   let excess = itemsTotal() - targetTotal;
   for (let index = items.length - 1; index >= 0 && excess > 0; index -= 1) {
     const item = items[index];

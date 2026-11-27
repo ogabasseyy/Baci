@@ -15,6 +15,10 @@ import { buildGuestOrderResponse } from './build-guest-order-response';
 import { fetchAuthenticatedDeliveryFlag } from './fetch-authenticated-delivery-flag';
 import { fetchOrderInventoryProof } from './fetch-inventory-proof';
 import { fetchProductRouteDetails } from './fetch-product-route-details';
+import {
+  fetchStorefrontOrderLedgerCredit,
+  requiresStorefrontOrderLedgerCredit,
+} from './fetch-storefront-order-ledger-credit';
 import { mapOrderItemsWithRoutes } from './map-order-items-with-routes';
 import { mapTrackingPaymentAccounts } from './map-tracking-payment-accounts';
 import { orderDetailSelect } from './order-detail-select';
@@ -148,19 +152,29 @@ export async function GET(
           );
         }
 
-        const orderForResponse = {
-          ...order,
-        } as typeof order & { order_payment_accounts?: unknown };
-        delete orderForResponse.order_payment_accounts;
+        // biome-ignore format: compact destructure preserves the 300-line route gate.
+        const { order_payment_accounts: _opa, customer_id: _cid, ...orderForResponse } = order as typeof order & { order_payment_accounts?: unknown; customer_id?: string | null };
 
         // biome-ignore format: compact call preserves the 300-line route gate.
         const notificationDelivered = await fetchAuthenticatedDeliveryFlag(supabase, order.id);
         // biome-ignore format: compact call preserves the 300-line route gate.
         const inventoryConfirmed = await fetchOrderInventoryProof(supabase, order.id, token ?? null, email ?? null);
+        // biome-ignore format: compact call preserves the 300-line route gate.
+        const ledgerCredit = requiresStorefrontOrderLedgerCredit(order.payment_method) ? await fetchStorefrontOrderLedgerCredit(supabase, order.id, { merchantId: order.merchant_id, customerId: (order as { customer_id?: string | null }).customer_id }) : { ok: true as const, walletLedgerUsed: 0, savingsLedgerUsed: 0, walletReversalCompleted: false, walletReversedCredit: 0 };
+        if (!ledgerCredit.ok) {
+          return NextResponse.json(
+            { error: 'Failed to verify order store credit' },
+            { status: 500 }
+          );
+        }
 
         return NextResponse.json(
           sanitizePublicOrder({
             ...orderForResponse,
+            wallet_ledger_used: ledgerCredit.walletLedgerUsed,
+            savings_ledger_used: ledgerCredit.savingsLedgerUsed,
+            wallet_reversal_completed: ledgerCredit.walletReversalCompleted,
+            wallet_reversed_credit: ledgerCredit.walletReversedCredit,
             notification_delivered: notificationDelivered,
             inventory_confirmed: inventoryConfirmed,
             shipping_cost: order.shipping_fee,

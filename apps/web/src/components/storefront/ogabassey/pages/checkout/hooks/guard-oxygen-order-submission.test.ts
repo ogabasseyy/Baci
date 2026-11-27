@@ -20,7 +20,10 @@ function makeContext(overrides?: {
   method?: string;
   authenticated?: boolean;
   currencyCode?: string;
+  total?: number;
   walletAmount?: number;
+  remainingAmount?: number;
+  savingsAmount?: number;
   omitOpenAuthModal?: boolean;
 }) {
   const openAuthModal = vi.fn();
@@ -41,7 +44,16 @@ function makeContext(overrides?: {
       currencyCode: overrides?.currencyCode ?? 'NGN',
       session: {
         method: overrides?.method ?? 'oxygen',
-        wallet: { amountUsed: overrides?.walletAmount ?? 0 },
+        total: overrides?.total ?? 50_000,
+        wallet: {
+          amountUsed: overrides?.walletAmount ?? 0,
+          ...(overrides?.remainingAmount !== undefined
+            ? { remainingAmount: overrides.remainingAmount }
+            : {}),
+        },
+        ...(overrides?.savingsAmount !== undefined
+          ? { savings: { amountUsed: overrides.savingsAmount } }
+          : {}),
       },
     },
     processing: { releaseSubmission },
@@ -90,4 +102,47 @@ describe('guardOxygenOrderSubmission', () => {
     expect(openAuthModal).not.toHaveBeenCalled();
     expect(releaseSubmission).not.toHaveBeenCalled();
   });
+
+  it('allows an authenticated NGN Oxygen submission when partial wallet credit leaves remaining balance', async () => {
+    const { context, openAuthModal, releaseSubmission } = makeContext({
+      authenticated: true,
+      walletAmount: 15_000,
+    });
+    await expect(
+      guardOxygenOrderSubmission(context, 'merchant-1')
+    ).resolves.toBe(false);
+    expect(openAuthModal).not.toHaveBeenCalled();
+    expect(releaseSubmission).not.toHaveBeenCalled();
+    expect(mocks.toast).not.toHaveBeenCalled();
+  });
+
+  it('skips Oxygen submission guard when store credit leaves zero remaining amount', async () => {
+    const { context, openAuthModal } = makeContext({
+      authenticated: false,
+      total: 50_000,
+      walletAmount: 50_000,
+    });
+    await expect(
+      guardOxygenOrderSubmission(context, 'merchant-1')
+    ).resolves.toBe(false);
+    expect(openAuthModal).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'skips Oxygen submission guard when device savings cover 100%% of total (authenticated=%s)',
+    async (authenticated) => {
+      const { context, openAuthModal, releaseSubmission } = makeContext({
+        authenticated,
+        total: 50_000,
+        walletAmount: 0,
+        savingsAmount: 50_000,
+      });
+      await expect(
+        guardOxygenOrderSubmission(context, 'merchant-1')
+      ).resolves.toBe(false);
+      expect(openAuthModal).not.toHaveBeenCalled();
+      expect(releaseSubmission).not.toHaveBeenCalled();
+      expect(mocks.checkAvailability).not.toHaveBeenCalled();
+    }
+  );
 });

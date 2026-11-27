@@ -255,4 +255,27 @@ describe('MessagesScreen paging past the automatic pages', () => {
       'handled'
     );
   });
+
+  it('bugfix: a drag on one view does not load a page for the next view', () => {
+    render(<MessagesScreen />);
+
+    press('List dragged (test)');
+    press('All');
+    press('List end reached (test)');
+
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: a drag before a search does not load a page after it', () => {
+    render(<MessagesScreen />);
+
+    press('List dragged (test)');
+    fireEvent.change(screen.getByLabelText('Search chats'), {
+      target: { value: 'order' },
+    });
+    press('Clear search');
+    press('List end reached (test)');
+
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
 });

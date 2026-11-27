@@ -103,6 +103,9 @@ describe('resolveMerchantInboxRequest', () => {
       {
         ok: true,
         binding,
+        supabase,
+        merchantId: MERCHANT_ID,
+        canViewOrders: true,
       }
     );
     expect(mocks.getMerchantInboxBinding).toHaveBeenCalledWith(MERCHANT_ID);
@@ -161,6 +164,22 @@ describe('resolveMerchantInboxRequest', () => {
       ok: true,
     });
     await expect(failure('edit')).resolves.toMatchObject({ status: 403 });
+  });
+
+  it('bugfix: tells the route whether the caller may see order details', async () => {
+    mocks.getMerchantForApiRequest.mockResolvedValue(
+      staff({ customers: { view: true } })
+    );
+    await expect(
+      resolveMerchantInboxRequest(request, 'view')
+    ).resolves.toMatchObject({ ok: true, canViewOrders: false });
+
+    mocks.getMerchantForApiRequest.mockResolvedValue(
+      staff({ customers: { view: true }, orders: { view: true } })
+    );
+    await expect(
+      resolveMerchantInboxRequest(request, 'view')
+    ).resolves.toMatchObject({ ok: true, canViewOrders: true });
   });
 
   it('reports an unbound store without exposing configuration detail', async () => {

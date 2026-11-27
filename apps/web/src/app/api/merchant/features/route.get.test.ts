@@ -48,6 +48,7 @@ describe('GET /api/merchant/features', () => {
     expect(testState.selectColumns).toContain('klump_enabled');
     expect(testState.selectColumns).toContain('klump_min_amount');
     expect(testState.selectColumns).toContain('klump_max_amount');
+    expect(testState.selectColumns).toContain('oxygen_enabled');
     expect(testState.selectColumns).toContain('vtu_electricity_enabled');
     expect(testState.selectColumns).toContain('vtu_tv_enabled');
     expect(testState.selectColumns).toContain('vtu_betting_enabled');
@@ -76,6 +77,7 @@ describe('GET /api/merchant/features', () => {
       klump_enabled: false,
       klump_min_amount: 10000,
       klump_max_amount: 1000000,
+      oxygen_enabled: false,
       vtu_customer_cashback_enabled: false,
       vtu_customer_cashback_rate: 50,
       created_at: null,

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LIGHT_COLORS } from '@/constants/theme';
+import { LIGHT_COLORS, SPACING } from '@/constants/theme';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 
 vi.mock('@/components/ui/AppSheetModal', () => ({
@@ -54,6 +54,14 @@ beforeEach(() => {
 });
 
 describe('ConversationActions', () => {
+  it('bugfix: every action button is tall enough to tap', () => {
+    renderActions(chat());
+
+    for (const button of screen.getAllByRole('button')) {
+      expect(button).toHaveStyle({ minHeight: `${SPACING.touchTarget}px` });
+    }
+  });
+
   it('marks the chat Done and steps back', async () => {
     const { onUpdate, onDone } = renderActions(chat());
 

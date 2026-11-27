@@ -11,6 +11,7 @@ vi.mock('@/lib/sanitize-core', () => ({
 
 import { GET } from './route';
 import {
+  createStorefrontFromMock,
   mockItems,
   mockOrderData,
   mockSupabaseClient,
@@ -45,11 +46,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -112,11 +114,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -188,12 +191,13 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'merchants') return mockMerchantQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        merchants: mockMerchantQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -252,11 +256,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       ],
       error: null,
     });
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
 
     const response = await GET(request, {
       params: Promise.resolve({ id: 'order-uuid-123' }),
@@ -331,11 +336,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
     mockSupabaseClient.rpc.mockImplementation((name: string) => {
       if (name === 'get_order_notification_delivered') {
         return Promise.resolve({ data: delivered, error: null });
@@ -379,11 +385,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
     mockSupabaseClient.rpc.mockImplementation((name: string) => {
       if (name === 'get_order_inventory_proof') {
         return Promise.resolve({ data: confirmed, error: null });
@@ -428,11 +435,12 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
     };
-    mockSupabaseClient.from.mockImplementation((table: string) => {
-      if (table === 'orders') return mockOrderQuery;
-      if (table === 'order_items') return mockItemsQuery;
-      return {};
-    });
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+      })
+    );
     mockSupabaseClient.rpc.mockImplementation((name: string) => {
       if (name === 'get_order_notification_delivered') {
         return Promise.resolve({
@@ -450,5 +458,271 @@ describe('GET /api/storefront/orders/[id] authenticated lookup', () => {
 
     expect(response.status).toBe(200);
     expect(data.notification_delivered).toBe(false);
+  });
+
+  it('includes wallet and savings ledger credit totals on authenticated order lookup', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          payment_method: 'klump',
+          payment_status: 'unpaid',
+          amount_paid: 0,
+          wallet_amount_used: 0,
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock(
+        {
+          orders: mockOrderQuery,
+          order_items: mockItemsQuery,
+        },
+        {
+          walletRows: [
+            {
+              amount: 3000,
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'completed',
+            },
+            {
+              amount: 1000,
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'pending',
+            },
+          ],
+          savingsRows: [
+            { amount: 2000, metadata: {} },
+            {
+              amount: 1500,
+              metadata: { reversed_at: '2026-11-25T10:00:00Z' },
+            },
+          ],
+        }
+      )
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.wallet_ledger_used).toBe(3000);
+    expect(data.savings_ledger_used).toBe(2000);
+    expect(data.wallet_reversed_credit).toBe(0);
+    expect(mockOrderQuery.select.mock.calls[0][0]).toContain(
+      'wallet_amount_used'
+    );
+  });
+
+  it('scopes wallet and savings ledger lookups to the authorized order merchant_id and customer_id', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          merchant_id: 'merchant-uuid-456',
+          customer_id: 'customer-uuid-123',
+          payment_method: 'credit_direct',
+          payment_status: 'unpaid',
+          amount_paid: 0,
+          wallet_amount_used: 0,
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock(
+        {
+          orders: mockOrderQuery,
+          order_items: mockItemsQuery,
+        },
+        {
+          walletRows: [
+            {
+              amount: 3000,
+              merchant_id: 'merchant-uuid-456',
+              customer_id: 'customer-uuid-123',
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'completed',
+            },
+            {
+              amount: 9000,
+              merchant_id: 'other-merchant',
+              customer_id: 'customer-uuid-123',
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'completed',
+            },
+            {
+              amount: 7000,
+              merchant_id: 'merchant-uuid-456',
+              customer_id: 'other-customer',
+              source_type: 'order_redemption',
+              type: 'redemption',
+              status: 'completed',
+            },
+          ],
+          savingsRows: [
+            {
+              amount: 2000,
+              merchant_id: 'merchant-uuid-456',
+              customer_id: 'customer-uuid-123',
+              metadata: {},
+            },
+            {
+              amount: 5000,
+              merchant_id: 'other-merchant',
+              customer_id: 'customer-uuid-123',
+              metadata: {},
+            },
+          ],
+        }
+      )
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.customer_id).toBeUndefined();
+    expect(data.wallet_ledger_used).toBe(3000);
+    expect(data.savings_ledger_used).toBe(2000);
+  });
+
+  it('returns 500 when the store-credit ledger lookup fails for a BNPL/Oxygen order instead of zeroing credit', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          payment_method: 'oxygen',
+          payment_status: 'unpaid',
+          amount_paid: 0,
+          wallet_amount_used: 0,
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    const failingLedgerQuery = Object.assign(
+      Promise.resolve({ data: null, error: { message: 'ledger error' } }),
+      {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+      }
+    );
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+        customer_savings_redemptions: failingLedgerQuery,
+      })
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(data.error).toBe('Failed to verify order store credit');
+    expect(data.savings_ledger_used).toBeUndefined();
+    expect(data.wallet_ledger_used).toBeUndefined();
+  });
+
+  it('still returns 200 for non-BNPL orders when the store-credit ledger tables are unavailable', async () => {
+    const request = new NextRequest(
+      'http://localhost/api/storefront/orders/order-uuid-123'
+    );
+    mockSupabaseClient.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'user-123' } },
+    });
+
+    const mockOrderQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          ...mockOrderData,
+          payment_method: 'paystack',
+          payment_status: 'paid',
+          amount_paid: 11000,
+          wallet_amount_used: 0,
+        },
+        error: null,
+      }),
+    };
+    const mockItemsQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({ data: mockItems, error: null }),
+    };
+    const failingLedgerQuery = Object.assign(
+      Promise.resolve({ data: null, error: { message: 'ledger error' } }),
+      {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+      }
+    );
+    mockSupabaseClient.from.mockImplementation(
+      createStorefrontFromMock({
+        orders: mockOrderQuery,
+        order_items: mockItemsQuery,
+        customer_savings_redemptions: failingLedgerQuery,
+      })
+    );
+
+    const response = await GET(request, {
+      params: Promise.resolve({ id: 'order-uuid-123' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.id).toBe('order-uuid-123');
+    expect(data.wallet_ledger_used).toBe(0);
+    expect(data.savings_ledger_used).toBe(0);
   });
 });

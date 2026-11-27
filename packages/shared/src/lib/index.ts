@@ -5,6 +5,7 @@ export * from './build-refined-search-href';
 export * from './cac-registration';
 export * from './cancel-refund-attribution';
 export * from './cancel-refund-plan';
+export * from './chat-reply-notification';
 export * from './coerce-offer-authority-row';
 export * from './commerce-variant-axis';
 export * from './compare-condition-offer-identity';
@@ -126,6 +127,7 @@ export {
   readAssistanceStream,
   type SearchAssistanceFrame,
 } from './shopping-assistance-stream';
+export * from './store-credit-ledger';
 export * from './string-values';
 export * from './strip-provider-names';
 export * from './supabase-error-log';

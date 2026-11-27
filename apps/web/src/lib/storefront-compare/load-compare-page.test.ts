@@ -867,4 +867,78 @@ describe('loadComparePage', () => {
     );
     expect(result?.kind).toBe('brand');
   });
+
+  describe('fast-path prevalidation before DB or cache lookups', () => {
+    it.each([
+      {
+        label: 'invalid merchant identifier',
+        merchantSlug: 'invalid merchant!',
+        categorySlug: 'smartphones',
+        comparisonSlug: 'apple-vs-samsung',
+      },
+      {
+        label: 'malformed comparison slug without -vs-',
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        comparisonSlug: 'not-a-comparison',
+      },
+      {
+        label: 'comparison slug with multiple -vs- delimiters',
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        comparisonSlug: 'apple-vs-samsung-vs-xiaomi',
+      },
+      {
+        label: 'duplicate self-compare slug (a-vs-a)',
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        comparisonSlug: 'apple-vs-apple',
+      },
+      {
+        label: 'overly long comparison slug exceeding composite bound',
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        comparisonSlug: 'a'.repeat(1200),
+      },
+      {
+        label: 'unnecessary tilde hex encoding in comparison slug',
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        comparisonSlug: '~6170706c65-vs-samsung',
+      },
+      {
+        label: 'probe characters in comparison slug',
+        merchantSlug: 'ogabassey',
+        categorySlug: 'smartphones',
+        comparisonSlug: 'wp-login.php-vs-admin?foo=1',
+      },
+      {
+        label: 'path traversal in category slug',
+        merchantSlug: 'ogabassey',
+        categorySlug: '..%2fetc',
+        comparisonSlug: 'apple-vs-samsung',
+      },
+    ])('returns null for $label without calling merchant, category, or product lookups', async ({
+      merchantSlug,
+      categorySlug,
+      comparisonSlug,
+    }) => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {
+        // Suppress expected fast-path 404 warning.
+      });
+
+      const result = await loadComparePage({
+        merchantSlug,
+        categorySlug,
+        comparisonSlug,
+      });
+
+      expect(result).toBeNull();
+      expect(mockGetMerchantByIdentifier).not.toHaveBeenCalled();
+      expect(mockGetCachedCompareCategoryInventory).not.toHaveBeenCalled();
+      expect(mockGetCachedProductWithDetails).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+  });
 });

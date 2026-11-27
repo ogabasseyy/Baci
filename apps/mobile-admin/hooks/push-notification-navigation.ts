@@ -1,6 +1,8 @@
 import type { NotificationResponse } from 'expo-notifications';
 import type { Href } from 'expo-router';
 import { requestMobileUpdateCheck } from '@/components/updates/mobile-update-events';
+import { handleChatReplyResponse } from '@/services/chat-notification-reply';
+import { isChatReplyResponse } from '@/services/chat-reply-response';
 import { getNotificationNavigationParams } from '@/services/push-notifications';
 
 interface AdminRouter {
@@ -110,6 +112,14 @@ export function handleNotificationTap(
     reason: 'push-notification'
   ) => void = requestMobileUpdateCheck
 ) {
+  // The Reply box on a chat notification: send the text, do not just open it.
+  // Checked first, even for a response without usable data: the reply handler
+  // sends nothing then and shows the chat list.
+  if (isChatReplyResponse(response)) {
+    void handleChatReplyResponse(router, response);
+    return;
+  }
+
   const data = response.notification.request.content.data;
   if (!isPlainNotificationData(data)) {
     return;

@@ -28,6 +28,7 @@ const STORE_CREDIT_COMPATIBLE_PAYMENT_METHODS: ReadonlySet<StoreCreditPaymentMet
     'bank_transfer',
     'credpal',
     'credit_direct',
+    'oxygen',
     'klump',
     'invoice',
     'payforme',

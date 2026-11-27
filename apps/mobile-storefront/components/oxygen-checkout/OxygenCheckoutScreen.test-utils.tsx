@@ -40,7 +40,13 @@ jest.mock('./OxygenOtp', () => ({
   },
 }));
 jest.mock('./OxygenWorkflowBody', () => ({
-  OxygenWorkflowBody: ({ snapshot }: { snapshot: { stage: string } }) => {
+  OxygenWorkflowBody: ({
+    productAmount,
+    snapshot,
+  }: {
+    productAmount: number;
+    snapshot: { stage: string };
+  }) => {
     const { Text } = require('react-native');
     const { useEffect } = require('react');
     useEffect(
@@ -53,6 +59,9 @@ jest.mock('./OxygenWorkflowBody', () => ({
     return (
       <>
         <Text>Saved workflow</Text>
+        <Text testID="oxygen-workflow-product-amount">
+          {String(productAmount)}
+        </Text>
         {snapshot.stage === 'plan_required' ? (
           <OxygenActionFooter>
             <Text>See payment breakdown</Text>
@@ -73,6 +82,9 @@ jest.mock('@/services/oxygen/native-session', () => ({
   oxygenNativeSession: jest.fn(),
 }));
 jest.mock('@/services/oxygen/owned-order', () => ({
+  ...jest.requireActual<typeof import('@/services/oxygen/owned-order')>(
+    '@/services/oxygen/owned-order'
+  ),
   readOwnedOxygenOrder: jest.fn(),
 }));
 jest.mock('./use-oxygen-workflow', () => ({ useOxygenWorkflow: jest.fn() }));
@@ -94,6 +106,8 @@ export function savedCheckoutFixture() {
     jest.mocked(readOwnedOxygenOrder).mockResolvedValue({
       id: 'order',
       total: 100,
+      payableTotal: 100,
+      financedPrincipal: 100,
       order_number: 'ORD-STAGING-1',
       payment_method: 'oxygen',
       payment_status: 'pending',

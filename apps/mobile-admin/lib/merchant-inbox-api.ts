@@ -1,12 +1,14 @@
 import {
   type InboxConversation,
   type InboxConversationsPage,
+  type InboxCustomerProfile,
   type InboxMessage,
   type InboxSearchResponse,
   type InboxThreadPage,
   type InboxUpdate,
   type InboxView,
   inboxConversationsResponseSchema,
+  inboxCustomerResponseSchema,
   inboxReplyResponseSchema,
   inboxSearchResponseSchema,
   inboxThreadResponseSchema,
@@ -37,6 +39,14 @@ export async function updateInboxConversation(
   return inboxUpdateResponseSchema.parse(data).conversation;
 }
 
+/** The signed-in customer behind a chat, or null for a guest chat. */
+export async function fetchInboxCustomer(
+  conversationId: number
+): Promise<InboxCustomerProfile | null> {
+  const data = await apiClient<unknown>(`${BASE}/${conversationId}/customer`);
+  return inboxCustomerResponseSchema.parse(data).customer;
+}
+
 /** Chats matching a name, contact or message text. */
 export async function searchInbox(
   term: string,
@@ -60,14 +70,20 @@ export async function fetchInboxThread(
   return inboxThreadResponseSchema.parse(data);
 }
 
-/** Sends a store reply. The server has no idempotency key: never auto-retry. */
+/**
+ * Sends a store reply. The server has no idempotency key: never auto-retry.
+ * `merchantId` is the store the reply was meant for (a notification reply
+ * names the store that pushed it): the server refuses it with 409 unless the
+ * signed-in store is the same one.
+ */
 export async function sendInboxReply(
   conversationId: number,
-  content: string
+  content: string,
+  merchantId?: string
 ): Promise<InboxMessage> {
   const data = await apiClient<unknown>(`${BASE}/${conversationId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(merchantId ? { content, merchantId } : { content }),
   });
   return inboxReplyResponseSchema.parse(data).message;
 }

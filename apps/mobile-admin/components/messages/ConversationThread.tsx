@@ -8,14 +8,18 @@ import {
   View,
 } from 'react-native';
 import { ConversationActions } from '@/components/messages/ConversationActions';
+import { CustomerCard } from '@/components/messages/CustomerCard';
+import { CustomerUnavailable } from '@/components/messages/CustomerUnavailable';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { ReplyBox } from '@/components/messages/ReplyBox';
 import { AppHeaderKeyboardContainer } from '@/components/ui/AppHeaderKeyboardContainer';
 import { SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useInboxCustomer } from '@/hooks/useInboxCustomer';
 import { useInboxManage } from '@/hooks/useInboxManage';
 import { useInboxReply } from '@/hooks/useInboxReply';
 import { useInboxThread } from '@/hooks/useInboxThread';
 import { useTheme } from '@/hooks/useTheme';
+import { inboxDisplayName } from '@/lib/merchant-inbox-format';
 import { buildThreadRows } from '@/lib/merchant-inbox-rows';
 
 export function ConversationThread({
@@ -27,6 +31,10 @@ export function ConversationThread({
   const navigation = useNavigation();
   const thread = useInboxThread(conversationId);
   const { messages, conversation, refetch } = thread;
+  const customer = useInboxCustomer({
+    conversationId,
+    merchantId: thread.merchantId,
+  });
   const manage = useInboxManage({
     conversationId,
     merchantId: thread.merchantId,
@@ -47,7 +55,11 @@ export function ConversationThread({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
-        options={{ title: conversation?.customerName ?? 'Conversation' }}
+        options={{
+          title: conversation
+            ? inboxDisplayName(conversation.customerName)
+            : 'Conversation',
+        }}
       />
       {thread.isLoading ? (
         <View style={styles.centered}>
@@ -82,6 +94,21 @@ export function ConversationThread({
               }}
               onUpdate={manage.update}
             />
+          ) : null}
+          {/* A failed check says so: never loaded, or the card below may be
+              old. A chat already confirmed as a guest (null) stays quiet, with
+              nothing to hide or retry. */}
+          {customer.isError && customer.data !== null ? (
+            <CustomerUnavailable
+              colors={colors}
+              onRetry={() => {
+                customer.refetch();
+              }}
+              stale={!!customer.data}
+            />
+          ) : null}
+          {customer.data ? (
+            <CustomerCard colors={colors} customer={customer.data} />
           ) : null}
           <FlatList
             contentContainerStyle={styles.list}

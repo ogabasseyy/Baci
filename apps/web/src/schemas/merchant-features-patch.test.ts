@@ -26,6 +26,18 @@ describe('merchantFeatureSettingsPatchSchema', () => {
     });
   });
 
+  it('accepts explicit oxygen_enabled updates without materializing defaults on sparse payloads', () => {
+    expect(
+      merchantFeatureSettingsPatchSchema.parse({ oxygen_enabled: true })
+    ).toEqual({ oxygen_enabled: true });
+    expect(
+      merchantFeatureSettingsPatchSchema.parse({ oxygen_enabled: false })
+    ).toEqual({ oxygen_enabled: false });
+    expect(
+      merchantFeatureSettingsPatchSchema.parse({ loyalty_enabled: true })
+    ).not.toHaveProperty('oxygen_enabled');
+  });
+
   it('toggles the repairs catalogue flag', () => {
     const result = merchantFeatureSettingsPatchSchema.parse({
       repairs_catalog_enabled: true,

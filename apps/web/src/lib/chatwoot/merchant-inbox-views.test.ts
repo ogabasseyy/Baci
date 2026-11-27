@@ -62,6 +62,13 @@ describe('matchesView', () => {
     expect(matchesView(base, 'follow_up')).toBe(false);
   });
 
+  it('returning leaves out finished chats and waits for the customer check', () => {
+    expect(matchesView(base, 'returning')).toBe(true);
+    expect(matchesView({ ...base, status: 'resolved' }, 'returning')).toBe(
+      false
+    );
+  });
+
   it('done is exactly the resolved chats', () => {
     expect(matchesView({ ...base, status: 'resolved' }, 'done')).toBe(true);
     expect(matchesView(base, 'done')).toBe(false);

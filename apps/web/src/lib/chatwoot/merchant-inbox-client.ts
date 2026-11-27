@@ -7,6 +7,8 @@ import {
   providerInboxMessageListSchema,
 } from '@/schemas/merchant-inbox';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
+import { readCustomerLinkToken } from './merchant-inbox-customer-link';
+import { buildMerchantInboxListRows } from './merchant-inbox-list-rows';
 import {
   compareMerchantInboxMessages,
   projectMerchantInboxConversation,
@@ -15,7 +17,6 @@ import {
 import { PROVIDER_MESSAGE_PAGE_SIZE } from './merchant-inbox-provider-limits';
 import {
   type MerchantInboxView,
-  matchesView,
   providerQueryForView,
 } from './merchant-inbox-views';
 
@@ -89,7 +90,13 @@ export async function listMerchantInboxConversations(
     view?: MerchantInboxView;
   }
 ): Promise<
-  | { ok: true; conversations: MerchantInboxConversation[]; hasMore: boolean }
+  | {
+      ok: true;
+      conversations: MerchantInboxConversation[];
+      hasMore: boolean;
+      /** Signed customer links by conversation id; verify before use. */
+      links: Record<number, string>;
+    }
   | MerchantInboxFailure
 > {
   const viewQuery = input.view ? providerQueryForView(input.view) : null;
@@ -112,16 +119,11 @@ export async function listMerchantInboxConversations(
   const parsed = providerInboxConversationListSchema.safeParse(response.body);
   if (!parsed.success) return { ok: false, code: 'unavailable' };
   const { payload } = parsed.data.data;
-  const conversations = payload
-    .map((raw) => projectMerchantInboxConversation(raw, binding.inboxId))
-    .filter((value): value is MerchantInboxConversation => value !== null)
-    .filter((value) => !input.view || matchesView(value, input.view))
-    // Ordering must not depend on the provider honouring `sort_by`.
-    .sort(
-      (a, b) =>
-        (b.lastActivityAt ? Date.parse(b.lastActivityAt) : 0) -
-        (a.lastActivityAt ? Date.parse(a.lastActivityAt) : 0)
-    );
+  const { conversations, links } = buildMerchantInboxListRows(
+    payload,
+    binding.inboxId,
+    input.view
+  );
   // The provider's page size is a server setting a caller cannot pin, and its
   // total is read before the page rows, so a conversation arriving between
   // the two makes the total stale. Neither is trusted to end paging: any
@@ -130,7 +132,7 @@ export async function listMerchantInboxConversations(
   // fetch. Measured on the provider's page, not on the rows kept for this
   // inbox, because that is what decides whether a next page exists.
   const hasMore = payload.length > 0;
-  return { ok: true, conversations, hasMore };
+  return { ok: true, conversations, hasMore, links };
 }
 
 /**
@@ -142,7 +144,8 @@ export async function getMerchantInboxConversation(
   binding: MerchantInboxBinding,
   conversationId: number
 ): Promise<
-  { ok: true; conversation: MerchantInboxConversation } | MerchantInboxFailure
+  | { ok: true; conversation: MerchantInboxConversation; link: string | null }
+  | MerchantInboxFailure
 > {
   const response = await providerGet(
     binding,
@@ -156,7 +159,11 @@ export async function getMerchantInboxConversation(
   if (!conversation || conversation.id !== conversationId) {
     return { ok: false, code: 'not_found' };
   }
-  return { ok: true, conversation };
+  return {
+    ok: true,
+    conversation,
+    link: readCustomerLinkToken(response.body),
+  };
 }
 
 /** Returns one page of a bound conversation's messages, oldest first. */

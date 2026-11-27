@@ -1,3 +1,8 @@
+import {
+  computeOrderNetPayable,
+  computeOrderPreGatewayPaid,
+  isPreGatewayCreditStatus,
+} from '@baci/shared/lib';
 import { z } from 'zod';
 
 const amount = z
@@ -13,6 +18,13 @@ export const oxygenCheckoutOrderSchema = z.object({
   shipping_fee: amount,
   tax_amount: amount,
   total: amount,
+  amount_paid: amount.optional(),
+  wallet_amount_used: amount.optional(),
+  wallet_ledger_used: amount.optional(),
+  savings_ledger_used: amount.optional(),
+  wallet_reversal_completed: z.boolean().optional(),
+  wallet_reversed_credit: amount.optional(),
+  payment_status: z.string().optional(),
   order_items: z.array(
     z.object({
       id: z.uuid(),
@@ -30,3 +42,53 @@ export const oxygenCheckoutOrderSchema = z.object({
     })
   ),
 });
+
+export const isOxygenPreGatewayStatus = isPreGatewayCreditStatus;
+
+/** Returns true only when an Oxygen order has reached a terminal settled state. */
+export function isOxygenSettledStatus(status?: string | null): boolean {
+  const normalized = (status ?? '').trim().toLowerCase();
+  return normalized === 'paid' || normalized === 'bnpl_approved';
+}
+
+type OxygenOrderCreditFields = Pick<
+  z.infer<typeof oxygenCheckoutOrderSchema>,
+  | 'total'
+  | 'amount_paid'
+  | 'wallet_amount_used'
+  | 'wallet_ledger_used'
+  | 'savings_ledger_used'
+  | 'wallet_reversal_completed'
+  | 'wallet_reversed_credit'
+  | 'payment_status'
+>;
+
+export function getOxygenOrderPreGatewayPaid(
+  order: OxygenOrderCreditFields
+): number {
+  return computeOrderPreGatewayPaid({
+    total: order.total,
+    amountPaid: order.amount_paid,
+    walletAmountUsed: order.wallet_amount_used,
+    walletLedgerUsed: order.wallet_ledger_used,
+    savingsLedgerUsed: order.savings_ledger_used,
+    paymentStatus: order.payment_status,
+    walletReversalCompleted: order.wallet_reversal_completed,
+    walletReversedCredit: order.wallet_reversed_credit,
+  });
+}
+
+export function getOxygenOrderNetPayable(
+  order: OxygenOrderCreditFields
+): number {
+  return computeOrderNetPayable({
+    total: order.total,
+    amountPaid: order.amount_paid,
+    walletAmountUsed: order.wallet_amount_used,
+    walletLedgerUsed: order.wallet_ledger_used,
+    savingsLedgerUsed: order.savings_ledger_used,
+    paymentStatus: order.payment_status,
+    walletReversalCompleted: order.wallet_reversal_completed,
+    walletReversedCredit: order.wallet_reversed_credit,
+  });
+}

@@ -186,6 +186,66 @@ describe('AppKeyboardContainer', () => {
     expect(resolvedStyle?.paddingBottom).toBe(16);
   });
 
+  describe('bugfix: a sheet on the bottom edge left a gap under it', () => {
+    const scrollStyle = () =>
+      JSON.parse(
+        screen
+          .getByRole('region', { name: 'Keyboard scroll view' })
+          .getAttribute('data-content-container-style') ?? '[]'
+      ) as Record<string, unknown>[];
+
+    it('paints the bottom safe area in the fill colour instead of leaving it empty', () => {
+      render(
+        <AppKeyboardContainer bottomFillColor="#ffffff">
+          <Text>Sheet</Text>
+        </AppKeyboardContainer>
+      );
+
+      const padding = scrollStyle().find(
+        (value) => typeof value?.paddingBottom === 'number'
+      );
+      const strip = screen
+        .getAllByRole('region', { name: 'Keyboard content' })
+        .map((el) => JSON.parse(el.getAttribute('data-style') ?? '{}'));
+
+      expect(padding?.paddingBottom).toBe(0);
+      // The strip is as tall as the space it replaces (the safe-area inset 12
+      // is below the 16 minimum).
+      expect(strip).toContainEqual({ backgroundColor: '#ffffff', height: 16 });
+    });
+
+    it('keeps the plain padding and adds no strip without a fill colour', () => {
+      render(
+        <AppKeyboardContainer>
+          <Text>Dialog</Text>
+        </AppKeyboardContainer>
+      );
+
+      const padding = scrollStyle().find(
+        (value) => typeof value?.paddingBottom === 'number'
+      );
+
+      expect(padding?.paddingBottom).toBe(16);
+      expect(
+        screen.queryAllByRole('region', { name: 'Keyboard content' })
+      ).toHaveLength(0);
+    });
+
+    it('also fills the strip when scrolling is disabled', () => {
+      render(
+        <AppKeyboardContainer bottomFillColor="#eeeeee" scrollEnabled={false}>
+          <Text>Sheet</Text>
+        </AppKeyboardContainer>
+      );
+
+      const views = screen
+        .getAllByRole('region', { name: 'Keyboard content' })
+        .map((el) => JSON.parse(el.getAttribute('data-style') ?? '{}'));
+
+      expect(views).toContainEqual({ backgroundColor: '#eeeeee', height: 16 });
+    });
+  });
+
   it('top-aligns content when align is start', () => {
     render(
       <AppKeyboardContainer align="start">

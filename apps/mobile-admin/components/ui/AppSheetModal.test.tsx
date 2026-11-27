@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppSheetModal } from '@/components/ui/AppSheetModal';
 
 const keyboardContainerProps = vi.hoisted(() => ({
+  bottomFillColor: undefined as string | undefined,
   contentContainerStyle: undefined as unknown,
   keyboardVerticalOffset: 0,
   scrollEnabled: true,
@@ -15,16 +16,19 @@ function Text({ children }: { children?: React.ReactNode }) {
 
 vi.mock('@/components/ui/AppKeyboardContainer', () => ({
   AppKeyboardContainer: ({
+    bottomFillColor,
     children,
     contentContainerStyle,
     keyboardVerticalOffset,
     scrollEnabled,
   }: {
+    bottomFillColor?: string;
     children?: React.ReactNode;
     contentContainerStyle?: unknown;
     keyboardVerticalOffset?: number;
     scrollEnabled?: boolean;
   }) => {
+    keyboardContainerProps.bottomFillColor = bottomFillColor;
     keyboardContainerProps.contentContainerStyle = contentContainerStyle;
     keyboardContainerProps.keyboardVerticalOffset = keyboardVerticalOffset ?? 0;
     keyboardContainerProps.scrollEnabled = scrollEnabled ?? true;
@@ -93,6 +97,7 @@ vi.mock('react-native', () => {
 
 describe('AppSheetModal', () => {
   beforeEach(() => {
+    keyboardContainerProps.bottomFillColor = undefined;
     keyboardContainerProps.contentContainerStyle = undefined;
     keyboardContainerProps.keyboardVerticalOffset = 0;
     keyboardContainerProps.scrollEnabled = true;
@@ -192,5 +197,35 @@ describe('AppSheetModal', () => {
     expect(keyboardContainerProps.keyboardVerticalOffset).toBe(64);
     expect(keyboardContainerProps.scrollEnabled).toBe(false);
     expect(keyboardContainerProps.contentContainerStyle).toBeTruthy();
+  });
+  describe('bugfix: an attached sheet left a gap under it', () => {
+    it('fills the bottom safe area with the sheet colour when attached', () => {
+      render(
+        <AppSheetModal
+          accessibilityLabel="Attached sheet"
+          onClose={vi.fn()}
+          visible={true}
+        >
+          <Text>Attached</Text>
+        </AppSheetModal>
+      );
+
+      expect(keyboardContainerProps.bottomFillColor).toBe('#303030');
+    });
+
+    it('lets a detached sheet float over the backdrop', () => {
+      render(
+        <AppSheetModal
+          accessibilityLabel="Detached sheet"
+          onClose={vi.fn()}
+          presentation="detached"
+          visible={true}
+        >
+          <Text>Detached</Text>
+        </AppSheetModal>
+      );
+
+      expect(keyboardContainerProps.bottomFillColor).toBeUndefined();
+    });
   });
 });

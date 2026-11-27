@@ -30,6 +30,7 @@ interface CheckoutPaymentStepViewProps {
   isDark: boolean;
   isLoadingCheckoutSavings: boolean;
   klumpDisabledReason: string | undefined;
+  klumpLimits?: PaymentMethodSelectorProps['klumpLimits'];
   oxygenDisabledReason?: string;
   onRetrySavings: () => void;
   onSavingsToggle: NonNullable<PaymentMethodSelectorProps['onSavingsToggle']>;
@@ -60,6 +61,7 @@ export function CheckoutPaymentStepView({
   isDark,
   isLoadingCheckoutSavings,
   klumpDisabledReason,
+  klumpLimits,
   oxygenDisabledReason,
   onRetrySavings,
   onSavingsToggle,
@@ -126,6 +128,7 @@ export function CheckoutPaymentStepView({
         orderTotal={total}
         enabledMethods={availablePaymentMethods}
         hiddenMethods={hiddenPaymentMethods}
+        klumpLimits={klumpLimits}
         // Coming back from Review remounts the step: keep any chosen method
         // visible, including a wallet-only or savings-only payment.
         initiallyCollapsed={

@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { palette } from '@/constants/Colors';
 import { formatPrice } from '@/stores/cart-store';
+import { resolvePaymentSelectorSavingsSummary } from './checkout-store-credit';
 import { InstrumentRows } from './payment-method-selector/InstrumentRows';
 import { PaymentIntentAccordion } from './payment-method-selector/PaymentIntentAccordion';
 import { PaymentMethodStatusPanels } from './payment-method-selector/PaymentMethodStatusPanels';
@@ -48,6 +49,7 @@ export function PaymentMethodSelector({
   onSavingsToggle,
   suppressedSelectedMethods = [],
   hiddenMethods = [],
+  klumpLimits,
   methodBadgeOverrides = {},
   methodDescriptionOverrides = {},
   methodDisabledReasons = {},
@@ -80,6 +82,7 @@ export function PaymentMethodSelector({
   } = usePaymentMethodAvailability({
     enabledMethods,
     hiddenMethods,
+    klumpLimits,
     methodDisabledReasons,
     orderTotal,
     selectedMethod,
@@ -107,25 +110,24 @@ export function PaymentMethodSelector({
     onSelectTab,
   ]);
 
-  const savingsShouldRender =
-    Boolean(savingsGoalId) &&
-    savingsBalance > 0 &&
-    orderTotal > 0 &&
-    selectedTab === 'full' &&
-    supportsPartialPayment;
-  const savingsCoversFully =
-    savingsShouldRender && savingsBalance >= orderTotal;
-  const savingsPortion = savingsShouldRender
-    ? Math.min(savingsBalance, orderTotal)
-    : 0;
-  const savingsResidualToGateway = savingsShouldRender
-    ? Math.max(orderTotal - savingsBalance, 0)
-    : 0;
-  const savingsIsActive =
-    savingsSelection?.use === true &&
-    Boolean(savingsGoalId) &&
-    savingsSelection.goalId === savingsGoalId;
-  const activeSavingsAmount = savingsIsActive ? savingsPortion : 0;
+  const {
+    activeSavingsAmount,
+    savingsCoversFully,
+    savingsIsActive,
+    savingsPortion,
+    savingsResidualToGateway,
+    savingsShouldRender,
+    walletIsActive,
+  } = resolvePaymentSelectorSavingsSummary({
+    orderTotal,
+    savingsBalance,
+    savingsGoalId,
+    savingsSelection,
+    selectedTab,
+    supportsPartialPayment,
+    walletBalance,
+    walletSelection,
+  });
   const savingsGoalDisplayName = savingsGoalTitle ?? savingsFallbackTitle;
   const savingsAccessibilityLabel = savingsCoversFully
     ? `Pay with device savings, ${formatPrice(savingsBalance)} available`
@@ -169,7 +171,6 @@ export function PaymentMethodSelector({
   const walletResidualToCard = walletShouldRender
     ? Math.max(walletEffectiveTotal - walletBalance, 0)
     : 0;
-  const walletIsActive = walletSelection?.use === true;
 
   // Selecting an intent projects onto the existing (tab, method) state. For the
   // two terminal `pay_later` intents we also pin the specific method, because

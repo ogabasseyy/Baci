@@ -88,14 +88,27 @@ function createAdminClientMock() {
     from: (table: string) => ({
       select: () => ({
         eq: () => ({
-          eq: () => ({
-            single: () =>
-              Promise.resolve(
-                table === 'orders'
-                  ? { data: { wallet_amount_used: 0 }, error: null }
-                  : { data: null, error: null }
-              ),
-          }),
+          eq: () => {
+            const listPromise = Promise.resolve({ data: [], error: null });
+            return {
+              single: () =>
+                Promise.resolve(
+                  table === 'orders'
+                    ? {
+                        data: {
+                          total: 5000,
+                          amount_paid: 0,
+                          wallet_amount_used: 0,
+                          payment_status: 'unpaid',
+                        },
+                        error: null,
+                      }
+                    : { data: null, error: null }
+                ),
+              // biome-ignore lint/suspicious/noThenProperty: Supabase query builder is awaitable.
+              then: listPromise.then.bind(listPromise),
+            };
+          },
           single: () =>
             Promise.resolve(
               table === 'merchants'

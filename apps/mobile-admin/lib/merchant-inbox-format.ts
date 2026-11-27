@@ -43,14 +43,23 @@ export function sortInboxMessages(messages: InboxMessage[]): InboxMessage[] {
   );
 }
 
-/** Up to two capital letters for an avatar: "small-meadow-890" -> "SM". */
-export function inboxInitials(name: string): string {
-  const words = name
-    .replace(/\(.*?\)/g, ' ')
-    .split(/[^A-Za-z]+/)
-    .filter(Boolean);
-  const letters = words.slice(0, 2).map((word) => word[0]?.toUpperCase() ?? '');
-  return letters.join('') || '?';
+/** The chat engine's made-up visitor names look like "small-meadow-890". */
+const VISITOR_SLUG = /^[a-z]+(?:-[a-z]+)+-\d+$/;
+
+/**
+ * What a chat is called on screen. A visitor's made-up slug reads as a
+ * machine id, so "small-meadow-890" becomes "Small Meadow"; a real name is
+ * shown as it is, and a blank one is "Visitor".
+ */
+export function inboxDisplayName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return 'Visitor';
+  if (!VISITOR_SLUG.test(trimmed)) return trimmed;
+  return trimmed
+    .split('-')
+    .slice(0, -1)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 /** "Today", "Yesterday" or a short date, for the day dividers in a thread. */
@@ -124,4 +133,9 @@ export function followUpOptions(
       label: option.label,
       iso: option.date.toISOString(),
     }));
+}
+
+/** "1 order" or "5 orders". */
+export function formatOrderCount(count: number): string {
+  return `${count} ${count === 1 ? 'order' : 'orders'}`;
 }

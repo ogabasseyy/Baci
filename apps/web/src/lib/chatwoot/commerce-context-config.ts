@@ -136,7 +136,35 @@ export function challengePrivateKeyPem(env: NodeJS.ProcessEnv): string {
   return pem;
 }
 
+/**
+ * Optional `EKAETTE_CHATWOOT_CHALLENGE_PUBLIC_KEY` (SPKI PEM, literal `\n`
+ * unescaped like the private key). When set it lets verifiers work without the
+ * private signing key in the environment. Empty or whitespace-only counts as
+ * unset; a non-empty value that is malformed fails closed instead of silently
+ * falling back to the private key.
+ */
+function configuredChallengePublicKeyPem(
+  env: NodeJS.ProcessEnv
+): string | undefined {
+  const raw = env.EKAETTE_CHATWOOT_CHALLENGE_PUBLIC_KEY?.trim();
+  if (!raw) return undefined;
+  const pem = raw.replace(/\\n/g, '\n');
+  if (!pem.startsWith('-----BEGIN PUBLIC KEY-----')) {
+    throw new ChatwootCommerceContextError('invalid_config');
+  }
+  rsaModulusLength(pem, false);
+  try {
+    return createPublicKey(pem)
+      .export({ format: 'pem', type: 'spki' })
+      .toString();
+  } catch {
+    throw new ChatwootCommerceContextError('invalid_config');
+  }
+}
+
 export function challengePublicKeyPem(env: NodeJS.ProcessEnv): string {
+  const configured = configuredChallengePublicKeyPem(env);
+  if (configured) return configured;
   const pem = challengePrivateKeyPem(env);
   try {
     return createPublicKey(createPrivateKey(pem))

@@ -36,6 +36,7 @@ export function PaymentOptionsPanel({
   bankTransferCheckoutAvailable,
   featureSettings,
   klumpEligible,
+  creditDirectEligible,
   oxygenEligible = false,
   hasInstallmentOptions,
   currency,
@@ -160,7 +161,9 @@ export function PaymentOptionsPanel({
             {oxygenEligible && (
               <FinanceProviderOption provider="oxygen" selected={paymentMethod === 'oxygen'} onSelect={setPaymentMethod} logo={oxygenLogo} />
             )}
-            {featureSettings?.credit_direct_enabled === true && ngnOnlyRailsAvailable && (
+            {(creditDirectEligible ??
+              (featureSettings?.credit_direct_enabled === true &&
+                ngnOnlyRailsAvailable)) && (
               <FinanceProviderOption provider="credit_direct" selected={paymentMethod === 'credit_direct'} onSelect={setPaymentMethod} logo={creditDirectLogo} />
             )}
             {klumpEligible && (

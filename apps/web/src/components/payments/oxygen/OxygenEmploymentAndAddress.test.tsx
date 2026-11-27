@@ -1,45 +1,16 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { expect, it } from 'vitest';
 import { OxygenEmploymentAndAddress } from './OxygenEmploymentAndAddress';
 
-vi.mock('./OxygenResidentialFields', () => ({
-  OxygenResidentialFields: () => (
-    <input aria-label="Home address" defaultValue="Saved address" />
-  ),
-}));
-
-it('reveals address and consent after required income details, preserving them when edited', async () => {
+it('renders employment fields and visible consent on step 2 without residential address fields', () => {
   render(
     <form>
-      <OxygenEmploymentAndAddress
-        defaults={{}}
-        collectAddress
-        checkoutAddress={{}}
-        file={null}
-        onFile={vi.fn()}
-        onAddressChange={vi.fn()}
-      />
+      <OxygenEmploymentAndAddress defaults={{}} />
     </form>
   );
-  expect(screen.getByLabelText('Home address')).not.toBeVisible();
-  expect(screen.getByRole('checkbox', { hidden: true })).not.toBeVisible();
-  fireEvent.change(screen.getByLabelText('When are you paid?'), {
-    target: { value: '25' },
-  });
-  expect(screen.getByLabelText('Home address')).not.toBeVisible();
-  fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
-    target: { value: '50000' },
-  });
-  await waitFor(() =>
-    expect(screen.getByLabelText('Home address')).toBeVisible()
-  );
+  expect(screen.getByLabelText('Monthly income (₦)')).toBeVisible();
+  expect(screen.getByLabelText('When are you paid?')).toBeVisible();
   expect(screen.getByRole('checkbox')).toBeVisible();
-  fireEvent.change(screen.getByLabelText('Home address'), {
-    target: { value: 'My address' },
-  });
-  fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
-    target: { value: '' },
-  });
-  expect(screen.getByLabelText('Home address')).toBeVisible();
-  expect(screen.getByLabelText('Home address')).toHaveValue('My address');
+  expect(screen.queryByLabelText('Street address')).toBeNull();
+  expect(screen.queryByLabelText('Proof of address')).toBeNull();
 });

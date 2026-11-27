@@ -41,6 +41,7 @@ const RANKED_VIEWS: readonly InboxView[] = [
   'needs_reply',
   'unread',
   'follow_up',
+  'returning',
 ];
 
 export default function MessagesScreen() {
@@ -254,8 +255,8 @@ const styles = StyleSheet.create({
   stage: { flex: 1 },
   summary: {
     fontFamily: TYPOGRAPHY.fontFamily.medium,
-    fontSize: TYPOGRAPHY.size.md,
+    fontSize: TYPOGRAPHY.size.sm,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
 });

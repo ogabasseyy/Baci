@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { oxygenCheckoutOrderSchema } from './oxygen-checkout-order';
+import {
+  getOxygenOrderNetPayable,
+  getOxygenOrderPreGatewayPaid,
+  oxygenCheckoutOrderSchema,
+} from './oxygen-checkout-order';
 
 const order = {
   id: '60000000-0000-4000-8000-000000000001',
@@ -40,4 +44,57 @@ it('rejects negative, empty and non-finite prices, invalid currency and quantiti
       order_items: [{ ...order.order_items[0], quantity: 0 }],
     }).success
   ).toBe(false);
+});
+
+it('includes wallet and savings ledger credits for unpaid and settled orders', () => {
+  expect(
+    getOxygenOrderPreGatewayPaid({
+      total: 198000,
+      payment_status: 'unpaid',
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 30000,
+      savings_ledger_used: 18000,
+    })
+  ).toBe(48000);
+  expect(
+    getOxygenOrderNetPayable({
+      total: 198000,
+      payment_status: 'bnpl_approved',
+      amount_paid: 198000,
+      wallet_amount_used: 0,
+      savings_ledger_used: 48000,
+    })
+  ).toBe(150000);
+  expect(
+    getOxygenOrderNetPayable({
+      total: 198000,
+      payment_status: 'pending',
+      amount_paid: 198000,
+      wallet_amount_used: 0,
+    })
+  ).toBe(0);
+  expect(
+    getOxygenOrderNetPayable({
+      total: 198000,
+      payment_status: 'unpaid',
+      amount_paid: 30000,
+      wallet_amount_used: 30000,
+      wallet_ledger_used: 0,
+      savings_ledger_used: 18000,
+      wallet_reversal_completed: true,
+    })
+  ).toBe(180000);
+  expect(
+    getOxygenOrderNetPayable({
+      total: 50000,
+      payment_status: 'partially_paid',
+      amount_paid: 40000,
+      wallet_amount_used: 20000,
+      wallet_ledger_used: 0,
+      savings_ledger_used: 0,
+      wallet_reversal_completed: true,
+      wallet_reversed_credit: 20000,
+    })
+  ).toBe(30000);
 });

@@ -5,6 +5,8 @@ import {
 } from '@/lib/klump-sdk';
 import {
     buildKlumpItems,
+    getBnplRemainingAmount,
+    getUnmaskedValue,
     normalizeKlumpPhone,
     toKlumpIntegerAmount,
 } from '@/lib/klump-utils';
@@ -86,7 +88,7 @@ export async function launchKlumpCheckout({
         throw new Error('Missing Klump reference or tracking token.');
     }
 
-    const klumpAmount = toKlumpIntegerAmount(order.total);
+    const klumpAmount = toKlumpIntegerAmount(getBnplRemainingAmount(order));
     if (klumpAmount <= 0) {
         setStatus('error');
         setErrorMessage('Invalid order total for Klump checkout.');

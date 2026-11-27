@@ -1,0 +1,13 @@
+{
+  "name": "@baci/cloudflare-autocomplete-proxy",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/index.test.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.115.0"
+  }
+}

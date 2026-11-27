@@ -10,6 +10,13 @@ import {
 import { createClient } from '@/lib/supabase/server';
 
 const POSTGRES_QUERY_CANCELED_CODE = '57014';
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' } as const;
+const AUTOCOMPLETE_CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=30, stale-while-revalidate=300',
+  'CDN-Cache-Control':
+    'public, max-age=120, stale-while-revalidate=600, stale-if-error=600',
+  'Vercel-CDN-Cache-Control': 'public, max-age=120, stale-while-revalidate=600',
+} as const;
 const AutocompleteQuerySchema = z.object({
   q: z.string().trim().min(1),
   merchant_id: z.uuid(),
@@ -77,7 +84,12 @@ export async function GET(request: NextRequest) {
     // Popular searches disabled — search_analytics table has no data and
     // the popular_searches view caused 16K+ sequential scans per day via
     // RLS policy evaluation on every autocomplete keystroke.
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        ...AUTOCOMPLETE_CACHE_HEADERS,
+        'Vercel-Cache-Tag': `products-${merchantId}`,
+      },
+    });
   } catch (error) {
     const errorCode =
       typeof error === 'object' && error && 'code' in error
@@ -88,26 +100,32 @@ export async function GET(request: NextRequest) {
       console.warn(
         'Autocomplete saturated; returning empty suggestions for this request'
       );
-      return NextResponse.json({
-        suggestions: [],
-        popularSearches: [],
-      });
+      return NextResponse.json(
+        {
+          suggestions: [],
+          popularSearches: [],
+        },
+        { headers: NO_STORE_HEADERS }
+      );
     }
 
     if (errorCode === POSTGRES_QUERY_CANCELED_CODE) {
       console.warn(
         'Autocomplete timed out; returning empty suggestions for this request'
       );
-      return NextResponse.json({
-        suggestions: [],
-        popularSearches: [],
-      });
+      return NextResponse.json(
+        {
+          suggestions: [],
+          popularSearches: [],
+        },
+        { headers: NO_STORE_HEADERS }
+      );
     }
 
     console.error('Autocomplete error:', error);
     return NextResponse.json(
       { error: 'Failed to get autocomplete suggestions' },
-      { status: 500 }
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }

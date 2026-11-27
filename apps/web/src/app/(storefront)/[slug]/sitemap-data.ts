@@ -500,23 +500,39 @@ export function serializeSitemapIndex(links: string[]): string {
   );
 }
 
+const SITEMAP_CACHE_HEADERS = {
+  'cache-control': 'public, max-age=300, stale-while-revalidate=86400',
+  'cdn-cache-control':
+    'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400',
+  'vercel-cdn-cache-control':
+    'public, max-age=3600, stale-while-revalidate=86400',
+} as const;
+
+function buildSitemapHeaders(merchantId?: string): Record<string, string> {
+  return {
+    'content-type': 'application/xml; charset=utf-8',
+    ...SITEMAP_CACHE_HEADERS,
+    'vercel-cache-tag': merchantId
+      ? `sitemap,products-${merchantId}`
+      : 'sitemap',
+  };
+}
+
 export function createSitemapResponse(
-  entries: MetadataRoute.Sitemap
+  entries: MetadataRoute.Sitemap,
+  merchantId?: string
 ): Response {
   return new Response(serializeSitemap(entries), {
-    headers: {
-      'content-type': 'application/xml; charset=utf-8',
-      'cache-control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-    },
+    headers: buildSitemapHeaders(merchantId),
   });
 }
 
-export function createSitemapIndexResponse(links: string[]): Response {
+export function createSitemapIndexResponse(
+  links: string[],
+  merchantId?: string
+): Response {
   return new Response(serializeSitemapIndex(links), {
-    headers: {
-      'content-type': 'application/xml; charset=utf-8',
-      'cache-control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-    },
+    headers: buildSitemapHeaders(merchantId),
   });
 }
 

@@ -51,12 +51,20 @@ export function broadcastCustomerIdentityInvalidation(
   }
 }
 
+/**
+ * 'notice': another tab published an identity change (or may have, unseen).
+ * 'resume': this tab was only looked at again.
+ */
+export type IdentityInvalidationSource = 'notice' | 'resume';
+
 /** Subscribe to other tabs and fail closed when neither cross-tab transport works. */
-export function subscribeCustomerIdentityInvalidation(listener: () => void) {
+export function subscribeCustomerIdentityInvalidation(
+  listener: (source: IdentityInvalidationSource) => void
+) {
   if (typeof window === 'undefined')
     return { available: false, unsubscribe: () => undefined };
   const receive = (value: unknown) => {
-    if (isNotice(value) && value.source !== source) listener();
+    if (isNotice(value) && value.source !== source) listener('notice');
   };
   const onStorage = (event: StorageEvent) => {
     if (event.key !== STORAGE_KEY || !event.newValue) return;
@@ -85,16 +93,20 @@ export function subscribeCustomerIdentityInvalidation(listener: () => void) {
   } catch {
     /* The storage listener may still work. */
   }
+  // With no transport, a refocus is the only way another tab's change is seen.
+  const resumed: IdentityInvalidationSource =
+    storageAvailable || channel ? 'resume' : 'notice';
+  const onFocus = () => listener(resumed);
   const onVisible = () => {
-    if (document.visibilityState === 'visible') listener();
+    if (document.visibilityState === 'visible') listener(resumed);
   };
-  window.addEventListener('focus', listener);
+  window.addEventListener('focus', onFocus);
   document.addEventListener('visibilitychange', onVisible);
   return {
     available: storageAvailable || !!channel,
     unsubscribe: () => {
       window.removeEventListener('storage', onStorage);
-      window.removeEventListener('focus', listener);
+      window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisible);
       channel?.close();
     },

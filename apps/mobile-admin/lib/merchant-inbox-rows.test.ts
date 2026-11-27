@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatInboxDay, inboxInitials } from './merchant-inbox-format';
+import { formatInboxDay } from './merchant-inbox-format';
 import { buildThreadRows } from './merchant-inbox-rows';
 
 const msg = (id: number, createdAt: string) => ({
@@ -34,13 +34,6 @@ describe('thread rows', () => {
 
   it('returns no rows for an empty thread', () => {
     expect(buildThreadRows([])).toEqual([]);
-  });
-
-  it('formats avatar initials from visitor and shopper names', () => {
-    expect(inboxInitials('small-meadow-890')).toBe('SM');
-    expect(inboxInitials('Baci test shopper (ignore)')).toBe('BT');
-    expect(inboxInitials('Ada')).toBe('A');
-    expect(inboxInitials('123')).toBe('?');
   });
 
   it('labels days older than yesterday with a date', () => {

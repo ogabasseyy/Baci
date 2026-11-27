@@ -52,7 +52,6 @@ describe('native application draft restoration', () => {
           busy={false}
           scopeKey="typing/owner"
           onExecute={jest.fn()}
-          onProof={jest.fn()}
         />
       );
       await act(async () => {});
@@ -71,7 +70,7 @@ describe('native application draft restoration', () => {
       jest.useRealTimers();
     }
   });
-  it('restores fields while requiring missing proof and fresh consent', async () => {
+  it('restores fields without requiring upfront proof and requires fresh consent', async () => {
     const fields = {
       home_street: 'Example Road',
       home_state: 'Lagos',
@@ -88,7 +87,6 @@ describe('native application draft restoration', () => {
         .fn()
         .mockResolvedValue({ banks: [{ code: '001', name: 'Access' }] }),
     } as unknown as OxygenClient;
-    const proof = jest.fn();
     render(
       <OxygenApplicationFlow
         snapshot={snapshot}
@@ -96,15 +94,13 @@ describe('native application draft restoration', () => {
         busy={false}
         scopeKey="user/merchant/workflow"
         onExecute={jest.fn()}
-        onProof={proof}
       />
     );
     await act(async () => {});
     expect(mockStepProps.fields).toEqual(fields);
     expect(mockStepProps.step).toBe(2);
-    expect(mockStepProps.proof).toBeNull();
     expect(mockStepProps.consent).toBe(false);
-    expect(proof).toHaveBeenLastCalledWith(undefined);
+    expect(mockStepProps.consentError).toBeNull();
   });
   it('keeps draft fields and transient proof ownership across the first booking', async () => {
     const client = {
@@ -120,7 +116,6 @@ describe('native application draft restoration', () => {
       busy: false,
       scopeKey: 'user/merchant/workflow',
       onExecute: jest.fn(),
-      onProof: jest.fn(),
     };
     const view = render(<OxygenApplicationFlow {...props} />);
     await act(async () => {});
@@ -158,7 +153,6 @@ describe('canonical server phone prerequisite', () => {
       busy: false,
       scopeKey: 'owned/workflow',
       onExecute: jest.fn(),
-      onProof: jest.fn(),
       phoneSentAt: new Date().toISOString(),
     };
     const view = render(<OxygenApplicationFlow {...props} />);
@@ -205,7 +199,6 @@ it('reconfirms the saved account when reopening directly on Income, without subm
       busy={false}
       scopeKey="restored/account"
       onExecute={onExecute}
-      onProof={jest.fn()}
     />
   );
   await act(async () => {});
@@ -250,7 +243,6 @@ it('blocks leaving Identity for an incomplete BVN and highlights that field', as
       busy={false}
       scopeKey="invalid/identity"
       onExecute={onExecute}
-      onProof={jest.fn()}
     />
   );
   await act(async () => {});

@@ -283,4 +283,48 @@ describe('saved native Oxygen checkout', () => {
         await screen.findByLabelText('Loading your application')
       ).toBeTruthy();
   });
+  it('passes net payableTotal to OxygenWorkflowBody while preserving original order total', async () => {
+    jest.mocked(readOwnedOxygenOrder).mockResolvedValueOnce({
+      id: 'order',
+      total: 198000,
+      payableTotal: 150000,
+      financedPrincipal: 150000,
+      order_number: 'ORD-PARTIAL-1',
+      payment_method: 'oxygen',
+      payment_status: 'unpaid',
+      shipping_status: 'pending',
+      prefill: {},
+    });
+    render(<OxygenCheckoutScreen orderId="order" />);
+    await screen.findByText('Saved workflow');
+    expect(
+      screen.getByTestId('oxygen-workflow-product-amount').props.children
+    ).toBe('150000');
+    const workflowCall = jest.mocked(useOxygenWorkflow).mock.calls[0];
+    expect(workflowCall?.[0]).toBe('order');
+    expect(readOwnedOxygenOrder).toHaveBeenCalledWith(
+      'order',
+      'customer',
+      'merchant'
+    );
+  });
+
+  it('passes 0 productAmount to OxygenWorkflowBody when a paid order with partial wallet credit has not reached activated stage', async () => {
+    jest.mocked(readOwnedOxygenOrder).mockResolvedValueOnce({
+      id: 'order',
+      total: 198000,
+      payableTotal: 0,
+      financedPrincipal: 150000,
+      order_number: 'ORD-PAID-PARTIAL-1',
+      payment_method: 'oxygen',
+      payment_status: 'paid',
+      shipping_status: 'pending',
+      prefill: {},
+    });
+    render(<OxygenCheckoutScreen orderId="order" />);
+    await screen.findByText('Saved workflow');
+    expect(
+      screen.getByTestId('oxygen-workflow-product-amount').props.children
+    ).toBe('0');
+  });
 });

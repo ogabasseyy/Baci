@@ -29,7 +29,7 @@ describe('continueCheckoutPayment', () => {
     } = context;
 
     await continueCheckoutPayment({
-      dispatch,
+      dispatch: { ...dispatch, paymentMethod: 'klump' },
       order,
       wallet: { amountUsed: 1000, newBalance: 0 },
       amountDueToGateway: 0,
@@ -75,7 +75,7 @@ describe('continueCheckoutPayment', () => {
     const events: string[] = [];
 
     await continueCheckoutPayment({
-      dispatch,
+      dispatch: { ...dispatch, paymentMethod: 'klump' },
       order,
       wallet: { amountUsed: 250, newBalance: 750 },
       amountDueToGateway: 750,
@@ -105,7 +105,7 @@ describe('continueCheckoutPayment', () => {
     expect(completeCheckoutOrder).not.toHaveBeenCalled();
   });
 
-  it('rejects a reduced Klump amount before attempting optional signup', async () => {
+  it('dispatches a reduced Klump amount when positive net balance remains after store credit', async () => {
     const context = paymentDispatchContext();
     const {
       order,
@@ -122,7 +122,7 @@ describe('continueCheckoutPayment', () => {
     const releaseSubmission = vi.fn();
 
     await continueCheckoutPayment({
-      dispatch,
+      dispatch: { ...dispatch, paymentMethod: 'klump' },
       order,
       wallet: { amountUsed: 250, newBalance: 750 },
       amountDueToGateway: 750,
@@ -139,8 +139,55 @@ describe('continueCheckoutPayment', () => {
       releaseSubmission,
     });
 
-    expect(signupBeforePayment).not.toHaveBeenCalled();
-    expect(releaseSubmission).toHaveBeenCalledOnce();
+    expect(signupBeforePayment).toHaveBeenCalledOnce();
+    expect(dispatchCheckoutPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        order,
+        paymentMethod: 'klump',
+        paymentAmount: 750,
+      })
+    );
+  });
+
+  it('completes Klump order via zero_due when store credit covers 100% of the order', async () => {
+    const context = paymentDispatchContext();
+    const {
+      order,
+      paymentAmount: _paymentAmount,
+      createdOrderNumber: _createdOrderNumber,
+      orderChargeCurrency: _orderChargeCurrency,
+      capturePaymentStarted: _capturePaymentStarted,
+      hasPaymentStarted: _hasPaymentStarted,
+      setInitializedReference: _setInitializedReference,
+      completeSignup: _completeSignup,
+      ...dispatch
+    } = context;
+
+    await continueCheckoutPayment({
+      dispatch: { ...dispatch, paymentMethod: 'klump' },
+      order,
+      wallet: { amountUsed: 1000, newBalance: 0 },
+      amountDueToGateway: 0,
+      createdOrderNumber: 'ORD-1',
+      orderChargeCurrency: 'NGN',
+      checkoutFingerprint: 'fingerprint',
+      paymentMethod: 'klump',
+      setWalletBalance: vi.fn(),
+      capturePaymentStarted: vi.fn(),
+      hasPaymentStarted: vi.fn(() => false),
+      setInitializedReference: vi.fn(),
+      completeSignup: vi.fn(async () => undefined),
+      releaseSubmission: vi.fn(),
+    });
+
+    expect(completeCheckoutOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        completion: expect.objectContaining({
+          kind: 'zero_due',
+          paymentMethod: 'klump',
+        }),
+      })
+    );
     expect(dispatchCheckoutPayment).not.toHaveBeenCalled();
   });
 });

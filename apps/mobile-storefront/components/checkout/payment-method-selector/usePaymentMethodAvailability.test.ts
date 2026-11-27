@@ -18,7 +18,7 @@ describe('usePaymentMethodAvailability', () => {
     expect(klump?.disabledReason).toContain('Minimum order');
   });
 
-  it('disables klump when wallet credit is active', () => {
+  it('keeps klump enabled when partial wallet credit leaves net payable within bounds', () => {
     const result = usePaymentMethodAvailability({
       enabledMethods: ['klump'],
       methodDisabledReasons: {},
@@ -31,13 +31,12 @@ describe('usePaymentMethodAvailability', () => {
     const klump = result.filteredMethods.find(
       (method) => method.id === 'klump'
     );
-    expect(klump?.disabled).toBe(true);
-    expect(klump?.disabledReason).toBe(
-      'Wallet credit cannot be combined with Klump'
-    );
+    expect(result.isBNPLEligible).toBe(true);
+    expect(klump?.disabled).toBeUndefined();
+    expect(klump?.disabledReason).toBeUndefined();
   });
 
-  it('disables klump when savings credit is active', () => {
+  it('keeps klump enabled when partial savings credit leaves net payable within bounds', () => {
     const result = usePaymentMethodAvailability({
       enabledMethods: ['klump'],
       methodDisabledReasons: {},
@@ -54,9 +53,28 @@ describe('usePaymentMethodAvailability', () => {
     const klump = result.filteredMethods.find(
       (method) => method.id === 'klump'
     );
+    expect(result.isBNPLEligible).toBe(true);
+    expect(klump?.disabled).toBeUndefined();
+    expect(klump?.disabledReason).toBeUndefined();
+  });
+
+  it('disables installment financing when wallet credit covers 100% of the order', () => {
+    const result = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      methodDisabledReasons: {},
+      orderTotal: 100000,
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 100000, use: true },
+    });
+
+    const klump = result.filteredMethods.find(
+      (method) => method.id === 'klump'
+    );
+    expect(result.isBNPLEligible).toBe(false);
     expect(klump?.disabled).toBe(true);
     expect(klump?.disabledReason).toBe(
-      'Device savings cannot be combined with Klump'
+      'No payable balance remains for installment financing'
     );
   });
 
@@ -137,5 +155,70 @@ describe('usePaymentMethodAvailability', () => {
       false
     );
     expect(result.hasBNPLMethods).toBe(false);
+  });
+
+  it('uses merchant klumpLimits when net payable sits between merchant and generic BNPL bounds', () => {
+    const lowerMerchantMin = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      klumpLimits: { minAmount: 5_000, maxAmount: 500_000 },
+      methodDisabledReasons: {},
+      orderTotal: 20_000,
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 12_000, use: true },
+    });
+    const enabledKlump = lowerMerchantMin.filteredMethods.find(
+      (method) => method.id === 'klump'
+    );
+    expect(lowerMerchantMin.isBNPLEligible).toBe(true);
+    expect(enabledKlump?.disabled).toBeUndefined();
+
+    const higherMerchantMin = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      klumpLimits: { minAmount: 15_000, maxAmount: 500_000 },
+      methodDisabledReasons: {},
+      orderTotal: 20_000,
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 8_000, use: true },
+    });
+    const disabledKlump = higherMerchantMin.filteredMethods.find(
+      (method) => method.id === 'klump'
+    );
+    expect(higherMerchantMin.isBNPLEligible).toBe(false);
+    expect(disabledKlump?.disabled).toBe(true);
+    expect(disabledKlump?.disabledReason).toContain('Minimum order');
+    expect(disabledKlump?.disabledReason).toContain('15,000');
+  });
+
+  it('caps wallet against residual after savings when both wallet and savings are active', () => {
+    const partialResult = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      methodDisabledReasons: {},
+      orderTotal: 100_000,
+      savingsSelection: { amount: 40_000, goalId: 'goal-1', use: true },
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 30_000, use: true },
+    });
+    expect(partialResult.isBNPLEligible).toBe(true);
+    expect(
+      partialResult.filteredMethods.find((m) => m.id === 'klump')?.disabled
+    ).toBeUndefined();
+
+    const fullyCoveredResult = usePaymentMethodAvailability({
+      enabledMethods: ['klump'],
+      methodDisabledReasons: {},
+      orderTotal: 100_000,
+      savingsSelection: { amount: 60_000, goalId: 'goal-1', use: true },
+      selectedMethod: 'klump',
+      selectedTab: 'installments',
+      walletSelection: { amount: 100_000, use: true },
+    });
+    expect(fullyCoveredResult.isBNPLEligible).toBe(false);
+    expect(
+      fullyCoveredResult.filteredMethods.find((m) => m.id === 'klump')
+        ?.disabledReason
+    ).toBe('No payable balance remains for installment financing');
   });
 });

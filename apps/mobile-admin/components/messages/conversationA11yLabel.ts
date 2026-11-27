@@ -1,5 +1,10 @@
-import { formatFollowUp, formatInboxTag } from '@/lib/merchant-inbox-format';
-import { isFollowUpDue } from '@/lib/merchant-inbox-sort';
+import {
+  formatFollowUp,
+  formatInboxTag,
+  formatOrderCount,
+  inboxDisplayName,
+} from '@/lib/merchant-inbox-format';
+import { isFollowUpDue, isReturningCustomer } from '@/lib/merchant-inbox-sort';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 import { PRIORITY_LABEL } from './ConversationMeta';
 
@@ -13,10 +18,20 @@ export function conversationA11yLabel(
   conversation: InboxConversation,
   { preview, waiting }: { preview: string; waiting: boolean }
 ): string {
-  const parts = [`Conversation with ${conversation.customerName}`];
+  const parts = [
+    `Conversation with ${inboxDisplayName(conversation.customerName)}`,
+  ];
   if (waiting) parts.push('needs reply');
   if (conversation.unreadCount > 0) {
     parts.push(`${conversation.unreadCount} new`);
+  }
+  const customer = conversation.customer;
+  if (customer) {
+    parts.push(
+      isReturningCustomer(conversation)
+        ? `returning customer, ${formatOrderCount(customer.orderCount)}`
+        : 'signed-in customer'
+    );
   }
   if (conversation.priority) {
     parts.push(`${PRIORITY_LABEL[conversation.priority]} priority`);

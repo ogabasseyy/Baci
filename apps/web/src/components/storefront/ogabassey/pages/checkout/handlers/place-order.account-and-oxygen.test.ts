@@ -120,6 +120,32 @@ describe('handlePlaceOrder', () => {
     expect(opts.routerPush).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });
+  it('routes zero-due Oxygen orders to wallet order success without opening Oxygen financing', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        order: { id: '60000000-0000-4000-8000-000000000002', tracking_token: 'tok-zero' },
+        wallet: { amountUsed: 12000, newBalance: 0 },
+        amountDueToGateway: 0,
+      }),
+    });
+    const opts = buildOpts({
+      paymentMethod: 'oxygen',
+      user: null,
+      payWithWallet: true,
+      walletAmountUsed: 12000,
+    });
+    await handlePlaceOrder(opts);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/orders');
+    expect(navigation.oxygen).not.toHaveBeenCalled();
+    expect(opts.routerPush).toHaveBeenCalledWith(
+      expect.stringContaining('/order-success?orderId=60000000-0000-4000-8000-000000000002&wallet=true')
+    );
+    vi.unstubAllEnvs();
+  });
+
   it('permits the admitted production pilot to create an Oxygen order', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ available: true }) });

@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { listMerchantInboxConversations } from '@/lib/chatwoot/merchant-inbox-client';
+import { listConversationsWithCustomers } from '@/lib/chatwoot/merchant-inbox-list-with-customers';
 import {
   merchantInboxError,
   merchantInboxJson,
@@ -20,10 +20,15 @@ export async function GET(request: NextRequest) {
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
 
-  const result = await listMerchantInboxConversations(
-    resolved.binding,
-    query.data
-  );
+  const result = await listConversationsWithCustomers({
+    binding: resolved.binding,
+    supabase: resolved.supabase,
+    merchantId: resolved.merchantId,
+    canViewOrders: resolved.canViewOrders,
+    page: query.data.page,
+    status: query.data.status,
+    view: query.data.view,
+  });
   if (!result.ok) {
     return merchantInboxError(
       503,
@@ -34,6 +39,6 @@ export async function GET(request: NextRequest) {
   return merchantInboxJson({
     conversations: result.conversations,
     hasMore: result.hasMore,
-    page: query.data.page,
+    page: result.page,
   });
 }

@@ -234,7 +234,7 @@ describe('getStorefrontAutocompleteProducts cache', () => {
     );
   });
 
-  it('expires a cached response after five seconds', async () => {
+  it('expires a cached response after thirty seconds', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-27T00:00:00.000Z'));
     const supabase = createAutocompleteSupabase();
@@ -255,7 +255,7 @@ describe('getStorefrontAutocompleteProducts cache', () => {
       query: 'iphone',
       limit: 10,
     });
-    await vi.advanceTimersByTimeAsync(5_001);
+    await vi.advanceTimersByTimeAsync(30_001);
     await getStorefrontAutocompleteProducts({
       supabase,
       merchantId: FIRST_MERCHANT_ID,

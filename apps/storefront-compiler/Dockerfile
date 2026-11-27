@@ -11,6 +11,7 @@ RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 WORKDIR /workspace
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
+COPY patches ./patches
 COPY packages/shared ./packages/shared
 COPY packages/experience-sdk ./packages/experience-sdk
 COPY apps/storefront-compiler ./apps/storefront-compiler

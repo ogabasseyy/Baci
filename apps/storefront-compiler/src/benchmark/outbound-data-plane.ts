@@ -3,11 +3,11 @@ import {
   type CatalogSearchResponse,
   executeSimulatedAnonCatalogRpc,
 } from './anon-catalog-rpc';
-import type {
-  BackingCatalogProduct,
-  PublicProjectedProduct,
-} from './ogabassey-catalog-fixture';
-import { applyVariantStockOverlayToJson } from './outbound-overlay';
+import type { BackingCatalogProduct } from './ogabassey-catalog-fixture';
+import {
+  applyVariantStockOverlayToJson,
+  computeVariantStockOverlay,
+} from './outbound-overlay';
 
 export type { CatalogSearchResponse };
 
@@ -96,6 +96,27 @@ export class SimulatedPostgrestOutboundPlane {
 
   public advanceClockMs(deltaMs: number): void {
     this.nowMs += deltaMs;
+  }
+
+  public registerTenantCatalog(
+    merchantId: string,
+    products: BackingCatalogProduct[]
+  ): void {
+    const exists = this.catalogByMerchant.has(merchantId);
+    this.catalogByMerchant.set(merchantId, products);
+    this.structureGen.set(
+      merchantId,
+      exists ? (this.structureGen.get(merchantId) ?? 1) + 1 : 1
+    );
+    this.availabilityGen.set(
+      merchantId,
+      exists ? (this.availabilityGen.get(merchantId) ?? 1) + 1 : 1
+    );
+    this.coupledGen.set(
+      merchantId,
+      exists ? (this.coupledGen.get(merchantId) ?? 1) + 1 : 1
+    );
+    this.sampledGenCache.delete(merchantId);
   }
 
   public recordInventoryWrite(
@@ -244,8 +265,8 @@ export class SimulatedPostgrestOutboundPlane {
       } else {
         this.telemetry.originAvailabilityRpcCalls += 1;
         await this.simulateOriginDelay(this.originRpcLatencyMs * 0.2);
-        const variantMap = this.computeVariantStockOverlay(
-          merchantId,
+        const variantMap = computeVariantStockOverlay(
+          this.catalogByMerchant.get(merchantId) ?? [],
           baseJson
         );
         availJson = JSON.stringify(variantMap);
@@ -269,27 +290,5 @@ export class SimulatedPostgrestOutboundPlane {
         'x-baci-tenant': merchantId,
       },
     });
-  }
-
-  private computeVariantStockOverlay(
-    merchantId: string,
-    cachedBody: string
-  ): Record<string, boolean> {
-    const parsed = JSON.parse(cachedBody) as {
-      products?: PublicProjectedProduct[];
-      product?: PublicProjectedProduct | null;
-    };
-    const rows = this.catalogByMerchant.get(merchantId) ?? [];
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    const variantOverlay: Record<string, boolean> = {};
-    const targets = parsed.products ?? (parsed.product ? [parsed.product] : []);
-    for (const item of targets) {
-      const backing = byId.get(item.id);
-      if (!backing) continue;
-      for (const variant of backing.variants) {
-        variantOverlay[variant.id] = variant.stockQty > 0;
-      }
-    }
-    return variantOverlay;
   }
 }

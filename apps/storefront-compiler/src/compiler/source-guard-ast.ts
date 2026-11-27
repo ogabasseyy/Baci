@@ -5,12 +5,17 @@ import {
   FORBIDDEN_BROWSER_NAV_GLOBALS,
   FORBIDDEN_STORAGE_MEMBERS,
   LOWERCASE_HTML_SINK_NAMES,
+  SAFE_DOCUMENT_MEMBERS,
   SAFE_NAVIGATOR_MEMBERS,
-  SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
 import { resolveStaticString } from './const-string-fold';
 import { isForbiddenDomPropertyMutation } from './dom-mutation-guard';
 import { hasLocalLexicalBinding } from './jsx-tag-safety';
+import {
+  isDocumentReceiver,
+  isNavigatorReceiver,
+  isSensitiveGlobalReceiver,
+} from './sensitive-receiver';
 
 export { hasLocalLexicalBinding, resolveStaticString };
 
@@ -23,75 +28,6 @@ export interface SourceSafetyViolation {
     | 'DANGEROUS_INNER_HTML'
     | 'PROHIBITED_RUNTIME_IMPORT';
   detail: string;
-}
-
-function isDocumentReceiver(expr: ts.Expression): boolean {
-  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
-    return isDocumentReceiver(expr.expression);
-  }
-  if (ts.isIdentifier(expr)) return expr.text === 'document';
-  if (ts.isPropertyAccessExpression(expr)) return expr.name.text === 'document';
-  if (ts.isElementAccessExpression(expr)) {
-    return resolveStaticString(expr.argumentExpression) === 'document';
-  }
-  return false;
-}
-
-function isNavigatorReceiver(expr: ts.Expression): boolean {
-  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
-    return isNavigatorReceiver(expr.expression);
-  }
-  if (ts.isIdentifier(expr)) {
-    return (
-      expr.text === 'navigator' && !hasLocalLexicalBinding(expr, 'navigator')
-    );
-  }
-  if (ts.isPropertyAccessExpression(expr)) {
-    return (
-      expr.name.text === 'navigator' &&
-      isSensitiveGlobalReceiver(expr.expression)
-    );
-  }
-  if (ts.isElementAccessExpression(expr)) {
-    return (
-      resolveStaticString(expr.argumentExpression) === 'navigator' &&
-      isSensitiveGlobalReceiver(expr.expression)
-    );
-  }
-  return false;
-}
-
-function isSensitiveGlobalReceiver(expr: ts.Expression): boolean {
-  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
-    return isSensitiveGlobalReceiver(expr.expression);
-  }
-  if (ts.isIdentifier(expr)) {
-    return (
-      SENSITIVE_GLOBAL_ROOTS.has(expr.text) &&
-      !hasLocalLexicalBinding(expr, expr.text)
-    );
-  }
-  if (
-    ts.isCallExpression(expr) &&
-    (ts.isPropertyAccessExpression(expr.expression) ||
-      ts.isElementAccessExpression(expr.expression))
-  ) {
-    return isSensitiveGlobalReceiver(expr.expression.expression);
-  }
-  if (ts.isPropertyAccessExpression(expr)) {
-    return (
-      SENSITIVE_GLOBAL_ROOTS.has(expr.name.text) ||
-      isSensitiveGlobalReceiver(expr.expression)
-    );
-  }
-  if (ts.isElementAccessExpression(expr)) {
-    const k = resolveStaticString(expr.argumentExpression);
-    return (
-      (k !== null && SENSITIVE_GLOBAL_ROOTS.has(k)) ||
-      isSensitiveGlobalReceiver(expr.expression)
-    );
-  }
-  return false;
 }
 
 function isSafeStaticObjectLiteral(expr: ts.Expression): boolean {
@@ -198,8 +134,9 @@ export function classifyMemberName(
     );
   } else if (
     receiver !== undefined &&
-    ((isNavigatorReceiver(receiver) &&
-      !SAFE_NAVIGATOR_MEMBERS.has(memberName)) ||
+    ((isDocumentReceiver(receiver) && !SAFE_DOCUMENT_MEMBERS.has(memberName)) ||
+      (isNavigatorReceiver(receiver) &&
+        !SAFE_NAVIGATOR_MEMBERS.has(memberName)) ||
       (isSensitiveGlobalReceiver(receiver) &&
         (FORBIDDEN_BROWSER_CAPABILITY_GLOBALS.has(memberName) ||
           memberName === 'valueOf' ||

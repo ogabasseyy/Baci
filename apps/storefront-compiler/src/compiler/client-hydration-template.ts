@@ -94,6 +94,13 @@ if (rootElement && stateScript?.textContent) {
           if (typeof rawVal !== 'string' || rawVal.trim().length === 0) {
             return { status: 'error', code: 'INVALID_REQUEST', message: \`Catalog \${paramKey} must be a non-empty string\` };
           }
+          if (window.parent && window.parent !== window) {
+            const framedCat = await dispatchFramedCatalog(method, paramKey, rawVal.trim(), routeEpoch);
+            if (framedCat.status === 'ok' && framedCat.value && typeof framedCat.value.revision === 'string') {
+              currentRevision = framedCat.value.revision;
+            }
+            return framedCat;
+          }
           if (typeof fetch !== 'function') {
             return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'Catalog fetch unavailable' };
           }

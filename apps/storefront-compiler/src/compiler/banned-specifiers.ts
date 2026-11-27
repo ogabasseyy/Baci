@@ -92,6 +92,16 @@ export const SAFE_NAVIGATOR_MEMBERS: ReadonlySet<string> = new Set([
   'vendor',
 ]);
 
+export const SAFE_DOCUMENT_MEMBERS: ReadonlySet<string> = new Set([
+  'title',
+  'visibilityState',
+  'hidden',
+  'readyState',
+  'dir',
+  'characterSet',
+  'compatMode',
+]);
+
 export const FORBIDDEN_BROWSER_CAPABILITY_GLOBALS: ReadonlySet<string> =
   new Set(
     [
@@ -123,6 +133,8 @@ export const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
     'attachshadow|shadowroot|appendchild|insertbefore|replacechild|replacechildren',
     'insertadjacentelement|insertadjacenttext|prepend|replacewith',
     'csstext|setproperty|insertrule|addrule|replacesync|baseval|rellist|ping',
+    'parentnode|parentelement|getrootnode|offsetparent|composedpath',
+    'documentelement|scrollingelement|activeelement|stylesheets|currentscript',
   ]
     .join('|')
     .split('|')
@@ -130,7 +142,7 @@ export const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
 
 export const FORBIDDEN_DOM_MUTATION_MEMBERS: ReadonlySet<string> = new Set(
   [
-    'href|xlinkHref|action|formAction|target|formTarget|method|formMethod',
+    'location|href|xlinkHref|action|formAction|target|formTarget|method|formMethod',
     'enctype|formEnctype|rel|download|referrerPolicy',
     'protocol|host|hostname|port|pathname|search|hash|username|password',
     'src|srcset|poster|data|cite|style',

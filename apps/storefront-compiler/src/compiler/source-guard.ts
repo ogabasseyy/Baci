@@ -14,6 +14,7 @@ import {
   checkJsxSpreadAttributeSafety,
 } from './jsx-nav-safety';
 import { createJsxTagValidator } from './jsx-tag-safety';
+import { checkDynamicImportOrRequireNode } from './module-call-guard';
 import {
   classifyMemberName,
   hasLocalLexicalBinding,
@@ -107,28 +108,7 @@ export function scanManifestSourceSafety(
           `Prohibited runtime specifier "${node.moduleSpecifier.text}"`
         );
       }
-      if (
-        ts.isCallExpression(node) &&
-        node.expression.kind === ts.SyntaxKind.ImportKeyword
-      ) {
-        const spec = node.arguments[0]
-          ? resolveStaticString(node.arguments[0])
-          : null;
-        if (spec === null) {
-          fail(
-            'DYNAMIC_CODE_EVAL',
-            'Non-literal dynamic import() is forbidden'
-          );
-        } else if (
-          isProhibitedImportSpecifier(spec) ||
-          BANNED_MERCHANT_SUBPATH_SPECIFIERS.has(spec.trim())
-        ) {
-          fail(
-            'PROHIBITED_RUNTIME_IMPORT',
-            `Prohibited runtime specifier "${spec}"`
-          );
-        }
-      }
+      checkDynamicImportOrRequireNode(node, filePath, violations);
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const jsxError = checkJsxTag(node.tagName);
         if (jsxError !== null) fail('DANGEROUS_INNER_HTML', jsxError);

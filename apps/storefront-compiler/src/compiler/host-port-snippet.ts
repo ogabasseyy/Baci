@@ -68,13 +68,25 @@ function isValidHostRouteState(v) {
   );
 }
 
-function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
-  if (typeof safePath !== 'string' || safePath.length === 0 || safePath.length > 500) {
-    return Promise.resolve({
-      status: 'error',
-      code: 'INVALID_REQUEST',
-      message: 'Framed navigation path exceeds maximum length',
-    });
+const FRAMED_METHOD_CAPABILITY = {
+  'catalog.collection': 'catalog.read',
+  'catalog.product': 'catalog.read',
+  'catalog.variants': 'catalog.read',
+  'cart.readPublic': 'cart.read-public',
+  'cart.reconcile': 'cart.mutate',
+  'cart.add': 'cart.mutate',
+  'cart.remove': 'cart.mutate',
+  'cart.set_quantity': 'cart.mutate',
+  'checkout.prepare': 'checkout.prepare',
+  'checkout.open': 'checkout.open',
+  'navigation.go': 'navigation',
+  'navigation.open': 'navigation',
+};
+
+function sendFramedBridgeRequest(method, args, fallbackEpoch) {
+  const capability = FRAMED_METHOD_CAPABILITY[method];
+  if (!capability) {
+    return Promise.resolve({ status: 'error', code: 'INVALID_REQUEST', message: 'Unsupported bridge method' });
   }
   if (!hostPort) {
     return Promise.resolve({
@@ -102,7 +114,7 @@ function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
             resolve({
               status: 'error',
               code: 'INVALID_REQUEST',
-              message: 'Host navigation request timed out',
+              message: 'Host bridge request timed out',
             });
           }, 4000)
         : null;
@@ -113,11 +125,43 @@ function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
       buildDigest: hostBuildDigest,
       routeEpoch: hostEpoch || fallbackEpoch,
       requestId,
-      capability: 'navigation',
+      capability,
       method,
-      args: { path: safePath },
+      args,
     });
-  }).then((raw) => {
+  });
+}
+
+function dispatchFramedCatalog(method, paramKey, trimmedVal, fallbackEpoch) {
+  if (trimmedVal.length > 100) {
+    return Promise.resolve({
+      status: 'error',
+      code: 'INVALID_REQUEST',
+      message: \`Catalog \${paramKey} exceeds maximum length\`,
+    });
+  }
+  return sendFramedBridgeRequest(method, { [paramKey]: trimmedVal }, fallbackEpoch).then((raw) => {
+    if (raw && typeof raw === 'object') {
+      if (raw.status === 'ok' && raw.value !== undefined) {
+        return { status: 'ok', value: raw.value };
+      }
+      if (raw.status === 'error' && typeof raw.code === 'string' && typeof raw.message === 'string') {
+        return { status: 'error', code: raw.code, message: raw.message };
+      }
+    }
+    return { status: 'error', code: 'SNAPSHOT_STALE', message: 'Invalid host catalog response' };
+  });
+}
+
+function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
+  if (typeof safePath !== 'string' || safePath.length === 0 || safePath.length > 500) {
+    return Promise.resolve({
+      status: 'error',
+      code: 'INVALID_REQUEST',
+      message: 'Framed navigation path exceeds maximum length',
+    });
+  }
+  return sendFramedBridgeRequest(method, { path: safePath }, fallbackEpoch).then((raw) => {
     if (raw && typeof raw === 'object') {
       if (method === 'navigation.open' && raw.status === 'ok' && typeof raw.value?.presented === 'boolean') {
         return { status: 'ok', value: { presented: raw.value.presented } };

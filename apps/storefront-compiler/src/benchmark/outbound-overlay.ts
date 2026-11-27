@@ -1,4 +1,28 @@
-import type { PublicProjectedProduct } from './ogabassey-catalog-fixture';
+import type {
+  BackingCatalogProduct,
+  PublicProjectedProduct,
+} from './ogabassey-catalog-fixture';
+
+export function computeVariantStockOverlay(
+  rows: readonly BackingCatalogProduct[],
+  cachedBody: string
+): Record<string, boolean> {
+  const parsed = JSON.parse(cachedBody) as {
+    products?: PublicProjectedProduct[];
+    product?: PublicProjectedProduct | null;
+  };
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const variantOverlay: Record<string, boolean> = {};
+  const targets = parsed.products ?? (parsed.product ? [parsed.product] : []);
+  for (const item of targets) {
+    const backing = byId.get(item.id);
+    if (!backing) continue;
+    for (const variant of backing.variants) {
+      variantOverlay[variant.id] = variant.stockQty > 0;
+    }
+  }
+  return variantOverlay;
+}
 
 export function applyVariantStockOverlayToJson(
   cachedBody: string,

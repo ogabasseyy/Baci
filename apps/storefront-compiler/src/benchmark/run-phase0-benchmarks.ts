@@ -22,6 +22,7 @@ import {
   SimulatedPostgrestOutboundPlane,
   type TrustedOutboundParams,
 } from './outbound-data-plane';
+import { verifySpoofedTenantBlocked } from './spoof-probe';
 
 export { type ChurnScenarioMetrics, runGenerationChurnBenchmarkAsync };
 
@@ -239,23 +240,11 @@ export async function runPhase0Benchmarks(options?: {
 
   const spoofIsolate = createBenchmarkIsolate();
   try {
-    const spoofRes = await spoofIsolate.dispatchFetch(
-      'https://ogabassey.mybaci.store/search?q=iphone&merchantId=victim-tenant',
-      { headers: { 'x-baci-merchant-slug': 'victim-tenant' } }
-    );
-    const spoofHtml = await spoofRes.text();
-    const directOutboundSpoofRes = await outboundPlane.handleOutboundFetch(
-      new Request(
-        'https://catalog.baci.internal/v1/search?category=smartphones&merchantId=99999999-9999-4999-8999-999999999999'
-      ),
+    const spoofedTenantBlocked = await verifySpoofedTenantBlocked({
+      spoofIsolate,
+      outboundPlane,
       trustedParams,
-      'split-availability'
-    );
-    const spoofedTenantBlocked =
-      spoofRes.status === 200 &&
-      !spoofHtml.includes('victim-tenant') &&
-      directOutboundSpoofRes.headers.get('x-baci-tenant') === merchantId &&
-      outboundPlane.telemetry.spoofedTenantIgnoredCount >= 1;
+    });
 
     const churnResults: ChurnScenarioMetrics[] = [];
     for (const rate of [0, 2, 12, 60] as const) {

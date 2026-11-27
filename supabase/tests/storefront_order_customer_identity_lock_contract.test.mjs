@@ -11,7 +11,7 @@ const migration = readFileSync(
 );
 const correctiveMigration = readFileSync(
   new URL(
-    '../migrations/20261124100000_fix_authenticated_storefront_identity_confirmation.sql',
+    '../migrations/20261127120000_fix_guest_identity_phone_prelock.sql',
     import.meta.url
   ),
   'utf8'
@@ -64,4 +64,11 @@ test('authenticated callers that omit p_user_id skip guest identity confirmation
     /IF auth\.uid\(\) IS NULL AND p_user_id IS NULL THEN/
   );
   assert.match(correctiveMigration, /coalesce\(auth\.uid\(\), p_user_id\)/);
+});
+
+test('guest phone prelock ignores registered customers before email fallback', () => {
+  assert.equal(
+    (correctiveMigration.match(/AND c\.user_id IS NULL/g) ?? []).length,
+    2
+  );
 });

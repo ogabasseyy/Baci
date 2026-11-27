@@ -50,6 +50,14 @@ const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set([
   'contentdocument',
   'contentwindow',
   'defaultview',
+  'preinit',
+  'preinitmodule',
+  'preload',
+  'preloadmodule',
+  'prefetchdns',
+  'preconnect',
+  'requestsubmit',
+  'dispatchevent',
 ]);
 
 function isDocumentReceiver(expr: ts.Expression): boolean {
@@ -136,6 +144,12 @@ export function classifyMemberName(
       filePath,
       rule: 'DYNAMIC_CODE_EVAL',
       detail: `Direct browser navigation via "${memberName}" is forbidden; use @baci/experience-sdk navigation`,
+    });
+  } else if (memberName === 'click' || memberName === 'submit') {
+    violations.push({
+      filePath,
+      rule: 'DYNAMIC_CODE_EVAL',
+      detail: `Imperative DOM "${memberName}" activation is forbidden; use declarative events or SDK navigation`,
     });
   } else if (
     memberName === 'assign' &&

@@ -189,7 +189,7 @@ export default function StorefrontApp(props: StorefrontRenderProps) {
               ))}
             </ul>
             <a
-              href={\`https://\${props.merchantSlug}.usebaci.com/checkout\`}
+              href="https://ogabassey.usebaci.com/checkout"
               rel="noopener noreferrer"
               className="accent-cta inline-flex items-center justify-center rounded-xl px-6 py-3 font-semibold"
             >

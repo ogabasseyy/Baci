@@ -2,10 +2,15 @@ import ts from '@typescript/typescript6';
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import {
   BANNED_MERCHANT_SUBPATH_SPECIFIERS,
+  BENIGN_OBJECT_DATA_KEYS,
   FORBIDDEN_BROWSER_NAV_GLOBALS,
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
+import {
+  checkJsxAttributeSafety,
+  checkJsxSpreadAttributeSafety,
+} from './jsx-nav-safety';
 import { createJsxTagValidator } from './jsx-tag-safety';
 import {
   classifyMemberName,
@@ -111,9 +116,11 @@ export function scanManifestSourceSafety(
         }
       }
       if (ts.isJsxAttribute(node)) {
-        classifyMemberName(
+        checkJsxAttributeSafety(
           file.path,
-          node.name.getText(sourceFile),
+          node,
+          sourceFile,
+          manifest.merchantSlug,
           violations
         );
       }
@@ -122,20 +129,12 @@ export function scanManifestSourceSafety(
         classifyMemberName(file.path, specName, violations);
       }
       if (ts.isJsxSpreadAttribute(node)) {
-        const isSafeStaticLiteral =
-          ts.isObjectLiteralExpression(node.expression) &&
-          node.expression.properties.every(
-            (p) =>
-              ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)
-          );
-        if (!isSafeStaticLiteral) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DANGEROUS_INNER_HTML',
-            detail:
-              'Non-static JSX spread attributes are forbidden; pass explicit props',
-          });
-        }
+        checkJsxSpreadAttributeSafety(
+          file.path,
+          node,
+          manifest.merchantSlug,
+          violations
+        );
       }
 
       if (
@@ -145,22 +144,22 @@ export function scanManifestSourceSafety(
         ts.isGetAccessorDeclaration(node) ||
         ts.isSetAccessorDeclaration(node)
       ) {
+        const isSpreadProp =
+          ts.isPropertyAssignment(node) &&
+          ts.isObjectLiteralExpression(node.parent) &&
+          ts.isJsxSpreadAttribute(node.parent.parent);
         if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) {
-          const isBenignObjectDataKey =
+          const isBenignKey =
             ts.isPropertyAssignment(node) &&
-            (node.name.text === 'assign' ||
-              node.name.text === 'write' ||
-              node.name.text === 'writeln' ||
-              node.name.text === 'constructor' ||
-              node.name.text === 'cookie' ||
-              node.name.text === 'serviceWorker');
-          if (!isBenignObjectDataKey) {
+            BENIGN_OBJECT_DATA_KEYS.has(node.name.text);
+          if (!isBenignKey && !isSpreadProp) {
             classifyMemberName(file.path, node.name.text, violations);
           }
         } else if (ts.isComputedPropertyName(node.name)) {
           const folded = resolveStaticString(node.name.expression);
           if (folded !== null) {
-            classifyMemberName(file.path, folded, violations);
+            if (!isSpreadProp)
+              classifyMemberName(file.path, folded, violations);
           } else {
             violations.push({
               filePath: file.path,

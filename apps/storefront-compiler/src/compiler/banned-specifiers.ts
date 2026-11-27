@@ -61,6 +61,17 @@ export const FORBIDDEN_BROWSER_NAV_GLOBALS: ReadonlySet<string> = new Set([
   'open',
 ]);
 
+export const BENIGN_OBJECT_DATA_KEYS: ReadonlySet<string> = new Set([
+  'assign',
+  'click',
+  'submit',
+  'write',
+  'writeln',
+  'constructor',
+  'cookie',
+  'serviceWorker',
+]);
+
 export const DYNAMIC_CODE_NAMES: ReadonlySet<string> = new Set([
   'eval',
   'Function',

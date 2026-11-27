@@ -72,7 +72,11 @@ describe('getCachedMaintainedCompareRouteManifest', () => {
     expect(mockGetPublishedStorefrontComparisonRevision).toHaveBeenCalledWith(
       'merchant-1'
     );
-    expect(mockCacheLife).toHaveBeenCalledWith('products');
+    expect(mockCacheLife).toHaveBeenCalledWith({
+      stale: 3600,
+      revalidate: 86400,
+      expire: 604800,
+    });
     expect(mockCacheTag).toHaveBeenCalledWith(
       'comparison-revision-merchant-1-42'
     );

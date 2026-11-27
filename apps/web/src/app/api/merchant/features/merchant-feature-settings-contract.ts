@@ -23,6 +23,7 @@ export interface MerchantFeatureSettings {
   klump_enabled: boolean;
   klump_min_amount: number;
   klump_max_amount: number;
+  oxygen_enabled: boolean;
   preferred_local_gateway: 'paystack' | 'korapay';
   preferred_international_gateway: 'paystack' | 'korapay';
   shipping_providers: string[];
@@ -96,6 +97,7 @@ const merchantFeatureAllFields: readonly (keyof MerchantFeatureSettings)[] = [
   'klump_enabled',
   'klump_min_amount',
   'klump_max_amount',
+  'oxygen_enabled',
   'preferred_local_gateway',
   'preferred_international_gateway',
   'shipping_providers',

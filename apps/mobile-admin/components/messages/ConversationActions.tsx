@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 6,
-    minHeight: 36,
+    minHeight: SPACING.touchTarget,
     paddingHorizontal: SPACING.md,
   },
   label: {

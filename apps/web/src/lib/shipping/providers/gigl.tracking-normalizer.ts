@@ -5,13 +5,19 @@ import { createHash } from 'node:crypto';
 // graph to exactly what the poller executes.
 import { mapKnownGiglStatus } from '@baci/shared/lib/gigl-tracking-status';
 import type { z } from 'zod';
-import { GIGL_PICKUP_EN_ROUTE_RAW_STATUS } from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
+import {
+  GIGL_ARRIVED_IN_CITY_RAW_STATUS,
+  GIGL_PICKUP_EN_ROUTE_RAW_STATUS,
+} from '@/lib/shipping/gigl-tracking-notification-policy-matrix';
 import type { TrackingEvent, TrackingResult } from '../types';
 import {
   GIGL_TRACKING_MAX_FUTURE_SKEW_MS,
   PickupOptions,
 } from './gigl.constants';
 import type { giglSchemas } from './gigl.schemas';
+import { resolveAggregate } from './gigl.tracking-aggregate';
+import { applyLifecycleGuards } from './gigl.tracking-lifecycle-guards';
+import { currentStatusRank } from './gigl.tracking-status-rank';
 
 type GiglTrackingShipment = z.input<typeof giglSchemas.trackingShipment>;
 
@@ -94,6 +100,7 @@ export function normalizeGiglTrackingShipment(
         const rawStatus = event.Status.trim();
         const scanStatusReason = event.ScanStatusReason?.trim();
         const scanStatusIncident = event.ScanStatusIncident?.trim();
+        const scanStatusComment = event.ScanStatusComment?.trim();
         const hasPickupEnRouteReason = [
           scanStatusReason,
           scanStatusIncident,
@@ -142,6 +149,10 @@ export function normalizeGiglTrackingShipment(
               timestamp,
             } satisfies TrackingEvent,
             recognizedStatus,
+            providerStatus: rawStatus,
+            scanText: [scanStatusReason, scanStatusIncident, scanStatusComment]
+              .filter(Boolean)
+              .join(' '),
           },
         ];
       } catch {
@@ -150,18 +161,49 @@ export function normalizeGiglTrackingShipment(
     }
   );
 
+  applyLifecycleGuards(
+    candidates,
+    shipment.Destination ?? undefined,
+    shipment.Origin ?? undefined
+  );
+
   const sortedCandidates = [...candidates].sort(
     (left, right) =>
-      right.event.timestamp.getTime() - left.event.timestamp.getTime()
-  );
-  const newestRecognized = sortedCandidates.find(
-    (candidate) => candidate.recognizedStatus !== null
+      right.event.timestamp.getTime() - left.event.timestamp.getTime() ||
+      currentStatusRank(right) - currentStatusRank(left)
   );
   if (sortedCandidates.length === 0) {
     throw new Error('GIGL tracking result has no valid tracking events');
   }
-  const hasRecognizedLifecycleEvent = newestRecognized !== undefined;
-  const status = newestRecognized?.recognizedStatus ?? 'pending';
+  const hasRecognizedLifecycleEvent = sortedCandidates.some(
+    (candidate) => candidate.recognizedStatus !== null
+  );
+  const { status, lead } = resolveAggregate(sortedCandidates);
+  // The worker reads the current location from events[0]; a same-time scan
+  // (e.g. MSHC, with or without its own location) must not hide the arrival
+  // centre from the same poll.
+  // The event that will lead the list (see resolveAggregate) owns the snapshot.
+  const top = lead ?? sortedCandidates[0];
+  // A located leader keeps its own location (terminal, failed...) except the
+  // generic MSHC, whose hub is not where the parcel is: the arrival wins there.
+  const topKeepsOwnLocation =
+    Boolean(top?.event.location) &&
+    top?.providerStatus.trim().toUpperCase() !== 'MSHC';
+  if (top && !topKeepsOwnLocation) {
+    const tied = sortedCandidates.filter(
+      (candidate) =>
+        candidate.event.location &&
+        candidate.event.timestamp.getTime() === top.event.timestamp.getTime()
+    );
+    // Only the verified arrival case: a tied arrival scan's location is the
+    // current one. Never copy a hub's location onto an unrelated leading event
+    // (e.g. a location-less delivered scan).
+    const located = tied.find(
+      (candidate) =>
+        candidate.event.rawStatus === GIGL_ARRIVED_IN_CITY_RAW_STATUS
+    );
+    if (located && located !== top) top.event.location = located.event.location;
+  }
   const deliveredEvent = sortedCandidates.find(
     (candidate) => candidate.recognizedStatus === 'delivered'
   );
@@ -174,7 +216,10 @@ export function normalizeGiglTrackingShipment(
     hasRecognizedLifecycleEvent,
     actualDelivery:
       status === 'delivered' ? deliveredEvent?.event.timestamp : undefined,
-    events: sortedCandidates.map((candidate) => candidate.event),
+    events: (lead
+      ? [lead, ...sortedCandidates.filter((candidate) => candidate !== lead)]
+      : sortedCandidates
+    ).map((candidate) => candidate.event),
     isStationPickup: shipment.PickupOptions === PickupOptions.ServiceCentre,
   };
 }

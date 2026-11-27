@@ -86,7 +86,7 @@ async function getCachedGoogleMerchantFeedDataForVersion(
   'use cache';
   void cacheVersion;
   cacheLife('products');
-  cacheTag('google-merchant-feed', 'products', `merchant-feed-${merchantId}`);
+  cacheTag('google-merchant-feed', `merchant-feed-${merchantId}`);
 
   return await getGoogleMerchantFeedData(merchantId, merchantSlug);
 }
@@ -97,20 +97,22 @@ export async function getGoogleMerchantFeedData(
 ): Promise<GoogleMerchantFeedData> {
   const supabase = createAnonClient();
 
-  const { data: primaryDomain, error: domainError } = await supabase
-    .from('domains')
-    .select('domain')
-    .eq('merchant_id', merchantId)
-    .eq('status', 'active')
-    .eq('is_primary', true)
-    .maybeSingle();
+  const [{ data: primaryDomain, error: domainError }, products] =
+    await Promise.all([
+      supabase
+        .from('domains')
+        .select('domain')
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .eq('is_primary', true)
+        .maybeSingle(),
+      fetchActiveFeedProducts(supabase, merchantId),
+    ]);
 
   if (domainError) {
     console.error('DB_DOMAIN_ERROR:', domainError);
     throw new Error('Failed to fetch merchant domain');
   }
-
-  const products = await fetchActiveFeedProducts(supabase, merchantId);
 
   // Fetch prevalidated image manifest only for active products in bounded
   // chunks, keeping PostgREST `in(...)` filters under common proxy limits.
@@ -131,11 +133,11 @@ export async function getGoogleMerchantFeedData(
     };
   }
 
-  const manifestRows = await fetchVerifiedImageManifestRows(
-    supabase,
-    merchantId,
-    productIds
-  );
+  const [manifestRows, variantRows] = await Promise.all([
+    fetchVerifiedImageManifestRows(supabase, merchantId, productIds),
+    fetchFeedVariants(supabase, merchantId, productIds),
+    attachConditionOffers(supabase, feedProducts),
+  ]);
 
   // Group manifest rows by product_id
   const imageManifest: ImageManifestMap = {};
@@ -153,8 +155,6 @@ export async function getGoogleMerchantFeedData(
       position: row.position,
     });
   }
-
-  const variantRows = await fetchFeedVariants(supabase, merchantId, productIds);
 
   if (variantRows && variantRows.length > 0) {
     const variantsByProduct = new Map<string, FeedVariant[]>();
@@ -176,8 +176,6 @@ export async function getGoogleMerchantFeedData(
       product.variants = variantsByProduct.get(product.id) ?? [];
     }
   }
-
-  await attachConditionOffers(supabase, feedProducts);
 
   return {
     custom_domain: primaryDomain?.domain ?? null,

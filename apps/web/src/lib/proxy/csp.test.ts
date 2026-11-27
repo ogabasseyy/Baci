@@ -276,3 +276,45 @@ it('limits execution framing to storefronts and the private builder subtree', ()
     uninstall();
   }
 });
+
+it('allows the configured PostHog relay origin in admin, auth, and storefront CSP', () => {
+  vi.stubEnv(
+    'NEXT_PUBLIC_POSTHOG_RELAY_URL',
+    'https://posthog-proxy.usebaci.com'
+  );
+  try {
+    for (const routeType of ['admin', 'auth', 'storefront'] as const) {
+      const policy = generateCSP(routeType, false);
+      expect(directive(policy, 'connect-src')).toContain(
+        'https://posthog-proxy.usebaci.com'
+      );
+      expect(directive(policy, 'script-src')).toContain(
+        'https://posthog-proxy.usebaci.com'
+      );
+    }
+    expect(generateCSP('api', false)).not.toContain(
+      'https://posthog-proxy.usebaci.com'
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it('allows the configured autocomplete worker origin only in storefront connect-src', () => {
+  vi.stubEnv(
+    'NEXT_PUBLIC_AUTOCOMPLETE_URL',
+    'https://baci-autocomplete-proxy.ogabassey-ai.workers.dev'
+  );
+  try {
+    expect(
+      directive(generateCSP('storefront', false), 'connect-src')
+    ).toContain('https://baci-autocomplete-proxy.ogabassey-ai.workers.dev');
+    for (const routeType of ['admin', 'auth', 'api'] as const) {
+      expect(generateCSP(routeType, false)).not.toContain(
+        'https://baci-autocomplete-proxy.ogabassey-ai.workers.dev'
+      );
+    }
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

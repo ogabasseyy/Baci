@@ -37,7 +37,6 @@ function application(read: jest.Mock) {
       client={client}
       busy={false}
       onExecute={jest.fn()}
-      onProof={jest.fn()}
       scopeKey="owned/application"
     />
   );

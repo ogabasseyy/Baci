@@ -209,6 +209,12 @@ export function applySecurityHeaders(
     return response;
   }
 
+  // Let the public storefront autocomplete route own its own cache headers
+  // (layered CDN headers on 200; uncached on errors/timeouts/saturated fallbacks).
+  if (pathname === '/api/search/autocomplete') {
+    return response;
+  }
+
   // Keep SEO listing subroutes cacheable; they share the 3-segment shape used
   // by category PDPs but do not stream PDP metadata/content slots.
   if (isStorefrontNestedListingPath(pathname, hostname, routeType)) {

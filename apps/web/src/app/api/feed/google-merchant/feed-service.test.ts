@@ -4,6 +4,13 @@ const mockResolveFeedMerchant = vi.fn();
 const mockGenerateGoogleMerchantFeed = vi.fn();
 const mockGetCachedGoogleMerchantFeedData = vi.fn();
 const mockLoggerError = vi.fn();
+const mockCacheLife = vi.fn();
+const mockCacheTag = vi.fn();
+
+vi.mock('next/cache', () => ({
+  cacheLife: (...args: unknown[]) => mockCacheLife(...args),
+  cacheTag: (...args: unknown[]) => mockCacheTag(...args),
+}));
 
 vi.mock('@/lib/feed-identifier', () => {
   class _MerchantNotFoundError extends Error {
@@ -67,7 +74,16 @@ describe('generateGoogleMerchantFeedForIdentifier', () => {
       isBySlug: true,
     });
 
-    expect(result).toEqual({ success: true, xml: '<rss />' });
+    expect(result).toEqual({
+      success: true,
+      merchantId: 'merchant-1',
+      xml: '<rss />',
+    });
+    expect(mockCacheLife).toHaveBeenCalledWith('products');
+    expect(mockCacheTag).toHaveBeenCalledWith(
+      'google-merchant-feed',
+      'merchant-feed-merchant-1'
+    );
     expect(mockResolveFeedMerchant).toHaveBeenCalledWith('ogabassey', true);
     expect(mockGetCachedGoogleMerchantFeedData).toHaveBeenCalledWith(
       'merchant-1',
@@ -104,6 +120,7 @@ describe('generateGoogleMerchantFeedForIdentifier', () => {
 
     expect(result).toEqual({
       success: true,
+      merchantId: 'merchant-1',
       xml: '<rss><link>https://ogabassey.baci.app/phone</link></rss>',
     });
     expect(mockGenerateGoogleMerchantFeed).toHaveBeenCalledWith(
@@ -123,7 +140,11 @@ describe('generateGoogleMerchantFeedForIdentifier', () => {
       isBySlug: false,
     });
 
-    expect(result).toEqual({ success: true, xml: '<rss />' });
+    expect(result).toEqual({
+      success: true,
+      merchantId: 'merchant-1',
+      xml: '<rss />',
+    });
     expect(mockResolveFeedMerchant).toHaveBeenCalledWith(
       '00000000-0000-4000-8000-000000000001',
       false

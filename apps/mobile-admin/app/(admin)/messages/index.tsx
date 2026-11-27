@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -17,6 +16,7 @@ import {
 } from '@/components/messages/FloatingSearchBar';
 import { InboxEmptyState } from '@/components/messages/InboxEmptyState';
 import { InboxListFooter } from '@/components/messages/InboxListFooter';
+import { InboxLoadError } from '@/components/messages/InboxLoadError';
 import { InboxSearchResults } from '@/components/messages/InboxSearchResults';
 import { InboxViewChips } from '@/components/messages/InboxViewChips';
 import { AppHeaderKeyboardContainer } from '@/components/ui/AppHeaderKeyboardContainer';
@@ -25,7 +25,6 @@ import { SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useInboxConversations } from '@/hooks/useInboxConversations';
 import { useInboxSearch } from '@/hooks/useInboxSearch';
 import { useTheme } from '@/hooks/useTheme';
-import { NetworkError } from '@/lib/api-client';
 import { MAX_AUTO_PAGES } from '@/lib/inbox-paging';
 import { inboxWaitingSummary } from '@/lib/inbox-waiting-summary';
 import { sortInbox } from '@/lib/merchant-inbox-sort';
@@ -42,17 +41,8 @@ const RANKED_VIEWS: readonly InboxView[] = [
   'needs_reply',
   'unread',
   'follow_up',
+  'returning',
 ];
-
-function errorText(error: unknown): string {
-  if (error instanceof NetworkError && error.statusCode === 403) {
-    return 'You do not have permission to read customer messages.';
-  }
-  if (error instanceof NetworkError && error.statusCode === 404) {
-    return 'Messages are not set up for this store yet.';
-  }
-  return 'Could not load messages. Please try again.';
-}
 
 export default function MessagesScreen() {
   const { colors } = useTheme();
@@ -98,12 +88,18 @@ export default function MessagesScreen() {
     }
   }, [autoLoading, query.isFetching, query.fetchNextPage, pages]);
 
-  // For the buttons: a tap can land after a refresh has started.
+  // For taps and scrolls: one can land as a refresh starts, before the screen
+  // has heard of it, so these join a running fetch and never cancel it.
   const loadMore = () => {
-    if (!query.isFetching) query.fetchNextPage();
+    if (!query.isFetching) query.fetchNextPage({ cancelRefetch: false });
   };
   const refreshAgain = () => {
-    if (!query.isFetching) query.refetch();
+    if (!query.isFetching) query.refetch({ cancelRefetch: false });
+  };
+  // Reloading the pages already here never asks for the one that failed.
+  const retryFailed = () => {
+    if (query.isFetchNextPageError) loadMore();
+    else refreshAgain();
   };
 
   // FlashList reports the end after any render, scrolled or not, so past the
@@ -114,7 +110,16 @@ export default function MessagesScreen() {
     if (pageFailed || !query.hasNextPage || query.isFetching) return;
     if (capped && !scrolled.current) return;
     scrolled.current = false;
-    query.fetchNextPage();
+    loadMore();
+  };
+  // A scroll belongs to the list it was made on, not the one shown after it.
+  const showView = (next: InboxView) => {
+    scrolled.current = false;
+    setView(next);
+  };
+  const changeTerm = (next: string) => {
+    scrolled.current = false;
+    setTerm(next);
   };
 
   const onRefresh = async () => {
@@ -132,7 +137,7 @@ export default function MessagesScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <AppHeaderKeyboardContainer contentContainerStyle={{ paddingBottom: 0 }}>
         {searching ? null : (
-          <InboxViewChips colors={colors} onChange={setView} value={view} />
+          <InboxViewChips colors={colors} onChange={showView} value={view} />
         )}
         <View style={styles.stage}>
           <View style={styles.flex}>
@@ -155,20 +160,11 @@ export default function MessagesScreen() {
                 <ActivityIndicator color={colors.primary} size="large" />
               </View>
             ) : query.isError && conversations.length === 0 ? (
-              <View style={styles.centered}>
-                <Text style={[styles.title, { color: colors.text }]}>
-                  {errorText(query.error)}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    query.refetch();
-                  }}
-                  style={styles.retry}
-                >
-                  <Text style={{ color: colors.primary }}>Tap to retry</Text>
-                </Pressable>
-              </View>
+              <InboxLoadError
+                colors={colors}
+                error={query.error}
+                onRetry={retryFailed}
+              />
             ) : (
               <FlashList
                 contentContainerStyle={{
@@ -241,7 +237,7 @@ export default function MessagesScreen() {
           >
             <FloatingSearchBar
               colors={colors}
-              onChangeText={setTerm}
+              onChangeText={changeTerm}
               value={term}
             />
           </KeyboardInsetView>
@@ -252,31 +248,15 @@ export default function MessagesScreen() {
 }
 
 const styles = StyleSheet.create({
-  centered: {
-    alignItems: 'center',
-    flex: 1,
-    gap: SPACING.sm,
-    justifyContent: 'center',
-    padding: SPACING.xl,
-  },
+  centered: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   container: { flex: 1 },
   flex: { flex: 1 },
   floating: { left: 0, position: 'absolute', right: 0 },
   stage: { flex: 1 },
-  retry: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: SPACING.touchTarget,
-  },
   summary: {
     fontFamily: TYPOGRAPHY.fontFamily.medium,
-    fontSize: TYPOGRAPHY.size.md,
+    fontSize: TYPOGRAPHY.size.sm,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-  },
-  title: {
-    fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-    fontSize: TYPOGRAPHY.size.lg,
-    textAlign: 'center',
+    paddingVertical: SPACING.sm,
   },
 });

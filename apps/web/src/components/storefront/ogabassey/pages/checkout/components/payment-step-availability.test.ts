@@ -31,6 +31,38 @@ describe('payment-step availability helpers', () => {
         orderAmount: 50_000,
         payableAmount: 45_000,
       }),
+    ).toBe(true);
+    expect(
+      isKlumpEligible({
+        featureSettings: { klump_enabled: true, klump_min_amount: 0 },
+        currency: 'NGN',
+        orderAmount: 50_000,
+        payableAmount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      isPaymentMethodAvailable({
+        paymentMethod: 'oxygen',
+        paystackCheckoutAvailable: true,
+        korapayCheckoutAvailable: true,
+        bankTransferCheckoutAvailable: true,
+        oxygenAllowed: true,
+        currency: 'NGN',
+        orderAmount: 50_000,
+        payableAmount: 25_000,
+      }),
+    ).toBe(true);
+    expect(
+      isPaymentMethodAvailable({
+        paymentMethod: 'oxygen',
+        paystackCheckoutAvailable: true,
+        korapayCheckoutAvailable: true,
+        bankTransferCheckoutAvailable: true,
+        oxygenAllowed: true,
+        currency: 'NGN',
+        orderAmount: 50_000,
+        payableAmount: 0,
+      }),
     ).toBe(false);
   });
 
@@ -167,13 +199,22 @@ describe('payment-step availability helpers', () => {
         payableAmount: 300_000,
       }),
     ).toBe(false);
-    // Payable differs from order total (e.g. partial wallet payment) — BNPL needs full order.
+    // Payable differs from order total (e.g. partial wallet payment) — still eligible when within bounds.
     expect(
       isCreditDirectEligible({
         featureSettings: { credit_direct_enabled: true },
         currency: 'NGN',
         orderAmount: 300_000,
         payableAmount: 250_000,
+      }),
+    ).toBe(true);
+    // Zero remaining payable amount (100% covered by store credit).
+    expect(
+      isCreditDirectEligible({
+        featureSettings: { credit_direct_enabled: true, credit_direct_min_amount: 0 },
+        currency: 'NGN',
+        orderAmount: 300_000,
+        payableAmount: 0,
       }),
     ).toBe(false);
     // Above the default ₦5,000,000 cap.

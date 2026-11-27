@@ -12,9 +12,9 @@ describe('buildStorefrontDocumentCacheHeaders', () => {
       expect(headers.cacheControl).not.toContain('no-store');
     });
 
-    it("caches short on Vercel's CDN with a long stale-while-revalidate", () => {
+    it("caches on Vercel's CDN with a 1-hour fresh window and long stale-while-revalidate", () => {
       expect(headers.vercelCdnCacheControl).toBe(
-        'max-age=300, stale-while-revalidate=86400'
+        'max-age=3600, stale-while-revalidate=86400'
       );
     });
 

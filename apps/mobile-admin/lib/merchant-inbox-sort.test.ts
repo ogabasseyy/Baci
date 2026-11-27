@@ -116,3 +116,47 @@ describe('isFollowUpDue', () => {
     expect(isFollowUpDue(snoozed('2026-11-25T12:01:00.000Z'), now)).toBe(false);
   });
 });
+
+describe('sortInbox with customers', () => {
+  const returning = { orderCount: 3, totalSpent: 150000 };
+
+  it('puts returning customers before guests of the same priority', () => {
+    const sorted = sortInbox(
+      [chat(1), chat(2, { customer: returning }), chat(3)],
+      'needs_reply'
+    );
+    expect(ids(sorted)).toEqual([2, 1, 3]);
+  });
+
+  it('still lets an explicit priority beat a returning customer', () => {
+    const sorted = sortInbox(
+      [chat(1, { customer: returning }), chat(2, { priority: 'urgent' })],
+      'needs_reply'
+    );
+    expect(ids(sorted)).toEqual([2, 1]);
+  });
+
+  it('does not treat a signed-in customer with no orders as returning', () => {
+    const sorted = sortInbox(
+      [chat(1), chat(2, { customer: { orderCount: 0, totalSpent: 0 } })],
+      'needs_reply'
+    );
+    expect(ids(sorted)).toEqual([1, 2]);
+  });
+});
+
+describe('sortInbox with hidden order data', () => {
+  it('does not treat a customer whose orders are hidden as returning', () => {
+    const sorted = sortInbox(
+      [
+        chat(1),
+        chat(2, {
+          customer: { orderCount: 9, totalSpent: 5, ordersHidden: true },
+        }),
+      ],
+      'needs_reply'
+    );
+    // Same priority, no returning boost for either: longest waiting first.
+    expect(ids(sorted)).toEqual([1, 2]);
+  });
+});

@@ -24,6 +24,10 @@ const notificationCopy: Record<string, { title: string; body: string }> = {
     title: 'Order in transit',
     body: 'Your order is moving through GIG Logistics.',
   },
+  arrived_in_city: {
+    title: 'Arrived in your city',
+    body: 'Your order has reached your delivery city. We will update you on the next step.',
+  },
   delivery_attempt_failed: {
     title: 'Delivery attempt unsuccessful',
     body: 'GIG Logistics could not complete the delivery attempt.',

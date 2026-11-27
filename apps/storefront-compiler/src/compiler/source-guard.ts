@@ -9,6 +9,7 @@ import {
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
+import { createVirtualComponentExportResolver } from './jsx-export-graph';
 import {
   checkJsxAttributeSafety,
   checkJsxSpreadAttributeSafety,
@@ -53,6 +54,14 @@ export function scanManifestSourceSafety(
     );
   }
   const declaredAssetIds = new Set(manifest.assets.map((a) => a.assetId));
+  const resolveSafeExports = createVirtualComponentExportResolver(parsedFiles);
+  if (!resolveSafeExports(manifest.entry).has('default')) {
+    violations.push({
+      filePath: manifest.entry,
+      rule: 'DANGEROUS_INNER_HTML',
+      detail: `Manifest entry "${manifest.entry}" must export a valid default React component`,
+    });
+  }
   const buildFileJsxChecker = createJsxTagValidator(parsedFiles);
 
   for (const [filePath, sourceFile] of parsedFiles.entries()) {

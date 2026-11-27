@@ -1,5 +1,6 @@
 import path from 'node:path';
 import ts from '@typescript/typescript6';
+import { collectReassignedIdentifiers } from './dom-mutation-guard';
 
 export type SafeExportKind = 'component' | 'sdkLink';
 
@@ -178,13 +179,15 @@ export function createVirtualComponentExportResolver(
           }
         }
       }
+      const reassigned = collectReassignedIdentifiers(sf);
       for (const stmt of sf.statements) {
-        if (
-          ts.isVariableStatement(stmt) &&
-          (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0
-        ) {
+        if (ts.isVariableStatement(stmt)) {
           for (const d of stmt.declarationList.declarations) {
-            if (ts.isIdentifier(d.name) && d.initializer) {
+            if (
+              ts.isIdentifier(d.name) &&
+              d.initializer &&
+              !reassigned.has(d.name.text)
+            ) {
               const k = resolveDirectComponentKind(
                 d.initializer,
                 (n) => localSafe.get(n) ?? null
@@ -206,10 +209,29 @@ export function createVirtualComponentExportResolver(
           const isDef = mods?.some(
             (m) => m.kind === ts.SyntaxKind.DefaultKeyword
           );
-          if (isDef) exported.set('default', 'component');
-          else if (isExp && stmt.name) {
+          if (isDef && (!ts.isFunctionDeclaration(stmt) || Boolean(stmt.body)))
+            exported.set('default', 'component');
+          else if (
+            isExp &&
+            stmt.name &&
+            (!ts.isFunctionDeclaration(stmt) || Boolean(stmt.body))
+          ) {
             exported.set(stmt.name.text, 'component');
           }
+        } else if (
+          ts.isExpressionStatement(stmt) &&
+          ts.isBinaryExpression(stmt.expression) &&
+          stmt.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+          ts.isPropertyAccessExpression(stmt.expression.left) &&
+          ts.isIdentifier(stmt.expression.left.expression) &&
+          stmt.expression.left.expression.text === 'module' &&
+          stmt.expression.left.name.text === 'exports'
+        ) {
+          const k = resolveDirectComponentKind(
+            stmt.expression.right,
+            (n) => localSafe.get(n) ?? null
+          );
+          if (k) exported.set('default', k);
         } else if (
           ts.isVariableStatement(stmt) &&
           stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)

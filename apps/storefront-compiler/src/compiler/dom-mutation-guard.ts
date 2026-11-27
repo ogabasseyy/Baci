@@ -70,6 +70,20 @@ function hasStyleMemberInReceiverChain(expr: ts.Expression): boolean {
   return false;
 }
 
+export function collectReassignedIdentifiers(
+  sf: ts.SourceFile
+): ReadonlySet<string> {
+  const mutated = new Set<string>();
+  const walk = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && isWriteTargetExpression(node)) {
+      mutated.add(node.text);
+    }
+    ts.forEachChild(node, walk);
+  };
+  walk(sf);
+  return mutated;
+}
+
 export function isForbiddenDomPropertyMutation(
   memberName: string,
   receiver?: ts.Expression,

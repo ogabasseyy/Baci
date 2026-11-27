@@ -3,24 +3,85 @@ import { SENSITIVE_GLOBAL_ROOTS } from './banned-specifiers';
 import { resolveStaticString } from './const-string-fold';
 import { hasLocalLexicalBinding } from './jsx-tag-safety';
 
-function findLocalVariableInitializer(
-  id: ts.Identifier
-): ts.Expression | undefined {
+const WINDOW_YIELDING_MEMBER_NAMES: ReadonlySet<string> = new Set([
+  'view',
+  'source',
+]);
+
+function isDestructuredSensitiveMember(
+  pattern: ts.ObjectBindingPattern,
+  targetName: string
+): boolean {
+  for (const el of pattern.elements) {
+    if (ts.isIdentifier(el.name) && el.name.text === targetName) {
+      const prop = el.propertyName
+        ? ts.isIdentifier(el.propertyName) ||
+          ts.isStringLiteral(el.propertyName)
+          ? el.propertyName.text
+          : ts.isComputedPropertyName(el.propertyName)
+            ? resolveStaticString(el.propertyName.expression)
+            : null
+        : el.name.text;
+      if (
+        prop !== null &&
+        (SENSITIVE_GLOBAL_ROOTS.has(prop) ||
+          WINDOW_YIELDING_MEMBER_NAMES.has(prop))
+      ) {
+        return true;
+      }
+    } else if (
+      ts.isObjectBindingPattern(el.name) &&
+      isDestructuredSensitiveMember(el.name, targetName)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findLocalBindingSource(id: ts.Identifier): {
+  initializer?: ts.Expression;
+  isSensitiveDestructure: boolean;
+} {
   let cur: ts.Node | undefined = id.parent;
   while (cur) {
+    if (
+      ts.isFunctionDeclaration(cur) ||
+      ts.isFunctionExpression(cur) ||
+      ts.isArrowFunction(cur) ||
+      ts.isMethodDeclaration(cur)
+    ) {
+      for (const param of cur.parameters) {
+        if (
+          ts.isObjectBindingPattern(param.name) &&
+          isDestructuredSensitiveMember(param.name, id.text)
+        ) {
+          return { isSensitiveDestructure: true };
+        }
+      }
+    }
     if (ts.isBlock(cur) || ts.isSourceFile(cur)) {
       for (const stmt of cur.statements) {
         if (!ts.isVariableStatement(stmt)) continue;
         for (const decl of stmt.declarationList.declarations) {
           if (ts.isIdentifier(decl.name) && decl.name.text === id.text) {
-            return decl.initializer;
+            return {
+              initializer: decl.initializer,
+              isSensitiveDestructure: false,
+            };
+          }
+          if (
+            ts.isObjectBindingPattern(decl.name) &&
+            isDestructuredSensitiveMember(decl.name, id.text)
+          ) {
+            return { isSensitiveDestructure: true };
           }
         }
       }
     }
     cur = cur.parent;
   }
-  return undefined;
+  return { isSensitiveDestructure: false };
 }
 
 export function isDocumentReceiver(
@@ -40,8 +101,10 @@ export function isDocumentReceiver(
     if (expr.text === 'document' && !hasLocalLexicalBinding(expr, 'document')) {
       return true;
     }
-    const init = findLocalVariableInitializer(expr);
-    return init !== undefined && isDocumentReceiver(init, seen);
+    const src = findLocalBindingSource(expr);
+    return (
+      src.initializer !== undefined && isDocumentReceiver(src.initializer, seen)
+    );
   }
   if (ts.isPropertyAccessExpression(expr)) {
     return (
@@ -78,8 +141,11 @@ export function isNavigatorReceiver(
     ) {
       return true;
     }
-    const init = findLocalVariableInitializer(expr);
-    return init !== undefined && isNavigatorReceiver(init, seen);
+    const src = findLocalBindingSource(expr);
+    return (
+      src.initializer !== undefined &&
+      isNavigatorReceiver(src.initializer, seen)
+    );
   }
   if (ts.isPropertyAccessExpression(expr)) {
     return (
@@ -116,8 +182,12 @@ export function isSensitiveGlobalReceiver(
     ) {
       return true;
     }
-    const init = findLocalVariableInitializer(expr);
-    return init !== undefined && isSensitiveGlobalReceiver(init, seen);
+    const src = findLocalBindingSource(expr);
+    if (src.isSensitiveDestructure) return true;
+    return (
+      src.initializer !== undefined &&
+      isSensitiveGlobalReceiver(src.initializer, seen)
+    );
   }
   if (
     ts.isCallExpression(expr) &&
@@ -129,13 +199,16 @@ export function isSensitiveGlobalReceiver(
   if (ts.isPropertyAccessExpression(expr)) {
     return (
       SENSITIVE_GLOBAL_ROOTS.has(expr.name.text) ||
+      WINDOW_YIELDING_MEMBER_NAMES.has(expr.name.text) ||
       isSensitiveGlobalReceiver(expr.expression, seen)
     );
   }
   if (ts.isElementAccessExpression(expr)) {
     const k = resolveStaticString(expr.argumentExpression);
     return (
-      (k !== null && SENSITIVE_GLOBAL_ROOTS.has(k)) ||
+      (k !== null &&
+        (SENSITIVE_GLOBAL_ROOTS.has(k) ||
+          WINDOW_YIELDING_MEMBER_NAMES.has(k))) ||
       isSensitiveGlobalReceiver(expr.expression, seen)
     );
   }

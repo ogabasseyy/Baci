@@ -24,6 +24,7 @@ function isNonNegativePrice(v) {
 function isValidPriceFields(obj) {
   if (obj.priceNgn !== undefined && !isNonNegativePrice(obj.priceNgn)) return false;
   if (obj.price !== undefined && !isNonNegativePrice(obj.price)) return false;
+  if (obj.priceNgn !== undefined && obj.price !== undefined && obj.priceNgn !== obj.price) return false;
   return isNonNegativePrice(obj.priceNgn) || isNonNegativePrice(obj.price);
 }
 
@@ -80,6 +81,9 @@ function isValidCatalogPayload(data, kind) {
     return data.product === null || isValidCatalogProductRecord(data.product);
   }
   if (kind === 'collection' && typeof data.categoryExists !== 'boolean') {
+    return false;
+  }
+  if (data.title !== undefined && (typeof data.title !== 'string' || data.title.length > 300)) {
     return false;
   }
   if (!Array.isArray(data.products) || !data.products.every(isValidCatalogProductRecord)) {

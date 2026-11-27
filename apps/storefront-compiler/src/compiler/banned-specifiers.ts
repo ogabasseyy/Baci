@@ -133,7 +133,7 @@ export const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
     'attachshadow|shadowroot|appendchild|insertbefore|replacechild|replacechildren',
     'insertadjacentelement|insertadjacenttext|prepend|replacewith',
     'csstext|setproperty|insertrule|addrule|replacesync|baseval|rellist|ping',
-    'parentnode|parentelement|getrootnode|offsetparent|composedpath',
+    'parentnode|parentelement|getrootnode|offsetparent|composedpath|postmessage',
     'documentelement|scrollingelement|activeelement|stylesheets|currentscript',
   ]
     .join('|')

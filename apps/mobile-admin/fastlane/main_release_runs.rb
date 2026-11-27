@@ -1,5 +1,5 @@
-# Which TestFlight builds a push to main uploaded. App Store Connect does not
-# record a build's branch, so GitHub's history of release runs is asked.
+# What the release from main uploaded. App Store Connect does not record a
+# build's branch, so GitHub's history of release runs is asked.
 require "json"
 require "net/http"
 
@@ -45,54 +45,40 @@ def main_push?(run)
   run["event"] == "push" && run["head_branch"] == "main"
 end
 
-# The push to main with this run number. Older pages are read until it is found
-# or its number has been passed.
-def main_release_run(runs, run_number)
-  page = 1
-  loop do
-    found = runs.find do |candidate|
-      main_push?(candidate) && candidate["run_number"] == run_number
-    end
-    return found if found
-    return if runs.length < RELEASE_RUNS_PER_PAGE || runs.last["run_number"] <= run_number
-
-    page += 1
-    runs = release_runs_page(page)
-  end
-end
-
-# A later push to main changed the app, so the release workflow withholds this
-# build as stale and it must not go out from here either.
-def overtaken_on_main?(runs, build_number)
-  run_number = build_number - Integer(ENV.fetch("BUILD_NUMBER_BASE"), 10)
+# The latest release from main. The release workflow withholds anything older as
+# stale, so only this run's build may be sent. Manual runs are left out, as a
+# normal release leaves them on TestFlight. Older pages are read until a push to
+# main turns up.
+def latest_main_release_run(runs)
   page = 1
   until runs.empty?
-    newest = runs.select { |run| main_push?(run) }.map { |run| run["run_number"] }.max
-    return newest > run_number if newest
+    latest = runs.select { |run| main_push?(run) }.max_by { |run| run["run_number"] }
+    return latest if latest
 
     page += 1
     runs = release_runs_page(page)
   end
-  # No run from main at all: nothing shows the build is current.
-  true
+  nil
 end
 
-# The version that run gave its build, from the workflow as it stood then.
-def released_app_version(run, build_number)
+# The build number that run gave its upload. A push cannot override it.
+def released_build_number(run)
+  run["run_number"] + Integer(ENV.fetch("BUILD_NUMBER_BASE"), 10)
+end
+
+# The version it gave that build, from the workflow as it stood at its commit.
+# Apple tells builds apart by version and number together.
+def released_app_version(run)
   file = github_api("contents/.github/workflows/#{RELEASE_WORKFLOW_FILE}?ref=#{run['head_sha']}")
   major_minor = file.fetch("content").unpack1("m")[RELEASE_VERSION_LINE, 1]
-  major_minor && "#{major_minor}.#{build_number}"
+  unless major_minor
+    UI.user_error!("Could not read APP_VERSION_MAJOR_MINOR for release run #{run['run_number']}")
+  end
+  "#{major_minor}.#{released_build_number(run)}"
 end
 
-# Apple tells builds apart by version and number together, so both must match.
-# Manual runs are left out, as a normal release leaves them on TestFlight, and
-# because a build number override would break the run number arithmetic.
-def uploaded_from_main?(runs, app_version, build_number)
-  run_number = build_number - Integer(ENV.fetch("BUILD_NUMBER_BASE"), 10)
-  run = run_number.positive? && main_release_run(runs, run_number)
-  return false unless run && released_app_version(run, build_number) == app_version
-
-  # Every attempt: a failed re-run does not undo an earlier upload.
+# Every attempt: a failed re-run does not undo an earlier upload.
+def run_uploaded?(run)
   github_api("actions/runs/#{run['id']}/jobs?filter=all&per_page=100")
     .fetch("jobs")
     .flat_map { |job| job.fetch("steps", []) }

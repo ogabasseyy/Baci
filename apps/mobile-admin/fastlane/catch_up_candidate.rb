@@ -1,7 +1,6 @@
-# Chooses the build the scheduled check sends: the newest valid, unexpired
-# TestFlight build that a push to main uploaded, that is newer than the live
-# version and that no later push to main has overtaken. It only reads; the
-# submit lane does the sending.
+# Chooses the build the scheduled check sends: the one the latest release from
+# main uploaded, if it is usable and newer than the live version. It never falls
+# back to an older build. It only reads; the submit lane does the sending.
 
 # Apple or a person turned the attached build down, so a person decides.
 TURNED_DOWN_VERSION_STATES = %w[
@@ -51,16 +50,21 @@ def catch_up_candidate(app_id:)
   # sends its build once the slot is free.
   return skip_catch_up("A release run is still going and submits its own build.") if release_run_active?(runs)
 
-  build = newest_main_build(app, runs, newer_than: live.version_string)
-  return skip_catch_up("nothing newer than #{live.version_string} from main is on TestFlight.") unless build
+  run = latest_main_release_run(runs)
+  return skip_catch_up("no release from main was found.") unless run
 
-  if overtaken_on_main?(runs, build.version.to_i)
-    return skip_catch_up(
-      "build #{build.version} is out of date: a later release from main has no build " \
-      "to send. Re-run or fix that release."
-    )
+  app_version = released_app_version(run)
+  number = released_build_number(run).to_s
+  unless Gem::Version.new(app_version) > Gem::Version.new(live.version_string)
+    return skip_catch_up("nothing newer than #{live.version_string} from main (latest: #{app_version}).")
   end
-  return skip_catch_up("build #{build.version} is still processing.") if build.processing_state == "PROCESSING"
+  unless run_uploaded?(run)
+    return skip_catch_up("the latest release from main did not upload build #{number}. Re-run or fix it.")
+  end
+
+  build = testflight_build(app, app_version, number)
+  return skip_catch_up("build #{number} is not usable on TestFlight (unlisted, expired or invalid).") unless build
+  return skip_catch_up("build #{number} is still processing.") if build.processing_state == "PROCESSING"
 
   editable = app.get_edit_app_store_version(platform: platform)
   if turned_down_blocks?(editable, build)
@@ -70,38 +74,14 @@ def catch_up_candidate(app_id:)
     )
   end
 
-  app_version = build.pre_release_version.version
-  report_catch_up("Sending #{app_version} (build #{build.version}) to App Review.")
-  CatchUpBuild.new(app_version, build.version)
+  report_catch_up("Sending #{app_version} (build #{number}) to App Review.")
+  CatchUpBuild.new(app_version, number)
 end
 
-# Newest first. A build still processing is returned too, so that an older one
-# does not overtake it. Every page is read, so that newer uploads from elsewhere
-# cannot hide a main build.
-def newest_main_build(app, runs, newer_than:)
-  floor = Gem::Version.new(newer_than)
-  builds = Spaceship::ConnectAPI.get_builds(
-    filter: { app: app.id, expired: "false", processingState: "PROCESSING,FAILED,INVALID,VALID" },
-    includes: "preReleaseVersion",
-    sort: "-uploadedDate",
-    limit: 200
-  ).all_pages.flat_map(&:to_models)
-
-  builds
-    .select { |build| newer_ios_build?(build, floor) }
-    .sort_by { |build| release_order(build.pre_release_version.version, build.version) }
-    .reverse
-    .find do |build|
-      uploaded_from_main?(runs, build.pre_release_version.version, build.version.to_i)
-    end
-end
-
-# FAILED and INVALID builds can never be sent, so they are passed over.
-def newer_ios_build?(build, floor)
-  release = build.pre_release_version
-  !build.expired &&
-    %w[VALID PROCESSING].include?(build.processing_state) &&
-    !release.nil? && release.platform == "IOS" &&
-    Gem::Version.correct?(release.version) && Gem::Version.new(release.version) > floor &&
-    build.version.to_s.match?(/\A\d+\z/)
+# That one build, unless Apple cannot take it.
+def testflight_build(app, app_version, build_number)
+  Spaceship::ConnectAPI::Build.all(
+    app_id: app.id, version: app_version, build_number: build_number,
+    platform: Spaceship::ConnectAPI::Platform::IOS
+  ).find { |build| !build.expired && %w[VALID PROCESSING].include?(build.processing_state) }
 end

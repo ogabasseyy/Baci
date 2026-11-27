@@ -27,6 +27,11 @@ describe('admin iOS catch-up: proving a build came from main', () => {
       runs: [mainRun(607)],
     });
     expect(output).toContain('send=2.0.607 build=607');
+
+    const other = runCandidate({
+      builds: [{ number: 607, version: '2.1.607' }],
+    });
+    expect(other).toContain('send=none');
   });
 
   it('takes the version from the release workflow of that run', () => {
@@ -50,6 +55,21 @@ describe('admin iOS catch-up: proving a build came from main', () => {
     expect(output).toContain(`send=${majorMinor}.607 build=607`);
   });
 
+  it('sends the latest release after the major.minor was lowered', () => {
+    const output = runCandidate({
+      builds: [
+        { number: 600, version: '3.0.600' },
+        { number: 601, version: '2.1.601' },
+      ],
+      live: '2.0.599',
+      runs: [
+        mainRun(601, { majorMinor: '2.1' }),
+        mainRun(600, { majorMinor: '3.0' }),
+      ],
+    });
+    expect(output).toContain('send=2.1.601 build=601');
+  });
+
   it('reads older pages of release runs until it finds the main run', () => {
     const output = runCandidate({
       builds: [{ number: 607 }],
@@ -58,14 +78,29 @@ describe('admin iOS catch-up: proving a build came from main', () => {
     expect(output).toContain('send=2.0.607 build=607');
   });
 
-  it('stops reading once the run number has been passed', () => {
-    // 780 maps to run 750, on the first page and not a push to main. 20 maps
-    // to no run at all.
+  it('reads no older page once it has found a release from main', () => {
     const output = runCandidate({
-      builds: [{ number: 780 }, { number: 20, version: '2.0.700' }],
-      runs: [...newerManualRuns, mainRun(607)],
+      builds: [{ number: 900 }],
+      runs: [mainRun(900), ...newerManualRuns],
     });
-    expect(output).toContain('send=none');
+    expect(output).toContain('send=2.0.900 build=900');
     expect(output).not.toContain('runs page 2');
+  });
+
+  it('sends nothing when no release from main exists', () => {
+    const output = runCandidate({
+      builds: [{ number: 607 }],
+      runs: newerManualRuns,
+    });
+    expect(output).toContain('no release from main was found');
+    expect(output).toContain('send=none');
+  });
+
+  it('fails visibly when the version line cannot be read', () => {
+    const output = runCandidate({
+      builds: [{ number: 607 }],
+      releaseWorkflow: 'env:\n  APP_VERSION_MAJOR_MINOR: 2.0\n',
+    });
+    expect(output).toContain('FAIL Could not read APP_VERSION_MAJOR_MINOR');
   });
 });

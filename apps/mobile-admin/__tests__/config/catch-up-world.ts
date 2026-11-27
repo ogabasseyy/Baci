@@ -21,6 +21,8 @@ export interface ReleaseRun {
   branch?: string;
   status?: string;
   upload?: string;
+  // The release workflow's <major>.<minor> at this run's commit, if it differs.
+  majorMinor?: string;
 }
 
 export interface World {
@@ -29,7 +31,6 @@ export interface World {
   // Newest first, as GitHub lists them.
   runs?: ReleaseRun[];
   editable?: { state: string; build?: number };
-  pageSize?: number;
   // The release workflow as it stood at each run's commit.
   releaseWorkflow?: string;
 }
@@ -62,14 +63,21 @@ export function runCandidate({
       module ConnectAPI
         module Platform; IOS = "IOS"; end
         PreRelease = Struct.new(:version, :platform)
-        Build = Struct.new(:version, :processing_state, :expired, :pre_release_version)
-        Version = Struct.new(:version_string, :app_version_state, :build)
-        # One page of results; all_pages follows the rest, as Spaceship does.
-        class Response
-          def initialize(pages); @pages = pages; end
-          def to_models; @pages.first || []; end
-          def all_pages; @pages.map { |page| Response.new([page]) }; end
+        Build = Struct.new(:version, :processing_state, :expired, :pre_release_version) do
+          # As the real lookup: one marketing version and build number.
+          def self.all(app_id:, version:, build_number:, platform:)
+            raise "wrong app" unless app_id == "app-id"
+            listed = WORLD["builds"].map do |b|
+              new(b["number"].to_s, b["state"] || "VALID", b["expired"] || false,
+                  PreRelease.new(b["version"] || "2.0.#{b['number']}", "IOS"))
+            end
+            listed.select do |build|
+              build.version == build_number && build.pre_release_version.version == version &&
+                build.pre_release_version.platform == platform
+            end
+          end
         end
+        Version = Struct.new(:version_string, :app_version_state, :build)
         class App
           def self.find(_id); new; end
           def id; "app-id"; end
@@ -80,16 +88,6 @@ export function runCandidate({
             e = WORLD["editable"]
             e && Version.new("2.0.#{e['build']}", e["state"], e["build"] && Build.new(e["build"].to_s))
           end
-        end
-        def self.get_builds(filter:, includes:, limit:, sort:)
-          raise "wrong app" unless filter[:app] == "app-id"
-          raise "newest first" unless sort == "-uploadedDate"
-          raise "version not included" unless includes.include?("preReleaseVersion")
-          builds = WORLD["builds"].map do |b|
-            Build.new(b["number"].to_s, b["state"] || "VALID", b["expired"] || false,
-                      PreRelease.new(b["version"] || "2.0.#{b['number']}", "IOS"))
-          end
-          Response.new(builds.each_slice(WORLD["pageSize"] || limit).to_a)
         end
       end
     end
@@ -111,7 +109,9 @@ export function runCandidate({
         unless path.match?(%r{\\Acontents/\\.github/workflows/ios-release\\.yml\\?ref=sha-\\d+\\z})
           raise "wrong file: #{path}"
         end
-        { "content" => WORLD["releaseWorkflowBase64"] }
+        own = runs.find { |r| path.end_with?("ref=sha-#{r['number']}") }["majorMinor"]
+        line = own && "env:\\n  APP_VERSION_MAJOR_MINOR: '#{own}'\\n"
+        { "content" => line ? [line].pack("m") : WORLD["releaseWorkflowBase64"] }
       else
         id = path[%r{actions/runs/(\\d+)/jobs}, 1].to_i
         run = runs.find { |r| r["number"] == id }

@@ -28,9 +28,9 @@ describe('admin iOS catch-up: which build to send', () => {
         { number: 606 },
       ],
     });
-    // 607 to 609 came from later releases, so 606 is out of date too.
+    // 606 is older than the latest release, so it does not stand in.
     expect(output).toContain('send=none');
-    expect(output).toContain('build 606 is out of date');
+    expect(output).toContain('build 609 is not usable');
   });
 
   it('only sends builds a push to main uploaded', () => {
@@ -61,12 +61,11 @@ describe('admin iOS catch-up: which build to send', () => {
       runs: [mainRun(607, { upload }), mainRun(606)],
     });
     expect(output).toContain('send=none');
-    expect(output).toContain('build 606 is out of date');
+    expect(output).toContain('did not upload build 607');
   });
 
-  it('finds a main build behind a full page of uploads from elsewhere', () => {
+  it('looks past newer uploads from elsewhere to the release build', () => {
     const output = runCandidate({
-      pageSize: 2,
       builds: [{ number: 609 }, { number: 608 }, { number: 607 }],
       runs: [mainRun(607)],
     });

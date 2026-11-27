@@ -13,6 +13,8 @@ DECLARE
   listing jsonb;
 BEGIN
   installation := public.bind_brilstash_installation(merchant, 'new-fixture', true);
+  IF public.inspect_brilstash_installation(installation)->>'handoffMinPrice' IS DISTINCT FROM '0'
+  THEN RAISE EXCEPTION 'ordinary binding did not retain its zero-price handoff probe'; END IF;
   BEGIN
     PERFORM public.bind_brilstash_installation(merchant, 'another-fresh-fixture', true);
     RAISE EXCEPTION 'merchant acquired a second current installation';
@@ -145,7 +147,10 @@ DECLARE
   installation uuid := current_setting('fixture.on_demand_installation')::uuid;
   merchant uuid := '20000000-0000-4000-8000-000000000001';
   product_id uuid := '40000000-0000-4000-8000-000000000001';
+  listing_external_id text;
 BEGIN
+  SELECT row->>'externalId' INTO STRICT listing_external_id
+  FROM private.brilstash_source_rows(installation, merchant) AS source(row);
   IF (SELECT row->'inventory'
       FROM private.brilstash_source_rows(installation, merchant) AS source(row))
     IS DISTINCT FROM '{"kind":"on-demand","units":100}'::jsonb
@@ -157,8 +162,9 @@ BEGIN
   THEN RAISE EXCEPTION 'on-demand policy replaced tracked stock'; END IF;
 
   UPDATE public.products p SET manage_stock = false, status = 'archived' WHERE p.id = product_id;
-  IF EXISTS (SELECT 1 FROM private.brilstash_source_rows(installation, merchant) AS source(row)
-     WHERE row->>'visible' = 'true' OR row->'inventory'->>'units' = '100')
-  THEN RAISE EXCEPTION 'on-demand policy exposed an archived listing'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM private.brilstash_source_rows(installation, merchant) AS source(row)
+    WHERE row->>'externalId' = listing_external_id
+      AND row->'visible' = 'false'::jsonb AND row->'inventory' = '{"kind":"untracked"}'::jsonb)
+  THEN RAISE EXCEPTION 'archiving must preserve the hidden listing ID without on-demand capacity'; END IF;
 END $$;
 ROLLBACK TO SAVEPOINT on_demand_inventory;

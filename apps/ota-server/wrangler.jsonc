@@ -7,7 +7,7 @@
   "workers_dev": false,
   "preview_urls": false,
   "vars": {
-    "OTA_CANONICAL_ORIGIN": "https://ota.usebaci.com"
+    "OTA_CANONICAL_ORIGIN": "https://ota.ogabassey.com"
   },
   "r2_buckets": [
     {
@@ -17,7 +17,7 @@
   ],
   "routes": [
     {
-      "pattern": "ota.usebaci.com",
+      "pattern": "ota.ogabassey.com",
       "custom_domain": true
     }
   ]

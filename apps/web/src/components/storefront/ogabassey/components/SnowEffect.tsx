@@ -2,7 +2,8 @@
 
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { useV2Theme } from '../providers/v2-theme-context';
-import { SNOW_CSS, SNOW_LAYERS } from './snow-styles';
+import { SNOW_LAYERS } from './snow-layers';
+import { SNOW_CSS } from './snow-styles';
 import { useSnowDismissal } from './use-snow-dismissal';
 
 /**

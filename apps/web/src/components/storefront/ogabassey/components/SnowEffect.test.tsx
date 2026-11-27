@@ -1,7 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SnowEffect } from './SnowEffect';
-import { SNOW_STOPPED_KEY } from './use-snow-dismissal';
 
 const themeState = vi.hoisted(() => ({ theme: 'santa' }));
 vi.mock('../providers/v2-theme-context', () => ({
@@ -27,13 +25,20 @@ function stubMatchMedia(initial: boolean) {
   };
 }
 
+let SnowEffect: typeof import('./SnowEffect').SnowEffect;
+let SNOW_STOPPED_KEY: string;
+
 const snow = () => screen.queryByTestId('snow-effect');
 const stopButton = () => screen.queryByRole('button', { name: /stop snow/i });
 
 describe('SnowEffect', () => {
   const store = new Map<string, string>();
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // The dismissal fallback is module state: load fresh modules per test.
+    vi.resetModules();
+    ({ SnowEffect } = await import('./SnowEffect'));
+    ({ SNOW_STOPPED_KEY } = await import('./use-snow-dismissal'));
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 11, 10));
     themeState.theme = 'santa';

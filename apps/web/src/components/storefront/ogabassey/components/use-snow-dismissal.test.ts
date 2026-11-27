@@ -1,11 +1,18 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SNOW_STOPPED_KEY, useSnowDismissal } from './use-snow-dismissal';
+
+
+let SNOW_STOPPED_KEY: string;
+let useSnowDismissal: typeof import('./use-snow-dismissal').useSnowDismissal;
 
 describe('useSnowDismissal', () => {
   const store = new Map<string, string>();
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ SNOW_STOPPED_KEY, useSnowDismissal } = await import(
+      './use-snow-dismissal'
+    ));
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 11, 10));
     store.clear();
@@ -52,6 +59,20 @@ describe('useSnowDismissal', () => {
     expect(result.current.stopped).toBe(false);
 
     act(() => result.current.stop());
+
+    expect(result.current.stopped).toBe(true);
+  });
+
+  it('stays stopped after a remount when storage is blocked', () => {
+    const blocked = () => {
+      throw new Error('blocked');
+    };
+    vi.stubGlobal('localStorage', { getItem: blocked, setItem: blocked });
+    const first = renderHook(() => useSnowDismissal());
+    act(() => first.result.current.stop());
+    first.unmount();
+
+    const { result } = renderHook(() => useSnowDismissal());
 
     expect(result.current.stopped).toBe(true);
   });

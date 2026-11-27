@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SNOW_CSS, SNOW_LAYERS } from './snow-styles';
+import { SNOW_LAYERS } from './snow-layers';
+import { SNOW_CSS } from './snow-styles';
 
 describe('snow styles', () => {
   it('loops each layer by exactly one tile at its own speed', () => {
@@ -26,5 +27,22 @@ describe('snow styles', () => {
     expect(SNOW_CSS).toContain(
       '@media (prefers-reduced-motion: reduce){.oga-snow,.oga-snow-stop{display:none}}'
     );
+  });
+
+  it('stacks below storefront modals and drawers, which start at z 50', () => {
+    const layers = [...SNOW_CSS.matchAll(/z-index:(\d+)/g)].map((m) =>
+      Number(m[1])
+    );
+    expect(layers).toHaveLength(2);
+    expect(Math.max(...layers)).toBeLessThan(50);
+  });
+
+  it('takes the stop button and lights from the shop theme', () => {
+    const chrome = SNOW_CSS.match(/\.oga-snow-(stop|lights)\{position[^}]*\}/g) ?? [];
+    expect(chrome).toHaveLength(2);
+    for (const rule of chrome) {
+      expect(rule).toContain('var(--store-primary)');
+      expect(rule).not.toMatch(/#[0-9a-f]{3}|rgb/i);
+    }
   });
 });

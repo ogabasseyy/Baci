@@ -99,6 +99,8 @@ describe('createCriticalCartProduct', () => {
       attributes: { platform: 'EU', storage: '2TB' },
       id: 'variant-1',
     });
+    expect(cartProduct.variants?.[0]).not.toHaveProperty('merchant_id');
+    expect(cartProduct.variants?.[0]).not.toHaveProperty('product_id');
   });
 
   it('treats missing stock flags as managed by default', () => {

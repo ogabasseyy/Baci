@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Product } from '@/lib/products';
+import type { CriticalCartVariant } from './critical-cart-product';
 import { resolveMissingCriticalVariantAxes } from './critical-missing-variant-axes';
 
 type Variants = NonNullable<Product['variants']>;
@@ -70,5 +71,36 @@ describe('resolveMissingCriticalVariantAxes', () => {
         explicitSelectedAxes: ['region'],
       }).missingHiddenRequiredVariantAxes
     ).toEqual([]);
+  });
+
+  it('accepts narrowed CriticalCartVariant entries without merchant or product ids', () => {
+    const narrowedVariants: CriticalCartVariant[] = [
+      {
+        id: 'v-1',
+        attributes: { storage: '128GB', color: 'Black' },
+        condition: 'new',
+        stock_quantity: 4,
+      },
+      {
+        id: 'v-2',
+        attributes: { storage: '256GB', color: 'Silver' },
+        condition: 'used',
+        stock_quantity: 2,
+      },
+    ];
+
+    expect(
+      resolveMissingCriticalVariantAxes({
+        explicitSelectedAxes: [],
+        hiddenRequiredVariantAxes: [],
+        renderableVariantAxes: ['storage', 'color'],
+        resolvedVariant: narrowedVariants[0],
+        selectedAttributes: { storage: '128GB' },
+        variants: narrowedVariants,
+      })
+    ).toEqual({
+      missingHiddenRequiredVariantAxes: [],
+      missingRenderableVariantAxes: ['color'],
+    });
   });
 });

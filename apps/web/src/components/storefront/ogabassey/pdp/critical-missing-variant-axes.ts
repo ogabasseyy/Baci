@@ -1,15 +1,15 @@
-import type { Product as CartProduct } from '@/lib/products';
-import { getInapplicableCriticalVariantAxes } from './critical-applicable-variant-axes';
-
-type CriticalVariant = NonNullable<CartProduct['variants']>[number];
+import {
+  type CriticalAxisVariant,
+  getInapplicableCriticalVariantAxes,
+} from './critical-applicable-variant-axes';
 
 interface ResolveMissingCriticalVariantAxesInput {
   explicitSelectedAxes: string[];
   hiddenRequiredVariantAxes: string[];
   renderableVariantAxes: string[];
-  resolvedVariant?: CriticalVariant | null;
+  resolvedVariant?: CriticalAxisVariant | null;
   selectedAttributes: Record<string, string>;
-  variants: CartProduct['variants'];
+  variants: readonly CriticalAxisVariant[] | null | undefined;
 }
 
 /**

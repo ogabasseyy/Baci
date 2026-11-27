@@ -61,7 +61,7 @@ describe('generateProductSchema accepted payment methods', () => {
     ).toEqual(['https://schema.org/CreditCard']);
   });
 
-  it('adds configured accepted payment methods to variant offers', () => {
+  it('attaches configured accepted payment methods once on the shared variant seller Organization', () => {
     const schema = generateProductSchema(
       makeSeoProduct({
         variants: [
@@ -73,6 +73,14 @@ describe('generateProductSchema accepted payment methods', () => {
             price_override: 90,
             stock_quantity: 5,
           },
+          {
+            id: 'v2',
+            product_id: 'test-123',
+            merchant_id: 'm1',
+            attributes: { storage: '256GB' },
+            price_override: 110,
+            stock_quantity: 3,
+          },
         ],
       }),
       'TestStore',
@@ -80,12 +88,27 @@ describe('generateProductSchema accepted payment methods', () => {
       'NG',
       undefined,
       undefined,
-      { acceptedPaymentMethods: ['Pay on delivery'] }
+      {
+        acceptedPaymentMethods: ['Pay on delivery'],
+        merchantBaseUrl: 'https://teststore.usebaci.com',
+        productUrl: 'https://teststore.usebaci.com/phones/test-product',
+      }
     );
 
     const variants = schema.hasVariant as Record<string, unknown>[];
-    const offer = variants[0]?.offers as Record<string, unknown>;
+    const firstOffer = variants[0]?.offers as Record<string, unknown>;
+    const secondOffer = variants[1]?.offers as Record<string, unknown>;
 
-    expect(offer.acceptedPaymentMethod).toEqual(['https://schema.org/COD']);
+    expect(firstOffer).not.toHaveProperty('acceptedPaymentMethod');
+    expect(secondOffer).not.toHaveProperty('acceptedPaymentMethod');
+    expect(firstOffer.seller).toEqual({
+      '@type': 'Organization',
+      '@id': 'https://teststore.usebaci.com/#online-store',
+      name: 'TestStore',
+      acceptedPaymentMethod: ['https://schema.org/COD'],
+    });
+    expect(secondOffer.seller).toEqual({
+      '@id': 'https://teststore.usebaci.com/#online-store',
+    });
   });
 });

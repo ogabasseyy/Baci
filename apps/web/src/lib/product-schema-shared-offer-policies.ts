@@ -1,4 +1,5 @@
 import type { MerchantReturnPolicy, OfferShippingDetails } from 'schema-dts';
+import { getProductScopedPrefix } from './product-schema-scoped-id-prefix';
 
 type NodeReference = { '@id': string };
 
@@ -27,9 +28,7 @@ export function buildSharedOfferPolicies(
     return () => ({});
   }
 
-  const prefix = productUrl
-    ? `${productUrl.origin}${productUrl.pathname}#`
-    : `#${encodeURIComponent(productGroupId)}-`;
+  const prefix = getProductScopedPrefix(productUrl, productGroupId);
   const shippingId = `${prefix}shipping-policy`;
   const returnPolicyId = `${prefix}return-policy`;
 

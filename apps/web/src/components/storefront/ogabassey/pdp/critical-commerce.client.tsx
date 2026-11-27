@@ -5,11 +5,11 @@ import { useState } from 'react';
 import { resolveVariantSelection } from '@baci/shared/lib';
 import { getVariantConnectivityDisclosure } from '@/lib/storefront-variant-disclosure';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
-import type { Product as CartProduct } from '@/lib/products';
 import {
   OGABASSEY_PDP_PRIMARY_IMAGE_QUALITY,
   OGABASSEY_PDP_PRIMARY_IMAGE_SIZES,
 } from '@/components/storefront/ogabassey/config/product-media';
+import type { CriticalCartProductInput } from './critical-cart-product';
 import {
   formatCriticalPrice,
   type InitialCriticalVariantSelection,
@@ -39,7 +39,7 @@ export {
 
 interface OgabasseyPdpCriticalCommerceClientProps {
   cartHref: Route;
-  cartProduct: CartProduct;
+  cartProduct: CriticalCartProductInput;
   initialVariantSelection?: InitialCriticalVariantSelection;
   initialOfferId?: string | null;
   routeOfferMissing?: boolean;

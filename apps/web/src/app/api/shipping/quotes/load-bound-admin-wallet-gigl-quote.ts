@@ -131,6 +131,16 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
 
   const expiresAt = Date.parse(String(boundQuote.expires_at ?? ''));
   const isExpired = Number.isFinite(expiresAt) && expiresAt <= Date.now();
+  // Booking rejects every charge awaiting reconciliation, so never offer it.
+  if (latestCharge?.status === 'needs_reconciliation') {
+    return NextResponse.json(
+      {
+        error: 'This shipment booking already requires reconciliation.',
+        code: 'MERCHANT_WALLET_BOOKING_NOT_RETRYABLE',
+      },
+      { status: 409 }
+    );
+  }
   const hasActiveCharge =
     typeof latestCharge?.status === 'string' &&
     ACTIVE_BOUND_QUOTE_CHARGE_STATUSES.has(latestCharge.status);

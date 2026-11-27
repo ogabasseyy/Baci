@@ -97,4 +97,41 @@ describe('loadBoundAdminWalletGiglQuoteResponse for platform-funded merchants', 
       shortfall: 3500,
     });
   });
+
+  it('bugfix: never offers booking for a charge awaiting reconciliation', async () => {
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          id: 'quote-1',
+          provider: 'GIGL',
+          price: 4500,
+          currency: 'NGN',
+          expires_at: '2999-01-01T00:00:00.000Z',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { status: 'needs_reconciliation', funding_source: 'platform' },
+        error: null,
+      });
+    const limit = vi.fn(() => ({ maybeSingle }));
+    const order = vi.fn(() => ({ limit }));
+    const eq = vi.fn(() => ({ eq, order, maybeSingle }));
+    const supabase = {
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq })) })),
+      rpc: vi.fn(async () => ({ data: 'platform', error: null })),
+    } as unknown as Parameters<typeof loadBoundAdminWalletGiglQuoteResponse>[0];
+
+    const response = await loadBoundAdminWalletGiglQuoteResponse(
+      supabase,
+      'merchant-1',
+      'quote-1'
+    );
+
+    expect(response?.status).toBe(409);
+    await expect(response?.json()).resolves.toMatchObject({
+      code: 'MERCHANT_WALLET_BOOKING_NOT_RETRYABLE',
+    });
+  });
 });

@@ -1,6 +1,9 @@
+import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
+
 export function buildClientHydrationEntrySource(
   entryPath: string,
-  assetsMap: Readonly<Record<string, string>> = {}
+  assetsMap: Readonly<Record<string, string>> = {},
+  routes: ReadonlyArray<{ path: string; view: string }> = []
 ): string {
   return `
 import { CommerceProvider, createCommerceClient } from '@baci/experience-sdk';
@@ -8,6 +11,8 @@ import { createElement } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 
 const ASSETS_MAP = ${JSON.stringify(assetsMap)};
+const DECLARED_ROUTES = ${JSON.stringify(routes)};
+${buildDeclaredRouteMatcherSnippet()}
 const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;
 function resolveSafeInternalPath(p) {
   if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || UNSAFE_PATH_CHARS.test(p)) {
@@ -16,11 +21,12 @@ function resolveSafeInternalPath(p) {
   try {
     const resolved = new URL(p, window.location.origin);
     if (resolved.origin !== window.location.origin) return null;
+    if (resolved.pathname === '/_baci' || resolved.pathname.startsWith('/_baci/')) return null;
     const normalized = resolved.pathname + resolved.search + resolved.hash;
     if (!normalized.startsWith('/') || normalized.startsWith('//') || UNSAFE_PATH_CHARS.test(normalized)) {
       return null;
     }
-    return normalized;
+    return { normalized, pathname: resolved.pathname };
   } catch {
     return null;
   }
@@ -52,6 +58,11 @@ if (rootElement && stateScript?.textContent) {
       const initialProps = JSON.parse(stateScript.textContent);
       const runtimeAssets = { ...ASSETS_MAP };
       seedInitialCatalogAssets(runtimeAssets, initialProps);
+      let routeEpoch = 1;
+      let currentRevision =
+        typeof initialProps.publicDataRevision === 'string' && initialProps.publicDataRevision.length > 0
+          ? initialProps.publicDataRevision
+          : '0';
       const commerce = createCommerceClient(async (method, args) => {
         if (
           method === 'catalog.collection' ||
@@ -82,6 +93,9 @@ if (rootElement && stateScript?.textContent) {
                   if (typeof aurl === 'string') runtimeAssets[aid] = aurl;
                 }
               }
+              if (payload.status === 'ok' && payload.value && typeof payload.value.revision === 'string') {
+                currentRevision = payload.value.revision;
+              }
               const { assets: _extraAssets, ...bridgeResult } = payload;
               return bridgeResult;
             }
@@ -93,27 +107,45 @@ if (rootElement && stateScript?.textContent) {
           }
         }
         if (method === 'navigation.go') {
-          const safePath = resolveSafeInternalPath(args.path);
-          if (!safePath) {
+          const target = resolveSafeInternalPath(args?.path);
+          if (!target) {
             return { status: 'error', code: 'INVALID_REQUEST', message: 'Navigation path must be a same-origin relative path' };
           }
-          window.location.assign(safePath);
-          return {
-            status: 'ok',
-            value: {
-              epoch: 1,
-              routeId: String(initialProps.view || 'route'),
-              params: {},
-              canonicalPath: safePath,
-              publicDataRevision: '0',
-            },
+          if (RANKED_DECLARED_ROUTES.length > 0) {
+            const matched = matchDeclaredRoute(target.pathname);
+            if (!matched) {
+              return { status: 'error', code: 'NOT_FOUND', message: 'Destination route is not declared' };
+            }
+            if (matched.view === 'bad_request') {
+              return { status: 'error', code: 'INVALID_REQUEST', message: 'Malformed navigation path segment' };
+            }
+            const nextState = {
+              epoch: ++routeEpoch,
+              routeId: matched.view,
+              params: { ...matched.params },
+              canonicalPath: target.normalized,
+              publicDataRevision: currentRevision,
+            };
+            window.location.assign(target.normalized);
+            return { status: 'ok', value: nextState };
+          }
+          const fallbackId = target.pathname === '/' ? 'home' : target.pathname.split('/').filter(Boolean)[0] || 'route';
+          const nextState = {
+            epoch: ++routeEpoch,
+            routeId: fallbackId,
+            params: {},
+            canonicalPath: target.normalized,
+            publicDataRevision: currentRevision,
           };
+          window.location.assign(target.normalized);
+          return { status: 'ok', value: nextState };
         }
         if (method === 'navigation.open') {
-          const safePath = resolveSafeInternalPath(args.path);
-          if (!safePath) {
+          const target = resolveSafeInternalPath(args?.path);
+          if (!target) {
             return { status: 'error', code: 'INVALID_REQUEST', message: 'Navigation path must be a same-origin relative path' };
           }
+          const safePath = target.normalized;
           if (window.parent && window.parent !== window) {
             window.parent.postMessage({ type: 'baci:navigation.open', path: safePath }, 'https://usebaci.com');
             return { status: 'ok', value: { presented: true } };
@@ -128,12 +160,8 @@ if (rootElement && stateScript?.textContent) {
           }
           return { status: 'ok', value: { presented: false } };
         }
-        if (method === 'checkout.prepare') {
-          return { status: 'error', code: 'CART_ENROLLMENT_REQUIRED', message: 'Cart session enrollment required before checkout preparation' };
-        }
-        if (method === 'checkout.open') {
-          window.location.assign(\`https://\${initialProps.merchantSlug}.usebaci.com/cart\`);
-          return { status: 'ok', value: { presented: true } };
+        if (method === 'checkout.prepare' || method === 'checkout.open') {
+          return { status: 'error', code: 'CART_ENROLLMENT_REQUIRED', message: 'Cart session enrollment required before checkout' };
         }
         return { status: 'error', code: 'CART_ENROLLMENT_REQUIRED', message: 'Commerce transport requires active storefront session' };
       });

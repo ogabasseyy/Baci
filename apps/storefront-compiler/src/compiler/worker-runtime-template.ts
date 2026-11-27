@@ -1,6 +1,7 @@
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import { buildClientHydrationEntrySource } from './client-hydration-template';
 import { buildContentSecurityPolicyHeader } from './csp-header';
+import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
 import { buildWorkerCatalogBridgeSnippet } from './worker-catalog-bridge';
 
 export { buildClientHydrationEntrySource, buildContentSecurityPolicyHeader };
@@ -62,32 +63,12 @@ function canonicalizeSearchParams(inputParams) {
   return canonical;
 }
 
-function safeDecodeSegment(raw) {
-  try { return decodeURIComponent(raw); } catch { return null; }
-}
+${buildDeclaredRouteMatcherSnippet()}
 
-function matchDeclaredRoute(pathname) {
-  const reqSegs = pathname.split('/').filter(Boolean);
-  for (const route of DECLARED_ROUTES) {
-    const patSegs = route.path.split('/').filter(Boolean);
-    if (patSegs.length !== reqSegs.length) continue;
-    const params = Object.create(null);
-    let matched = true;
-    for (let i = 0; i < patSegs.length; i++) {
-      const pat = patSegs[i];
-      const seg = reqSegs[i];
-      if (pat.startsWith(':') || (pat.startsWith('[') && pat.endsWith(']'))) {
-        const decoded = safeDecodeSegment(seg);
-        if (decoded === null) return { view: 'bad_request', params: {} };
-        params[pat.startsWith(':') ? pat.slice(1) : pat.slice(1, -1)] = decoded;
-      } else if (pat !== seg) {
-        matched = false;
-        break;
-      }
-    }
-    if (matched) return { view: route.view, params };
-  }
-  return null;
+function formatUpstreamRevision(data) {
+  const g = data?.generation;
+  const a = data?.availabilityGeneration;
+  return g != null && a != null ? \`\${g}:\${a}\` : g != null || a != null ? String(g ?? a) : '0';
 }
 
 const CATALOG_FETCH_TIMEOUT_MS = 2500;
@@ -136,6 +117,7 @@ export default {
     let products = [];
     let facets = EMPTY_FACETS;
     let productDetail = null;
+    let publicDataRevision = '0';
 
     if (!matchedRoute) {
       status = 404;
@@ -150,6 +132,7 @@ export default {
         title = upstream.data.title || 'Featured Devices';
         products = upstream.data.products || [];
         facets = upstream.data.facets || EMPTY_FACETS;
+        publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     } else if (matchedRoute.view === 'search') {
       const canonical = canonicalizeSearchParams(url.searchParams);
@@ -165,6 +148,7 @@ export default {
         title = upstream.data.title || 'Search Catalog';
         products = upstream.data.products || [];
         facets = upstream.data.facets || EMPTY_FACETS;
+        publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     } else if (matchedRoute.view === 'cart') {
       title = 'Your Cart';
@@ -191,7 +175,7 @@ export default {
       } else if (!upstream.data.categoryExists) {
         status = 404; view = 'not_found'; title = 'Category Not Found';
       } else {
-        title = upstream.data.title || categoryParam; products = upstream.data.products || []; facets = upstream.data.facets || EMPTY_FACETS;
+        title = upstream.data.title || categoryParam; products = upstream.data.products || []; facets = upstream.data.facets || EMPTY_FACETS; publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     } else if (matchedRoute.view === 'product') {
       const paramEntries = Object.entries(matchedRoute.params);
@@ -223,11 +207,12 @@ export default {
       } else {
         productDetail = upstream.data.product;
         title = upstream.data.product.name;
+        publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     }
 
     const renderProps = {
-      view, pathname: url.pathname, merchantSlug, title, products, facets, productDetail,
+      view, pathname: url.pathname, merchantSlug, title, products, facets, productDetail, publicDataRevision,
     };
 
     const renderStart = performance.now();
@@ -250,8 +235,15 @@ export default {
     }
     const renderMs = performance.now() - renderStart;
 
+    const pdInStock = productDetail
+      ? typeof productDetail.available === 'boolean'
+        ? productDetail.available
+        : typeof productDetail.inStock === 'boolean'
+          ? productDetail.inStock
+          : Array.isArray(productDetail.variants) && productDetail.variants.some((v) => (typeof v.available === 'boolean' ? v.available : v.inStock === true))
+      : false;
     const jsonLd = status === 200 && view === 'product' && productDetail
-      ? { '@context': 'https://schema.org', '@type': 'Product', name: productDetail.name, brand: { '@type': 'Brand', name: productDetail.brand }, offers: { '@type': 'Offer', priceCurrency: 'NGN', price: productDetail.priceNgn, availability: productDetail.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } }
+      ? { '@context': 'https://schema.org', '@type': 'Product', name: productDetail.name, brand: { '@type': 'Brand', name: productDetail.brand }, offers: { '@type': 'Offer', priceCurrency: 'NGN', price: productDetail.priceNgn ?? productDetail.price, availability: pdInStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } }
       : { '@context': 'https://schema.org', '@type': view === 'collection' ? 'CollectionPage' : 'WebSite', name: title, url: url.origin + url.pathname };
     const robotsMeta = status !== 200 ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow" />';
     const hydrationBootstrap = status >= 500 ? '' : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;

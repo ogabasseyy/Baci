@@ -273,7 +273,7 @@ export function scanManifestSourceSafety(
         ) {
           fail(
             'DYNAMIC_CODE_EVAL',
-            `Direct browser capability or navigation via "${node.text}" is forbidden; use @baci/experience-sdk`
+            `Direct browser navigation or capability via "${node.text}" is forbidden; use @baci/experience-sdk`
           );
         } else if (
           SENSITIVE_GLOBAL_ROOTS.has(node.text) &&

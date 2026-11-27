@@ -132,7 +132,11 @@ export async function compileStorefrontWorker(
   const clientEntryName = '__baci_client_entry__.tsx';
   clientVirtualFiles.set(
     clientEntryName,
-    buildClientHydrationEntrySource(PREBUNDLE_VIRTUAL_ENTRY, assetsMap)
+    buildClientHydrationEntrySource(
+      PREBUNDLE_VIRTUAL_ENTRY,
+      assetsMap,
+      manifest.routes
+    )
   );
 
   let clientBuild: Awaited<ReturnType<typeof build>>;

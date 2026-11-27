@@ -8,6 +8,12 @@ function isNonEmptyStr(v) {
   return typeof v === 'string' && v.trim().length > 0;
 }
 
+function isValidAvailabilityFields(obj, requireExplicit) {
+  if (obj.available !== undefined && typeof obj.available !== 'boolean') return false;
+  if (obj.inStock !== undefined && typeof obj.inStock !== 'boolean') return false;
+  return !requireExplicit || typeof obj.available === 'boolean' || typeof obj.inStock === 'boolean';
+}
+
 function isValidCatalogVariantRecord(v) {
   return (
     v !== null &&
@@ -15,7 +21,8 @@ function isValidCatalogVariantRecord(v) {
     !Array.isArray(v) &&
     isNonEmptyStr(v.id) &&
     isNonEmptyStr(v.label) &&
-    (isFiniteNumber(v.priceNgn) || isFiniteNumber(v.price))
+    (isFiniteNumber(v.priceNgn) || isFiniteNumber(v.price)) &&
+    isValidAvailabilityFields(v, true)
   );
 }
 
@@ -26,6 +33,9 @@ function isValidCatalogProductRecord(p) {
   }
   if (!isFiniteNumber(p.priceNgn) && !isFiniteNumber(p.price)) return false;
   if (!Array.isArray(p.variants) || !p.variants.every(isValidCatalogVariantRecord)) {
+    return false;
+  }
+  if (!isValidAvailabilityFields(p, false)) {
     return false;
   }
   if ((p.has_variants === true || p.requiresVariant === true) && p.variants.length === 0) {

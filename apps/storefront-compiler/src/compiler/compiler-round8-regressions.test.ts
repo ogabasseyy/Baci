@@ -153,8 +153,8 @@ describe('Round-8 Codex DOM attribute sinks, navigation safety/shapes, CSS comme
     expect(validGo).toEqual({
       status: 'ok',
       value: {
-        epoch: 1,
-        routeId: 'home',
+        epoch: 2,
+        routeId: 'smartphones',
         params: {},
         canonicalPath: '/smartphones?brand=Apple',
         publicDataRevision: '0',
@@ -179,8 +179,11 @@ describe('Round-8 Codex DOM attribute sinks, navigation safety/shapes, CSS comme
     expect(postedMessages).toHaveLength(1);
 
     const checkoutOpen = await capturedTransport('checkout.open', {});
-    expect(checkoutOpen).toEqual({ status: 'ok', value: { presented: true } });
-    expect(assignedUrls.at(-1)).toBe('https://ogabassey.usebaci.com/cart');
+    expect(checkoutOpen).toMatchObject({
+      status: 'error',
+      code: 'CART_ENROLLMENT_REQUIRED',
+    });
+    expect(assignedUrls).toEqual(['/smartphones?brand=Apple']);
   });
 
   it('ignores commented @import rules in CSS graph while preserving compound selectors and escaped line continuations', async () => {

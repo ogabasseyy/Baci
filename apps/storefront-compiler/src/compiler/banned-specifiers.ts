@@ -109,6 +109,36 @@ export const FORBIDDEN_BROWSER_CAPABILITY_GLOBALS: ReadonlySet<string> =
       .split('|')
   );
 
+export const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
+  [
+    'dangerouslysetinnerhtml|__html|$$typeof|innerhtml|outerhtml|insertadjacenthtml',
+    'srcdoc|createcontextualfragment|parsefromstring|setattribute|setattributens',
+    'setattributenode|setattributenodens|createattribute|createattributens',
+    'setnameditem|setnameditemns|getattributenode|getattributenodens|execcommand',
+    'sethtmlunsafe|parsehtmlunsafe|sethtml|createhtml|createscript|createscripturl',
+    'ownerdocument|contentdocument|contentwindow|defaultview|preinit|preinitmodule',
+    'preload|preloadmodule|prefetchdns|preconnect|requestsubmit|dispatchevent',
+    'implementation|createdocument|createhtmldocument|createdocumenttype',
+    'createdocumentfragment|createrange|importnode|adoptnode|clonenode',
+    'attachshadow|shadowroot|appendchild|insertbefore|replacechild|replacechildren',
+    'insertadjacentelement|insertadjacenttext|prepend|replacewith',
+    'csstext|setproperty|insertrule|addrule|replacesync|baseval|rellist|ping',
+  ]
+    .join('|')
+    .split('|')
+);
+
+export const FORBIDDEN_DOM_MUTATION_MEMBERS: ReadonlySet<string> = new Set(
+  [
+    'href|xlinkHref|action|formAction|target|formTarget|method|formMethod',
+    'enctype|formEnctype|rel|download|referrerPolicy',
+    'protocol|host|hostname|port|pathname|search|hash|username|password',
+    'src|srcset|poster|data|cite|style',
+  ]
+    .join('|')
+    .split('|')
+);
+
 export const BENIGN_OBJECT_DATA_KEYS: ReadonlySet<string> = new Set([
   'assign',
   'click',

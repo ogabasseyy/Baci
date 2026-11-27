@@ -4,10 +4,12 @@ import {
   FORBIDDEN_BROWSER_CAPABILITY_GLOBALS,
   FORBIDDEN_BROWSER_NAV_GLOBALS,
   FORBIDDEN_STORAGE_MEMBERS,
+  LOWERCASE_HTML_SINK_NAMES,
   SAFE_NAVIGATOR_MEMBERS,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
 import { resolveStaticString } from './const-string-fold';
+import { isForbiddenDomPropertyMutation } from './dom-mutation-guard';
 import { hasLocalLexicalBinding } from './jsx-tag-safety';
 
 export { hasLocalLexicalBinding, resolveStaticString };
@@ -22,24 +24,6 @@ export interface SourceSafetyViolation {
     | 'PROHIBITED_RUNTIME_IMPORT';
   detail: string;
 }
-
-const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
-  [
-    'dangerouslysetinnerhtml|__html|$$typeof|innerhtml|outerhtml|insertadjacenthtml',
-    'srcdoc|createcontextualfragment|parsefromstring|setattribute|setattributens',
-    'setattributenode|setattributenodens|createattribute|createattributens',
-    'setnameditem|setnameditemns|getattributenode|getattributenodens|execcommand',
-    'sethtmlunsafe|parsehtmlunsafe|sethtml|createhtml|createscript|createscripturl',
-    'ownerdocument|contentdocument|contentwindow|defaultview|preinit|preinitmodule',
-    'preload|preloadmodule|prefetchdns|preconnect|requestsubmit|dispatchevent',
-    'implementation|createdocument|createhtmldocument|createdocumenttype',
-    'createdocumentfragment|createrange|importnode|adoptnode|clonenode',
-    'attachshadow|shadowroot|appendchild|insertbefore|replacechild|replacechildren',
-    'insertadjacentelement|insertadjacenttext|prepend|replacewith',
-  ]
-    .join('|')
-    .split('|')
-);
 
 function isDocumentReceiver(expr: ts.Expression): boolean {
   if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
@@ -161,6 +145,13 @@ export function classifyMemberName(
     push(
       'DYNAMIC_CODE_EVAL',
       `Direct browser navigation via "${memberName}" is forbidden; use @baci/experience-sdk navigation`
+    );
+  } else if (
+    isForbiddenDomPropertyMutation(memberName, receiver, memberAccessNode)
+  ) {
+    push(
+      'DYNAMIC_CODE_EVAL',
+      `Direct browser navigation or DOM resource mutation via "${memberName}" is forbidden; use @baci/experience-sdk`
     );
   } else if (memberName === 'click' || memberName === 'submit') {
     push(

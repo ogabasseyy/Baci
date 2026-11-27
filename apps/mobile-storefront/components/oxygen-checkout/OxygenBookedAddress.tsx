@@ -17,6 +17,7 @@ export function OxygenBookedAddress({
   snapshot,
   client,
   proof: prepared,
+  checkoutAddress,
   busy,
   onExecute,
   onRefresh,
@@ -24,6 +25,10 @@ export function OxygenBookedAddress({
   snapshot: OxygenRuntimeSnapshot;
   client: OxygenClient;
   proof?: OxygenTransientFile;
+  checkoutAddress?: {
+    kind: 'pickup' | 'delivery';
+    fields: OxygenFields;
+  } | null;
   busy: boolean;
   onExecute: (
     command: OxygenRuntimeAction,
@@ -39,7 +44,16 @@ export function OxygenBookedAddress({
   const [confirmed, setConfirmed] = useState(false);
   const [recovered, setRecovered] = useState(false);
   const colors = useOxygenColors();
-  const proofScope = JSON.stringify([snapshot.workflowId, fields]);
+  // Scope proof to workflow and material address fields so optional landmark
+  // edits preserve the selected bill while street/location changes require a fresh match.
+  const proofScope = JSON.stringify([
+    snapshot.workflowId,
+    fields.home_state ?? '',
+    fields.home_lga ?? '',
+    fields.home_city ?? '',
+    fields.home_street ?? '',
+    fields.home_house_number ?? '',
+  ]);
   const picked = useOxygenProof(proofScope);
   useEffect(() => {
     if (loadFailed) return;
@@ -81,19 +95,40 @@ export function OxygenBookedAddress({
     landmark: fields.home_landmark ?? '',
     house_number: fields.home_house_number ?? '',
   };
-  const complete = Object.values(address).every((v) => v.trim());
+  const complete = [
+    address.state,
+    address.lga,
+    address.city,
+    address.street,
+    address.house_number,
+  ].every((v) => v.trim());
   const file = picked.proof ?? (!edit ? prepared : undefined);
+  const addressDone = snapshot.state.kyc?.address_status === 'DONE';
   const waiting =
     snapshot.state.kyc?.address_status === 'PROCESSING' ||
     snapshot.pending?.action === 'submit_address';
   async function submit() {
-    if (!file || !complete || (requiresConfirmation && !confirmed)) return;
+    if (
+      addressDone ||
+      !file ||
+      !complete ||
+      (requiresConfirmation && !confirmed)
+    )
+      return;
     await onExecute({ action: 'submit_address', ...address }, file);
   }
   return (
     <View style={{ gap: 12 }}>
       <OxygenAddressReview
-        status={waiting ? 'reviewing' : file ? 'ready' : 'missing_proof'}
+        status={
+          addressDone
+            ? 'received'
+            : waiting
+              ? 'reviewing'
+              : file
+                ? 'ready'
+                : 'missing_proof'
+        }
         busy={busy || !loaded}
         showRefresh={loaded && !snapshot.pending}
         showSelectProof={false}
@@ -137,11 +172,12 @@ export function OxygenBookedAddress({
           />
         </>
       ) : null}
-      {!waiting && loaded ? (
+      {!waiting && !addressDone && loaded ? (
         <>
           {!complete || edit || recovered ? (
             <OxygenHomeAddress
               fields={fields}
+              checkoutAddress={checkoutAddress}
               onChange={(patch) => {
                 setEdit(true);
                 setConfirmed(false);

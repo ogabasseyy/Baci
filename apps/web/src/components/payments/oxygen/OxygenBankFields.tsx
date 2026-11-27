@@ -28,6 +28,7 @@ export function OxygenBankFields({
   active = true,
   conversationTurn,
   onVerifiedChange,
+  onResolvingChange,
 }: {
   workflowId?: string;
   busy: boolean;
@@ -35,6 +36,7 @@ export function OxygenBankFields({
   conversationTurn?: number;
   defaults?: { bank_code?: string; account_number?: string };
   onVerifiedChange?: (verified: boolean) => void;
+  onResolvingChange?: (resolving: boolean) => void;
 }) {
   const bankId = useId();
   const [banks, setBanks] = useState<{ name: string; code: string }[]>([]);
@@ -118,9 +120,24 @@ export function OxygenBankFields({
           'Unable to verify this account. Check the bank and account number.'
         );
     } finally {
-      if (generation.current === token) setResolving(false);
+      if (generation.current === token) {
+        setResolving(false);
+      }
     }
   }
+  const awaitingVerification = Boolean(
+    active &&
+      workflowId &&
+      !busy &&
+      bank &&
+      /^\d{10}$/.test(number) &&
+      !name &&
+      !error &&
+      (loading || resolving || banks.some((item) => item.code === bank))
+  );
+  useEffect(() => {
+    onResolvingChange?.(awaitingVerification);
+  }, [awaitingVerification, onResolvingChange]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: resolve reads only the selected account; result state must not restart the lookup.
   useEffect(() => {
     if (

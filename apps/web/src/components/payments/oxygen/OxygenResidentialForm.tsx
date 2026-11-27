@@ -48,6 +48,12 @@ export function OxygenResidentialForm({
           return;
         }
         const values = new FormData(event.currentTarget);
+        if (values.get('home_search_pending') === '1') {
+          setError(
+            'Select an address from search or enter your address manually.'
+          );
+          return;
+        }
         const address = residentialAddress(
           Object.fromEntries(
             residentialKeys.map((key) => [
@@ -56,6 +62,16 @@ export function OxygenResidentialForm({
             ])
           )
         );
+        if (
+          !address.street.trim() ||
+          !address.city.trim() ||
+          !address.state.trim() ||
+          !address.lga.trim() ||
+          !address.house_number.trim()
+        ) {
+          setError('Select or enter your full home address before continuing.');
+          return;
+        }
         setEnteredAddress(address);
         lock.current = true;
         setSending(true);

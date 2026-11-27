@@ -30,8 +30,6 @@ it('allows local step navigation while an encrypted draft save is pending', () =
       active
       consent={false}
       onConsent={jest.fn()}
-      proof={null}
-      onPickProof={jest.fn()}
       onStepChange={next}
       onSubmit={jest.fn()}
       saving
@@ -52,8 +50,6 @@ it('uses compact spacing on identity while keeping the form scrollable', () => {
       active
       consent={false}
       onConsent={jest.fn()}
-      proof={null}
-      onPickProof={jest.fn()}
       onStepChange={jest.fn()}
       onSubmit={jest.fn()}
     />
@@ -64,32 +60,33 @@ it('uses compact spacing on identity while keeping the form scrollable', () => {
 });
 
 it('allows the payday dropdown to consume nested scrolling within the form', () => {
+  const onSubmit = jest.fn();
   render(
     <OxygenApplicationSteps
       step={2}
       fields={{}}
-      banks={[]}
+      banks={[{ code: '058', name: 'GT Bank' }]}
       onChange={jest.fn()}
       onResolveAccount={jest.fn()}
       active
       consent={false}
       onConsent={jest.fn()}
-      proof={null}
-      onPickProof={jest.fn()}
       onStepChange={jest.fn()}
-      onSubmit={jest.fn()}
+      onSubmit={onSubmit}
     />
   );
   expect(
     screen.UNSAFE_getByType(AppKeyboardAwareScrollView).props
       .nestedScrollEnabled
   ).toBe(true);
+  const submit = screen.getByRole('button', { name: 'Continue verification' });
+  expect(submit).toBeEnabled();
+  fireEvent.press(submit);
+  expect(onSubmit).toHaveBeenCalledTimes(1);
   const buttons = screen.getAllByRole('button');
-  expect(
-    buttons.indexOf(
-      screen.getByRole('button', { name: 'Continue verification' })
-    )
-  ).toBeLessThan(buttons.indexOf(screen.getByRole('button', { name: 'Back' })));
+  expect(buttons.indexOf(submit)).toBeLessThan(
+    buttons.indexOf(screen.getByRole('button', { name: 'Back' }))
+  );
 });
 
 it.each([
@@ -108,8 +105,6 @@ it.each([
       active
       consent={false}
       onConsent={jest.fn()}
-      proof={null}
-      onPickProof={jest.fn()}
       onStepChange={jest.fn()}
       onSubmit={jest.fn()}
     />

@@ -1,26 +1,41 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createOgabasseyStorefrontManifest } from '../benchmark/ogabassey-catalog-fixture';
+import {
+  createOgabasseyStorefrontManifest,
+  generateOgabasseyBackingCatalog,
+} from '../benchmark/ogabassey-catalog-fixture';
+import { SimulatedPostgrestOutboundPlane } from '../benchmark/outbound-data-plane';
 import {
   compileStorefrontWorker,
   StorefrontCompilerError,
 } from './compile-storefront';
 
-describe('Round-2 Codex & Muse compiler hardening regressions', () => {
-  it('computes sourceDigest over the full canonicalized manifest while remaining invariant to ordering', async () => {
+describe('Round-2 & Round-3 Codex & Muse compiler hardening regressions', () => {
+  it('computes sourceDigest over the full manifest, preserving behavioral route order and deterministic CSS cascade', async () => {
     const base = createOgabasseyStorefrontManifest();
+    base.files.push(
+      { path: 'src/styles/z-theme.css', content: '.tone { color: #111827; }' },
+      { path: 'src/styles/a-theme.css', content: '.tone { color: #2563eb; }' }
+    );
     const first = await compileStorefrontWorker(base);
 
-    const reordered = structuredClone(base);
-    reordered.files = [...reordered.files].reverse();
-    reordered.routes = [...reordered.routes].reverse();
-    reordered.packages = [...reordered.packages].reverse();
-    const reorderedCompiled = await compileStorefrontWorker(reordered);
+    const reorderedFilesAndPkgs = structuredClone(base);
+    reorderedFilesAndPkgs.files = [...reorderedFilesAndPkgs.files].reverse();
+    reorderedFilesAndPkgs.packages = [
+      ...reorderedFilesAndPkgs.packages,
+    ].reverse();
+    const reorderedCompiled = await compileStorefrontWorker(
+      reorderedFilesAndPkgs
+    );
     expect(reorderedCompiled.sourceDigest).toBe(first.sourceDigest);
+    expect(reorderedCompiled.cssCode).toBe(first.cssCode);
 
-    const changedRoutes = structuredClone(base);
-    changedRoutes.routes.push({ path: '/about', view: 'editorial' });
+    // Reordering routes changes match precedence (/search vs /:category) and MUST change sourceDigest.
+    const reversedRoutes = structuredClone(base);
+    reversedRoutes.routes = [...reversedRoutes.routes].reverse();
     expect(
-      (await compileStorefrontWorker(changedRoutes)).sourceDigest
+      (await compileStorefrontWorker(reversedRoutes)).sourceDigest
     ).not.toBe(first.sourceDigest);
 
     const changedTheme = structuredClone(base);
@@ -111,5 +126,58 @@ describe('Round-2 Codex & Muse compiler hardening regressions', () => {
     await expect(compileStorefrontWorker(mutualCycle)).rejects.toMatchObject({
       code: 'INVALID_MANIFEST',
     });
+  });
+
+  it('blocks dangerous class fields, non-static JSX/createElement spread props, and undeclared catalog paths', async () => {
+    for (const badCode of [
+      `class Payload { dangerouslySetInnerHTML = { __html: '<b>xss</b>' }; }
+       export default function X() { return <div {...new Payload()} />; }`,
+      `import { createElement } from 'react';
+       export default function X() { return createElement('div', JSON.parse('{}')); }`,
+    ]) {
+      const m = createOgabasseyStorefrontManifest();
+      m.files = [{ path: 'src/StorefrontApp.tsx', content: badCode }];
+      await expect(compileStorefrontWorker(m)).rejects.toBeInstanceOf(
+        StorefrontCompilerError
+      );
+    }
+
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const plane = new SimulatedPostgrestOutboundPlane({
+      merchantId,
+      products: generateOgabasseyBackingCatalog(4),
+    });
+    const undeclaredPathRes = await plane.handleOutboundFetch(
+      new Request('https://catalog.baci.internal/v1/undeclared?q=phone'),
+      { merchantId, merchantSlug: 'ogabassey' },
+      'split-availability'
+    );
+    expect(undeclaredPathRes.status).toBe(403);
+    const postMethodRes = await plane.handleOutboundFetch(
+      new Request('https://catalog.baci.internal/v1/search?q=phone', {
+        method: 'POST',
+      }),
+      { merchantId, merchantSlug: 'ogabassey' },
+      'split-availability'
+    );
+    expect(postMethodRes.status).toBe(403);
+    expect(plane.telemetry.originCatalogRpcCalls).toBe(0);
+
+    // Verify package.json specifiers match pnpm-lock.yaml importer.
+    const pkgRoot = path.resolve(import.meta.dirname, '../..');
+    const pkgJson = JSON.parse(
+      readFileSync(path.join(pkgRoot, 'package.json'), 'utf8')
+    ) as {
+      dependencies: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    const lockfile = readFileSync(
+      path.resolve(pkgRoot, '../../pnpm-lock.yaml'),
+      'utf8'
+    );
+    expect(lockfile).toContain(`specifier: ${pkgJson.dependencies.esbuild}`);
+    expect(lockfile).toContain(
+      `specifier: ${pkgJson.devDependencies['@types/react']}`
+    );
   });
 });

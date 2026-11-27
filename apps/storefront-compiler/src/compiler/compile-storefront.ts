@@ -214,9 +214,7 @@ export async function compileStorefrontWorker(
     format: manifest.format,
     mode: manifest.mode,
     entry: manifest.entry,
-    routes: [...manifest.routes].sort((a, b) =>
-      a.path < b.path ? -1 : a.path > b.path ? 1 : 0
-    ),
+    routes: manifest.routes.map((r) => ({ path: r.path, view: r.view })),
     packages: [...manifest.packages].sort((a, b) =>
       a.name < b.name ? -1 : a.name > b.name ? 1 : 0
     ),

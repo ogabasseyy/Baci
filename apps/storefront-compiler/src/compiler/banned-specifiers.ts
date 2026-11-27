@@ -59,6 +59,9 @@ export const DYNAMIC_CODE_NAMES: ReadonlySet<string> = new Set([
   'eval',
   'Function',
   'constructor',
+  'fromEntries',
+  'defineProperty',
+  'defineProperties',
 ]);
 
 export function isProhibitedImportSpecifier(specifier: string): boolean {

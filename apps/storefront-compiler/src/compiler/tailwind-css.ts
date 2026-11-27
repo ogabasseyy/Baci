@@ -165,6 +165,7 @@ export async function compileStorefrontTailwindCss(
 
   const virtualImports = Array.from(virtualCssByPath.keys())
     .filter((cssPath) => !childImportedPaths.has(cssPath))
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .map((cssPath) => `@import "./${cssPath}";`)
     .join('\n');
   const rootCss = `@import "tailwindcss";\n${virtualImports}`;

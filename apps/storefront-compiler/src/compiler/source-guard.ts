@@ -138,8 +138,54 @@ export function scanManifestSourceSafety(
         );
       }
 
+      if (ts.isJsxSpreadAttribute(node)) {
+        const isSafeStaticLiteral =
+          ts.isObjectLiteralExpression(node.expression) &&
+          node.expression.properties.every(
+            (p) =>
+              ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)
+          );
+        if (!isSafeStaticLiteral) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DANGEROUS_INNER_HTML',
+            detail:
+              'Non-static JSX spread attributes are forbidden; pass explicit props',
+          });
+        }
+      }
+
+      if (
+        ts.isCallExpression(node) &&
+        ((ts.isIdentifier(node.expression) &&
+          node.expression.text === 'createElement') ||
+          (ts.isPropertyAccessExpression(node.expression) &&
+            node.expression.name.text === 'createElement')) &&
+        node.arguments.length >= 2
+      ) {
+        const propsArg = node.arguments[1];
+        const isNullish =
+          propsArg.kind === ts.SyntaxKind.NullKeyword ||
+          (ts.isIdentifier(propsArg) && propsArg.text === 'undefined');
+        const isStaticPropsObj =
+          ts.isObjectLiteralExpression(propsArg) &&
+          propsArg.properties.every(
+            (p) =>
+              ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)
+          );
+        if (!isNullish && !isStaticPropsObj) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DANGEROUS_INNER_HTML',
+            detail:
+              'createElement props must be null, undefined, or a static object literal',
+          });
+        }
+      }
+
       if (
         ts.isPropertyAssignment(node) ||
+        ts.isPropertyDeclaration(node) ||
         ts.isMethodDeclaration(node) ||
         ts.isGetAccessorDeclaration(node) ||
         ts.isSetAccessorDeclaration(node)

@@ -158,11 +158,15 @@ export class SimulatedPostgrestOutboundPlane {
     strategy: CacheKeyStrategy
   ): Promise<Response> {
     const url = new URL(request.url);
-    if (url.hostname !== 'catalog.baci.internal') {
-      return new Response(JSON.stringify({ error: 'Egress host denied' }), {
-        status: 403,
-        headers: { 'content-type': 'application/json' },
-      });
+    const isApprovedCatalogEndpoint =
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      url.hostname === 'catalog.baci.internal' &&
+      (url.pathname === '/v1/search' || url.pathname === '/v1/product');
+    if (!isApprovedCatalogEndpoint) {
+      return new Response(
+        JSON.stringify({ error: 'Egress endpoint or method denied' }),
+        { status: 403, headers: { 'content-type': 'application/json' } }
+      );
     }
 
     const untrustedMerchantHint =

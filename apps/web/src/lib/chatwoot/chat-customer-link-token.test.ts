@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { createPublicKey, generateKeyPairSync } from 'node:crypto';
 import { decodeJwt, SignJWT } from 'jose';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -23,6 +23,57 @@ function env(): NodeJS.ProcessEnv {
     EKAETTE_CHATWOOT_CHALLENGE_ISSUER: 'https://app.example.test',
   };
 }
+
+describe('chat customer link verification with the optional public key', () => {
+  const publicKeyOf = (source: NodeJS.ProcessEnv): string =>
+    createPublicKey(source.EKAETTE_CHATWOOT_CHALLENGE_PRIVATE_KEY as string)
+      .export({ format: 'pem', type: 'spki' })
+      .toString();
+  const issue = (source: NodeJS.ProcessEnv) =>
+    issueChatCustomerLinkToken(
+      { merchantId: MERCHANT, customerId: CUSTOMER },
+      { env: source }
+    );
+
+  it('verifies an issued token with no private key in the environment', async () => {
+    const signing = env();
+    const token = await issue(signing);
+    const verify = await createChatCustomerLinkVerifier(MERCHANT, {
+      env: {
+        NODE_ENV: 'test',
+        EKAETTE_CHATWOOT_CHALLENGE_ISSUER: 'https://app.example.test',
+        EKAETTE_CHATWOOT_CHALLENGE_PUBLIC_KEY: publicKeyOf(signing),
+      },
+    });
+
+    await expect(verify?.(token)).resolves.toEqual({
+      merchantId: MERCHANT,
+      customerId: CUSTOMER,
+    });
+  });
+
+  it('refuses a token when the public key belongs to another pair', async () => {
+    const signing = env();
+    const token = await issue(signing);
+    const verify = await createChatCustomerLinkVerifier(MERCHANT, {
+      env: {
+        ...signing,
+        EKAETTE_CHATWOOT_CHALLENGE_PUBLIC_KEY: publicKeyOf(env()),
+      },
+    });
+
+    expect(verify).not.toBeNull();
+    await expect(verify?.(token)).resolves.toBeNull();
+  });
+
+  it('stays off when the public key is malformed instead of using the private key', async () => {
+    await expect(
+      createChatCustomerLinkVerifier(MERCHANT, {
+        env: { ...env(), EKAETTE_CHATWOOT_CHALLENGE_PUBLIC_KEY: 'not-a-key' },
+      })
+    ).resolves.toBeNull();
+  });
+});
 
 describe('chat customer link token lifetime', () => {
   it('bugfix: expires after 30 days, not 90, so a copied note stops working sooner', async () => {

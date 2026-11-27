@@ -57,7 +57,9 @@ describe('useChatwootCustomerLink across page loads', () => {
     expect(cookieMarker()).toBe(true);
 
     // Page load 2: the shopper is a guest now; memory is gone, storage empty.
-    mocks.hint.mockReturnValue('0');
+    // With no session hint (an explicit '0' removes the note regardless), only
+    // the marker cookie can tell this load there is a note to remove.
+    mocks.hint.mockReturnValue(null);
     const second = await freshHook();
     renderHook(() => second('ogabassey', true));
 

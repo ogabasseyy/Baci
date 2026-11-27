@@ -1,5 +1,5 @@
 name: Verify iOS native patch contracts
-description: Run Expo JSI symbol, RuntimeScheduler, and ExpoModulesCore patch contract node tests.
+description: Run Expo JSI symbol, RuntimeScheduler, ExpoModulesCore, and Xcode 27 patch contract node tests.
 
 runs:
   using: composite
@@ -10,3 +10,4 @@ runs:
         .github/scripts/verify-ios-expo-jsi-symbols.test.mjs
         .github/scripts/ios-runtime-scheduler.test.mjs
         .github/scripts/verify-ios-expo-core-patch.test.mjs
+        .github/scripts/verify-ios-xcode27-patches.test.mjs

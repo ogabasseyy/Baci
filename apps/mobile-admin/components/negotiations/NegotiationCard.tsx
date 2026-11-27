@@ -2,6 +2,7 @@ import type { NegotiationCartLine, NegotiationItemInfo } from '@baci/shared';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import { palette } from '@/constants/Colors';
+import { formatCurrency } from '@/lib/utils';
 import { formatCurrency as formatPrice } from '@/utils/format';
 import { formatNegotiationItemMeta } from './format-negotiation-item-meta';
 import { negotiationCardStyles as styles } from './NegotiationCard.styles';
@@ -25,6 +26,8 @@ export interface NegotiationCardRequest {
   current_price: number | null;
   item_info: NegotiationItemInfo | null;
   cart_snapshot: NegotiationCartLine[] | null;
+  customer_name?: string | null;
+  counter_offer?: number | null;
   customer_email: string | null;
   customer_phone: string | null;
   created_at: string;
@@ -54,6 +57,7 @@ interface NegotiationCardProps {
   expanded: boolean;
   item: NegotiationCardRequest;
   onAction: (id: string, status: 'accepted' | 'rejected') => void;
+  onCounterOffer?: (id: string, amount: number) => void;
   onOpenEvidence: (evidenceUrl: string) => void | Promise<void>;
   onOpenExternalUrl: (url: string) => void | Promise<void>;
   onToggleCart: (id: string) => void;
@@ -66,6 +70,7 @@ export function NegotiationCard({
   expanded,
   item,
   onAction,
+  onCounterOffer,
   onOpenEvidence,
   onOpenExternalUrl,
   onToggleCart,
@@ -185,6 +190,22 @@ export function NegotiationCard({
         </Pressable>
       ) : null}
 
+      <Text style={[styles.label, { color: colors.textSecondary }]}>
+        Customer
+      </Text>
+      <Text style={[styles.itemName, { color: colors.text }]}>
+        {item.customer_name || 'Name not available'}
+      </Text>
+      {item.customer_phone ? (
+        <Text style={[styles.contactEmail, { color: colors.textSecondary }]}>
+          {item.customer_phone}
+        </Text>
+      ) : null}
+      {item.status === 'countered' && item.counter_offer != null ? (
+        <Text style={[styles.newPrice, { color: colors.primary }]}>
+          Your counter offer: {formatCurrency(item.counter_offer)}
+        </Text>
+      ) : null}
       <NegotiationContactActions
         colors={colors}
         item={item}
@@ -192,11 +213,13 @@ export function NegotiationCard({
       />
 
       <NegotiationDecisionControls
+        key={item.id}
         actionLoading={actionLoading}
         actionsDisabled={actionsDisabled}
         colors={colors}
         itemId={item.id}
         onAction={onAction}
+        onCounterOffer={onCounterOffer}
         status={item.status}
       />
     </View>

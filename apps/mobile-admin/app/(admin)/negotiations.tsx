@@ -13,6 +13,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { loadNegotiationRequests } from '@/components/negotiations/load-negotiation-requests';
 import {
   NegotiationCard,
   type NegotiationCardRequest,
@@ -34,37 +35,8 @@ type ResolveNegotiationResponse = {
   manualContactAvailable?: boolean;
   notified: boolean;
   reason?: 'no_customer_email' | 'no_delivery_channel';
-  status: 'accepted' | 'rejected';
+  status: 'accepted' | 'rejected' | 'countered';
 };
-
-// Module-scope helpers keep try/throw out of the component body so React
-// Compiler can memoize the screen (try/finally + throw-in-try are bailouts).
-async function loadNegotiationRequests(
-  merchantId: string
-): Promise<NegotiationRequest[]> {
-  // NOTE: `negotiation_requests` has no top-level `current_price` column —
-  // selecting it returns a 400 ("column does not exist") and breaks the whole
-  // screen. The pre-offer price lives in `item_info.current_price` (single-item
-  // offers only); whole-cart "total" offers carry no per-item price. Derive the
-  // display price from item_info so the query stays valid.
-  const { data, error } = await supabase
-    .from('negotiation_requests')
-    .select(
-      'id, customer_id, type, status, offered_price, item_info, cart_snapshot, customer_email, customer_phone, created_at, evidence_url'
-    )
-    .eq('merchant_id', merchantId)
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-
-  return (data ?? []).map((row) => ({
-    ...row,
-    // cart_snapshot is arbitrary client-supplied JSONB; coerce anything that
-    // isn't an array to null so one malformed row can't crash the list on .map.
-    cart_snapshot: Array.isArray(row.cart_snapshot) ? row.cart_snapshot : null,
-    current_price: row.item_info?.current_price ?? null,
-  })) as NegotiationRequest[];
-}
 
 export default function NegotiationsScreen() {
   const isFocused = useIsFocused();
@@ -98,16 +70,18 @@ export default function NegotiationsScreen() {
     mutationFn: ({
       id,
       status,
+      counterOffer,
     }: {
       id: string;
-      status: 'accepted' | 'rejected';
+      status: 'accepted' | 'rejected' | 'countered';
+      counterOffer?: number;
     }) => {
       if (!merchant?.id) throw new Error('Merchant not found');
       return apiClient<ResolveNegotiationResponse>(
         '/api/negotiations/resolve',
         {
           method: 'POST',
-          body: JSON.stringify({ negotiationId: id, status }),
+          body: JSON.stringify({ negotiationId: id, status, counterOffer }),
         }
       );
     },
@@ -117,8 +91,12 @@ export default function NegotiationsScreen() {
         Alert.alert(
           'Customer notified',
           result.channel === 'email'
-            ? 'The decision email was accepted for delivery.'
-            : 'The decision notification was sent.'
+            ? result.status === 'countered'
+              ? 'The counter offer email was accepted for delivery.'
+              : 'The decision email was accepted for delivery.'
+            : result.status === 'countered'
+              ? 'The counter offer notification was sent.'
+              : 'The decision notification was sent.'
         );
       } else {
         Alert.alert(
@@ -219,6 +197,14 @@ export default function NegotiationsScreen() {
         expanded={expandedId === item.id}
         item={item}
         onAction={handleAction}
+        onCounterOffer={(id, counterOffer) => {
+          if (!updateStatusMutation.isPending)
+            updateStatusMutation.mutate({
+              id,
+              status: 'countered',
+              counterOffer,
+            });
+        }}
         onOpenEvidence={openNegotiationEvidence}
         onOpenExternalUrl={openNegotiationExternalUrl}
         onToggleCart={(id) =>

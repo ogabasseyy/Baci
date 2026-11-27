@@ -65,6 +65,13 @@ export async function notifyNegotiationRequest(
   );
 }
 
+function formatCounterAmount(amount: number | null | undefined) {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) {
+    throw new Error('A positive counter offer amount is required');
+  }
+  return formatCurrency(amount);
+}
+
 /**
  * Notify customer of a negotiation response (accepted/rejected).
  *
@@ -73,14 +80,19 @@ export async function notifyNegotiationRequest(
 export function notifyNegotiationResponse(
   userId: string,
   negotiationType: 'single' | 'total',
-  status: 'accepted' | 'rejected',
+  status: 'accepted' | 'rejected' | 'countered',
   negotiationId: string,
   itemName?: string | null,
   offeredPrice?: number | null,
   productSlug?: string | null
 ): Promise<NotificationSendResult> {
   const isAccepted = status === 'accepted';
-  const title = isAccepted ? '✅ Offer Accepted!' : '❌ Offer Declined';
+  const title =
+    status === 'countered'
+      ? '🤝 New Counter Offer'
+      : isAccepted
+        ? '✅ Offer Accepted!'
+        : '❌ Offer Declined';
 
   let body: string;
   if (negotiationType === 'total' || !itemName) {
@@ -96,6 +108,10 @@ export function notifyNegotiationResponse(
       : `Your offer for ${itemName} was declined. Try a new offer or buy at the listed price.`;
   }
 
+  if (status === 'countered') {
+    body = `You received a counter offer of ${formatCounterAmount(offeredPrice)} for ${negotiationType === 'total' ? 'your cart' : (itemName ?? 'your item')}. Contact the store about this price or submit a new offer to keep negotiating.`;
+  }
+
   return notifyCustomer(
     userId,
     title,
@@ -104,6 +120,7 @@ export function notifyNegotiationResponse(
       type: 'negotiation_response',
       negotiation_id: negotiationId,
       status,
+      ...(status === 'countered' ? { counter_offer: offeredPrice } : {}),
       ...(productSlug ? { product_slug: productSlug } : {}),
     },
     'orders'
@@ -118,7 +135,7 @@ interface NotifyGuestNegotiationResponseEmailParams {
   negotiationId: string;
   negotiationType: 'single' | 'total';
   productSlug?: string | null;
-  status: 'accepted' | 'rejected';
+  status: 'accepted' | 'rejected' | 'countered';
 }
 
 export async function notifyGuestNegotiationResponseByEmail({
@@ -134,17 +151,26 @@ export async function notifyGuestNegotiationResponseByEmail({
   const isAccepted = status === 'accepted';
   const formattedPrice =
     acceptedPrice != null ? formatCurrency(acceptedPrice) : null;
-  const subject = isAccepted
-    ? 'Your offer has been accepted'
-    : 'Your offer was declined';
+  const subject =
+    status === 'countered'
+      ? 'You received a counter offer'
+      : isAccepted
+        ? 'Your offer has been accepted'
+        : 'Your offer was declined';
   const itemLabel =
     negotiationType === 'total' || !itemName ? 'your cart offer' : itemName;
-  const decisionText = isAccepted
-    ? `Your offer${formattedPrice ? ` of ${formattedPrice}` : ''} for ${itemLabel} has been accepted.`
-    : `Your offer for ${itemLabel} was declined. You can return to the store to make another offer or buy at the listed price.`;
-  const actionText = isAccepted
-    ? 'Return to the store to complete your purchase.'
-    : 'Return to the store to continue shopping.';
+  const decisionText =
+    status === 'countered'
+      ? `You received a counter offer of ${formatCounterAmount(acceptedPrice)} for ${itemLabel}.`
+      : isAccepted
+        ? `Your offer${formattedPrice ? ` of ${formattedPrice}` : ''} for ${itemLabel} has been accepted.`
+        : `Your offer for ${itemLabel} was declined. You can return to the store to make another offer or buy at the listed price.`;
+  const actionText =
+    status === 'countered'
+      ? 'Contact the store about this price or submit a new offer to keep negotiating.'
+      : isAccepted
+        ? 'Return to the store to complete your purchase.'
+        : 'Return to the store to continue shopping.';
   const escapedDecisionText = escapeHtmlText(decisionText);
   const escapedActionText = escapeHtmlText(actionText);
 

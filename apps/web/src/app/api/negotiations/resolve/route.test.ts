@@ -150,6 +150,139 @@ describe('POST /api/negotiations/resolve', () => {
     mockCheckCsrfProtection.mockResolvedValue({ valid: true });
   });
 
+  it.each([
+    undefined,
+    0,
+    -1,
+    12.345,
+    10000000000,
+  ])('rejects invalid counter amount %s', async (counterOffer) => {
+    await setupAuth({ authenticated: true, hasAccess: true });
+    const response = await POST(
+      createRequest({ ...validBody, status: 'countered', counterOffer })
+    );
+    expect(response.status).toBe(400);
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'accepted',
+    'rejected',
+  ])('rejects a counter amount on %s', async (status) => {
+    await setupAuth({ authenticated: true, hasAccess: true });
+    const response = await POST(
+      createRequest({ ...validBody, status, counterOffer: 5000 })
+    );
+    expect(response.status).toBe(400);
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
+  it('saves a merchant-scoped counter offer and notifies the customer with its amount', async () => {
+    await setupAuth({
+      authenticated: true,
+      hasAccess: true,
+      merchantId: 'merchant-123',
+    });
+    mockSupabaseUpdates({
+      data: {
+        id: validBody.negotiationId,
+        merchant_id: 'merchant-123',
+        customer_id: null,
+        customer_email: 'guest@example.com',
+        customer_phone: null,
+        type: 'single',
+        item_info: { name: 'Product' },
+        offered_price: 5000,
+        counter_offer: 6000,
+        status: 'countered',
+      },
+      error: null,
+    });
+    const response = await POST(
+      createRequest({ ...validBody, status: 'countered', counterOffer: 6000 })
+    );
+    expect(response.status).toBe(200);
+    expect(updateCalls[0]).toMatchObject({
+      payload: { status: 'countered', counter_offer: 6000 },
+    });
+    expect(updateCalls[0].eq).toContainEqual(['merchant_id', 'merchant-123']);
+    expect(updateCalls[0].eq).toContainEqual(['status', 'pending']);
+    expect(mockNotifyGuestNegotiationResponseByEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'countered', acceptedPrice: 6000 })
+    );
+  });
+
+  it('restores pending state and clears the counter amount if delivery fails', async () => {
+    await setupAuth({
+      authenticated: true,
+      hasAccess: true,
+      merchantId: 'merchant-123',
+    });
+    mockSupabaseUpdates(
+      {
+        data: {
+          id: validBody.negotiationId,
+          merchant_id: 'merchant-123',
+          customer_id: null,
+          customer_email: 'guest@example.com',
+          type: 'total',
+          item_info: null,
+          offered_price: 5000,
+          counter_offer: 6000,
+          status: 'countered',
+        },
+        error: null,
+      },
+      { data: { id: validBody.negotiationId }, error: null }
+    );
+    mockNotifyGuestNegotiationResponseByEmail.mockRejectedValueOnce(
+      new Error('Delivery failed')
+    );
+    const response = await POST(
+      createRequest({ ...validBody, status: 'countered', counterOffer: 6000 })
+    );
+    expect(response.status).toBe(502);
+    expect(updateCalls[1].payload).toEqual({
+      status: 'pending',
+      counter_offer: null,
+    });
+  });
+
+  it('rolls back and skips notifications if the saved counter amount is missing', async () => {
+    await setupAuth({
+      authenticated: true,
+      hasAccess: true,
+      merchantId: 'merchant-123',
+    });
+    mockSupabaseUpdates(
+      {
+        data: {
+          id: validBody.negotiationId,
+          merchant_id: 'merchant-123',
+          customer_id: null,
+          customer_email: 'guest@example.com',
+          type: 'total',
+          item_info: null,
+          offered_price: 5000,
+          counter_offer: null,
+          status: 'countered',
+        },
+        error: null,
+      },
+      { data: { id: validBody.negotiationId }, error: null }
+    );
+    const response = await POST(
+      createRequest({ ...validBody, status: 'countered', counterOffer: 6000 })
+    );
+    expect(response.status).toBe(502);
+    expect(mockNotifyGuestNegotiationResponseByEmail).not.toHaveBeenCalled();
+    expect(mockNotifyNegotiationResponse).not.toHaveBeenCalled();
+    expect(updateCalls[1].payload).toEqual({
+      status: 'pending',
+      counter_offer: null,
+    });
+  });
+
   it('returns 401 when not authenticated', async () => {
     await setupAuth({ authenticated: false });
 
@@ -225,7 +358,9 @@ describe('POST /api/negotiations/resolve', () => {
       notified: true,
       channel: 'email',
     });
-    expect(updateCalls[0]).toMatchObject({ payload: { status: 'accepted' } });
+    expect(updateCalls[0]).toMatchObject({
+      payload: { status: 'accepted', counter_offer: null },
+    });
     expect(updateCalls[0]?.eq).toEqual([
       ['id', validBody.negotiationId],
       ['merchant_id', 'merchant-123'],
@@ -389,7 +524,9 @@ describe('POST /api/negotiations/resolve', () => {
       error: 'Failed to notify the customer. Please try again.',
       code: 'notification_failed',
     });
-    expect(updateCalls[1]).toMatchObject({ payload: { status: 'pending' } });
+    expect(updateCalls[1]).toMatchObject({
+      payload: { status: 'pending', counter_offer: null },
+    });
     expect(updateCalls[1]?.eq).toEqual([
       ['id', validBody.negotiationId],
       ['merchant_id', 'merchant-123'],
@@ -438,7 +575,9 @@ describe('POST /api/negotiations/resolve', () => {
         'Failed to notify the customer and restore request state. Please refresh before retrying.',
       code: 'rollback_failed',
     });
-    expect(updateCalls[1]).toMatchObject({ payload: { status: 'pending' } });
+    expect(updateCalls[1]).toMatchObject({
+      payload: { status: 'pending', counter_offer: null },
+    });
     expect(mockLoggerError).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to resolve negotiation request',
@@ -476,6 +615,9 @@ describe('POST /api/negotiations/resolve', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(updateCalls[0]).toMatchObject({
+      payload: { status: 'rejected', counter_offer: null },
+    });
     expect(mockNotifyNegotiationResponse).toHaveBeenCalledWith(
       'customer-456',
       'total',

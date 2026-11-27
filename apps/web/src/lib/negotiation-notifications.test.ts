@@ -238,3 +238,56 @@ describe('notifyGuestNegotiationResponseByEmail', () => {
     ).rejects.toThrow('provider unavailable');
   });
 });
+
+describe('counter offer notifications', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('includes the counter amount in push content and navigation data', async () => {
+    await notifyNegotiationResponse(
+      'customer-1',
+      'single',
+      'countered',
+      'n1',
+      'Samsung Galaxy S21',
+      220000
+    );
+    expect(mockNotifyCustomer).toHaveBeenCalledWith(
+      'customer-1',
+      '🤝 New Counter Offer',
+      expect.stringContaining('220,000'),
+      expect.objectContaining({
+        status: 'countered',
+        counter_offer: 220000,
+        negotiation_id: 'n1',
+      }),
+      'orders'
+    );
+  });
+
+  it('does not send a counter push without a positive amount', () => {
+    expect(() =>
+      notifyNegotiationResponse('customer-1', 'total', 'countered', 'n1')
+    ).toThrow('A positive counter offer amount is required');
+    expect(mockNotifyCustomer).not.toHaveBeenCalled();
+  });
+
+  it('sends a counter offer email with the amount and escaped item name', async () => {
+    mockSendEmail.mockResolvedValueOnce({ success: true });
+    await notifyGuestNegotiationResponseByEmail({
+      email: 'guest@example.com',
+      merchantId: 'm1',
+      negotiationId: 'n1',
+      negotiationType: 'single',
+      status: 'countered',
+      acceptedPrice: 220000,
+      itemName: '<Samsung>',
+    });
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: 'You received a counter offer',
+        textContent: expect.stringMatching(/220,000[\s\S]*submit a new offer/),
+        htmlContent: expect.stringContaining('&lt;Samsung&gt;'),
+      })
+    );
+  });
+});

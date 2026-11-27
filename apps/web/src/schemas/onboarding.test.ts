@@ -109,9 +109,19 @@ describe('onboardingSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects missing logoUrl (required for web)', () => {
+  it('allows missing logoUrl on web so merchants can skip logo setup', () => {
     const result = onboardingSchema.safeParse(validPayload({ logoUrl: '' }));
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+  });
+
+  it('preprocesses FormData string booleans for slugIsCustom', () => {
+    const result = onboardingSchema.safeParse(
+      validPayload({ slug: 'kicks-hub', slugIsCustom: 'true' })
+    );
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.slugIsCustom).toBe(true);
+    }
   });
 
   it('rejects invalid logoUrl', () => {

@@ -75,7 +75,8 @@ export const validFields = {
   businessName: 'TestStore',
   businessType: 'fashion',
   country: 'NG',
-  logoUrl: 'https://example.com/logo.png',
+  logoUrl:
+    'https://project.supabase.co/storage/v1/object/public/images/onboarding/user-123/logo.png',
   brandColors: JSON.stringify({
     primary: '#000000',
     background: '#ffffff',
@@ -92,6 +93,7 @@ export function makeFormData(fields: Record<string, string>) {
 export function setupActionMocks() {
   vi.resetModules();
   vi.clearAllMocks();
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://project.supabase.co';
   mocks.ensureActionRateLimit.mockResolvedValue(true);
   mocks.getAppUrl.mockReturnValue('http://localhost:3000');
   mocks.getConfiguredAppUrl.mockReturnValue('https://usebaci.com');

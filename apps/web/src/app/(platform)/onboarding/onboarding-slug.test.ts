@@ -1,6 +1,10 @@
+import { isReservedStoreSlug } from '@baci/shared/onboarding-chat';
 import { describe, expect, it, vi } from 'vitest';
+import { isReservedMerchantSlug, RESERVED_PATHS } from '@/lib/validation';
 import {
+  extractRenamedSlugResult,
   hasEstablishedOnboardingSlug,
+  isRenameSlugUnavailableError,
   resolveOnboardingMerchantSlug,
 } from './onboarding-slug';
 
@@ -22,5 +26,66 @@ describe('resolveOnboardingMerchantSlug', () => {
     await expect(
       resolveOnboardingMerchantSlug({ rpc }, 'Baci Food')
     ).resolves.toBe('baci-food-2');
+  });
+
+  it('classifies only explicit rename_merchant_slug unavailable error keys and not arbitrary 23505s', () => {
+    expect(
+      isRenameSlugUnavailableError({ code: '23505', message: 'slug_taken' })
+    ).toBe(true);
+    expect(
+      isRenameSlugUnavailableError({ code: '22023', message: 'reserved_slug' })
+    ).toBe(true);
+    expect(
+      isRenameSlugUnavailableError({ code: '22023', message: 'invalid_slug' })
+    ).toBe(true);
+    expect(
+      isRenameSlugUnavailableError({
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "domains_pkey"',
+      })
+    ).toBe(false);
+  });
+
+  it('preserves explicit retired_slug: null from a no-op rename RPC instead of fabricating previousSlug', () => {
+    expect(
+      extractRenamedSlugResult(
+        { slug: 'same-slug', retired_slug: null },
+        'fallback',
+        'previous-slug'
+      )
+    ).toEqual({
+      finalSlug: 'same-slug',
+      retiredSlug: null,
+    });
+    expect(extractRenamedSlugResult(null, 'fallback', 'previous-slug')).toEqual(
+      {
+        finalSlug: 'fallback',
+        retiredSlug: 'previous-slug',
+      }
+    );
+  });
+
+  it('keeps @baci/shared/onboarding-chat reserved slugs in parity with web server reserved slugs', () => {
+    const infraReserved = [
+      'www',
+      'app',
+      'api',
+      'admin',
+      'dashboard',
+      'mail',
+      'smtp',
+      'assets',
+      'static',
+      'cdn',
+      'status',
+      'support',
+      'help',
+      'chat',
+    ];
+    for (const slug of [...RESERVED_PATHS, ...infraReserved]) {
+      expect(isReservedMerchantSlug(slug)).toBe(true);
+      expect(isReservedStoreSlug(slug)).toBe(true);
+    }
   });
 });

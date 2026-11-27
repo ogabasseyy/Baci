@@ -147,7 +147,8 @@ describe('web and v2 mobile canonical starter-fact parity', () => {
           ...validFields,
           businessName: 'Conflicting Submitted Name',
           businessType: 'fashion',
-          logoUrl: 'https://cdn.example.com/submitted-logo.png',
+          logoUrl:
+            'https://project.supabase.co/storage/v1/object/public/images/onboarding/user-123/submitted-logo.png',
           brandColors: JSON.stringify({
             primary: '#abcdef',
             background: '#000000',

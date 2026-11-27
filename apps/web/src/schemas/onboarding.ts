@@ -81,7 +81,12 @@ const step1BaseSchema = z.object({
   // true only when the user manually EDITED the Store Link (vs. the auto-derived
   // value the UI prefills). Auto slugs are treated as a de-dupable preference
   // (run through generate_slug); an explicit slug is honored verbatim (409 if taken).
-  slugIsCustom: z.boolean().optional(),
+  slugIsCustom: z.preprocess((val) => {
+    if (val === 'true') return true;
+    if (val === 'false') return false;
+    if (val === '') return undefined;
+    return val;
+  }, z.boolean().optional()),
 });
 
 const step2BaseSchema = z.object({
@@ -252,8 +257,9 @@ const createWebOnboardingSchema = (options?: {
     .merge(step2BaseSchema)
     .merge(step3BaseSchema)
     .extend({
-      logoUrl: createRequiredLogoUrl(
-        'Logo is required for web setup. Please upload or generate one.'
+      logoUrl: z.preprocess(
+        _preprocessUrl,
+        z.union([z.string().trim().url(), z.literal('')]).default('')
       ),
     })
     .superRefine((data, ctx) => {

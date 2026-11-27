@@ -1,27 +1,13 @@
-import { after, type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getRootDomain } from '@/env';
 import { authenticateApiRequest } from '@/lib/api-auth';
-import {
-  revalidateBlogFeed,
-  revalidateDomains,
-  revalidateMerchant,
-  revalidateMerchantFeed,
-  revalidateMerchantSlugLookup,
-  revalidatePageConfig,
-  revalidateStorefrontProductsSlugCache,
-} from '@/lib/cache-revalidation';
 import { checkCsrfProtection } from '@/lib/csrf';
-import {
-  invalidateForwardDomainCacheForSlug,
-  invalidateReverseDomainCacheForSlug,
-} from '@/lib/domain-cache-simple';
-import { triggerDomainEdgeConfigSync } from '@/lib/edge-config-sync';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import { invalidateAliasCacheForSlug } from '@/lib/slug-alias-cache';
+import { invalidateMerchantSlugRename } from '@/lib/invalidate-merchant-slug-rename';
 import { RESERVED_PATHS } from '@/lib/validation';
 import { merchantIdParamSchema } from '@/schemas/merchant-id-param';
 import { renameSlugSchema } from '@/schemas/rename-slug';
@@ -176,51 +162,11 @@ export async function POST(request: NextRequest) {
       : previousSlug;
   const rootDomain = getRootDomain() || 'usebaci.com';
 
-  // The slug backs merchant cache keys, the domain rows, page configs, and the
-  // product/OpenAI feeds (which embed absolute slug URLs). Bust all of them so
-  // the new URL serves and the old one stops resolving to a live store (it now
-  // 301s via the alias).
-  revalidateMerchant(access.merchantId, finalSlug);
-  revalidateDomains();
-  revalidatePageConfig(access.merchantId);
-  revalidateMerchantFeed(access.merchantId);
-  // The blog RSS feed caches its payload (including slug-bearing store/feed URLs)
-  // by merchant id under generic tags — bust it so the retired slug stops appearing.
-  revalidateBlogFeed();
-  // The /api/merchants/by-slug lookup caches under `merchant-slug-${slug}` +
-  // 'merchant' (tags revalidateMerchant does NOT clear). Bust BOTH the retired
-  // slug (so it stops resolving to a live store) and the new slug (so it serves
-  // immediately) instead of leaving them cached for up to 5 minutes.
-  if (retiredSlug && retiredSlug !== finalSlug) {
-    revalidateMerchantSlugLookup(retiredSlug);
-    // Drop this instance's reverse domain->slug cache entries pointing at the
-    // retired slug so a custom domain stops resolving to it immediately. Other
-    // instances self-correct via the proxy's alias-aware custom-domain fallback.
-    invalidateReverseDomainCacheForSlug(retiredSlug);
-    // Drop the stale forward slug->custom-domain entry for the retired slug too.
-    invalidateForwardDomainCacheForSlug(retiredSlug);
-    // Drop the stale NEGATIVE alias-cache entry for the just-retired slug so the
-    // old host starts 301ing immediately instead of after NEGATIVE_TTL.
-    invalidateAliasCacheForSlug(retiredSlug);
-  }
-  revalidateMerchantSlugLookup(finalSlug);
-  // The /api/storefront/[slug]/products lookup caches (miss included) under the
-  // generic 'merchant-slug' tag for 60s. If the NEW slug was probed just before
-  // the rename, that cached miss would 404 the renamed store's products API; bust
-  // the tag so it re-resolves immediately.
-  revalidateStorefrontProductsSlugCache();
-  // The forward slug->custom-domain cache can hold a NEGATIVE result for the new
-  // slug (probed before it went live), which would stop the new subdomain 301ing
-  // to the merchant's custom domain until CACHE_TTL. Drop it for the final slug.
-  invalidateForwardDomainCacheForSlug(finalSlug);
-  invalidateAliasCacheForSlug(finalSlug);
-
-  // Custom-domain merchants: the RPC's subdomain-row move fires the domains
-  // webhook, but explicitly resync Vercel Edge Config as a backstop so the
-  // custom domain's `domain_* -> slug` mapping points at the NEW slug — otherwise
-  // it keeps routing the custom domain to the retired slug and 404s. Best-effort,
-  // runs after the response is sent, never throws.
-  after(() => triggerDomainEdgeConfigSync());
+  invalidateMerchantSlugRename({
+    merchantId: access.merchantId,
+    finalSlug,
+    retiredSlug,
+  });
 
   return NextResponse.json({
     slug: finalSlug,

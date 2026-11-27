@@ -53,6 +53,7 @@
     "./test-fixtures/order-wallet-funding-intent": "./src/test-fixtures/order-wallet-funding-intent.ts",
     "./experience": "./src/experience/index.ts",
     "./experience/limits": "./src/experience/limits.ts",
+    "./onboarding-chat": "./src/onboarding-chat/index.ts",
     "./lib/is-product-variant-purchasable": "./src/lib/is-product-variant-purchasable.ts"
   },
   "scripts": {

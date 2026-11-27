@@ -1,0 +1,199 @@
+import {
+  DEFAULT_BRAND_COLORS,
+  type OnboardingChatData,
+} from '@baci/shared/onboarding-chat';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { submitOnboarding } from '@/app/(platform)/onboarding/actions';
+import {
+  trackMerchantSignupCompleted,
+  trackMerchantSignupStarted,
+} from '@/components/analytics/platform-analytics-provider';
+import {
+  requestWebOnboardingAssist,
+  uploadWebDataUriLogo,
+} from './web-onboarding-chat-helpers';
+import {
+  runWebLogoGeneration,
+  runWebNameSuggestion,
+  runWebStoreLaunch,
+  type StoreActionContext,
+} from './web-onboarding-store-actions';
+
+vi.mock('@/app/(platform)/onboarding/actions', () => ({
+  submitOnboarding: vi.fn(),
+}));
+
+vi.mock('@/components/analytics/platform-analytics-provider', () => ({
+  trackMerchantSignupStarted: vi.fn(),
+  trackMerchantSignupCompleted: vi.fn(),
+}));
+
+vi.mock('./web-onboarding-chat-helpers', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('./web-onboarding-chat-helpers')>();
+  return {
+    ...actual,
+    requestWebOnboardingAssist: vi.fn(),
+    uploadWebOnboardingLogo: vi.fn(),
+    uploadWebDataUriLogo: vi.fn(),
+  };
+});
+
+const DATA: OnboardingChatData = {
+  firstName: 'Ada',
+  lastName: 'Okafor',
+  phone: '',
+  businessName: 'Kicks Hub',
+  businessType: 'fashion',
+  otherBusinessType: '',
+  country: 'NG',
+  slug: 'kicks-hub',
+  slugIsCustom: true,
+  logoUrl: '',
+  brandColors: DEFAULT_BRAND_COLORS,
+};
+
+function makeCtx(): StoreActionContext {
+  return {
+    user: { id: 'u-1', email: 'ada@example.com' } as never,
+    setUser: vi.fn(),
+    data: DATA,
+    setData: vi.fn(),
+    setStep: vi.fn(),
+    setSuggestedNames: vi.fn(),
+    setLogoDraft: vi.fn(),
+    setRejectedSlug: vi.fn(),
+    setIsCustomizingSlug: vi.fn(),
+    setIsBusy: vi.fn(),
+    setIsLaunching: vi.fn(),
+    appendMessages: vi.fn(),
+  };
+}
+
+describe('web-onboarding-store-actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('populates suggested names and returns to business_name step', async () => {
+    vi.mocked(requestWebOnboardingAssist).mockResolvedValueOnce({
+      businessNames: ['Lagos Lace', 'Sole Craft'],
+    });
+    const ctx = makeCtx();
+    await runWebNameSuggestion('Sneakers in Lagos', ctx);
+
+    expect(ctx.setSuggestedNames).toHaveBeenCalledWith([
+      'Lagos Lace',
+      'Sole Craft',
+    ]);
+    expect(ctx.setStep).toHaveBeenCalledWith('business_name');
+  });
+
+  it('handles empty logo response gracefully without setting a draft', async () => {
+    vi.mocked(requestWebOnboardingAssist).mockResolvedValueOnce({
+      logos: [],
+      brandColors: DEFAULT_BRAND_COLORS,
+    });
+    const ctx = makeCtx();
+    await runWebLogoGeneration(ctx);
+
+    expect(ctx.setLogoDraft).not.toHaveBeenCalled();
+    expect(ctx.appendMessages).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'system' })
+    );
+  });
+
+  it('recovers cleanly on slug_unavailable from submitOnboarding', async () => {
+    vi.mocked(submitOnboarding).mockResolvedValueOnce({
+      success: false,
+      code: 'slug_unavailable',
+      message: 'That store link is already taken.',
+    });
+    const ctx = makeCtx();
+    await runWebStoreLaunch(ctx);
+
+    expect(ctx.setRejectedSlug).toHaveBeenCalledWith('kicks-hub');
+    expect(ctx.setStep).toHaveBeenCalledWith('slug');
+    expect(trackMerchantSignupStarted).toHaveBeenCalledWith({
+      business_name: 'Kicks Hub',
+      business_type: 'fashion',
+    });
+    expect(trackMerchantSignupCompleted).not.toHaveBeenCalled();
+  });
+
+  it('clears user and returns to auth_choice when submitOnboarding reports auth_required', async () => {
+    vi.mocked(submitOnboarding).mockResolvedValueOnce({
+      success: false,
+      code: 'auth_required',
+      message: 'An account may already exist. Please log in to continue.',
+    });
+    const ctx = makeCtx();
+    await runWebStoreLaunch(ctx);
+
+    expect(ctx.setUser).toHaveBeenCalledWith(null);
+    expect(ctx.setStep).toHaveBeenCalledWith('auth_choice');
+    expect(ctx.appendMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: 'system',
+        text: 'An account may already exist. Please log in to continue.',
+      })
+    );
+  });
+
+  it('clears an oversized generated logo and returns to the logo step instead of dead-ending on summary', async () => {
+    vi.mocked(uploadWebDataUriLogo).mockRejectedValueOnce(
+      new Error('Logo image must be smaller than 4 MB.')
+    );
+    const ctx = makeCtx();
+    ctx.data = {
+      ...DATA,
+      logoUrl: 'data:image/png;base64,AAAA',
+    };
+    await runWebStoreLaunch(ctx);
+
+    expect(ctx.setLogoDraft).toHaveBeenCalledWith(null);
+    expect(ctx.setData).toHaveBeenCalledOnce();
+    expect(ctx.setStep).toHaveBeenCalledWith('logo');
+    expect(submitOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('fires signup started and completed analytics and notifies when server de-dupes the assigned slug', async () => {
+    vi.mocked(submitOnboarding).mockResolvedValueOnce({
+      success: true,
+      message: 'Store created!',
+      merchantId: 'merchant-42',
+      businessName: 'Kicks Hub',
+      merchantSlug: 'kicks-hub-2',
+    });
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: '' },
+    });
+    try {
+      const ctx = makeCtx();
+      await runWebStoreLaunch(ctx);
+
+      expect(ctx.setData).toHaveBeenCalledOnce();
+      expect(ctx.appendMessages).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'assistant',
+          text: expect.stringContaining('kicks-hub-2.usebaci.com'),
+        })
+      );
+      expect(trackMerchantSignupStarted).toHaveBeenCalledWith({
+        business_name: 'Kicks Hub',
+        business_type: 'fashion',
+      });
+      expect(trackMerchantSignupCompleted).toHaveBeenCalledWith('merchant-42', {
+        business_name: 'Kicks Hub',
+      });
+      expect(window.location.href).toBe('/dashboard');
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
+});

@@ -4,6 +4,9 @@ require "English"
 # `import`, as in the storefront Fastfile: fastlane runs this file as a string,
 # which can leave require_relative without a base path.
 import("pending_review_guard.rb")
+import("main_release_runs.rb")
+import("catch_up_candidate.rb")
+import("catch_up_lane.rb")
 
 WORKSPACE = "ios/BaciTheEcommerceBuilder.xcworkspace"
 SCHEME = "BaciTheEcommerceBuilder"

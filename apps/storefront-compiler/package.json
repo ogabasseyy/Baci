@@ -20,6 +20,7 @@
     "@baci/shared": "workspace:*",
     "@typescript/typescript6": "~6.0.2",
     "esbuild": "^0.28.1",
+    "framer-motion": "^12.40.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwindcss": "^4.3.1",

@@ -116,61 +116,63 @@ export async function runPhase0Benchmarks(options?: {
     originRpcLatencyMs: 0,
   });
 
-  const mf = new Miniflare({
-    modules: [
-      {
-        type: 'ESModule',
-        path: 'worker.mjs',
-        contents: initialRelease.workerCode,
+  const createBenchmarkIsolate = () =>
+    new Miniflare({
+      modules: [
+        {
+          type: 'ESModule',
+          path: 'worker.mjs',
+          contents: initialRelease.workerCode,
+        },
+      ],
+      compatibilityDate: '2026-07-01',
+      bindings: {},
+      outboundService: async (mfReq: MiniflareRequest) => {
+        const copiedHeaders = new Headers();
+        mfReq.headers.forEach((value, key) => {
+          copiedHeaders.append(key, value);
+        });
+        const webReq = new Request(mfReq.url, {
+          method: mfReq.method,
+          headers: copiedHeaders,
+        });
+        const webRes = await outboundPlane.handleOutboundFetch(
+          webReq,
+          trustedParams,
+          'split-availability'
+        );
+        const bodyText = await webRes.text();
+        return new MiniflareResponse(bodyText, {
+          status: webRes.status,
+          headers: Object.fromEntries(webRes.headers.entries()),
+        });
       },
-    ],
-    compatibilityDate: '2026-07-01',
-    bindings: {},
-    outboundService: async (mfReq: MiniflareRequest) => {
-      const copiedHeaders = new Headers();
-      mfReq.headers.forEach((value, key) => {
-        copiedHeaders.append(key, value);
-      });
-      const webReq = new Request(mfReq.url, {
-        method: mfReq.method,
-        headers: copiedHeaders,
-      });
-      const webRes = await outboundPlane.handleOutboundFetch(
-        webReq,
-        trustedParams,
-        'split-availability'
-      );
-      const bodyText = await webRes.text();
-      return new MiniflareResponse(bodyText, {
-        status: webRes.status,
-        headers: Object.fromEntries(webRes.headers.entries()),
-      });
+    });
+
+  const benchmarkRoutes: readonly {
+    route: string;
+    expectedStatus: number;
+  }[] = [
+    { route: '/', expectedStatus: 200 },
+    { route: '/smartphones', expectedStatus: 200 },
+    {
+      route: '/search?q=iphone&brand=Apple&condition=New',
+      expectedStatus: 200,
     },
-  });
+    {
+      route: '/smartphones/apple-iphone-16-pro-max-1',
+      expectedStatus: 200,
+    },
+    { route: '/unknown-category-slug', expectedStatus: 404 },
+  ];
 
-  try {
-    const benchmarkRoutes: readonly {
-      route: string;
-      expectedStatus: number;
-    }[] = [
-      { route: '/', expectedStatus: 200 },
-      { route: '/smartphones', expectedStatus: 200 },
-      {
-        route: '/search?q=iphone&brand=Apple&condition=New',
-        expectedStatus: 200,
-      },
-      {
-        route: '/smartphones/apple-iphone-16-pro-max-1',
-        expectedStatus: 200,
-      },
-      { route: '/unknown-category-slug', expectedStatus: 404 },
-    ];
+  const routeMetrics: RouteBenchmarkMetrics[] = [];
+  let true404Verified = true;
+  let anonCostPriceContained = true;
 
-    const routeMetrics: RouteBenchmarkMetrics[] = [];
-    let true404Verified = true;
-    let anonCostPriceContained = true;
-
-    for (const item of benchmarkRoutes) {
+  for (const item of benchmarkRoutes) {
+    const mf = createBenchmarkIsolate();
+    try {
       const fullUrl = `https://ogabassey.mybaci.store${item.route}`;
       const coldStart = performance.now();
       const coldRes = await mf.dispatchFetch(fullUrl);
@@ -209,9 +211,14 @@ export async function runPhase0Benchmarks(options?: {
         warmP95IsolateSsrMs: percentile(warmIsolateSsrs, 95),
         htmlBytes: Buffer.byteLength(coldHtml, 'utf8'),
       });
+    } finally {
+      await mf.dispose();
     }
+  }
 
-    const spoofRes = await mf.dispatchFetch(
+  const spoofIsolate = createBenchmarkIsolate();
+  try {
+    const spoofRes = await spoofIsolate.dispatchFetch(
       'https://ogabassey.mybaci.store/search?q=iphone&merchantId=victim-tenant',
       { headers: { 'x-baci-merchant-slug': 'victim-tenant' } }
     );
@@ -266,6 +273,6 @@ export async function runPhase0Benchmarks(options?: {
       generationChurn: churnResults,
     };
   } finally {
-    await mf.dispose();
+    await spoofIsolate.dispose();
   }
 }

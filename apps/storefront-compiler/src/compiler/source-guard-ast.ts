@@ -12,20 +12,46 @@ export interface SourceSafetyViolation {
   detail: string;
 }
 
+const DANGEROUS_HTML_SINK_NAMES: ReadonlySet<string> = new Set([
+  'dangerouslySetInnerHTML',
+  '__html',
+  '$$typeof',
+  'innerHTML',
+  'outerHTML',
+  'insertAdjacentHTML',
+  'srcdoc',
+  'createContextualFragment',
+  'parseFromString',
+]);
+
+function isDocumentReceiver(expr: ts.Expression): boolean {
+  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
+    return isDocumentReceiver(expr.expression);
+  }
+  if (ts.isIdentifier(expr)) return expr.text === 'document';
+  if (ts.isPropertyAccessExpression(expr)) return expr.name.text === 'document';
+  if (ts.isElementAccessExpression(expr)) {
+    return resolveStaticString(expr.argumentExpression) === 'document';
+  }
+  return false;
+}
+
 export function classifyMemberName(
   filePath: string,
   memberName: string,
-  violations: SourceSafetyViolation[]
+  violations: SourceSafetyViolation[],
+  receiver?: ts.Expression
 ): void {
   if (
-    memberName === 'dangerouslySetInnerHTML' ||
-    memberName === '__html' ||
-    memberName === '$$typeof'
+    DANGEROUS_HTML_SINK_NAMES.has(memberName) ||
+    ((memberName === 'write' || memberName === 'writeln') &&
+      receiver !== undefined &&
+      isDocumentReceiver(receiver))
   ) {
     violations.push({
       filePath,
       rule: 'DANGEROUS_INNER_HTML',
-      detail: `Forbidden raw HTML or React element symbol property "${memberName}"`,
+      detail: `Forbidden raw HTML or React element sink "${memberName}"`,
     });
   } else if (
     memberName === 'createElement' ||

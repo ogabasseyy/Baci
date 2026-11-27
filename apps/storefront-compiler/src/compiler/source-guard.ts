@@ -175,7 +175,12 @@ export function scanManifestSourceSafety(
         ts.isShorthandPropertyAssignment(node) ||
         ts.isPropertyAccessExpression(node)
       ) {
-        classifyMemberName(file.path, node.name.text, violations);
+        classifyMemberName(
+          file.path,
+          node.name.text,
+          violations,
+          ts.isPropertyAccessExpression(node) ? node.expression : undefined
+        );
         if (
           ts.isPropertyAccessExpression(node) &&
           SENSITIVE_GLOBAL_ROOTS.has(node.name.text) &&
@@ -193,7 +198,7 @@ export function scanManifestSourceSafety(
         if (!ts.isNumericLiteral(node.argumentExpression)) {
           const folded = resolveStaticString(node.argumentExpression);
           if (folded !== null) {
-            classifyMemberName(file.path, folded, violations);
+            classifyMemberName(file.path, folded, violations, node.expression);
             if (
               SENSITIVE_GLOBAL_ROOTS.has(folded) &&
               !isAllowedSensitiveRootPosition(node)

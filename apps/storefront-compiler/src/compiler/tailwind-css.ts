@@ -9,13 +9,20 @@ import {
   type WorkerStorefrontManifest,
 } from '../schemas/worker-manifest';
 import { StorefrontCompilerError } from './closed-graph-plugin';
+import {
+  assertAllowedAssetUrl,
+  CANDIDATE_TOKEN_RE,
+  CSS_URL_RE,
+  decodeCssEscapes,
+  validateAndNormalizeMerchantCss,
+} from './css-safety';
 
 const requireFromHere = createRequire(import.meta.url);
 const tailwindPkgDir = path.dirname(
   requireFromHere.resolve('tailwindcss/package.json')
 );
 
-const ALLOWED_TAILWIND_STYLESHEETS: Readonly<Record<string, string>> = {
+const ALLOWED_ROOT_TAILWIND_STYLESHEETS: Readonly<Record<string, string>> = {
   tailwindcss: 'index.css',
   'tailwindcss/index.css': 'index.css',
   'tailwindcss/index': 'index.css',
@@ -25,10 +32,14 @@ const ALLOWED_TAILWIND_STYLESHEETS: Readonly<Record<string, string>> = {
   'tailwindcss/preflight': 'preflight.css',
   'tailwindcss/utilities.css': 'utilities.css',
   'tailwindcss/utilities': 'utilities.css',
-  './theme.css': 'theme.css',
-  './preflight.css': 'preflight.css',
-  './utilities.css': 'utilities.css',
 };
+
+const ALLOWED_INTERNAL_TAILWIND_STYLESHEETS: Readonly<Record<string, string>> =
+  {
+    './theme.css': 'theme.css',
+    './preflight.css': 'preflight.css',
+    './utilities.css': 'utilities.css',
+  };
 
 const cachedTailwindFiles = new Map<string, string>();
 
@@ -38,31 +49,6 @@ function readPinnedTailwindCss(fileName: string): string {
   const content = readFileSync(path.join(tailwindPkgDir, fileName), 'utf8');
   cachedTailwindFiles.set(fileName, content);
   return content;
-}
-
-const CANDIDATE_TOKEN_RE = /[A-Za-z0-9_:/\-[\].%!#(),+*&=$^~]+/g;
-const CSS_URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
-const EXTERNAL_CSS_IMPORT_RE =
-  /@import\s+(?:url\s*\(\s*)?['"]?(?:https?:|\/\/|data:|file:)/i;
-const FORBIDDEN_TAILWIND_DIRECTIVE_RE = /@(?:plugin|config|source)\b/i;
-
-function assertAllowedAssetUrl(
-  rawUrl: string,
-  sourceLabel: string,
-  declaredAssetIds: ReadonlySet<string>
-): void {
-  const trimmed = rawUrl.trim();
-  if (trimmed.startsWith('#')) return;
-  if (trimmed.startsWith('/assets/')) {
-    const assetId = trimmed.slice('/assets/'.length);
-    if (!declaredAssetIds.has(assetId)) {
-      throw new Error(`Undeclared asset URL "${trimmed}" in "${sourceLabel}"`);
-    }
-    return;
-  }
-  throw new Error(
-    `Disallowed CSS url("${trimmed}") in "${sourceLabel}"; declare media in manifest.assets`
-  );
 }
 
 export function extractTailwindCandidates(
@@ -84,46 +70,6 @@ export function extractTailwindCandidates(
   return Array.from(candidates);
 }
 
-function decodeCssEscapes(rawCss: string): string {
-  return rawCss.replace(
-    /\\([0-9a-fA-F]{1,6})\s?|\\(.)/g,
-    (_match, hex: string | undefined, ch: string | undefined) => {
-      if (hex !== undefined) {
-        const codePoint = Number.parseInt(hex, 16);
-        if (
-          Number.isFinite(codePoint) &&
-          codePoint > 0 &&
-          codePoint <= 0x10ffff
-        ) {
-          return String.fromCodePoint(codePoint);
-        }
-      }
-      return ch ?? '';
-    }
-  );
-}
-
-function validateMerchantCssSafety(
-  cssContent: string,
-  filePath: string,
-  declaredAssetIds: ReadonlySet<string>
-): void {
-  const unescaped = decodeCssEscapes(cssContent);
-  for (const candidate of [cssContent, unescaped]) {
-    if (EXTERNAL_CSS_IMPORT_RE.test(candidate)) {
-      throw new Error(`External @import URL forbidden in "${filePath}"`);
-    }
-    if (FORBIDDEN_TAILWIND_DIRECTIVE_RE.test(candidate)) {
-      throw new Error(
-        `Forbidden @plugin/@config/@source directive in "${filePath}"`
-      );
-    }
-    for (const match of candidate.matchAll(CSS_URL_RE)) {
-      assertAllowedAssetUrl(match[2] ?? '', filePath, declaredAssetIds);
-    }
-  }
-}
-
 export interface CompiledStorefrontCss {
   css: string;
   rawBytes: number;
@@ -134,25 +80,36 @@ export async function compileStorefrontTailwindCss(
   manifest: WorkerStorefrontManifest
 ): Promise<CompiledStorefrontCss> {
   const declaredAssets = new Set(manifest.assets.map((asset) => asset.assetId));
+  const rawCssEntries = manifest.files.filter((file) =>
+    file.path.endsWith('.css')
+  );
+  const virtualCssPaths = new Set(rawCssEntries.map((file) => file.path));
   const virtualCssByPath = new Map<string, string>();
 
-  for (const file of manifest.files) {
-    if (!file.path.endsWith('.css')) continue;
-    validateMerchantCssSafety(file.content, file.path, declaredAssets);
-    virtualCssByPath.set(file.path, file.content);
+  for (const file of rawCssEntries) {
+    virtualCssByPath.set(
+      file.path,
+      validateAndNormalizeMerchantCss(
+        file.content,
+        file.path,
+        declaredAssets,
+        virtualCssPaths
+      )
+    );
   }
 
   // Identify virtual stylesheets already @imported by another virtual stylesheet
   // and reject cyclic @import graphs before root entry compilation.
   const importsByPath = new Map<string, string[]>();
   const childImportedPaths = new Set<string>();
-  const localImportRe = /@import\s+(?:url\(\s*)?['"]([^'"]+)['"]\s*\)?/g;
+  const localImportRe =
+    /@import\s+(?:url\(\s*(?:['"]([^'"]+)['"]|([^'")\s]+))\s*\)|['"]([^'"]+)['"])/gi;
   for (const [cssPath, content] of virtualCssByPath.entries()) {
     const dir = path.posix.dirname(`/virtual/${cssPath}`);
     const deps: string[] = [];
-    for (const match of content.matchAll(localImportRe)) {
-      const target = match[1] ?? '';
-      if (!target || ALLOWED_TAILWIND_STYLESHEETS[target]) continue;
+    for (const match of decodeCssEscapes(content).matchAll(localImportRe)) {
+      const target = (match[1] ?? match[2] ?? match[3] ?? '').trim();
+      if (!target || ALLOWED_ROOT_TAILWIND_STYLESHEETS[target]) continue;
       const resolved = path.posix.normalize(path.posix.join(dir, target));
       if (resolved.startsWith('/virtual/')) {
         const relativeDep = resolved.slice('/virtual/'.length);
@@ -201,8 +158,12 @@ export async function compileStorefrontTailwindCss(
         )
       ),
     loadStylesheet: (id, base) => {
-      const mappedTailwind = ALLOWED_TAILWIND_STYLESHEETS[id];
-      if (mappedTailwind && (base === '/virtual' || base === '/tailwindcss')) {
+      const mappedTailwind =
+        ALLOWED_ROOT_TAILWIND_STYLESHEETS[id] ??
+        (base === '/tailwindcss'
+          ? ALLOWED_INTERNAL_TAILWIND_STYLESHEETS[id]
+          : undefined);
+      if (mappedTailwind) {
         return Promise.resolve({
           path: `/tailwindcss/${mappedTailwind}`,
           base: '/tailwindcss',

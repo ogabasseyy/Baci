@@ -33,6 +33,18 @@ describe('Round-5 Codex compiler, CSS, SDK provider, and overlay metadata regres
          return <p>{String(Boolean(desc))}</p>;
        }`,
     ],
+    [
+      'direct DOM innerHTML sink',
+      `export default function X() {
+         return <button type="button" onClick={() => { document.body.innerHTML = '<b>x</b>'; }}>ok</button>;
+       }`,
+    ],
+    [
+      'direct document.write sink',
+      `export default function X() {
+         return <button type="button" onClick={() => { document.write('<b>x</b>'); }}>ok</button>;
+       }`,
+    ],
   ])('blocks reflective/chained escape: %s', async (_label, code) => {
     const manifest = createOgabasseyStorefrontManifest();
     manifest.files = [{ path: 'src/StorefrontApp.tsx', content: code }];
@@ -151,5 +163,43 @@ describe('Round-5 Codex compiler, CSS, SDK provider, and overlay metadata regres
     };
     expect(second.generation).toBe(2);
     expect(second.availabilityGeneration).toBe(2);
+  });
+
+  it('preserves root theme.css, unquoted @import url(...), quoted Tailwind arbitrary candidates, and framer-motion', async () => {
+    const manifest = createOgabasseyStorefrontManifest();
+    manifest.packages.push({
+      name: 'framer-motion',
+      versionRef: 'platform-pinned',
+    });
+    manifest.files = [
+      {
+        path: 'tokens.css',
+        content: '.cascade-probe { border-color: #234567; color: #abcdef; }',
+      },
+      {
+        path: 'theme.css',
+        content: `@import url(tokens.css);\n.cascade-probe { color: #123456; }`,
+      },
+      {
+        path: 'src/StorefrontApp.tsx',
+        content: `
+          import { motion } from 'framer-motion';
+          export default function App() {
+            const labels = { write: 'Write a review' };
+            return <motion.main className="cascade-probe before:content-['*'] [&[data-state=closed]]:hidden">{labels.write}</motion.main>;
+          }
+        `,
+      },
+    ];
+    const compiled = await compileStorefrontWorker(manifest);
+    expect(compiled.cssCode).toContain('#234567');
+    expect(compiled.cssCode).toContain('#123456');
+    const tokenColorIdx = compiled.cssCode.indexOf('#abcdef');
+    const themeColorIdx = compiled.cssCode.indexOf('#123456');
+    if (tokenColorIdx !== -1) {
+      expect(themeColorIdx).toBeGreaterThan(tokenColorIdx);
+    }
+    expect(compiled.cssCode).toContain('--tw-content: "*"');
+    expect(compiled.cssCode).toContain('[data-state=closed]');
   });
 });

@@ -1,4 +1,5 @@
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
+import { buildBoundedCatalogJsonSnippet } from './bounded-json-snippet';
 import { buildClientHydrationEntrySource } from './client-hydration-template';
 import { buildContentSecurityPolicyHeader } from './csp-header';
 import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
@@ -72,15 +73,15 @@ function formatUpstreamRevision(data) {
 }
 
 const CATALOG_FETCH_TIMEOUT_MS = 2500;
-
+${buildBoundedCatalogJsonSnippet()}
 async function fetchCatalogJson(endpointUrl, kind) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), CATALOG_FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(endpointUrl, { signal: ctrl.signal });
     if (!res.ok) return { ok: false, status: res.status };
-    const data = await res.json();
-    if (!isValidCatalogPayload(data, kind)) return { ok: false, status: 502 };
+    const data = await readBoundedCatalogJson(res, MAX_CATALOG_RESPONSE_BYTES);
+    if (data === null || !isValidCatalogPayload(data, kind)) return { ok: false, status: 502 };
     return { ok: true, data };
   } catch {
     return { ok: false, status: 502 };

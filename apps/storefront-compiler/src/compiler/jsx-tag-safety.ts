@@ -1,6 +1,7 @@
 import ts from '@typescript/typescript6';
 import {
   bindingContainsName,
+  classifyPackageExport,
   createVirtualComponentExportResolver,
   hasDeclareModifier,
   resolveDirectComponentKind,
@@ -160,7 +161,7 @@ export function createJsxTagValidator(
             }
           }
         } else {
-          if (clause.name) importBindings.set(clause.name.text, 'component');
+          if (clause.name) importBindings.set(clause.name.text, 'unsafe');
           if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
             for (const el of clause.namedBindings.elements) {
               const orig = (el.propertyName ?? el.name).text;
@@ -168,11 +169,7 @@ export function createJsxTagValidator(
                 el.name.text,
                 spec === 'framer-motion' && orig === 'motion'
                   ? 'motion'
-                  : spec === '@baci/experience-sdk' && orig === 'Link'
-                    ? 'sdkLink'
-                    : /^[A-Z]/.test(orig)
-                      ? 'component'
-                      : 'unsafe'
+                  : (classifyPackageExport(spec, orig) ?? 'unsafe')
               );
             }
           }

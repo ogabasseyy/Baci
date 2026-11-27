@@ -1,67 +1,22 @@
 import path from 'node:path';
 import ts from '@typescript/typescript6';
+import {
+  classifyPackageExport,
+  isDirectComponentExpr,
+  resolveDirectComponentKind,
+  type SafeExportKind,
+} from './component-expr-classifier';
 import { collectReassignedIdentifiers } from './dom-mutation-guard';
 
-export type SafeExportKind = 'component' | 'sdkLink';
+export {
+  classifyPackageExport,
+  isDirectComponentExpr,
+  resolveDirectComponentKind,
+  type SafeExportKind,
+};
 
 const VIRTUAL_SUFFIXES =
   '|.tsx|.ts|.jsx|.js|/index.tsx|/index.ts|/index.jsx|/index.js'.split('|');
-
-function unwrapExpr(expr: ts.Expression): ts.Expression {
-  if (
-    ts.isParenthesizedExpression(expr) ||
-    ts.isAsExpression(expr) ||
-    ts.isSatisfiesExpression(expr)
-  ) {
-    return unwrapExpr(expr.expression);
-  }
-  return expr;
-}
-
-function isWrapperHocCallee(callee: ts.Expression): boolean {
-  if (ts.isIdentifier(callee)) {
-    return callee.text === 'forwardRef' || callee.text === 'memo';
-  }
-  return (
-    ts.isPropertyAccessExpression(callee) &&
-    ts.isIdentifier(callee.expression) &&
-    callee.expression.text === 'React' &&
-    (callee.name.text === 'forwardRef' || callee.name.text === 'memo')
-  );
-}
-
-export function resolveDirectComponentKind(
-  expr: ts.Expression,
-  lookupKind: (name: string) => SafeExportKind | null
-): SafeExportKind | null {
-  const inner = unwrapExpr(expr);
-  if (
-    ts.isArrowFunction(inner) ||
-    ts.isFunctionExpression(inner) ||
-    ts.isClassExpression(inner)
-  ) {
-    return 'component';
-  }
-  if (ts.isIdentifier(inner)) return lookupKind(inner.text);
-  if (ts.isCallExpression(inner) && isWrapperHocCallee(inner.expression)) {
-    const arg0 = inner.arguments[0];
-    return arg0 !== undefined
-      ? resolveDirectComponentKind(arg0, lookupKind)
-      : null;
-  }
-  return null;
-}
-
-export function isDirectComponentExpr(
-  expr: ts.Expression,
-  isKnownComponent: (name: string) => boolean
-): boolean {
-  return (
-    resolveDirectComponentKind(expr, (n) =>
-      isKnownComponent(n) ? 'component' : null
-    ) !== null
-  );
-}
 
 export function bindingContainsName(
   binding: ts.BindingName,
@@ -100,16 +55,6 @@ export function resolveVirtualModule(
     if (files.has(candidate)) return candidate;
   }
   return null;
-}
-
-function classifyPackageExport(
-  spec: string,
-  exportedName: string
-): SafeExportKind | null {
-  if (spec === '@baci/experience-sdk' && exportedName === 'Link') {
-    return 'sdkLink';
-  }
-  return /^[A-Z]/.test(exportedName) ? 'component' : null;
 }
 
 export function createVirtualComponentExportResolver(
@@ -162,19 +107,16 @@ export function createVirtualComponentExportResolver(
                 if (k) localSafe.set(el.name.text, k);
               }
             }
-          } else {
-            if (clause.name) localSafe.set(clause.name.text, 'component');
-            if (
-              clause.namedBindings &&
-              ts.isNamedImports(clause.namedBindings)
-            ) {
-              for (const el of clause.namedBindings.elements) {
-                const k = classifyPackageExport(
-                  spec,
-                  (el.propertyName ?? el.name).text
-                );
-                if (k) localSafe.set(el.name.text, k);
-              }
+          } else if (
+            clause.namedBindings &&
+            ts.isNamedImports(clause.namedBindings)
+          ) {
+            for (const el of clause.namedBindings.elements) {
+              const k = classifyPackageExport(
+                spec,
+                (el.propertyName ?? el.name).text
+              );
+              if (k) localSafe.set(el.name.text, k);
             }
           }
         }

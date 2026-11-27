@@ -14,7 +14,27 @@ let hostBootstrapReceived = false;
 let hostRenderCommitted = false;
 let hostRenderFailed = false;
 let hostCommitSent = false;
+let lastHostBootstrap = null;
+let lastHostRoute = null;
+let onHostBootstrapUpdate = null;
+let onHostRouteUpdate = null;
 const hostPending = new Map();
+
+function registerHostStateHandlers(onBootstrap, onRoute) {
+  onHostBootstrapUpdate = onBootstrap;
+  onHostRouteUpdate = onRoute;
+  if (lastHostBootstrap) {
+    onBootstrap(lastHostBootstrap);
+  }
+  if (
+    lastHostRoute &&
+    (!lastHostBootstrap ||
+      !Number.isSafeInteger(lastHostBootstrap.route?.epoch) ||
+      lastHostRoute.epoch > lastHostBootstrap.route.epoch)
+  ) {
+    onRoute(lastHostRoute);
+  }
+}
 
 function notifyHostRenderCommitted() {
   if (hostRenderFailed) return;
@@ -58,12 +78,21 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
       if (m?.type === 'bootstrap' && Number.isSafeInteger(m.bootstrap?.route?.epoch) && m.bootstrap.route.epoch >= hostEpoch) {
         hostEpoch = m.bootstrap.route.epoch;
         hostBootstrapReceived = true;
+        lastHostBootstrap = m.bootstrap;
+        lastHostRoute = m.bootstrap.route;
+        if (typeof onHostBootstrapUpdate === 'function') {
+          onHostBootstrapUpdate(m.bootstrap);
+        }
         if (hostRenderCommitted && !hostRenderFailed && !hostCommitSent) {
           hostCommitSent = true;
           hostPort?.postMessage({ type: 'render-committed', nonce: hostNonce, epoch: hostEpoch });
         }
       } else if (m?.type === 'route' && Number.isSafeInteger(m.route?.epoch) && m.route.epoch >= hostEpoch) {
         hostEpoch = m.route.epoch;
+        lastHostRoute = m.route;
+        if (typeof onHostRouteUpdate === 'function') {
+          onHostRouteUpdate(m.route);
+        }
         hostPort?.postMessage({ type: 'route-ack', epoch: hostEpoch });
       } else if (m?.type === 'result' && typeof m.requestId === 'string') {
         const entry = hostPending.get(m.requestId);

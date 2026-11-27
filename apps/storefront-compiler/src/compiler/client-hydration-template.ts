@@ -1,4 +1,5 @@
 import { buildFramedAnchorInterceptorSnippet } from './framed-anchor-snippet';
+import { buildHostBootstrapStateSnippet } from './host-bootstrap-state-snippet';
 import { buildFramedHostPortSnippet } from './host-port-snippet';
 import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
 
@@ -17,6 +18,7 @@ const ASSETS_MAP = ${JSON.stringify(assetsMap)};
 const DECLARED_ROUTES = ${JSON.stringify(routes)};
 ${buildDeclaredRouteMatcherSnippet()}
 ${buildFramedHostPortSnippet(previewOrigin)}
+${buildHostBootstrapStateSnippet()}
 ${buildFramedAnchorInterceptorSnippet()}
 const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;
 function resolveSafeInternalPath(p) {
@@ -83,6 +85,7 @@ if (rootElement && stateScript?.textContent) {
   void (async () => {
     try {
       const initialProps = JSON.parse(stateScript.textContent);
+      let currentProps = initialProps;
       const runtimeAssets = { ...ASSETS_MAP };
       seedInitialCatalogAssets(runtimeAssets, initialProps);
       let routeEpoch = 1;
@@ -90,6 +93,8 @@ if (rootElement && stateScript?.textContent) {
         typeof initialProps.publicDataRevision === 'string' && initialProps.publicDataRevision.length > 0
           ? initialProps.publicDataRevision
           : '0';
+      let reactRoot = null;
+      let StorefrontApp = null;
       const commerce = createCommerceClient(async (method, args) => {
         if (
           method === 'catalog.collection' ||
@@ -207,18 +212,49 @@ if (rootElement && stateScript?.textContent) {
         notifyHostRenderFailed();
         return;
       }
-      hydrateRoot(
-        rootElement,
+      StorefrontApp = mod.default;
+      const buildAppTree = (propsToRender) =>
         createElement(
           CommerceProvider,
           { commerce, assets: runtimeAssets },
-          createElement(HydrationCommitGate, null, createElement(mod.default, initialProps))
-        ),
-        {
-          onUncaughtError: () => notifyHostRenderFailed(),
+          createElement(HydrationCommitGate, null, createElement(StorefrontApp, propsToRender))
+        );
+      reactRoot = hydrateRoot(rootElement, buildAppTree(currentProps), {
+        onUncaughtError: () => notifyHostRenderFailed(),
+      });
+      registerHostStateHandlers(
+        (bootstrap) => {
+          if (!bootstrap || typeof bootstrap !== 'object') return;
+          if (bootstrap.assets && typeof bootstrap.assets === 'object' && !Array.isArray(bootstrap.assets)) {
+            for (const [aid, aurl] of Object.entries(bootstrap.assets)) {
+              if (typeof aurl === 'string') runtimeAssets[aid] = aurl;
+            }
+          }
+          if (Number.isSafeInteger(bootstrap.route?.epoch) && bootstrap.route.epoch > routeEpoch) {
+            routeEpoch = bootstrap.route.epoch;
+          }
+          currentProps = {
+            ...deriveNextRenderProps(currentProps, bootstrap.route, bootstrap.catalog, runtimeAssets),
+            bootstrap,
+          };
+          currentRevision = currentProps.publicDataRevision;
+          if (reactRoot && typeof reactRoot.render === 'function') {
+            reactRoot.render(buildAppTree(currentProps));
+          }
+        },
+        (route) => {
+          if (!route || typeof route !== 'object') return;
+          if (Number.isSafeInteger(route.epoch) && route.epoch > routeEpoch) {
+            routeEpoch = route.epoch;
+          }
+          currentProps = deriveNextRenderProps(currentProps, route, null, runtimeAssets);
+          currentRevision = currentProps.publicDataRevision;
+          if (reactRoot && typeof reactRoot.render === 'function') {
+            reactRoot.render(buildAppTree(currentProps));
+          }
         }
       );
-      attachFramedNavigationInterceptors(rootElement, commerce, initialProps);
+      attachFramedNavigationInterceptors(rootElement, commerce, initialProps, () => currentProps?.pathname);
     } catch (err) {
       notifyHostRenderFailed();
       if (typeof console !== 'undefined' && typeof console.error === 'function') {

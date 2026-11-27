@@ -16,6 +16,7 @@ import {
 } from './jsx-nav-safety';
 import { createJsxTagValidator } from './jsx-tag-safety';
 import { checkDynamicImportOrRequireNode } from './module-call-guard';
+import { createSdkOpenReceiverChecker } from './sdk-binding-resolver';
 import {
   classifyMemberName,
   hasLocalLexicalBinding,
@@ -63,12 +64,14 @@ export function scanManifestSourceSafety(
     });
   }
   const buildFileJsxChecker = createJsxTagValidator(parsedFiles);
+  const buildSdkOpenChecker = createSdkOpenReceiverChecker(parsedFiles);
 
   for (const [filePath, sourceFile] of parsedFiles.entries()) {
     const { checkJsxTag, isSdkLinkTag } = buildFileJsxChecker(
       filePath,
       sourceFile
     );
+    const isSdkOpenReceiver = buildSdkOpenChecker(filePath, sourceFile);
     const jsxEnv = {
       filePath,
       merchantSlug: manifest.merchantSlug,
@@ -193,7 +196,8 @@ export function scanManifestSourceSafety(
           node.name.text,
           violations,
           ts.isPropertyAccessExpression(node) ? node.expression : undefined,
-          ts.isPropertyAccessExpression(node) ? node : undefined
+          ts.isPropertyAccessExpression(node) ? node : undefined,
+          isSdkOpenReceiver
         );
         if (
           ts.isPropertyAccessExpression(node) &&
@@ -216,7 +220,8 @@ export function scanManifestSourceSafety(
               folded,
               violations,
               node.expression,
-              node
+              node,
+              isSdkOpenReceiver
             );
             if (
               SENSITIVE_GLOBAL_ROOTS.has(folded) &&

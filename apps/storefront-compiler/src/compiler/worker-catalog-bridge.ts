@@ -6,6 +6,10 @@ function isFiniteNumber(v) {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+function isNonNegativeSafeInt(v) {
+  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+}
+
 function isNonEmptyStr(v) {
   return typeof v === 'string' && v.trim().length > 0;
 }
@@ -78,7 +82,8 @@ function isValidFacetsBucket(list) {
         typeof b === 'object' &&
         !Array.isArray(b) &&
         typeof b.value === 'string' &&
-        isFiniteNumber(b.count)
+        b.value.length <= 200 &&
+        isNonNegativeSafeInt(b.count)
     )
   );
 }
@@ -110,7 +115,7 @@ function isValidCatalogPayload(data, kind) {
       Array.isArray(f) ||
       !isValidFacetsBucket(f.brands) ||
       !isValidFacetsBucket(f.conditions) ||
-      !isFiniteNumber(f.totalMatches)
+      !isNonNegativeSafeInt(f.totalMatches)
     ) {
       return false;
     }

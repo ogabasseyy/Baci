@@ -39,23 +39,6 @@ function isSafeStaticObjectLiteral(expr: ts.Expression): boolean {
   );
 }
 
-function isAllowedSdkOpenReceiver(receiver?: ts.Expression): boolean {
-  if (!receiver) return false;
-  if (
-    ts.isParenthesizedExpression(receiver) ||
-    ts.isAsExpression(receiver) ||
-    ts.isNonNullExpression(receiver)
-  ) {
-    return isAllowedSdkOpenReceiver(receiver.expression);
-  }
-  if (ts.isPropertyAccessExpression(receiver)) {
-    return (
-      receiver.name.text === 'navigation' || receiver.name.text === 'checkout'
-    );
-  }
-  return false;
-}
-
 function isAllowedObjectAssignCall(memberAccessNode?: ts.Node): boolean {
   if (!memberAccessNode?.parent) return false;
   const call = memberAccessNode.parent;
@@ -73,7 +56,8 @@ export function classifyMemberName(
   memberName: string,
   violations: SourceSafetyViolation[],
   receiver?: ts.Expression,
-  memberAccessNode?: ts.Node
+  memberAccessNode?: ts.Node,
+  isSdkOpenReceiver?: (expr?: ts.Expression) => boolean
 ): void {
   const push = (rule: SourceSafetyViolation['rule'], detail: string) =>
     violations.push({ filePath, rule, detail });
@@ -105,7 +89,7 @@ export function classifyMemberName(
     memberAccessNode?.parent !== undefined &&
     ts.isCallExpression(memberAccessNode.parent) &&
     memberAccessNode.parent.expression === memberAccessNode &&
-    !isAllowedSdkOpenReceiver(receiver)
+    !(isSdkOpenReceiver?.(receiver) ?? false)
   ) {
     push(
       'DYNAMIC_CODE_EVAL',

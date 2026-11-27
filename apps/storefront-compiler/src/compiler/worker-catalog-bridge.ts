@@ -42,7 +42,10 @@ function toSdkPublicProduct(p) {
           ? \`/\${p.slug}\`
           : undefined,
     available,
-    requiresVariant: variants.length > 1,
+    requiresVariant:
+      typeof p.requiresVariant === 'boolean'
+        ? p.requiresVariant
+        : Boolean(p.has_variants) || variants.length > 0,
     image: p.image && typeof p.image === 'object' && !Array.isArray(p.image) ? p.image : null,
     variants,
   };
@@ -86,7 +89,12 @@ async function handleCatalogBridgeRequest(url, method) {
       }
       mapped.push(item);
     }
-    const revision = String(up.data.availabilityGeneration ?? up.data.generation ?? '0');
+    const gen = up.data.generation;
+    const availGen = up.data.availabilityGeneration;
+    const revision =
+      gen !== undefined && availGen !== undefined
+        ? \`\${gen}:\${availGen}\`
+        : String(gen ?? availGen ?? '0');
     return jsonCatalogBridgeResponse(200, { status: 'ok', value: { products: mapped, revision } }, method);
   }
   if (op === 'product') {

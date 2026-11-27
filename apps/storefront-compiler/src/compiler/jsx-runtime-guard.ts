@@ -10,8 +10,11 @@ import { Fragment, jsx as rawJsx, jsxs as rawJsxs } from 'react/jsx-runtime';
 
 const TRUSTED_ORIGIN = ${JSON.stringify(trustedOrigin)};
 const DECLARED_ASSETS = new Set(${JSON.stringify(declaredAssetIds)});
-const CSS_RES_TOKEN_RE = /url\\s*\\(|src\\s*\\(|image-set\\s*\\(|\\\\/i;
-const SAFE_ASSET_URL_RE = /^url\\(\\s*(?:"(\\/assets\\/[A-Za-z0-9._-]+|#[A-Za-z0-9._-]+)"|'(\\/assets\\/[A-Za-z0-9._-]+|#[A-Za-z0-9._-]+)'|(\\/assets\\/[A-Za-z0-9._-]+|#[A-Za-z0-9._-]+))\\s*\\)$/i;
+const CSS_URL_RE = /url\\(\\s*(?:"((?:[^"\\\\]|\\\\[\\s\\S])*)"|'((?:[^'\\\\]|\\\\[\\s\\S])*)'|([^'")\\s]+))\\s*\\)/gi;
+const CSS_SRC_FN_RE = /\\bsrc\\(\\s*(?:"((?:[^"\\\\]|\\\\[\\s\\S])*)"|'((?:[^'\\\\]|\\\\[\\s\\S])*)'|([^'")\\s]+))\\s*\\)/gi;
+const IMAGE_SET_START_RE = /(?:-[a-z]+-)?image-set\\s*\\(/gi;
+const IMAGE_SET_TOKEN_RE = /\\b(?:url|type)\\s*\\(\\s*(?:"(?:[^"\\\\]|\\\\[\\s\\S])*"|'(?:[^'\\\\]|\\\\[\\s\\S])*'|[^'")\\s]*)\\s*\\)|"((?:[^"\\\\]|\\\\[\\s\\S])*)"|'((?:[^'\\\\]|\\\\[\\s\\S])*)'/gi;
+const ANY_RES_CALL_RE = /\\b(?:url|src|(?:-[a-z]+-)?image-set)\\s*\\(/i;
 
 function isNavPropKey(key) {
   const lower = key.toLowerCase();
@@ -48,12 +51,99 @@ function isSafeCompletedNavTarget(val) {
   }
 }
 
+function stripInlineComments(s) {
+  return s.replace(
+    /(\\\\([\\s\\S])|"(?:[^"\\\\]|\\\\[\\s\\S])*"|'(?:[^'\\\\]|\\\\[\\s\\S])*')|\\/\\*[\\s\\S]*?(?:\\*\\/|$)/g,
+    (_m, kept) => (kept !== undefined ? kept : '/**/')
+  );
+}
+
+function decodeInlineEscapes(s) {
+  return s.replace(/\\\\([0-9a-fA-F]{1,6})\\s?|\\\\(.)/g, (_m, hex, ch) => {
+    if (hex !== undefined) {
+      const cp = Number.parseInt(hex, 16);
+      if (Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff) return String.fromCodePoint(cp);
+    }
+    return ch ?? '';
+  });
+}
+
+function hasBalancedCssTokens(s) {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '\\\\') { i += 1; continue; }
+    if (ch === '"' || ch === "'") {
+      const q = ch;
+      i += 1;
+      while (i < s.length && s[i] !== q) i += s[i] === '\\\\' ? 2 : 1;
+      if (i >= s.length) return false;
+      continue;
+    }
+    if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth < 0) return false;
+    }
+  }
+  return depth === 0;
+}
+
+function isAllowedCssAssetRef(raw) {
+  const t = String(raw || '').trim();
+  if (t.startsWith('#')) return t.length > 1;
+  if (!t.startsWith('/assets/')) return false;
+  return DECLARED_ASSETS.has(t.slice('/assets/'.length));
+}
+
+function checkCandidateStyleCss(cssText) {
+  if (!ANY_RES_CALL_RE.test(cssText)) return true;
+  if (!hasBalancedCssTokens(cssText)) return false;
+  let count = 0;
+  for (const m of cssText.matchAll(CSS_URL_RE)) {
+    count++;
+    if (!isAllowedCssAssetRef(m[1] ?? m[2] ?? m[3] ?? '')) return false;
+  }
+  for (const m of cssText.matchAll(CSS_SRC_FN_RE)) {
+    count++;
+    if (!isAllowedCssAssetRef(m[1] ?? m[2] ?? m[3] ?? '')) return false;
+  }
+  for (const startMatch of cssText.matchAll(IMAGE_SET_START_RE)) {
+    let idx = (startMatch.index ?? 0) + startMatch[0].length;
+    let depth = 1;
+    const bodyStart = idx;
+    while (idx < cssText.length && depth > 0) {
+      const ch = cssText[idx];
+      if (ch === '\\\\') { idx += 2; continue; }
+      if (ch === '"' || ch === "'") {
+        const q = ch;
+        idx += 1;
+        while (idx < cssText.length && cssText[idx] !== q) idx += cssText[idx] === '\\\\' ? 2 : 1;
+        idx += 1;
+        continue;
+      }
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      idx += 1;
+    }
+    if (depth !== 0) return false;
+    const rawBody = cssText.slice(bodyStart, Math.max(bodyStart, idx - 1));
+    for (const tok of rawBody.matchAll(IMAGE_SET_TOKEN_RE)) {
+      const strUrl = tok[1] ?? tok[2];
+      if (strUrl !== undefined) {
+        count++;
+        if (!isAllowedCssAssetRef(strUrl)) return false;
+      }
+    }
+  }
+  return count > 0;
+}
+
 function isSafeInlineStyleValue(val) {
-  if (typeof val !== 'string' || !CSS_RES_TOKEN_RE.test(val)) return true;
-  const m = SAFE_ASSET_URL_RE.exec(val.trim());
-  if (!m) return false;
-  const ref = m[1] || m[2] || m[3] || '';
-  return ref.startsWith('#') || DECLARED_ASSETS.has(ref.slice('/assets/'.length));
+  if (typeof val !== 'string') return true;
+  const noComments = stripInlineComments(val);
+  const decoded = decodeInlineEscapes(noComments);
+  return checkCandidateStyleCss(noComments) && checkCandidateStyleCss(decoded);
 }
 
 function sanitizeInlineStyle(styleObj) {

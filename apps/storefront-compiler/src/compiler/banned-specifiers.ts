@@ -50,8 +50,29 @@ export const SENSITIVE_GLOBAL_ROOTS: ReadonlySet<string> = new Set([
   'top',
   'parent',
   'frames',
-  'caches',
+]);
+
+export const FORBIDDEN_STORAGE_GLOBALS: ReadonlySet<string> = new Set([
+  'localStorage',
+  'sessionStorage',
   'indexedDB',
+  'caches',
+  'CacheStorage',
+  'IDBFactory',
+  'Storage',
+  'openDatabase',
+  'sharedStorage',
+  'cookieStore',
+]);
+
+export const FORBIDDEN_STORAGE_MEMBERS: ReadonlySet<string> = new Set([
+  'localStorage',
+  'sessionStorage',
+  'indexedDB',
+  'openDatabase',
+  'sharedStorage',
+  'cookie',
+  'cookieStore',
 ]);
 
 export const FORBIDDEN_BROWSER_NAV_GLOBALS: ReadonlySet<string> = new Set([

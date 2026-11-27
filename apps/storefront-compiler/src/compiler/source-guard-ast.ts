@@ -2,6 +2,7 @@ import ts from '@typescript/typescript6';
 import {
   DYNAMIC_CODE_NAMES,
   FORBIDDEN_BROWSER_NAV_GLOBALS,
+  FORBIDDEN_STORAGE_MEMBERS,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
 import { hasLocalLexicalBinding } from './jsx-tag-safety';
@@ -185,21 +186,22 @@ export function classifyMemberName(
       detail:
         'Service Worker registration or control is forbidden on storefronts',
     });
-  } else if (memberName === 'cookie' || memberName === 'cookieStore') {
+  } else if (
+    FORBIDDEN_STORAGE_MEMBERS.has(memberName) ||
+    ((memberName === 'caches' || memberName === 'storage') &&
+      receiver !== undefined &&
+      isSensitiveGlobalReceiver(receiver))
+  ) {
     violations.push({
       filePath,
       rule: 'DIRECT_COOKIE_ACCESS',
       detail:
-        'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
+        'Custom storefronts are cookie/storage-free; use @baci/experience-sdk APIs',
     });
   }
 }
 
-/**
- * Constant-folds string literals, templates, and `+` concatenations so
- * obfuscated forms like `'dangerously' + 'SetInnerHTML'` or `globalThis['ev' + 'al']`
- * resolve to their runtime string value.
- */
+/** Constant-folds string literals, templates, and `+` concatenations. */
 export function resolveStaticString(node: ts.Expression): string | null {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
     return node.text;

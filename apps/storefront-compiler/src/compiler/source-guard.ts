@@ -4,6 +4,7 @@ import {
   BANNED_MERCHANT_SUBPATH_SPECIFIERS,
   BENIGN_OBJECT_DATA_KEYS,
   FORBIDDEN_BROWSER_NAV_GLOBALS,
+  FORBIDDEN_STORAGE_GLOBALS,
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
@@ -256,12 +257,14 @@ export function scanManifestSourceSafety(
             rule: 'DYNAMIC_CODE_EVAL',
             detail: `Direct reference to "${node.text}" is forbidden`,
           });
-        } else if (node.text === 'cookieStore') {
+        } else if (
+          FORBIDDEN_STORAGE_GLOBALS.has(node.text) &&
+          !hasLocalLexicalBinding(node, node.text)
+        ) {
           violations.push({
             filePath: file.path,
             rule: 'DIRECT_COOKIE_ACCESS',
-            detail:
-              'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
+            detail: `Direct browser storage/cookie access via "${node.text}" is forbidden; use @baci/experience-sdk`,
           });
         } else if (
           FORBIDDEN_BROWSER_NAV_GLOBALS.has(node.text) &&

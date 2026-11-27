@@ -7,6 +7,7 @@ import {
   WALLET_TOP_UP_TRANSACTION_TYPE,
 } from '@/lib/customer-wallet-top-up';
 import { verifyPayment as verifyKorapayPayment } from '@/lib/korapay';
+import { readPaystackWalletTopUpAmount } from '@/lib/payments/paystack-wallet-top-up-amount';
 import { scheduleWalletTopUpCreditNotification } from '@/lib/payments/schedule-wallet-top-up-credit-notification';
 import { verifyTransaction as verifyPaystackTransaction } from '@/lib/paystack';
 import { resolveWalletTopUpMerchant } from '@/lib/resolve-wallet-top-up-merchant';
@@ -18,12 +19,16 @@ function getVerifiedAmount(
   gateway: 'paystack' | 'korapay',
   payload: Record<string, unknown>
 ) {
+  // A customer-paid Paystack fee is charged on top of the top-up; only the
+  // principal is compared and credited.
+  if (gateway === 'paystack') return readPaystackWalletTopUpAmount(payload);
+
   const rawAmount = payload.amount;
   if (typeof rawAmount !== 'number' || !Number.isFinite(rawAmount)) {
     return null;
   }
 
-  return gateway === 'paystack' ? rawAmount / 100 : rawAmount;
+  return rawAmount;
 }
 
 function getVerifiedCurrency(payload: Record<string, unknown>) {

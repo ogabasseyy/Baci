@@ -1,5 +1,10 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import {
+  Miniflare,
+  type Request as MiniflareRequest,
+  Response as MiniflareResponse,
+} from 'miniflare';
 import { describe, expect, it } from 'vitest';
 import {
   createOgabasseyStorefrontManifest,
@@ -179,5 +184,81 @@ describe('Round-2 & Round-3 Codex & Muse compiler hardening regressions', () => 
     expect(lockfile).toContain(
       `specifier: ${pkgJson.devDependencies['@types/react']}`
     );
+  });
+
+  it('blocks aliased React factories / jsx-runtime, vets CSP per directive, and binds custom-domain slug + custom collection params', async () => {
+    for (const factoryEscape of [
+      `import { createElement as h } from 'react';
+       export default function X() { return h('div', JSON.parse('{"dangerouslySetInnerHTML":{"__html":"<b>x</b>"}}')); }`,
+      `import { jsx as j } from 'react/jsx-runtime';
+       export default function X() { return j('div', JSON.parse('{}')); }`,
+    ]) {
+      const m = createOgabasseyStorefrontManifest();
+      m.files = [{ path: 'src/StorefrontApp.tsx', content: factoryEscape }];
+      await expect(compileStorefrontWorker(m)).rejects.toBeInstanceOf(
+        StorefrontCompilerError
+      );
+    }
+
+    // Host vetted for img-src (images.unsplash.com) MUST be flagged unvetted when placed in scriptOrigins.
+    const crossDirectiveManifest = createOgabasseyStorefrontManifest();
+    crossDirectiveManifest.cspAllowlist = {
+      scriptOrigins: ['https://images.unsplash.com'],
+      connectOrigins: [],
+      imgOrigins: ['https://images.unsplash.com'],
+    };
+    const crossCompiled = await compileStorefrontWorker(crossDirectiveManifest);
+    expect(crossCompiled.cspGovernance.unvettedOrigins).toEqual([
+      'https://images.unsplash.com',
+    ]);
+    expect(crossCompiled.cspGovernance.vettedOrigins).toEqual([]);
+    expect(
+      crossCompiled.cspGovernance.unvettedByDirective.scriptOrigins
+    ).toEqual(['https://images.unsplash.com']);
+
+    // Custom domain (shop.example.com) + /collections/:collectionSlug route binding.
+    const customRouteManifest = createOgabasseyStorefrontManifest();
+    customRouteManifest.routes = [
+      { path: '/', view: 'home' },
+      { path: '/collections/:collectionSlug', view: 'collection' },
+    ];
+    const compiledWorker = await compileStorefrontWorker(customRouteManifest);
+    let queriedCategory = '';
+    const mf = new Miniflare({
+      modules: [
+        {
+          type: 'ESModule',
+          path: 'worker.mjs',
+          contents: compiledWorker.workerCode,
+        },
+      ],
+      compatibilityDate: '2026-07-01',
+      bindings: {},
+      outboundService: (req: MiniflareRequest) => {
+        const u = new URL(req.url);
+        queriedCategory = u.searchParams.get('category') ?? '';
+        return new MiniflareResponse(
+          JSON.stringify({
+            title: 'Phones',
+            categoryExists: true,
+            products: [],
+            facets: { brands: [], conditions: [], totalMatches: 0 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      },
+    });
+    try {
+      const res = await mf.dispatchFetch(
+        'https://shop.example.com/collections/phones'
+      );
+      expect(res.status).toBe(200);
+      expect(queriedCategory).toBe('phones');
+      const html = await res.text();
+      expect(html).toContain('"merchantSlug":"ogabassey"');
+      expect(html).not.toContain('"merchantSlug":"shop"');
+    } finally {
+      await mf.dispose();
+    }
   });
 });

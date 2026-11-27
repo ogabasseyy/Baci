@@ -23,6 +23,7 @@ import StorefrontApp from ${JSON.stringify(entryImportPath)};
 const THEME_TOKENS = ${themeTokensJson};
 const DECLARED_ROUTES = ${declaredRoutesJson};
 const CSP_HEADER = ${JSON.stringify(cspHeaderValue)};
+const TRUSTED_MERCHANT_SLUG = ${JSON.stringify(manifest.merchantSlug)};
 const EMPTY_FACETS = { brands: [], conditions: [], totalMatches: 0 };
 
 function escapeHtmlAttr(value) {
@@ -40,7 +41,6 @@ function escapeJsonForScript(value) {
     .replace(/&/g, '\\\\u0026');
 }
 
-const MERCHANT_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const ALLOWED_SEARCH_PARAMS = [
   'brand',
   'category',
@@ -49,14 +49,6 @@ const ALLOWED_SEARCH_PARAMS = [
   'page',
   'q',
 ];
-
-function resolveMerchantSlug(url) {
-  const host = url.hostname.toLowerCase();
-  const candidate = host.endsWith('.mybaci.store')
-    ? host.slice(0, -'.mybaci.store'.length)
-    : (host.split('.')[0] ?? '');
-  return MERCHANT_SLUG_RE.test(candidate) ? candidate : 'store';
-}
 
 function canonicalizeSearchParams(inputParams) {
   const canonical = new URLSearchParams();
@@ -127,7 +119,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    const merchantSlug = resolveMerchantSlug(url);
+    const merchantSlug = TRUSTED_MERCHANT_SLUG;
 
     const matchedRoute = matchDeclaredRoute(url.pathname);
     if (matchedRoute && matchedRoute.view === 'bad_request') {
@@ -179,12 +171,20 @@ export default {
     } else if (matchedRoute.view === 'cart') {
       title = 'Your Cart';
     } else if (matchedRoute.view === 'editorial') {
-      title = matchedRoute.params.slug || matchedRoute.params.page || 'Editorial';
+      const paramValues = Object.values(matchedRoute.params);
+      title =
+        matchedRoute.params.slug ||
+        matchedRoute.params.page ||
+        paramValues[0] ||
+        'Editorial';
     } else if (matchedRoute.view === 'collection') {
+      const paramValues = Object.values(matchedRoute.params);
       const categoryParam =
         matchedRoute.params.category ||
         matchedRoute.params.handle ||
-        url.pathname.split('/').filter(Boolean)[0] ||
+        matchedRoute.params.collectionSlug ||
+        matchedRoute.params.slug ||
+        paramValues[0] ||
         '';
       const upstream = await fetchCatalogJson(
         \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\`
@@ -202,11 +202,12 @@ export default {
         facets = upstream.data.facets || EMPTY_FACETS;
       }
     } else if (matchedRoute.view === 'product') {
+      const paramValues = Object.values(matchedRoute.params);
       const productSlug =
         matchedRoute.params.productSlug ||
         matchedRoute.params.slug ||
         matchedRoute.params.handle ||
-        url.pathname.split('/').filter(Boolean).pop() ||
+        paramValues[paramValues.length - 1] ||
         '';
       const categoryQuery = matchedRoute.params.category
         ? \`category=\${encodeURIComponent(matchedRoute.params.category)}&\`

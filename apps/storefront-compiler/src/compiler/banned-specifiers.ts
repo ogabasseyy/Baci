@@ -64,6 +64,16 @@ export const DYNAMIC_CODE_NAMES: ReadonlySet<string> = new Set([
   'defineProperties',
 ]);
 
+export const BANNED_MERCHANT_SUBPATH_SPECIFIERS: ReadonlySet<string> = new Set([
+  'react/jsx-runtime',
+  'react/jsx-dev-runtime',
+  'react-dom/client',
+  'react-dom/server',
+  'react-dom/server.browser',
+  'react-dom/server.edge',
+  'react-dom/server.node',
+]);
+
 export function isProhibitedImportSpecifier(specifier: string): boolean {
   const trimmed = specifier.trim();
   if (BANNED_IMPORT_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) {

@@ -4,6 +4,7 @@ export function createOgabasseyStorefrontManifest(): WorkerStorefrontManifest {
   return {
     format: 'baci.storefront-worker/v1',
     mode: 'full-code',
+    merchantSlug: 'ogabassey',
     entry: 'src/StorefrontApp.tsx',
     packages: [
       { name: 'react', versionRef: 'platform-pinned' },

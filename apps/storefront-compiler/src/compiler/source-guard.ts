@@ -1,6 +1,7 @@
 import ts from '@typescript/typescript6';
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import {
+  BANNED_MERCHANT_SUBPATH_SPECIFIERS,
   DYNAMIC_CODE_NAMES,
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
@@ -36,11 +37,25 @@ function classifyMemberName(
   memberName: string,
   violations: SourceSafetyViolation[]
 ): void {
-  if (memberName === 'dangerouslySetInnerHTML' || memberName === '__html') {
+  if (
+    memberName === 'dangerouslySetInnerHTML' ||
+    memberName === '__html' ||
+    memberName === '$$typeof'
+  ) {
     violations.push({
       filePath,
       rule: 'DANGEROUS_INNER_HTML',
-      detail: `Forbidden raw HTML property "${memberName}"`,
+      detail: `Forbidden raw HTML or React element symbol property "${memberName}"`,
+    });
+  } else if (
+    memberName === 'createElement' ||
+    memberName === 'cloneElement' ||
+    memberName === 'createFactory'
+  ) {
+    violations.push({
+      filePath,
+      rule: 'DANGEROUS_INNER_HTML',
+      detail: `Direct React factory "${memberName}" is forbidden; use JSX syntax`,
     });
   } else if (DYNAMIC_CODE_NAMES.has(memberName)) {
     violations.push({
@@ -99,7 +114,10 @@ export function scanManifestSourceSafety(
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
         node.moduleSpecifier &&
         ts.isStringLiteral(node.moduleSpecifier) &&
-        isProhibitedImportSpecifier(node.moduleSpecifier.text)
+        (isProhibitedImportSpecifier(node.moduleSpecifier.text) ||
+          BANNED_MERCHANT_SUBPATH_SPECIFIERS.has(
+            node.moduleSpecifier.text.trim()
+          ))
       ) {
         violations.push({
           filePath: file.path,
@@ -121,7 +139,10 @@ export function scanManifestSourceSafety(
             rule: 'DYNAMIC_CODE_EVAL',
             detail: 'Non-literal dynamic import() is forbidden',
           });
-        } else if (isProhibitedImportSpecifier(spec)) {
+        } else if (
+          isProhibitedImportSpecifier(spec) ||
+          BANNED_MERCHANT_SUBPATH_SPECIFIERS.has(spec.trim())
+        ) {
           violations.push({
             filePath: file.path,
             rule: 'PROHIBITED_RUNTIME_IMPORT',
@@ -138,6 +159,11 @@ export function scanManifestSourceSafety(
         );
       }
 
+      if (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) {
+        const specName = (node.propertyName ?? node.name).text;
+        classifyMemberName(file.path, specName, violations);
+      }
+
       if (ts.isJsxSpreadAttribute(node)) {
         const isSafeStaticLiteral =
           ts.isObjectLiteralExpression(node.expression) &&
@@ -151,34 +177,6 @@ export function scanManifestSourceSafety(
             rule: 'DANGEROUS_INNER_HTML',
             detail:
               'Non-static JSX spread attributes are forbidden; pass explicit props',
-          });
-        }
-      }
-
-      if (
-        ts.isCallExpression(node) &&
-        ((ts.isIdentifier(node.expression) &&
-          node.expression.text === 'createElement') ||
-          (ts.isPropertyAccessExpression(node.expression) &&
-            node.expression.name.text === 'createElement')) &&
-        node.arguments.length >= 2
-      ) {
-        const propsArg = node.arguments[1];
-        const isNullish =
-          propsArg.kind === ts.SyntaxKind.NullKeyword ||
-          (ts.isIdentifier(propsArg) && propsArg.text === 'undefined');
-        const isStaticPropsObj =
-          ts.isObjectLiteralExpression(propsArg) &&
-          propsArg.properties.every(
-            (p) =>
-              ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)
-          );
-        if (!isNullish && !isStaticPropsObj) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DANGEROUS_INNER_HTML',
-            detail:
-              'createElement props must be null, undefined, or a static object literal',
           });
         }
       }

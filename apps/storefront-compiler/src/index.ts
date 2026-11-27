@@ -43,7 +43,7 @@ export {
   type AllowedStorefrontPackage,
   type CspAllowlist,
   type CspGovernanceSummary,
-  PLATFORM_VETTED_CSP_HOSTS,
+  PLATFORM_VETTED_CSP_BY_DIRECTIVE,
   parseWorkerStorefrontManifest,
   summarizeCspGovernance,
   WORKER_COMPILER_LIMITS,

@@ -1,4 +1,15 @@
 import { z } from 'zod';
+import {
+  type CspGovernanceSummary,
+  PLATFORM_VETTED_CSP_BY_DIRECTIVE,
+  summarizeCspGovernance,
+} from '../compiler/csp-header';
+
+export {
+  type CspGovernanceSummary,
+  PLATFORM_VETTED_CSP_BY_DIRECTIVE,
+  summarizeCspGovernance,
+};
 
 const utf8ByteLength = (value: string): number =>
   new TextEncoder().encode(value).length;
@@ -26,16 +37,6 @@ export const ALLOWED_STOREFRONT_PACKAGES = [
 
 export type AllowedStorefrontPackage =
   (typeof ALLOWED_STOREFRONT_PACKAGES)[number];
-
-export const PLATFORM_VETTED_CSP_HOSTS: ReadonlySet<string> = new Set([
-  'connect.facebook.net',
-  'www.facebook.com',
-  'www.googletagmanager.com',
-  'www.google-analytics.com',
-  'analytics.tiktok.com',
-  'cdn.usebaci.com',
-  'images.unsplash.com',
-]);
 
 const IPV4_OR_IPV6_HOST = /^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\])$/;
 const HEX_COLOR_RE =
@@ -143,6 +144,7 @@ export const workerStorefrontManifestSchema = z
   .strictObject({
     format: z.literal('baci.storefront-worker/v1'),
     mode: z.enum(['composable', 'full-code']),
+    merchantSlug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/),
     entry: relativeSourcePathSchema,
     files: z
       .array(
@@ -236,40 +238,27 @@ export const workerStorefrontManifestSchema = z
         message: 'Duplicate route path in manifest',
       });
     }
+    for (const route of manifest.routes) {
+      if (
+        (route.view === 'collection' || route.view === 'product') &&
+        !route.path
+          .split('/')
+          .some(
+            (seg) =>
+              seg.startsWith(':') || (seg.startsWith('[') && seg.endsWith(']'))
+          )
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${route.view} route "${route.path}" must capture a dynamic segment`,
+        });
+      }
+    }
   });
 
 export type WorkerStorefrontManifest = z.infer<
   typeof workerStorefrontManifestSchema
 >;
-
-export interface CspGovernanceSummary {
-  allowlist: CspAllowlist;
-  vettedOrigins: string[];
-  unvettedOrigins: string[];
-}
-
-export function summarizeCspGovernance(
-  allowlist: CspAllowlist
-): CspGovernanceSummary {
-  const uniqueOrigins = Array.from(
-    new Set([
-      ...allowlist.scriptOrigins,
-      ...allowlist.connectOrigins,
-      ...allowlist.imgOrigins,
-    ])
-  ).sort();
-  const vettedOrigins: string[] = [];
-  const unvettedOrigins: string[] = [];
-  for (const origin of uniqueOrigins) {
-    const hostname = new URL(origin).hostname.toLowerCase();
-    if (PLATFORM_VETTED_CSP_HOSTS.has(hostname)) {
-      vettedOrigins.push(origin);
-    } else {
-      unvettedOrigins.push(origin);
-    }
-  }
-  return { allowlist, vettedOrigins, unvettedOrigins };
-}
 
 export function parseWorkerStorefrontManifest(
   input: unknown

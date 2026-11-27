@@ -213,6 +213,7 @@ export async function compileStorefrontWorker(
   const canonicalManifest = {
     format: manifest.format,
     mode: manifest.mode,
+    merchantSlug: manifest.merchantSlug,
     entry: manifest.entry,
     routes: manifest.routes.map((r) => ({ path: r.path, view: r.view })),
     packages: [...manifest.packages].sort((a, b) =>

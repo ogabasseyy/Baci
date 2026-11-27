@@ -31,6 +31,9 @@ def catch_up_candidate(app_id:)
   UI.user_error!("Could not find the live iOS version to compare with") unless live
 
   runs = recent_release_runs
+  # Checked once, with no lock. A push landing after this ends like one landing
+  # just after we submit: its release run finds the slot held, and a later check
+  # sends its build once the slot is free.
   return skip_catch_up("A release run is still going and submits its own build.") if release_run_active?(runs)
 
   build = newest_main_build(app, runs, newer_than: live.version_string)

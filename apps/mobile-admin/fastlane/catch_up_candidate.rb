@@ -83,7 +83,9 @@ def newest_main_build(app, runs, newer_than:)
     .select { |build| newer_ios_build?(build, floor) }
     .sort_by { |build| release_order(build.pre_release_version.version, build.version) }
     .reverse
-    .find { |build| uploaded_from_main?(runs, build.version.to_i) }
+    .find do |build|
+      uploaded_from_main?(runs, build.pre_release_version.version, build.version.to_i)
+    end
 end
 
 # FAILED and INVALID builds can never be sent, so they are passed over.

@@ -119,6 +119,11 @@ describe('admin iOS catch-up workflow', () => {
     expect(release).toContain(
       'BUILD_NUMBER=$(( GH_RUN_NUMBER + BUILD_NUMBER_BASE ))'
     );
+    // The version a build is matched on, beside its number.
+    expect(release).toContain(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: shell variables
+      'echo "IOS_APP_VERSION=${APP_VERSION_MAJOR_MINOR}.$BUILD_NUMBER"'
+    );
     // The step whose success proves a main run uploaded its build.
     const uploadStep = read(resolve(fastlaneDir, 'main_release_runs.rb')).match(
       /RELEASE_UPLOAD_STEP = "(.+)"/

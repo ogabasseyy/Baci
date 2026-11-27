@@ -21,9 +21,8 @@ vi.mock('@/components/address-autocomplete', () => ({
 vi.mock('./OxygenVerificationTrust', () => ({
   OxygenVerificationTrust: () => null,
 }));
-it('collects the checkout address and proof beside income, without sending them in the create-account payload or draft document', async () => {
+it('submits start_application from step 2 without requiring address or proof upfront', async () => {
   const submit = vi.fn().mockResolvedValue(true);
-  const prepare = vi.fn();
   const save = vi.fn();
   const flush = vi.fn().mockResolvedValue(true);
   render(
@@ -32,15 +31,6 @@ it('collects the checkout address and proof beside income, without sending them 
       phone="08000000001"
       workflowId="60000000-0000-4000-8000-000000000001"
       submit={submit}
-      checkoutAddress={{
-        street: 'Example Road',
-        house_number: '4',
-        city: 'Ikeja',
-        state: 'Lagos',
-        lga: 'Ikeja',
-        landmark: 'Example Mall',
-      }}
-      onResidentialReady={prepare}
       initialDraft={{
         step: 2,
         fields: {
@@ -64,24 +54,19 @@ it('collects the checkout address and proof beside income, without sending them 
       saveBlocked={false}
     />
   );
-  await screen.findByText('Account verified');
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Continue to income details' })
-  );
   await screen.findByRole('heading', { name: 'Employment and consent' });
-  expect(screen.getByText('From your checkout')).toBeVisible();
-  expect(screen.getByLabelText('Street address')).toHaveValue('Example Road');
-  const file = new File(['bill'], 'bill.pdf', { type: 'application/pdf' });
-  fireEvent.change(screen.getByLabelText('Proof of address'), {
-    target: { files: [file] },
-  });
-  fireEvent.click(
-    screen.getByLabelText(
-      'This is my home address and matches my proof of address.'
-    )
+  await waitFor(() =>
+    expect(screen.getByLabelText('Account name')).toHaveValue('Test Customer')
   );
+  expect(screen.queryByLabelText('Street address')).toBeNull();
+  expect(screen.queryByLabelText('Proof of address')).toBeNull();
   fireEvent.click(screen.getByRole('checkbox', { name: /I agree to share/ }));
   flush.mockResolvedValueOnce(false);
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue verification' })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );
@@ -89,27 +74,16 @@ it('collects the checkout address and proof beside income, without sending them 
     'We could not save your details. Check the message above before continuing.'
   );
   expect(submit).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue verification' })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );
-  await waitFor(() =>
-    expect(prepare).toHaveBeenCalledWith({
-      file,
-      address: {
-        street: 'Example Road',
-        house_number: '4',
-        city: 'Ikeja',
-        state: 'Lagos',
-        lga: 'Ikeja',
-        landmark: 'Example Mall',
-      },
-    })
-  );
-  expect(submit).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
   expect(submit.mock.calls[0][0].action).toBe('start_application');
-  expect(JSON.stringify(submit.mock.calls)).not.toContain('Example Road');
-  expect(save.mock.calls.at(-1)?.[0].fields.home_street).toBe('Example Road');
-  expect(JSON.stringify(save.mock.calls)).not.toContain('bill.pdf');
 });
 
 it('focuses and highlights the missing payday instead of the error banner', async () => {
@@ -134,11 +108,13 @@ it('focuses and highlights the missing payday instead of the error banner', asyn
       saveBlocked={false}
     />
   );
-  await screen.findByText('Account verified');
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Continue to income details' })
-  );
+  await screen.findByRole('heading', { name: 'Employment and consent' });
   const payday = screen.getByLabelText('When are you paid?');
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue verification' })
+    ).toBeEnabled()
+  );
   fireEvent.click(
     screen.getByRole('button', { name: 'Continue verification' })
   );

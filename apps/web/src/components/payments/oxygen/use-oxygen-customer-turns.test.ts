@@ -5,7 +5,7 @@ import { useOxygenCustomerTurns } from './use-oxygen-customer-turns';
 
 describe('useOxygenCustomerTurns', () => {
   it('advances and rewinds identity turns in conversational mode without leaving step 0', () => {
-    const { result } = renderHook(() => useOxygenCustomerTurns(0, true, false));
+    const { result } = renderHook(() => useOxygenCustomerTurns(0, true));
     expect(result.current.step).toBe(0);
     expect(result.current.chatTurn).toBe(oxygenIdentityTurns.bvn);
     expect(result.current.nextQuestion).toBe(true);
@@ -22,8 +22,8 @@ describe('useOxygenCustomerTurns', () => {
     expect(result.current.chatTurn).toBe(oxygenIdentityTurns.bvn);
   });
 
-  it('skips the residential address turn when collectAddress is false', () => {
-    const { result } = renderHook(() => useOxygenCustomerTurns(0, true, false));
+  it('goes directly from payday to consent on step 2 without a residential address turn', () => {
+    const { result } = renderHook(() => useOxygenCustomerTurns(0, true));
     act(() => result.current.goToStep(2));
     act(() => result.current.advanceQuestion()); // employer
     act(() => result.current.advanceQuestion()); // amount
@@ -37,5 +37,10 @@ describe('useOxygenCustomerTurns', () => {
       result.current.back();
     });
     expect(result.current.chatTurn).toBe(oxygenIncomeTurns.payday);
+  });
+
+  it('restores saved step up to 2 on reload', () => {
+    const { result } = renderHook(() => useOxygenCustomerTurns(2, false));
+    expect(result.current.step).toBe(2);
   });
 });

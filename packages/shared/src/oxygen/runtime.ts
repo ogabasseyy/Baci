@@ -48,7 +48,7 @@ export const oxygenRuntimeActionSchema = z.discriminatedUnion('action', [
       lga: field,
       city: field,
       street: field,
-      landmark: field,
+      landmark: z.string().trim().max(200).optional().default(''),
       house_number: field,
     })
     .strict(),

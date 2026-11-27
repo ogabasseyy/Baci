@@ -11,7 +11,14 @@ function isNonEmptyStr(v) {
 function isValidAvailabilityFields(obj, requireExplicit) {
   if (obj.available !== undefined && typeof obj.available !== 'boolean') return false;
   if (obj.inStock !== undefined && typeof obj.inStock !== 'boolean') return false;
+  if (obj.available !== undefined && obj.inStock !== undefined && obj.available !== obj.inStock) return false;
   return !requireExplicit || typeof obj.available === 'boolean' || typeof obj.inStock === 'boolean';
+}
+
+function isValidPriceFields(obj) {
+  if (obj.priceNgn !== undefined && !isFiniteNumber(obj.priceNgn)) return false;
+  if (obj.price !== undefined && !isFiniteNumber(obj.price)) return false;
+  return isFiniteNumber(obj.priceNgn) || isFiniteNumber(obj.price);
 }
 
 function isValidCatalogVariantRecord(v) {
@@ -21,7 +28,7 @@ function isValidCatalogVariantRecord(v) {
     !Array.isArray(v) &&
     isNonEmptyStr(v.id) &&
     isNonEmptyStr(v.label) &&
-    (isFiniteNumber(v.priceNgn) || isFiniteNumber(v.price)) &&
+    isValidPriceFields(v) &&
     isValidAvailabilityFields(v, true)
   );
 }
@@ -31,7 +38,7 @@ function isValidCatalogProductRecord(p) {
   if (!isNonEmptyStr(p.id) || !isNonEmptyStr(p.slug) || !isNonEmptyStr(p.name)) {
     return false;
   }
-  if (!isFiniteNumber(p.priceNgn) && !isFiniteNumber(p.price)) return false;
+  if (!isValidPriceFields(p)) return false;
   if (!Array.isArray(p.variants) || !p.variants.every(isValidCatalogVariantRecord)) {
     return false;
   }
@@ -42,6 +49,42 @@ function isValidCatalogProductRecord(p) {
     return false;
   }
   return true;
+}
+
+function normalizeSsrCatalogProduct(p) {
+  const rawVars = Array.isArray(p.variants) ? p.variants : [];
+  const variants = rawVars.map((v) => {
+    const vPrice = isFiniteNumber(v.priceNgn) ? v.priceNgn : v.price;
+    const vAvail = typeof v.available === 'boolean' ? v.available : v.inStock === true;
+    return {
+      ...v,
+      priceNgn: vPrice,
+      price: isFiniteNumber(v.price) ? v.price : vPrice,
+      inStock: vAvail,
+      available: vAvail,
+    };
+  });
+  const pPrice = isFiniteNumber(p.priceNgn) ? p.priceNgn : p.price;
+  const pAvail =
+    typeof p.available === 'boolean'
+      ? p.available
+      : typeof p.inStock === 'boolean'
+        ? p.inStock
+        : variants.some((v) => v.available);
+  return {
+    ...p,
+    priceNgn: pPrice,
+    price: isFiniteNumber(p.price) ? p.price : pPrice,
+    inStock: pAvail,
+    available: pAvail,
+    categorySlug: typeof p.categorySlug === 'string' ? p.categorySlug : '',
+    brand: typeof p.brand === 'string' ? p.brand : '',
+    condition: typeof p.condition === 'string' ? p.condition : '',
+    imageUrl: typeof p.imageUrl === 'string' ? p.imageUrl : '',
+    imageAlt: typeof p.imageAlt === 'string' && p.imageAlt.length > 0 ? p.imageAlt : p.name,
+    shortSpecs: typeof p.shortSpecs === 'string' ? p.shortSpecs : '',
+    variants,
+  };
 }
 
 function isValidFacetsBucket(list) {

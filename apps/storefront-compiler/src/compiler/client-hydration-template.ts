@@ -1,3 +1,4 @@
+import { buildFramedHostPortSnippet } from './host-port-snippet';
 import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
 
 export function buildClientHydrationEntrySource(
@@ -13,6 +14,7 @@ import { hydrateRoot } from 'react-dom/client';
 const ASSETS_MAP = ${JSON.stringify(assetsMap)};
 const DECLARED_ROUTES = ${JSON.stringify(routes)};
 ${buildDeclaredRouteMatcherSnippet()}
+${buildFramedHostPortSnippet()}
 const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;
 function resolveSafeInternalPath(p) {
   if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || UNSAFE_PATH_CHARS.test(p)) {
@@ -30,6 +32,24 @@ function resolveSafeInternalPath(p) {
   } catch {
     return null;
   }
+}
+function resolveDeclaredNavigationTarget(rawPath) {
+  const target = resolveSafeInternalPath(rawPath);
+  if (!target) {
+    return { ok: false, error: { status: 'error', code: 'INVALID_REQUEST', message: 'Navigation path must be a same-origin relative path' } };
+  }
+  if (RANKED_DECLARED_ROUTES.length > 0) {
+    const matched = matchDeclaredRoute(target.pathname);
+    if (!matched) {
+      return { ok: false, error: { status: 'error', code: 'NOT_FOUND', message: 'Destination route is not declared' } };
+    }
+    if (matched.view === 'bad_request') {
+      return { ok: false, error: { status: 'error', code: 'INVALID_REQUEST', message: 'Malformed navigation path segment' } };
+    }
+    return { ok: true, normalized: target.normalized, routeId: matched.view, params: { ...matched.params } };
+  }
+  const fallbackId = target.pathname === '/' ? 'home' : target.pathname.split('/').filter(Boolean)[0] || 'route';
+  return { ok: true, normalized: target.normalized, routeId: fallbackId, params: {} };
 }
 function seedInitialCatalogAssets(target, state) {
   const rows = Array.isArray(state?.products)
@@ -107,48 +127,24 @@ if (rootElement && stateScript?.textContent) {
           }
         }
         if (method === 'navigation.go') {
-          const target = resolveSafeInternalPath(args?.path);
-          if (!target) {
-            return { status: 'error', code: 'INVALID_REQUEST', message: 'Navigation path must be a same-origin relative path' };
-          }
-          if (RANKED_DECLARED_ROUTES.length > 0) {
-            const matched = matchDeclaredRoute(target.pathname);
-            if (!matched) {
-              return { status: 'error', code: 'NOT_FOUND', message: 'Destination route is not declared' };
-            }
-            if (matched.view === 'bad_request') {
-              return { status: 'error', code: 'INVALID_REQUEST', message: 'Malformed navigation path segment' };
-            }
-            const nextState = {
-              epoch: ++routeEpoch,
-              routeId: matched.view,
-              params: { ...matched.params },
-              canonicalPath: target.normalized,
-              publicDataRevision: currentRevision,
-            };
-            window.location.assign(target.normalized);
-            return { status: 'ok', value: nextState };
-          }
-          const fallbackId = target.pathname === '/' ? 'home' : target.pathname.split('/').filter(Boolean)[0] || 'route';
+          const resolved = resolveDeclaredNavigationTarget(args?.path);
+          if (!resolved.ok) return resolved.error;
           const nextState = {
             epoch: ++routeEpoch,
-            routeId: fallbackId,
-            params: {},
-            canonicalPath: target.normalized,
+            routeId: resolved.routeId,
+            params: resolved.params,
+            canonicalPath: resolved.normalized,
             publicDataRevision: currentRevision,
           };
-          window.location.assign(target.normalized);
+          window.location.assign(resolved.normalized);
           return { status: 'ok', value: nextState };
         }
         if (method === 'navigation.open') {
-          const target = resolveSafeInternalPath(args?.path);
-          if (!target) {
-            return { status: 'error', code: 'INVALID_REQUEST', message: 'Navigation path must be a same-origin relative path' };
-          }
-          const safePath = target.normalized;
+          const resolved = resolveDeclaredNavigationTarget(args?.path);
+          if (!resolved.ok) return resolved.error;
+          const safePath = resolved.normalized;
           if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'baci:navigation.open', path: safePath }, 'https://usebaci.com');
-            return { status: 'ok', value: { presented: true } };
+            return dispatchFramedNavigationOpen(safePath, routeEpoch);
           }
           if (typeof window.open !== 'function') {
             return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'New browsing context unavailable' };

@@ -168,15 +168,18 @@ describe('Round-8 Codex DOM attribute sinks, navigation safety/shapes, CSS comme
     expect(validOpen).toEqual({ status: 'ok', value: { presented: true } });
     expect(openedUrls).toEqual(['/smartphones']);
 
-    // Framed postMessage branch also returns { presented: true }
+    // Framed without connected MessagePort fails closed with LAUNCH_EXPIRED instead of claiming presented: true
     windowMock.parent = {
       postMessage: (msg: unknown) => postedMessages.push(msg),
     };
     const framedOpen = await capturedTransport('navigation.open', {
       path: '/search',
     });
-    expect(framedOpen).toEqual({ status: 'ok', value: { presented: true } });
-    expect(postedMessages).toHaveLength(1);
+    expect(framedOpen).toMatchObject({
+      status: 'error',
+      code: 'LAUNCH_EXPIRED',
+    });
+    expect(postedMessages).toHaveLength(0);
 
     const checkoutOpen = await capturedTransport('checkout.open', {});
     expect(checkoutOpen).toMatchObject({

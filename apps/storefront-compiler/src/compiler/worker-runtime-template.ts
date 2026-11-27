@@ -130,7 +130,7 @@ export default {
         title = 'Catalog Temporarily Unavailable';
       } else {
         title = upstream.data.title || 'Featured Devices';
-        products = upstream.data.products || [];
+        products = (upstream.data.products || []).map(normalizeSsrCatalogProduct);
         facets = upstream.data.facets || EMPTY_FACETS;
         publicDataRevision = formatUpstreamRevision(upstream.data);
       }
@@ -146,7 +146,7 @@ export default {
         title = 'Search Temporarily Unavailable';
       } else {
         title = upstream.data.title || 'Search Catalog';
-        products = upstream.data.products || [];
+        products = (upstream.data.products || []).map(normalizeSsrCatalogProduct);
         facets = upstream.data.facets || EMPTY_FACETS;
         publicDataRevision = formatUpstreamRevision(upstream.data);
       }
@@ -175,7 +175,7 @@ export default {
       } else if (!upstream.data.categoryExists) {
         status = 404; view = 'not_found'; title = 'Category Not Found';
       } else {
-        title = upstream.data.title || categoryParam; products = upstream.data.products || []; facets = upstream.data.facets || EMPTY_FACETS; publicDataRevision = formatUpstreamRevision(upstream.data);
+        title = upstream.data.title || categoryParam; products = (upstream.data.products || []).map(normalizeSsrCatalogProduct); facets = upstream.data.facets || EMPTY_FACETS; publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     } else if (matchedRoute.view === 'product') {
       const paramEntries = Object.entries(matchedRoute.params);
@@ -205,8 +205,8 @@ export default {
         view = 'not_found';
         title = 'Product Not Found';
       } else {
-        productDetail = upstream.data.product;
-        title = upstream.data.product.name;
+        productDetail = normalizeSsrCatalogProduct(upstream.data.product);
+        title = productDetail.name;
         publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     }

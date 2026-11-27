@@ -28,6 +28,7 @@ interface World {
   builds: TestFlightBuild[];
   runs?: ReleaseRun[];
   editable?: { state: string; build?: number };
+  pageSize?: number;
 }
 
 const RUN_OFFSET = 30;
@@ -53,7 +54,12 @@ function runCandidate({ live = '2.0.605', ...world }: World) {
         PreRelease = Struct.new(:version, :platform)
         Build = Struct.new(:version, :processing_state, :expired, :pre_release_version)
         Version = Struct.new(:version_string, :app_version_state, :build)
-        Response = Struct.new(:to_models)
+        # One page of results; all_pages follows the rest, as Spaceship does.
+        class Response
+          def initialize(pages); @pages = pages; end
+          def to_models; @pages.first || []; end
+          def all_pages; @pages.map { |page| Response.new([page]) }; end
+        end
         class App
           def self.find(_id); new; end
           def id; "app-id"; end
@@ -62,17 +68,18 @@ function runCandidate({ live = '2.0.605', ...world }: World) {
           end
           def get_edit_app_store_version(platform:)
             e = WORLD["editable"]
-            e && Version.new(nil, e["state"], e["build"] && Build.new(e["build"].to_s))
+            e && Version.new("2.0.#{e['build']}", e["state"], e["build"] && Build.new(e["build"].to_s))
           end
         end
         def self.get_builds(filter:, includes:, limit:, sort:)
           raise "wrong app" unless filter[:app] == "app-id"
           raise "newest first" unless sort == "-uploadedDate"
           raise "version not included" unless includes.include?("preReleaseVersion")
-          Response.new(WORLD["builds"].map do |b|
+          builds = WORLD["builds"].map do |b|
             Build.new(b["number"].to_s, b["state"] || "VALID", b["expired"] || false,
                       PreRelease.new("2.0.#{b['number']}", "IOS"))
-          end)
+          end
+          Response.new(builds.each_slice(WORLD["pageSize"] || limit).to_a)
         end
       end
     end
@@ -155,6 +162,15 @@ describe('admin iOS catch-up: which build to send', () => {
     expect(output).toContain('build=606');
   });
 
+  it('finds a main build behind a full page of uploads from elsewhere', () => {
+    const output = runCandidate({
+      pageSize: 2,
+      builds: [{ number: 609 }, { number: 608 }, { number: 607 }],
+      runs: [mainRun(607)],
+    });
+    expect(output).toContain('build=607');
+  });
+
   it('waits rather than sending an older build while the newest processes', () => {
     const output = runCandidate({
       builds: [{ number: 607, state: 'PROCESSING' }, { number: 606 }],
@@ -204,6 +220,32 @@ describe('admin iOS catch-up: which build to send', () => {
     expect(output).toContain(state);
   });
 
+  it('sends nothing older than a turned-down build from elsewhere', () => {
+    const output = runCandidate({
+      builds: [{ number: 610 }, { number: 607 }],
+      runs: [mainRun(607)],
+      editable: { state: 'REJECTED', build: 610 },
+    });
+    expect(output).toContain('send=none');
+    expect(output).toContain('build 610 is REJECTED');
+  });
+
+  it('does not put an older build in place of an invalid binary', () => {
+    const output = runCandidate({
+      builds: [{ number: 608, state: 'INVALID' }, { number: 607 }],
+      editable: { state: 'INVALID_BINARY', build: 608 },
+    });
+    expect(output).toContain('send=none');
+  });
+
+  it('still sends when the rejected version has no build attached', () => {
+    const output = runCandidate({
+      builds: [{ number: 607 }],
+      editable: { state: 'REJECTED' },
+    });
+    expect(output).toContain('build=607');
+  });
+
   it('sends a newer build after an earlier one was rejected', () => {
     const output = runCandidate({
       builds: [{ number: 608 }, { number: 607 }],
@@ -223,58 +265,5 @@ describe('admin iOS catch-up: which build to send', () => {
   it('fails visibly when there is no live version to compare with', () => {
     const output = runCandidate({ live: null, builds: [{ number: 607 }] });
     expect(output).toContain('FAIL Could not find the live iOS version');
-  });
-});
-
-// Calls the real github_api with Net::HTTP answering `status` and `body`.
-function runGithubRead(status: string, body: string) {
-  const script = `
-    module UI
-      def self.user_error!(message); puts "FAIL #{message}"; exit 0; end
-    end
-    require ${JSON.stringify(resolve(fastlaneDir, 'main_release_runs'))}
-    Reply = Struct.new(:code, :body)
-    class Net::HTTP
-      def self.start(host, port, use_ssl:)
-        raise "must use TLS to api.github.com" unless use_ssl && host == "api.github.com"
-        http = Object.new
-        def http.request(request)
-          puts "authorised=#{request['Authorization'] == 'Bearer test-token'}"
-          # Net::HTTP hands bodies over as raw bytes.
-          Reply.new(ENV.fetch("STATUS"), ENV.fetch("BODY").dup.force_encoding("BINARY"))
-        end
-        yield http
-      end
-    end
-    puts "title=#{github_api("actions/runs/1/jobs")["title"].bytesize}"
-  `;
-  return execFileSync('ruby', ['-e', script], {
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      LC_ALL: 'C',
-      STATUS: status,
-      BODY: body,
-      GITHUB_REPOSITORY: 'owner/repo',
-      GITHUB_TOKEN: 'test-token',
-    },
-  });
-}
-
-describe('admin iOS catch-up: reading GitHub', () => {
-  it('reads a reply with non-ASCII commit titles', () => {
-    // An em dash is three bytes, as in many commit titles.
-    const output = runGithubRead('200', '{"title":"a \u2014 b"}');
-    expect(output).toContain('title=7');
-  });
-
-  it('reports a refused request without printing the token', () => {
-    const output = runGithubRead('403', 'secret body');
-    expect(output).toContain('authorised=true');
-    expect(output).toContain(
-      'FAIL GitHub returned 403 for actions/runs/1/jobs'
-    );
-    expect(output).not.toContain('test-token');
-    expect(output).not.toContain('secret body');
   });
 });

@@ -22,6 +22,20 @@ def skip_catch_up(reason)
   nil
 end
 
+# Builds are ordered by marketing version, then build number.
+def release_order(app_version, build_number)
+  [Gem::Version.new(app_version), Gem::Version.new(build_number)]
+end
+
+# A turned down build is not sent again, and nothing older goes out in its
+# place, whoever uploaded it.
+def turned_down_blocks?(editable, build)
+  return false unless editable&.build && TURNED_DOWN_VERSION_STATES.include?(editable.app_version_state)
+
+  candidate = release_order(build.pre_release_version.version, build.version)
+  (candidate <=> release_order(editable.version_string, editable.build.version)) <= 0
+end
+
 def catch_up_candidate(app_id:)
   app = Spaceship::ConnectAPI::App.find(app_id)
   UI.user_error!("Could not find App Store Connect app #{app_id}") unless app
@@ -41,11 +55,10 @@ def catch_up_candidate(app_id:)
   return skip_catch_up("build #{build.version} is still processing.") if build.processing_state == "PROCESSING"
 
   editable = app.get_edit_app_store_version(platform: platform)
-  if editable && TURNED_DOWN_VERSION_STATES.include?(editable.app_version_state) &&
-     editable.build&.version == build.version
+  if turned_down_blocks?(editable, build)
     return skip_catch_up(
-      "build #{build.version} is #{editable.app_version_state}. Resubmit it by hand, " \
-      "or the next newer build will be sent."
+      "build #{editable.build.version} is #{editable.app_version_state}, so nothing as old " \
+      "is sent. Resubmit it by hand, or the next newer build will be sent."
     )
   end
 
@@ -55,19 +68,20 @@ def catch_up_candidate(app_id:)
 end
 
 # Newest first. A build still processing is returned too, so that an older one
-# does not overtake it.
+# does not overtake it. Every page is read, so that newer uploads from elsewhere
+# cannot hide a main build.
 def newest_main_build(app, runs, newer_than:)
   floor = Gem::Version.new(newer_than)
   builds = Spaceship::ConnectAPI.get_builds(
     filter: { app: app.id, expired: "false", processingState: "PROCESSING,FAILED,INVALID,VALID" },
     includes: "preReleaseVersion",
     sort: "-uploadedDate",
-    limit: 50
-  ).to_models
+    limit: 200
+  ).all_pages.flat_map(&:to_models)
 
   builds
     .select { |build| newer_ios_build?(build, floor) }
-    .sort_by { |build| [Gem::Version.new(build.pre_release_version.version), build.version.to_i] }
+    .sort_by { |build| release_order(build.pre_release_version.version, build.version) }
     .reverse
     .find { |build| uploaded_from_main?(runs, build.version.to_i) }
 end

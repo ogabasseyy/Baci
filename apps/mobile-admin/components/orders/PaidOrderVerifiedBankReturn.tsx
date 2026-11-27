@@ -1,6 +1,8 @@
-import { findLatestOpenDisbursementClaim } from '@baci/shared';
+import {
+  findLatestOpenDisbursementClaim,
+  paidOrderEvidenceIdSchema,
+} from '@baci/shared';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { z } from 'zod';
 import { formatPrice } from '@/components/orders-screen/format-price';
 import type { ThemeColors } from '@/constants/theme';
 import type {
@@ -60,7 +62,9 @@ export function PaidOrderVerifiedBankReturn({
   if (claimId) {
     const value =
       outgoingEvidence.claimId === claimId ? outgoingEvidence.value : '';
-    const evidenceIdIsValid = z.uuid().safeParse(value.trim()).success;
+    const evidenceIdIsValid = paidOrderEvidenceIdSchema.safeParse(
+      value.trim()
+    ).success;
     return (
       <View>
         <TextInput

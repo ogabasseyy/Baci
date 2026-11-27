@@ -2,6 +2,7 @@ export * from './cancellation-refund-details';
 export * from './customer-login-email-hint';
 export * from './merchant-inbox-customer';
 export * from './merchant-settings';
+export * from './paid-order-evidence-id';
 export * from './paid-order-staff-top-up';
 export * from './phone';
 export * from './quiz-contract';

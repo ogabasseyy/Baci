@@ -5,20 +5,20 @@ import type {
 
 export const PLATFORM_VETTED_CSP_BY_DIRECTIVE = {
   scriptOrigins: new Set([
-    'connect.facebook.net',
-    'www.googletagmanager.com',
-    'analytics.tiktok.com',
+    'https://connect.facebook.net',
+    'https://www.googletagmanager.com',
+    'https://analytics.tiktok.com',
   ]),
   connectOrigins: new Set([
-    'www.facebook.com',
-    'www.google-analytics.com',
-    'analytics.tiktok.com',
+    'https://www.facebook.com',
+    'https://www.google-analytics.com',
+    'https://analytics.tiktok.com',
   ]),
   imgOrigins: new Set([
-    'cdn.usebaci.com',
-    'images.unsplash.com',
-    'www.facebook.com',
-    'www.google-analytics.com',
+    'https://cdn.usebaci.com',
+    'https://images.unsplash.com',
+    'https://www.facebook.com',
+    'https://www.google-analytics.com',
   ]),
 } as const;
 
@@ -45,10 +45,10 @@ export function summarizeCspGovernance(
     'connectOrigins',
     'imgOrigins',
   ] as const) {
-    const vettedHosts = PLATFORM_VETTED_CSP_BY_DIRECTIVE[directive];
+    const vettedOrigins = PLATFORM_VETTED_CSP_BY_DIRECTIVE[directive];
     for (const origin of allowlist[directive]) {
-      const hostname = new URL(origin).hostname.toLowerCase();
-      if (vettedHosts.has(hostname)) {
+      const canonicalOrigin = new URL(origin).origin.toLowerCase();
+      if (vettedOrigins.has(canonicalOrigin)) {
         vettedCandidates.add(origin);
       } else {
         unvettedSet.add(origin);

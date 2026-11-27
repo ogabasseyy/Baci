@@ -2,13 +2,18 @@ import path from 'node:path';
 
 export const CANDIDATE_TOKEN_RE =
   /(?:[A-Za-z0-9_:/\-.%!#()+*&=$^~]|\[(?:[^[\]\s]|\[[^[\]\s]{0,80}\]){1,100}\])+/g;
-export const CSS_URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+export const CSS_URL_RE =
+  /url\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^'")\s]+))\s*\)/gi;
 
 const EXTERNAL_CSS_IMPORT_RE =
   /@import\s+(?:url\s*\(\s*)?['"]?(?:https?:|\/\/|data:|file:)/i;
 const FORBIDDEN_TAILWIND_DIRECTIVE_RE = /@(?:plugin|config|source)\b/i;
 const IMPORT_URL_CALL_RE =
-  /@import\s+url\(\s*(?:['"]([^'"]+)['"]|([^'")\s]+))\s*\)/gi;
+  /@import\s+url\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^'")\s]+))\s*\)/gi;
+
+export function extractMatchedCssUrl(match: RegExpExecArray): string {
+  return match[1] ?? match[2] ?? match[3] ?? '';
+}
 
 export function assertAllowedAssetUrl(
   rawUrl: string,
@@ -60,8 +65,13 @@ export function validateAndNormalizeMerchantCss(
   const normalizeImportUrls = (input: string, placeholderOnly: boolean) =>
     input.replace(
       IMPORT_URL_CALL_RE,
-      (full, q: string | undefined, u: string | undefined) => {
-        const raw = (q ?? u ?? '').trim();
+      (
+        full,
+        dq: string | undefined,
+        sq: string | undefined,
+        u: string | undefined
+      ) => {
+        const raw = (dq ?? sq ?? u ?? '').trim();
         if (
           !raw ||
           raw.startsWith('/') ||
@@ -94,7 +104,11 @@ export function validateAndNormalizeMerchantCss(
     }
     const stripped = normalizeImportUrls(candidate, true);
     for (const match of stripped.matchAll(CSS_URL_RE)) {
-      assertAllowedAssetUrl(match[2] ?? '', filePath, declaredAssetIds);
+      assertAllowedAssetUrl(
+        extractMatchedCssUrl(match),
+        filePath,
+        declaredAssetIds
+      );
     }
   }
 

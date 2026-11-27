@@ -255,6 +255,11 @@ export default {
         ? '<meta name="robots" content="noindex, nofollow" />'
         : '<meta name="robots" content="index, follow" />';
 
+    const hydrationBootstrap =
+      status === 502
+        ? ''
+        : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;
+
     const html = \`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -268,8 +273,7 @@ export default {
 </head>
 <body>
   <div id="root">\${appHtml}</div>
-  <script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>
-  <script type="module" src="${clientAssetPath}"></script>
+  \${hydrationBootstrap}
 </body>
 </html>\`;
 

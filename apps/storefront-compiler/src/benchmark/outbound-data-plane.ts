@@ -160,7 +160,7 @@ export class SimulatedPostgrestOutboundPlane {
     const url = new URL(request.url);
     const isApprovedCatalogEndpoint =
       (request.method === 'GET' || request.method === 'HEAD') &&
-      url.hostname === 'catalog.baci.internal' &&
+      url.origin === 'https://catalog.baci.internal' &&
       (url.pathname === '/v1/search' || url.pathname === '/v1/product');
     if (!isApprovedCatalogEndpoint) {
       return new Response(

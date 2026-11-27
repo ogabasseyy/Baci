@@ -9,6 +9,7 @@ import {
   compileStorefrontWorker,
 } from '../compiler/compile-storefront';
 import { deriveCompileSigkillTimeoutMs } from '../sandbox/container-profiles';
+import { measureColdCliProcessSamples } from './cold-cli-probe';
 import {
   type ChurnScenarioMetrics,
   runGenerationChurnBenchmarkAsync,
@@ -39,6 +40,7 @@ export interface Phase0BenchmarkReport {
   catalogProductCount: number;
   compiler: {
     coldCompileMs: number;
+    coldProcessP95CompileMs: number;
     warmP50CompileMs: number;
     warmP95CompileMs: number;
     derivedSigkillTimeoutMs: number;
@@ -76,14 +78,17 @@ function parseServerTimingSsrMs(headerValue: string | null): number {
 
 export async function runPhase0Benchmarks(options?: {
   warmCompileIterations?: number;
+  coldCliProcessIterations?: number;
   warmSsrIterations?: number;
   productCount?: number;
 }): Promise<Phase0BenchmarkReport> {
   const warmCompileIterations = options?.warmCompileIterations ?? 15;
+  const coldCliProcessIterations = options?.coldCliProcessIterations ?? 3;
   const warmSsrIterations = options?.warmSsrIterations ?? 20;
   const productCount = options?.productCount ?? 2000;
 
   const manifest = createOgabasseyStorefrontManifest();
+  const manifestJson = JSON.stringify(manifest);
 
   const coldCompileStart = performance.now();
   const initialRelease: CompiledStorefrontRelease =
@@ -91,6 +96,11 @@ export async function runPhase0Benchmarks(options?: {
   const coldCompileMs = Number(
     (performance.now() - coldCompileStart).toFixed(2)
   );
+  const coldProcessSamples = await measureColdCliProcessSamples(
+    manifestJson,
+    coldCliProcessIterations
+  );
+  const coldProcessP95CompileMs = percentile(coldProcessSamples, 95);
 
   const warmCompileSamples: number[] = [];
   for (let i = 0; i < warmCompileIterations; i++) {
@@ -100,8 +110,9 @@ export async function runPhase0Benchmarks(options?: {
   }
   const warmP50CompileMs = percentile(warmCompileSamples, 50);
   const warmP95CompileMs = percentile(warmCompileSamples, 95);
-  const derivedSigkillTimeoutMs =
-    deriveCompileSigkillTimeoutMs(warmP95CompileMs);
+  const derivedSigkillTimeoutMs = deriveCompileSigkillTimeoutMs(
+    Math.max(coldCompileMs, coldProcessP95CompileMs, warmP95CompileMs)
+  );
 
   const merchantId = '00000000-0000-4000-8000-000000000001';
   const trustedParams: TrustedOutboundParams = {
@@ -259,6 +270,7 @@ export async function runPhase0Benchmarks(options?: {
       catalogProductCount: productCount,
       compiler: {
         coldCompileMs,
+        coldProcessP95CompileMs,
         warmP50CompileMs,
         warmP95CompileMs,
         derivedSigkillTimeoutMs,

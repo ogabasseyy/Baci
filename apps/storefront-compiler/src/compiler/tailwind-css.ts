@@ -14,6 +14,7 @@ import {
   CANDIDATE_TOKEN_RE,
   CSS_URL_RE,
   decodeCssEscapes,
+  extractMatchedCssUrl,
   validateAndNormalizeMerchantCss,
 } from './css-safety';
 
@@ -62,7 +63,11 @@ export function extractTailwindCandidates(
       const token = match[0];
       if (!token || token.length > 120) continue;
       for (const urlMatch of token.matchAll(CSS_URL_RE)) {
-        assertAllowedAssetUrl(urlMatch[2] ?? '', file.path, declaredAssets);
+        assertAllowedAssetUrl(
+          extractMatchedCssUrl(urlMatch),
+          file.path,
+          declaredAssets
+        );
       }
       candidates.add(token);
     }
@@ -204,7 +209,7 @@ export async function compileStorefrontTailwindCss(
   const css = minified.code;
   for (const match of css.matchAll(CSS_URL_RE)) {
     assertAllowedAssetUrl(
-      match[2] ?? '',
+      extractMatchedCssUrl(match),
       'compiled-stylesheet',
       declaredAssets
     );

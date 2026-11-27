@@ -12,16 +12,16 @@ export interface SourceSafetyViolation {
   detail: string;
 }
 
-const DANGEROUS_HTML_SINK_NAMES: ReadonlySet<string> = new Set([
-  'dangerouslySetInnerHTML',
+const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set([
+  'dangerouslysetinnerhtml',
   '__html',
   '$$typeof',
-  'innerHTML',
-  'outerHTML',
-  'insertAdjacentHTML',
+  'innerhtml',
+  'outerhtml',
+  'insertadjacenthtml',
   'srcdoc',
-  'createContextualFragment',
-  'parseFromString',
+  'createcontextualfragment',
+  'parsefromstring',
 ]);
 
 function isDocumentReceiver(expr: ts.Expression): boolean {
@@ -42,8 +42,9 @@ export function classifyMemberName(
   violations: SourceSafetyViolation[],
   receiver?: ts.Expression
 ): void {
+  const lowerMember = memberName.toLowerCase();
   if (
-    DANGEROUS_HTML_SINK_NAMES.has(memberName) ||
+    LOWERCASE_HTML_SINK_NAMES.has(lowerMember) ||
     ((memberName === 'write' || memberName === 'writeln') &&
       receiver !== undefined &&
       isDocumentReceiver(receiver))

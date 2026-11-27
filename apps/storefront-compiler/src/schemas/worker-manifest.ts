@@ -69,6 +69,7 @@ export const httpsOriginSchema = z
       const parsed = new URL(raw);
       return (
         parsed.protocol === 'https:' &&
+        parsed.port === '' &&
         parsed.origin === raw &&
         parsed.username === '' &&
         parsed.password === '' &&

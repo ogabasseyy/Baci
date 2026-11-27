@@ -45,6 +45,12 @@ describe('Round-5 Codex compiler, CSS, SDK provider, and overlay metadata regres
          return <button type="button" onClick={() => { document.write('<b>x</b>'); }}>ok</button>;
        }`,
     ],
+    [
+      'camelCase iframe srcDoc prop',
+      `export default function X() {
+         return <iframe title="x" srcDoc="<script>alert(1)</script>" />;
+       }`,
+    ],
   ])('blocks reflective/chained escape: %s', async (_label, code) => {
     const manifest = createOgabasseyStorefrontManifest();
     manifest.files = [{ path: 'src/StorefrontApp.tsx', content: code }];
@@ -201,5 +207,70 @@ describe('Round-5 Codex compiler, CSS, SDK provider, and overlay metadata regres
     }
     expect(compiled.cssCode).toContain('--tw-content: "*"');
     expect(compiled.cssCode).toContain('[data-state=closed]');
+  });
+
+  it('rejects quoted CSS url("...a)b"), non-default CSP ports, non-HTTPS catalog origins, and omits hydration on 502', async () => {
+    const quotedParenCss = createOgabasseyStorefrontManifest();
+    quotedParenCss.files = [
+      {
+        path: 'src/styles/paren.css',
+        content: `.hero { background-image: url("https://images.unsplash.com/a)b.png"); }`,
+      },
+      {
+        path: 'src/StorefrontApp.tsx',
+        content: `import './styles/paren.css'; export default function X(){return <main className="hero">ok</main>;}`,
+      },
+    ];
+    await expect(
+      compileStorefrontWorker(quotedParenCss)
+    ).rejects.toBeInstanceOf(StorefrontCompilerError);
+
+    const customPortCsp = createOgabasseyStorefrontManifest();
+    customPortCsp.cspAllowlist.imgOrigins = [
+      'https://images.unsplash.com:8443',
+    ];
+    await expect(compileStorefrontWorker(customPortCsp)).rejects.toBeInstanceOf(
+      StorefrontCompilerError
+    );
+
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const plane = new SimulatedPostgrestOutboundPlane({
+      merchantId,
+      products: generateOgabasseyBackingCatalog(4),
+    });
+    const httpSchemeRes = await plane.handleOutboundFetch(
+      new Request('http://catalog.baci.internal/v1/search?limit=4'),
+      { merchantId, merchantSlug: 'ogabassey' },
+      'split-availability'
+    );
+    expect(httpSchemeRes.status).toBe(403);
+    const customPortCatalogRes = await plane.handleOutboundFetch(
+      new Request('https://catalog.baci.internal:8443/v1/search?limit=4'),
+      { merchantId, merchantSlug: 'ogabassey' },
+      'split-availability'
+    );
+    expect(customPortCatalogRes.status).toBe(403);
+
+    const compiled = await compileStorefrontWorker(
+      createOgabasseyStorefrontManifest()
+    );
+    const mf = new Miniflare({
+      modules: [
+        { type: 'ESModule', path: 'worker.mjs', contents: compiled.workerCode },
+      ],
+      compatibilityDate: '2026-07-01',
+      bindings: {},
+      outboundService: () =>
+        new MiniflareResponse('Forbidden', { status: 403 }),
+    });
+    try {
+      const res502 = await mf.dispatchFetch('https://ogabassey.mybaci.store/');
+      expect(res502.status).toBe(502);
+      const html502 = await res502.text();
+      expect(html502).not.toContain('__BACI_STOREFRONT_STATE__');
+      expect(html502).not.toContain(compiled.assets.clientAssetPath);
+    } finally {
+      await mf.dispose();
+    }
   });
 });

@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:ci": "pnpm run typecheck",
     "test": "pnpm run build && vitest run",
-    "benchmark": "node --import tsx src/benchmark/cli.ts"
+    "benchmark": "pnpm run build && node --import tsx src/benchmark/cli.ts"
   },
   "dependencies": {
     "@baci/experience-sdk": "workspace:*",

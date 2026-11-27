@@ -16,6 +16,7 @@ import {
 } from './jsx-nav-safety';
 import { createJsxTagValidator } from './jsx-tag-safety';
 import { checkDynamicImportOrRequireNode } from './module-call-guard';
+import { checkOpenDestructuringSafety } from './open-binding-guard';
 import { createSdkOpenReceiverChecker } from './sdk-binding-resolver';
 import {
   classifyMemberName,
@@ -285,6 +286,7 @@ export function scanManifestSourceSafety(
     };
 
     visit(sourceFile);
+    checkOpenDestructuringSafety(sourceFile, filePath, violations);
   }
 
   return violations;

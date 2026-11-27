@@ -59,11 +59,11 @@ describe('Round 28 compiler & runtime regressions', () => {
       )
       .replace(
         "import { createElement, useEffect } from 'react';",
-        'const createElement = (t, p, ...c) => (typeof t === "function" ? t({ ...(p || {}), children: c }) : {}); const useEffect = () => {};'
+        'const createElement = (t, p, ...c) => (typeof t === "function" ? t({ ...(p || {}), children: c }) : {}); const useEffect = (fn) => { __captureCommit(fn); };'
       )
       .replace(
         "import { hydrateRoot } from 'react-dom/client';",
-        'const hydrateRoot = () => ({ render: () => {} });'
+        'const hydrateRoot = (_el, tree) => ({ render: (next) => { void next; } });'
       )
       .replace(
         'const mod = await import("./src/App.tsx");',
@@ -71,11 +71,15 @@ describe('Round 28 compiler & runtime regressions', () => {
       );
 
     let finishImport: (() => void) | undefined;
+    let commitHydration: (() => void) | undefined;
     vm.runInNewContext(stubBody, {
       URL,
       URLSearchParams,
       __resolveImport: (fn: () => void) => {
         finishImport = fn;
+      },
+      __captureCommit: (fn: () => void) => {
+        commitHydration = fn;
       },
       __props: (p: Record<string, unknown>) => snapshots.push(p),
       __assets: (a: Record<string, string>) => assetsLog.push({ ...a }),
@@ -97,16 +101,8 @@ describe('Round 28 compiler & runtime regressions', () => {
                 ) => rootListeners.set(t, cb),
               }
             : {
-                textContent: JSON.stringify({
-                  view: 'home',
-                  pathname: '/',
-                  merchantSlug: 'ogabassey',
-                  title: 'Featured Devices',
-                  products: [],
-                  facets: { brands: [], conditions: [], totalMatches: 0 },
-                  productDetail: null,
-                  publicDataRevision: '1:1',
-                }),
+                textContent:
+                  '{"view":"home","pathname":"/","merchantSlug":"ogabassey","title":"Featured Devices","products":[],"facets":{"brands":[],"conditions":[],"totalMatches":0},"productDetail":null,"publicDataRevision":"1:1"}',
               },
       },
     });
@@ -203,6 +199,10 @@ describe('Round 28 compiler & runtime regressions', () => {
     });
     finishImport?.();
     await new Promise((r) => setImmediate(r));
+    // Initial hydrateRoot renders SSR initialProps first (deferring cached host rerender until commit!)
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.view).toBe('home');
+    commitHydration?.();
     expect(assetsLog.at(-1)?.['img-16']).toBe(
       'https://cdn.usebaci.com/iphone-16.png'
     );

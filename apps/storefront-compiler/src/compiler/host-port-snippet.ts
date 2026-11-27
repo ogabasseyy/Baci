@@ -173,7 +173,7 @@ function sendFramedBridgeRequest(method, args, fallbackEpoch) {
               return;
             }
             resolve({ status: 'error', code: 'INVALID_REQUEST', message: 'Host bridge request timed out' });
-          }, 4000)
+          }, 10000)
         : null;
     hostPending.set(requestId, { resolve, timer, requestId });
     hostPort.postMessage({

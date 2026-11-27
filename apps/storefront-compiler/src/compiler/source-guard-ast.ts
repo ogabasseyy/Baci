@@ -86,10 +86,13 @@ export function classifyMemberName(
     );
   } else if (
     memberName === 'open' &&
-    memberAccessNode?.parent !== undefined &&
-    ts.isCallExpression(memberAccessNode.parent) &&
-    memberAccessNode.parent.expression === memberAccessNode &&
-    !(isSdkOpenReceiver?.(receiver) ?? false)
+    memberAccessNode !== undefined &&
+    !(
+      memberAccessNode.parent !== undefined &&
+      ts.isCallExpression(memberAccessNode.parent) &&
+      memberAccessNode.parent.expression === memberAccessNode &&
+      (isSdkOpenReceiver?.(receiver) ?? false)
+    )
   ) {
     push(
       'DYNAMIC_CODE_EVAL',

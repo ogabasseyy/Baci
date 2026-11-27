@@ -87,7 +87,9 @@ if (rootElement && stateScript?.textContent) {
       const initialProps = JSON.parse(stateScript.textContent);
       let currentProps = initialProps;
       const runtimeAssets = { ...ASSETS_MAP };
+      const enrichedCatalogCache = new Map();
       seedInitialCatalogAssets(runtimeAssets, initialProps);
+      rememberEnrichedProducts(enrichedCatalogCache, initialProps);
       let routeEpoch = 1;
       let currentRevision =
         typeof initialProps.publicDataRevision === 'string' && initialProps.publicDataRevision.length > 0
@@ -95,6 +97,8 @@ if (rootElement && stateScript?.textContent) {
           : '0';
       let reactRoot = null;
       let StorefrontApp = null;
+      let hydrationCommitted = false;
+      let pendingPostCommitRender = false;
       const commerce = createCommerceClient(async (method, args) => {
         if (
           method === 'catalog.collection' ||
@@ -203,6 +207,13 @@ if (rootElement && stateScript?.textContent) {
       });
       function HydrationCommitGate(props) {
         useEffect(() => {
+          hydrationCommitted = true;
+          if (pendingPostCommitRender) {
+            pendingPostCommitRender = false;
+            if (reactRoot && typeof reactRoot.render === 'function') {
+              reactRoot.render(buildAppTree(currentProps));
+            }
+          }
           notifyHostRenderCommitted();
         }, []);
         return props.children;
@@ -219,6 +230,15 @@ if (rootElement && stateScript?.textContent) {
           { commerce, assets: runtimeAssets },
           createElement(HydrationCommitGate, null, createElement(StorefrontApp, propsToRender))
         );
+      const scheduleHydratedRender = () => {
+        if (!hydrationCommitted) {
+          pendingPostCommitRender = true;
+          return;
+        }
+        if (reactRoot && typeof reactRoot.render === 'function') {
+          reactRoot.render(buildAppTree(currentProps));
+        }
+      };
       reactRoot = hydrateRoot(rootElement, buildAppTree(currentProps), {
         onUncaughtError: () => notifyHostRenderFailed(),
       });
@@ -234,24 +254,20 @@ if (rootElement && stateScript?.textContent) {
             routeEpoch = bootstrap.route.epoch;
           }
           currentProps = {
-            ...deriveNextRenderProps(currentProps, bootstrap.route, bootstrap.catalog, runtimeAssets),
+            ...deriveNextRenderProps(currentProps, bootstrap.route, bootstrap.catalog, runtimeAssets, enrichedCatalogCache),
             bootstrap,
           };
           currentRevision = currentProps.publicDataRevision;
-          if (reactRoot && typeof reactRoot.render === 'function') {
-            reactRoot.render(buildAppTree(currentProps));
-          }
+          scheduleHydratedRender();
         },
         (route) => {
           if (!route || typeof route !== 'object') return;
           if (Number.isSafeInteger(route.epoch) && route.epoch > routeEpoch) {
             routeEpoch = route.epoch;
           }
-          currentProps = deriveNextRenderProps(currentProps, route, null, runtimeAssets);
+          currentProps = deriveNextRenderProps(currentProps, route, null, runtimeAssets, enrichedCatalogCache);
           currentRevision = currentProps.publicDataRevision;
-          if (reactRoot && typeof reactRoot.render === 'function') {
-            reactRoot.render(buildAppTree(currentProps));
-          }
+          scheduleHydratedRender();
         }
       );
       attachFramedNavigationInterceptors(rootElement, commerce, initialProps, () => currentProps?.pathname);

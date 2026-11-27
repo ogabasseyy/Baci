@@ -7,6 +7,7 @@ INSERT INTO verified_funding_cases VALUES
   ('mixed_legacy',pg_temp.verified_funding_fixture('bank_transfer',true)),
   ('same_price_cash',pg_temp.verified_funding_fixture('cash',false,0)),
   ('same_price_unknown',pg_temp.verified_funding_fixture('synthetic_new_gateway',false,0)),
+  ('credit_direct_scenario_disabled',pg_temp.verified_funding_fixture('credit_direct')),
   ('lower_price',pg_temp.verified_funding_fixture('credit_direct',false,-2000000)),
   ('paused',pg_temp.verified_funding_fixture('credit_direct')),
   ('funding_mismatch',pg_temp.verified_funding_fixture('credit_direct')),
@@ -32,6 +33,11 @@ UPDATE private.paid_order_amendment_config SET enabled = false
 WHERE merchant_id = (SELECT (ids->>'merchant')::uuid FROM verified_funding_cases WHERE kind = 'paused');
 UPDATE public.transactions SET amount = amount - 1
 WHERE id = (SELECT (ids#>>'{captureIds,0}')::uuid FROM verified_funding_cases WHERE kind = 'funding_mismatch');
+UPDATE private.paid_order_amendment_config config
+SET scenarios = ARRAY['paystack_integration_wallet:serialized_variant:upgrade']
+FROM verified_funding_cases fixture
+WHERE fixture.kind = 'credit_direct_scenario_disabled'
+  AND config.merchant_id = (fixture.ids->>'merchant')::uuid;
 SELECT set_config('request.jwt.claim.role','service_role',true);
 SELECT public.register_paid_order_bank_evidence(config.bank_account_id,'SYNTHETIC-DUPLICATE','incoming',
   2000000,now()-interval '1 minute','separate exact-amount statement credit',NULL,(fixture.ids->>'order')::uuid)
@@ -61,6 +67,19 @@ BEGIN
       IF SQLERRM <> 'order_not_found' THEN RAISE; END IF;
     END;
     PERFORM set_config('request.jwt.claim.sub',fixture.ids->>'actor',true);
+    IF fixture.kind = 'credit_direct_scenario_disabled' THEN
+      IF public.read_paid_order_amendment_workspace(order_id)->>'canStart' IS DISTINCT FROM 'false' THEN
+        RAISE EXCEPTION 'Credit Direct change was advertised without a Credit Direct scenario';
+      END IF;
+      BEGIN
+        PERFORM public.preview_paid_order_amendment(order_id,jsonb_build_object(
+          'lineId',fixture.ids->>'line','replacement',jsonb_build_object('kind','variant','id',fixture.ids->>'variant')));
+        RAISE EXCEPTION 'Credit Direct preview was admitted without its scenario';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM <> 'scenario_disabled' THEN RAISE; END IF;
+      END;
+      CONTINUE;
+    END IF;
     IF fixture.kind IN ('mixed_legacy','same_price_cash','same_price_unknown') THEN
       IF public.read_paid_order_amendment_workspace(order_id)->>'canStart' IS DISTINCT FROM 'false' THEN
         RAISE EXCEPTION 'unsupported verified funding method was advertised';

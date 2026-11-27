@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import {
   onlineManager,
   QueryClient,
@@ -171,6 +172,20 @@ describe('usePaidOrderAmendment', () => {
     const { result } = renderAmendmentHook(true, client);
     await waitFor(() => expect(mocks.workspace).toHaveBeenCalledOnce());
     expect(result.current.verification).toEqual(recovery);
+  });
+
+  it('exposes a failed initial workspace load and clears it after refresh', async () => {
+    mocks.workspace
+      .mockRejectedValueOnce(new Error('Network unavailable'))
+      .mockResolvedValueOnce(emptyWorkspace);
+    const { result } = renderAmendmentHook();
+    await waitFor(() => expect(result.current.workspaceError).toBe(true));
+
+    await act(async () => {
+      await expect(result.current.refreshOrder()).resolves.toBe(true);
+    });
+
+    await waitFor(() => expect(result.current.workspaceError).toBe(false));
   });
 
   it('keeps the newest workspace when an older refresh finishes last', async () => {

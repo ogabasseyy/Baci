@@ -152,6 +152,18 @@ BEGIN
         IS DISTINCT FROM 0::numeric THEN
       RAISE EXCEPTION 'Verified cancellation refund, idempotency, restock or invoice drift: %',result;
     END IF;
+    IF method = 'pos' THEN
+      PERFORM set_config('request.jwt.claim.role','service_role',true);
+      BEGIN
+        INSERT INTO private.paid_order_verified_refund_evidence(
+          order_id,payment_id,purpose,method,amount_minor,reference,reconciliation_reference
+        ) VALUES (o,paid_leg,'downgrade','pos',1,'tender-return-ref-12345',
+          'SYNTHETIC-CASE-REPLAY-' || o);
+        RAISE EXCEPTION 'Case-variant POS refund reference bypassed anti-replay';
+      EXCEPTION WHEN unique_violation THEN
+        NULL;
+      END;
+    END IF;
     IF method IN ('cash','pos') THEN
       rotation_account := gen_random_uuid();
       rotation_cutover := now() + interval '1 second';

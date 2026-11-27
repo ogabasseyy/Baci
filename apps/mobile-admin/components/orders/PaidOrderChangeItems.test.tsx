@@ -100,6 +100,21 @@ it('hides the entry when the server has paused new changes', () => {
   expect(screen.queryByRole('button', { name: 'Change items' })).toBeNull();
 });
 
+it('keeps a retry action visible when the initial workspace request fails', () => {
+  const refreshOrder = vi.fn();
+  mocks.workspace.mockReturnValue({
+    canStart: false,
+    summary: null,
+    workspaceError: true,
+    refreshOrder,
+  });
+
+  showButton();
+  expect(screen.getByText('Item changes could not load.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry item changes' }));
+  expect(refreshOrder).toHaveBeenCalledOnce();
+});
+
 it('keeps unreadable-confirmation recovery reachable after reopening the order', () => {
   const recoverUnreadableConfirmation = vi.fn();
   mocks.workspace.mockReturnValue({

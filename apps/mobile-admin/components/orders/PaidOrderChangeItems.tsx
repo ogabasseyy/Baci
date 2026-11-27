@@ -31,10 +31,31 @@ export function PaidOrderChangeItems({
       (amendment.canStart && items.length)
   );
   const summary = amendment.summary;
-  if (!canOpen && !summary && !open) return null;
+  const canRetryWorkspace = amendment.workspaceError && !deferWorkspace;
+  if (!canOpen && !summary && !open && !canRetryWorkspace) return null;
 
   return (
     <View style={{ marginBottom: 12, gap: 8 }}>
+      {canRetryWorkspace && (
+        <View style={{ gap: 4 }}>
+          <Text style={{ color: colors.text, paddingHorizontal: 12 }}>
+            Item changes could not load.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void amendment.refreshOrder()}
+            style={{
+              minHeight: 44,
+              justifyContent: 'center',
+              paddingHorizontal: 12,
+            }}
+          >
+            <Text style={{ color: colors.primary, fontWeight: '600' }}>
+              Retry item changes
+            </Text>
+          </Pressable>
+        </View>
+      )}
       {canOpen && (
         <Pressable
           accessibilityRole="button"

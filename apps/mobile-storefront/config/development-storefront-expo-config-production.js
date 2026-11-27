@@ -7,12 +7,13 @@
 // env would silently reuse the first load's values. Release usage evaluates
 // once per process; tests needing fresh env must reset the require cache
 // (jest.resetModules) before re-requiring, as the app-config suites do.
-const fs = require('node:fs');
-const path = require('node:path');
 const {
   buildStorefrontAndroidIntentFilters,
 } = require('./android-intent-filters.js');
 const { createExpoPlugins } = require('./expo-plugins.js');
+const {
+  buildStorefrontOtaUpdatesConfiguration,
+} = require('./ota-updates-config.js');
 const { resolveUpdateChannel } = require('./resolve-update-channel.js');
 const { buildSentryExpoConfiguration } = require('./sentry-expo-config.js');
 const {
@@ -120,134 +121,9 @@ const posthogHost =
 const merchantDomain =
   process.env.EXPO_PUBLIC_MERCHANT_DOMAIN?.trim() || 'ogabassey.com';
 const updateChannel = resolveUpdateChannel(process.env);
-const DEFAULT_OTA_UPDATES_URL =
-  'https://u.expo.dev/c6c1897b-cac8-49b0-85f9-3d277aecc379';
-const SELF_HOSTED_OTA_UPDATES_URL = 'https://ota.ogabassey.com/api/manifest';
-const SELF_HOSTED_OTA_UPDATES_URLS = new Set([
-  SELF_HOSTED_OTA_UPDATES_URL,
-  'https://ota.usebaci.com/api/manifest',
-]);
-const ALLOWED_OTA_UPDATES_URLS = new Set([
-  DEFAULT_OTA_UPDATES_URL,
-  ...SELF_HOSTED_OTA_UPDATES_URLS,
-]);
-const rawUpdatesUrl = process.env.EXPO_PUBLIC_OTA_UPDATES_URL?.trim();
-let updatesUrl = DEFAULT_OTA_UPDATES_URL;
-
-if (rawUpdatesUrl) {
-  let parsedUpdatesUrl;
-  try {
-    parsedUpdatesUrl = new URL(rawUpdatesUrl);
-  } catch {
-    throw new Error(
-      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be a valid https URL.`
-    );
-  }
-  if (parsedUpdatesUrl.protocol !== 'https:') {
-    throw new Error(
-      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must use https.`
-    );
-  }
-  const host = parsedUpdatesUrl.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  const ipv4Parts = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
-  let isNonPublicIp = host.includes(':');
-  if (ipv4Parts) {
-    const octets = ipv4Parts.slice(1).map((n) => Number(n));
-    const [a, b] = octets;
-    const validOctets = octets.every((o) => o >= 0 && o <= 255);
-    isNonPublicIp =
-      !validOctets ||
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224;
-  }
-  if (
-    parsedUpdatesUrl.username ||
-    parsedUpdatesUrl.password ||
-    parsedUpdatesUrl.hash ||
-    parsedUpdatesUrl.search ||
-    host === 'localhost' ||
-    host.endsWith('.localhost') ||
-    host.endsWith('.local') ||
-    host.endsWith('.internal') ||
-    isNonPublicIp
-  ) {
-    throw new Error(
-      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be a public https origin/path without credentials, query, fragment, or non-public/loopback host.`
-    );
-  }
-  if (!ALLOWED_OTA_UPDATES_URLS.has(parsedUpdatesUrl.href)) {
-    throw new Error(
-      `[app.config] Invalid EXPO_PUBLIC_OTA_UPDATES_URL="${rawUpdatesUrl}". Must be an allowlisted OTA endpoint (${[...ALLOWED_OTA_UPDATES_URLS].join(', ')}).`
-    );
-  }
-  updatesUrl = parsedUpdatesUrl.href;
-}
-
-const codeSigningCertificatePath =
-  process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH?.trim() ||
-  process.env.EXPO_OTA_CODE_SIGNING_CERTIFICATE_PATH?.trim() ||
-  undefined;
-if (codeSigningCertificatePath) {
-  if (
-    codeSigningCertificatePath.includes('-----BEGIN') ||
-    /[\r\n]/.test(codeSigningCertificatePath)
-  ) {
-    throw new Error(
-      '[app.config] EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH must be a file path to a PEM certificate, not inline PEM contents.'
-    );
-  }
-  if (
-    path.isAbsolute(codeSigningCertificatePath) ||
-    codeSigningCertificatePath.split(/[/\\]/).includes('..') ||
-    !/\.(pem|crt|cer)$/i.test(codeSigningCertificatePath)
-  ) {
-    throw new Error(
-      `[app.config] Invalid EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH="${codeSigningCertificatePath}". Expected a relative .pem/.crt/.cer path.`
-    );
-  }
-  if (process.env.EAS_BUILD === 'true') {
-    const resolvedCertPath = path.resolve(
-      __dirname,
-      '..',
-      codeSigningCertificatePath
-    );
-    if (!fs.existsSync(resolvedCertPath)) {
-      throw new Error(
-        `[app.config] EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH="${codeSigningCertificatePath}" does not exist on disk.`
-      );
-    }
-  }
-}
-const codeSigningKeyId =
-  process.env.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID?.trim() ||
-  process.env.EXPO_OTA_CODE_SIGNING_KEY_ID?.trim() ||
-  'main';
-const allowUnsignedSelfHostedOta =
-  process.env.EXPO_PUBLIC_OTA_ALLOW_UNSIGNED === 'true';
-
-if (
-  codeSigningCertificatePath &&
-  !SELF_HOSTED_OTA_UPDATES_URLS.has(updatesUrl)
-) {
-  throw new Error(
-    `[app.config] EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH requires EXPO_PUBLIC_OTA_UPDATES_URL="${SELF_HOSTED_OTA_UPDATES_URL}".`
-  );
-}
-if (
-  SELF_HOSTED_OTA_UPDATES_URLS.has(updatesUrl) &&
-  !codeSigningCertificatePath &&
-  !allowUnsignedSelfHostedOta
-) {
-  throw new Error(
-    `[app.config] Self-hosted OTA URL "${updatesUrl}" requires EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH unless EXPO_PUBLIC_OTA_ALLOW_UNSIGNED=true is explicitly set.`
-  );
-}
+const updatesConfig = buildStorefrontOtaUpdatesConfiguration(process.env, {
+  updateChannel,
+});
 
 const isContinuousIntegration =
   process.env.CI === 'true' || process.env.CI === '1';
@@ -410,23 +286,7 @@ const buildStorefrontConfig = ({ config }) => ({
       projectId: 'c6c1897b-cac8-49b0-85f9-3d277aecc379',
     },
   },
-  updates: {
-    url: updatesUrl,
-    checkAutomatically: 'ON_LOAD',
-    fallbackToCacheTimeout: 0,
-    requestHeaders: {
-      'expo-channel-name': updateChannel,
-    },
-    ...(codeSigningCertificatePath
-      ? {
-          codeSigningCertificate: codeSigningCertificatePath,
-          codeSigningMetadata: {
-            alg: 'rsa-v1_5-sha256',
-            keyid: codeSigningKeyId,
-          },
-        }
-      : {}),
-  },
+  updates: updatesConfig,
   runtimeVersion,
 });
 

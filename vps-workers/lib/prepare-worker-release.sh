@@ -173,7 +173,7 @@ for entry in bin jobs lib config node_modules app-checkout.sha; do
   fi
 done
 
-rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' \
+rsync -a --delete --exclude='.env*' --exclude='logs' --exclude='locks' --exclude='.gigl-capability-smoke-ok' --exclude='gigl-tracking-token-cache' \
   "$staging_dir/" "$remote_dir/"
 
 # Snapshot the checkout pointer for rollback: the flip's one-time

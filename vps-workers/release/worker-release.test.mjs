@@ -47,6 +47,19 @@ test(
       )
     );
     assert.ok(existsSync(join(host.root, 'baci-workers/bin/gigl-dotenv.sh')));
+    assert.ok(
+      existsSync(join(host.root, 'baci-workers/bin/gigl-cache-lock-exec.py'))
+    );
+    assert.equal(
+      readFileSync(
+        join(host.root, 'baci-workers/bin/gigl-cache-lock-exec.py'),
+        'utf8'
+      ),
+      readFileSync(
+        new URL('../bin/gigl-cache-lock-exec.py', import.meta.url),
+        'utf8'
+      )
+    );
     assert.equal(
       realpathSync(join(host.root, 'app-live')),
       realpathSync(join(host.root, 'releases', host.firstSha, 'app'))

@@ -47,6 +47,12 @@ export const SENSITIVE_GLOBAL_ROOTS: ReadonlySet<string> = new Set([
   'self',
   'document',
   'navigator',
+  'location',
+  'top',
+  'parent',
+  'frames',
+  'caches',
+  'indexedDB',
 ]);
 
 export const DYNAMIC_CODE_NAMES: ReadonlySet<string> = new Set([

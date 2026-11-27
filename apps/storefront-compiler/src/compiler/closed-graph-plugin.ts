@@ -36,6 +36,7 @@ const PINNED_PACKAGE_ALLOWLIST: ReadonlySet<string> = new Set([
   'framer-motion',
   'motion-dom',
   'motion-utils',
+  'zod',
 ]);
 
 export class StorefrontCompilerError extends Error {

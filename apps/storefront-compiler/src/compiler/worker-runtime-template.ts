@@ -1,7 +1,8 @@
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
+import { buildClientHydrationEntrySource } from './client-hydration-template';
 import { buildContentSecurityPolicyHeader } from './csp-header';
 
-export { buildContentSecurityPolicyHeader };
+export { buildClientHydrationEntrySource, buildContentSecurityPolicyHeader };
 
 export function buildWorkerSsrEntrySource(options: {
   manifest: WorkerStorefrontManifest;
@@ -39,14 +40,33 @@ function escapeJsonForScript(value) {
     .replace(/&/g, '\\\\u0026');
 }
 
-function resolveMerchantSlug(url, request) {
-  const headerSlug = request.headers.get('x-baci-merchant-slug');
-  if (headerSlug) return headerSlug;
+const MERCHANT_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const ALLOWED_SEARCH_PARAMS = [
+  'brand',
+  'category',
+  'condition',
+  'limit',
+  'page',
+  'q',
+];
+
+function resolveMerchantSlug(url) {
   const host = url.hostname.toLowerCase();
-  if (host.endsWith('.mybaci.store')) {
-    return host.slice(0, -'.mybaci.store'.length) || 'store';
+  const candidate = host.endsWith('.mybaci.store')
+    ? host.slice(0, -'.mybaci.store'.length)
+    : (host.split('.')[0] ?? '');
+  return MERCHANT_SLUG_RE.test(candidate) ? candidate : 'store';
+}
+
+function canonicalizeSearchParams(inputParams) {
+  const canonical = new URLSearchParams();
+  for (const key of ALLOWED_SEARCH_PARAMS) {
+    const value = inputParams.get(key);
+    if (value !== null && value !== '') {
+      canonical.set(key, value);
+    }
   }
-  return host.split('.')[0] || 'store';
+  return canonical;
 }
 
 function safeDecodeSegment(raw) {
@@ -107,9 +127,7 @@ export default {
     }
 
     const url = new URL(request.url);
-    const merchantSlug = resolveMerchantSlug(url, request);
-    const spoofProbe = url.searchParams.get('__spoof_merchant');
-    const spoofSuffix = spoofProbe ? \`&merchantId=\${encodeURIComponent(spoofProbe)}\` : '';
+    const merchantSlug = resolveMerchantSlug(url);
 
     const matchedRoute = matchDeclaredRoute(url.pathname);
     if (matchedRoute && matchedRoute.view === 'bad_request') {
@@ -134,7 +152,7 @@ export default {
       view = 'not_found';
       title = 'Page Not Found';
     } else if (matchedRoute.view === 'home') {
-      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?limit=12\${spoofSuffix}\`);
+      const upstream = await fetchCatalogJson('https://catalog.baci.internal/v1/search?limit=12');
       if (!upstream.ok) {
         status = 502;
         title = 'Catalog Temporarily Unavailable';
@@ -144,9 +162,12 @@ export default {
         facets = upstream.data.facets || EMPTY_FACETS;
       }
     } else if (matchedRoute.view === 'search') {
-      const passthrough = new URLSearchParams(url.searchParams);
-      passthrough.delete('__spoof_merchant');
-      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?\${passthrough.toString()}\${spoofSuffix}\`);
+      const canonical = canonicalizeSearchParams(url.searchParams);
+      const qs = canonical.toString();
+      const endpoint = qs
+        ? \`https://catalog.baci.internal/v1/search?\${qs}\`
+        : 'https://catalog.baci.internal/v1/search';
+      const upstream = await fetchCatalogJson(endpoint);
       if (!upstream.ok) {
         status = 502;
         title = 'Search Temporarily Unavailable';
@@ -166,7 +187,7 @@ export default {
         url.pathname.split('/').filter(Boolean)[0] ||
         '';
       const upstream = await fetchCatalogJson(
-        \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\${spoofSuffix}\`
+        \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\`
       );
       if (!upstream.ok) {
         status = 502;
@@ -191,7 +212,7 @@ export default {
         ? \`category=\${encodeURIComponent(matchedRoute.params.category)}&\`
         : '';
       const upstream = await fetchCatalogJson(
-        \`https://catalog.baci.internal/v1/product?\${categoryQuery}productSlug=\${encodeURIComponent(productSlug)}\${spoofSuffix}\`
+        \`https://catalog.baci.internal/v1/product?\${categoryQuery}productSlug=\${encodeURIComponent(productSlug)}\`
       );
       if (!upstream.ok) {
         status = 502;
@@ -207,13 +228,7 @@ export default {
     }
 
     const renderProps = {
-      view,
-      pathname: url.pathname,
-      merchantSlug,
-      title,
-      products,
-      facets,
-      productDetail,
+      view, pathname: url.pathname, merchantSlug, title, products, facets, productDetail,
     };
 
     const renderStart = performance.now();
@@ -226,24 +241,18 @@ export default {
     const jsonLd =
       status === 200 && view === 'product' && productDetail
         ? {
-            '@context': 'https://schema.org',
-            '@type': 'Product',
+            '@context': 'https://schema.org', '@type': 'Product',
             name: productDetail.name,
             brand: { '@type': 'Brand', name: productDetail.brand },
             offers: {
-              '@type': 'Offer',
-              priceCurrency: 'NGN',
-              price: productDetail.priceNgn,
-              availability: productDetail.inStock
-                ? 'https://schema.org/InStock'
-                : 'https://schema.org/OutOfStock',
+              '@type': 'Offer', priceCurrency: 'NGN', price: productDetail.priceNgn,
+              availability: productDetail.inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
             },
           }
         : {
             '@context': 'https://schema.org',
             '@type': view === 'collection' ? 'CollectionPage' : 'WebSite',
-            name: title,
-            url: url.origin + url.pathname,
+            name: title, url: url.origin + url.pathname,
           };
 
     const robotsMeta =
@@ -280,20 +289,5 @@ export default {
     });
   },
 };
-`;
-}
-
-export function buildClientHydrationEntrySource(entryPath: string): string {
-  return `
-import { createElement } from 'react';
-import { hydrateRoot } from 'react-dom/client';
-import StorefrontApp from ${JSON.stringify(`./${entryPath}`)};
-
-const rootElement = document.getElementById('root');
-const stateScript = document.getElementById('__BACI_STOREFRONT_STATE__');
-if (rootElement && stateScript?.textContent) {
-  const initialProps = JSON.parse(stateScript.textContent);
-  hydrateRoot(rootElement, createElement(StorefrontApp, initialProps));
-}
 `;
 }

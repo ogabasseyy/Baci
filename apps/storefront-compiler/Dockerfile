@@ -4,7 +4,7 @@
 # Executed under runsc (--network=none --read-only --user=65532:65532 --cap-drop=ALL)
 # or Cloudflare Containers (basic / standard-1, enableInternet = false).
 
-FROM node:24-bookworm-slim AS builder
+FROM node:24-bookworm-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS builder
 
 RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 
@@ -20,7 +20,7 @@ RUN pnpm install --frozen-lockfile --filter @baci/storefront-compiler... && \
     pnpm --filter @baci/storefront-compiler deploy --prod --legacy /opt/storefront-compiler && \
     cp -r apps/storefront-compiler/dist /opt/storefront-compiler/dist
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim@sha256:873f586f3794f52281bd039bf02c048a0be08fde619338f9941bad1eb6b34530 AS runtime
 
 ENV NODE_ENV=production \
     LANG=C.UTF-8 \

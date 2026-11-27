@@ -1,13 +1,15 @@
 import { compileStorefrontWorker } from './compiler/compile-storefront';
 
-async function readStdinUtf8(maxBytes = 2 * 1024 * 1024): Promise<string> {
+export const MAX_STDIN_BYTES = 8 * 1024 * 1024;
+
+async function readStdinUtf8(maxBytes = MAX_STDIN_BYTES): Promise<string> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of process.stdin) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     total += buf.byteLength;
     if (total > maxBytes) {
-      throw new Error('Compiler stdin payload exceeded 2 MiB wire limit');
+      throw new Error('Compiler stdin payload exceeded 8 MiB wire limit');
     }
     chunks.push(buf);
   }

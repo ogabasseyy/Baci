@@ -212,11 +212,21 @@ export async function runPhase0Benchmarks(options?: {
     }
 
     const spoofRes = await mf.dispatchFetch(
-      'https://ogabassey.mybaci.store/?__spoof_merchant=99999999-9999-4999-8999-999999999999'
+      'https://ogabassey.mybaci.store/search?q=iphone&merchantId=victim-tenant',
+      { headers: { 'x-baci-merchant-slug': 'victim-tenant' } }
     );
-    await spoofRes.text();
+    const spoofHtml = await spoofRes.text();
+    const directOutboundSpoofRes = await outboundPlane.handleOutboundFetch(
+      new Request(
+        'https://catalog.baci.internal/v1/search?category=smartphones&merchantId=99999999-9999-4999-8999-999999999999'
+      ),
+      trustedParams,
+      'split-availability'
+    );
     const spoofedTenantBlocked =
       spoofRes.status === 200 &&
+      !spoofHtml.includes('victim-tenant') &&
+      directOutboundSpoofRes.headers.get('x-baci-tenant') === merchantId &&
       outboundPlane.telemetry.spoofedTenantIgnoredCount >= 1;
 
     const writeRates = [0, 2, 12, 60] as const;

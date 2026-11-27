@@ -79,11 +79,14 @@ export function executeSimulatedAnonCatalogRpc(
   const condition = (url.searchParams.get('condition') ?? '')
     .trim()
     .toLowerCase();
-  const limit = Math.min(
-    Math.max(Number(url.searchParams.get('limit') ?? '24'), 1),
-    48
-  );
-  const page = Math.max(Number(url.searchParams.get('page') ?? '1'), 1);
+  const limitParam = url.searchParams.get('limit')?.trim();
+  const rawLimit = limitParam ? Number(limitParam) : 24;
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(Math.trunc(rawLimit), 1), 48)
+    : 24;
+  const pageParam = url.searchParams.get('page')?.trim();
+  const rawPage = pageParam ? Number(pageParam) : 1;
+  const page = Number.isFinite(rawPage) ? Math.max(Math.trunc(rawPage), 1) : 1;
 
   const categoryExists =
     !category || publishedRows.some((row) => row.categorySlug === category);

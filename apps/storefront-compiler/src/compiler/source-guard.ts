@@ -5,6 +5,11 @@ import {
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
+import {
+  isAllowedSensitiveRootPosition,
+  isPropertyOrDeclarationName,
+  resolveStaticString,
+} from './source-guard-ast';
 
 export { isProhibitedImportSpecifier };
 
@@ -17,44 +22,6 @@ export interface SourceSafetyViolation {
     | 'DANGEROUS_INNER_HTML'
     | 'PROHIBITED_RUNTIME_IMPORT';
   detail: string;
-}
-
-/**
- * Constant-folds string literals, templates, and `+` concatenations so
- * obfuscated forms like `'dangerously' + 'SetInnerHTML'` or `globalThis['ev' + 'al']`
- * resolve to their runtime string value.
- */
-function resolveStaticString(node: ts.Expression): string | null {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return node.text;
-  }
-  if (
-    ts.isParenthesizedExpression(node) ||
-    ts.isAsExpression(node) ||
-    ts.isSatisfiesExpression(node) ||
-    ts.isNonNullExpression(node) ||
-    ts.isTypeAssertionExpression(node)
-  ) {
-    return resolveStaticString(node.expression);
-  }
-  if (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind === ts.SyntaxKind.PlusToken
-  ) {
-    const left = resolveStaticString(node.left);
-    const right = resolveStaticString(node.right);
-    return left !== null && right !== null ? left + right : null;
-  }
-  if (ts.isTemplateExpression(node)) {
-    let acc = node.head.text;
-    for (const span of node.templateSpans) {
-      const mid = resolveStaticString(span.expression);
-      if (mid === null) return null;
-      acc += mid + span.literal.text;
-    }
-    return acc;
-  }
-  return null;
 }
 
 function scriptKindForPath(filePath: string): ts.ScriptKind {
@@ -98,14 +65,6 @@ function classifyMemberName(
   }
 }
 
-function unwrapIdentifierName(expr: ts.Expression): string | null {
-  if (ts.isIdentifier(expr)) return expr.text;
-  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
-    return unwrapIdentifierName(expr.expression);
-  }
-  return null;
-}
-
 export function scanManifestSourceSafety(
   manifest: WorkerStorefrontManifest
 ): SourceSafetyViolation[] {
@@ -123,7 +82,18 @@ export function scanManifestSourceSafety(
     );
 
     const visit = (node: ts.Node): void => {
-      if (ts.isTypeNode(node)) return;
+      if (
+        ts.isTypeNode(node) ||
+        ts.isInterfaceDeclaration(node) ||
+        ts.isTypeAliasDeclaration(node)
+      ) {
+        return;
+      }
+
+      if (ts.isConstructorDeclaration(node)) {
+        ts.forEachChild(node, visit);
+        return;
+      }
 
       if (
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
@@ -175,9 +145,12 @@ export function scanManifestSourceSafety(
         ts.isSetAccessorDeclaration(node)
       ) {
         if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) {
-          const isPlainConstructorDataKey =
-            ts.isPropertyAssignment(node) && node.name.text === 'constructor';
-          if (!isPlainConstructorDataKey) {
+          const isBenignObjectDataKey =
+            ts.isPropertyAssignment(node) &&
+            (node.name.text === 'constructor' ||
+              node.name.text === 'cookie' ||
+              node.name.text === 'serviceWorker');
+          if (!isBenignObjectDataKey) {
             classifyMemberName(file.path, node.name.text, violations);
           }
         } else if (ts.isComputedPropertyName(node.name)) {
@@ -220,38 +193,43 @@ export function scanManifestSourceSafety(
       }
 
       if (ts.isElementAccessExpression(node)) {
-        const folded = resolveStaticString(node.argumentExpression);
-        if (folded !== null) {
-          classifyMemberName(file.path, folded, violations);
-        } else {
-          const rootId = unwrapIdentifierName(node.expression);
-          if (rootId && SENSITIVE_GLOBAL_ROOTS.has(rootId)) {
+        if (!ts.isNumericLiteral(node.argumentExpression)) {
+          const folded = resolveStaticString(node.argumentExpression);
+          if (folded !== null) {
+            classifyMemberName(file.path, folded, violations);
+          } else {
             violations.push({
               filePath: file.path,
               rule: 'DYNAMIC_CODE_EVAL',
-              detail: `Dynamic bracket indexing on "${rootId}" is forbidden`,
+              detail:
+                'Non-literal bracket indexing is forbidden; use .at() or static keys',
             });
           }
         }
       }
 
-      if (ts.isIdentifier(node)) {
-        const parent = node.parent;
-        const isPropName =
-          (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
-          (ts.isPropertyAssignment(parent) && parent.name === node);
-        if (!isPropName && (node.text === 'eval' || node.text === 'Function')) {
+      if (ts.isIdentifier(node) && !isPropertyOrDeclarationName(node)) {
+        if (node.text === 'eval' || node.text === 'Function') {
           violations.push({
             filePath: file.path,
             rule: 'DYNAMIC_CODE_EVAL',
             detail: `Direct reference to "${node.text}" is forbidden`,
           });
-        } else if (!isPropName && node.text === 'cookieStore') {
+        } else if (node.text === 'cookieStore') {
           violations.push({
             filePath: file.path,
             rule: 'DIRECT_COOKIE_ACCESS',
             detail:
               'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
+          });
+        } else if (
+          SENSITIVE_GLOBAL_ROOTS.has(node.text) &&
+          !isAllowedSensitiveRootPosition(node)
+        ) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DYNAMIC_CODE_EVAL',
+            detail: `Aliasing or passing sensitive global "${node.text}" is forbidden`,
           });
         }
       }

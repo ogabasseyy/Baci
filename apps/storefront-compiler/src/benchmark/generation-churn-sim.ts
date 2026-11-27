@@ -9,6 +9,7 @@ export interface ChurnScenarioMetrics {
   inventoryWritesPerMinute: number;
   strategy: CacheKeyStrategy;
   totalRequests: number;
+  writeCount: number;
   catalogCacheHitRatio: number;
   originGenerationReads: number;
   originCatalogRpcCalls: number;
@@ -78,14 +79,18 @@ export async function runGenerationChurnBenchmarkAsync(options: {
   const totalTicks = schedule.length;
   const tickDeltaMs = 100;
   const totalWritesInWindow = options.inventoryWritesPerMinute * 3;
-  const writeIntervalTicks =
-    totalWritesInWindow > 0
-      ? Math.max(1, Math.floor(totalTicks / totalWritesInWindow))
-      : 0;
+  const writesPerTick = new Map<number, number>();
+  for (let w = 0; w < totalWritesInWindow; w++) {
+    const writeTick = Math.floor((w * totalTicks) / totalWritesInWindow);
+    writesPerTick.set(writeTick, (writesPerTick.get(writeTick) ?? 0) + 1);
+  }
 
+  let writeCount = 0;
   for (let tick = 0; tick < totalTicks; tick++) {
-    if (writeIntervalTicks > 0 && tick > 0 && tick % writeIntervalTicks === 0) {
-      plane.recordInventoryWrite(merchantId, tick);
+    const writesAtTick = writesPerTick.get(tick) ?? 0;
+    for (let w = 0; w < writesAtTick; w++) {
+      plane.recordInventoryWrite(merchantId, tick + w);
+      writeCount += 1;
     }
     const targetUrl = schedule[tick] ?? schedule[0];
     await plane.handleOutboundFetch(
@@ -110,6 +115,7 @@ export async function runGenerationChurnBenchmarkAsync(options: {
     inventoryWritesPerMinute: options.inventoryWritesPerMinute,
     strategy: options.strategy,
     totalRequests: plane.telemetry.totalRequests,
+    writeCount,
     catalogCacheHitRatio: hitRatio,
     originGenerationReads: plane.telemetry.originGenerationReads,
     originCatalogRpcCalls: plane.telemetry.originCatalogRpcCalls,

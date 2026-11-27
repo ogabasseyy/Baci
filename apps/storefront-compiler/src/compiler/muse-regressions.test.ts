@@ -1,4 +1,8 @@
-import { Miniflare, Response as MiniflareResponse } from 'miniflare';
+import {
+  Miniflare,
+  type Request as MiniflareRequest,
+  Response as MiniflareResponse,
+} from 'miniflare';
 import { describe, expect, it } from 'vitest';
 import { createOgabasseyStorefrontManifest } from '../benchmark/ogabassey-catalog-fixture';
 import {
@@ -61,6 +65,52 @@ describe('Muse PR #4493 security, routing, CSP, and malformed-URI regressions', 
          return <p>{String(F)}</p>;
        }`,
     ],
+    [
+      'aliased document global with bracket indexing',
+      `export default function X({ k }: { k: string }) {
+         const d = document;
+         return <p>{String((d as unknown as Record<string, unknown>)[k])}</p>;
+       }`,
+    ],
+    [
+      'passing sensitive global location as argument',
+      `export default function X() {
+         const read = (l: Location) => l.href;
+         return <p>{read(location)}</p>;
+       }`,
+    ],
+    [
+      'non-literal bracket indexing on function expression',
+      `export default function X({ k }: { k: string }) {
+         const fn = ((() => {}) as unknown as Record<string, (s: string) => () => number>)[k]('return 1');
+         return <p>{String(fn())}</p>;
+       }`,
+    ],
+    [
+      'numeric bracket indexing on window global',
+      `export default function X() {
+         return <p>{String(window[0])}</p>;
+       }`,
+    ],
+    [
+      'destructuring cookie from object',
+      `export default function X({ obj }: { obj: { cookie: string } }) {
+         const { cookie } = obj;
+         return <p>{cookie}</p>;
+       }`,
+    ],
+    [
+      'dot property access .cookie',
+      `export default function X({ obj }: { obj: { cookie: string } }) {
+         return <p>{obj.cookie}</p>;
+       }`,
+    ],
+    [
+      'bracket property access ["cookie"]',
+      `export default function X({ obj }: { obj: Record<string, string> }) {
+         return <p>{obj['cookie']}</p>;
+       }`,
+    ],
   ])('AST source guard blocks %s', async (_label, code) => {
     const manifest = createOgabasseyStorefrontManifest();
     manifest.files = [{ path: 'src/StorefrontApp.tsx', content: code }];
@@ -70,16 +120,73 @@ describe('Muse PR #4493 security, routing, CSP, and malformed-URI regressions', 
     );
   });
 
-  it('allows harmless non-computed { constructor: "Acme" } data properties in object literals', async () => {
+  it('allows class constructors, benign data object keys, numeric array indexing, and typeof window', async () => {
     const manifest = createOgabasseyStorefrontManifest();
     manifest.files = [
       {
         path: 'src/StorefrontApp.tsx',
-        content: `export default function X() { const meta = { constructor: 'Acme Devices' }; return <p>{meta.title ?? 'ok'}</p>; }`,
+        content: `
+          class Helper {
+            constructor(public readonly label: string) {}
+          }
+          export default function X() {
+            const helper = new Helper('Acme Devices');
+            const items = ['alpha', 'beta'];
+            const meta = { constructor: helper.label, cookie: 'chocolate', serviceWorker: 'none', title: 'Bakery' };
+            const hasWin = typeof window !== 'undefined';
+            return <p>{items[0]}-{meta.title}-{String(hasWin)}</p>;
+          }
+        `,
       },
     ];
     const compiled = await compileStorefrontWorker(manifest);
     expect(compiled.buildDigest).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('strips __spoof_merchant and x-baci-merchant-slug from workerCode and canonicalizes search params', async () => {
+    const manifest = createOgabasseyStorefrontManifest();
+    const compiled = await compileStorefrontWorker(manifest);
+    expect(compiled.workerCode).not.toContain('__spoof_merchant');
+    expect(compiled.workerCode).not.toContain('x-baci-merchant-slug');
+
+    const upstreamUrls: string[] = [];
+    const mf = new Miniflare({
+      modules: [
+        { type: 'ESModule', path: 'worker.mjs', contents: compiled.workerCode },
+      ],
+      compatibilityDate: '2026-07-01',
+      bindings: {},
+      outboundService: (req: MiniflareRequest) => {
+        upstreamUrls.push(req.url);
+        return new MiniflareResponse(
+          JSON.stringify({
+            title: 'Search',
+            products: [],
+            facets: { brands: [], conditions: [], totalMatches: 0 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      },
+    });
+    try {
+      const spoofedHeaderRes = await mf.dispatchFetch(
+        'https://ogabassey.mybaci.store/search?q=phone&nonce=1&merchantId=evil',
+        { headers: { 'x-baci-merchant-slug': 'evil-slug' } }
+      );
+      const html1 = await spoofedHeaderRes.text();
+      expect(html1).toContain('"merchantSlug":"ogabassey"');
+      expect(html1).not.toContain('evil-slug');
+
+      await mf.dispatchFetch(
+        'https://ogabassey.mybaci.store/search?nonce=2&q=phone&slug=evil'
+      );
+      expect(upstreamUrls).toEqual([
+        'https://catalog.baci.internal/v1/search?q=phone',
+        'https://catalog.baci.internal/v1/search?q=phone',
+      ]);
+    } finally {
+      await mf.dispose();
+    }
   });
 
   it('enforces CSP header, declared-route-only dispatch (including editorial), and 502 upstream resilience', async () => {

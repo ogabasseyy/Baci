@@ -8,6 +8,7 @@ import {
   WORKER_COMPILER_LIMITS,
   type WorkerStorefrontManifest,
 } from '../schemas/worker-manifest';
+import { StorefrontCompilerError } from './closed-graph-plugin';
 
 const requireFromHere = createRequire(import.meta.url);
 const tailwindPkgDir = path.dirname(
@@ -120,19 +121,46 @@ export async function compileStorefrontTailwindCss(
   }
 
   // Identify virtual stylesheets already @imported by another virtual stylesheet
-  // so root entry @imports only top-level stylesheets while preserving each file's directory base.
+  // and reject cyclic @import graphs before root entry compilation.
+  const importsByPath = new Map<string, string[]>();
   const childImportedPaths = new Set<string>();
   const localImportRe = /@import\s+(?:url\(\s*)?['"]([^'"]+)['"]\s*\)?/g;
   for (const [cssPath, content] of virtualCssByPath.entries()) {
     const dir = path.posix.dirname(`/virtual/${cssPath}`);
+    const deps: string[] = [];
     for (const match of content.matchAll(localImportRe)) {
       const target = match[1] ?? '';
       if (!target || ALLOWED_TAILWIND_STYLESHEETS[target]) continue;
       const resolved = path.posix.normalize(path.posix.join(dir, target));
       if (resolved.startsWith('/virtual/')) {
-        childImportedPaths.add(resolved.slice('/virtual/'.length));
+        const relativeDep = resolved.slice('/virtual/'.length);
+        childImportedPaths.add(relativeDep);
+        if (virtualCssByPath.has(relativeDep)) deps.push(relativeDep);
       }
     }
+    importsByPath.set(cssPath, deps);
+  }
+
+  const visitState = new Map<string, 'visiting' | 'visited'>();
+  const detectCssCycle = (node: string, stack: string[]): void => {
+    visitState.set(node, 'visiting');
+    stack.push(node);
+    for (const dep of importsByPath.get(node) ?? []) {
+      const state = visitState.get(dep);
+      if (state === 'visiting') {
+        const cycle = [...stack.slice(stack.indexOf(dep)), dep].join(' -> ');
+        throw new StorefrontCompilerError(
+          'INVALID_MANIFEST',
+          `Cyclic CSS @import detected: ${cycle}`
+        );
+      }
+      if (!state) detectCssCycle(dep, stack);
+    }
+    stack.pop();
+    visitState.set(node, 'visited');
+  };
+  for (const cssPath of virtualCssByPath.keys()) {
+    if (!visitState.has(cssPath)) detectCssCycle(cssPath, []);
   }
 
   const virtualImports = Array.from(virtualCssByPath.keys())

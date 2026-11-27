@@ -16,7 +16,7 @@ describe('compileStorefrontWorker sandbox & closed-graph enforcement', () => {
     manifest.files[manifest.files.length - 1] = {
       path: 'src/StorefrontApp.tsx',
       content: `
-        if (typeof globalThis !== 'undefined' && (globalThis as Record<string, unknown>).__COMPILER_HOST__) {
+        if (typeof globalThis !== 'undefined' && globalThis.__COMPILER_HOST__) {
           throw new Error('MUST_NOT_EXECUTE_AT_COMPILE_TIME');
         }
         export default function SafeApp() {

@@ -38,6 +38,25 @@ export const PLATFORM_VETTED_CSP_HOSTS: ReadonlySet<string> = new Set([
 ]);
 
 const IPV4_OR_IPV6_HOST = /^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\])$/;
+const HEX_COLOR_RE =
+  /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const FUNC_COLOR_RE =
+  /^(?:rgb|rgba|hsl|hsla|oklch)\(\s*(?:(?:[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:%|deg|rad|turn|grad)?|none)(?:\s*[,/\s]\s*(?:[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:%|deg|rad|turn|grad)?|none)){2,3})\s*\)$/;
+const FORBIDDEN_CSS_TOKEN_CHARS_RE = /[;{}<>\\"'`]/;
+
+export const cssColorTokenSchema = z
+  .string()
+  .trim()
+  .min(4)
+  .max(64)
+  .refine(
+    (value) =>
+      !FORBIDDEN_CSS_TOKEN_CHARS_RE.test(value) &&
+      !value.includes('/*') &&
+      !value.includes('*/') &&
+      (HEX_COLOR_RE.test(value) || FUNC_COLOR_RE.test(value)),
+    'Theme token must be a valid hex, rgb/rgba, hsl/hsla, or oklch CSS color'
+  );
 
 export const httpsOriginSchema = z
   .string()
@@ -173,9 +192,9 @@ export const workerStorefrontManifestSchema = z
       .default([]),
     themeTokens: z
       .strictObject({
-        primary: z.string().min(1).max(64),
-        secondary: z.string().min(1).max(64),
-        accent: z.string().min(1).max(64),
+        primary: cssColorTokenSchema,
+        secondary: cssColorTokenSchema,
+        accent: cssColorTokenSchema,
       })
       .default({
         primary: 'hsl(222 47% 11%)',

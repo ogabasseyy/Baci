@@ -123,4 +123,57 @@ describe('Phase 0 workerd SSR, Outbound tenant binding, and generation-churn ben
       singleZero.catalogCacheHitRatio
     );
   });
+
+  it('canonicalizes search query params for cache hits, guards NaN pagination, and schedules exact churn writes', async () => {
+    const merchantId = '00000000-0000-4000-8000-000000000001';
+    const products = generateOgabasseyBackingCatalog(40);
+    const plane = new SimulatedPostgrestOutboundPlane({
+      merchantId,
+      products,
+    });
+
+    const firstSearch = await plane.handleOutboundFetch(
+      new Request(
+        'https://catalog.baci.internal/v1/search?q=iphone&nonce=1&merchantId=evil'
+      ),
+      { merchantId, merchantSlug: 'ogabassey' },
+      'split-availability'
+    );
+    expect(firstSearch.headers.get('x-baci-cache')).toBe('MISS');
+
+    const secondSearch = await plane.handleOutboundFetch(
+      new Request(
+        'https://catalog.baci.internal/v1/search?nonce=2&q=iphone&extra=ignored'
+      ),
+      { merchantId, merchantSlug: 'ogabassey' },
+      'split-availability'
+    );
+    expect(secondSearch.headers.get('x-baci-cache')).toBe('HIT');
+    expect(plane.telemetry.originCatalogRpcCalls).toBe(1);
+
+    const nanPagination = await plane.handleOutboundFetch(
+      new Request('https://catalog.baci.internal/v1/search?limit=abc&page=xyz'),
+      { merchantId, merchantSlug: 'ogabassey' },
+      'split-availability'
+    );
+    const nanPayload = (await nanPagination.json()) as {
+      products: unknown[];
+    };
+    expect(nanPayload.products.length).toBeGreaterThan(0);
+    expect(nanPayload.products.length).toBeLessThanOrEqual(24);
+
+    const churnAt2 = await runGenerationChurnBenchmarkAsync({
+      inventoryWritesPerMinute: 2,
+      strategy: 'split-availability',
+      productCount: 120,
+    });
+    expect(churnAt2.writeCount).toBe(6);
+
+    const churnAt60 = await runGenerationChurnBenchmarkAsync({
+      inventoryWritesPerMinute: 60,
+      strategy: 'split-availability',
+      productCount: 120,
+    });
+    expect(churnAt60.writeCount).toBe(180);
+  });
 });

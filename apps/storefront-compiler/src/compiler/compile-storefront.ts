@@ -210,15 +210,34 @@ export async function compileStorefrontWorker(
     );
   }
 
-  const canonicalFiles = [...manifest.files]
-    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-    .map((f) => `${f.path}:${f.content}`);
-  const sourceDigest = sha256Hex([
-    manifest.format,
-    manifest.mode,
-    manifest.entry,
-    ...canonicalFiles,
-  ]);
+  const canonicalManifest = {
+    format: manifest.format,
+    mode: manifest.mode,
+    entry: manifest.entry,
+    routes: [...manifest.routes].sort((a, b) =>
+      a.path < b.path ? -1 : a.path > b.path ? 1 : 0
+    ),
+    packages: [...manifest.packages].sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    ),
+    assets: [...manifest.assets].sort((a, b) =>
+      a.assetId < b.assetId ? -1 : a.assetId > b.assetId ? 1 : 0
+    ),
+    themeTokens: {
+      primary: manifest.themeTokens.primary,
+      secondary: manifest.themeTokens.secondary,
+      accent: manifest.themeTokens.accent,
+    },
+    cspAllowlist: {
+      scriptOrigins: [...manifest.cspAllowlist.scriptOrigins].sort(),
+      connectOrigins: [...manifest.cspAllowlist.connectOrigins].sort(),
+      imgOrigins: [...manifest.cspAllowlist.imgOrigins].sort(),
+    },
+    files: [...manifest.files]
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+      .map((f) => ({ path: f.path, content: f.content })),
+  };
+  const sourceDigest = sha256Hex([JSON.stringify(canonicalManifest)]);
   const buildDigest = sha256Hex([workerCode, clientCode, compiledCss.css]);
 
   return {

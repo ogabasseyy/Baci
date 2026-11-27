@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -152,5 +153,41 @@ describe('Muse & CodeRabbit split-availability overlay and isolated CLI bundle',
     } finally {
       rmSync(tempDeployDir, { recursive: true, force: true });
     }
+  });
+
+  it('accepts >2 MiB JSON-escaped valid <1 MiB UTF-8 manifests through CLI 8 MiB wire limit and pins Dockerfile digests', async () => {
+    const pkgRoot = path.resolve(import.meta.dirname, '../..');
+    const dockerfile = readFileSync(path.join(pkgRoot, 'Dockerfile'), 'utf8');
+    const fromLines = dockerfile
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('FROM '));
+    expect(fromLines.length).toBeGreaterThanOrEqual(2);
+    for (const line of fromLines) {
+      expect(line).toMatch(/@sha256:[a-f0-9]{64}\b/);
+    }
+
+    const manifest = createOgabasseyStorefrontManifest();
+    // 450 KiB of '\\' is < 512 KiB per-file and < 1 MiB total UTF-8,
+    // while JSON escaping doubles it to > 900 KiB; across two files (~900 KiB raw -> > 1.8 MiB),
+    // and using \x07 control chars inside a JS comment expands 6x (\u0007) to > 2.7 MiB JSON!
+    const escapedCommentA = `// ${'\x07'.repeat(230_000)}\nexport const a = 1;`;
+    const escapedCommentB = `// ${'\x07'.repeat(230_000)}\nexport const b = 2;`;
+    manifest.files.push(
+      { path: 'src/extra/a.ts', content: escapedCommentA },
+      { path: 'src/extra/b.ts', content: escapedCommentB }
+    );
+    const wireJson = JSON.stringify(manifest);
+    expect(Buffer.byteLength(wireJson, 'utf8')).toBeGreaterThan(
+      2 * 1024 * 1024
+    );
+
+    const { code, stdout } = await runBuiltCli(
+      wireJson,
+      path.join(pkgRoot, 'dist/cli.mjs')
+    );
+    expect(code).toBe(0);
+    const parsed = JSON.parse(stdout) as { buildDigest: string };
+    expect(parsed.buildDigest).toMatch(/^[a-f0-9]{64}$/);
   });
 });

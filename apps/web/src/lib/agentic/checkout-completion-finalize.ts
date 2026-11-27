@@ -109,6 +109,7 @@ export async function finalizeAgenticCheckoutPayment({
   let orderId = readFinalizationOrderId(metadata);
   if (!orderId) {
     const creation = await createFinalizationOrder({
+      dvaAccount,
       finalizationClaim,
       merchantId,
       metadata,

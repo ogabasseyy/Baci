@@ -166,7 +166,7 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
     mocks.update.mockResolvedValue({
       ok: false,
       code: 'unavailable',
-      followUpCancelSent: true,
+      followUpCancelSent: 'applied',
     });
 
     expect((await patch('7', { followUpAt: null })).status).toBe(503);

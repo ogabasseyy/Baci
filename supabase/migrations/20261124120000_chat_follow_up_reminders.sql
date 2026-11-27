@@ -56,15 +56,19 @@ ALTER TABLE public.chat_follow_up_reminders ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.chat_follow_up_reminders FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.chat_follow_up_reminders TO authenticated;
 
--- The store owner and staff may see reminders with the inbox "view" permission
--- and change them with the inbox "edit" permission: the same permissions the
--- inbox API itself asks for. check_staff_permission answers for the signed-in
+-- The store owner and staff may see reminders with the inbox "view" or "edit"
+-- permission and change them with "edit": the same permissions the inbox API
+-- itself asks for. "edit" does not imply "view", and Postgres needs the row to
+-- be visible to replace or remove it. check_staff_permission answers for the signed-in
 -- caller only (and recognises the owner), and is used instead of an inline
 -- merchants/staff_members subquery so the policy cannot recurse.
 DROP POLICY IF EXISTS chat_follow_up_reminders_select ON public.chat_follow_up_reminders;
 CREATE POLICY chat_follow_up_reminders_select ON public.chat_follow_up_reminders
   FOR SELECT TO authenticated
-  USING (public.check_staff_permission((SELECT auth.uid()), merchant_id, 'customers', 'view'));
+  USING (
+    public.check_staff_permission((SELECT auth.uid()), merchant_id, 'customers', 'view')
+    OR public.check_staff_permission((SELECT auth.uid()), merchant_id, 'customers', 'edit')
+  );
 DROP POLICY IF EXISTS chat_follow_up_reminders_insert ON public.chat_follow_up_reminders;
 CREATE POLICY chat_follow_up_reminders_insert ON public.chat_follow_up_reminders
   FOR INSERT TO authenticated

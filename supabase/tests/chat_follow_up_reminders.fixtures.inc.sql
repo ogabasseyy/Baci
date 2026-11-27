@@ -8,7 +8,8 @@ INSERT INTO auth.users (id, instance_id, aud, role, email) VALUES
   ('c4a73000-0000-4000-8000-0000000000a2', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'follow-up-outsider@example.invalid'),
   ('c4a73000-0000-4000-8000-0000000000a3', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'follow-up-staff-editor@example.invalid'),
   ('c4a73000-0000-4000-8000-0000000000a4', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'follow-up-staff-viewer@example.invalid'),
-  ('c4a73000-0000-4000-8000-0000000000a5', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'follow-up-other-owner@example.invalid');
+  ('c4a73000-0000-4000-8000-0000000000a5', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'follow-up-other-owner@example.invalid'),
+  ('c4a73000-0000-4000-8000-0000000000a6', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'follow-up-staff-edit-only@example.invalid');
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO public.merchants (id, user_id, email, business_name, slug, country, payout_currency) VALUES
@@ -16,7 +17,8 @@ INSERT INTO public.merchants (id, user_id, email, business_name, slug, country, 
   ('c4a73000-0000-4000-8000-0000000000b2', 'c4a73000-0000-4000-8000-0000000000a5', 'follow-up-other-owner@example.invalid', 'Synthetic Follow Up Store Two', 'synthetic-follow-up-two', 'NG', 'NGN');
 INSERT INTO public.staff_members (merchant_id, user_id, email, role, permissions, status) VALUES
   ('c4a73000-0000-4000-8000-0000000000b1', 'c4a73000-0000-4000-8000-0000000000a3', 'follow-up-staff-editor@example.invalid', 'blog_manager', '{"customers":{"view":true,"edit":true}}'::jsonb, 'active'),
-  ('c4a73000-0000-4000-8000-0000000000b1', 'c4a73000-0000-4000-8000-0000000000a4', 'follow-up-staff-viewer@example.invalid', 'blog_manager', '{"customers":{"view":true,"edit":false}}'::jsonb, 'active');
+  ('c4a73000-0000-4000-8000-0000000000b1', 'c4a73000-0000-4000-8000-0000000000a4', 'follow-up-staff-viewer@example.invalid', 'blog_manager', '{"customers":{"view":true,"edit":false}}'::jsonb, 'active'),
+  ('c4a73000-0000-4000-8000-0000000000b1', 'c4a73000-0000-4000-8000-0000000000a6', 'follow-up-staff-edit-only@example.invalid', 'blog_manager', '{"customers":{"view":false,"edit":true}}'::jsonb, 'active');
 RESET ROLE;
 SELECT set_config('request.jwt.claim.role', '', true);
 

@@ -130,11 +130,14 @@ describe('recoverAcceptedFollowUpReminder', () => {
 });
 
 describe('bugfix: a cancellation that failed partway still drops the reminder', () => {
-  const cancelled = (update: { followUpAt?: null; status?: 'resolved' }) =>
+  const cancelled = (
+    update: { followUpAt?: null; status?: 'resolved' },
+    cancelSent: 'applied' | 'unconfirmed' = 'applied'
+  ) =>
     recoverAcceptedFollowUpReminder(client, binding, {
       conversationId: 7,
       update,
-      cancelSent: true,
+      cancelSent,
     });
 
   it.each([
@@ -153,7 +156,7 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
     expect(mocks.hold).not.toHaveBeenCalled();
   });
 
-  it('syncs it when the chat cannot be read back', async () => {
+  it('syncs an applied one when the chat cannot be read back', async () => {
     unreadable();
     await cancelled({ followUpAt: null });
     expect(mocks.sync).toHaveBeenCalledWith(client, {
@@ -163,5 +166,21 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
       customerName: '',
       observed: undefined,
     });
+  });
+
+  it.each([
+    ['a clear', { followUpAt: null }],
+    ['Done', { status: 'resolved' as const }],
+  ])('bugfix: keeps the reminder when %s got no answer and the chat cannot be read', async (_name, update) => {
+    unreadable();
+    await cancelled(update, 'unconfirmed');
+    expect(mocks.sync).not.toHaveBeenCalled();
+    expect(mocks.hold).not.toHaveBeenCalled();
+  });
+
+  it('lets the chat decide an unanswered cancellation it can read', async () => {
+    engine({ status: 'resolved', followUp: true });
+    await cancelled({ status: 'resolved' }, 'unconfirmed');
+    expect(mocks.sync).toHaveBeenCalledTimes(1);
   });
 });

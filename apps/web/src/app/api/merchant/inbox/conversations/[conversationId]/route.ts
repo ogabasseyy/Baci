@@ -77,7 +77,8 @@ export async function PATCH(
     conversationId: conversationId.data,
     update: update.data,
     sent: 'followUpSent' in result ? result.followUpSent : undefined,
-    cancelSent: 'followUpCancelSent' in result,
+    cancelSent:
+      'followUpCancelSent' in result ? result.followUpCancelSent : undefined,
   });
   return merchantInboxError(
     503,

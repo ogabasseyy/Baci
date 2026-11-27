@@ -71,16 +71,16 @@ describe('bugfix: a failed change says whether a cancellation was sent', () => {
 
     await expect(cancel(next)).resolves.toMatchObject({
       ok: false,
-      followUpCancelSent: true,
+      followUpCancelSent: 'applied',
     });
   });
 
-  it('marks it when Done gets no clear answer', async () => {
+  it('marks it unconfirmed when Done gets no clear answer', async () => {
     chatWithLabels(['follow-up'], '/toggle_status');
 
     await expect(cancel({ status: 'resolved' })).resolves.toMatchObject({
       ok: false,
-      followUpCancelSent: true,
+      followUpCancelSent: 'unconfirmed',
     });
   });
 

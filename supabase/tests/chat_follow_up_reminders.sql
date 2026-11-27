@@ -112,6 +112,29 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- Inbox "edit" without "view" is a grant the inbox API accepts, so the app's
+-- save (an upsert), reschedule and clear must work for it too: Postgres needs
+-- the row to be visible for each of them.
+SELECT pg_temp.as_user('c4a73000-0000-4000-8000-0000000000a6');
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE m uuid := 'c4a73000-0000-4000-8000-0000000000b1'; v_days integer; v_changed integer;
+BEGIN
+  FOR v_days IN 1..2 LOOP
+    INSERT INTO public.chat_follow_up_reminders(merchant_id, conversation_id, due_at)
+    VALUES (m, 115, now() + make_interval(days => v_days))
+    ON CONFLICT (merchant_id, conversation_id) DO UPDATE
+    SET merchant_id = EXCLUDED.merchant_id, conversation_id = EXCLUDED.conversation_id, due_at = EXCLUDED.due_at;
+  END LOOP;
+  IF (SELECT due_at FROM public.chat_follow_up_reminders WHERE conversation_id = 115) IS DISTINCT FROM now() + interval '2 days' THEN
+    RAISE EXCEPTION 'edit-only staff could not reschedule their reminder';
+  END IF;
+  DELETE FROM public.chat_follow_up_reminders WHERE merchant_id = m AND conversation_id = 115;
+  GET DIAGNOSTICS v_changed = ROW_COUNT;
+  IF v_changed <> 1 THEN RAISE EXCEPTION 'edit-only staff could not clear their reminder'; END IF;
+END $$;
+RESET ROLE;
+
 -- Staff who may only view see reminders but cannot write or remove them.
 SELECT pg_temp.as_user('c4a73000-0000-4000-8000-0000000000a4');
 SET LOCAL ROLE authenticated;

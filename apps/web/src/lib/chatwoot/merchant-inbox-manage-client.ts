@@ -157,8 +157,8 @@ export async function updateMerchantInboxConversation(
   | { ok: true; conversation: MerchantInboxConversation }
   | (MerchantInboxFailure & {
       followUpSent?: SentFollowUp;
-      /** Done or a reopen was sent and not refused: it took, or may yet. */
-      followUpCancelSent?: true;
+      /** Done or a reopen was sent and not refused: taken, or no clear answer. */
+      followUpCancelSent?: SentFollowUp['state'];
     })
   | { ok: false; code: 'invalid_follow_up' }
 > {
@@ -172,18 +172,20 @@ export async function updateMerchantInboxConversation(
   let followUp: boolean | undefined;
   let labelsSaved = false;
   let sent: SentFollowUp | undefined;
-  let cancelSent = false;
+  let cancelSent: SentFollowUp['state'] | undefined;
   const fail = (result: MerchantInboxFailure = unavailable) => ({
     ...result,
     ...(sent && { followUpSent: sent }),
-    ...(cancelSent && { followUpCancelSent: true as const }),
+    ...(cancelSent && { followUpCancelSent: cancelSent }),
   });
   /** Done or reopen, which cancel a snooze. False when it has to stop here. */
   const writeStatus = async (status: 'open' | 'resolved') => {
     const outcome = await providerWrite(binding, `${base}/toggle_status`, {
       status,
     });
-    cancelSent = outcome !== 'rejected';
+    if (outcome !== 'rejected') {
+      cancelSent = outcome === 'ok' ? 'applied' : 'unconfirmed';
+    }
     return outcome === 'ok';
   };
 

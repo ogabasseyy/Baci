@@ -21,7 +21,9 @@ const SNOOZE_TOLERANCE_MS = 60_000;
  *   unless another reminder is pending.
  * - Done, reopen or clear: when a status change was sent and not refused, the
  *   reminder follows the same rule as after a successful change (a chat still
- *   shown as snoozed with its follow-up keeps it).
+ *   shown as snoozed with its follow-up keeps it). With no clear answer and a
+ *   chat that cannot be read, it is left alone: the sweep checks the chat again
+ *   before it pushes.
  * Otherwise nothing is touched. Best effort, never throws.
  */
 export async function recoverAcceptedFollowUpReminder(
@@ -33,7 +35,7 @@ export async function recoverAcceptedFollowUpReminder(
     /** Set when the snooze was sent and not refused. */
     sent?: SentFollowUp;
     /** Set when Done or a reopen was sent and not refused. */
-    cancelSent?: boolean;
+    cancelSent?: SentFollowUp['state'];
   }
 ): Promise<void> {
   const { conversationId, update, sent, cancelSent } = input;
@@ -47,6 +49,8 @@ export async function recoverAcceptedFollowUpReminder(
     snoozedUntil: shown.snoozedUntil,
   };
   if (typeof requestedAt !== 'string') {
+    // Nothing confirms the cancellation: the chat may still be snoozed.
+    if (!shown && cancelSent === 'unconfirmed') return;
     await syncChatFollowUpReminder(client, {
       merchantId: binding.merchantId,
       conversationId,

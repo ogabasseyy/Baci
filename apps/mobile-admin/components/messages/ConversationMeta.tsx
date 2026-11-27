@@ -6,8 +6,12 @@ import {
   type ThemeColors,
   TYPOGRAPHY,
 } from '@/constants/theme';
-import { formatFollowUp, formatInboxTag } from '@/lib/merchant-inbox-format';
-import { isFollowUpDue } from '@/lib/merchant-inbox-sort';
+import {
+  formatFollowUp,
+  formatInboxTag,
+  formatOrderCount,
+} from '@/lib/merchant-inbox-format';
+import { isFollowUpDue, isReturningCustomer } from '@/lib/merchant-inbox-sort';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
 
 const MAX_VISIBLE_TAGS = 2;
@@ -28,9 +32,12 @@ export function ConversationMeta({
   conversation: InboxConversation;
 }) {
   const tags = conversation.tags ?? [];
+  const customer = conversation.customer;
   const followUp =
     !!conversation.followUp && conversation.status !== 'resolved';
-  if (!conversation.priority && !followUp && tags.length === 0) return null;
+  if (!conversation.priority && !followUp && tags.length === 0 && !customer) {
+    return null;
+  }
 
   const hot =
     conversation.priority === 'urgent' || conversation.priority === 'high';
@@ -39,6 +46,16 @@ export function ConversationMeta({
 
   return (
     <View style={styles.row}>
+      {customer ? (
+        <View style={[styles.pill, { backgroundColor: colors.successLight }]}>
+          <Ionicons color={colors.success} name="person" size={12} />
+          <Text style={[styles.text, { color: colors.success }]}>
+            {isReturningCustomer(conversation)
+              ? `Returning · ${formatOrderCount(customer.orderCount)}`
+              : 'Signed in'}
+          </Text>
+        </View>
+      ) : null}
       {conversation.priority ? (
         <View
           style={[

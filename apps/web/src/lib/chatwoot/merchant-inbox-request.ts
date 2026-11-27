@@ -37,7 +37,17 @@ export async function resolveMerchantInboxRequest(
   request: NextRequest,
   action: 'view' | 'edit'
 ): Promise<
-  | { ok: true; binding: MerchantInboxBinding }
+  | {
+      ok: true;
+      binding: MerchantInboxBinding;
+      /** The caller's own RLS-scoped client, for reads on their store. */
+      supabase: NonNullable<
+        Awaited<ReturnType<typeof authenticateApiRequest>>['supabase']
+      >;
+      merchantId: string;
+      /** May this caller see order details (not just chats and customers)? */
+      canViewOrders: boolean;
+    }
   | { ok: false; response: NextResponse }
 > {
   // Web cookie sessions and mobile-admin Bearer sessions, both under RLS.
@@ -78,5 +88,15 @@ export async function resolveMerchantInboxRequest(
       ),
     };
   }
-  return { ok: true, binding };
+  return {
+    ok: true,
+    binding,
+    supabase,
+    merchantId: merchantContext.merchantId,
+    canViewOrders: hasPermission(
+      toUserAccess(merchantContext),
+      'orders',
+      'view'
+    ),
+  };
 }

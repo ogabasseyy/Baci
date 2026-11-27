@@ -54,6 +54,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -89,6 +90,8 @@ describe('ChatwootWidget', () => {
   });
 
   it('loads the official SDK from the fixed platform and mounts the trusted bridge', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-27T12:00:00Z'));
     const run = vi.fn(({ websiteToken, baseUrl }) => {
       const widgetWindow = window as Window & {
         $chatwoot?: Record<string, unknown>;
@@ -115,7 +118,10 @@ describe('ChatwootWidget', () => {
     const script = document.getElementById(
       'baci-chatwoot-sdk'
     ) as HTMLScriptElement;
-    expect(script.src).toBe('https://support.example.com/packs/js/sdk.js');
+    // The day stamp is what lets returning shoppers pick up a rebuilt widget.
+    expect(script.src).toBe(
+      'https://support.example.com/packs/js/sdk.js?v=2026-11-27'
+    );
     fireEvent.load(script);
     expect(run).toHaveBeenCalledWith({
       websiteToken: config.websiteToken,

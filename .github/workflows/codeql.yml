@@ -47,7 +47,7 @@ jobs:
 
       - name: Initialize CodeQL
         # Pin to full SHA for supply chain security
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           languages: ${{ matrix.language }}
           # Keep CodeQL configuration source explicit to avoid stale config drift in code scanning UI
@@ -57,11 +57,11 @@ jobs:
 
       - name: Autobuild
         # Pin to full SHA for supply chain security
-        uses: github/codeql-action/autobuild@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/autobuild@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
 
       - name: Perform CodeQL Analysis
         # Pin to full SHA for supply chain security
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           category: "/language:${{ matrix.language }}"
 

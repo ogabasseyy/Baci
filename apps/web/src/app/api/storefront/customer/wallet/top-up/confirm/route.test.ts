@@ -330,6 +330,57 @@ describe('POST /api/storefront/customer/wallet/top-up/confirm', () => {
     });
   });
 
+  it('bugfix: credits the principal when the customer paid the Paystack fee on top', async () => {
+    mockVerifyPaystackTransaction.mockResolvedValueOnce({
+      data: {
+        amount: 253_750,
+        currency: 'NGN',
+        fees: 3_750,
+        requested_amount: 250_000,
+        status: 'success',
+      },
+      success: true,
+    });
+
+    const response = await POST(
+      makeRequest({
+        gateway: 'paystack',
+        merchantSlug: 'ogabassey',
+        reference: 'WAL-123',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCreditWalletTopUp).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 2500, reference: 'WAL-123' })
+    );
+  });
+
+  it('still rejects a gross amount whose fee split Paystack does not prove', async () => {
+    mockVerifyPaystackTransaction.mockResolvedValueOnce({
+      data: {
+        amount: 253_750,
+        currency: 'NGN',
+        fees: 3_000,
+        requested_amount: 250_000,
+        status: 'success',
+      },
+      success: true,
+    });
+
+    const response = await POST(
+      makeRequest({
+        gateway: 'paystack',
+        merchantSlug: 'ogabassey',
+        reference: 'WAL-123',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'Payment amount mismatch' });
+    expect(mockCreditWalletTopUp).not.toHaveBeenCalled();
+  });
+
   it('confirms with merchantId when the storefront slug is unavailable or stale', async () => {
     const response = await POST(
       makeRequest({

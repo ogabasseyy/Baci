@@ -5,7 +5,7 @@ import { readJob, readJobIds, readStep, readStepNames } from './storefront-relea
 
 export const OTA_GUARD_STEP = 'Refuse sources held by the storefront release gate';
 export const OTA_ROLLBACK_GUARD_STEP = 'Refuse rollback target held by the storefront release gate';
-const OTA_ROLLBACK_STEP = 'Rollback OTA update on ota.usebaci.com and smoke-check manifest';
+const OTA_ROLLBACK_STEP = 'Rollback OTA update on ota.ogabassey.com and smoke-check manifest';
 const OTA_SELECTION_STEP = 'Validate and select reviewed source';
 export const RELEASE_GUARD_STEP = 'Refuse release sources that are not on main';
 const CHECKOUT_STEP = 'Checkout';

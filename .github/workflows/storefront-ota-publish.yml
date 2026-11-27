@@ -160,15 +160,15 @@ jobs:
 
       - name: Normalize OTA server URL
         env:
-          RAW_OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.usebaci.com' }}
+          RAW_OTA_SERVER_URL: ${{ vars.OTA_SERVER_URL || 'https://ota.ogabassey.com' }}
         run: |
           set -euo pipefail
           base_url="$RAW_OTA_SERVER_URL"
           while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
           base_url="${base_url%/api/manifest}"
           while [[ "$base_url" == */ ]]; do base_url="${base_url%/}"; done
-          if [[ "$base_url" != "https://ota.usebaci.com" ]]; then
-            echo "::error::OTA_SERVER_URL must target https://ota.usebaci.com (got: ${base_url})." >&2
+          if [[ "$base_url" != "https://ota.ogabassey.com" && "$base_url" != "https://ota.usebaci.com" ]]; then
+            echo "::error::OTA_SERVER_URL must target https://ota.ogabassey.com or https://ota.usebaci.com (got: ${base_url})." >&2
             exit 1
           fi
           echo "OTA_BASE_URL=${base_url}" >> "$GITHUB_ENV"
@@ -180,7 +180,7 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
           ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
           KEY_ID: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID || vars.OTA_SIGNING_KEY_ID || '' }}
-          CERT_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH || '' }}
+          CERT_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH || (inputs.allow_unsigned != true && './certs/ota-code-signing.crt' || '') }}
           CERT_PEM: ${{ vars.OTA_CODE_SIGNING_CERTIFICATE_PEM || '' }}
         run: |
           set -euo pipefail
@@ -197,6 +197,7 @@ jobs:
             {
               echo "EFFECTIVE_OTA_SIGNING_KEY_ID=${effective_key_id}"
               echo "EFFECTIVE_OTA_CERT_PATH=apps/mobile-storefront/${CERT_PATH}"
+              echo "EFFECTIVE_OTA_EXPORT_CERT_PATH=${CERT_PATH}"
             } >> "$GITHUB_ENV"
           else
             if [[ "$ALLOW_UNSIGNED" != "true" ]]; then
@@ -206,6 +207,7 @@ jobs:
             {
               echo "EFFECTIVE_OTA_SIGNING_KEY_ID="
               echo "EFFECTIVE_OTA_CERT_PATH="
+              echo "EFFECTIVE_OTA_EXPORT_CERT_PATH="
             } >> "$GITHUB_ENV"
           fi
 
@@ -282,7 +284,7 @@ jobs:
           EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
           EXPO_PUBLIC_OTA_UPDATES_URL: ${{ env.OTA_MANIFEST_URL }}
           EXPO_PUBLIC_OTA_ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
-          EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ env.EFFECTIVE_OTA_EXPORT_CERT_PATH }}
           EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ env.EFFECTIVE_OTA_CERT_PATH != '' && env.EFFECTIVE_OTA_SIGNING_KEY_ID || '' }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -378,7 +380,7 @@ jobs:
             "$SOURCE_SHA" \
             "$OTA_MANIFEST_URL"
 
-      - name: Publish OTA update to ota.usebaci.com and smoke-check manifest
+      - name: Publish OTA update to ota.ogabassey.com and smoke-check manifest
         if: inputs.action == 'publish'
         env:
           OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}
@@ -431,7 +433,7 @@ jobs:
             exit 1
           fi
 
-      - name: Rollback OTA update on ota.usebaci.com and smoke-check manifest
+      - name: Rollback OTA update on ota.ogabassey.com and smoke-check manifest
         if: inputs.action == 'rollback'
         env:
           OTA_SERVER_URL: ${{ env.OTA_BASE_URL }}

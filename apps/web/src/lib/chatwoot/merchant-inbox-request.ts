@@ -1,6 +1,5 @@
 import 'server-only';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import {
@@ -41,8 +40,13 @@ export async function resolveMerchantInboxRequest(
   | {
       ok: true;
       binding: MerchantInboxBinding;
-      /** The caller's own session client, so writes stay under their rights. */
-      supabase: SupabaseClient;
+      /** The caller's own RLS-scoped client: reads and writes stay under their rights. */
+      supabase: NonNullable<
+        Awaited<ReturnType<typeof authenticateApiRequest>>['supabase']
+      >;
+      merchantId: string;
+      /** May this caller see order details (not just chats and customers)? */
+      canViewOrders: boolean;
     }
   | { ok: false; response: NextResponse }
 > {
@@ -84,5 +88,15 @@ export async function resolveMerchantInboxRequest(
       ),
     };
   }
-  return { ok: true, binding, supabase };
+  return {
+    ok: true,
+    binding,
+    supabase,
+    merchantId: merchantContext.merchantId,
+    canViewOrders: hasPermission(
+      toUserAccess(merchantContext),
+      'orders',
+      'view'
+    ),
+  };
 }

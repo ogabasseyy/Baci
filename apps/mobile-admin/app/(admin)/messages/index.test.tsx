@@ -60,7 +60,7 @@ describe('MessagesScreen', () => {
     mocks.search.mockReturnValue(idleSearch(vi.fn(), vi.fn()));
   });
 
-  it('lists conversations with preview and a needs-reply badge', () => {
+  it('lists conversations with preview and an unread count', () => {
     mocks.query.mockReturnValue(
       ready([
         conversation(1, 'Ada Test', 'customer'),
@@ -71,17 +71,20 @@ describe('MessagesScreen', () => {
 
     expect(screen.getByText('Ada Test')).toBeInTheDocument();
     expect(screen.getByText('Hello from Ada Test')).toBeInTheDocument();
-    expect(screen.getByText('2 new · needs reply')).toBeInTheDocument();
-    expect(screen.getAllByText(/· needs reply/i)).toHaveLength(1);
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText(/new · needs reply/i)).toBeNull();
   });
 
-  it('bugfix: shows only the unread count, not needs reply, when the store answered last', () => {
+  it('bugfix: a chat the store answered last is not described as needing a reply', () => {
     const answered = { ...conversation(3, 'Cy Test', 'store'), unreadCount: 1 };
     mocks.query.mockReturnValue(ready([answered]));
     render(<MessagesScreen />);
 
-    expect(screen.getByText('1 new')).toBeInTheDocument();
-    expect(screen.queryByText(/· needs reply/i)).toBeNull();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Cy Test, 1 new/ })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /needs reply/ })).toBeNull();
   });
 
   it('opens the thread for the tapped conversation', () => {
@@ -217,5 +220,29 @@ describe('MessagesScreen', () => {
 
     expect(screen.getByText('Order issue')).toBeInTheDocument();
     expect(screen.getByText('High')).toBeInTheDocument();
+  });
+
+  it('marks a returning customer on the row and offers a Customers view', () => {
+    const linked = {
+      ...conversation(6, 'Linked Test', 'customer'),
+      customer: { orderCount: 3, totalSpent: 150000 },
+    };
+    mocks.query.mockReturnValue(ready([linked]));
+    render(<MessagesScreen />);
+
+    expect(screen.getByText('Returning · 3 orders')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customers' }));
+    expect(mocks.query).toHaveBeenLastCalledWith('returning');
+  });
+
+  it('shows Signed in for a customer with no orders yet', () => {
+    const fresh = {
+      ...conversation(7, 'Fresh Test', 'customer'),
+      customer: { orderCount: 0, totalSpent: 0 },
+    };
+    mocks.query.mockReturnValue(ready([fresh]));
+    render(<MessagesScreen />);
+    expect(screen.getByText('Signed in')).toBeInTheDocument();
   });
 });

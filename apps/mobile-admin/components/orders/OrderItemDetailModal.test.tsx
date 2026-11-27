@@ -12,14 +12,21 @@ vi.mock('@/components/ui/AppSheetModal', () => ({
   AppSheetModal: ({
     accessibilityLabel,
     children,
+    sheetStyle,
     visible,
   }: {
     accessibilityLabel: string;
     children?: ReactNode;
+    sheetStyle?: unknown;
     visible: boolean;
   }) =>
     visible ? (
-      <section aria-label={accessibilityLabel}>{children}</section>
+      <section
+        aria-label={accessibilityLabel}
+        data-sheet-style={JSON.stringify(sheetStyle)}
+      >
+        {children}
+      </section>
     ) : null,
 }));
 
@@ -28,10 +35,6 @@ vi.mock('@react-native-vector-icons/ionicons', () => ({
 
   default: ({ name }: { color?: string; name: string; size?: number }) => name,
   __esModule: true,
-}));
-
-vi.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 vi.mock('@/components/ui/SafeImage', () => ({
@@ -111,6 +114,25 @@ describe('OrderItemDetailModal', () => {
     expect(screen.getByText('Condition')).toBeInTheDocument();
     expect(screen.getByText('Open Box')).toBeInTheDocument();
     expect(screen.queryByText('Edit Product')).not.toBeInTheDocument();
+  });
+
+  it('leaves the space under the sheet to the shared shell, not padding it twice', () => {
+    render(
+      <OrderItemDetailModal
+        formattedLineTotal="₦500,000"
+        formattedUnitPrice="₦500,000"
+        item={createItem()}
+        onClose={vi.fn()}
+        visible
+      />
+    );
+
+    // The shell already paints a safe-area strip under every attached sheet.
+    expect(
+      screen
+        .getByRole('region', { name: 'Order item details' })
+        .getAttribute('data-sheet-style')
+    ).not.toContain('paddingBottom');
   });
 
   it('closes when the user presses the close control', () => {

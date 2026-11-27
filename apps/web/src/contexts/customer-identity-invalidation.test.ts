@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   broadcastCustomerIdentityInvalidation,
   subscribeCustomerIdentityInvalidation,
 } from './customer-identity-invalidation';
 
 describe('cross-tab customer identity invalidation', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it('publishes only a store-scoped invalidation without account details', () => {
     broadcastCustomerIdentityInvalidation('ogabassey');
     const notice = JSON.parse(
@@ -62,6 +67,46 @@ describe('cross-tab customer identity invalidation', () => {
       })
     );
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  const otherTabNotice = () =>
+    new StorageEvent('storage', {
+      key: 'baci:customer-identity-changed',
+      newValue: JSON.stringify({
+        type: 'invalidate',
+        source: 'another-tab',
+        merchantSlug: 'ogabassey',
+        sequence: 1,
+      }),
+    });
+
+  it("bugfix: tells another tab's notice apart from this tab being refocused", () => {
+    const listener = vi.fn();
+    const subscription = subscribeCustomerIdentityInvalidation(listener);
+
+    window.dispatchEvent(otherTabNotice());
+    window.dispatchEvent(new Event('focus'));
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(listener.mock.calls).toEqual([['notice'], ['resume'], ['resume']]);
+    subscription.unsubscribe();
+    window.dispatchEvent(new Event('focus'));
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+
+  it('treats a refocus as a possible change when no cross-tab channel works', () => {
+    vi.stubGlobal('BroadcastChannel', undefined);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const listener = vi.fn();
+    const subscription = subscribeCustomerIdentityInvalidation(listener);
+
+    window.dispatchEvent(new Event('focus'));
+
+    expect(subscription.available).toBe(false);
+    expect(listener.mock.calls).toEqual([['notice']]);
+    subscription.unsubscribe();
   });
 
   it('delivers a publisher notice to a separately initialized tab', async () => {

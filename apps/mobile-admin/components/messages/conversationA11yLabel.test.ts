@@ -59,4 +59,16 @@ describe('conversationA11yLabel', () => {
       'Conversation with Ada Test. Is it in stock?'
     );
   });
+
+  it('says when the shopper is a signed-in or returning customer', () => {
+    const customer = (orderCount: number, ordersHidden = false) =>
+      chat({ customer: { orderCount, totalSpent: 0, ordersHidden } });
+
+    expect(spoken(customer(3))).toContain('returning customer, 3 orders');
+    expect(spoken(customer(1))).toContain('returning customer, 1 order.');
+    expect(spoken(customer(0))).toContain('signed-in customer');
+    // Without permission to see orders only the signed-in state is spoken.
+    expect(spoken(customer(5, true))).toContain('signed-in customer');
+    expect(spoken(customer(5, true))).not.toContain('orders');
+  });
 });

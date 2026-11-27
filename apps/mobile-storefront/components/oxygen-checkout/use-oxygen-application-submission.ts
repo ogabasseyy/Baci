@@ -9,9 +9,9 @@ export function useOxygenApplicationSubmission({
   accountName,
   checking,
   consent,
-  hasProof,
   checkoutPhone,
   setFieldErrors,
+  setConsentError,
   setError,
   save,
   onExecute,
@@ -21,9 +21,9 @@ export function useOxygenApplicationSubmission({
   accountName: string;
   checking: boolean;
   consent: boolean;
-  hasProof: boolean;
   checkoutPhone: string;
   setFieldErrors: (errors: Partial<Record<keyof OxygenFields, string>>) => void;
+  setConsentError?: (error: string | null) => void;
   setError: (error: string | null) => void;
   save: (step: 0 | 1 | 2) => Promise<boolean>;
   onExecute: (command: OxygenRuntimeAction) => Promise<void>;
@@ -34,6 +34,7 @@ export function useOxygenApplicationSubmission({
     if (locked.current) return;
     const identityErrors = oxygenIdentityErrors(fields, checkoutPhone);
     setFieldErrors(identityErrors);
+    setConsentError?.(null);
     if (Object.keys(identityErrors).length) {
       setError('Check the highlighted identity details.');
       await save(0);
@@ -45,10 +46,13 @@ export function useOxygenApplicationSubmission({
       accountName,
       checking,
       consent,
-      hasProof,
       checkoutPhone,
     });
     if ('error' in prepared) {
+      if ('fieldErrors' in prepared && prepared.fieldErrors)
+        setFieldErrors(prepared.fieldErrors);
+      if ('consentError' in prepared && prepared.consentError)
+        setConsentError?.(prepared.consentError);
       setError(prepared.error ?? null);
       if ('bankRequired' in prepared && prepared.bankRequired) await save(1);
       return;

@@ -21,7 +21,6 @@ import { useOxygenBookingProgress } from './use-oxygen-booking-progress';
 import { useOxygenConfirmationUpdates } from './use-oxygen-confirmation-updates';
 import { useOxygenPlanAcceptance } from './use-oxygen-plan-acceptance';
 import { useOxygenProvider } from './use-oxygen-provider';
-import { useOxygenResidentialContext } from './use-oxygen-residential-context';
 import { useOxygenResidentialSubmission } from './use-oxygen-residential-submission';
 import { useOxygenSavedUpdates } from './use-oxygen-saved-updates';
 import { useOxygenSelfieHandoff } from './use-oxygen-selfie-handoff';
@@ -106,9 +105,6 @@ function OxygenProviderSession({
       setReplacingAddress(false);
       bookingProgress.restartAddressReview();
     }
-  );
-  const residentialContext = useOxygenResidentialContext(
-    snapshot?.stage === 'application_required' ? snapshot.workflowId : undefined
   );
   const residential = useOxygenResidentialSubmission(
     snapshot,
@@ -276,7 +272,6 @@ function OxygenProviderSession({
           }}
           approval={approval}
           bookingProgress={bookingProgress}
-          residentialContext={residentialContext}
           residential={residential}
         />
       )}

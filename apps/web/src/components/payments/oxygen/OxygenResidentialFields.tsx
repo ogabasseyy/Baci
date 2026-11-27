@@ -1,7 +1,7 @@
 'use client';
 // Interactive address search and editable form values; no map SDK is loaded.
 import { FileCheck2, House, Upload } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import {
   AddressAutocomplete,
   type PlaceDetails,
@@ -48,9 +48,27 @@ export function OxygenResidentialFields({
     residentialKeys.filter((key) => key === 'landmark' || !initial[key])
   );
   const [search, setSearch] = useState('');
+  const [searchPending, setSearchPending] = useState(false);
   const [searchFailed, setSearchFailed] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const summary = [
+    address.house_number,
+    address.street,
+    address.city,
+    address.state,
+  ]
+    .filter(Boolean)
+    .join(', ');
   function update(next: ResidentialAddress) {
+    const materialChanged = (
+      ['street', 'city', 'lga', 'state', 'house_number'] as const
+    ).some((key) => next[key] !== address[key]);
+    if (file && materialChanged) {
+      onFile(null);
+      setError('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
     setAddress(next);
     onChange?.(next);
   }
@@ -69,6 +87,7 @@ export function OxygenResidentialFields({
       residentialKeys.filter((key) => key === 'landmark' || !next[key])
     );
     setSearch(place.formattedAddress);
+    setSearchPending(false);
     setEditing('search');
   }
   return (
@@ -109,16 +128,7 @@ export function OxygenResidentialFields({
             <p className="text-xs font-medium text-gray-500">
               {checkout ? 'From your checkout' : 'Your address'}
             </p>
-            <p className="mt-1 text-sm text-gray-900">
-              {[
-                address.house_number,
-                address.street,
-                address.city,
-                address.state,
-              ]
-                .filter(Boolean)
-                .join(', ')}
-            </p>
+            <p className="mt-1 text-sm text-gray-900">{summary}</p>
           </div>
           <button
             type="button"
@@ -126,16 +136,8 @@ export function OxygenResidentialFields({
             className="min-h-11 shrink-0 px-2 text-sm font-semibold text-store-primary"
             onClick={() => {
               setEditing('search');
-              setSearch(
-                [
-                  address.house_number,
-                  address.street,
-                  address.city,
-                  address.state,
-                ]
-                  .filter(Boolean)
-                  .join(', ')
-              );
+              setSearchPending(false);
+              setSearch(summary);
             }}
           >
             Change address
@@ -145,6 +147,11 @@ export function OxygenResidentialFields({
       {/* Editable details stay available even when search has no results or fails. */}
       {editing && (
         <div className="mb-4 space-y-3">
+          <input
+            type="hidden"
+            name="home_search_pending"
+            value={editing === 'search' && searchPending ? '1' : ''}
+          />
           <label
             htmlFor={`${id}-search`}
             className="text-xs font-semibold text-gray-700"
@@ -159,7 +166,7 @@ export function OxygenResidentialFields({
             placeholder="Search street or area"
             onChange={(value) => {
               setSearch(typeof value === 'string' ? value : value.target.value);
-              update(residentialAddress());
+              setSearchPending(true);
             }}
             onSelect={select}
             onError={setSearchFailed}
@@ -176,7 +183,10 @@ export function OxygenResidentialFields({
           <button
             type="button"
             disabled={disabled}
-            onClick={() => setEditing(manual ? 'search' : 'manual')}
+            onClick={() => {
+              setSearchPending(false);
+              setEditing(manual ? 'search' : 'manual');
+            }}
             className="min-h-11 text-xs font-semibold text-store-primary"
           >
             {manual ? 'Use address search' : 'Enter address manually'}
@@ -193,29 +203,31 @@ export function OxygenResidentialFields({
             'lga',
             'landmark',
           ] as const
-        ).map((key) => (
-          <label
-            key={key}
-            hidden={
-              !manual && (!address.street || !missingFields.includes(key))
-            }
-            className={`grid gap-1.5 text-xs font-semibold text-gray-700 ${!manual && (!address.street || !missingFields.includes(key)) ? 'hidden' : manual && (key === 'street' || key === 'landmark') ? 'min-[400px]:col-span-2' : ''}`}
-          >
-            {labels[key]}
-            <input
-              className={field}
-              name={`home_${key}`}
-              required
-              maxLength={200}
-              value={address[key]}
-              disabled={disabled}
-              autoComplete="off"
-              onChange={(event) =>
-                update({ ...address, [key]: event.target.value })
-              }
-            />
-          </label>
-        ))}
+        ).map((key) => {
+          const isHidden =
+            !manual && (!address.street || !missingFields.includes(key));
+          return (
+            <label
+              key={key}
+              hidden={isHidden}
+              className={`grid gap-1.5 text-xs font-semibold text-gray-700 ${isHidden ? 'hidden' : manual && (key === 'street' || key === 'landmark') ? 'min-[400px]:col-span-2' : ''}`}
+            >
+              {labels[key]}
+              <input
+                className={field}
+                name={`home_${key}`}
+                required={!isHidden && key !== 'landmark'}
+                maxLength={200}
+                value={address[key]}
+                disabled={disabled}
+                autoComplete="off"
+                onChange={(event) =>
+                  update({ ...address, [key]: event.target.value })
+                }
+              />
+            </label>
+          );
+        })}
       </div>
       <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-dashed border-store-primary/30 bg-white p-4">
         {file ? (
@@ -242,6 +254,7 @@ export function OxygenResidentialFields({
             </span>
           )}
           <input
+            ref={fileInputRef}
             aria-label="Proof of address"
             type="file"
             accept="application/pdf,image/jpeg,image/png"

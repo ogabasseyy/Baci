@@ -36,6 +36,10 @@ SELECT * FROM (VALUES
    'guest cancel; order id + tracking token verified in SQL'),
   ('public.check_staff_permission(uuid,uuid,text,text)',
    'RLS/policy helper evaluated for anon sessions'),
+  ('public.read_paid_order_amendment_tracking(uuid,text,text,text)',
+   'guest amendment summary requires merchant, order and existing tracking proof'),
+  ('public.claim_checkout_for_paid_order_amendment(uuid,text,text,text,text,bigint,bigint,bigint)',
+   'guest checkout requires the order tracking token before reserving a pilot payment reference'),
   ('public.claim_immediate_order_notification_with_proof(uuid,text)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.commerce_cart_publish_health()',
@@ -243,6 +247,10 @@ SELECT * FROM (VALUES
   ('public.chat_event_deactivate_push_tokens(text,bigint,uuid,text,uuid,text,text[])',
    'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
   ('public.chat_event_record_push_attempt(text,bigint,uuid,text,uuid,jsonb)',
-   'signed chat push flow; action-bound HMAC proof verified in the body, no service role')
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
+  ('public.record_chat_handover(text,bigint,uuid,text,bigint,text)',
+   'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role'),
+  ('public.oxygen_storefront_pilot_available(uuid)',
+   'public storefront/feed read; anon-safe boolean display hint when mode=open')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

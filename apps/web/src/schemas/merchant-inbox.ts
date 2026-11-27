@@ -1,4 +1,10 @@
+import {
+  CHAT_REPLY_MAX_LENGTH,
+  type MerchantInboxCustomerBadge,
+  merchantInboxCustomerBadgeSchema,
+} from '@baci/shared';
 import { z } from 'zod';
+import { INBOX_PRIORITIES } from './merchant-inbox-manage';
 
 const providerId = z.number().int().positive().safe();
 const unixSeconds = z.number().int().nonnegative().safe();
@@ -24,6 +30,10 @@ export const providerInboxConversationSchema = z.object({
   inbox_id: providerId,
   status: z.string(),
   unread_count: z.number().int().nonnegative().nullish(),
+  labels: z.array(z.string()).max(100).nullish(),
+  priority: z.string().nullish(),
+  // Seconds or an ISO string, depending on the provider build.
+  snoozed_until: z.union([unixSeconds, z.string()]).nullish(),
   last_activity_at: unixSeconds.nullish(),
   created_at: unixSeconds.nullish(),
   meta: z
@@ -51,6 +61,11 @@ export const providerInboxConversationListSchema = z.object({
   }),
 });
 
+/** `POST /conversations/filter`: the list's rows, without its `data` wrapper. */
+export const providerInboxFilteredListSchema = z.object({
+  payload: z.array(z.unknown()).max(MERCHANT_INBOX_MAX_CONVERSATIONS_PER_PAGE),
+});
+
 export const providerInboxMessageListSchema = z.object({
   payload: z.array(z.unknown()).max(200),
 });
@@ -60,6 +75,10 @@ export const merchantInboxListQuerySchema = z.object({
   status: z
     .enum(['open', 'resolved', 'pending', 'snoozed', 'all'])
     .default('all'),
+  /** A smart view; when present it decides the status filter itself. */
+  view: z
+    .enum(['all', 'needs_reply', 'unread', 'follow_up', 'done', 'returning'])
+    .optional(),
 });
 
 export const merchantInboxMessagesQuerySchema = z.object({
@@ -72,10 +91,16 @@ export const merchantInboxConversationIdSchema = z.coerce
   .positive()
   .safe();
 
-export const MERCHANT_INBOX_REPLY_MAX_LENGTH = 2_000;
+export const MERCHANT_INBOX_REPLY_MAX_LENGTH = CHAT_REPLY_MAX_LENGTH;
 
 export const merchantInboxReplySchema = z.strictObject({
   content: z.string().trim().min(1).max(MERCHANT_INBOX_REPLY_MAX_LENGTH),
+  /**
+   * The store a reply was meant for (a notification reply names the store that
+   * pushed it). When given, the reply is refused unless the signed-in store is
+   * the same one, so it can never reach another store's customer.
+   */
+  merchantId: z.string().uuid().optional(),
 });
 
 export type MerchantInboxSender = 'customer' | 'store' | 'assistant' | 'system';
@@ -86,6 +111,7 @@ export type MerchantInboxMessage = {
   kind: 'text' | 'product_card' | 'other';
   text: string;
   createdAt: string;
+  checkoutNameRequested?: true;
 };
 
 export type MerchantInboxConversation = {
@@ -95,6 +121,14 @@ export type MerchantInboxConversation = {
   customerName: string;
   lastActivityAt: string | null;
   lastMessage: MerchantInboxMessage | null;
+  /** Merchant tags (slugs). Optional so older fixtures and clients still type-check. */
+  tags?: string[];
+  priority?: (typeof INBOX_PRIORITIES)[number] | null;
+  /** Marked "follow up": snoozed, or reopened and due. */
+  followUp?: boolean;
+  snoozedUntil?: string | null;
+  /** A verified signed-in customer of this store, when the chat is linked. */
+  customer?: MerchantInboxCustomerBadge | null;
 };
 
 /** Baci's own inbox responses, validated again in the browser. */
@@ -113,6 +147,11 @@ export const merchantInboxConversationSchema = z.object({
   customerName: z.string().min(1).max(80),
   lastActivityAt: z.string().min(1).max(40).nullable(),
   lastMessage: merchantInboxMessageSchema.nullable(),
+  tags: z.array(z.string().max(30)).max(10).optional(),
+  priority: z.enum(INBOX_PRIORITIES).nullable().optional(),
+  followUp: z.boolean().optional(),
+  snoozedUntil: z.string().min(1).max(40).nullable().optional(),
+  customer: merchantInboxCustomerBadgeSchema.nullable().optional(),
 }) satisfies z.ZodType<MerchantInboxConversation>;
 
 export const merchantInboxConversationsResponseSchema = z.object({

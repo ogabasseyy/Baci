@@ -139,7 +139,17 @@ function readWireDataId(raw: string): string | null {
 
 export async function listPaystackRefunds(
   reference: string,
-  options: { deadlineMs?: number } = {}
+  options: {
+    deadlineMs?: number;
+    expectedAmount?: number;
+    expectedCapture?: {
+      id: string;
+      domain: 'test' | 'live';
+    } & (
+      | { amountKobo: number; integrationId?: never }
+      | { integrationId: string; amountKobo?: never }
+    );
+  } = {}
 ): Promise<ProviderRefund[]> {
   // The reference travels only through encodeURIComponent into a query
   // string, so punctuation is safe: reject empties, oversize values, and
@@ -211,6 +221,35 @@ export async function listPaystackRefunds(
   const transactionId =
     wireText !== null && /^[1-9][0-9]*$/.test(wireText) ? wireText : null;
   if (transactionId === null) throw new Error('Unverified refund transaction');
+  const data = verified.payload.data as Record<string, unknown> | null;
+  if (
+    options.expectedAmount !== undefined &&
+    data?.amount !== options.expectedAmount
+  ) {
+    throw new Error('Refund capture mismatch');
+  }
+  const expected = options.expectedCapture;
+  if (expected) {
+    if (
+      transactionId !== expected.id ||
+      data?.status !== 'success' ||
+      data.reference !== reference ||
+      data.domain !== expected.domain ||
+      (expected.amountKobo !== undefined &&
+        data.amount !== expected.amountKobo) ||
+      (expected.integrationId !== undefined &&
+        data.integration != null &&
+        String(data.integration) !== expected.integrationId) ||
+      typeof data.currency !== 'string' ||
+      data.currency.toUpperCase() !== 'NGN'
+    ) {
+      throw new Error(
+        expected.amountKobo === undefined
+          ? 'Refund capture mismatch'
+          : 'Saved Paystack capture mismatch'
+      );
+    }
+  }
   const refunds: ProviderRefund[] = [];
   for (let page = 1; page <= 20; page++) {
     const envelope = (
@@ -246,11 +285,20 @@ export async function listPaystackRefunds(
       // this identity check only guards against a provider filter fault.
       // Rows carry the transaction as an expanded object, a bare numeric
       // ID, or (legacy) the reference string.
-      const linked = candidate.transaction;
-      const matches = identityTexts(linked).some(
+      const linked = identityTexts(candidate.transaction);
+      const matches = linked.some(
         (text) => text === transactionId || text === reference
       );
-      if (!matches) throw new Error('Refund transaction mismatch');
+      if (
+        !matches ||
+        (expected &&
+          (linked.some(
+            (text) => text !== transactionId && text !== reference
+          ) ||
+            (candidate.domain !== undefined &&
+              candidate.domain !== expected.domain)))
+      )
+        throw new Error('Refund transaction mismatch');
       refunds.push({
         id: candidate.id,
         amount: candidate.amount,
@@ -258,8 +306,9 @@ export async function listPaystackRefunds(
         status: candidate.status,
       });
     }
-    // A full page is not proof that all refunds were read.
-    if (envelope.data.length < 100) return refunds;
+    // For the balance check, a short page may reflect a provider page
+    // cap. Read through the first empty page before trusting the total.
+    if (expected ? rows.length === 0 : rows.length < 100) return refunds;
   }
   throw new Error('Refund pagination requires review');
 }

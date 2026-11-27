@@ -9,13 +9,9 @@ const mockGetDocumentAsync = jest.fn<
 const mockDeleteCopy = jest.fn();
 const mockFile = jest.fn<void, [string]>();
 
-jest.mock(
-  'expo-document-picker',
-  () => ({
-    getDocumentAsync: (options: unknown) => mockGetDocumentAsync(options),
-  }),
-  { virtual: true }
-);
+jest.mock('expo-document-picker', () => ({
+  getDocumentAsync: (options: unknown) => mockGetDocumentAsync(options),
+}));
 jest.mock('expo-file-system', () => ({
   Paths: { cache: { uri: 'file:///app/cache/' } },
   File: class {

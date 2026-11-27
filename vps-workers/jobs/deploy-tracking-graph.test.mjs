@@ -170,6 +170,7 @@ describe('deploy tracking import graph', () => {
       'packages/shared/package.json',
       'packages/shared/src/lib/filter-by-location-phrase.ts',
       'packages/shared/src/lib/gigl-tracking-status.ts',
+      'packages/shared/src/lib/location-state-aliases.ts',
     ]) {
       assert.ok(reachable.has(shared), `expected ${shared} to be reachable`);
     }

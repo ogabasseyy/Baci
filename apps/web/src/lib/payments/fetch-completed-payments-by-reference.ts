@@ -11,6 +11,7 @@ const RECOVERY_MATCH_MAX_PASSES = 3;
 export interface CompletedPaymentMatch {
   amount: number;
   gateway: string | null;
+  gateway_response?: unknown;
   gateway_reference: string | null;
   id: string;
   merchant_id: string;

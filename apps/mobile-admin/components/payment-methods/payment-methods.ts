@@ -26,6 +26,7 @@ const PAYMENT_METHOD_ICON_BY_ID: Partial<Record<string, IoniconsIconName>> = {
   juicyway: 'flash-outline',
   klump: 'calendar-outline',
   korapay: 'wallet-outline',
+  oxygen: 'card-outline',
   pay_on_delivery: 'cash-outline',
   paystack: 'card-outline',
 };

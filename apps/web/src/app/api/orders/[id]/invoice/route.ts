@@ -6,6 +6,7 @@ import {
   type ReceiptOrder,
   resolveReceiptItemFulfillmentAttachment,
 } from '@baci/shared';
+import { formatOrderItemDisplayName } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -24,6 +25,7 @@ import type {
 import { resolveInvoicePaymentAccount } from '@/lib/invoice-payment-account';
 import { deriveTaxSubtotalsFromInvoiceItems } from '@/lib/invoice-tax-subtotals';
 import { ORDER_COLUMNS } from '@/lib/order-queries';
+import { loadPaidOrderDocument } from '@/lib/orders/paid-order-amendment-document';
 import {
   generatePeppolInvoiceXml,
   PEPPOL_BIS_BILLING_COMPLIANCE_NOTE,
@@ -34,6 +36,8 @@ import {
 } from '@/lib/receipt-pdf-generator';
 import { resolveInvoiceTypeCode } from '@/lib/resolve-invoice-type-code';
 import { createClient } from '@/lib/supabase/server';
+import { unamendedOrderSummarySchema } from '@/schemas/order-amendment';
+import { paidOrderDocumentVersionSchema } from '@/schemas/order-amendment-document';
 
 const paramsSchema = z.object({
   id: z.string().uuid(),
@@ -44,6 +48,8 @@ interface OrderItem {
   line_id: number | null;
   name: string;
   item_description: string | null;
+  condition?: string | null;
+  variant_name?: string | null;
   quantity: number;
   price: number;
   unit_code: string | null;
@@ -87,7 +93,7 @@ interface ShippingAddress {
  */
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -111,10 +117,19 @@ export async function GET(
       );
     }
     const orderId = parsed.data.id;
+    const revisionValue = new URL(request.url).searchParams.get('revision');
+    const version = paidOrderDocumentVersionSchema.safeParse(
+      revisionValue ?? 'original'
+    );
+    if (!version.success) {
+      return NextResponse.json(
+        { error: 'Invalid invoice revision' },
+        { status: 400 }
+      );
+    }
 
-    // Fetch order with all related data. `orders.merchant_id` stores the
-    // merchant UUID, not the auth user UUID, so the explicit tenant scope is
-    // enforced through the inner merchant ownership filter below.
+    // Fetch through the authenticated order RLS policy. That policy also
+    // admits customers, so separately require merchant order-view access.
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(
@@ -147,7 +162,6 @@ export async function GET(
       `
       )
       .eq('id', orderId)
-      .eq('merchants.user_id', user.id)
       .single();
 
     if (orderError || !order) {
@@ -217,17 +231,53 @@ export async function GET(
     const merchant = md as MerchantData;
 
     if (merchant.user_id !== user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      const permission = await supabase.rpc('check_staff_permission', {
+        p_user_id: user.id,
+        p_merchant_id: merchant.id,
+        p_resource: 'orders',
+        p_action: 'view',
+      });
+      if (permission.error || permission.data !== true) {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      }
     }
 
-    // Fetch order items
-    const { data: orderItems, error: itemsError } = await supabase
+    const projection =
+      order.source === 'online_store' || revisionValue
+        ? await loadPaidOrderDocument(supabase, orderId, version.data)
+        : { data: null, error: null };
+    const checkUnamendedFallback =
+      projection.error === 'unavailable' && version.data === 'original';
+    if (projection.error && !checkUnamendedFallback) {
+      return NextResponse.json(
+        { error: 'Unable to load invoice revision' },
+        { status: projection.error === 'not_found' ? 404 : 503 }
+      );
+    }
+    // The document reader validates money and strips fields outside the
+    // invoice snapshot before applying historical values.
+    if (projection.data) Object.assign(order, projection.data.inputs.order);
+    const sellerTax = projection.data?.inputs.sellerTax;
+    if (sellerTax) {
+      merchant.vat_registration_status = sellerTax.registrationStatus;
+      merchant.vat_rate = sellerTax.rate;
+    }
+    const documentNumber = projection.data?.documentNumber ?? null;
+    const itemsQuery = supabase
       .from('order_items')
       .select(
         'id, line_id, name, item_description, quantity, price, assurance_fee, unit_code, line_extension_amount, vat_category_code, vat_rate, vat_amount, sellers_item_id, product_id'
       )
       .eq('order_id', orderId)
       .order('line_id', { ascending: true });
+    const { data: orderItems, error: itemsError } = projection.data
+      ? {
+          data: projection.data.inputs.items as unknown as Awaited<
+            typeof itemsQuery
+          >['data'],
+          error: null,
+        }
+      : await itemsQuery;
 
     if (itemsError) {
       console.error('Error fetching order items:', itemsError);
@@ -236,10 +286,13 @@ export async function GET(
         { status: 500 }
       );
     }
-
     // Fetch tax subtotals if VAT registered
-    let taxSubtotals: TaxSubtotalRow[] = [];
-    if (merchant.vat_registration_status === 'registered') {
+    const pinnedTaxSubtotals = projection.data?.inputs.taxSubtotals;
+    let taxSubtotals: TaxSubtotalRow[] = pinnedTaxSubtotals ?? [];
+    if (
+      merchant.vat_registration_status === 'registered' &&
+      pinnedTaxSubtotals == null
+    ) {
       const { data: subtotals, error: taxError } = await supabase
         .from('order_tax_subtotals')
         .select(
@@ -262,9 +315,28 @@ export async function GET(
       taxSubtotals = subtotals || [];
     }
 
+    if (checkUnamendedFallback) {
+      // Verify after reading the live invoice data. An amendment leaves durable
+      // history, so a null summary also rules out a swap during those reads.
+      const status = await supabase.rpc('read_paid_order_amendment', {
+        p_order_id: orderId,
+      });
+      if (
+        status.error ||
+        !unamendedOrderSummarySchema.safeParse(status.data).success
+      ) {
+        return NextResponse.json(
+          { error: 'Unable to load invoice revision' },
+          { status: 503 }
+        );
+      }
+    }
+
     const typedOrderItems = orderItems as OrderItem[];
     const orderFulfillment = normalizeReceiptFulfillmentDetails(
-      order.fulfillment_details
+      projection.data
+        ? projection.data.inputs.order.fulfillment_details
+        : order.fulfillment_details
     );
     const hasDeviceItem = typedOrderItems.some((item) =>
       isDeviceReceiptItemName(item.name || '')
@@ -379,7 +451,13 @@ export async function GET(
       return {
         line_id: invoiceLineId,
         product_id: item.product_id || undefined,
-        name: item.name || '',
+        name: projection.data?.amendment
+          ? formatOrderItemDisplayName({
+              baseName: item.name,
+              condition: item.condition,
+              variantName: item.variant_name,
+            })
+          : item.name || '',
         description: desc,
         quantity: item.quantity,
         unit_code: item.unit_code || 'EA',
@@ -393,15 +471,22 @@ export async function GET(
     });
 
     // Build tax subtotals for invoice
-    const invoiceTaxSubtotals: TaxSubtotal[] = taxSubtotals.map((st) => ({
+    const isRevisedAmendment =
+      Boolean(projection.data?.amendment) &&
+      version.data !== 'original' &&
+      !projection.data?.inputs.revisedTaxPinned;
+    const storedTaxSubtotals: TaxSubtotal[] = taxSubtotals.map((st) => ({
       vat_category_code: st.vat_category_code,
       vat_rate: st.vat_rate,
       taxable_amount: Number(st.taxable_amount),
       tax_amount: Number(st.tax_amount),
       exemption_reason: st.exemption_reason || undefined,
     }));
-
-    const derivedLineTaxSubtotals = deriveTaxSubtotalsFromInvoiceItems(items);
+    const invoiceTaxSubtotals = isRevisedAmendment ? [] : storedTaxSubtotals;
+    const derivedLineTaxSubtotals = deriveTaxSubtotalsFromInvoiceItems(
+      items,
+      storedTaxSubtotals
+    );
     if (
       invoiceTaxSubtotals.length === 0 &&
       derivedLineTaxSubtotals.length > 0 &&
@@ -494,7 +579,9 @@ export async function GET(
       error: paymentAccountError,
       transactionError,
       paymentAccount,
-    } = await resolveInvoicePaymentAccount(supabase, orderId, isPaidOrder);
+    } = projection.data?.amendment
+      ? { error: null, transactionError: null, paymentAccount: null }
+      : await resolveInvoicePaymentAccount(supabase, orderId, isPaidOrder);
 
     if (paymentAccountError || transactionError) {
       console.error('Error fetching invoice payment account data:', orderId, {
@@ -527,7 +614,8 @@ export async function GET(
     const invoiceData: InvoiceData = {
       // Document identifiers
       invoice_number:
-        order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`,
+        (order.order_number || `INV-${order.id.slice(0, 8).toUpperCase()}`) +
+        (documentNumber ? `-R${documentNumber}` : ''),
       invoice_type_code: resolveInvoiceTypeCode({
         paymentMethod: order.payment_method,
         isPaid: isPaidOrder,
@@ -596,7 +684,11 @@ export async function GET(
       amount_paid: amountPaid,
 
       // Additional info
-      notes: order.invoice_note || order.notes || undefined,
+      notes: documentNumber
+        ? `Revised invoice R${documentNumber} for order ${order.order_number}`
+        : projection.data?.amendment
+          ? 'Archived copy of the original order'
+          : order.invoice_note || order.notes || undefined,
       payment_terms: order.payment_terms || undefined,
       payment_account: paymentAccount
         ? {
@@ -604,7 +696,7 @@ export async function GET(
             account_name: paymentAccount.account_name || undefined,
             bank_name: paymentAccount.bank_name || undefined,
           }
-        : merchant.bank_account_number
+        : !projection.data?.amendment && merchant.bank_account_number
           ? {
               account_number: merchant.bank_account_number,
               account_name:
@@ -694,10 +786,14 @@ export async function GET(
       brand_colors: merchant.brand_colors || undefined,
       vat_registration_status: merchant.vat_registration_status,
       vat_rate: merchant.vat_rate,
-      bank_code: merchant.bank_code,
-      bank_account_number: merchant.bank_account_number,
-      bank_name: merchant.bank_name,
-      bank_account_name: merchant.bank_account_name,
+      bank_code: projection.data?.amendment ? null : merchant.bank_code,
+      bank_account_number: projection.data?.amendment
+        ? null
+        : merchant.bank_account_number,
+      bank_name: projection.data?.amendment ? null : merchant.bank_name,
+      bank_account_name: projection.data?.amendment
+        ? null
+        : merchant.bank_account_name,
       social_media: merchant.social_media,
       pages: merchant.pages,
     };

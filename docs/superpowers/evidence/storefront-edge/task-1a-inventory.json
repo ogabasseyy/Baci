@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "3505d27b0953bfa7e199e9df0e7c69583190bfb6",
+  "originMainSha": "8d86a47017f55ab64d3c064f70ac1460e72eb98f",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "44cd63ed4ac09810431fcdb23ed1b14a5122f04261ebf03fd27bb6a68be01dd5",
-  "routingProxyInputSha256": "f24be4385c9ebafacc6c5fd51cf9eb73d7938199ab029215008a37ace614fb3e",
+  "routeTreeSha256": "94fc608ea137590c42191ff2aff23e8b01c4bc7a34a09d330fc8ff2c301b41a4",
+  "routingProxyInputSha256": "e61b1284a1155bbc6b3d653942694c904f2f8af2626f37689d549dc7ce5908fb",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1332,6 +1332,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/bank-verification/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/bank-verification",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/bank-verification/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/chatwoot/cart/add/route.ts",
       "methods": [
         "OPTIONS",
@@ -1353,6 +1365,18 @@
       "routePattern": "/api/storefront/chatwoot/cart/quantity",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/chatwoot/cart/quantity/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/checkout-turn/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/checkout-turn",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/checkout-turn/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1401,6 +1425,30 @@
       "routePattern": "/api/storefront/chatwoot/context/verify",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/chatwoot/context/verify/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/customer-link/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/customer-link",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/customer-link/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/chatwoot/delivery-confirmation/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/chatwoot/delivery-confirmation",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/chatwoot/delivery-confirmation/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -2253,6 +2301,19 @@
       "routePattern": "/api/storefront/orders/{id}/receipt-bank-details",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/orders/[id]/receipt-bank-details/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/orders/[id]/tracking/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/orders/{id}/tracking",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/orders/[id]/tracking/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -9498,5 +9559,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "5b17babae38471de836209fd0f901b267f9874148d44e35c3959487551ca2ec4"
+  "inventorySha256": "6b4f06a187a6db4138951b7283bfe646b911271bf204db59a032379089be375d"
 }

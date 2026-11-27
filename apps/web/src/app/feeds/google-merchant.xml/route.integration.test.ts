@@ -7,6 +7,11 @@ const mockResolveFeedMerchant = vi.fn();
 const mockGetCachedGoogleMerchantFeedData = vi.fn();
 const mockLoggerError = vi.fn();
 
+vi.mock('next/cache', () => ({
+  cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
+}));
+
 vi.mock('@/lib/storefront-merchant', () => ({
   resolveStorefrontMerchantFromRequest: (...args: unknown[]) =>
     mockResolveStorefrontMerchantFromRequest(...args),

@@ -6273,6 +6273,7 @@ export type Database = {
           loyalty_enabled: boolean | null;
           merchant_id: string;
           order_tracking_enabled: boolean | null;
+          oxygen_enabled: boolean;
           pay_on_delivery_enabled: boolean | null;
           paystack_enabled: boolean | null;
           preferred_international_gateway: string | null;
@@ -6358,6 +6359,7 @@ export type Database = {
           loyalty_enabled?: boolean | null;
           merchant_id: string;
           order_tracking_enabled?: boolean | null;
+          oxygen_enabled?: boolean;
           pay_on_delivery_enabled?: boolean | null;
           paystack_enabled?: boolean | null;
           preferred_international_gateway?: string | null;
@@ -6443,6 +6445,7 @@ export type Database = {
           loyalty_enabled?: boolean | null;
           merchant_id?: string;
           order_tracking_enabled?: boolean | null;
+          oxygen_enabled?: boolean;
           pay_on_delivery_enabled?: boolean | null;
           paystack_enabled?: boolean | null;
           preferred_international_gateway?: string | null;
@@ -7591,6 +7594,7 @@ export type Database = {
       notification_preferences: {
         Row: {
           banner_enabled: boolean | null;
+          chat_message_notifications: string;
           chat_message_push_enabled: boolean;
           follow_up_notifications_enabled: boolean;
           in_app_enabled: boolean | null;
@@ -7603,6 +7607,7 @@ export type Database = {
         };
         Insert: {
           banner_enabled?: boolean | null;
+          chat_message_notifications?: string;
           chat_message_push_enabled?: boolean;
           follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
@@ -7615,6 +7620,7 @@ export type Database = {
         };
         Update: {
           banner_enabled?: boolean | null;
+          chat_message_notifications?: string;
           chat_message_push_enabled?: boolean;
           follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
@@ -18505,9 +18511,17 @@ export type Database = {
           total_sent: number;
         }[];
       };
+      get_chat_message_alert_level: {
+        Args: { p_merchant_id: string };
+        Returns: string;
+      };
       get_chat_message_push_preference: {
         Args: { p_merchant_id: string };
         Returns: boolean;
+      };
+      set_chat_message_alert_level: {
+        Args: { p_level: string; p_merchant_id: string };
+        Returns: string;
       };
       set_chat_message_push_preference: {
         Args: { p_enabled: boolean; p_merchant_id: string };
@@ -19455,6 +19469,7 @@ export type Database = {
           klump_max_amount: number;
           klump_min_amount: number;
           korapay_enabled: boolean;
+          oxygen_enabled: boolean;
           pay_on_delivery_enabled: boolean;
           paystack_enabled: boolean;
           vat_rate: number;

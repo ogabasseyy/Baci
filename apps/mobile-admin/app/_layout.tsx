@@ -19,6 +19,7 @@ import 'react-native-reanimated';
 import { StatusBar, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppKeyboardProvider } from '@/components/ui/AppKeyboardProvider';
 import { MobileUpdateController } from '@/components/updates/MobileUpdateController';
 import { isRuntimePlatform } from '@/config/runtime-platform';
 import { DARK_COLORS, LIGHT_COLORS } from '@/constants/theme';
@@ -151,15 +152,17 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryProvider>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <ThemeProvider value={isDark ? AdminDarkTheme : AdminLightTheme}>
-            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-            <NetworkProvider>
-              <OnboardingProvider>
-                <Slot />
-                <MobileUpdateController />
-              </OnboardingProvider>
-            </NetworkProvider>
-          </ThemeProvider>
+          <AppKeyboardProvider>
+            <ThemeProvider value={isDark ? AdminDarkTheme : AdminLightTheme}>
+              <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+              <NetworkProvider>
+                <OnboardingProvider>
+                  <Slot />
+                  <MobileUpdateController />
+                </OnboardingProvider>
+              </NetworkProvider>
+            </ThemeProvider>
+          </AppKeyboardProvider>
         </GestureHandlerRootView>
       </QueryProvider>
     </SafeAreaProvider>

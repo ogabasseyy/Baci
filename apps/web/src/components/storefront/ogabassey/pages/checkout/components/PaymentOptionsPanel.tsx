@@ -2,7 +2,7 @@ import { Banknote, CalendarDays, FileText, Truck } from 'lucide-react';
 import Image from 'next/image';
 import creditDirectLogo from '@/../public/partners/credit-direct-filled.png';
 import oxygenLogo from '@/../public/partners/oxygen-x-filled.png';
-import { useEffect } from 'react';
+import { useContext, useEffect } from 'react';
 import {
   BankTransferLogo,
   JuicywayLogo,
@@ -11,6 +11,8 @@ import {
 } from '../../../components/PaymentLogos';
 import type { PaymentTab } from '../types';
 import type { PaymentOptionsPanelProps } from './payment-options-panel.types';
+import { BankCardOfferOptionsContext } from './bank-card-offer-options-context';
+import { BankCardOfferOptions } from './BankCardOfferOptions';
 import { PaymentInstallmentDetails } from './PaymentInstallmentDetails';
 import { PaymentOptionCard } from './PaymentOptionCard';
 import { PaymentScheduleCard } from './PaymentScheduleCard';
@@ -34,6 +36,7 @@ export function PaymentOptionsPanel({
   bankTransferCheckoutAvailable,
   featureSettings,
   klumpEligible,
+  creditDirectEligible,
   oxygenEligible = false,
   hasInstallmentOptions,
   currency,
@@ -41,6 +44,7 @@ export function PaymentOptionsPanel({
   redvaultStatus,
   redvaultSummary,
 }: PaymentOptionsPanelProps) {
+  const bankOfferModel = useContext(BankCardOfferOptionsContext);
   useEffect(() => {
     if (!hasInstallmentOptions && paymentTab === 'installments') {
       // Keep parent tab state aligned with the visible full-payment panel so a
@@ -79,10 +83,11 @@ export function PaymentOptionsPanel({
               status={redvaultStatus}
               summary={redvaultSummary}
             />
+            <BankCardOfferOptions />
             {paystackCheckoutAvailable && (
               <PaymentOptionCard
                 method="paystack"
-                paymentMethod={paymentMethod}
+                paymentMethod={bankOfferModel?.selectedId || bankOfferModel?.recovery?.active ? '' : paymentMethod}
                 setPaymentMethod={setPaymentMethod}
                 title="Paystack"
                 description="Card, Bank Transfer, USSD"
@@ -156,7 +161,9 @@ export function PaymentOptionsPanel({
             {oxygenEligible && (
               <FinanceProviderOption provider="oxygen" selected={paymentMethod === 'oxygen'} onSelect={setPaymentMethod} logo={oxygenLogo} />
             )}
-            {featureSettings?.credit_direct_enabled === true && ngnOnlyRailsAvailable && (
+            {(creditDirectEligible ??
+              (featureSettings?.credit_direct_enabled === true &&
+                ngnOnlyRailsAvailable)) && (
               <FinanceProviderOption provider="credit_direct" selected={paymentMethod === 'credit_direct'} onSelect={setPaymentMethod} logo={creditDirectLogo} />
             )}
             {klumpEligible && (

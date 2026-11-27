@@ -1,0 +1,1026 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "currency": "NGN",
+  "moneyUnit": "kobo",
+  "assumedSettlementRoute": "paystack_integration_wallet",
+  "inventoryPools": {
+    "serial-ip12": {
+      "type": "serialized_variant",
+      "sku": "FIX-IP12",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 0,
+      "unitId": "synthetic-unit-ip12"
+    },
+    "serial-ip12-alt": {
+      "type": "serialized_variant",
+      "sku": "FIX-IP12-ALT",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 1,
+      "unitId": "synthetic-unit-ip12-alt"
+    },
+    "serial-ip13": {
+      "type": "serialized_variant",
+      "sku": "FIX-IP13",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 1,
+      "unitId": "synthetic-unit-ip13"
+    },
+    "serial-ip11": {
+      "type": "serialized_variant",
+      "sku": "FIX-IP11",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 1,
+      "unitId": "synthetic-unit-ip11"
+    },
+    "offer-ip12-used": {
+      "type": "condition_offer",
+      "sku": "FIX-IP12-USED",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 0,
+      "productOfferId": "fixture-offer-ip12-used",
+      "parentPoolId": "parent-ip12"
+    },
+    "offer-ip11-used": {
+      "type": "condition_offer",
+      "sku": "FIX-IP11-USED",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 1,
+      "productOfferId": "fixture-offer-ip11-used",
+      "parentPoolId": "parent-ip11"
+    },
+    "parent-ip11": {
+      "type": "product_scalar",
+      "sku": "FIX-IP11-PARENT",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 7
+    },
+    "parent-ip12": {
+      "type": "product_scalar",
+      "sku": "FIX-IP12-PARENT",
+      "locationId": "fixture-stockroom",
+      "initialAvailable": 8
+    }
+  },
+  "bankEvidence": [
+    {
+      "id": "bank-short-top-up",
+      "accountId": "fixture-bank-inbound",
+      "transactionId": "synthetic-bank-in-040",
+      "direction": "inbound",
+      "amountMinor": 4000000,
+      "expectedAllocation": "unapplied"
+    },
+    {
+      "id": "bank-return-short",
+      "accountId": "fixture-bank-outbound",
+      "transactionId": "synthetic-bank-out-040",
+      "direction": "outbound",
+      "amountMinor": 4000000,
+      "returnsEvidenceId": "bank-short-top-up"
+    },
+    {
+      "id": "bank-exact-top-up",
+      "accountId": "fixture-bank-inbound",
+      "transactionId": "synthetic-bank-in-050",
+      "direction": "inbound",
+      "amountMinor": 5000000,
+      "expectedAllocation": "upgrade-paystack-plus-offline"
+    }
+  ],
+  "cases": [
+    {
+      "id": "equal-price-serialized",
+      "order": {
+        "id": "equal",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-equal",
+        "line": {
+          "id": "line-equal",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-equal",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "capture-equal",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip12-alt",
+        "quantity": 1,
+        "previewTotalMinor": 30000000
+      },
+      "expected": {
+        "eligible": true,
+        "amendedTotalMinor": 30000000,
+        "adjustmentMinor": 0,
+        "initialState": "settled",
+        "initialHold": false,
+        "topUpMinor": 0,
+        "amendmentRefundMinor": 0,
+        "cancellationRefunds": [
+          {
+            "paymentId": "capture-equal",
+            "amountMinor": 30000000
+          }
+        ],
+        "stockDeltas": {
+          "onSwap": {
+            "serial-ip12": 1,
+            "serial-ip12-alt": -1
+          },
+          "onCancellation": {
+            "serial-ip12-alt": 1
+          }
+        },
+        "serialTransitions": [
+          {
+            "unitId": "synthetic-unit-ip12",
+            "from": "reserved",
+            "to": "available",
+            "action": "confirm"
+          },
+          {
+            "unitId": "synthetic-unit-ip12-alt",
+            "from": "available",
+            "to": "reserved",
+            "action": "confirm"
+          },
+          {
+            "unitId": "synthetic-unit-ip12-alt",
+            "from": "reserved",
+            "to": "available",
+            "action": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "upgrade-paystack-plus-offline",
+      "order": {
+        "id": "upgrade",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-upgrade",
+        "line": {
+          "id": "line-upgrade",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-upgrade",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "capture-upgrade",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip13",
+        "quantity": 1,
+        "previewTotalMinor": 35000000
+      },
+      "expected": {
+        "eligible": true,
+        "amendedTotalMinor": 35000000,
+        "adjustmentMinor": 5000000,
+        "initialState": "awaiting_payment",
+        "initialHold": true,
+        "topUpMinor": 5000000,
+        "amendmentRefundMinor": 0,
+        "cancellationRefunds": [
+          {
+            "paymentId": "capture-upgrade",
+            "amountMinor": 30000000
+          },
+          {
+            "paymentId": "bank-exact-top-up",
+            "amountMinor": 5000000
+          }
+        ],
+        "stockDeltas": {
+          "onSwap": {
+            "serial-ip12": 1,
+            "serial-ip13": -1
+          },
+          "onCancellation": {
+            "serial-ip13": 1
+          }
+        },
+        "serialTransitions": [
+          {
+            "unitId": "synthetic-unit-ip12",
+            "from": "reserved",
+            "to": "available",
+            "action": "confirm"
+          },
+          {
+            "unitId": "synthetic-unit-ip13",
+            "from": "available",
+            "to": "reserved",
+            "action": "confirm"
+          },
+          {
+            "unitId": "synthetic-unit-ip13",
+            "from": "reserved",
+            "to": "available",
+            "action": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "downgrade-and-cancel-remainder",
+      "order": {
+        "id": "downgrade",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-downgrade",
+        "line": {
+          "id": "line-downgrade",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-downgrade",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "capture-downgrade",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": true,
+        "amendedTotalMinor": 25000000,
+        "adjustmentMinor": -5000000,
+        "initialState": "awaiting_refund",
+        "initialHold": true,
+        "topUpMinor": 0,
+        "amendmentRefundMinor": 5000000,
+        "cancellationRefunds": [
+          {
+            "paymentId": "capture-downgrade",
+            "amountMinor": 25000000
+          }
+        ],
+        "stockDeltas": {
+          "onSwap": {
+            "serial-ip12": 1,
+            "serial-ip11": -1
+          },
+          "onCancellation": {
+            "serial-ip11": 1
+          }
+        },
+        "serialTransitions": [
+          {
+            "unitId": "synthetic-unit-ip12",
+            "from": "reserved",
+            "to": "available",
+            "action": "confirm"
+          },
+          {
+            "unitId": "synthetic-unit-ip11",
+            "from": "available",
+            "to": "reserved",
+            "action": "confirm"
+          },
+          {
+            "unitId": "synthetic-unit-ip11",
+            "from": "reserved",
+            "to": "available",
+            "action": "cancel"
+          }
+        ]
+      }
+    },
+    {
+      "id": "downgrade-condition-offer",
+      "order": {
+        "id": "condition",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-condition",
+        "line": {
+          "id": "line-condition",
+          "sku": "FIX-IP12-USED",
+          "quantity": 1,
+          "stockPoolId": "offer-ip12-used",
+          "productOfferId": "fixture-offer-ip12-used"
+        },
+        "payments": [
+          {
+            "id": "capture-condition",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "offer-ip11-used",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": true,
+        "amendedTotalMinor": 25000000,
+        "adjustmentMinor": -5000000,
+        "initialState": "awaiting_refund",
+        "initialHold": true,
+        "topUpMinor": 0,
+        "amendmentRefundMinor": 5000000,
+        "cancellationRefunds": [
+          {
+            "paymentId": "capture-condition",
+            "amountMinor": 25000000
+          }
+        ],
+        "stockDeltas": {
+          "onSwap": {
+            "offer-ip12-used": 1,
+            "offer-ip11-used": -1
+          },
+          "onCancellation": {
+            "offer-ip11-used": 1
+          },
+          "unchangedPools": ["parent-ip11", "parent-ip12"]
+        }
+      }
+    },
+    {
+      "id": "partner-attestation",
+      "order": {
+        "id": "partner",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "partner",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-partner",
+        "line": {
+          "id": "line-partner",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-partner",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "partner-capture",
+            "rail": "partner_attested",
+            "settlementRoute": "partner_external",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "partner_provenance",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "chat-dedicated-transfer",
+      "order": {
+        "id": "chat",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "storefront_chat",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-chat",
+        "line": {
+          "id": "line-chat",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-chat",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "chat-capture",
+            "rail": "paystack_dedicated_transfer",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "unqualified_payment_instrument",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "legacy-gross-only",
+      "order": {
+        "id": "legacy",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "import",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": null,
+        "line": {
+          "id": "line-legacy",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-legacy",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [],
+        "amountPaidMinor": 30000000,
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "missing_capture_evidence",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "checkout-initialization-in-flight",
+      "order": {
+        "id": "initializing",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": ["checkout_initialization"],
+        "originalDocumentId": "original-initializing",
+        "line": {
+          "id": "line-initializing",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-initializing",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "capture-initializing",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "active_payment_claim",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "courier-booking-in-flight",
+      "order": {
+        "id": "courier",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": ["courier_booking"],
+        "originalDocumentId": "original-courier",
+        "line": {
+          "id": "line-courier",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-courier",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "capture-courier",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "active_fulfillment_claim",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "unqualified-direct-split",
+      "order": {
+        "id": "direct",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-direct",
+        "line": {
+          "id": "line-direct",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-direct",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "direct-capture",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_direct_split",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "unqualified_settlement_route",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "split-original-tender",
+      "order": {
+        "id": "split",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-split",
+        "line": {
+          "id": "line-split",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "line-split",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "split-paystack",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 20000000
+          },
+          {
+            "id": "split-bank",
+            "rail": "offline_bank",
+            "settlementRoute": "external_bank",
+            "amountMinor": 10000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "split_tender",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "already-handed-over",
+      "order": {
+        "id": "fulfilled",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "delivered",
+        "openClaims": [],
+        "originalDocumentId": "original-fulfilled",
+        "line": {
+          "id": "line-fulfilled",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "sold",
+            "reservationExpiresAt": null,
+            "soldAt": "2026-11-21T10:00:00Z",
+            "orderItemId": "line-fulfilled",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "capture-fulfilled",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "fulfilled_order",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    },
+    {
+      "id": "serialized-unit-sold",
+      "order": {
+        "id": "sold-unit",
+        "merchantId": "fixture-ogabassey",
+        "provenance": "website",
+        "currency": "NGN",
+        "totalMinor": 30000000,
+        "paymentStatus": "paid",
+        "fulfillmentStatus": "pending",
+        "openClaims": [],
+        "originalDocumentId": "original-sold-unit",
+        "line": {
+          "id": "line-sold-unit",
+          "sku": "FIX-IP12",
+          "quantity": 1,
+          "stockPoolId": "serial-ip12",
+          "unitId": "synthetic-unit-ip12",
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip12",
+            "status": "sold",
+            "reservationExpiresAt": null,
+            "soldAt": "2026-11-21T10:00:00Z",
+            "orderItemId": "line-sold-unit",
+            "locationId": "fixture-stockroom"
+          }
+        },
+        "payments": [
+          {
+            "id": "capture-sold-unit",
+            "rail": "paystack_card",
+            "settlementRoute": "paystack_integration_wallet",
+            "amountMinor": 30000000
+          }
+        ],
+        "version": "fixture-order-v1"
+      },
+      "replacement": {
+        "stockPoolId": "serial-ip11",
+        "quantity": 1,
+        "previewTotalMinor": 25000000
+      },
+      "expected": {
+        "eligible": false,
+        "reason": "serialized_unit_already_sold",
+        "stockDeltas": {},
+        "newMoneyMovements": 0
+      }
+    }
+  ],
+  "reconciliationCases": [
+    {
+      "id": "early-capture",
+      "orderCaseId": "checkout-initialization-in-flight",
+      "events": [
+        "initialization_claim_committed",
+        "capture_verified",
+        "initializer_resumed",
+        "capture_replayed"
+      ],
+      "expected": {
+        "newCaptures": 1,
+        "newSettlements": 1,
+        "regressedToPending": false
+      },
+      "precondition": "original_checkout_still_payable",
+      "orderOverrides": {
+        "paymentStatus": "unpaid",
+        "payments": []
+      },
+      "initializationClaim": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      },
+      "capture": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      }
+    },
+    {
+      "id": "stale-capture",
+      "orderCaseId": "checkout-initialization-in-flight",
+      "events": ["capture_verified", "capture_replayed"],
+      "expected": {
+        "newUnappliedFundsRecords": 1,
+        "newOrderAllocations": 0,
+        "stockMovements": 0
+      },
+      "precondition": "order_already_funded",
+      "initializationClaim": {
+        "reference": "synthetic-checkout-stale",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      },
+      "capture": {
+        "reference": "synthetic-checkout-stale",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      }
+    },
+    {
+      "id": "refund-response-lost",
+      "orderCaseId": "downgrade-and-cancel-remainder",
+      "events": [
+        "refund_claimed",
+        "provider_accepts_response_lost",
+        "refund_verified_by_lookup",
+        "processed_webhook_replayed",
+        "order_cancelled"
+      ],
+      "expected": {
+        "amendmentRefunds": 1,
+        "amendmentRefundMinor": 5000000,
+        "cancellationRefunds": 1,
+        "cancellationRefundMinor": 25000000
+      }
+    },
+    {
+      "id": "short-transfer-returned",
+      "orderCaseId": "upgrade-paystack-plus-offline",
+      "evidenceIds": [
+        "bank-short-top-up",
+        "bank-return-short",
+        "bank-exact-top-up"
+      ],
+      "expected": {
+        "orderAllocations": 1,
+        "topUpMinor": 5000000,
+        "unappliedReturnMinor": 4000000,
+        "shortTransferRefundedAgainAtCancellation": false
+      }
+    },
+    {
+      "id": "capture-wrong-account",
+      "orderCaseId": "checkout-initialization-in-flight",
+      "orderOverrides": {
+        "paymentStatus": "unpaid",
+        "payments": []
+      },
+      "initializationClaim": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      },
+      "capture": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-other-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      },
+      "mismatchField": "accountId",
+      "expected": {
+        "newOrderAllocations": 0,
+        "claimState": "review",
+        "amendmentAllowed": false
+      }
+    },
+    {
+      "id": "capture-wrong-currency",
+      "orderCaseId": "checkout-initialization-in-flight",
+      "orderOverrides": {
+        "paymentStatus": "unpaid",
+        "payments": []
+      },
+      "initializationClaim": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      },
+      "capture": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-paystack-integration",
+        "currency": "USD",
+        "amountMinor": 30000000
+      },
+      "mismatchField": "currency",
+      "expected": {
+        "newOrderAllocations": 0,
+        "claimState": "review",
+        "amendmentAllowed": false
+      }
+    },
+    {
+      "id": "capture-wrong-amount",
+      "orderCaseId": "checkout-initialization-in-flight",
+      "orderOverrides": {
+        "paymentStatus": "unpaid",
+        "payments": []
+      },
+      "initializationClaim": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 30000000
+      },
+      "capture": {
+        "reference": "synthetic-checkout-early",
+        "accountId": "fixture-paystack-integration",
+        "currency": "NGN",
+        "amountMinor": 29999999
+      },
+      "mismatchField": "amountMinor",
+      "expected": {
+        "newOrderAllocations": 0,
+        "claimState": "review",
+        "amendmentAllowed": false
+      }
+    }
+  ]
+}

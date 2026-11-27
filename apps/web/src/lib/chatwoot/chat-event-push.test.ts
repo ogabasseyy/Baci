@@ -12,7 +12,9 @@ vi.mock('@/lib/supabase/anon', () => ({
 vi.mock('@/lib/expo-push-core', () => ({
   notifyMerchantWithStore: mocks.notify,
 }));
-vi.mock('@/lib/expo-client', () => ({ getExpoClient: () => ({}) }));
+vi.mock('@/lib/expo-push-lazy-client', () => ({
+  createLazyExpoGetter: () => () => ({}),
+}));
 vi.mock('./chat-event-push-store', async (importActual) => {
   const actual: Record<string, unknown> = await importActual();
   return { ...actual, createChatEventPushStore: mocks.createStore };
@@ -73,8 +75,13 @@ describe('sendChatEventPush', () => {
       input.merchantId,
       'New message from Ada',
       'Is it in stock?',
-      { type: 'customer_message', conversation_id: 21 },
-      'general'
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+      },
+      'general',
+      { categoryId: 'chat_reply' }
     );
   });
 
@@ -86,8 +93,60 @@ describe('sendChatEventPush', () => {
       'New customer message',
       'A customer sent a message to your store.',
       expect.anything(),
-      'general'
+      'general',
+      { categoryId: 'chat_reply' }
     );
+  });
+
+  it('pushes a handover with its own wording and a handover marker', async () => {
+    await sendChatEventPush(
+      {
+        ...input,
+        eventKey: 'chat-handover-2-128',
+        preview: '',
+        kind: 'handover',
+      },
+      env
+    );
+    expect(mocks.notify).toHaveBeenCalledWith(
+      { store: true },
+      input.merchantId,
+      'Ada needs a person',
+      'The assistant handed this chat to your team. Open it to reply.',
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+        handover: true,
+      },
+      'general',
+      { categoryId: 'chat_reply' }
+    );
+  });
+
+  it('uses neutral wording for a handover from a customer with no name', async () => {
+    await sendChatEventPush(
+      { ...input, customerName: '', preview: '', kind: 'handover' },
+      env
+    );
+    expect(mocks.notify).toHaveBeenCalledWith(
+      expect.anything(),
+      input.merchantId,
+      'A customer needs a person',
+      'The assistant handed this chat to your team. Open it to reply.',
+      expect.objectContaining({ handover: true }),
+      'general',
+      { categoryId: 'chat_reply' }
+    );
+  });
+
+  it('keeps ordinary message pushes free of the handover marker', async () => {
+    await sendChatEventPush(input, env);
+    expect(mocks.notify.mock.calls[0][4]).toEqual({
+      type: 'customer_message',
+      conversation_id: 21,
+      merchant_id: input.merchantId,
+    });
   });
 
   it('does not push when the claim was already taken', async () => {

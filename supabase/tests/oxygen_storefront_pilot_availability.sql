@@ -8,6 +8,20 @@ VALUES
 SELECT set_config('request.jwt.claim.sub','f1ab0000-0000-4000-8000-000000000003',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('f1ab0000-0000-4000-8000-000000000011','f1ab0000-0000-4000-8000-000000000003','pilot-merchant@example.test','Pilot test','oxygen-pilot-fixture');
+DO $$ BEGIN
+ IF EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'merchant_feature_settings'
+    AND column_name = 'oxygen_enabled'
+ ) THEN
+  EXECUTE $sql$
+   UPDATE public.merchant_feature_settings
+   SET oxygen_enabled = true
+   WHERE merchant_id = 'f1ab0000-0000-4000-8000-000000000011'
+  $sql$;
+ END IF;
+END $$;
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES
  ('f1ab0000-0000-4000-8000-000000000021','f1ab0000-0000-4000-8000-000000000011','f1ab0000-0000-4000-8000-000000000001','Pilot','One','pilot-owner@example.test'),
@@ -22,9 +36,12 @@ INSERT INTO oxygen_private.runtime_bindings(merchant_id,worker_user_id,partner_r
 VALUES ('f1ab0000-0000-4000-8000-000000000011','f1ab0000-0000-4000-8000-000000000003','production-pilot-fixture','production',true);
 SET LOCAL ROLE anon;
 DO $$ BEGIN
+ IF public.oxygen_storefront_pilot_available('f1ab0000-0000-4000-8000-000000000011') THEN
+  RAISE EXCEPTION 'Anonymous availability must deny missing policy';
+ END IF;
  BEGIN
-  PERFORM public.oxygen_storefront_pilot_available('f1ab0000-0000-4000-8000-000000000011');
-  RAISE EXCEPTION 'Anonymous callers can access availability';
+  PERFORM public.oxygen_start_workflow('f1ab0000-0000-4000-8000-000000000031','web');
+  RAISE EXCEPTION 'Anonymous callers can start a workflow';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
@@ -44,6 +61,13 @@ INSERT INTO oxygen_private.production_admission_policy(merchant_id,mode)
 VALUES ('f1ab0000-0000-4000-8000-000000000011','pilot');
 INSERT INTO oxygen_private.production_pilot_customers(merchant_id,user_id)
 VALUES ('f1ab0000-0000-4000-8000-000000000011','f1ab0000-0000-4000-8000-000000000001');
+SET LOCAL ROLE anon;
+DO $$ BEGIN
+ IF public.oxygen_storefront_pilot_available('f1ab0000-0000-4000-8000-000000000011') THEN
+  RAISE EXCEPTION 'Anonymous availability must deny pilot policy';
+ END IF;
+END $$;
+RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','f1ab0000-0000-4000-8000-000000000002',true);
 DO $$ BEGIN
@@ -89,6 +113,17 @@ END $$;
 RESET ROLE;
 UPDATE oxygen_private.runtime_bindings SET enabled=true WHERE merchant_id='f1ab0000-0000-4000-8000-000000000011';
 UPDATE oxygen_private.production_admission_policy SET mode='open' WHERE merchant_id='f1ab0000-0000-4000-8000-000000000011';
+SET LOCAL ROLE anon;
+DO $$ BEGIN
+ IF NOT public.oxygen_storefront_pilot_available('f1ab0000-0000-4000-8000-000000000011') THEN
+  RAISE EXCEPTION 'Open rollout should show availability to anonymous guests';
+ END IF;
+ BEGIN
+  PERFORM public.oxygen_start_workflow('f1ab0000-0000-4000-8000-000000000032','web');
+  RAISE EXCEPTION 'Anonymous callers can start a workflow during open rollout';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','f1ab0000-0000-4000-8000-000000000002',true);
 DO $$ DECLARE result jsonb; BEGIN
@@ -101,6 +136,30 @@ END $$;
 RESET ROLE;
 DO $$ BEGIN
  IF NOT EXISTS (SELECT 1 FROM public.oxygen_workflows WHERE order_id='f1ab0000-0000-4000-8000-000000000032') THEN RAISE EXCEPTION 'Open rollout failed to persist the workflow'; END IF;
+END $$;
+DO $$ BEGIN
+ IF EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'merchant_feature_settings'
+    AND column_name = 'oxygen_enabled'
+ ) THEN
+  EXECUTE $sql$
+   UPDATE public.merchant_feature_settings
+   SET oxygen_enabled = false
+   WHERE merchant_id = 'f1ab0000-0000-4000-8000-000000000011'
+  $sql$;
+  SET LOCAL ROLE authenticated;
+  IF public.oxygen_storefront_pilot_available('f1ab0000-0000-4000-8000-000000000011') THEN
+   RAISE EXCEPTION 'Disabled oxygen_enabled must not appear available';
+  END IF;
+  RESET ROLE;
+  EXECUTE $sql$
+   UPDATE public.merchant_feature_settings
+   SET oxygen_enabled = true
+   WHERE merchant_id = 'f1ab0000-0000-4000-8000-000000000011'
+  $sql$;
+ END IF;
 END $$;
 DELETE FROM oxygen_private.production_admission_policy WHERE merchant_id='f1ab0000-0000-4000-8000-000000000011';
 UPDATE oxygen_private.runtime_bindings SET environment='staging' WHERE merchant_id='f1ab0000-0000-4000-8000-000000000011';

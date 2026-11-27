@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "baci-ota-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "OTA_CANONICAL_ORIGIN": "https://ota.usebaci.com"
+  },
+  "r2_buckets": [
+    {
+      "binding": "OTA_BUCKET",
+      "bucket_name": "baci-mobile-ota"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "ota.usebaci.com",
+      "custom_domain": true
+    }
+  ]
+}

@@ -60,8 +60,24 @@ describe('handlePlaceOrder', () => {
   });
 
   describe('Klump', () => {
-    it('blocks Klump before order creation when wallet credit reduces the payable amount', async () => {
-      const { toast } = await import('@/hooks/use-toast');
+    it('allows Klump checkout when partial wallet credit reduces the payable amount', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            order: { id: 'order-klump', tracking_token: 'track-klump' },
+            wallet: { amountUsed: 5_000, newBalance: 0 },
+            amountDueToGateway: 7_000,
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            success: true,
+            authorization_url: window.location.href,
+          }),
+        });
+
       const opts = buildOpts({
         paymentMethod: 'klump',
         payWithWallet: true,
@@ -70,38 +86,63 @@ describe('handlePlaceOrder', () => {
 
       await handlePlaceOrder(opts);
 
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      const initBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(initBody).toEqual(
+        expect.objectContaining({
+          gateway: 'klump',
+          order_id: 'order-klump',
+        })
+      );
+    });
+
+    it('blocks Klump before order creation when payable amount is zero or invalid', async () => {
+      const { toast } = await import('@/hooks/use-toast');
+      const opts = buildOpts({
+        paymentMethod: 'klump',
+        payWithWallet: true,
+        walletAmountUsed: 12_000,
+        total: 12_000,
+      });
+
+      await handlePlaceOrder(opts);
+
       expect(mockFetch).not.toHaveBeenCalled();
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Klump unavailable with wallet credit',
+          title: 'Klump unavailable',
         })
       );
       expect(opts.setIsProcessing).toHaveBeenCalledWith(false);
       expect(opts.isOrderInFlightRef.current).toBe(false);
     });
 
-    it('does not initialize Klump if the order response has a reduced gateway amount', async () => {
-      const { toast } = await import('@/hooks/use-toast');
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          order: { id: 'order-klump', tracking_token: 'track-klump' },
-          wallet: { amountUsed: 5_000, newBalance: 0 },
-          amountDueToGateway: 7_000,
-        }),
-      });
+    it('initializes Klump with reduced gateway amount after creating the order', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            order: { id: 'order-klump', tracking_token: 'track-klump' },
+            wallet: { amountUsed: 5_000, newBalance: 0 },
+            amountDueToGateway: 7_000,
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            success: true,
+            authorization_url: window.location.href,
+          }),
+        });
 
       const opts = buildOpts({ paymentMethod: 'klump' });
       await handlePlaceOrder(opts);
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(toast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Klump unavailable with wallet credit',
-        })
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/payments/initialize',
+        expect.objectContaining({ method: 'POST' })
       );
-      expect(opts.setIsProcessing).toHaveBeenCalledWith(false);
-      expect(opts.isOrderInFlightRef.current).toBe(false);
     });
 
     it('initializes Klump payment after creating the order', async () => {

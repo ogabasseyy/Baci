@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "cases": [
+    {
+      "id": "cross-tenant-confirm",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "actorMerchantId": "fixture-other-merchant"
+      },
+      "steps": ["create_preview_as_owner", "confirm_as_other_merchant"],
+      "expected": {
+        "newAmendments": 0,
+        "newOrderRevisions": 0,
+        "stockDeltas": {},
+        "newMoneyMovements": 0,
+        "result": "forbidden"
+      }
+    },
+    {
+      "id": "stale-preview",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "previewVersion": "fixture-order-v1",
+        "currentVersion": "fixture-order-v2"
+      },
+      "steps": ["preview", "update_order_version", "confirm"],
+      "expected": {
+        "newAmendments": 0,
+        "newOrderRevisions": 0,
+        "stockDeltas": {},
+        "newMoneyMovements": 0,
+        "result": "preview_stale"
+      }
+    },
+    {
+      "id": "stale-preview-after-pause",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "previewConfigVersion": 1,
+        "currentConfigVersion": 2
+      },
+      "steps": ["preview", "pause_scenario", "confirm"],
+      "expected": {
+        "newAmendments": 0,
+        "newOrderRevisions": 0,
+        "stockDeltas": {},
+        "newMoneyMovements": 0,
+        "result": "scenario_disabled"
+      }
+    },
+    {
+      "id": "inventory-mutation-rollback",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "failurePoint": "after_original_release_before_replacement_allocation"
+      },
+      "steps": [
+        "release_original_in_transaction",
+        "fail_replacement_allocation",
+        "rollback"
+      ],
+      "expected": {
+        "newAmendments": 0,
+        "newOrderRevisions": 0,
+        "stockDeltas": {},
+        "newMoneyMovements": 0,
+        "originalUnitStillLinked": true,
+        "activeOrderVersion": "fixture-order-v1"
+      }
+    },
+    {
+      "id": "replay-after-expiry-and-pause",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "idempotencyKey": "fixture-confirm-a"
+      },
+      "steps": [
+        "preview",
+        "confirm",
+        "expire_preview",
+        "pause_scenario",
+        "replay_same_confirm"
+      ],
+      "expected": {
+        "sameAmendmentId": true,
+        "totalAmendments": 1,
+        "newStockMovementsOnReplay": 0
+      }
+    },
+    {
+      "id": "replay-key-changed-payload",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "idempotencyKey": "fixture-confirm-a"
+      },
+      "steps": ["preview", "confirm", "replay_with_changed_reason"],
+      "expected": {
+        "result": "idempotency_conflict",
+        "totalAmendments": 1,
+        "newStockMovementsOnReplay": 0
+      }
+    },
+    {
+      "id": "second-amendment-fresh-key",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "firstKey": "fixture-confirm-a",
+        "secondKey": "fixture-confirm-b"
+      },
+      "steps": ["preview", "confirm", "try_confirm_with_fresh_key"],
+      "expected": {
+        "result": "already_amended",
+        "totalAmendments": 1,
+        "newStockMovementsOnSecondConfirm": 0
+      }
+    },
+    {
+      "id": "last-unit-race",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "replacementPoolId": "serial-ip12-alt",
+        "secondOrder": {
+          "orderId": "fixture-order-competitor",
+          "lineId": "fixture-line-competitor",
+          "originalUnitId": "synthetic-unit-ip12-competitor",
+          "captureId": "fixture-capture-competitor"
+        }
+      },
+      "steps": [
+        "seed_two_independent_paid_orders",
+        "preview_both",
+        "compete_for_same_replacement_unit"
+      ],
+      "expected": {
+        "winningConfirmations": 1,
+        "losingConfirmations": 1,
+        "replacementAvailableAfter": 0,
+        "originalUnitsReleased": 1,
+        "originalUnitsStillHeld": 1
+      }
+    },
+    {
+      "id": "courier-claim-wins",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "claimId": "fixture-courier-claim"
+      },
+      "steps": ["commit_booking_claim", "confirm"],
+      "expected": {
+        "newAmendments": 0,
+        "newOrderRevisions": 0,
+        "stockDeltas": {},
+        "newMoneyMovements": 0,
+        "result": "fulfillment_claim_open",
+        "providerBookCalls": 1
+      }
+    },
+    {
+      "id": "amendment-wins-fulfillment-race",
+      "orderCaseId": "upgrade-paystack-plus-offline",
+      "inputs": {},
+      "steps": ["confirm_upgrade", "attempt_shipping", "attempt_handover"],
+      "expected": {
+        "holdFulfillment": true,
+        "providerBookCalls": 0,
+        "handoverCompleted": false
+      }
+    },
+    {
+      "id": "preserve-unrelated-serialized-line",
+      "orderCaseId": "equal-price-serialized",
+      "inputs": {
+        "additionalLine": {
+          "id": "fixture-line-unchanged",
+          "stockPoolId": "serial-ip13",
+          "quantity": 1,
+          "totalMinor": 6000000,
+          "inventoryUnit": {
+            "id": "synthetic-unit-ip13",
+            "status": "reserved",
+            "reservationExpiresAt": null,
+            "soldAt": null,
+            "orderItemId": "fixture-line-unchanged"
+          }
+        },
+        "orderTotalMinor": 36000000,
+        "originalPaymentMinor": 36000000,
+        "previewTotalMinor": 36000000
+      },
+      "steps": [
+        "seed_extra_confirmed_line",
+        "confirm_replacement",
+        "inspect_other_allocation"
+      ],
+      "expected": {
+        "unrelatedUnitId": "synthetic-unit-ip13",
+        "unrelatedUnitStatus": "reserved",
+        "unrelatedOrderItemId": "fixture-line-unchanged",
+        "unrelatedUnitMovements": 0
+      }
+    }
+  ]
+}

@@ -107,3 +107,35 @@ describe('admin notification navigation edge cases', () => {
     ).toEqual({ screen: 'orders' });
   });
 });
+
+describe('customer message notification navigation', () => {
+  it('routes a numeric conversation id to that conversation', () => {
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'customer_message',
+        conversation_id: 4821,
+      })
+    ).toEqual({ screen: 'message', params: { id: '4821' } });
+  });
+
+  it('accepts a numeric string id', () => {
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'customer_message',
+        conversationId: '77',
+      })
+    ).toEqual({ screen: 'message', params: { id: '77' } });
+  });
+
+  it('falls back to the messages list for a missing or malformed id', () => {
+    expect(
+      getAdminNotificationNavigationTarget({ type: 'customer_message' })
+    ).toEqual({ screen: 'messages' });
+    expect(
+      getAdminNotificationNavigationTarget({
+        type: 'customer_message',
+        conversation_id: '../orders',
+      })
+    ).toEqual({ screen: 'messages' });
+  });
+});

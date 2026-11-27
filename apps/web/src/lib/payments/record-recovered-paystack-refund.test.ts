@@ -138,6 +138,59 @@ describe('recordRecoveredPaystackRefund', () => {
     );
   });
 
+  it('recovers a provider-only gross refund without inflating the order ledger', async () => {
+    const { insert, supabase } = database();
+    await recordRecoveredPaystackRefund(supabase, {
+      current: { ...current, amount: 10157 },
+      evidence,
+      payment: {
+        ...payment,
+        gateway_response: {
+          amount: 10157,
+          requested_amount: 10000,
+          baci_paystack_checkout_customer_fee_minor: 157,
+        },
+      },
+      refundId: 202,
+    });
+
+    const ledger = expect.objectContaining({
+      amount: 100,
+      metadata: expect.objectContaining({
+        provider_refund_amount_minor: 10157,
+      }),
+    });
+    expect(insert).toHaveBeenCalledWith(ledger);
+    expect(mocks.reconcileRecoveredRow).toHaveBeenCalledWith(supabase, ledger);
+  });
+
+  it('files partial surcharge evidence without crediting any order refund', async () => {
+    const { insert, supabase } = database();
+    await recordRecoveredPaystackRefund(supabase, {
+      current,
+      evidence,
+      payment: {
+        ...payment,
+        gateway_response: {
+          amount: 10157,
+          requested_amount: 10000,
+          baci_paystack_checkout_customer_fee_minor: 157,
+        },
+      },
+      refundId: 202,
+    });
+    expect(insert).not.toHaveBeenCalled();
+    expect(
+      mocks.filePaystackRefundRecoveryReview
+    ).toHaveBeenCalledExactlyOnceWith(
+      supabase,
+      expect.objectContaining({
+        orderId: payment.order_id,
+        paystackRef: '202',
+      })
+    );
+  });
+
   it('omits a failure verdict so the first reconcile applies the transition', async () => {
     const { insert, supabase } = database();
 

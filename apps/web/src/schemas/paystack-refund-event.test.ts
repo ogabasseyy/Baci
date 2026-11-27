@@ -11,6 +11,18 @@ describe('paystackRefundEventSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it.each([
+    '19275788',
+    '18446744073709551615',
+  ])('preserves a decimal-text Paystack refund ID (%s)', (id) => {
+    expect(
+      paystackRefundEventSchema.parse({
+        data: { id, status: 'processed', transaction: 123 },
+        event: 'refund.processed',
+      }).data?.id
+    ).toBe(id);
+  });
+
   it('parses nested and flat payment references', () => {
     expect(
       paystackRefundEventSchema.safeParse({
@@ -36,7 +48,8 @@ describe('paystackRefundEventSchema', () => {
   });
 
   it.each([
-    [{ data: { id: '42' }, event: 'refund.processed' }],
+    [{ data: { id: '4.2' }, event: 'refund.processed' }],
+    [{ data: { id: '0' }, event: 'refund.processed' }],
     [{ data: { transaction: { reference: 123 } }, event: 'refund.failed' }],
     [{ data: 'not-an-object', event: 'refund.processed' }],
     [{ data: [], event: 'refund.processed' }],
@@ -102,4 +115,15 @@ describe('paystackRefundEventSchema', () => {
       expect(parsed.data.data).toMatchObject({ domain: 'live', id: 42 });
     }
   });
+});
+
+it('accepts a refund event keyed only by an amendment refund reference', () => {
+  expect(
+    paystackRefundEventSchema.safeParse({
+      event: 'refund.processed',
+      data: {
+        refund_reference: 'BAC-AMEND-4d292e5f-95ce-401c-b3e1-06499a3fcea6',
+      },
+    }).success
+  ).toBe(true);
 });

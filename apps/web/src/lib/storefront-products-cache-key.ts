@@ -21,11 +21,16 @@ function normalizeMerchantIdForCacheTag(merchantId: string) {
   return normalizedMerchantId;
 }
 
+export function getStorefrontProductsCacheTag(merchantId: string) {
+  const normalizedMerchantId = normalizeMerchantIdForCacheTag(merchantId);
+  return `${STOREFRONT_PRODUCTS_CACHE_TAG_PREFIX}-${normalizedMerchantId}`;
+}
+
 export function buildStorefrontProductsCacheTags(merchantId: string) {
   const normalizedMerchantId = normalizeMerchantIdForCacheTag(merchantId);
 
   return [
-    `${STOREFRONT_PRODUCTS_CACHE_TAG_PREFIX}-${normalizedMerchantId}`,
+    getStorefrontProductsCacheTag(normalizedMerchantId),
     `${MERCHANT_ID_CACHE_TAG_PREFIX}-${normalizedMerchantId}`,
   ];
 }

@@ -1,42 +1,98 @@
+import {
+  BANK_CARD_OFFER_REFERENCE_PATTERN,
+  hasBankCardOfferReferencePrefix,
+} from '@baci/shared/constants';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
+import type { BankCardOfferTerminalStatus } from '@/schemas/bank-card-offer-terminal-status';
 import { completeOrderGatewayPayment } from './complete-order-gateway-payment';
 import { fileRedvaultInventoryConfirmationReview } from './file-redvault-inventory-confirmation-review';
 import { captureOrHoldRedvaultPayment } from './redvault-capture-hold';
+import { resolveBankCardOfferGatewayCompletion } from './resolve-bank-card-offer-gateway-completion';
 import { verifyAndCompleteRedvaultPayment } from './verify-and-complete-redvault-payment';
 
 export async function resolveOrderGatewayCompletion({
   actor,
+  expectedBankOfferTerminalStatus,
   expectedOutstandingMinor,
   gateway,
   gatewayResponse,
   merchantId,
   orderId,
   reference,
+  signal,
   supabase,
   transactionId,
 }: {
   actor: string;
+  expectedBankOfferTerminalStatus?: BankCardOfferTerminalStatus;
   expectedOutstandingMinor?: number | null;
   gateway: 'juicyway' | 'paystack' | 'korapay';
-  gatewayResponse: Record<string, unknown>;
+  gatewayResponse?: Record<string, unknown>;
   merchantId: string;
   orderId: string;
   reference: string;
+  signal?: AbortSignal;
   supabase: SupabaseClient;
   transactionId: string;
 }) {
+  const bankOffer = hasBankCardOfferReferencePrefix(reference);
   try {
-    // Capture moves money and must not ride the route's service-role client:
-    // classification and capture run through the short-lived scoped route
-    // client (merchant-bound authenticated claims), which the REDVAULT
-    // RPCs accept alongside service_role.
+    // Reserve all casing variants for bank offers, but require the original
+    // canonical reference before allowing any payment path to act on it.
+    if (bankOffer && !BANK_CARD_OFFER_REFERENCE_PATTERN.test(reference)) {
+      return {
+        ok: false as const,
+        outcome: {
+          kind: 'completion_failed' as const,
+          error: new Error('invalid_bank_offer_reference'),
+        },
+      };
+    }
+    if (
+      expectedBankOfferTerminalStatus &&
+      (gateway !== 'paystack' || !bankOffer)
+    ) {
+      return {
+        ok: false as const,
+        outcome: {
+          kind: 'completion_failed' as const,
+          error: new Error('invalid_bank_offer_terminal_review_request'),
+        },
+      };
+    }
+    // Use the short-lived merchant-bound client for capture classification
+    // and approval. REDVAULT RPCs also accept the service worker's role.
     const redvaultScopedClient = createStorefrontOrderRpcClient({
       fallbackClient: supabase,
       hasCanonicalDeliveryMetadata: false,
       merchantId,
       userId: null,
     });
+    if (bankOffer) {
+      return await resolveBankCardOfferGatewayCompletion({
+        actor,
+        expectedBankOfferTerminalStatus,
+        expectedOutstandingMinor,
+        gateway,
+        merchantId,
+        orderId,
+        reference,
+        scopedClient: redvaultScopedClient,
+        signal,
+        supabase,
+        transactionId,
+      });
+    }
+    if (!gatewayResponse) {
+      return {
+        ok: false as const,
+        outcome: {
+          kind: 'completion_failed' as const,
+          error: new Error('missing_gateway_response'),
+        },
+      };
+    }
     const capture = await captureOrHoldRedvaultPayment({
       gateway,
       gatewayResponse,
@@ -116,6 +172,7 @@ export async function resolveOrderGatewayCompletion({
             completion,
             redvaultDuplicate: approved.duplicate,
             redvaultInventoryConfirmed: approved.inventoryConfirmed,
+            verifiedGatewayResponse: gatewayResponse,
           };
         }
         await fileRedvaultInventoryConfirmationReview({
@@ -157,5 +214,6 @@ export async function resolveOrderGatewayCompletion({
     ...result,
     redvaultDuplicate: false,
     redvaultInventoryConfirmed: false,
+    verifiedGatewayResponse: gatewayResponse,
   };
 }

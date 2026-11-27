@@ -23,6 +23,7 @@ const DEFAULT_MERCHANT_FEATURE_SETTINGS = {
   klump_enabled: false,
   klump_min_amount: 10000,
   klump_max_amount: 1000000,
+  oxygen_enabled: false,
   preferred_local_gateway: 'paystack' as const,
   preferred_international_gateway: 'korapay' as const,
   // Carrier rates are opt-in per merchant. Stores can still use their own
@@ -115,6 +116,7 @@ const PUBLIC_DEFAULT_FEATURE_SETTING_KEYS = [
   'loyalty_enabled',
   'low_stock_threshold',
   'order_tracking_enabled',
+  'oxygen_enabled',
   'pay_on_delivery_enabled',
   'paystack_enabled',
   'preferred_international_gateway',

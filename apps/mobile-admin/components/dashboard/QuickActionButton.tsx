@@ -12,6 +12,10 @@ interface QuickActionButtonProps {
   iconColor?: string;
   backgroundColor?: string;
   iconSize?: number;
+  /** Red counter on the corner; hidden at 0. Shows 99+ above 99. */
+  badgeCount?: number;
+  /** The count is only what has loaded so far: shown as "N+", spoken as "at least N". */
+  badgeAtLeast?: boolean;
 }
 
 export function QuickActionButton({
@@ -21,6 +25,8 @@ export function QuickActionButton({
   iconColor,
   backgroundColor,
   iconSize = 24,
+  badgeCount = 0,
+  badgeAtLeast = false,
 }: QuickActionButtonProps) {
   const { colors, shadows } = useTheme();
   const finalIconColor = iconColor || colors.primary;
@@ -36,8 +42,23 @@ export function QuickActionButton({
       ]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={
+        badgeCount > 0
+          ? `${label}, ${badgeAtLeast ? 'at least ' : ''}${badgeCount} waiting`
+          : label
+      }
     >
+      {badgeCount > 0 ? (
+        <View style={[styles.badge, { backgroundColor: colors.error }]}>
+          <Text style={[styles.badgeText, { color: colors.textOnPrimary }]}>
+            {badgeCount > 99
+              ? '99+'
+              : badgeAtLeast
+                ? `${badgeCount}+`
+                : badgeCount}
+          </Text>
+        </View>
+      ) : null}
       <View style={[styles.iconContainer, { backgroundColor: finalBgColor }]}>
         <Ionicons name={icon} size={iconSize} color={finalIconColor} />
       </View>
@@ -49,6 +70,22 @@ export function QuickActionButton({
 }
 
 const styles = StyleSheet.create({
+  badge: {
+    alignItems: 'center',
+    borderRadius: RADIUS.full,
+    height: 22,
+    justifyContent: 'center',
+    minWidth: 22,
+    paddingHorizontal: 6,
+    position: 'absolute',
+    right: 10,
+    top: 8,
+    zIndex: 1,
+  },
+  badgeText: {
+    fontFamily: TYPOGRAPHY.fontFamily.bold,
+    fontSize: TYPOGRAPHY.size.sm,
+  },
   container: {
     borderRadius: RADIUS.lg,
     padding: SPACING.md,

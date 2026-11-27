@@ -7,10 +7,31 @@ import { oxygenPersonalFields as personal } from './oxygen-customer-form-payload
 export function OxygenContactFields({
   prefill,
   defaults,
+  fromConversation = false,
 }: {
   prefill: OxygenCustomerPrefill;
   defaults: OxygenFormDraft['fields'];
+  fromConversation?: boolean;
 }) {
+  if (
+    fromConversation &&
+    prefill.first_name &&
+    prefill.last_name &&
+    prefill.email
+  ) {
+    return (
+      <>
+        <input type="hidden" name="first_name" value={prefill.first_name} />
+        <input type="hidden" name="last_name" value={prefill.last_name} />
+        <input type="hidden" name="email" value={prefill.email} />
+        <input
+          type="hidden"
+          name="middle_name"
+          value={defaults.middle_name ?? ''}
+        />
+      </>
+    );
+  }
   return (
     <details
       open={!prefill.first_name || !prefill.last_name || !prefill.email}

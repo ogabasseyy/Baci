@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { merchantInboxConversationSchema } from '@/schemas/merchant-inbox';
 import {
   compareMerchantInboxMessages,
   projectMerchantInboxConversation,
@@ -45,6 +46,24 @@ describe('projectMerchantInboxMessage', () => {
     expect(projectMerchantInboxMessage(message(overrides))?.sender).toBe(
       sender
     );
+  });
+
+  it('marks review_checkout assistant messages as checkoutNameRequested', () => {
+    expect(
+      projectMerchantInboxMessage(
+        message({
+          message_type: 1,
+          sender: { type: 'agent_bot' },
+          content: 'I can help you check out here.',
+          content_attributes: {
+            ekaette_follow_ups: { actions: ['review_checkout'] },
+          },
+        })
+      )
+    ).toMatchObject({
+      sender: 'assistant',
+      checkoutNameRequested: true,
+    });
   });
 
   it('includes product titles for a product card', () => {
@@ -115,6 +134,18 @@ describe('message ordering and truncation', () => {
     expect(text).toBe('a'.repeat(3_999));
   });
 
+  // Each case puts the 4,000-unit cap in the middle of one visible character.
+  it.each([
+    ['a flag', 3_997, '🇳🇬'],
+    ['a family emoji', 3_997, '👨‍👩‍👧'],
+    ['a letter with its accent', 3_999, 'e\u0301'],
+  ])('bugfix: does not leave half of %s at the cap', (_name, before, glyph) => {
+    const text = projectMerchantInboxMessage(
+      message({ content: `${'a'.repeat(before)}${glyph}tail` })
+    )?.text;
+    expect(text).toBe('a'.repeat(before));
+  });
+
   it('orders by creation time and uses the id only to break ties', () => {
     const at = (id: number, seconds: number) =>
       projectMerchantInboxMessage(message({ id, created_at: seconds }));
@@ -153,6 +184,45 @@ describe('projectMerchantInboxConversation', () => {
         text: 'Do you have the Demo Phone X?',
         createdAt: CREATED_ISO,
       },
+      tags: [],
+      priority: null,
+      followUp: false,
+      snoozedUntil: null,
+    });
+  });
+
+  it('projects tags, priority and follow-up without leaking system labels', () => {
+    const result = projectMerchantInboxConversation(
+      {
+        ...conversation,
+        status: 'snoozed',
+        labels: ['handled-by-ai', 'tag-payment', 'follow-up'],
+        priority: 'high',
+        snoozed_until: CREATED + 3600,
+      },
+      2
+    );
+    expect(result).toMatchObject({
+      tags: ['payment'],
+      priority: 'high',
+      followUp: true,
+      snoozedUntil: new Date((CREATED + 3600) * 1000).toISOString(),
+    });
+  });
+
+  it('reads an ISO snooze time and ignores an unknown priority', () => {
+    const result = projectMerchantInboxConversation(
+      {
+        ...conversation,
+        status: 'snoozed',
+        priority: 'someday',
+        snoozed_until: '2026-11-23T08:00:00.000Z',
+      },
+      2
+    );
+    expect(result).toMatchObject({
+      priority: null,
+      snoozedUntil: '2026-11-23T08:00:00.000Z',
     });
   });
 
@@ -187,6 +257,10 @@ describe('projectMerchantInboxConversation', () => {
       customerName: 'Customer',
       lastActivityAt: null,
       lastMessage: null,
+      tags: [],
+      priority: null,
+      followUp: false,
+      snoozedUntil: null,
     });
   });
 
@@ -202,5 +276,23 @@ describe('projectMerchantInboxConversation', () => {
     expect(
       projectMerchantInboxConversation({ ...conversation, status: 'weird' }, 2)
     ).toBeNull();
+  });
+
+  it('bugfix: a chat with many or overlong tag labels still passes the response contract', () => {
+    const labels = [
+      ...Array.from({ length: 12 }, (_, i) => `tag-t${i}`),
+      `tag-${'x'.repeat(40)}`,
+    ];
+
+    const projected = projectMerchantInboxConversation(
+      { ...conversation, labels },
+      2
+    );
+
+    // One such chat used to make the whole conversations page fail to parse.
+    expect(merchantInboxConversationSchema.safeParse(projected).success).toBe(
+      true
+    );
+    expect(projected?.tags).toHaveLength(10);
   });
 });

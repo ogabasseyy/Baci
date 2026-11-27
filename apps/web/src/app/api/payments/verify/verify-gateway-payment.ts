@@ -1,4 +1,5 @@
 import { verifyPayment as verifyKorapayPayment } from '@/lib/korapay';
+import { readPaystackCheckoutCustomerFeeMinor } from '@/lib/payments/paystack-checkout-customer-fee';
 import type { GatewayVerificationResult } from '@/lib/payments/types';
 import { verifyTransaction as verifyPaystackPayment } from '@/lib/paystack';
 
@@ -20,7 +21,11 @@ export function getVerifiedAmount(
       ? gatewayResponse.currency
       : undefined;
   // Paystack returns amounts in kobo (smallest unit), divide by 100
-  const amount = gateway === 'paystack' ? rawAmount / 100 : rawAmount;
+  const amount =
+    gateway === 'paystack'
+      ? (rawAmount - readPaystackCheckoutCustomerFeeMinor(gatewayResponse)) /
+        100
+      : rawAmount;
 
   return { amount, currency };
 }

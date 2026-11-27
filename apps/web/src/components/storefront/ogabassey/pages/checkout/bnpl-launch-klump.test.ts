@@ -114,4 +114,88 @@ describe('launchKlumpCheckout', () => {
     expect(window.localStorage.getItem(KLUMP_REDIRECT_URL_KEY)).toBeNull();
     expect(ctx.setStatus).toHaveBeenCalledWith('error');
   });
+
+  it('charges the net remaining amount when store credit was pre-applied', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 20_000,
+      items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchKlumpCheckout(ctx);
+
+    expect(mockKlumpConstructor).toHaveBeenCalledTimes(1);
+    const args = mockKlumpConstructor.mock.calls[0][0] as WidgetArgs & {
+      data: { items: Array<{ unit_price: number }> };
+    };
+    expect(args.data.amount).toBe(30_000);
+    expect(args.data.items).toEqual([
+      { name: 'Phone', quantity: 1, unit_price: 30_000 },
+    ]);
+  });
+
+  it('refuses to open Klump when store credit covers 100% of the order', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 50_000,
+      items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchKlumpCheckout(ctx);
+
+    expect(ctx.setStatus).toHaveBeenCalledWith('error');
+    expect(mockKlumpConstructor).not.toHaveBeenCalled();
+  });
+
+  it('charges net remaining amount from ledger credit when order amount_paid is zero', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 12_000,
+      savings_ledger_used: 8_000,
+      items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchKlumpCheckout(ctx);
+
+    expect(mockKlumpConstructor).toHaveBeenCalledTimes(1);
+    const args = mockKlumpConstructor.mock.calls[0][0] as WidgetArgs & {
+      data: { items: Array<{ unit_price: number }> };
+    };
+    expect(args.data.amount).toBe(30_000);
+    expect(args.data.items).toEqual([
+      { name: 'Phone', quantity: 1, unit_price: 30_000 },
+    ]);
+  });
+
+  it('rounds kobo-fractional store-credit residuals to the canonical Klump integer amount', async () => {
+    const ctx = baseContext();
+    ctx.order = {
+      id: 'order-1',
+      total: 50_000,
+      amount_paid: 0,
+      wallet_amount_used: 0,
+      wallet_ledger_used: 39_999.5,
+      savings_ledger_used: 0,
+      items: [{ name: 'Phone', price: 50_000, quantity: 1 }],
+    };
+
+    await launchKlumpCheckout(ctx);
+
+    expect(mockKlumpConstructor).toHaveBeenCalledTimes(1);
+    const args = mockKlumpConstructor.mock.calls[0][0] as WidgetArgs & {
+      data: { items: Array<{ unit_price: number }> };
+    };
+    expect(args.data.amount).toBe(10_001);
+    expect(args.data.items).toEqual([
+      { name: 'Phone', quantity: 1, unit_price: 10_001 },
+    ]);
+  });
 });

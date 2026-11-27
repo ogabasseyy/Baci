@@ -54,6 +54,8 @@ describe('productCacheRevalidation', () => {
     );
 
     const calledTags = revalidateTag.mock.calls.map(([tag]) => tag);
+    expect(calledTags).toContain('storefront-products-merchant-1');
+    expect(calledTags).not.toContain('merchant-id-merchant-1');
     expect(calledTags).not.toContain('product-details');
     expect(calledTags).not.toContain('product-canonical-redirect');
     expect(calledTags).not.toContain('product-legacy-redirect');

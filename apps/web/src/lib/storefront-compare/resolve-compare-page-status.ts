@@ -8,6 +8,7 @@ import {
 } from './get-cached-compare-category-inventory';
 import { getCachedCompareMerchantByIdentifier } from './get-cached-compare-merchant';
 import { getCachedMaintainedCompareRouteManifest } from './get-cached-maintained-compare-route-manifest';
+import { isSelfComparePair } from './is-self-compare-pair';
 
 /**
  * The proxy may emit a hard 404 only for `missing`. `unknown` is deliberately
@@ -64,6 +65,10 @@ export async function resolveComparePageStatus(input: {
     !evaluateStorefrontSlugSafety(parsed.rightKey).safe
   ) {
     return { kind: 'unknown' };
+  }
+
+  if (isSelfComparePair(parsed)) {
+    return { kind: 'missing' };
   }
 
   const inventory = await getCachedCompareCategoryInventory(

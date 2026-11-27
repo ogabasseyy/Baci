@@ -111,6 +111,7 @@ vi.mock('@/lib/korapay', () => ({
 // Paystack mocks
 const mockInitializePaystack = vi.fn();
 vi.mock('@/lib/paystack', () => ({
+  isPaystackConfigured: () => true,
   initializeTransaction: (...args: unknown[]) =>
     mockInitializePaystack(...args),
   calculatePlatformFee: (amount: number) => ({
@@ -144,12 +145,14 @@ const MERCHANT_ID = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
 const ORDER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 let rpcResult: { data: unknown; error: unknown };
+let amendmentCheckoutClaimResult: { data: unknown; error: unknown };
 let rpcTransactionResult: { data: unknown; error: unknown };
 let rpcDvaReservationResult: { data: unknown; error: unknown };
 let redvaultAttemptInitializeResult: { data: unknown; error: unknown };
 let redvaultAttemptClaimResults: Array<{ data: unknown; error: unknown }>;
 let redvaultAttemptReserveResults: Array<{ data: unknown; error: unknown }>;
 let rpcTokenProofResult: { data: unknown; error: unknown };
+let onAmendmentClaim: (() => void) | undefined;
 const rpcCalls: Array<{ args?: unknown; name: string }> = [];
 
 function createMockSupabase() {
@@ -171,6 +174,10 @@ function createMockSupabase() {
         });
       if (name === 'get_order_paystack_split_retained_shipping_kobo')
         return Promise.resolve({ data: 0, error: null });
+      if (name === 'claim_checkout_for_paid_order_amendment') {
+        onAmendmentClaim?.();
+        return Promise.resolve(amendmentCheckoutClaimResult);
+      }
       if (name === 'create_payment_transaction')
         return Promise.resolve(rpcTransactionResult);
       if (name === 'reserve_paystack_order_payment_account')
@@ -195,6 +202,7 @@ let featureSettingsResult: { data: unknown; error: unknown };
 let orderPaymentResult: { data: unknown; error: unknown };
 let orderTokenResult: { data: unknown; error: unknown };
 let savingsRedemptionsResult: { data: unknown; error: unknown };
+let walletTransactionsResult: { data: unknown; error: unknown };
 
 function createMockAdminClient() {
   return {
@@ -222,7 +230,26 @@ function createMockAdminClient() {
           select: () => ({
             eq: () => ({
               eq: () => ({
-                single: () => Promise.resolve(orderPaymentResult),
+                single: () => {
+                  const rawData = orderPaymentResult.data;
+                  if (
+                    rawData &&
+                    typeof rawData === 'object' &&
+                    !Object.hasOwn(rawData, 'total') &&
+                    Array.isArray(rpcResult.data) &&
+                    rpcResult.data[0] &&
+                    typeof rpcResult.data[0] === 'object'
+                  ) {
+                    return Promise.resolve({
+                      ...orderPaymentResult,
+                      data: {
+                        ...(rawData as Record<string, unknown>),
+                        total: (rpcResult.data[0] as { total?: unknown }).total,
+                      },
+                    });
+                  }
+                  return Promise.resolve(orderPaymentResult);
+                },
               }),
               single: () => Promise.resolve(orderTokenResult),
             }),
@@ -234,6 +261,15 @@ function createMockAdminClient() {
           select: () => ({
             eq: () => ({
               eq: () => Promise.resolve(savingsRedemptionsResult),
+            }),
+          }),
+        };
+      }
+      if (table === 'customer_wallet_transactions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => Promise.resolve(walletTransactionsResult),
             }),
           }),
         };
@@ -309,6 +345,7 @@ function setupDefaults() {
     ],
     error: null,
   };
+  amendmentCheckoutClaimResult = { data: 'untracked', error: null };
   rpcTransactionResult = { data: null, error: null };
   rpcDvaReservationResult = { data: 'inserted', error: null };
   redvaultAttemptInitializeResult = { data: null, error: null };
@@ -331,6 +368,7 @@ function setupDefaults() {
     error: null,
   };
   savingsRedemptionsResult = { data: [], error: null };
+  walletTransactionsResult = { data: [], error: null };
   routeMocks.authenticateApiRequest.mockResolvedValue({ user: null });
   routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
     available: false,
@@ -369,6 +407,158 @@ describe('POST /api/payments/initialize', () => {
       bank_name: 'Wema Bank',
     });
     setupDefaults();
+  });
+
+  it('rejects ordinary checkout before any provider call when an amendment wins', async () => {
+    amendmentCheckoutClaimResult = {
+      data: null,
+      error: { code: 'P0001', message: 'amendment_payment_open' },
+    };
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        tracking_token: 'track-token-123',
+      })
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+    });
+    expect(mockInitializePaystack).not.toHaveBeenCalled();
+    expect(
+      rpcCalls.some(({ name }) => name === 'create_payment_transaction')
+    ).toBe(false);
+  });
+
+  it('initializes integration-wallet pilot orders without a split or subaccount', async () => {
+    amendmentCheckoutClaimResult = { data: 'claimed_integration', error: null };
+    merchantResult = {
+      data: {
+        id: MERCHANT_ID,
+        business_name: 'Test Store',
+        slug: 'test-store',
+        paystack_subaccount_code: null,
+      },
+      error: null,
+    };
+    mockInitializePaystack.mockResolvedValueOnce({
+      authorization_url: 'https://checkout.paystack.com/sandbox-fixture',
+    });
+    const res = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        tracking_token: 'track-token-123',
+      })
+    );
+    expect(res.status).toBe(200);
+    const payload = mockInitializePaystack.mock.calls.at(-1)?.[0];
+    expect(payload.channels).toEqual(['card']);
+    expect(payload).not.toHaveProperty('subaccount');
+    expect(payload).not.toHaveProperty('transaction_charge');
+    expect(rpcCalls).toContainEqual({
+      name: 'claim_checkout_for_paid_order_amendment',
+      args: expect.objectContaining({ p_gateway: 'paystack_no_subaccount' }),
+    });
+  });
+
+  it('does not claim or submit after a local Paystack preflight failure', async () => {
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        customer_phone: 'not-a-phone',
+        tracking_token: 'track-token-123',
+      })
+    );
+    expect(response.status).toBe(502);
+    expect(
+      rpcCalls.some(
+        ({ name }) => name === 'claim_checkout_for_paid_order_amendment'
+      )
+    ).toBe(false);
+    expect(mockInitializePaystack).not.toHaveBeenCalled();
+  });
+
+  it('passes paystack_bank_transfer to the amendment claim and blocks claimed checkouts', async () => {
+    amendmentCheckoutClaimResult = { data: 'claimed', error: null };
+    const response = await POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        payment_type: 'bank_transfer',
+        tracking_token: 'track-token-123',
+      })
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'ORDER_AMENDMENT_PAYMENT_BLOCKED',
+    });
+    expect(rpcCalls).toContainEqual({
+      name: 'claim_checkout_for_paid_order_amendment',
+      args: expect.objectContaining({ p_gateway: 'paystack_bank_transfer' }),
+    });
+    expect(mockInitializePaystack).not.toHaveBeenCalled();
+  });
+
+  it('holds the checkout claim through provider acceptance and a failed local write', async () => {
+    amendmentCheckoutClaimResult = { data: 'claimed', error: null };
+    rpcTransactionResult = {
+      data: null,
+      error: { code: 'XX000', message: 'Synthetic transaction write failure' },
+    };
+    const providerCalled = Promise.withResolvers<void>();
+    const providerResponse = Promise.withResolvers<{
+      authorization_url: string;
+    }>();
+    mockInitializePaystack.mockImplementationOnce(() => {
+      providerCalled.resolve();
+      return providerResponse.promise;
+    });
+
+    const result = POST(
+      makeRequest({
+        ...validBody,
+        gateway: 'paystack',
+        tracking_token: 'track-token-123',
+      })
+    );
+    await Promise.race([
+      providerCalled.promise,
+      result.then(() => {
+        throw new Error('Checkout returned before calling the provider');
+      }),
+    ]);
+    const claim = rpcCalls.find(
+      ({ name }) => name === 'claim_checkout_for_paid_order_amendment'
+    );
+    expect(claim).toBeDefined();
+    expect(mockInitializePaystack).toHaveBeenCalledWith(
+      expect.objectContaining({ channels: ['card'] })
+    );
+    expect(
+      rpcCalls.some(({ name }) => name === 'create_payment_transaction')
+    ).toBe(false);
+
+    providerResponse.resolve({
+      authorization_url: 'https://paystack.com/pay/synthetic',
+    });
+    const response = await result;
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      code: 'TRANSACTION_CREATE_FAILED',
+    });
+    expect(
+      rpcCalls.filter(
+        ({ name }) => name === 'claim_checkout_for_paid_order_amendment'
+      )
+    ).toHaveLength(1);
+    expect(
+      rpcCalls.filter(({ name }) => name === 'create_payment_transaction')
+    ).toHaveLength(1);
+    expect(mockInitializePaystack).toHaveBeenCalledTimes(1);
   });
 
   describe('validation', () => {
@@ -744,6 +934,68 @@ describe('POST /api/payments/initialize', () => {
       });
     });
 
+    it('rejects a non-pilot REDVAULT order when store credit covers 100% of the total', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+            wallet_amount_used: 5000,
+          },
+        ],
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('NO_PAYABLE_AMOUNT');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-pilot REDVAULT order with partial wallet store credit before initializing Paystack', async () => {
+      routeMocks.getRedvaultPaymentAvailability.mockReturnValue({
+        available: true,
+      });
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            payment_method: 'uba_redvault',
+            total: 5000,
+            tracking_token: 'track-token-123',
+            wallet_amount_used: 1500,
+          },
+        ],
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          payment_method: 'uba_redvault',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('REDVAULT_STORE_CREDIT_UNSUPPORTED');
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
     it('ignores a client-supplied amount and derives the gateway amount from the order', async () => {
       enableKorapayForTest();
       mockInitializeKorapay.mockResolvedValue({
@@ -850,7 +1102,10 @@ describe('POST /api/payments/initialize', () => {
         ],
         error: null,
       };
-      orderPaymentResult = { data: { wallet_amount_used: 1200 }, error: null };
+      orderPaymentResult = {
+        data: { total: 5000, wallet_amount_used: 1200 },
+        error: null,
+      };
       savingsRedemptionsResult = { data: [{ amount: 800 }], error: null };
       enableKorapayForTest();
       mockInitializeKorapay.mockResolvedValue({
@@ -1455,7 +1710,7 @@ describe('POST /api/payments/initialize', () => {
       ).toBe(false);
     });
 
-    it('rejects Klump when store credits already reduced the payable total', async () => {
+    it('initializes Klump for the net remaining payable amount when store credits reduce order total', async () => {
       rpcResult = {
         data: [
           {
@@ -1467,7 +1722,7 @@ describe('POST /api/payments/initialize', () => {
         error: null,
       };
       orderPaymentResult = {
-        data: { wallet_amount_used: 25_000 },
+        data: { total: 50_000, wallet_amount_used: 25_000 },
         error: null,
       };
       featureSettingsResult = {
@@ -1488,8 +1743,296 @@ describe('POST /api/payments/initialize', () => {
       );
       const json = await res.json();
 
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.gateway).toBe('klump');
+      const txCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(txCall).toBeDefined();
+      expect(txCall?.args).toMatchObject({
+        p_amount: 25_000,
+        p_merchant_amount: 25_000,
+        p_gateway: 'klump',
+      });
+    });
+
+    it('initializes Klump for the net remaining payable amount when wallet ledger rows exist without synced order wallet_amount_used', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { total: 50_000, wallet_amount_used: 0 },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 25_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'completed',
+          },
+        ],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 25_000, gateway: 'klump' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(json.gateway).toBe('klump');
+      const txCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(txCall?.args).toMatchObject({
+        p_amount: 25_000,
+        p_merchant_amount: 25_000,
+        p_gateway: 'klump',
+      });
+    });
+
+    it('rejects Klump when wallet and savings ledger rows cover 100% even if order wallet_amount_used is zero', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { total: 50_000, wallet_amount_used: 0 },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 30_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'completed',
+          },
+        ],
+        error: null,
+      };
+      savingsRedemptionsResult = {
+        data: [{ amount: 20_000, metadata: {} }],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 0, gateway: 'klump' })
+      );
+      const json = await res.json();
+
       expect(res.status).toBe(400);
-      expect(json.code).toBe('AMOUNT_COMPOSITION_UNSUPPORTED');
+      expect(json.code).toBe('NO_PAYABLE_AMOUNT');
+      expect(
+        rpcCalls.some((call) => call.name === 'create_payment_transaction')
+      ).toBe(false);
+    });
+
+    it('does not subtract reversed or non-completed wallet/savings ledger credit from Klump gateway charge', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { total: 50_000, wallet_amount_used: 20_000 },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 20_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'completed',
+          },
+          {
+            amount: 10_000,
+            source_type: 'order_redemption',
+            type: 'redemption',
+            status: 'pending',
+          },
+          {
+            amount: 20_000,
+            source_type: 'order_reversal',
+            type: 'credit',
+            status: 'completed',
+          },
+        ],
+        error: null,
+      };
+      savingsRedemptionsResult = {
+        data: [
+          {
+            amount: 15_000,
+            metadata: { reversed_at: '2026-11-25T10:00:00Z' },
+          },
+        ],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 50_000, gateway: 'klump' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      const txCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(txCall?.args).toMatchObject({
+        p_amount: 50_000,
+        p_merchant_amount: 50_000,
+        p_gateway: 'klump',
+      });
+    });
+
+    it('subtracts orders.amount_paid on unpaid/pending orders when it exceeds wallet and savings ledger columns', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: {
+          total: 50_000,
+          wallet_amount_used: 0,
+          amount_paid: 20_000,
+          payment_status: 'pending',
+        },
+        error: null,
+      };
+      walletTransactionsResult = { data: [], error: null };
+      savingsRedemptionsResult = { data: [], error: null };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 30_000, gateway: 'klump' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      const txCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(txCall?.args).toMatchObject({
+        p_amount: 30_000,
+        p_merchant_amount: 30_000,
+        p_gateway: 'klump',
+      });
+    });
+
+    it('rejects Klump when store credits cover 100% of the order', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: { total: 50_000, wallet_amount_used: 50_000 },
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 0, gateway: 'klump' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.code).toBe('NO_PAYABLE_AMOUNT');
       expect(
         rpcCalls.some((call) => call.name === 'create_payment_transaction')
       ).toBe(false);
@@ -1622,7 +2165,7 @@ describe('POST /api/payments/initialize', () => {
       });
     });
 
-    it('keeps the order total as the RPC amount and stores the rounded Klump charge amount', async () => {
+    it('uses the rounded integer Klump charge amount across claim and transaction RPCs', async () => {
       rpcResult = {
         data: [
           {
@@ -1651,11 +2194,18 @@ describe('POST /api/payments/initialize', () => {
       );
 
       expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 5_808_900,
+        p_gateway: 'klump',
+      });
       const transactionCall = rpcCalls.find(
         (call) => call.name === 'create_payment_transaction'
       );
       expect(transactionCall?.args).toMatchObject({
-        p_amount: 58_088.5,
+        p_amount: 58_089,
         p_gateway: 'klump',
         p_merchant_amount: 58_089,
         p_platform_fee: 0,
@@ -1692,11 +2242,18 @@ describe('POST /api/payments/initialize', () => {
       );
 
       expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 5_808_900,
+        p_gateway: 'klump',
+      });
       const transactionCall = rpcCalls.find(
         (call) => call.name === 'create_payment_transaction'
       );
       expect(transactionCall?.args).toMatchObject({
-        p_amount: 58_088.5,
+        p_amount: 58_089,
         p_gateway: 'klump',
         p_merchant_amount: 58_089,
         p_platform_fee: 0,
@@ -1733,13 +2290,88 @@ describe('POST /api/payments/initialize', () => {
       );
 
       expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 5_808_900,
+        p_gateway: 'klump',
+      });
       const transactionCall = rpcCalls.find(
         (call) => call.name === 'create_payment_transaction'
       );
       expect(transactionCall?.args).toMatchObject({
-        p_amount: 58_088.5,
+        p_amount: 58_089,
         p_gateway: 'klump',
         p_merchant_amount: 58_089,
+        p_platform_fee: 0,
+        p_reference: 'BAC-ABCD12345678',
+      });
+    });
+
+    it('uses the canonical integer Klump amount across claim and transaction RPCs when wallet credit leaves a kobo residual', async () => {
+      rpcResult = {
+        data: [
+          {
+            merchant_id: MERCHANT_ID,
+            total: 50_000,
+            tracking_token: 'track-token-123',
+          },
+        ],
+        error: null,
+      };
+      orderPaymentResult = {
+        data: {
+          total: 50_000,
+          wallet_amount_used: 0,
+          amount_paid: 0,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 39_999.5,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      featureSettingsResult = {
+        data: {
+          klump_enabled: true,
+          klump_min_amount: 10_000,
+          klump_max_amount: 500_000,
+          korapay_enabled: true,
+          paystack_enabled: true,
+          preferred_international_gateway: 'korapay',
+          preferred_local_gateway: 'paystack',
+        },
+        error: null,
+      };
+
+      const res = await POST(
+        makeRequest({ ...validBody, amount: 10_000.5, gateway: 'klump' })
+      );
+
+      expect(res.status).toBe(200);
+      const claimCall = rpcCalls.find(
+        (call) => call.name === 'claim_checkout_for_paid_order_amendment'
+      );
+      expect(claimCall?.args).toMatchObject({
+        p_expected_amount_minor: 1_000_100,
+        p_gateway: 'klump',
+      });
+      const transactionCall = rpcCalls.find(
+        (call) => call.name === 'create_payment_transaction'
+      );
+      expect(transactionCall?.args).toMatchObject({
+        p_amount: 10_001,
+        p_gateway: 'klump',
+        p_merchant_amount: 10_001,
         p_platform_fee: 0,
         p_reference: 'BAC-ABCD12345678',
       });
@@ -2300,6 +2932,305 @@ describe('POST /api/payments/initialize', () => {
         expect.objectContaining({ currency: 'GHS' })
       );
       expect(mockInitializePaystack).not.toHaveBeenCalled();
+    });
+
+    it('passes the net-of-savings amount to claim_checkout_for_paid_order_amendment and Paystack for amendment-configured merchants', async () => {
+      amendmentCheckoutClaimResult = { data: 'claimed', error: null };
+      savingsRedemptionsResult = {
+        data: [{ amount: 1500, metadata: {} }],
+        error: null,
+      };
+      mockInitializePaystack.mockResolvedValueOnce({
+        authorization_url: 'https://checkout.paystack.com/net-amendment',
+        access_code: 'ac_net_amendment',
+        reference: 'BAC-NETAMEND01',
+      });
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          gateway: 'paystack',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls).toContainEqual({
+        name: 'claim_checkout_for_paid_order_amendment',
+        args: expect.objectContaining({
+          p_expected_amount_minor: 350_000,
+        }),
+      });
+      expect(mockInitializePaystack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 350_000,
+        })
+      );
+    });
+
+    it('initializes Paystack for net payable when partial wallet-credit order resolves untracked on an amendment-configured merchant', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      orderPaymentResult = {
+        data: {
+          total: 5000,
+          wallet_amount_used: 1500,
+          amount_paid: 1500,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 1500,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      mockInitializePaystack.mockResolvedValueOnce({
+        authorization_url: 'https://checkout.paystack.com/net-wallet',
+        access_code: 'ac_net_wallet',
+        reference: 'BAC-NETWALLET1',
+      });
+
+      const res = await POST(
+        makeRequest({
+          ...validBody,
+          gateway: 'paystack',
+          tracking_token: 'track-token-123',
+        })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.success).toBe(true);
+      expect(rpcCalls).toContainEqual({
+        name: 'claim_checkout_for_paid_order_amendment',
+        args: expect.objectContaining({
+          p_expected_amount_minor: 350_000,
+        }),
+      });
+      expect(mockInitializePaystack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 350_000,
+        })
+      );
+    });
+
+    it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED when concurrent ledger credit changes before gateway initialization', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      // Simulate concurrent wallet reversal while claim_checkout_for_paid_order_amendment
+      // runs: pre-claim read sees 1k wallet credit (4k payable on 5k order), then post-claim
+      // re-verification sees reversal (5k payable) and aborts before charging Paystack.
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 1000,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      onAmendmentClaim = () => {
+        walletTransactionsResult = {
+          data: [
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_redemption',
+              type: 'redemption',
+            },
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_reversal',
+              type: 'credit',
+            },
+          ],
+          error: null,
+        };
+      };
+
+      try {
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(409);
+        expect(json.code).toBe('CHECKOUT_PAYMENT_DETAILS_CHANGED');
+        expect(mockInitializePaystack).not.toHaveBeenCalled();
+        expect(
+          rpcCalls.some((call) => call.name === 'create_payment_transaction')
+        ).toBe(false);
+      } finally {
+        onAmendmentClaim = undefined;
+      }
+    });
+
+    it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED when orders.total changes before gateway initialization', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      orderPaymentResult = {
+        data: {
+          total: 5000,
+          wallet_amount_used: 0,
+          amount_paid: 0,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      onAmendmentClaim = () => {
+        orderPaymentResult = {
+          data: {
+            total: 6000,
+            wallet_amount_used: 0,
+            amount_paid: 0,
+            payment_status: 'unpaid',
+          },
+          error: null,
+        };
+      };
+
+      try {
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(409);
+        expect(json.code).toBe('CHECKOUT_PAYMENT_DETAILS_CHANGED');
+        expect(mockInitializePaystack).not.toHaveBeenCalled();
+        expect(
+          rpcCalls.some((call) => call.name === 'create_payment_transaction')
+        ).toBe(false);
+      } finally {
+        onAmendmentClaim = undefined;
+      }
+    });
+
+    it('returns 409 CHECKOUT_PAYMENT_DETAILS_CHANGED with no authorization URL when store credit changes during gateway initialization', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      walletTransactionsResult = {
+        data: [
+          {
+            amount: 1000,
+            status: 'completed',
+            source_type: 'order_redemption',
+            type: 'redemption',
+          },
+        ],
+        error: null,
+      };
+      mockInitializePaystack.mockImplementationOnce(async () => {
+        walletTransactionsResult = {
+          data: [
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_redemption',
+              type: 'redemption',
+            },
+            {
+              amount: 1000,
+              status: 'completed',
+              source_type: 'order_reversal',
+              type: 'credit',
+            },
+          ],
+          error: null,
+        };
+        return {
+          authorization_url: 'https://checkout.paystack.com/stale-session',
+          access_code: 'stale-code',
+          reference: 'BAC-ABCD12345678',
+        };
+      });
+
+      const res = await POST(
+        makeRequest({ ...validBody, gateway: 'paystack' })
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(409);
+      expect(json.code).toBe('CHECKOUT_PAYMENT_DETAILS_CHANGED');
+      expect(json.authorization_url).toBeUndefined();
+      expect(json.checkout_url).toBeUndefined();
+      expect(
+        rpcCalls.some((call) => call.name === 'create_payment_transaction')
+      ).toBe(false);
+    });
+
+    it('returns 400 INVALID_ORDER_TOTAL when non-REDVAULT recheck reads a null orders.total', async () => {
+      amendmentCheckoutClaimResult = { data: 'untracked', error: null };
+      orderPaymentResult = {
+        data: {
+          total: 5000,
+          wallet_amount_used: 0,
+          amount_paid: 0,
+          payment_status: 'unpaid',
+        },
+        error: null,
+      };
+      onAmendmentClaim = () => {
+        orderPaymentResult = {
+          data: {
+            total: null,
+            wallet_amount_used: 0,
+            amount_paid: 0,
+            payment_status: 'unpaid',
+          },
+          error: null,
+        };
+      };
+
+      try {
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(400);
+        expect(json.code).toBe('INVALID_ORDER_TOTAL');
+        expect(mockInitializePaystack).not.toHaveBeenCalled();
+        expect(
+          rpcCalls.some((call) => call.name === 'create_payment_transaction')
+        ).toBe(false);
+      } finally {
+        onAmendmentClaim = undefined;
+      }
+    });
+
+    it('returns 409 ORDER_NOT_PAYABLE when initializing payment for an already-settled paid or bnpl_approved order', async () => {
+      for (const paymentStatus of ['paid', 'bnpl_approved']) {
+        orderPaymentResult = {
+          data: {
+            total: 5000,
+            wallet_amount_used: 0,
+            amount_paid: 5000,
+            payment_status: paymentStatus,
+          },
+          error: null,
+        };
+
+        const res = await POST(
+          makeRequest({ ...validBody, gateway: 'paystack' })
+        );
+        const json = await res.json();
+
+        expect(res.status).toBe(409);
+        expect(json.code).toBe('ORDER_NOT_PAYABLE');
+      }
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(
+        rpcCalls.some((call) => call.name === 'create_payment_transaction')
+      ).toBe(false);
     });
   });
 });

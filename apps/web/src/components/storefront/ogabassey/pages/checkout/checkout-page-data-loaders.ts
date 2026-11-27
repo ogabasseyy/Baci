@@ -133,6 +133,7 @@ export interface RequestDvaInitializationParams {
   /** Merchant-resolved fiat order currency (server derives from order). */
   orderCurrency: string;
   trackingToken?: string | null;
+  paymentType?: 'dva' | 'bank_transfer';
 }
 
 export interface DvaBillingAddress {
@@ -152,6 +153,7 @@ export async function requestDvaInitialization({
   billingAddress,
   orderCurrency,
   trackingToken,
+  paymentType = 'dva',
 }: RequestDvaInitializationParams): Promise<{
   dva: Omit<DvaData, 'amount' | 'reference'>;
   reference: string;
@@ -167,7 +169,7 @@ export async function requestDvaInitialization({
       customer_name: customerName,
       customer_phone: customerPhone,
       gateway: 'paystack',
-      payment_type: 'dva', // Dedicated Virtual Account
+      payment_type: paymentType,
       billing_address: billingAddress,
       ...(trackingToken?.trim() ? { tracking_token: trackingToken } : {}),
     }),

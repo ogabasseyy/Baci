@@ -29,6 +29,7 @@ permissions:
 
 env:
   EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
+  EXPO_PUBLIC_CHECKOUT_REPLAY_ENABLED: ${{ vars.STOREFRONT_CHECKOUT_REPLAY_ENABLED }}
   BACI_MOBILE_BUILD_PLATFORM: ios
   # Compile Expo consumers against the same resolved JSI headers and library.
   EXPO_USE_PRECOMPILED_MODULES: '0'

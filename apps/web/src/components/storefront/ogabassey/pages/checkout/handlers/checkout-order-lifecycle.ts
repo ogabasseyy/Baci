@@ -224,7 +224,10 @@ export async function runCheckoutOrderLifecycle({
     customerEmail: customer.email,
     customerPhone: customer.phone,
     checkoutFingerprint: fingerprint,
-    paymentMethod: reuse.paymentMethod,
+    paymentMethod:
+      order.payment_method === 'bank_card_offer'
+        ? order.payment_method
+        : reuse.paymentMethod,
     amountDueToGateway,
     createdAt: new Date().toISOString(),
     ...(redvaultReview.enabled &&

@@ -1,0 +1,69 @@
+import '@testing-library/jest-dom/vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { LIGHT_COLORS, SPACING } from '@/constants/theme';
+import { InboxViewChips } from './InboxViewChips';
+
+describe('InboxViewChips', () => {
+  it('lists every view and marks the selected one', () => {
+    render(
+      <InboxViewChips
+        colors={LIGHT_COLORS}
+        onChange={vi.fn()}
+        value="follow_up"
+      />
+    );
+
+    for (const label of ['Needs reply', 'Unread', 'Follow-up', 'Done', 'All']) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    }
+    // The selected chip is filled with the primary colour; the others are not.
+    expect(screen.getByRole('button', { name: 'Follow-up' })).toHaveStyle({
+      backgroundColor: LIGHT_COLORS.primary,
+    });
+    expect(screen.getByRole('button', { name: 'Unread' })).not.toHaveStyle({
+      backgroundColor: LIGHT_COLORS.primary,
+    });
+  });
+
+  it('reports the tapped view', () => {
+    const onChange = vi.fn();
+    render(
+      <InboxViewChips
+        colors={LIGHT_COLORS}
+        onChange={onChange}
+        value="needs_reply"
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(onChange).toHaveBeenCalledWith('done');
+  });
+
+  it('bugfix: the scroller stays a compact toolbar instead of taking screen height', () => {
+    const { container } = render(
+      <InboxViewChips
+        colors={LIGHT_COLORS}
+        onChange={vi.fn()}
+        value="needs_reply"
+      />
+    );
+    // The outer scroll view must not grow (a horizontal ScrollView does by default).
+    expect(container.firstElementChild).toHaveStyle({ flexGrow: '0' });
+  });
+
+  it('bugfix: every chip is tall enough to tap', () => {
+    render(
+      <InboxViewChips
+        colors={LIGHT_COLORS}
+        onChange={vi.fn()}
+        value="needs_reply"
+      />
+    );
+
+    for (const chip of screen.getAllByRole('button')) {
+      expect(chip).toHaveStyle({ minHeight: `${SPACING.touchTarget}px` });
+    }
+  });
+});

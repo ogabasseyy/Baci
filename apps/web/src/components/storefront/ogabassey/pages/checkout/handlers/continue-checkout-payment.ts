@@ -58,23 +58,7 @@ export async function continueCheckoutPayment({
 }: ContinueCheckoutPaymentOptions): Promise<void> {
   const paymentAmount = amountDueToGateway ?? dispatch.total;
 
-  if (
-    isKlumpUnavailableForGatewayAmount({
-      paymentMethod,
-      payableAmount: paymentAmount,
-      orderAmount: dispatch.total,
-    })
-  ) {
-    toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
-    releaseSubmission();
-    return;
-  }
-
   if (signupBeforePayment) await signupBeforePayment();
-
-  const capturePaymentStartedForOrder = (reference?: string) => {
-    capturePaymentStarted(reference);
-  };
 
   if (wallet?.amountUsed) setWalletBalance(wallet.newBalance);
 
@@ -96,6 +80,22 @@ export async function continueCheckoutPayment({
     });
     return;
   }
+
+  if (
+    isKlumpUnavailableForGatewayAmount({
+      paymentMethod,
+      payableAmount: paymentAmount,
+      orderAmount: dispatch.total,
+    })
+  ) {
+    toast(KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST);
+    releaseSubmission();
+    return;
+  }
+
+  const capturePaymentStartedForOrder = (reference?: string) => {
+    capturePaymentStarted(reference);
+  };
 
   await dispatchCheckoutPayment({
     ...dispatch,

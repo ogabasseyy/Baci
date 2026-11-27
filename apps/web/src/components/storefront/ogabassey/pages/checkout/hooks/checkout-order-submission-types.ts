@@ -1,3 +1,4 @@
+import type { BankCardOfferSelection } from '../preview-bank-card-offer';
 import type { CartItem } from '@/hooks/cart';
 import type { useCart } from '@/hooks/cart';
 import type { SharedCartSyncStatus } from '@/hooks/cart/cart-types';
@@ -30,6 +31,7 @@ export interface CheckoutOrderSubmissionContext {
     password: string;
     user: AuthUser | null | undefined;
     waitForResolvedCustomerAuth: ReturnType<typeof useStorefrontCustomerSession>['waitForResolvedAuthenticated'];
+    openAuthModal?: () => void;
   };
   cart: {
     cart: CartItem[];
@@ -78,6 +80,8 @@ export interface CheckoutOrderSubmissionContext {
     walletFundedTransfer: ReturnType<typeof useWalletFundedBankTransfer>;
   };
   payment: {
+    bankCardOffer?: BankCardOfferSelection;
+    recoverSavedOffer?: boolean;
     session: PaymentSession;
     bankTransferAvailable: boolean;
     paystackAvailable: boolean;

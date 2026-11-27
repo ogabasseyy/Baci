@@ -8,6 +8,10 @@ import {
 } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import {
+  getStorefrontOpenGraphImages,
+  getStorefrontTwitterImages,
+} from '@/lib/storefront-social-images';
+import {
   isDomainIdentifier,
   isValidMerchantIdentifier,
 } from '@/lib/validation';
@@ -37,12 +41,29 @@ export async function generateMetadata({
   }
 
   const baseUrl = buildStoreUrl(merchant);
+  const canonicalUrl = `${baseUrl}/swap`;
+  const title = 'Swap Your Device';
+  const description =
+    'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.';
 
   return {
-    title: 'Swap Your Device',
-    description:
-      'Trade in an eligible phone, laptop, console or tablet, review valuation requirements, and use your device value toward an upgrade.',
-    alternates: { canonical: `${baseUrl}/swap` },
+    title,
+    description,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      type: 'website',
+      siteName: merchant.business_name,
+      images: getStorefrontOpenGraphImages(baseUrl, title, merchant.logo_url),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: getStorefrontTwitterImages(baseUrl, merchant.logo_url),
+    },
   };
 }
 

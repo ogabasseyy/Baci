@@ -53,6 +53,7 @@ vi.mock('@/lib/korapay', () => ({
 
 const mockInitializePaystack = vi.fn();
 vi.mock('@/lib/paystack', () => ({
+  isPaystackConfigured: () => true,
   initializeTransaction: (...args: unknown[]) =>
     mockInitializePaystack(...args),
   calculatePlatformFee: (amount: number) => ({
@@ -91,6 +92,8 @@ function createMockSupabase() {
   return {
     rpc: vi.fn((name: string, args?: unknown) => {
       rpcCalls.push({ name, args });
+      if (name === 'claim_checkout_for_paid_order_amendment')
+        return Promise.resolve({ data: 'untracked', error: null });
       if (name === 'get_order_payment_snapshot')
         return Promise.resolve({
           data: [
@@ -124,7 +127,13 @@ function createMockAdminClient() {
     merchant_feature_settings: () => Promise.resolve(featureSettingsResult),
     orders: () =>
       Promise.resolve({
-        data: { wallet_amount_used: 0, tracking_token: 'track-token-123' },
+        data: {
+          total: 5000,
+          amount_paid: 0,
+          wallet_amount_used: 0,
+          payment_status: 'unpaid',
+          tracking_token: 'track-token-123',
+        },
         error: null,
       }),
   };
@@ -132,9 +141,14 @@ function createMockAdminClient() {
     from: (table: string) => ({
       select: () => ({
         eq: () => ({
-          eq: () => ({
-            single: rows[table] ?? (() => Promise.resolve({ data: null })),
-          }),
+          eq: () => {
+            const listPromise = Promise.resolve({ data: [], error: null });
+            return {
+              single: rows[table] ?? (() => Promise.resolve({ data: null })),
+              // biome-ignore lint/suspicious/noThenProperty: Supabase query builder is awaitable.
+              then: listPromise.then.bind(listPromise),
+            };
+          },
           single: rows[table] ?? (() => Promise.resolve({ data: null })),
         }),
       }),

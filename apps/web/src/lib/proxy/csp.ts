@@ -4,6 +4,7 @@ import {
   parseChatwootTenantBindings,
 } from '@/lib/chatwoot/commerce-context-bindings';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
+import { getPostHogRelayUrl } from '@/lib/posthog/config';
 import { getExperienceExecutionOrigin } from '../experience/execution-origin-runtime';
 import { isOxygenPaymentSurface } from './oxygen-payment-surface';
 import { buildProxyRequestHeaders } from './request-headers';
@@ -28,6 +29,7 @@ export function generateCSP(
       ? readOxygenHostedOrigins().hosted
       : [];
   const executionOrigin = getExperienceExecutionOrigin();
+  const posthogRelayOrigin = getConfiguredPostHogRelayOrigin();
   const builderExperiencePreview = isExperienceBuilderPreviewPath(
     pathname ?? ''
   );
@@ -102,9 +104,28 @@ export function generateCSP(
         (key === 'connect-src' || key === 'frame-src')
           ? `${source} ${chatwootOrigin}${key === 'connect-src' ? ` ${toChatwootSocketOrigin(chatwootOrigin)}` : ''}`
           : source;
-      return (withChatwoot ? `${key} ${withChatwoot}` : key).trim();
+      const withPostHogRelay =
+        posthogRelayOrigin &&
+        routeType !== 'api' &&
+        (key === 'connect-src' || key === 'script-src')
+          ? `${withChatwoot} ${posthogRelayOrigin}`
+          : withChatwoot;
+      return (withPostHogRelay ? `${key} ${withPostHogRelay}` : key).trim();
     })
     .join('; ');
+}
+
+function getConfiguredPostHogRelayOrigin(): string | null {
+  const relayUrl = getPostHogRelayUrl();
+  if (!relayUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(relayUrl).origin;
+  } catch {
+    return null;
+  }
 }
 
 /** Exact HTTPS origin only; malformed environment values never widen CSP. */

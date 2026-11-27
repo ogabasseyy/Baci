@@ -1,0 +1,11 @@
+name = "baci-posthog-proxy"
+main = "src/index.mjs"
+compatibility_date = "2024-01-01"
+
+[vars]
+POSTHOG_INGEST_HOST = "https://eu.i.posthog.com"
+POSTHOG_ASSETS_HOST = "https://eu-assets.i.posthog.com"
+# Optional: restrict browser origins (comma-separated, supports *.usebaci.com)
+# ALLOWED_ORIGINS = "https://usebaci.com,*.usebaci.com"
+# Optional: strip a path prefix if mounted on a route like usebaci.com/baci-relay/*
+# POSTHOG_PROXY_PATH = "/baci-relay"

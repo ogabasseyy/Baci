@@ -50,6 +50,7 @@ import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempote
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import { validateLocalAirportDeliveryFee } from '@/lib/checkout/validate-local-airport-delivery-fee';
 import { validateRedvaultRequest } from '@/lib/checkout/validate-redvault-request';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { recordPlatformOrderCreatedEvent } from '@/lib/events/record-platform-order-created-event';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 import { detectPrivacyRegion } from '@/lib/geo-privacy';
@@ -101,9 +102,11 @@ import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { checkoutOrderNotReusable } from './checkout-order-not-reusable';
+import { finishBankCardOfferOrder } from './finish-bank-card-offer-order';
 import { rejectMobileOxygenCreditCombination } from './mobile-oxygen-order-admission';
 import { resolveOrderCreationMerchant } from './order-creation-merchant';
 import { authenticateOrderRequest } from './order-request-auth';
+import { prepareBankCardOfferOrder } from './prepare-bank-card-offer-order';
 import { replayAdmittedOxygenOrder } from './replay-admitted-oxygen-order';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
@@ -442,7 +445,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/orders - Create new order from storefront
 // CSRF exemption: This endpoint is called by unauthenticated storefront guests during checkout.
-// Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
+// Signed-in bank offers require CSRF validation below. Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
 // Zod validates input shape, while the SECURITY DEFINER RPC enforces merchant + item authorization server-side.
 
 export async function POST(request: NextRequest) {
@@ -481,7 +484,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = parseResult.data;
+    const parsedOrder = parseResult.data;
+    if (parsedOrder.payment_method === 'bank_card_offer' && user) {
+      const csrf = await checkCsrfProtection(request);
+      if (!csrf.valid) {
+        return (
+          csrf.response ??
+          NextResponse.json({ error: 'Invalid CSRF token' }, { status: 403 })
+        );
+      }
+    }
+    // Bank-offer config stores canonical UUIDs. Preserve standard checkout's
+    // existing payload identity so old standard idempotency keys still replay.
+    const body =
+      parsedOrder.payment_method === 'bank_card_offer'
+        ? { ...parsedOrder, merchant_id: parsedOrder.merchant_id.toLowerCase() }
+        : parsedOrder;
 
     const {
       merchant_id,
@@ -559,6 +577,22 @@ export async function POST(request: NextRequest) {
       );
       if (invalidKeyResponse) return invalidKeyResponse;
     }
+    const bankOfferOrder = await prepareBankCardOfferOrder({
+      body,
+      merchantId: merchant_id,
+      customerEmail: customer_email,
+      userId: resolvedUserId,
+      userEmail: user?.email,
+      requestIdempotencyKey,
+      hasVoucherItem,
+      clientIp,
+      clientUserAgent,
+      supabase,
+      createScopedClient: createStorefrontOrderRpcClient,
+      recordOrderCreated: recordPlatformOrderCreatedEvent,
+    });
+    if (bankOfferOrder.kind === 'response') return bankOfferOrder.response;
+    const bankCardOfferRequested = bankOfferOrder.kind === 'checkout';
     const verifiedQuizVoucherAwardIdsByIndex = new Map<number, string>();
     if (payment_method === 'uba_redvault') {
       const availability = getRedvaultPaymentAvailability();
@@ -1379,6 +1413,7 @@ export async function POST(request: NextRequest) {
     //   decides whether the validated discount should be charged.
     const shouldApplyServerDerivedDiscount =
       !redvaultRequested &&
+      !bankCardOfferRequested &&
       merchantCanAutoNegotiate &&
       !requestedDiscountCode &&
       (typeof body.expected_total === 'number' || source === 'mobile_app');
@@ -2283,6 +2318,39 @@ export async function POST(request: NextRequest) {
         ? { merchantRateAttestation: checkoutContext.merchantRateAttestation }
         : {}),
     });
+    if (bankOfferOrder.kind === 'checkout') {
+      return await finishBankCardOfferOrder({
+        ...bankOfferOrder,
+        client: orderRpcClient,
+        orderArgs: {
+          ...orderRpcArgs,
+          ...(checkoutContext.shippingRateMarker ?? {}),
+          ...redvaultOrderDraftFulfillment(
+            verifiedMerchantShippingRate,
+            body.shipping_rate_id
+          ),
+        },
+        items: orderItemsRpcPayload,
+        fees: [effectiveShippingFee, orderTaxAmount, giftWrappingFeeValue],
+        currency: merchantResolvedCurrency,
+        expectedTotal: body.expected_total,
+        hasIncompatibleDiscount: Boolean(
+          discountCodeId ||
+            loyaltyRedemptionId ||
+            requestedSavingsRedemption ||
+            (negotiationDiscount?.totalDiscount ?? 0) > 0 ||
+            hasVoucherItem ||
+            body.shared_cart ||
+            body.discount_code ||
+            body.use_wallet_credit ||
+            body.wallet_amount ||
+            body.use_savings_credit ||
+            body.savings_amount
+        ),
+        merchantId: merchant_id,
+        merchantSlug: merchant.slug,
+      });
+    }
     if (redvaultRequested && redvaultQuote) {
       if (merchantResolvedCurrency !== 'NGN') {
         return NextResponse.json(

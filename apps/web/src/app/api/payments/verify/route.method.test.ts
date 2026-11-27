@@ -8,6 +8,21 @@ const CSRF_HEADERS = {
 };
 
 describe('/api/payments/verify method boundary', () => {
+  it.each([
+    'BCO',
+    'bco',
+  ])('requires authenticated POST for %s references even with a tracking token', async (prefix) => {
+    const reference = `${prefix}-${'a'.repeat(32)}`;
+    const response = await GET(
+      new NextRequest(
+        `http://localhost:3000/api/payments/verify?reference=%20${reference}%20&trackingToken=track-1`
+      )
+    );
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('POST');
+  });
+
   it('serves sessionless verification over GET, gated by the creation tracking token', async () => {
     const missing = await GET(
       new NextRequest('http://localhost:3000/api/payments/verify')

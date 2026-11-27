@@ -67,10 +67,11 @@ export function BaciLandingPage({ metrics }: { metrics: LandingMetrics }) {
                 </span>
               </h1>
 
-              <p className="mx-auto max-w-[700px] text-muted-foreground text-base md:text-lg leading-relaxed">
-                Launch a professional e-commerce store powered by AI in seconds.
-                No coding required. Perfect for retail businesses ready to
-                scale.
+              <p className="mx-auto max-w-[720px] text-muted-foreground text-base md:text-lg leading-relaxed">
+                Launch an AI-powered store in seconds—with built-in price
+                negotiations, discount codes, local &amp; crypto payments,
+                agentic commerce, and a mobile admin app to run your business
+                from anywhere.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto pt-4">
@@ -89,9 +90,35 @@ export function BaciLandingPage({ metrics }: { metrics: LandingMetrics }) {
                   variant="outline"
                   className="border-2 h-14 px-8 rounded-full text-lg hover:bg-primary/5 hover:text-primary hover:border-primary/50 transition-all"
                 >
-                  <Link href="#how-it-works">See How It Works</Link>
+                  <Link href="#features">Explore Built-In Features</Link>
                 </Button>
               </div>
+
+              {/* Above-the-fold built-in capability strip */}
+              <ul
+                aria-label="Key built-in capabilities"
+                className="flex flex-wrap items-center justify-center gap-2 max-w-3xl"
+              >
+                {[
+                  'Price Negotiations',
+                  'Discount Codes & Vouchers',
+                  'Paystack, BNPL & Crypto',
+                  'Mobile Admin App',
+                  'Jumia Sync',
+                  'Agentic Commerce',
+                ].map((capability) => (
+                  <li
+                    key={capability}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-white/90 dark:bg-slate-900/80 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-800 shadow-2xs"
+                  >
+                    <CheckCircle2
+                      className="size-3.5 text-accent shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span>{capability}</span>
+                  </li>
+                ))}
+              </ul>
 
               {/* Metrics Cards */}
               <div className="w-full max-w-4xl mt-6 pt-4 border-t border-slate-200/60 dark:border-slate-800/60">
@@ -120,7 +147,11 @@ export function BaciLandingPage({ metrics }: { metrics: LandingMetrics }) {
           </div>
         </section>
 
-        {/* CTA Section */}
+        <BaciLandingFeatures />
+
+        <BaciLandingFaqs />
+
+        {/* Final CTA Section */}
         <section className="py-24 relative overflow-hidden">
           <div className="absolute inset-0 bg-primary dark:bg-slate-950">
             <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
@@ -135,13 +166,14 @@ export function BaciLandingPage({ metrics }: { metrics: LandingMetrics }) {
               paddingRight: 'max(1rem, env(safe-area-inset-right))',
             }}
           >
-            <div className="max-w-4xl mx-auto text-center gap-y-8">
+            <div className="max-w-4xl mx-auto text-center space-y-6">
               <h2 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl text-white">
                 Ready to launch your empire?
               </h2>
               <p className="text-xl text-white/80 max-w-2xl mx-auto">
                 Join thousands of merchants growing their business with Baci.
-                Start your 14-day free trial today.
+                Start free today with negotiations, discount codes, and mobile
+                admin built right in.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
                 <Button
@@ -152,7 +184,7 @@ export function BaciLandingPage({ metrics }: { metrics: LandingMetrics }) {
                   <Link href="/onboarding">Start Free Trial</Link>
                 </Button>
               </div>
-              <div className="flex items-center justify-center gap-8 pt-8 text-white/60 text-sm">
+              <div className="flex items-center justify-center gap-8 pt-6 text-white/70 text-sm">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="size-4 text-accent" />
                   <span>No credit card required</span>
@@ -165,10 +197,6 @@ export function BaciLandingPage({ metrics }: { metrics: LandingMetrics }) {
             </div>
           </div>
         </section>
-
-        <BaciLandingFeatures />
-
-        <BaciLandingFaqs />
       </main>
 
       {/* Footer */}

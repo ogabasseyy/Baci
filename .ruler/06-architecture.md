@@ -35,6 +35,7 @@ Merchant brand colors use CSS variables (`var(--store-primary)`, etc.). Never ha
 
 ## Important Files
 
+- `docs/PRODUCT_FEATURES.md` — Canonical product capability catalog across web, mobile-admin, mobile-storefront, and API (also check `apps/web/src/config/platform-features.ts`)
 - `proxy.ts` — Request middleware (auth, rate limiting, domains)
 - `src/env.ts` — Environment variable management
 - `src/config/business-types.ts` — Business type configuration (single source of truth)

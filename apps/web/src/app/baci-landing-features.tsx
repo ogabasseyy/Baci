@@ -1,16 +1,16 @@
-import {
-  ArrowRight,
-  BarChart,
-  CheckCircle2,
-  Palette,
-  ShoppingBag,
-  Sparkles,
-  Store,
-  Zap,
-} from 'lucide-react';
+import { ArrowRight, CheckCircle2, Sparkles, Zap } from 'lucide-react';
+import { FeatureIcon } from '@/components/landing/feature-icon';
+import { FeatureToolkitTabs } from '@/components/landing/feature-toolkit-tabs';
+import { MobileAppStrip } from '@/components/landing/mobile-app-strip';
+import { ProductShowcase } from '@/components/landing/product-showcase';
+import { RoadmapStrip } from '@/components/landing/roadmap-strip';
 import { JsonLd } from '@/components/seo/json-ld';
+import { PLATFORM_CONFIG } from '@/config/platform';
+import { PLATFORM_SPOTLIGHT_FEATURES } from '@/config/platform-features';
 
 export function BaciLandingFeatures() {
+  const howItWorksUrl = `${PLATFORM_CONFIG.url}#how-it-works`;
+
   return (
     <>
       {/* Features Grid */}
@@ -27,56 +27,30 @@ export function BaciLandingFeatures() {
         >
           <div className="text-center mb-16">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl mb-4 text-primary dark:text-white">
-              Everything you need to scale
+              Everything you need to sell, get paid, and scale
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Powerful features built for modern commerce, simplified by AI.
+              Far more than a store builder—Baci packs conversion, fintech,
+              mobile operations, and AI discovery into one unified platform.
             </p>
           </div>
 
           <ul className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {[
-              {
-                icon: <Palette className="size-6 text-purple-500" />,
-                title: 'Custom Branding',
-                description:
-                  'Upload your logo and let our AI automatically generate a matching color palette and theme.',
-              },
-              {
-                icon: <Sparkles className="size-6 text-accent" />,
-                title: 'AI-Powered Design',
-                description:
-                  'Generate your entire store layout, branding, and copy in seconds with advanced AI.',
-              },
-              {
-                icon: <ShoppingBag className="size-6 text-blue-500" />,
-                title: 'Smart Inventory',
-                description:
-                  'Track stock levels, manage variants, and get low-stock alerts automatically.',
-              },
-              {
-                icon: <Store className="size-6 text-green-500" />,
-                title: 'Multi-Channel',
-                description:
-                  'Sell everywhere - online, social media, and in-person with unified inventory.',
-              },
-              {
-                icon: <Zap className="size-6 text-yellow-500" />,
-                title: 'Lightning Fast',
-                description:
-                  'Built on modern edge infrastructure for sub-second load times globally.',
-              },
-              {
-                icon: <BarChart className="size-6 text-red-500" />,
-                title: 'Real-time Analytics',
-                description:
-                  'Get actionable insights on sales, visitors, and conversion rates instantly.',
-              },
-            ].map((feature) => (
-              <li key={feature.title}>
+            {PLATFORM_SPOTLIGHT_FEATURES.map((feature) => (
+              <li key={feature.id}>
                 <article className="h-full p-8 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-[transform,box-shadow] duration-200 group">
-                  <div className="size-12 rounded-xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-200">
-                    {feature.icon}
+                  <div className="flex items-center justify-between gap-3 mb-6">
+                    <div className="size-12 rounded-xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                      <FeatureIcon
+                        name={feature.icon}
+                        className={feature.iconClassName}
+                      />
+                    </div>
+                    {feature.badge && (
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-accent/10 text-accent">
+                        {feature.badge}
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-xl font-bold mb-3 text-primary dark:text-white">
                     {feature.title}
@@ -88,8 +62,18 @@ export function BaciLandingFeatures() {
               </li>
             ))}
           </ul>
+
+          <ProductShowcase />
+
+          <FeatureToolkitTabs />
         </div>
       </section>
+
+      {/* Mobile Admin App Strip */}
+      <MobileAppStrip />
+
+      {/* Upcoming Roadmap Strip */}
+      <RoadmapStrip />
 
       {/* How It Works Section */}
       <section
@@ -180,21 +164,21 @@ export function BaciLandingFeatures() {
                   position: 1,
                   name: 'Sign Up & Tell Us About Your Business',
                   text: 'Answer a few quick questions about your products, brand, and target audience. Our AI will understand your vision.',
-                  url: 'https://baci.app#how-it-works',
+                  url: howItWorksUrl,
                 },
                 {
                   '@type': 'HowToStep',
                   position: 2,
                   name: 'AI Generates Your Store',
                   text: 'Watch as our AI creates your complete store: product pages, branding, copy, and layout—all optimized for conversions.',
-                  url: 'https://baci.app#how-it-works',
+                  url: howItWorksUrl,
                 },
                 {
                   '@type': 'HowToStep',
                   position: 3,
                   name: 'Customize & Launch',
                   text: "Fine-tune any details you'd like, connect your payment processor, and go live. Start selling in minutes, not months.",
-                  url: 'https://baci.app#how-it-works',
+                  url: howItWorksUrl,
                 },
               ],
               totalTime: 'PT10M',

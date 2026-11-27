@@ -1,6 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppSheetModal } from '@/components/ui/AppSheetModal';
 import SafeImage from '@/components/ui/SafeImage';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
@@ -36,7 +35,6 @@ export function OrderItemDetailModal({
   visible,
 }: OrderItemDetailModalProps) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
 
   if (!visible || !item) {
     return null;
@@ -56,7 +54,6 @@ export function OrderItemDetailModal({
         {
           backgroundColor: colors.card,
           borderColor: colors.border,
-          paddingBottom: Math.max(insets.bottom, SPACING.lg),
         },
       ]}
       visible={visible}

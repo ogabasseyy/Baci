@@ -47,7 +47,12 @@ export function InboxViewChips({
             <Text
               style={[
                 styles.label,
-                { color: selected ? colors.textOnPrimary : colors.text },
+                {
+                  color: selected ? colors.textOnPrimary : colors.textSecondary,
+                  fontFamily: selected
+                    ? TYPOGRAPHY.fontFamily.semiBold
+                    : TYPOGRAPHY.fontFamily.medium,
+                },
               ]}
             >
               {view.label}
@@ -65,13 +70,12 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.full,
     borderWidth: 1,
     justifyContent: 'center',
+    // Tall enough to tap (#4483); the slimmer sides and per-state weight are
+    // the list's newer look.
     minHeight: SPACING.touchTarget,
-    paddingHorizontal: SPACING.md + 2,
+    paddingHorizontal: SPACING.md,
   },
-  label: {
-    fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-    fontSize: TYPOGRAPHY.size.md,
-  },
+  label: { fontSize: TYPOGRAPHY.size.md },
   scroller: { flexGrow: 0 },
   row: {
     gap: SPACING.sm,

@@ -13,6 +13,12 @@ import { SPACING } from '@/constants/theme';
 
 interface AppKeyboardContainerProps {
   align?: 'start' | 'center' | 'end';
+  /**
+   * Paints the strip under the content (the bottom safe area) in this colour,
+   * for a sheet that sits on the screen's bottom edge, so it reaches the edge
+   * instead of leaving the backdrop showing under it.
+   */
+  bottomFillColor?: string;
   children: ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
   offsetPreset?: 'default' | 'compactHeader';
@@ -23,6 +29,7 @@ interface AppKeyboardContainerProps {
 
 export function AppKeyboardContainer({
   align = 'end',
+  bottomFillColor,
   children,
   contentContainerStyle,
   keyboardVerticalOffset,
@@ -41,14 +48,27 @@ export function AppKeyboardContainer({
       : align === 'center'
         ? 'center'
         : 'flex-end';
+  const bottomSpace = Math.max(insets.bottom, SPACING.lg);
   const contentStyle: StyleProp<ViewStyle> = [
     styles.content,
     {
       justifyContent,
-      paddingBottom: Math.max(insets.bottom, SPACING.lg),
+      // With a fill colour the same space is a coloured strip after the
+      // children, not empty padding.
+      paddingBottom: bottomFillColor ? 0 : bottomSpace,
     } satisfies ViewStyle,
     contentContainerStyle,
   ];
+  const content = (
+    <>
+      {children}
+      {bottomFillColor ? (
+        <View
+          style={{ backgroundColor: bottomFillColor, height: bottomSpace }}
+        />
+      ) : null}
+    </>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -70,10 +90,10 @@ export function AppKeyboardContainer({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {children}
+          {content}
         </ScrollView>
       ) : (
-        <View style={contentStyle}>{children}</View>
+        <View style={contentStyle}>{content}</View>
       )}
     </KeyboardAvoidingView>
   );

@@ -22,6 +22,10 @@ export const INBOX_EMPTY_COPY: Record<
     title: 'No follow-ups',
     body: 'Use Follow up inside a chat to bring it back at the right time.',
   },
+  returning: {
+    title: 'No customer chats',
+    body: 'Chats from signed-in customers who have ordered before show up here, to staff who can view orders.',
+  },
   done: {
     title: 'No finished chats yet',
     body: 'Chats you mark Done are kept here.',

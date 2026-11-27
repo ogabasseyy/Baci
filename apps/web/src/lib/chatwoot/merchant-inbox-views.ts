@@ -7,6 +7,8 @@ export const MERCHANT_INBOX_VIEWS = [
   'unread',
   'follow_up',
   'done',
+  /** Chats from signed-in customers who have ordered; finished in the route. */
+  'returning',
 ] as const;
 export type MerchantInboxView = (typeof MERCHANT_INBOX_VIEWS)[number];
 
@@ -48,5 +50,8 @@ export function matchesView(
       return conversation.status !== 'resolved' && !!conversation.followUp;
     case 'done':
       return conversation.status === 'resolved';
+    case 'returning':
+      // The customer rule needs the verified link, so the route applies it.
+      return conversation.status !== 'resolved';
   }
 }

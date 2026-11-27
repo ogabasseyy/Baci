@@ -10,6 +10,7 @@ DECLARE
   product_id uuid := gen_random_uuid();
   order_id uuid := gen_random_uuid();
   capture_id uuid := gen_random_uuid();
+  replacement_id uuid := gen_random_uuid();
   customer_email text := order_id::text || '@example.test';
 BEGIN
   IF has_function_privilege('anon', 'public.reinstate_timeout_order_payment(uuid,uuid)', 'EXECUTE')
@@ -45,6 +46,27 @@ BEGIN
     WHERE o.id = order_id AND o.payment_status = 'cancelled' AND o.cancelled_at IS NOT NULL) THEN
     RAISE EXCEPTION 'Timeout did not cancel the Credit Direct order';
   END IF;
+  -- The final recovery RPC requires an exact ledger amount even when the
+  -- provider event itself is authentic.
+  UPDATE public.transactions SET amount = 149 WHERE id = capture_id;
+  IF public.reinstate_timeout_order_payment(order_id, capture_id) IS DISTINCT FROM 'blocked' THEN
+    RAISE EXCEPTION 'Short capture incorrectly reinstated the timed-out order';
+  END IF;
+  UPDATE public.transactions SET amount = 150 WHERE id = capture_id;
+
+  -- A recent matching replacement order must keep the cancelled order closed.
+  INSERT INTO public.orders (
+    id, merchant_id, customer_email, order_number, total, subtotal, currency,
+    source, payment_method, payment_status, shipping_status
+  ) VALUES (
+    replacement_id, merchant_id, customer_email, 'REPLACEMENT-' || left(order_id::text, 8),
+    150, 150, 'NGN', 'mobile_app', 'credit_direct', 'pending', 'pending'
+  );
+  IF public.reinstate_timeout_order_payment(order_id, capture_id) IS DISTINCT FROM 'blocked' THEN
+    RAISE EXCEPTION 'Matching replacement order did not block reinstatement';
+  END IF;
+  DELETE FROM public.orders WHERE id = replacement_id;
+
   IF public.reinstate_timeout_order_payment(order_id, capture_id) IS DISTINCT FROM 'reinstated' THEN
     RAISE EXCEPTION 'Verified Credit Direct payment did not reinstate the order';
   END IF;

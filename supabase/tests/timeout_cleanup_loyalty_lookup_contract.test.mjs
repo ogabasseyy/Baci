@@ -4,16 +4,21 @@ import test from 'node:test';
 
 const migration = readFileSync(
   new URL(
-    '../migrations/20261127121000_bound_timeout_loyalty_lookup.sql',
+    '../migrations/20261127124000_close_timeout_identity_lock_gaps.sql',
     import.meta.url
   ),
   'utf8'
 );
 
-test('timeout cleanup probes loyalty claims by each candidate order', () => {
-  assert.doesNotMatch(migration, /loyalty_orders\s+AS\s+MATERIALIZED/i);
+test('timeout cleanup snapshots loyalty claims before cancellation can release them', () => {
+  const snapshot = migration.indexOf('INTO v_loyalty_order_ids');
+  const cancellation = migration.indexOf('UPDATE public.orders o');
+  assert.ok(snapshot >= 0 && cancellation > snapshot);
   assert.match(
     migration,
-    /NOT EXISTS\s*\(\s*SELECT 1 FROM public\.reward_redemptions l\s+WHERE l\.used_on_order_id = c\.id/s
+    /NOT \(c\.id = ANY\(v_loyalty_order_ids\)\)/
   );
+  const candidateQuery = migration.slice(migration.indexOf('INTO v_candidate_ids'), snapshot);
+  assert.match(candidateQuery, /public\.oxygen_workflows/);
+  assert.match(candidateQuery, /public\.reconciliation_review/);
 });

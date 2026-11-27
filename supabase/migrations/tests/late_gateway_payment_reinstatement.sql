@@ -7,6 +7,11 @@ BEGIN;
 \ir ../20261124090000_prelock_storefront_customer_identity.sql
 \ir ../20261124100000_fix_authenticated_storefront_identity_confirmation.sql
 \ir ../20261124103000_clear_reinstatement_guard_after_block.sql
+\ir ../20261127120000_fix_guest_identity_phone_prelock.sql
+\ir ../20261127121000_bound_timeout_loyalty_lookup.sql
+\ir ../20261127122000_storefront_catalog_identity_lock_order.sql
+\ir ../20261127123000_identity_before_catalog_lock_order.sql
+\ir ../20261127124000_close_timeout_identity_lock_gaps.sql
 
 CREATE TRIGGER prevent_cancelled_order_reopen
 BEFORE UPDATE ON public.orders
@@ -53,13 +58,14 @@ BEGIN
   SELECT pg_get_functiondef(
     'public.reinstate_timeout_order_payment(uuid,uuid)'::regprocedure
   ) INTO reinstatement_definition;
-  IF strpos(reinstatement_definition, 'PERFORM p.id') = 0
-    OR strpos(reinstatement_definition, 'PERFORM v.id') = 0
-    OR strpos(reinstatement_definition, 'PERFORM p.id') >
+  IF strpos(reinstatement_definition, 'PERFORM private.lock_order_replacement_identity') = 0
+    OR strpos(reinstatement_definition, 'SELECT ARRAY(') <
       strpos(reinstatement_definition, 'PERFORM private.lock_order_replacement_identity')
-    OR strpos(reinstatement_definition, 'PERFORM v.id') >
-      strpos(reinstatement_definition, 'PERFORM private.lock_order_replacement_identity') THEN
-    RAISE EXCEPTION 'Reinstatement must lock catalog rows before customer identity';
+    OR strpos(reinstatement_definition, 'PERFORM p.id') <
+      strpos(reinstatement_definition, 'SELECT ARRAY(')
+    OR strpos(reinstatement_definition, 'PERFORM v.id') <
+      strpos(reinstatement_definition, 'PERFORM p.id') THEN
+    RAISE EXCEPTION 'Reinstatement must lock customer identity, replacement orders, then catalog rows';
   END IF;
 
   -- Authenticated callers may omit p_user_id; lock their effective identity

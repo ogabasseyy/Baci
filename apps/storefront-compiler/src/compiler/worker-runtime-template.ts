@@ -116,6 +116,9 @@ export default {
     }
     const url = new URL(request.url);
     if (url.pathname === '/_baci/catalog') return handleCatalogBridgeRequest(url, request.method);
+    if (url.pathname === '/_baci' || url.pathname.startsWith('/_baci/')) {
+      return new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'content-security-policy': CSP_HEADER, 'x-robots-tag': 'noindex, nofollow' } });
+    }
     const merchantSlug = TRUSTED_MERCHANT_SLUG;
     const matchedRoute = matchDeclaredRoute(url.pathname);
     if (matchedRoute && matchedRoute.view === 'bad_request') {
@@ -235,8 +238,9 @@ export default {
     } else {
       try {
         const StorefrontApp = await loadStorefrontApp();
+        const ssrAssets = collectCatalogAssetUrls(ASSETS_MAP, products, productDetail);
         appHtml = renderToString(
-          createElement(CommerceProvider, { commerce: SSR_COMMERCE, assets: ASSETS_MAP }, createElement(StorefrontApp, renderProps))
+          createElement(CommerceProvider, { commerce: SSR_COMMERCE, assets: ssrAssets }, createElement(StorefrontApp, renderProps))
         );
       } catch {
         status = 500;

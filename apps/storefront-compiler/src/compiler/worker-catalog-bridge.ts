@@ -1,6 +1,22 @@
 export function buildWorkerCatalogBridgeSnippet(): string {
   return `
-function toSdkPublicProduct(p) {
+function collectCatalogAssetUrls(baseAssets, list, single) {
+  const merged = { ...baseAssets };
+  const rows = Array.isArray(list) ? (single ? [...list, single] : list) : single ? [single] : [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r && typeof r === 'object' && typeof r.imageUrl === 'string' && r.imageUrl.length > 0) {
+      const aid =
+        r.image && typeof r.image === 'object' && typeof r.image.assetId === 'string' && r.image.assetId.length > 0
+          ? r.image.assetId
+          : \`catalog-product-\${String(r.id || r.slug || i)}\`;
+      merged[aid] = r.imageUrl;
+    }
+  }
+  return merged;
+}
+
+function toSdkPublicProduct(p, assetOut) {
   if (!p || typeof p !== 'object' || Array.isArray(p) || typeof p.name !== 'string') {
     return null;
   }
@@ -29,6 +45,29 @@ function toSdkPublicProduct(p) {
       : typeof p.inStock === 'boolean'
         ? p.inStock
         : variants.some((v) => v.available);
+  let image = null;
+  if (
+    p.image &&
+    typeof p.image === 'object' &&
+    !Array.isArray(p.image) &&
+    typeof p.image.assetId === 'string' &&
+    p.image.assetId.length > 0
+  ) {
+    image = {
+      assetId: p.image.assetId,
+      alt: typeof p.image.alt === 'string' && p.image.alt.length > 0 ? p.image.alt : p.name,
+    };
+    if (assetOut && typeof p.imageUrl === 'string' && p.imageUrl.length > 0) {
+      assetOut[p.image.assetId] = p.imageUrl;
+    }
+  } else if (typeof p.imageUrl === 'string' && p.imageUrl.length > 0) {
+    const assetId = \`catalog-product-\${String(p.id || p.slug || 'item')}\`;
+    if (assetOut) assetOut[assetId] = p.imageUrl;
+    image = {
+      assetId,
+      alt: typeof p.imageAlt === 'string' && p.imageAlt.length > 0 ? p.imageAlt : p.name,
+    };
+  }
   return {
     id: String(p.id ?? ''),
     slug: String(p.slug ?? ''),
@@ -46,7 +85,7 @@ function toSdkPublicProduct(p) {
       typeof p.requiresVariant === 'boolean'
         ? p.requiresVariant
         : Boolean(p.has_variants) || variants.length > 0,
-    image: p.image && typeof p.image === 'object' && !Array.isArray(p.image) ? p.image : null,
+    image,
     variants,
   };
 }
@@ -82,8 +121,9 @@ async function handleCatalogBridgeRequest(url, method) {
       return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Collection not found' }, method);
     }
     const mapped = [];
+    const assets = {};
     for (const row of up.data.products || []) {
-      const item = toSdkPublicProduct(row);
+      const item = toSdkPublicProduct(row, assets);
       if (!item) {
         return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed catalog product record' }, method);
       }
@@ -92,10 +132,10 @@ async function handleCatalogBridgeRequest(url, method) {
     const gen = up.data.generation;
     const availGen = up.data.availabilityGeneration;
     const revision =
-      gen !== undefined && availGen !== undefined
+      gen != null && availGen != null
         ? \`\${gen}:\${availGen}\`
         : String(gen ?? availGen ?? '0');
-    return jsonCatalogBridgeResponse(200, { status: 'ok', value: { products: mapped, revision } }, method);
+    return jsonCatalogBridgeResponse(200, { status: 'ok', value: { products: mapped, revision }, assets }, method);
   }
   if (op === 'product') {
     const raw = (url.searchParams.get('handle') || '').trim().replace(/^\\/+|\\/+$/g, '');
@@ -113,11 +153,12 @@ async function handleCatalogBridgeRequest(url, method) {
     if (!up.data.product) {
       return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Product not found' }, method);
     }
-    const mapped = toSdkPublicProduct(up.data.product);
+    const assets = {};
+    const mapped = toSdkPublicProduct(up.data.product, assets);
     if (!mapped) {
       return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed product record' }, method);
     }
-    return jsonCatalogBridgeResponse(200, { status: 'ok', value: mapped }, method);
+    return jsonCatalogBridgeResponse(200, { status: 'ok', value: mapped, assets }, method);
   }
   if (op === 'variants') {
     const productId = (url.searchParams.get('productId') || '').trim();
@@ -131,7 +172,7 @@ async function handleCatalogBridgeRequest(url, method) {
     if (!up.data.product) {
       return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Product not found' }, method);
     }
-    const mapped = toSdkPublicProduct(up.data.product);
+    const mapped = toSdkPublicProduct(up.data.product, null);
     if (!mapped) {
       return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed variant record' }, method);
     }

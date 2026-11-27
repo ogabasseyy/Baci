@@ -55,16 +55,12 @@ function readPinnedTailwindCss(fileName: string): string {
 export function extractTailwindCandidates(
   manifest: WorkerStorefrontManifest
 ): string[] {
-  const declaredAssets = new Set(manifest.assets.map((asset) => asset.assetId));
   const candidates = new Set<string>();
   for (const file of manifest.files) {
     if (file.path.endsWith('.css')) continue;
     for (const match of file.content.matchAll(CANDIDATE_TOKEN_RE)) {
       const token = match[0];
       if (!token || token.length > 120) continue;
-      for (const rawUrl of extractAllCssResourceUrls(token)) {
-        assertAllowedAssetUrl(rawUrl, file.path, declaredAssets);
-      }
       candidates.add(token);
     }
   }
@@ -205,8 +201,15 @@ export async function compileStorefrontTailwindCss(
   });
 
   const css = minified.code;
-  for (const rawUrl of extractAllCssResourceUrls(css)) {
-    assertAllowedAssetUrl(rawUrl, 'compiled-stylesheet', declaredAssets);
+  for (const candidateCss of [
+    rawBuiltCss,
+    decodeCssEscapes(stripCssComments(rawBuiltCss)),
+    css,
+    decodeCssEscapes(stripCssComments(css)),
+  ]) {
+    for (const rawUrl of extractAllCssResourceUrls(candidateCss)) {
+      assertAllowedAssetUrl(rawUrl, 'compiled-stylesheet', declaredAssets);
+    }
   }
   const rawBytes = Buffer.byteLength(css, 'utf8');
   if (rawBytes > WORKER_COMPILER_LIMITS.maxCssRawBytes) {

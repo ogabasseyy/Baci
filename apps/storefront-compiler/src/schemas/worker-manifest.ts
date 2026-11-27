@@ -217,6 +217,12 @@ export const workerStorefrontManifestSchema = z
     const seenNormalizedRoutes = new Set<string>();
     for (const route of manifest.routes) {
       const segments = route.path.split('/').filter(Boolean);
+      if (segments[0]?.toLowerCase() === '_baci') {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Reserved platform route prefix "/_baci" is forbidden in "${route.path}"`,
+        });
+      }
       const paramNames = new Set<string>();
       let hasDynamic = false;
       const normalizedSegs: string[] = [];

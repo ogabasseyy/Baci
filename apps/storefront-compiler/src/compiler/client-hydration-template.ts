@@ -25,12 +25,33 @@ function resolveSafeInternalPath(p) {
     return null;
   }
 }
+function seedInitialCatalogAssets(target, state) {
+  const rows = Array.isArray(state?.products)
+    ? state.productDetail
+      ? [...state.products, state.productDetail]
+      : state.products
+    : state?.productDetail
+      ? [state.productDetail]
+      : [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (r && typeof r === 'object' && typeof r.imageUrl === 'string' && r.imageUrl.length > 0) {
+      const aid =
+        r.image && typeof r.image === 'object' && typeof r.image.assetId === 'string' && r.image.assetId.length > 0
+          ? r.image.assetId
+          : \`catalog-product-\${String(r.id || r.slug || i)}\`;
+      target[aid] = r.imageUrl;
+    }
+  }
+}
 const rootElement = document.getElementById('root');
 const stateScript = document.getElementById('__BACI_STOREFRONT_STATE__');
 if (rootElement && stateScript?.textContent) {
   void (async () => {
     try {
       const initialProps = JSON.parse(stateScript.textContent);
+      const runtimeAssets = { ...ASSETS_MAP };
+      seedInitialCatalogAssets(runtimeAssets, initialProps);
       const commerce = createCommerceClient(async (method, args) => {
         if (
           method === 'catalog.collection' ||
@@ -54,7 +75,13 @@ if (rootElement && stateScript?.textContent) {
             const res = await fetch(ep.href, { headers: { accept: 'application/json' } });
             const payload = await res.json();
             if (payload && typeof payload === 'object' && (payload.status === 'ok' || payload.status === 'error')) {
-              return payload;
+              if (payload.assets && typeof payload.assets === 'object' && !Array.isArray(payload.assets)) {
+                for (const [aid, aurl] of Object.entries(payload.assets)) {
+                  if (typeof aurl === 'string') runtimeAssets[aid] = aurl;
+                }
+              }
+              const { assets: _extraAssets, ...bridgeResult } = payload;
+              return bridgeResult;
             }
             return { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed catalog response' };
           } catch {
@@ -110,7 +137,7 @@ if (rootElement && stateScript?.textContent) {
       if (!mod || !mod.default) return;
       hydrateRoot(
         rootElement,
-        createElement(CommerceProvider, { commerce, assets: ASSETS_MAP }, createElement(mod.default, initialProps))
+        createElement(CommerceProvider, { commerce, assets: runtimeAssets }, createElement(mod.default, initialProps))
       );
     } catch (err) {
       if (typeof console !== 'undefined' && typeof console.error === 'function') {

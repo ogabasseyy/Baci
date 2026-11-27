@@ -65,13 +65,27 @@ export function scanManifestSourceSafety(
       isSdkLinkTag,
       violations,
     };
-    const file = { path: filePath };
+    const fail = (
+      rule: SourceSafetyViolation['rule'],
+      detail: string
+    ): void => {
+      violations.push({ filePath, rule, detail });
+    };
+
     const visit = (node: ts.Node): void => {
-      if (
-        ts.isTypeNode(node) ||
-        ts.isInterfaceDeclaration(node) ||
-        ts.isTypeAliasDeclaration(node)
-      ) {
+      if (ts.isTypeNode(node)) {
+        if (
+          ts.isExpressionWithTypeArguments(node) &&
+          ts.isHeritageClause(node.parent) &&
+          node.parent.token === ts.SyntaxKind.ExtendsKeyword &&
+          (ts.isClassDeclaration(node.parent.parent) ||
+            ts.isClassExpression(node.parent.parent))
+        ) {
+          visit(node.expression);
+        }
+        return;
+      }
+      if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
         return;
       }
       if (ts.isConstructorDeclaration(node)) {
@@ -87,11 +101,10 @@ export function scanManifestSourceSafety(
             node.moduleSpecifier.text.trim()
           ))
       ) {
-        violations.push({
-          filePath: file.path,
-          rule: 'PROHIBITED_RUNTIME_IMPORT',
-          detail: `Prohibited runtime specifier "${node.moduleSpecifier.text}"`,
-        });
+        fail(
+          'PROHIBITED_RUNTIME_IMPORT',
+          `Prohibited runtime specifier "${node.moduleSpecifier.text}"`
+        );
       }
       if (
         ts.isCallExpression(node) &&
@@ -101,38 +114,33 @@ export function scanManifestSourceSafety(
           ? resolveStaticString(node.arguments[0])
           : null;
         if (spec === null) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DYNAMIC_CODE_EVAL',
-            detail: 'Non-literal dynamic import() is forbidden',
-          });
+          fail(
+            'DYNAMIC_CODE_EVAL',
+            'Non-literal dynamic import() is forbidden'
+          );
         } else if (
           isProhibitedImportSpecifier(spec) ||
           BANNED_MERCHANT_SUBPATH_SPECIFIERS.has(spec.trim())
         ) {
-          violations.push({
-            filePath: file.path,
-            rule: 'PROHIBITED_RUNTIME_IMPORT',
-            detail: `Prohibited runtime specifier "${spec}"`,
-          });
+          fail(
+            'PROHIBITED_RUNTIME_IMPORT',
+            `Prohibited runtime specifier "${spec}"`
+          );
         }
       }
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const jsxError = checkJsxTag(node.tagName);
-        if (jsxError !== null) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DANGEROUS_INNER_HTML',
-            detail: jsxError,
-          });
-        }
+        if (jsxError !== null) fail('DANGEROUS_INNER_HTML', jsxError);
       }
       if (ts.isJsxAttribute(node)) {
         checkJsxAttributeSafety(jsxEnv, node, sourceFile);
       }
       if (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) {
-        const specName = (node.propertyName ?? node.name).text;
-        classifyMemberName(file.path, specName, violations);
+        classifyMemberName(
+          filePath,
+          (node.propertyName ?? node.name).text,
+          violations
+        );
       }
       if (ts.isJsxSpreadAttribute(node)) {
         checkJsxSpreadAttributeSafety(jsxEnv, node);
@@ -154,19 +162,17 @@ export function scanManifestSourceSafety(
             ts.isPropertyAssignment(node) &&
             BENIGN_OBJECT_DATA_KEYS.has(node.name.text);
           if (!isBenignKey && !isSpreadProp) {
-            classifyMemberName(file.path, node.name.text, violations);
+            classifyMemberName(filePath, node.name.text, violations);
           }
         } else if (ts.isComputedPropertyName(node.name)) {
           const folded = resolveStaticString(node.name.expression);
           if (folded !== null) {
-            if (!isSpreadProp)
-              classifyMemberName(file.path, folded, violations);
+            if (!isSpreadProp) classifyMemberName(filePath, folded, violations);
           } else {
-            violations.push({
-              filePath: file.path,
-              rule: 'DYNAMIC_CODE_EVAL',
-              detail: 'Unresolvable computed object property key is forbidden',
-            });
+            fail(
+              'DYNAMIC_CODE_EVAL',
+              'Unresolvable computed object property key is forbidden'
+            );
           }
         }
       }
@@ -174,17 +180,16 @@ export function scanManifestSourceSafety(
       if (ts.isBindingElement(node)) {
         const keyNode = node.propertyName ?? node.name;
         if (ts.isIdentifier(keyNode) || ts.isStringLiteral(keyNode)) {
-          classifyMemberName(file.path, keyNode.text, violations);
+          classifyMemberName(filePath, keyNode.text, violations);
         } else if (ts.isComputedPropertyName(keyNode)) {
           const folded = resolveStaticString(keyNode.expression);
           if (folded !== null) {
-            classifyMemberName(file.path, folded, violations);
+            classifyMemberName(filePath, folded, violations);
           } else {
-            violations.push({
-              filePath: file.path,
-              rule: 'DYNAMIC_CODE_EVAL',
-              detail: 'Unresolvable computed destructuring key is forbidden',
-            });
+            fail(
+              'DYNAMIC_CODE_EVAL',
+              'Unresolvable computed destructuring key is forbidden'
+            );
           }
         }
       }
@@ -194,7 +199,7 @@ export function scanManifestSourceSafety(
         ts.isPropertyAccessExpression(node)
       ) {
         classifyMemberName(
-          file.path,
+          filePath,
           node.name.text,
           violations,
           ts.isPropertyAccessExpression(node) ? node.expression : undefined,
@@ -205,11 +210,10 @@ export function scanManifestSourceSafety(
           SENSITIVE_GLOBAL_ROOTS.has(node.name.text) &&
           !isAllowedSensitiveRootPosition(node)
         ) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DYNAMIC_CODE_EVAL',
-            detail: `Aliasing or passing sensitive global "${node.name.text}" is forbidden`,
-          });
+          fail(
+            'DYNAMIC_CODE_EVAL',
+            `Aliasing or passing sensitive global "${node.name.text}" is forbidden`
+          );
         }
       }
 
@@ -218,7 +222,7 @@ export function scanManifestSourceSafety(
           const folded = resolveStaticString(node.argumentExpression);
           if (folded !== null) {
             classifyMemberName(
-              file.path,
+              filePath,
               folded,
               violations,
               node.expression,
@@ -228,19 +232,16 @@ export function scanManifestSourceSafety(
               SENSITIVE_GLOBAL_ROOTS.has(folded) &&
               !isAllowedSensitiveRootPosition(node)
             ) {
-              violations.push({
-                filePath: file.path,
-                rule: 'DYNAMIC_CODE_EVAL',
-                detail: `Aliasing or passing sensitive global "${folded}" is forbidden`,
-              });
+              fail(
+                'DYNAMIC_CODE_EVAL',
+                `Aliasing or passing sensitive global "${folded}" is forbidden`
+              );
             }
           } else {
-            violations.push({
-              filePath: file.path,
-              rule: 'DYNAMIC_CODE_EVAL',
-              detail:
-                'Non-literal bracket indexing is forbidden; use .at() or static keys',
-            });
+            fail(
+              'DYNAMIC_CODE_EVAL',
+              'Non-literal bracket indexing is forbidden; use .at() or static keys'
+            );
           }
         }
       }
@@ -252,38 +253,34 @@ export function scanManifestSourceSafety(
           node.text === 'Reflect' ||
           node.text === 'Proxy'
         ) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DYNAMIC_CODE_EVAL',
-            detail: `Direct reference to "${node.text}" is forbidden`,
-          });
+          fail(
+            'DYNAMIC_CODE_EVAL',
+            `Direct reference to "${node.text}" is forbidden`
+          );
         } else if (
           FORBIDDEN_STORAGE_GLOBALS.has(node.text) &&
           !hasLocalLexicalBinding(node, node.text)
         ) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DIRECT_COOKIE_ACCESS',
-            detail: `Direct browser storage/cookie access via "${node.text}" is forbidden; use @baci/experience-sdk`,
-          });
+          fail(
+            'DIRECT_COOKIE_ACCESS',
+            `Direct browser storage/cookie access via "${node.text}" is forbidden; use @baci/experience-sdk`
+          );
         } else if (
           FORBIDDEN_BROWSER_NAV_GLOBALS.has(node.text) &&
           !hasLocalLexicalBinding(node, node.text)
         ) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DYNAMIC_CODE_EVAL',
-            detail: `Direct browser navigation via "${node.text}" is forbidden; use @baci/experience-sdk navigation`,
-          });
+          fail(
+            'DYNAMIC_CODE_EVAL',
+            `Direct browser navigation via "${node.text}" is forbidden; use @baci/experience-sdk navigation`
+          );
         } else if (
           SENSITIVE_GLOBAL_ROOTS.has(node.text) &&
           !isAllowedSensitiveRootPosition(node)
         ) {
-          violations.push({
-            filePath: file.path,
-            rule: 'DYNAMIC_CODE_EVAL',
-            detail: `Aliasing or passing sensitive global "${node.text}" is forbidden`,
-          });
+          fail(
+            'DYNAMIC_CODE_EVAL',
+            `Aliasing or passing sensitive global "${node.text}" is forbidden`
+          );
         }
       }
 

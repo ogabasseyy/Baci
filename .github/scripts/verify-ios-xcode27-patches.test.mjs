@@ -88,8 +88,10 @@ const xcodeWorkflows = [
 for (const path of xcodeWorkflows) {
   test(`${path} builds with Xcode 27.2 on the xcode-27 runner`, () => {
     const workflow = read(path);
-    assert.match(workflow, /^ {2}XCODE_VERSION: '27\.2'$/m);
+    // Repository variables can fall back to macos-26 / 26.2 while the
+    // xcode-27 image is in preview; the defaults must be Xcode 27.2.
+    assert.match(workflow, /^ {2}XCODE_VERSION: \$\{\{ vars\.IOS_XCODE_VERSION \|\| '27\.2' \}\}$/m);
     assert.doesNotMatch(workflow, /runs-on: macos-26\b/);
-    assert.match(workflow, /runs-on: xcode-27$/m);
+    assert.match(workflow, /^ {4}runs-on: \$\{\{ vars\.IOS_XCODE_RUNNER \|\| 'xcode-27' \}\}$/m);
   });
 }

@@ -122,10 +122,14 @@ const merchantDomain =
 const updateChannel = resolveUpdateChannel(process.env);
 const DEFAULT_OTA_UPDATES_URL =
   'https://u.expo.dev/c6c1897b-cac8-49b0-85f9-3d277aecc379';
-const SELF_HOSTED_OTA_UPDATES_URL = 'https://ota.usebaci.com/api/manifest';
+const SELF_HOSTED_OTA_UPDATES_URL = 'https://ota.ogabassey.com/api/manifest';
+const SELF_HOSTED_OTA_UPDATES_URLS = new Set([
+  SELF_HOSTED_OTA_UPDATES_URL,
+  'https://ota.usebaci.com/api/manifest',
+]);
 const ALLOWED_OTA_UPDATES_URLS = new Set([
   DEFAULT_OTA_UPDATES_URL,
-  SELF_HOSTED_OTA_UPDATES_URL,
+  ...SELF_HOSTED_OTA_UPDATES_URLS,
 ]);
 const rawUpdatesUrl = process.env.EXPO_PUBLIC_OTA_UPDATES_URL?.trim();
 let updatesUrl = DEFAULT_OTA_UPDATES_URL;
@@ -227,18 +231,21 @@ const codeSigningKeyId =
 const allowUnsignedSelfHostedOta =
   process.env.EXPO_PUBLIC_OTA_ALLOW_UNSIGNED === 'true';
 
-if (codeSigningCertificatePath && updatesUrl !== SELF_HOSTED_OTA_UPDATES_URL) {
+if (
+  codeSigningCertificatePath &&
+  !SELF_HOSTED_OTA_UPDATES_URLS.has(updatesUrl)
+) {
   throw new Error(
     `[app.config] EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH requires EXPO_PUBLIC_OTA_UPDATES_URL="${SELF_HOSTED_OTA_UPDATES_URL}".`
   );
 }
 if (
-  updatesUrl === SELF_HOSTED_OTA_UPDATES_URL &&
+  SELF_HOSTED_OTA_UPDATES_URLS.has(updatesUrl) &&
   !codeSigningCertificatePath &&
   !allowUnsignedSelfHostedOta
 ) {
   throw new Error(
-    `[app.config] Self-hosted OTA URL "${SELF_HOSTED_OTA_UPDATES_URL}" requires EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH unless EXPO_PUBLIC_OTA_ALLOW_UNSIGNED=true is explicitly set.`
+    `[app.config] Self-hosted OTA URL "${updatesUrl}" requires EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH unless EXPO_PUBLIC_OTA_ALLOW_UNSIGNED=true is explicitly set.`
   );
 }
 

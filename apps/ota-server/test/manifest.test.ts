@@ -486,7 +486,7 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
     await seedRelease(bucket);
     const env: OtaWorkerEnv = {
       OTA_BUCKET: bucket,
-      OTA_CANONICAL_ORIGIN: 'https://ota.usebaci.com',
+      OTA_CANONICAL_ORIGIN: 'https://ota.ogabassey.com',
     };
 
     const resp = await worker.fetch(
@@ -505,19 +505,19 @@ describe('GET /api/manifest (Expo Updates v1)', () => {
       assets: Array<{ url: string }>;
     };
     expect(manifest.launchAsset.url).toBe(
-      'https://ota.usebaci.com/api/assets/bundles/ios/abc123.hbc'
+      'https://ota.ogabassey.com/api/assets/bundles/ios/abc123.hbc'
     );
     expect(manifest.assets[0]?.url).toBe(
-      'https://ota.usebaci.com/api/assets/blobs/def456.png'
+      'https://ota.ogabassey.com/api/assets/blobs/def456.png'
     );
 
     const httpOriginResp = await worker.fetch(
-      new Request('https://ota.usebaci.com/api/manifest', {
+      new Request('https://ota.ogabassey.com/api/manifest', {
         headers: createBaseHeaders(),
       }),
       {
         OTA_BUCKET: bucket,
-        OTA_CANONICAL_ORIGIN: 'http://ota.usebaci.com',
+        OTA_CANONICAL_ORIGIN: 'http://ota.ogabassey.com',
       }
     );
     expect(httpOriginResp.status).toBe(500);

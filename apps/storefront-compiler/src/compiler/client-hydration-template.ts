@@ -9,31 +9,68 @@ import { hydrateRoot } from 'react-dom/client';
 import StorefrontApp from ${JSON.stringify(`./${entryPath}`)};
 
 const ASSETS_MAP = ${JSON.stringify(assetsMap)};
-const isSafeInternalPath = (p) => typeof p === 'string' && p.startsWith('/') && !p.startsWith('//');
+const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;
+function resolveSafeInternalPath(p) {
+  if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || UNSAFE_PATH_CHARS.test(p)) {
+    return null;
+  }
+  try {
+    const resolved = new URL(p, window.location.origin);
+    if (resolved.origin !== window.location.origin) return null;
+    const normalized = resolved.pathname + resolved.search + resolved.hash;
+    if (!normalized.startsWith('/') || normalized.startsWith('//') || UNSAFE_PATH_CHARS.test(normalized)) {
+      return null;
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
 const rootElement = document.getElementById('root');
 const stateScript = document.getElementById('__BACI_STOREFRONT_STATE__');
 if (rootElement && stateScript?.textContent) {
   const initialProps = JSON.parse(stateScript.textContent);
   const commerce = createCommerceClient(async (method, args) => {
-    if (method === 'navigation.go' && isSafeInternalPath(args.path)) {
-      window.location.assign(args.path);
-      return { status: 'ok', value: { path: args.path, params: {} } };
-    }
-    if (method === 'navigation.open' && isSafeInternalPath(args.path)) {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'baci:navigation.open', path: args.path }, 'https://usebaci.com');
-        return { status: 'ok', value: null };
+    if (method === 'navigation.go') {
+      const safePath = resolveSafeInternalPath(args.path);
+      if (!safePath) {
+        return { status: 'error', code: 'INVALID_REQUEST', message: 'Navigation path must be a same-origin relative path' };
       }
-      const win = window.open(args.path, '_blank', 'noopener,noreferrer');
-      return win
-        ? { status: 'ok', value: null }
-        : { status: 'error', code: 'UNAVAILABLE', message: 'New browsing context unavailable' };
+      window.location.assign(safePath);
+      return {
+        status: 'ok',
+        value: {
+          epoch: 1,
+          routeId: String(initialProps.view || 'route'),
+          params: {},
+          canonicalPath: safePath,
+          publicDataRevision: '0',
+        },
+      };
+    }
+    if (method === 'navigation.open') {
+      const safePath = resolveSafeInternalPath(args.path);
+      if (!safePath) {
+        return { status: 'error', code: 'INVALID_REQUEST', message: 'Navigation path must be a same-origin relative path' };
+      }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'baci:navigation.open', path: safePath }, 'https://usebaci.com');
+        return { status: 'ok', value: { presented: true } };
+      }
+      if (typeof window.open !== 'function') {
+        return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'New browsing context unavailable' };
+      }
+      window.open(safePath, '_blank', 'noopener,noreferrer');
+      return { status: 'ok', value: { presented: true } };
+    }
+    if (method === 'checkout.prepare') {
+      return { status: 'ok', value: { ready: true } };
     }
     if (method === 'checkout.open') {
       window.location.assign(\`https://\${initialProps.merchantSlug}.usebaci.com/cart\`);
-      return { status: 'ok', value: null };
+      return { status: 'ok', value: { presented: true } };
     }
-    return { status: 'error', code: 'UNAVAILABLE', message: 'Commerce transport requires active storefront session' };
+    return { status: 'error', code: 'CART_ENROLLMENT_REQUIRED', message: 'Commerce transport requires active storefront session' };
   });
   hydrateRoot(
     rootElement,

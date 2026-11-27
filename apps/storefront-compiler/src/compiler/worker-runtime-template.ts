@@ -31,7 +31,7 @@ const DECLARED_ROUTES = ${declaredRoutesJson};
 const CSP_HEADER = ${JSON.stringify(cspHeaderValue)};
 const TRUSTED_MERCHANT_SLUG = ${JSON.stringify(manifest.merchantSlug)};
 const ASSETS_MAP = ${assetsMapJson};
-const SSR_COMMERCE = createCommerceClient(async () => ({ status: 'error', code: 'UNAVAILABLE', message: 'SSR' }));
+const SSR_COMMERCE = createCommerceClient(async () => ({ status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'SSR' }));
 const EMPTY_FACETS = { brands: [], conditions: [], totalMatches: 0 };
 
 function escapeHtmlAttr(value) {

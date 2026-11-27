@@ -1,21 +1,4 @@
 export {
-  type BackingCatalogProduct,
-  createOgabasseyStorefrontManifest,
-  generateOgabasseyBackingCatalog,
-  type PublicProjectedProduct,
-} from './benchmark/ogabassey-catalog-fixture';
-export {
-  type CacheKeyStrategy,
-  type CatalogSearchResponse,
-  type OutboundTelemetry,
-  SimulatedPostgrestOutboundPlane,
-  type TrustedOutboundParams,
-} from './benchmark/outbound-data-plane';
-export {
-  type Phase0BenchmarkReport,
-  runPhase0Benchmarks,
-} from './benchmark/run-phase0-benchmarks';
-export {
   type CompiledStorefrontRelease,
   compileStorefrontWorker,
   StorefrontCompilerError,

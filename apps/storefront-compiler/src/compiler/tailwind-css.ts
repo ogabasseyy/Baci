@@ -15,6 +15,7 @@ import {
   CSS_URL_RE,
   decodeCssEscapes,
   extractMatchedCssUrl,
+  stripCssComments,
   validateAndNormalizeMerchantCss,
 } from './css-safety';
 
@@ -112,7 +113,9 @@ export async function compileStorefrontTailwindCss(
   for (const [cssPath, content] of virtualCssByPath.entries()) {
     const dir = path.posix.dirname(`/virtual/${cssPath}`);
     const deps: string[] = [];
-    for (const match of decodeCssEscapes(content).matchAll(localImportRe)) {
+    for (const match of decodeCssEscapes(stripCssComments(content)).matchAll(
+      localImportRe
+    )) {
       const target = (match[1] ?? match[2] ?? match[3] ?? '').trim();
       if (!target || ALLOWED_ROOT_TAILWIND_STYLESHEETS[target]) continue;
       const resolved = path.posix.normalize(path.posix.join(dir, target));

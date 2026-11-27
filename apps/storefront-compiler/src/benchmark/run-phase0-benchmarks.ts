@@ -63,16 +63,14 @@ export interface Phase0BenchmarkReport {
 function percentile(values: readonly number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(
-    sorted.length - 1,
-    Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)
+  const rawIdx = Math.ceil((p / 100) * sorted.length) - 1;
+  return Number(
+    (sorted[Math.min(sorted.length - 1, Math.max(0, rawIdx))] ?? 0).toFixed(2)
   );
-  return Number((sorted[idx] ?? 0).toFixed(2));
 }
 
 function parseServerTimingSsrMs(headerValue: string | null): number {
-  if (!headerValue) return 0;
-  const match = /ssr;dur=([0-9.]+)/.exec(headerValue);
+  const match = headerValue ? /ssr;dur=([0-9.]+)/.exec(headerValue) : null;
   return match?.[1] ? Number.parseFloat(match[1]) : 0;
 }
 
@@ -86,10 +84,8 @@ export async function runPhase0Benchmarks(options?: {
   const coldCliProcessIterations = options?.coldCliProcessIterations ?? 3;
   const warmSsrIterations = options?.warmSsrIterations ?? 20;
   const productCount = options?.productCount ?? 2000;
-
   const manifest = createOgabasseyStorefrontManifest();
   const manifestJson = JSON.stringify(manifest);
-
   const coldCompileStart = performance.now();
   const initialRelease: CompiledStorefrontRelease =
     await compileStorefrontWorker(manifest);
@@ -101,7 +97,6 @@ export async function runPhase0Benchmarks(options?: {
     coldCliProcessIterations
   );
   const coldProcessP95CompileMs = percentile(coldProcessSamples, 95);
-
   const warmCompileSamples: number[] = [];
   for (let i = 0; i < warmCompileIterations; i++) {
     const start = performance.now();
@@ -127,6 +122,9 @@ export async function runPhase0Benchmarks(options?: {
     originRpcLatencyMs: 0,
   });
 
+  let outboundPayloadsInspected = 0;
+  let outboundPayloadContained = true;
+
   const createBenchmarkIsolate = () =>
     new Miniflare({
       modules: [
@@ -143,16 +141,25 @@ export async function runPhase0Benchmarks(options?: {
         mfReq.headers.forEach((value, key) => {
           copiedHeaders.append(key, value);
         });
-        const webReq = new Request(mfReq.url, {
-          method: mfReq.method,
-          headers: copiedHeaders,
-        });
         const webRes = await outboundPlane.handleOutboundFetch(
-          webReq,
+          new Request(mfReq.url, {
+            method: mfReq.method,
+            headers: copiedHeaders,
+          }),
           trustedParams,
           'split-availability'
         );
         const bodyText = await webRes.text();
+        if (webRes.status === 200) {
+          outboundPayloadsInspected += 1;
+          if (
+            bodyText.includes('costPriceNgn') ||
+            bodyText.includes('supplierInternalCode') ||
+            bodyText.includes('SUP-LAGOS-')
+          ) {
+            outboundPayloadContained = false;
+          }
+        }
         return new MiniflareResponse(bodyText, {
           status: webRes.status,
           headers: Object.fromEntries(webRes.headers.entries()),
@@ -195,6 +202,7 @@ export async function runPhase0Benchmarks(options?: {
       }
       if (
         coldHtml.includes('costPriceNgn') ||
+        coldHtml.includes('supplierInternalCode') ||
         coldHtml.includes('SUP-LAGOS-')
       ) {
         anonCostPriceContained = false;
@@ -247,23 +255,20 @@ export async function runPhase0Benchmarks(options?: {
       directOutboundSpoofRes.headers.get('x-baci-tenant') === merchantId &&
       outboundPlane.telemetry.spoofedTenantIgnoredCount >= 1;
 
-    const writeRates = [0, 2, 12, 60] as const;
     const churnResults: ChurnScenarioMetrics[] = [];
-    for (const rate of writeRates) {
-      churnResults.push(
-        await runGenerationChurnBenchmarkAsync({
-          inventoryWritesPerMinute: rate,
-          strategy: 'single-generation',
-          productCount,
-        })
-      );
-      churnResults.push(
-        await runGenerationChurnBenchmarkAsync({
-          inventoryWritesPerMinute: rate,
-          strategy: 'split-availability',
-          productCount,
-        })
-      );
+    for (const rate of [0, 2, 12, 60] as const) {
+      for (const strategy of [
+        'single-generation',
+        'split-availability',
+      ] as const) {
+        churnResults.push(
+          await runGenerationChurnBenchmarkAsync({
+            inventoryWritesPerMinute: rate,
+            strategy,
+            productCount,
+          })
+        );
+      }
     }
 
     return {
@@ -279,7 +284,10 @@ export async function runPhase0Benchmarks(options?: {
       workerdSsr: {
         routes: routeMetrics,
         true404Verified,
-        anonCostPriceContained,
+        anonCostPriceContained:
+          anonCostPriceContained &&
+          outboundPayloadContained &&
+          outboundPayloadsInspected > 0,
         spoofedTenantBlocked,
       },
       generationChurn: churnResults,

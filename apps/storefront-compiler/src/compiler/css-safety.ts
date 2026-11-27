@@ -3,13 +3,13 @@ import path from 'node:path';
 export const CANDIDATE_TOKEN_RE =
   /(?:[A-Za-z0-9_:/\-.%!#()+*&=$^~]|\[(?:[^[\]\s]|\[[^[\]\s]{0,80}\]){1,100}\])+/g;
 export const CSS_URL_RE =
-  /url\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^'")\s]+))\s*\)/gi;
+  /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^'")\s]+))\s*\)/gi;
 
 const EXTERNAL_CSS_IMPORT_RE =
   /@import\s+(?:url\s*\(\s*)?['"]?(?:https?:|\/\/|data:|file:)/i;
 const FORBIDDEN_TAILWIND_DIRECTIVE_RE = /@(?:plugin|config|source)\b/i;
 const IMPORT_URL_CALL_RE =
-  /@import\s+url\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^'")\s]+))\s*\)/gi;
+  /@import\s+url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^'")\s]+))\s*\)/gi;
 
 export function extractMatchedCssUrl(match: RegExpExecArray): string {
   return match[1] ?? match[2] ?? match[3] ?? '';
@@ -31,6 +31,13 @@ export function assertAllowedAssetUrl(
   }
   throw new Error(
     `Disallowed CSS url("${trimmed}") in "${sourceLabel}"; declare media in manifest.assets`
+  );
+}
+
+export function stripCssComments(rawCss: string): string {
+  return rawCss.replace(
+    /(\\([\s\S])|"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*')|\/\*[\s\S]*?(?:\*\/|$)/g,
+    (_match, kept: string | undefined) => (kept !== undefined ? kept : '/**/')
   );
 }
 
@@ -60,7 +67,8 @@ export function validateAndNormalizeMerchantCss(
   virtualCssPaths: ReadonlySet<string>
 ): string {
   const dir = path.posix.dirname(`/virtual/${filePath}`);
-  const unescaped = decodeCssEscapes(cssContent);
+  const withoutComments = stripCssComments(cssContent);
+  const unescaped = decodeCssEscapes(withoutComments);
 
   const normalizeImportUrls = (input: string, placeholderOnly: boolean) =>
     input.replace(
@@ -93,7 +101,7 @@ export function validateAndNormalizeMerchantCss(
       }
     );
 
-  for (const candidate of [cssContent, unescaped]) {
+  for (const candidate of [withoutComments, unescaped]) {
     if (EXTERNAL_CSS_IMPORT_RE.test(candidate)) {
       throw new Error(`External @import URL forbidden in "${filePath}"`);
     }
@@ -112,5 +120,5 @@ export function validateAndNormalizeMerchantCss(
     }
   }
 
-  return normalizeImportUrls(cssContent, false);
+  return normalizeImportUrls(withoutComments, false);
 }

@@ -5,7 +5,8 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./benchmark": "./src/benchmark/index.ts"
   },
   "scripts": {
     "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --external:esbuild --external:tailwindcss --external:@typescript/typescript6 --outfile=dist/cli.mjs",

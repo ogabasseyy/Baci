@@ -1,15 +1,10 @@
 import { z } from 'zod';
-import {
-  type CspGovernanceSummary,
-  PLATFORM_VETTED_CSP_BY_DIRECTIVE,
-  summarizeCspGovernance,
-} from '../compiler/csp-header';
 
 export {
   type CspGovernanceSummary,
   PLATFORM_VETTED_CSP_BY_DIRECTIVE,
   summarizeCspGovernance,
-};
+} from '../compiler/csp-header';
 
 const utf8ByteLength = (value: string): number =>
   new TextEncoder().encode(value).length;
@@ -232,22 +227,56 @@ export const workerStorefrontManifestSchema = z
         message: 'Total source payload exceeds 1 MiB Worker profile budget',
       });
     }
-    const routePaths = manifest.routes.map((route) => route.path);
-    if (new Set(routePaths).size !== routePaths.length) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Duplicate route path in manifest',
-      });
-    }
+    const seenNormalizedRoutes = new Set<string>();
     for (const route of manifest.routes) {
+      const segments = route.path.split('/').filter(Boolean);
+      const paramNames = new Set<string>();
+      let hasDynamic = false;
+      const normalizedSegs: string[] = [];
+
+      for (const seg of segments) {
+        if (seg.startsWith(':') || seg.startsWith('[') || seg.endsWith(']')) {
+          const paramName = seg.startsWith(':')
+            ? seg.slice(1)
+            : seg.startsWith('[') && seg.endsWith(']')
+              ? seg.slice(1, -1)
+              : '';
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(paramName)) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `Invalid dynamic route segment "${seg}" in "${route.path}"`,
+            });
+          } else if (paramNames.has(paramName)) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `Duplicate parameter "${paramName}" in route "${route.path}"`,
+            });
+          }
+          paramNames.add(paramName);
+          hasDynamic = true;
+          normalizedSegs.push(':');
+        } else if (!/^[a-zA-Z0-9_-]+$/.test(seg)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `Invalid static route segment "${seg}" in "${route.path}"`,
+          });
+        } else {
+          normalizedSegs.push(seg);
+        }
+      }
+
+      const matcherPattern = `/${normalizedSegs.join('/')}`;
+      if (seenNormalizedRoutes.has(matcherPattern)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Duplicate normalized route pattern "${matcherPattern}" for "${route.path}"`,
+        });
+      }
+      seenNormalizedRoutes.add(matcherPattern);
+
       if (
         (route.view === 'collection' || route.view === 'product') &&
-        !route.path
-          .split('/')
-          .some(
-            (seg) =>
-              seg.startsWith(':') || (seg.startsWith('[') && seg.endsWith(']'))
-          )
+        !hasDynamic
       ) {
         ctx.addIssue({
           code: 'custom',

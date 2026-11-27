@@ -60,8 +60,12 @@ if (rootElement && stateScript?.textContent) {
       if (typeof window.open !== 'function') {
         return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'New browsing context unavailable' };
       }
-      window.open(safePath, '_blank', 'noopener,noreferrer');
-      return { status: 'ok', value: { presented: true } };
+      const win = window.open(safePath, '_blank');
+      if (win) {
+        try { win.opener = null; } catch {}
+        return { status: 'ok', value: { presented: true } };
+      }
+      return { status: 'ok', value: { presented: false } };
     }
     if (method === 'checkout.prepare') {
       return { status: 'ok', value: { ready: true } };

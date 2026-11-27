@@ -93,6 +93,22 @@ export function scanManifestSourceSafety(
         }
       }
 
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const tag = node.tagName.getText(sourceFile);
+        if (
+          tag === 'script' ||
+          tag === 'object' ||
+          tag === 'embed' ||
+          tag === 'base'
+        ) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DANGEROUS_INNER_HTML',
+            detail: `Executable or document-base JSX element "<${tag}>" is forbidden`,
+          });
+        }
+      }
+
       if (ts.isJsxAttribute(node)) {
         classifyMemberName(
           file.path,
@@ -133,7 +149,8 @@ export function scanManifestSourceSafety(
         if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) {
           const isBenignObjectDataKey =
             ts.isPropertyAssignment(node) &&
-            (node.name.text === 'constructor' ||
+            (node.name.text === 'assign' ||
+              node.name.text === 'constructor' ||
               node.name.text === 'cookie' ||
               node.name.text === 'serviceWorker');
           if (!isBenignObjectDataKey) {
@@ -179,7 +196,8 @@ export function scanManifestSourceSafety(
           file.path,
           node.name.text,
           violations,
-          ts.isPropertyAccessExpression(node) ? node.expression : undefined
+          ts.isPropertyAccessExpression(node) ? node.expression : undefined,
+          ts.isPropertyAccessExpression(node) ? node : undefined
         );
         if (
           ts.isPropertyAccessExpression(node) &&
@@ -198,7 +216,13 @@ export function scanManifestSourceSafety(
         if (!ts.isNumericLiteral(node.argumentExpression)) {
           const folded = resolveStaticString(node.argumentExpression);
           if (folded !== null) {
-            classifyMemberName(file.path, folded, violations, node.expression);
+            classifyMemberName(
+              file.path,
+              folded,
+              violations,
+              node.expression,
+              node
+            );
             if (
               SENSITIVE_GLOBAL_ROOTS.has(folded) &&
               !isAllowedSensitiveRootPosition(node)

@@ -239,7 +239,9 @@ describe('Muse PR #4493 security, routing, CSP, and malformed-URI regressions', 
         "connect-src 'self' https://api.usebaci.com https://www.google-analytics.com"
       );
       expect(csp).toContain("worker-src 'none'");
-      expect(csp).toContain("form-action 'self' https://*.usebaci.com");
+      expect(csp).toContain(
+        "form-action 'self' https://ogabassey.usebaci.com https://usebaci.com"
+      );
 
       // Editorial route renders 200 without upstream catalog calls.
       const editorialRes = await mf.dispatchFetch(

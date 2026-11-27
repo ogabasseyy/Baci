@@ -99,10 +99,7 @@ export default {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Method Not Allowed', {
         status: 405,
-        headers: {
-          Allow: 'GET, HEAD',
-          'content-security-policy': CSP_HEADER,
-        },
+        headers: { Allow: 'GET, HEAD', 'content-security-policy': CSP_HEADER },
       });
     }
 
@@ -113,11 +110,7 @@ export default {
     if (matchedRoute && matchedRoute.view === 'bad_request') {
       return new Response('Bad Request', {
         status: 400,
-        headers: {
-          'content-type': 'text/plain; charset=utf-8',
-          'content-security-policy': CSP_HEADER,
-          'x-robots-tag': 'noindex, nofollow',
-        },
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'content-security-policy': CSP_HEADER, 'x-robots-tag': 'noindex, nofollow' },
       });
     }
     let status = 200;
@@ -221,16 +214,21 @@ export default {
     };
 
     const renderStart = performance.now();
-    const appHtml =
-      status === 502
-        ? \`<main class="storefront-shell min-h-screen p-8 max-w-3xl mx-auto"><h1>\${escapeHtmlAttr(title)}</h1><p>Please try again in a moment.</p></main>\`
-        : renderToString(
-            createElement(
-              CommerceProvider,
-              { commerce: SSR_COMMERCE, assets: ASSETS_MAP },
-              createElement(StorefrontApp, renderProps)
-            )
-          );
+    let appHtml = '';
+    if (status === 502) {
+      appHtml = \`<main class="storefront-shell min-h-screen p-8 max-w-3xl mx-auto"><h1>\${escapeHtmlAttr(title)}</h1><p>Please try again in a moment.</p></main>\`;
+    } else {
+      try {
+        appHtml = renderToString(
+          createElement(CommerceProvider, { commerce: SSR_COMMERCE, assets: ASSETS_MAP }, createElement(StorefrontApp, renderProps))
+        );
+      } catch {
+        status = 500;
+        view = 'error';
+        title = 'Storefront Render Error';
+        appHtml = \`<main class="storefront-shell min-h-screen p-8 max-w-3xl mx-auto"><h1>\${escapeHtmlAttr(title)}</h1><p>Something went wrong while rendering this page.</p></main>\`;
+      }
+    }
     const renderMs = performance.now() - renderStart;
 
     const jsonLd =
@@ -256,7 +254,7 @@ export default {
         : '<meta name="robots" content="index, follow" />';
 
     const hydrationBootstrap =
-      status === 502
+      status >= 500
         ? ''
         : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;
 

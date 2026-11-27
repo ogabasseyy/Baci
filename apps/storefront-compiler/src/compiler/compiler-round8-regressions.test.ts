@@ -94,11 +94,10 @@ describe('Round-8 Codex DOM attribute sinks, navigation safety/shapes, CSS comme
         assign: (u: string) => assignedUrls.push(u),
       },
       parent: null as unknown,
-      open: (u: string, _target: string, features: string): null => {
-        expect(features).toBe('noopener,noreferrer');
+      open: (u: string, target: string) => {
+        expect(target).toBe('_blank');
         openedUrls.push(u);
-        // WHATWG HTML spec: window.open with noopener always returns null even on success.
-        return null;
+        return { opener: {} };
       },
     };
     windowMock.parent = windowMock;

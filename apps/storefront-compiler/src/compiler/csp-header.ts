@@ -79,19 +79,13 @@ export function buildContentSecurityPolicyHeader(
   manifest: WorkerStorefrontManifest
 ): string {
   const { scriptOrigins, connectOrigins, imgOrigins } = manifest.cspAllowlist;
-  const scriptSrc = ["'self'", ...scriptOrigins].join(' ');
-  const imgSrc = [
-    "'self'",
-    'https://*.supabase.co',
-    'https://cdn.usebaci.com',
-    'data:',
-    ...imgOrigins,
-  ].join(' ');
-  const connectSrc = [
-    "'self'",
-    'https://api.usebaci.com',
-    ...connectOrigins,
-  ].join(' ');
+  const scriptSrc = Array.from(new Set(["'self'", ...scriptOrigins])).join(' ');
+  const imgSrc = Array.from(
+    new Set(["'self'", 'https://cdn.usebaci.com', 'data:', ...imgOrigins])
+  ).join(' ');
+  const connectSrc = Array.from(
+    new Set(["'self'", 'https://api.usebaci.com', ...connectOrigins])
+  ).join(' ');
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
@@ -99,7 +93,7 @@ export function buildContentSecurityPolicyHeader(
     `img-src ${imgSrc}`,
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
-    "form-action 'self' https://*.usebaci.com",
+    `form-action 'self' https://${manifest.merchantSlug}.usebaci.com https://usebaci.com`,
     'frame-ancestors https://usebaci.com',
     "worker-src 'none'",
     "object-src 'none'",

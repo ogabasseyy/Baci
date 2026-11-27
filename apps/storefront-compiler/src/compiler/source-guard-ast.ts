@@ -46,11 +46,33 @@ function isDocumentReceiver(expr: ts.Expression): boolean {
   return false;
 }
 
+function isSafeStaticObjectLiteral(expr: ts.Expression): boolean {
+  return (
+    ts.isObjectLiteralExpression(expr) &&
+    expr.properties.every(
+      (p) => ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)
+    )
+  );
+}
+
+function isAllowedObjectAssignCall(memberAccessNode?: ts.Node): boolean {
+  if (!memberAccessNode?.parent) return false;
+  const call = memberAccessNode.parent;
+  if (!ts.isCallExpression(call) || call.expression !== memberAccessNode) {
+    return false;
+  }
+  return (
+    call.arguments.length >= 1 &&
+    call.arguments.every((arg) => isSafeStaticObjectLiteral(arg))
+  );
+}
+
 export function classifyMemberName(
   filePath: string,
   memberName: string,
   violations: SourceSafetyViolation[],
-  receiver?: ts.Expression
+  receiver?: ts.Expression,
+  memberAccessNode?: ts.Node
 ): void {
   const lowerMember = memberName.toLowerCase();
   if (
@@ -65,7 +87,18 @@ export function classifyMemberName(
       detail: `Forbidden raw HTML or React element sink "${memberName}"`,
     });
   } else if (
+    memberName === 'assign' &&
+    !isAllowedObjectAssignCall(memberAccessNode)
+  ) {
+    violations.push({
+      filePath,
+      rule: 'DANGEROUS_INNER_HTML',
+      detail:
+        'Unbounded .assign() mutation or navigation is forbidden; use object spread or SDK navigation',
+    });
+  } else if (
     memberName === 'createElement' ||
+    memberName === 'createElementNS' ||
     memberName === 'cloneElement' ||
     memberName === 'createFactory'
   ) {

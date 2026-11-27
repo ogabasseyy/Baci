@@ -7,6 +7,7 @@ import {
   type ChatFollowUpIntakeFailure,
   type DueChatFollowUpReminder,
   dueChatFollowUpReminderListSchema,
+  dueChatFollowUpReminderSchema,
 } from '@/schemas/chat-follow-up-reminder';
 import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
 
@@ -55,7 +56,16 @@ export async function listDueChatFollowUpReminders(
     if (error) return { ok: false, code: 'unavailable' };
     const parsed = dueChatFollowUpReminderListSchema.safeParse(data);
     if (!parsed.success) return { ok: false, code: 'unavailable' };
-    return { ok: true, reminders: parsed.data };
+    // Row by row: the batch spans stores, so one unreadable row is skipped.
+    const reminders = parsed.data.flatMap((row) => {
+      const checked = dueChatFollowUpReminderSchema.safeParse(row);
+      return checked.success ? [checked.data] : [];
+    });
+    const skipped = parsed.data.length - reminders.length;
+    if (skipped > 0) {
+      console.warn('Chat follow-up reminders could not be read', { skipped });
+    }
+    return { ok: true, reminders };
   } catch {
     return { ok: false, code: 'unavailable' };
   }

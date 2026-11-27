@@ -12,9 +12,8 @@ export const dueChatFollowUpReminderSchema = z.object({
   customer_name: z.string().max(80),
 });
 
-export const dueChatFollowUpReminderListSchema = z
-  .array(dueChatFollowUpReminderSchema)
-  .max(50);
+/** The listed rows, each still unchecked: one bad row must not reject the rest. */
+export const dueChatFollowUpReminderListSchema = z.array(z.unknown()).max(50);
 
 export type DueChatFollowUpReminder = z.infer<
   typeof dueChatFollowUpReminderSchema

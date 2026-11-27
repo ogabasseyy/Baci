@@ -12,18 +12,19 @@ const input = {
 };
 
 function fakeClient(errors: { remove?: unknown; upsert?: unknown } = {}) {
-  const not = vi.fn(async () => ({ error: errors.remove ?? null }));
+  const neq = vi.fn(async () => ({ error: errors.remove ?? null }));
+  const not = vi.fn(() => ({ neq }));
   const second = vi.fn(() => ({ not }));
   const first = vi.fn(() => ({ eq: second }));
   const remove = vi.fn(() => ({ eq: first }));
   const upsert = vi.fn(async () => ({ error: errors.upsert ?? null }));
   const from = vi.fn(() => ({ delete: remove, upsert }));
-  return { client: { from } as never, from, first, second, not, upsert };
+  return { client: { from } as never, from, first, second, not, neq, upsert };
 }
 
 describe('holdUnconfirmedChatFollowUpReminder', () => {
   it('drops only a handled reminder, then records the time without replacing a pending one', async () => {
-    const { client, from, first, second, not, upsert } = fakeClient();
+    const { client, from, first, second, not, neq, upsert } = fakeClient();
 
     await expect(
       holdUnconfirmedChatFollowUpReminder(client, input)
@@ -33,6 +34,8 @@ describe('holdUnconfirmedChatFollowUpReminder', () => {
     expect(first).toHaveBeenCalledWith('merchant_id', input.merchantId);
     expect(second).toHaveBeenCalledWith('conversation_id', 7);
     expect(not).toHaveBeenCalledWith('processed_at', 'is', null);
+    // A handled reminder for this very time keeps its history.
+    expect(neq).toHaveBeenCalledWith('due_at', input.dueAt);
     expect(upsert).toHaveBeenCalledWith(
       {
         merchant_id: input.merchantId,

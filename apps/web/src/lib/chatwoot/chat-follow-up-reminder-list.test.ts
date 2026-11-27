@@ -12,9 +12,10 @@ import {
 } from './chat-follow-up-reminder-list';
 
 const SECRET = 'synthetic-chat-event-secret-0123456789abcdef';
-const env = {
+const env: NodeJS.ProcessEnv = {
+  NODE_ENV: 'test',
   EKAETTE_CHAT_EVENT_RPC_SECRET: SECRET,
-} as unknown as NodeJS.ProcessEnv;
+};
 const MERCHANT = 'c4a70000-0000-4000-8000-0000000000b1';
 const REMINDER = '5f2d3c1e-8a47-4b69-9c0e-1a2b3c4d5e6f';
 
@@ -55,7 +56,7 @@ describe('listDueChatFollowUpReminders', () => {
 
   it('does nothing without the server secret', async () => {
     await expect(
-      listDueChatFollowUpReminders({} as NodeJS.ProcessEnv)
+      listDueChatFollowUpReminders({ NODE_ENV: 'test' })
     ).resolves.toEqual({ ok: false, code: 'not_configured' });
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
@@ -68,9 +69,30 @@ describe('listDueChatFollowUpReminders', () => {
     });
   });
 
-  it('refuses a malformed answer', async () => {
+  it('bugfix: one unreadable row does not hold back the other stores', async () => {
+    const good = {
+      reminder_id: REMINDER,
+      merchant_id: MERCHANT,
+      conversation_id: 7,
+      due_at: '2026-11-25T09:00:00+00:00',
+      customer_name: 'Ada',
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     mocks.rpc.mockResolvedValue({
-      data: [{ reminder_id: 'nope' }],
+      data: [{ ...good, conversation_id: 2 ** 60 }, good],
+      error: null,
+    });
+
+    await expect(listDueChatFollowUpReminders(env)).resolves.toEqual({
+      ok: true,
+      reminders: [good],
+    });
+    expect(warn).toHaveBeenCalledWith(expect.any(String), { skipped: 1 });
+  });
+
+  it('refuses an answer that is not a list', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: { reminder_id: 'nope' },
       error: null,
     });
     await expect(listDueChatFollowUpReminders(env)).resolves.toEqual({

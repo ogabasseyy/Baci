@@ -50,8 +50,15 @@ INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, du
   ('c4a73000-0000-4000-8000-0000000000d5', 'c4a73000-0000-4000-8000-0000000000b1', 205, now() - interval '8 days', 'Ancient', NULL, now() - interval '9 days');
 
 DO $$
-DECLARE v_ids uuid[];
+DECLARE v_ids uuid[]; v_row record; v_at bigint := extract(epoch FROM now())::bigint;
 BEGIN
+  -- The row exactly as the function returns it, not as the table holds it.
+  SELECT * INTO v_row FROM public.list_due_chat_follow_up_reminders(
+    pg_temp.list_proof('synthetic-chat-event-secret-0123456789abcdef', v_at, 25), v_at, 25);
+  IF ROW(v_row.reminder_id, v_row.merchant_id, v_row.conversation_id, v_row.due_at, v_row.customer_name)
+    IS DISTINCT FROM ROW('c4a73000-0000-4000-8000-0000000000d1'::uuid, 'c4a73000-0000-4000-8000-0000000000b1'::uuid, 201::bigint, now() - interval '1 hour', 'Ada'::text) THEN
+    RAISE EXCEPTION 'the list returned a wrong row: %', v_row;
+  END IF;
   SELECT array_agg(id ORDER BY id) INTO v_ids FROM pg_temp.due();
   IF v_ids IS DISTINCT FROM ARRAY['c4a73000-0000-4000-8000-0000000000d1'::uuid] THEN
     RAISE EXCEPTION 'listed the wrong reminders (only the one due in the last day and unhandled belongs): %', v_ids;
@@ -77,7 +84,7 @@ DECLARE
 BEGIN
   SELECT count(*) INTO v_notifications FROM public.notifications;
   v := pg_temp.take(d1);
-  IF v <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'first take: %', v; END IF;
+  IF v IS DISTINCT FROM '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'first take: %', v; END IF;
   SELECT * INTO v_event FROM public.chat_message_events WHERE merchant_id = m AND event_key = 'fu-' || replace(d1::text, '-', '');
   IF v_event.event_key IS NULL OR v_event.kind <> 'follow_up' OR v_event.outcome <> 'notified'
     OR v_event.conversation_id <> 201 OR v_event.notification_id IS NOT NULL THEN
@@ -87,22 +94,27 @@ BEGIN
   IF (SELECT processed_at FROM public.chat_follow_up_reminders WHERE id = d1) IS NULL THEN RAISE EXCEPTION 'the taken reminder is not marked handled'; END IF;
   -- Never twice: the second take is ignored, nothing more is recorded, and it is no longer listed.
   v := pg_temp.take(d1);
-  IF v <> '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'second take: %', v; END IF;
+  IF v IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'second take: %', v; END IF;
   IF (SELECT count(*) FROM public.chat_message_events WHERE merchant_id = m AND kind = 'follow_up') <> 1 THEN RAISE EXCEPTION 'a reminder recorded two events'; END IF;
   IF EXISTS (SELECT 1 FROM pg_temp.due()) THEN RAISE EXCEPTION 'a handled reminder is still listed'; END IF;
 
   -- Not due yet, past the 24-hour window, or already handled: ignored and left as they were.
-  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d3') <> '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a future reminder was taken'; END IF;
-  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d2') <> '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a reminder past the window was taken'; END IF;
-  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d4') <> '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a handled reminder was taken again'; END IF;
+  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d3') IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a future reminder was taken'; END IF;
+  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d2') IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a reminder past the window was taken'; END IF;
+  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d4') IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a handled reminder was taken again'; END IF;
   IF EXISTS (SELECT 1 FROM public.chat_follow_up_reminders WHERE id IN ('c4a73000-0000-4000-8000-0000000000d2', 'c4a73000-0000-4000-8000-0000000000d3') AND processed_at IS NOT NULL) THEN
     RAISE EXCEPTION 'an ignored reminder was marked handled';
   END IF;
-  -- Another store's id cannot take this store's reminder.
-  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d3', p_merchant => 'c4a73000-0000-4000-8000-0000000000b2') <> '{"outcome":"ignored"}'::jsonb THEN
+  IF (SELECT count(*) FROM public.chat_message_events WHERE merchant_id = m AND kind = 'follow_up') <> 1 THEN RAISE EXCEPTION 'an ignored take recorded an event'; END IF;
+  -- Another store's id cannot take this store's reminder, even a due one.
+  INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, due_at)
+  VALUES ('c4a73000-0000-4000-8000-0000000000d8', m, 208, now() - interval '5 minutes');
+  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d8', p_merchant => 'c4a73000-0000-4000-8000-0000000000b2') IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN
     RAISE EXCEPTION 'a reminder was taken through another store';
   END IF;
-  IF (SELECT count(*) FROM public.chat_message_events WHERE merchant_id = m AND kind = 'follow_up') <> 1 THEN RAISE EXCEPTION 'an ignored take recorded an event'; END IF;
+  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000d8') IS DISTINCT FROM '{"outcome":"notified","take":1}'::jsonb THEN
+    RAISE EXCEPTION 'the owning store could not take its due reminder';
+  END IF;
 END $$;
 
 -- A reminder the server found stale (chat finished, follow-up changed) is consumed without an event.
@@ -112,13 +124,24 @@ INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, du
 DO $$
 DECLARE d6 uuid := 'c4a73000-0000-4000-8000-0000000000d6'; d7 uuid := 'c4a73000-0000-4000-8000-0000000000d7';
 BEGIN
-  IF pg_temp.take(d6, p_send => false) <> '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'stale take did not answer ignored'; END IF;
+  IF pg_temp.take(d6, p_send => false) IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'stale take did not answer ignored'; END IF;
   IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = 'fu-' || replace(d6::text, '-', '')) THEN RAISE EXCEPTION 'a stale reminder recorded an event'; END IF;
-  IF pg_temp.take(d6) <> '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a consumed stale reminder was taken again'; END IF;
-  -- A follow-up replaced after the sweep listed it: the old id is ignored, the new one is a new reminder.
-  UPDATE public.chat_follow_up_reminders SET id = gen_random_uuid(), due_at = now() + interval '2 days', processed_at = NULL WHERE id = d7;
-  IF pg_temp.take(d7) <> '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a replaced reminder was sent under its old id'; END IF;
+  IF pg_temp.take(d6) IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a consumed stale reminder was taken again'; END IF;
+END $$;
+
+-- A follow-up moved by the team after the sweep listed it: the old id is ignored, the new one is a new reminder.
+SELECT pg_temp.as_user('c4a73000-0000-4000-8000-0000000000a1');
+SET LOCAL ROLE authenticated;
+UPDATE public.chat_follow_up_reminders SET due_at = now() - interval '5 minutes' WHERE conversation_id = 207;
+RESET ROLE;
+DO $$
+DECLARE d7 uuid := 'c4a73000-0000-4000-8000-0000000000d7';
+BEGIN
+  IF pg_temp.take(d7) IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a replaced reminder was sent under its old id'; END IF;
   IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = 'fu-' || replace(d7::text, '-', '')) THEN RAISE EXCEPTION 'a replaced reminder recorded an event'; END IF;
+  IF pg_temp.take((SELECT id FROM public.chat_follow_up_reminders WHERE conversation_id = 207)) IS DISTINCT FROM '{"outcome":"notified","take":1}'::jsonb THEN
+    RAISE EXCEPTION 'the moved reminder could not be taken';
+  END IF;
 END $$;
 
 -- The alert level: "handover only" does NOT mute a reminder (the team asked for it), "off" does.
@@ -132,11 +155,11 @@ DO $$
 DECLARE v jsonb;
 BEGIN
   v := pg_temp.take('c4a73000-0000-4000-8000-0000000000e1');
-  IF v <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'handover-only level muted a reminder: %', v; END IF;
+  IF v IS DISTINCT FROM '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'handover-only level muted a reminder: %', v; END IF;
   UPDATE public.notification_preferences SET chat_message_notifications = 'off' WHERE merchant_id = 'c4a73000-0000-4000-8000-0000000000b1';
   v := pg_temp.take('c4a73000-0000-4000-8000-0000000000e2');
-  IF v <> '{"outcome":"muted"}'::jsonb THEN RAISE EXCEPTION 'off level did not mute: %', v; END IF;
-  IF (SELECT outcome FROM public.chat_message_events WHERE event_key = 'fu-' || replace('c4a73000-0000-4000-8000-0000000000e2'::text, '-', '')) <> 'muted' THEN
+  IF v IS DISTINCT FROM '{"outcome":"muted"}'::jsonb THEN RAISE EXCEPTION 'off level did not mute: %', v; END IF;
+  IF (SELECT outcome FROM public.chat_message_events WHERE event_key = 'fu-' || replace('c4a73000-0000-4000-8000-0000000000e2'::text, '-', '')) IS DISTINCT FROM 'muted' THEN
     RAISE EXCEPTION 'the muted reminder was not recorded as muted';
   END IF;
   IF (SELECT processed_at FROM public.chat_follow_up_reminders WHERE id = 'c4a73000-0000-4000-8000-0000000000e2') IS NULL THEN
@@ -144,7 +167,7 @@ BEGIN
   END IF;
   UPDATE public.notification_preferences SET chat_message_notifications = 'all' WHERE merchant_id = 'c4a73000-0000-4000-8000-0000000000b1';
   v := pg_temp.take('c4a73000-0000-4000-8000-0000000000e3');
-  IF v <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'the all level did not notify: %', v; END IF;
+  IF v IS DISTINCT FROM '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'the all level did not notify: %', v; END IF;
 END $$;
 
 -- The reminder event is pushed through the existing proof-and-claim wrappers, once.
@@ -210,7 +233,7 @@ INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, du
   ('c4a73000-0000-4000-8000-0000000000e4', 'c4a73000-0000-4000-8000-0000000000b1', 304, now() - interval '10 minutes');
 DO $$
 BEGIN
-  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000e4') <> '{"outcome":"notified","take":1}'::jsonb THEN
+  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000e4') IS DISTINCT FROM '{"outcome":"notified","take":1}'::jsonb THEN
     RAISE EXCEPTION 'the cleanup take did not notify';
   END IF;
   IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = 'evt-fu-expired') THEN
@@ -224,7 +247,7 @@ END $$;
 -- Deleting the store removes its reminders.
 DO $$
 BEGIN
-  IF (SELECT confdeltype FROM pg_constraint WHERE conrelid = 'public.chat_follow_up_reminders'::regclass AND contype = 'f') <> 'c' THEN
+  IF (SELECT confdeltype FROM pg_constraint WHERE conrelid = 'public.chat_follow_up_reminders'::regclass AND conname = 'chat_follow_up_reminders_merchant_id_fkey') IS DISTINCT FROM 'c' THEN
     RAISE EXCEPTION 'reminders do not cascade from the merchant';
   END IF;
 END $$;
@@ -236,7 +259,7 @@ INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, du
   ('c4a73000-0000-4000-8000-0000000000f2', 'c4a73000-0000-4000-8000-0000000000b1', 502, now() - interval '4 hours'),
   ('c4a73000-0000-4000-8000-0000000000f3', 'c4a73000-0000-4000-8000-0000000000b1', 503, now() - interval '3 hours');
 DO $$
-DECLARE v_first uuid[]; v_second uuid[]; v_third bigint[];
+DECLARE v_first uuid[]; v_second uuid[];
 BEGIN
   SELECT array_agg(id ORDER BY due_at) INTO v_first FROM pg_temp.due(2);
   IF v_first IS DISTINCT FROM ARRAY['c4a73000-0000-4000-8000-0000000000f1'::uuid, 'c4a73000-0000-4000-8000-0000000000f2'::uuid] THEN
@@ -251,10 +274,17 @@ BEGIN
     ('c4a73000-0000-4000-8000-0000000000f1', 'c4a73000-0000-4000-8000-0000000000f2', 'c4a73000-0000-4000-8000-0000000000f3') AND last_listed_at IS NOT NULL) <> 3 THEN
     RAISE EXCEPTION 'looked-at reminders were not stamped';
   END IF;
-  -- Replacing a follow-up through the app starts it afresh (unlisted, unhandled), as the app's upsert does.
-  UPDATE public.chat_follow_up_reminders SET id = gen_random_uuid(), processed_at = NULL, last_listed_at = NULL WHERE conversation_id = 501;
-  SELECT array_agg(conversation_id ORDER BY due_at) INTO v_third FROM pg_temp.due(1);
-  IF v_third IS DISTINCT FROM ARRAY[501::bigint] THEN RAISE EXCEPTION 'a replaced reminder did not go to the front: %', v_third; END IF;
+END $$;
+
+-- Moving a follow-up through the app starts it afresh: the database clears what the sweep recorded.
+SELECT pg_temp.as_user('c4a73000-0000-4000-8000-0000000000a1');
+SET LOCAL ROLE authenticated;
+UPDATE public.chat_follow_up_reminders SET due_at = now() - interval '5 minutes' WHERE conversation_id = 501;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT array_agg(conversation_id) FROM pg_temp.due(1)) IS DISTINCT FROM ARRAY[501::bigint] THEN
+    RAISE EXCEPTION 'a moved reminder did not go to the front';
+  END IF;
 END $$;
 
 ROLLBACK;

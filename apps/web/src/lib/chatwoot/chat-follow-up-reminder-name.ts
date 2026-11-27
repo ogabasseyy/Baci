@@ -21,5 +21,9 @@ export function reminderCustomerName(name: string | null | undefined): string {
   ) {
     return '';
   }
-  return trimmed.length > 80 ? trimmed.slice(0, 80).trim() : trimmed;
+  // By character, as the database counts: a code unit cut can split one in two.
+  const characters = Array.from(trimmed);
+  return characters.length > 80
+    ? characters.slice(0, 80).join('').trim()
+    : trimmed;
 }

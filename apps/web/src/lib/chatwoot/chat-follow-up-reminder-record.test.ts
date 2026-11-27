@@ -12,9 +12,10 @@ import {
 } from './chat-follow-up-reminder-record';
 
 const SECRET = 'synthetic-chat-event-secret-0123456789abcdef';
-const env = {
+const env: NodeJS.ProcessEnv = {
+  NODE_ENV: 'test',
   EKAETTE_CHAT_EVENT_RPC_SECRET: SECRET,
-} as unknown as NodeJS.ProcessEnv;
+};
 const MERCHANT = 'c4a70000-0000-4000-8000-0000000000b1';
 const REMINDER = '5f2d3c1e-8a47-4b69-9c0e-1a2b3c4d5e6f';
 
@@ -80,7 +81,7 @@ describe('recordChatFollowUpReminder', () => {
 
   it('does nothing without the server secret', async () => {
     await expect(
-      recordChatFollowUpReminder(input, {} as NodeJS.ProcessEnv)
+      recordChatFollowUpReminder(input, { NODE_ENV: 'test' })
     ).resolves.toEqual({ ok: false, code: 'not_configured' });
     expect(mocks.rpc).not.toHaveBeenCalled();
   });

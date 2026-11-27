@@ -39,10 +39,12 @@ BEGIN
     OR has_function_privilege('service_role', 'private.chat_event_require_proof(text,text,bigint)', 'EXECUTE') THEN
     RAISE EXCEPTION 'the proof helper is reachable from an API role';
   END IF;
-  -- The event kind check knows the new kind and still refuses unknown ones.
-  IF pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'chat_message_events_kind_check')) NOT LIKE '%follow_up%' THEN
-    RAISE EXCEPTION 'event kind check does not allow follow_up';
-  END IF;
+  -- The event kind check still refuses unknown kinds (the sweep suite inserts follow_up ones).
+  BEGIN
+    INSERT INTO public.chat_message_events(merchant_id, event_key, conversation_id, outcome, kind)
+    VALUES ('c4a73000-0000-4000-8000-0000000000b1', 'evt-unknown-kind', 1, 'notified', 'something_else');
+    RAISE EXCEPTION 'an unknown event kind was accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
 END $$;
 
 -- Proof vectors the Node builders are tested against (chat-follow-up-reminder-intake.test.ts).
@@ -97,6 +99,11 @@ BEGIN
   BEGIN
     INSERT INTO public.chat_follow_up_reminders(merchant_id, conversation_id, due_at) VALUES (m, 0, now() + interval '1 day');
     RAISE EXCEPTION 'a zero chat id was accepted';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  -- A chat id the web server cannot hold exactly.
+  BEGIN
+    INSERT INTO public.chat_follow_up_reminders(merchant_id, conversation_id, due_at) VALUES (m, 9007199254740992, now() + interval '1 day');
+    RAISE EXCEPTION 'an unreadable chat id was accepted';
   EXCEPTION WHEN check_violation THEN NULL; END;
   DELETE FROM public.chat_follow_up_reminders WHERE merchant_id = m AND conversation_id = 100;
   IF EXISTS (SELECT 1 FROM public.chat_follow_up_reminders WHERE conversation_id = 100) THEN RAISE EXCEPTION 'the owner could not clear a reminder'; END IF;

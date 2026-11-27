@@ -215,6 +215,10 @@ BEGIN
     AND r.processed_at IS NULL
     AND r.due_at <= pg_catalog.now()
     AND r.due_at > pg_catalog.now() - interval '24 hours'
+    -- The retry spacing of the list, held here too: a sweep that listed before
+    -- another one's put back must not use up the next take at once.
+    AND (r.attempts = 0 OR r.updated_at <= pg_catalog.now()
+      - CASE WHEN r.attempts = 1 THEN interval '10 minutes' ELSE interval '2 hours' END)
   RETURNING r.* INTO v_row;
   IF NOT FOUND OR NOT p_send THEN
     RETURN pg_catalog.jsonb_build_object('outcome', 'ignored');

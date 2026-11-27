@@ -46,7 +46,7 @@ DECLARE r uuid := 'c4a73000-0000-4000-8000-000000000101'; claim uuid := 'c4a7300
   key text := 'fu-' || replace('c4a73000-0000-4000-8000-000000000101', '-', '');
 BEGIN
   IF pg_temp.release(r) THEN RAISE EXCEPTION 'a reminder that was never taken was released'; END IF;
-  IF pg_temp.take(r) <> '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'first take refused'; END IF;
+  IF pg_temp.take(r) IS DISTINCT FROM '{"outcome":"notified","take":1}'::jsonb THEN RAISE EXCEPTION 'first take refused'; END IF;
   -- Another store's id releases nothing.
   IF pg_temp.release(r, 'c4a73000-0000-4000-8000-0000000000b2') THEN RAISE EXCEPTION 'released through another store'; END IF;
   -- Claimed but never dispatched: the server may still release it.
@@ -56,16 +56,18 @@ BEGIN
   IF NOT pg_temp.release(r) THEN RAISE EXCEPTION 'an already put back reminder was reported as lost'; END IF;
   IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = key) THEN RAISE EXCEPTION 'the released event was kept'; END IF;
   -- Retries are spaced: ten minutes after the first take, two hours after the second.
+  -- The take itself holds to that, for a sweep that listed before the put back.
+  IF pg_temp.take(r) IS DISTINCT FROM '{"outcome":"ignored"}'::jsonb THEN RAISE EXCEPTION 'a first retry was taken at once'; END IF;
   IF EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a first retry did not wait'; END IF;
   PERFORM pg_temp.age_take(r, interval '11 minutes');
   IF NOT EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a released reminder is not listed again'; END IF;
-  IF pg_temp.take(r) <> '{"outcome":"notified","take":2}'::jsonb THEN RAISE EXCEPTION 'second take refused'; END IF;
+  IF pg_temp.take(r) IS DISTINCT FROM '{"outcome":"notified","take":2}'::jsonb THEN RAISE EXCEPTION 'second take refused'; END IF;
   IF NOT pg_temp.release(r) THEN RAISE EXCEPTION 'second release refused'; END IF;
   PERFORM pg_temp.age_take(r, interval '11 minutes');
   IF EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a second retry did not wait two hours'; END IF;
   PERFORM pg_temp.age_take(r, interval '121 minutes');
   IF NOT EXISTS (SELECT 1 FROM pg_temp.due() WHERE id = r) THEN RAISE EXCEPTION 'a second retry never came'; END IF;
-  IF pg_temp.take(r) <> '{"outcome":"notified","take":3}'::jsonb THEN RAISE EXCEPTION 'third take refused'; END IF;
+  IF pg_temp.take(r) IS DISTINCT FROM '{"outcome":"notified","take":3}'::jsonb THEN RAISE EXCEPTION 'third take refused'; END IF;
   IF pg_temp.release(r) THEN RAISE EXCEPTION 'a fourth take was allowed'; END IF;
 END $$;
 
@@ -117,7 +119,7 @@ BEGIN
   PERFORM pg_temp.take(r);
   PERFORM pg_temp.age_take(r, interval '11 minutes');
   PERFORM pg_temp.due(); -- the list's own recovery puts take 1 back
-  IF pg_temp.take(r) <> '{"outcome":"notified","take":2}'::jsonb THEN RAISE EXCEPTION 'take after recovery refused'; END IF;
+  IF pg_temp.take(r) IS DISTINCT FROM '{"outcome":"notified","take":2}'::jsonb THEN RAISE EXCEPTION 'take after recovery refused'; END IF;
   PERFORM public.chat_event_claim_push(pg_temp.push_proof(key, claim, 'claim'), extract(epoch FROM now())::bigint, 'c4a73000-0000-4000-8000-0000000000b1', key, claim);
   IF pg_temp.release(r, p_take => 1) THEN RAISE EXCEPTION 'an earlier take released a newer one'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = key AND push_claim = claim) THEN RAISE EXCEPTION 'the newer event was removed'; END IF;

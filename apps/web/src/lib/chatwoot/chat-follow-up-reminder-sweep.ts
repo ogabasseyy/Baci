@@ -144,6 +144,8 @@ export async function sweepChatFollowUpReminders(
   | { ok: true; summary: ChatFollowUpSweepSummary }
   | { ok: false; code: 'not_configured' | 'unavailable' }
 > {
+  // The budget covers the listing too: it is part of the route's 60 seconds.
+  const startedAt = deps.now();
   const listed = await deps.list();
   if (!listed.ok) return listed;
 
@@ -156,7 +158,6 @@ export async function sweepChatFollowUpReminders(
     retrying: 0,
     failed: 0,
   };
-  const startedAt = deps.now();
   const start = Math.floor(deps.random() * listed.reminders.length);
   for (const reminder of [
     ...listed.reminders.slice(start),

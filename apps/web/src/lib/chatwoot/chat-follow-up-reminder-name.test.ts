@@ -42,6 +42,12 @@ describe('reminderCustomerName', () => {
     expect(reminderCustomerName('Mary-Jane-42')).toBe('');
   });
 
+  it('bugfix: cuts between characters, never through one', () => {
+    expect(reminderCustomerName(`${'A'.repeat(79)}𠮷B`)).toBe(
+      `${'A'.repeat(79)}𠮷`
+    );
+  });
+
   it('cuts a very long name to the stored limit', () => {
     expect(reminderCustomerName('A'.repeat(200))).toHaveLength(80);
   });

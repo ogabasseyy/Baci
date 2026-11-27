@@ -27,7 +27,8 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.chat_follow_up_reminders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
-  conversation_id bigint NOT NULL CHECK (conversation_id > 0),
+  -- Bounded to what the web server holds exactly: a larger id is no real chat.
+  conversation_id bigint NOT NULL CHECK (conversation_id > 0 AND conversation_id <= 9007199254740991),
   due_at timestamptz NOT NULL,
   -- Bounded customer name for the push title; empty when the chat has no real
   -- name. No message text is stored here.

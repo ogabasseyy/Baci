@@ -63,3 +63,22 @@ describe('bugfix: slow reminders at the front starved the rest of the batch', ()
     expect(looked).toEqual([13, 11, 12]);
   });
 });
+
+describe('bugfix: a slow listing got a fresh time budget', () => {
+  it('counts the time spent listing', async () => {
+    let clock = 0;
+    const result = await sweepChatFollowUpReminders({
+      now: () => clock,
+      random: () => 0,
+      list: async () => {
+        clock = 35_000;
+        return { ok: true, reminders };
+      },
+      check: vi.fn(),
+      record: vi.fn(),
+      push: vi.fn(),
+      release: vi.fn(),
+    });
+    expect(result).toMatchObject({ ok: true, summary: { deferred: 3 } });
+  });
+});

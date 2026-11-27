@@ -1,4 +1,5 @@
 import { buildOxygenApplication } from './oxygen-application-command';
+import { oxygenEmploymentErrors } from './oxygen-employment-errors';
 import type { OxygenBank, OxygenFields } from './oxygen-form-utils';
 
 export function prepareOxygenApplication({
@@ -7,7 +8,6 @@ export function prepareOxygenApplication({
   accountName,
   checking,
   consent,
-  hasProof,
   checkoutPhone,
 }: {
   fields: OxygenFields;
@@ -15,7 +15,6 @@ export function prepareOxygenApplication({
   accountName: string;
   checking: boolean;
   consent: boolean;
-  hasProof: boolean;
   checkoutPhone: string;
 }) {
   if (!accountName)
@@ -25,12 +24,17 @@ export function prepareOxygenApplication({
         : 'Confirm your bank account on the Bank step.',
       bankRequired: !checking,
     } as const;
-  if (!hasProof)
+  const fieldErrors = oxygenEmploymentErrors(fields);
+  if (Object.keys(fieldErrors).length)
     return {
-      error: 'Choose your proof of address before continuing.',
+      error: 'Check the highlighted employment and income details.',
+      fieldErrors,
     } as const;
   if (!consent)
-    return { error: 'Accept Oxygen’s terms before continuing.' } as const;
+    return {
+      error: 'Accept Oxygen’s terms before continuing.',
+      consentError: 'Accept Oxygen’s terms to continue.',
+    } as const;
   const bank = banks.find((item) => item.code === fields.bank_code);
   if (!bank)
     return {

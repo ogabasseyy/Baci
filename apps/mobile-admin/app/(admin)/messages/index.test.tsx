@@ -10,83 +10,57 @@ const mocks = vi.hoisted(() => ({
   refetch: vi.fn(),
   fetchNextPage: vi.fn(),
   query: vi.fn(),
+  search: vi.fn(),
 }));
 
+vi.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }),
+}));
+vi.mock('@/components/ui/KeyboardInsetView', () => ({
+  KeyboardInsetView: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
 vi.mock('expo-router', () => ({ router: { push: mocks.push } }));
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: LIGHT_COLORS }),
 }));
 vi.mock('@/hooks/useInboxConversations', () => ({
-  useInboxConversations: () => mocks.query(),
+  useInboxConversations: (view?: string) => mocks.query(view),
+}));
+vi.mock('@/hooks/useInboxSearch', () => ({
+  useInboxSearch: (term: string) => mocks.search(term),
+}));
+vi.mock('@/components/ui/AppHeaderKeyboardContainer', () => ({
+  AppHeaderKeyboardContainer: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
 vi.mock('@/lib/api-client', async () => {
   const errors = await import('@/lib/api-errors');
   return { NetworkError: errors.NetworkError };
 });
-vi.mock('@shopify/flash-list', () => ({
-  FlashList: ({
-    data = [],
-    keyExtractor,
-    ListEmptyComponent,
-    renderItem,
-  }: {
-    data?: unknown[];
-    keyExtractor?: (item: unknown, index: number) => string;
-    ListEmptyComponent?: ReactNode;
-    renderItem: (input: { index: number; item: unknown }) => ReactNode;
-  }) => (
-    <div>
-      {data.length === 0
-        ? ListEmptyComponent
-        : data.map((item, index) => (
-            <div
-              key={
-                keyExtractor ? keyExtractor(item, index) : JSON.stringify(item)
-              }
-            >
-              {renderItem({ item, index })}
-            </div>
-          ))}
-    </div>
-  ),
+vi.mock('@shopify/flash-list', async () => ({
+  FlashList: (await import('@/test/messages-screen-support')).FlashListMock,
 }));
 
+import {
+  conversation,
+  idleSearch,
+  readyQuery,
+} from '@/test/messages-screen-support';
 import MessagesScreen from './index';
 
-const conversation = (
-  id: number,
-  name: string,
-  sender: 'customer' | 'store'
-) => ({
-  id,
-  status: 'open' as const,
-  unreadCount: sender === 'customer' ? 2 : 0,
-  customerName: name,
-  lastActivityAt: new Date().toISOString(),
-  lastMessage: {
-    id: id * 10,
-    sender,
-    kind: 'text' as const,
-    text: `Hello from ${name}`,
-    createdAt: new Date().toISOString(),
-  },
-});
-
-const ready = (conversations: ReturnType<typeof conversation>[]) => ({
-  data: { pages: [{ conversations, hasMore: false, page: 1 }] },
-  error: null,
-  fetchNextPage: mocks.fetchNextPage,
-  hasNextPage: false,
-  isError: false,
-  isFetchingNextPage: false,
-  isLoading: false,
-  refetch: mocks.refetch,
-});
+const ready = (conversations: ReturnType<typeof conversation>[]) =>
+  readyQuery(conversations, mocks);
 
 describe('MessagesScreen', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search.mockReturnValue(idleSearch(vi.fn(), vi.fn()));
+  });
 
-  it('lists conversations with preview and a needs-reply badge', () => {
+  it('lists conversations with preview and an unread count', () => {
     mocks.query.mockReturnValue(
       ready([
         conversation(1, 'Ada Test', 'customer'),
@@ -97,17 +71,20 @@ describe('MessagesScreen', () => {
 
     expect(screen.getByText('Ada Test')).toBeInTheDocument();
     expect(screen.getByText('Hello from Ada Test')).toBeInTheDocument();
-    expect(screen.getByText('2 new · needs reply')).toBeInTheDocument();
-    expect(screen.getAllByText(/needs reply/i)).toHaveLength(1);
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText(/new · needs reply/i)).toBeNull();
   });
 
-  it('bugfix: shows only the unread count, not needs reply, when the store answered last', () => {
+  it('bugfix: a chat the store answered last is not described as needing a reply', () => {
     const answered = { ...conversation(3, 'Cy Test', 'store'), unreadCount: 1 };
     mocks.query.mockReturnValue(ready([answered]));
     render(<MessagesScreen />);
 
-    expect(screen.getByText('1 new')).toBeInTheDocument();
-    expect(screen.queryByText(/needs reply/i)).toBeNull();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Cy Test, 1 new/ })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /needs reply/ })).toBeNull();
   });
 
   it('opens the thread for the tapped conversation', () => {
@@ -124,7 +101,7 @@ describe('MessagesScreen', () => {
   it('shows an empty state when there are no conversations', () => {
     mocks.query.mockReturnValue(ready([]));
     render(<MessagesScreen />);
-    expect(screen.getByText('No messages yet')).toBeInTheDocument();
+    expect(screen.getByText('You are all caught up')).toBeInTheDocument();
   });
 
   it('shows a retry when loading fails', () => {
@@ -142,6 +119,35 @@ describe('MessagesScreen', () => {
     expect(mocks.refetch).toHaveBeenCalled();
   });
 
+  /** Every loaded page narrowed to nothing, then a request failed. */
+  const failedWithNothingToShow = (isFetchNextPageError: boolean) => ({
+    ...ready([]),
+    error: new Error('down'),
+    hasNextPage: true,
+    isError: true,
+    isFetchNextPageError,
+  });
+
+  it('bugfix: the full-screen retry asks for the next page when that is what failed', () => {
+    mocks.query.mockReturnValue(failedWithNothingToShow(true));
+    render(<MessagesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap to retry' }));
+
+    expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
+    expect(mocks.refetch).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the chats on retry when no further page is what failed', () => {
+    mocks.query.mockReturnValue(failedWithNothingToShow(false));
+    render(<MessagesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap to retry' }));
+
+    expect(mocks.refetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchNextPage).not.toHaveBeenCalled();
+  });
+
   it('explains a missing permission instead of a generic error', () => {
     mocks.query.mockReturnValue({
       ...ready([]),
@@ -151,5 +157,92 @@ describe('MessagesScreen', () => {
     });
     render(<MessagesScreen />);
     expect(screen.getByText(/do not have permission/)).toBeInTheDocument();
+  });
+
+  it('opens on Needs reply and counts the chats waiting', () => {
+    mocks.query.mockReturnValue(
+      ready([
+        conversation(1, 'Ada Test', 'customer'),
+        conversation(2, 'Bo Test', 'customer'),
+      ])
+    );
+    render(<MessagesScreen />);
+
+    expect(mocks.query).toHaveBeenCalledWith('needs_reply');
+    expect(
+      screen.getByText('2 chats are waiting for your reply')
+    ).toBeInTheDocument();
+  });
+
+  it('switches view when a chip is tapped and loads that view', () => {
+    mocks.query.mockReturnValue(ready([]));
+    render(<MessagesScreen />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Follow-up' }));
+
+    expect(mocks.query).toHaveBeenLastCalledWith('follow_up');
+    expect(screen.getByText('No follow-ups')).toBeInTheDocument();
+  });
+
+  it('puts the longest-waiting chat first and lets priority lead', () => {
+    const old = {
+      ...conversation(1, 'Old Test', 'customer'),
+      lastActivityAt: '2026-11-20T08:00:00.000Z',
+      lastMessage: {
+        ...conversation(1, 'Old Test', 'customer').lastMessage,
+        createdAt: '2026-11-20T08:00:00.000Z',
+      },
+    };
+    const fresh = conversation(2, 'Fresh Test', 'customer');
+    const urgent = {
+      ...conversation(3, 'Urgent Test', 'customer'),
+      priority: 'urgent' as const,
+    };
+    mocks.query.mockReturnValue(ready([fresh, old, urgent]));
+    render(<MessagesScreen />);
+
+    const names = screen
+      .getAllByRole('button', { name: /Conversation with/ })
+      .map((row) => row.getAttribute('aria-label'));
+    expect(names[0]).toContain('Urgent Test');
+    expect(names[1]).toContain('Old Test');
+    expect(names[2]).toContain('Fresh Test');
+  });
+
+  it('shows tags, priority and follow-up on a row', () => {
+    const tagged = {
+      ...conversation(5, 'Tag Test', 'customer'),
+      tags: ['order-issue'],
+      priority: 'high' as const,
+    };
+    mocks.query.mockReturnValue(ready([tagged]));
+    render(<MessagesScreen />);
+
+    expect(screen.getByText('Order issue')).toBeInTheDocument();
+    expect(screen.getByText('High')).toBeInTheDocument();
+  });
+
+  it('marks a returning customer on the row and offers a Customers view', () => {
+    const linked = {
+      ...conversation(6, 'Linked Test', 'customer'),
+      customer: { orderCount: 3, totalSpent: 150000 },
+    };
+    mocks.query.mockReturnValue(ready([linked]));
+    render(<MessagesScreen />);
+
+    expect(screen.getByText('Returning · 3 orders')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customers' }));
+    expect(mocks.query).toHaveBeenLastCalledWith('returning');
+  });
+
+  it('shows Signed in for a customer with no orders yet', () => {
+    const fresh = {
+      ...conversation(7, 'Fresh Test', 'customer'),
+      customer: { orderCount: 0, totalSpent: 0 },
+    };
+    mocks.query.mockReturnValue(ready([fresh]));
+    render(<MessagesScreen />);
+    expect(screen.getByText('Signed in')).toBeInTheDocument();
   });
 });

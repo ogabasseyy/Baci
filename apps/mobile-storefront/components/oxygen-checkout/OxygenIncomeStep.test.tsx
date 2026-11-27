@@ -8,8 +8,6 @@ const props = {
   onChange: jest.fn(),
   consent: false,
   onConsent: jest.fn(),
-  proof: null,
-  onPickProof: jest.fn(),
 };
 const completedIncome = {
   employment_status: 'EMPLOYED',
@@ -45,14 +43,24 @@ it('formats income for display while passing unformatted money to the draft', ()
   expect(props.onChange).toHaveBeenCalledTimes(1);
 });
 
-it('groups utility proof with the home address and opens the picker', () => {
+it('renders consent on step 2 without upfront residential address or utility bill', () => {
   render(<OxygenIncomeStep {...props} fields={completedIncome} />);
-  expect(screen.getByText('Your home address')).toBeTruthy();
-  expect(screen.getByText('Utility bill / proof of address')).toBeTruthy();
-  fireEvent.press(screen.getByRole('button', { name: 'Choose photo' }));
-  expect(props.onPickProof).toHaveBeenCalledWith('photos');
-  fireEvent.press(screen.getByRole('button', { name: 'Choose file' }));
-  expect(props.onPickProof).toHaveBeenCalledWith('files');
+  expect(screen.queryByText('Your home address')).toBeNull();
+  expect(screen.queryByText('Utility bill / proof of address')).toBeNull();
+  expect(screen.getByRole('checkbox')).toBeTruthy();
+});
+
+it('shows an inline alert when consentError is passed', () => {
+  render(
+    <OxygenIncomeStep
+      {...props}
+      fields={completedIncome}
+      consentError="Accept Oxygen’s terms to continue."
+    />
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Accept Oxygen’s terms to continue.'
+  );
 });
 
 it('keeps terms separate from explicit consent', async () => {
@@ -76,44 +84,7 @@ it('keeps terms separate from explicit consent', async () => {
   open.mockRestore();
 });
 
-it('prevents changes and proof selection while submitting', () => {
+it('disables consent toggle while submitting', () => {
   render(<OxygenIncomeStep {...props} fields={completedIncome} busy />);
-  expect(screen.getByRole('button', { name: 'Choose photo' })).toBeDisabled();
   expect(screen.getByRole('checkbox')).toBeDisabled();
-});
-
-it('shows a selected photo as ready while an unrelated workflow refresh is busy', () => {
-  render(
-    <OxygenIncomeStep
-      {...props}
-      fields={completedIncome}
-      busy
-      proof={{
-        name: 'proof.png',
-        type: 'image/png',
-        size: 8,
-        bytes: new Uint8Array(8),
-      }}
-    />
-  );
-  expect(screen.getByText('Ready to upload')).toBeTruthy();
-  expect(screen.queryByText('Reading document…')).toBeNull();
-  expect(
-    screen.getByRole('button', { name: 'Change photo' }).props
-      .accessibilityState.disabled
-  ).toBe(true);
-});
-
-it('reveals address after income is completed and keeps it visible while editing', () => {
-  const view = render(<OxygenIncomeStep {...props} />);
-  expect(screen.queryByText('Your home address')).toBeNull();
-  view.rerender(<OxygenIncomeStep {...props} fields={completedIncome} />);
-  expect(screen.getByText('Your home address')).toBeTruthy();
-  view.rerender(
-    <OxygenIncomeStep
-      {...props}
-      fields={{ ...completedIncome, salary_amount: '' }}
-    />
-  );
-  expect(screen.getByText('Your home address')).toBeTruthy();
 });

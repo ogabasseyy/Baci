@@ -1,6 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LIGHT_COLORS } from '@/constants/theme';
@@ -10,11 +9,31 @@ const mocks = vi.hoisted(() => ({
   thread: vi.fn(),
   api: vi.fn(),
   refetch: vi.fn(),
+  back: vi.fn(),
+  choose: vi.fn(),
+  customer: vi.fn(),
+  isFocused: vi.fn(),
 }));
 
-vi.mock('expo-router', () => ({ Stack: { Screen: () => null } }));
+vi.mock('expo-router', () => ({
+  Stack: { Screen: () => null },
+  router: { back: mocks.back },
+  useNavigation: () => ({ isFocused: mocks.isFocused }),
+}));
+vi.mock('@/components/ui/AppSheetModal', () => ({
+  AppSheetModal: ({
+    children,
+    visible,
+  }: {
+    children: ReactNode;
+    visible: boolean;
+  }) => (visible ? <div>{children}</div> : null),
+}));
 vi.mock('@/hooks/useTheme', () => ({
   useTheme: () => ({ colors: LIGHT_COLORS }),
+}));
+vi.mock('@/hooks/useInboxCustomer', () => ({
+  useInboxCustomer: () => mocks.customer(),
 }));
 vi.mock('@/hooks/useInboxThread', () => ({
   useInboxThread: () => mocks.thread(),
@@ -23,50 +42,19 @@ vi.mock('@/lib/api-client', async () => {
   const errors = await import('@/lib/api-errors');
   return { apiClient: mocks.api, NetworkError: errors.NetworkError };
 });
-vi.mock('@/components/ui/AppKeyboardContainer', () => ({
-  AppKeyboardContainer: ({ children }: { children: ReactNode }) => (
+vi.mock('@/components/ui/AppHeaderKeyboardContainer', () => ({
+  AppHeaderKeyboardContainer: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
 }));
 
-import { ConversationThread } from './ConversationThread';
-
-const at = (m: number) => `2026-11-22T10:0${m}:00Z`;
-const messages = [
-  {
-    id: 1,
-    sender: 'customer',
-    kind: 'text',
-    text: 'Is the phone in stock?',
-    createdAt: at(0),
-  },
-  {
-    id: 2,
-    sender: 'assistant',
-    kind: 'text',
-    text: 'Let me check for you.',
-    createdAt: at(1),
-  },
-  {
-    id: 3,
-    sender: 'store',
-    kind: 'text',
-    text: 'Yes we have it',
-    createdAt: at(2),
-  },
-];
-
-function renderThread() {
-  return render(
-    <QueryClientProvider client={new QueryClient()}>
-      <ConversationThread conversationId={9} />
-    </QueryClientProvider>
-  );
-}
+import { at, messages, renderThread } from './ConversationThread.test-support';
 
 describe('ConversationThread', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.customer.mockReturnValue({ data: null });
+    mocks.isFocused.mockReturnValue(true);
     mocks.refetch.mockResolvedValue({
       isError: false,
       data: { pages: [{ messages }] },

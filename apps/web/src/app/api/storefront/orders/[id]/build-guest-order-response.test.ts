@@ -15,6 +15,11 @@ describe('buildGuestOrderResponse', () => {
         shipping_cost: 10000,
         total: 255000,
         amount_paid: 255000,
+        wallet_amount_used: 15000,
+        wallet_ledger_used: 15000,
+        savings_ledger_used: 10000,
+        wallet_reversal_completed: true,
+        wallet_reversed_credit: 20000,
         customer_name: 'Ada',
         customer_email: 'ada@example.com',
         customer_phone: '0801',
@@ -40,6 +45,11 @@ describe('buildGuestOrderResponse', () => {
       notification_delivered: true,
       inventory_confirmed: true,
       shipping_cost: 10000,
+      wallet_amount_used: 15000,
+      wallet_ledger_used: 15000,
+      savings_ledger_used: 10000,
+      wallet_reversal_completed: true,
+      wallet_reversed_credit: 20000,
     });
   });
 
@@ -68,7 +78,11 @@ describe('buildGuestOrderResponse', () => {
       tracking_token: null,
       notification_delivered: false,
       inventory_confirmed: false,
+      wallet_amount_used: 0,
+      wallet_reversal_completed: false,
     });
+    expect(response.wallet_ledger_used).toBeUndefined();
+    expect(response.savings_ledger_used).toBeUndefined();
   });
 
   it('falls back to the legacy shipping fee for shipping cost', () => {

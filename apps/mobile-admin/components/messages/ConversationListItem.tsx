@@ -1,3 +1,4 @@
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   RADIUS,
@@ -7,30 +8,29 @@ import {
 } from '@/constants/theme';
 import {
   formatInboxTime,
-  inboxInitials,
+  inboxDisplayName,
   inboxMessageText,
 } from '@/lib/merchant-inbox-format';
+import { isWaitingLong } from '@/lib/merchant-inbox-waiting';
 import type { InboxConversation } from '@/schemas/merchant-inbox';
+import { ConversationAvatar } from './ConversationAvatar';
+import { ConversationMeta } from './ConversationMeta';
+import { conversationA11yLabel } from './conversationA11yLabel';
 
 interface ConversationListItemProps {
   colors: ThemeColors;
   conversation: InboxConversation;
   onPress: (id: number) => void;
+  /** Search results show the matching words instead of the last message. */
+  snippet?: string | null;
 }
 
 /** Only a shopper's message waiting at the end of the chat needs an answer. */
 export function needsReply(conversation: InboxConversation): boolean {
-  return conversation.lastMessage?.sender === 'customer';
-}
-
-export function badgeText(conversation: InboxConversation): string | null {
-  const waiting = needsReply(conversation);
-  if (conversation.unreadCount > 0) {
-    return waiting
-      ? `${conversation.unreadCount} new · needs reply`
-      : `${conversation.unreadCount} new`;
-  }
-  return waiting ? 'Needs reply' : null;
+  return (
+    conversation.lastMessage?.sender === 'customer' &&
+    (conversation.status === 'open' || conversation.status === 'pending')
+  );
 }
 
 function previewText(conversation: InboxConversation): string {
@@ -45,37 +45,40 @@ function previewText(conversation: InboxConversation): string {
   return `${prefix}${inboxMessageText(last)}`;
 }
 
+/**
+ * One chat. Colour has one job each: blue says "new for you", and amber is
+ * kept for a shopper who has waited more than a day. Unread chats get a bold
+ * name and a count; a chat that only needs an answer gets a quiet reply mark.
+ */
 export function ConversationListItem({
   colors,
   conversation,
   onPress,
+  snippet,
 }: ConversationListItemProps) {
   const waiting = needsReply(conversation);
-  const badge = badgeText(conversation);
+  // Waiting runs from the shopper's message: labels or assignment move the
+  // chat's activity time without answering them.
+  const overdue =
+    waiting &&
+    isWaitingLong(
+      conversation.lastMessage?.createdAt ?? conversation.lastActivityAt
+    );
+  const unread = conversation.unreadCount > 0;
+  const preview = snippet || previewText(conversation);
 
   return (
     <Pressable
-      accessibilityLabel={`Conversation with ${conversation.customerName}${waiting ? ', needs reply' : ''}`}
+      accessibilityLabel={conversationA11yLabel(conversation, {
+        preview,
+        waiting,
+      })}
       accessibilityRole="button"
       android_ripple={{ color: colors.cardHover }}
       onPress={() => onPress(conversation.id)}
       style={[styles.row, { borderBottomColor: colors.border }]}
     >
-      <View
-        style={[
-          styles.avatar,
-          { backgroundColor: waiting ? colors.goldLight : colors.primaryLight },
-        ]}
-      >
-        <Text
-          style={[
-            styles.initials,
-            { color: waiting ? colors.gold : colors.primary },
-          ]}
-        >
-          {inboxInitials(conversation.customerName)}
-        </Text>
-      </View>
+      <ConversationAvatar colors={colors} name={conversation.customerName} />
       <View style={styles.main}>
         <View style={styles.top}>
           <Text
@@ -84,82 +87,91 @@ export function ConversationListItem({
               styles.name,
               {
                 color: colors.text,
-                fontFamily: waiting
+                fontFamily: unread
                   ? TYPOGRAPHY.fontFamily.bold
                   : TYPOGRAPHY.fontFamily.semiBold,
               },
             ]}
           >
-            {conversation.customerName}
+            {inboxDisplayName(conversation.customerName)}
           </Text>
           <Text
             style={[
               styles.time,
-              { color: waiting ? colors.gold : colors.textMuted },
+              { color: overdue ? colors.gold : colors.textMuted },
             ]}
           >
             {formatInboxTime(conversation.lastActivityAt)}
           </Text>
         </View>
-        <Text
-          numberOfLines={2}
-          style={[
-            styles.preview,
-            { color: waiting ? colors.text : colors.textSecondary },
-          ]}
-        >
-          {previewText(conversation)}
-        </Text>
-        {badge ? (
-          <View style={[styles.badge, { backgroundColor: colors.goldLight }]}>
-            <View style={[styles.dot, { backgroundColor: colors.gold }]} />
-            <Text style={[styles.badgeText, { color: colors.gold }]}>
-              {badge}
-            </Text>
-          </View>
-        ) : null}
+        <View style={styles.bottom}>
+          <Text
+            numberOfLines={snippet ? 2 : 1}
+            style={[
+              styles.preview,
+              // Unread is shown by the darker colour and the bold name, not by
+              // a heavier preview: regular weight keeps the list calm.
+              { color: unread ? colors.text : colors.textSecondary },
+            ]}
+          >
+            {preview}
+          </Text>
+          {unread ? (
+            <View style={[styles.count, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.countText, { color: colors.textOnPrimary }]}>
+                {conversation.unreadCount > 99
+                  ? '99+'
+                  : conversation.unreadCount}
+              </Text>
+            </View>
+          ) : waiting ? (
+            <Ionicons
+              color={overdue ? colors.gold : colors.primary}
+              name="arrow-undo"
+              size={16}
+            />
+          ) : null}
+        </View>
+        <ConversationMeta colors={colors} conversation={conversation} />
       </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  avatar: {
+  bottom: {
     alignItems: 'center',
-    borderRadius: RADIUS.full,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-  badge: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderRadius: RADIUS.full,
     flexDirection: 'row',
-    gap: 6,
-    marginTop: SPACING.sm,
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: 3,
+    gap: SPACING.sm,
+    marginTop: 2,
   },
-  badgeText: {
-    fontFamily: TYPOGRAPHY.fontFamily.semiBold,
-    fontSize: TYPOGRAPHY.size.sm,
+  count: {
+    alignItems: 'center',
+    borderRadius: RADIUS.full,
+    height: 20,
+    justifyContent: 'center',
+    minWidth: 20,
+    paddingHorizontal: 6,
   },
-  dot: { borderRadius: RADIUS.full, height: 6, width: 6 },
-  initials: {
+  countText: {
     fontFamily: TYPOGRAPHY.fontFamily.bold,
-    fontSize: TYPOGRAPHY.size.lg,
+    fontSize: TYPOGRAPHY.size.sm,
   },
   main: { flex: 1 },
   name: { flex: 1, fontSize: TYPOGRAPHY.size.lg },
-  preview: { fontSize: TYPOGRAPHY.size.md, lineHeight: 20, marginTop: 2 },
+  preview: {
+    flex: 1,
+    fontFamily: TYPOGRAPHY.fontFamily.regular,
+    fontSize: TYPOGRAPHY.size.md,
+    lineHeight: 20,
+  },
   row: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: SPACING.md,
-    minHeight: 76,
+    minHeight: 72,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md + 2,
+    paddingVertical: SPACING.md,
   },
   time: { fontSize: TYPOGRAPHY.size.sm, marginLeft: SPACING.sm },
   top: { alignItems: 'center', flexDirection: 'row' },

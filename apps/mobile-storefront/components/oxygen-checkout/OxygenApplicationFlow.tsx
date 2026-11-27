@@ -17,7 +17,6 @@ import { useOxygenApplicationDraft } from './use-oxygen-application-draft';
 import { useOxygenApplicationSubmission } from './use-oxygen-application-submission';
 import { useOxygenBanks } from './use-oxygen-banks';
 import { useOxygenIdentityFeedback } from './use-oxygen-identity-feedback';
-import { useOxygenProof } from './use-oxygen-proof';
 export interface OxygenApplicationFlowProps {
   prefill?: OxygenFields;
   snapshot: OxygenRuntimeSnapshot;
@@ -27,14 +26,6 @@ export interface OxygenApplicationFlowProps {
     command: OxygenRuntimeAction,
     file?: OxygenTransientFile
   ) => Promise<void>;
-  onProofControls?: (controls: {
-    pick: () => Promise<void>;
-    busy: boolean;
-    error: string | null;
-    missing: boolean;
-  }) => void;
-  onAddressFields?: (fields: OxygenFields) => void;
-  onProof: (file: OxygenTransientFile | undefined) => void;
   scopeKey: string;
   onResendPhone?: () => Promise<void>;
   phoneSentAt?: string | null;
@@ -47,9 +38,9 @@ export interface OxygenApplicationFlowProps {
     fields: OxygenFields;
   } | null;
 }
-/** Mount for the workflow's full lifetime so the first booking retains its proof. */
+/** Collects identity, bank, employment, and consent for Step 1. */
 export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
-  const { snapshot, client, busy, onExecute, scopeKey, onProof } = props;
+  const { snapshot, client, busy, onExecute, scopeKey } = props;
   const colors = useOxygenColors();
   const {
     fields,
@@ -72,6 +63,7 @@ export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
     props.prefill
   );
   const [consent, setConsent] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
   const {
     banks,
     error: bankError,
@@ -100,69 +92,11 @@ export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
       snapshot.executionEnabled,
   });
   const accountName = bankConfirmation.accountName;
-  const onProofRef = useRef(onProof);
-  onProofRef.current = onProof;
-  const addressCallback = useRef(props.onAddressFields);
-  addressCallback.current = props.onAddressFields;
-  useEffect(() => {
-    const {
-      home_street,
-      home_house_number,
-      home_city,
-      home_lga,
-      home_state,
-      home_landmark,
-    } = fields;
-    addressCallback.current?.({
-      home_street,
-      home_house_number,
-      home_city,
-      home_lga,
-      home_state,
-      home_landmark,
-    });
-  }, [fields]);
-  const proofScope = JSON.stringify([
-    scopeKey,
-    fields.home_state,
-    fields.home_lga,
-    fields.home_city,
-    fields.home_street,
-    fields.home_house_number,
-    fields.home_landmark,
-  ]);
-  const proof = useOxygenProof(proofScope);
-  const proofControlCallback = useRef(props.onProofControls);
-  proofControlCallback.current = props.onProofControls;
-  const pickLatest = useRef(proof.pick);
-  pickLatest.current = proof.pick;
-  useEffect(() => {
-    proofControlCallback.current?.({
-      pick: () => pickLatest.current(),
-      busy: proof.busy,
-      error: proof.error,
-      missing: !proof.proof,
-    });
-  }, [proof.busy, proof.error, proof.proof]);
-  useEffect(() => {
-    const file = proof.proof;
-    onProofRef.current(
-      file ? { bytes: file.bytes, type: file.type, name: file.name } : undefined
-    );
-  }, [proof.proof]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: consent and codes are never restored across scope changes.
   useEffect(() => {
     setConsent(false);
-    return () => onProofRef.current(undefined);
+    setConsentError(null);
   }, [scopeKey]);
-  const proofReceived =
-    snapshot.state.kyc?.address_status === 'DONE' ||
-    snapshot.state.kyc?.address_status === 'PROCESSING';
-  const clearProof = useRef(proof.clear);
-  clearProof.current = proof.clear;
-  useEffect(() => {
-    if (proofReceived) clearProof.current();
-  }, [proofReceived]);
   const previousApplication = useRef(snapshot.state.applicationReference);
   useEffect(() => {
     if (
@@ -183,9 +117,9 @@ export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
     accountName,
     checking: bankConfirmation.checking,
     consent,
-    hasProof: !!proof.proof,
     checkoutPhone: snapshot.checkoutPhone,
     setFieldErrors,
+    setConsentError,
     setError,
     save,
     onExecute,
@@ -237,6 +171,7 @@ export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
           return;
         }
         setError(null);
+        setConsentError(null);
         void save(next);
       }}
       onSubmit={() => void submission.submit()}
@@ -254,13 +189,14 @@ export function OxygenApplicationFlow(props: OxygenApplicationFlowProps) {
       onAccountName={bankConfirmation.confirm}
       accountChecking={bankConfirmation.checking}
       consent={consent}
-      onConsent={setConsent}
-      proofReceived={proofReceived}
-      proof={proof.proof}
-      proofError={proof.error}
-      proofBusy={proof.busy}
-      onPickProof={(source) => {
-        void proof.pick(source);
+      consentError={consentError}
+      onConsent={(value) => {
+        setConsent(value);
+        if (value) {
+          setConsentError(null);
+          if (error === 'Accept Oxygen’s terms before continuing.')
+            setError(null);
+        }
       }}
       error={identityFeedback.message(error) || bankConfirmation.error}
       checkoutAddress={props.checkoutHomeAddress}

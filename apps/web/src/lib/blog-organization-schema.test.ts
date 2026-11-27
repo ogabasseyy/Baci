@@ -43,8 +43,8 @@ describe('buildBlogOrganizationSchema', () => {
       })
     );
     expect(schema.sameAs).toEqual([
-      'https://facebook.com/ogabassey',
-      'https://instagram.com/ogabassey',
+      'https://www.facebook.com/ogabassey',
+      'https://www.instagram.com/ogabassey',
       'https://x.com/ogabassey',
     ]);
   });
@@ -65,7 +65,7 @@ describe('buildBlogOrganizationSchema', () => {
     );
 
     expect(schema.sameAs).toEqual([
-      'https://instagram.com/socialstore',
+      'https://www.instagram.com/socialstore',
       'https://www.tiktok.com/@socialstore',
       'https://www.snapchat.com/@socialstore',
     ]);

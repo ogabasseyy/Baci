@@ -204,7 +204,7 @@ describe('PaymentMethodSelector', () => {
     expect(onSelectMethod).not.toHaveBeenCalled();
   });
 
-  it('disables Klump when wallet credit is already active', () => {
+  it('keeps Klump selectable when partial wallet credit is active', () => {
     const onSelectMethod = jest.fn();
 
     render(
@@ -220,19 +220,19 @@ describe('PaymentMethodSelector', () => {
     );
 
     const klumpRow = screen.getByLabelText(
-      'Klump. Wallet credit cannot be combined with Klump'
+      'Klump. Buy now, pay in installments'
     );
 
     expect(
-      screen.getByText('Wallet credit cannot be combined with Klump')
-    ).toBeTruthy();
+      screen.queryByText('Wallet credit cannot be combined with Klump')
+    ).toBeNull();
 
     fireEvent.press(klumpRow);
 
-    expect(onSelectMethod).not.toHaveBeenCalled();
+    expect(onSelectMethod).toHaveBeenCalledWith('klump');
   });
 
-  it('disables Klump when device savings credit is already active', () => {
+  it('keeps Klump selectable when partial device savings credit is active', () => {
     const onSelectMethod = jest.fn();
 
     render(
@@ -252,16 +252,154 @@ describe('PaymentMethodSelector', () => {
     );
 
     const klumpRow = screen.getByLabelText(
-      'Klump. Device savings cannot be combined with Klump'
+      'Klump. Buy now, pay in installments'
     );
 
     expect(
-      screen.getByText('Device savings cannot be combined with Klump')
-    ).toBeTruthy();
+      screen.queryByText('Device savings cannot be combined with Klump')
+    ).toBeNull();
 
     fireEvent.press(klumpRow);
 
-    expect(onSelectMethod).not.toHaveBeenCalled();
+    expect(onSelectMethod).toHaveBeenCalledWith('klump');
+  });
+
+  it('renders device savings on full and installments tabs but not on pay_later', () => {
+    const props = {
+      onSelectMethod: () => {},
+      onSelectTab: () => {},
+      orderTotal: 120000,
+      savingsGoalId: '123e4567-e89b-12d3-a456-426614174555',
+      savingsBalance: 20000,
+      savingsGoalTitle: 'Laptop Goal',
+      onSavingsToggle: () => {},
+    };
+
+    const { rerender } = render(
+      <PaymentMethodSelector
+        {...props}
+        selectedMethod="klump"
+        selectedTab="installments"
+        enabledMethods={['klump']}
+      />
+    );
+    expect(screen.getByText(/Laptop Goal/)).toBeTruthy();
+
+    rerender(
+      <PaymentMethodSelector
+        {...props}
+        selectedMethod="paystack"
+        selectedTab="full"
+        enabledMethods={['paystack']}
+      />
+    );
+    expect(screen.getByText(/Laptop Goal/)).toBeTruthy();
+
+    rerender(
+      <PaymentMethodSelector
+        {...props}
+        selectedMethod="invoice"
+        selectedTab="pay_later"
+        enabledMethods={['invoice', 'payforme']}
+      />
+    );
+    expect(screen.queryByText(/Laptop Goal/)).toBeNull();
+  });
+
+  it('shows wallet-aware savings remaining amount on installments when wallet and savings are both active', () => {
+    render(
+      <PaymentMethodSelector
+        selectedMethod="klump"
+        onSelectMethod={() => {}}
+        selectedTab="installments"
+        onSelectTab={() => {}}
+        orderTotal={120000}
+        enabledMethods={['klump']}
+        savingsGoalId="123e4567-e89b-12d3-a456-426614174555"
+        savingsBalance={50000}
+        savingsGoalTitle="Laptop Goal"
+        savingsSelection={{
+          use: true,
+          goalId: '123e4567-e89b-12d3-a456-426614174555',
+          amount: 50000,
+        }}
+        onSavingsToggle={() => {}}
+        walletMode="orders"
+        walletBalance={30000}
+        walletOrderTotal={120000}
+        walletSelection={{ use: true, amount: 30000 }}
+        onWalletToggle={() => {}}
+      />
+    );
+
+    expect(
+      screen.getByText('₦50,000 from Laptop Goal · ₦40,000 remaining')
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/₦30,000 from wallet · ₦40,000 from card/i)
+    ).toBeTruthy();
+  });
+
+  it('uses live wallet balance rather than stale retained wallet selection amount when computing savings remaining amount', () => {
+    render(
+      <PaymentMethodSelector
+        selectedMethod="klump"
+        onSelectMethod={() => {}}
+        selectedTab="installments"
+        onSelectTab={() => {}}
+        orderTotal={120000}
+        enabledMethods={['klump']}
+        savingsGoalId="123e4567-e89b-12d3-a456-426614174555"
+        savingsBalance={50000}
+        savingsGoalTitle="Laptop Goal"
+        savingsSelection={{
+          use: true,
+          goalId: '123e4567-e89b-12d3-a456-426614174555',
+          amount: 50000,
+        }}
+        onSavingsToggle={() => {}}
+        walletMode="orders"
+        walletBalance={30000}
+        walletOrderTotal={120000}
+        walletSelection={{ use: true, amount: 10000 }}
+        onWalletToggle={() => {}}
+      />
+    );
+
+    expect(
+      screen.getByText('₦50,000 from Laptop Goal · ₦40,000 remaining')
+    ).toBeTruthy();
+  });
+
+  it('ignores retained wallet selection amount when wallet balance is exhausted', () => {
+    render(
+      <PaymentMethodSelector
+        selectedMethod="klump"
+        onSelectMethod={() => {}}
+        selectedTab="installments"
+        onSelectTab={() => {}}
+        orderTotal={120000}
+        enabledMethods={['klump']}
+        savingsGoalId="123e4567-e89b-12d3-a456-426614174555"
+        savingsBalance={50000}
+        savingsGoalTitle="Laptop Goal"
+        savingsSelection={{
+          use: true,
+          goalId: '123e4567-e89b-12d3-a456-426614174555',
+          amount: 50000,
+        }}
+        onSavingsToggle={() => {}}
+        walletMode="orders"
+        walletBalance={0}
+        walletOrderTotal={120000}
+        walletSelection={{ use: true, amount: 30000 }}
+        onWalletToggle={() => {}}
+      />
+    );
+
+    expect(
+      screen.getByText('₦50,000 from Laptop Goal · ₦70,000 remaining')
+    ).toBeTruthy();
   });
 
   it('can show Paystack as an unselected alternate card option when a saved card owns the selection', () => {

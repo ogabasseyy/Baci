@@ -20,15 +20,15 @@ describe('klump checkout helpers', () => {
     expect(getKlumpDisabledReason(settings, 120000)).toBeUndefined();
   });
 
-  it('disables Klump when wallet credit is active', () => {
+  it('keeps Klump enabled when wallet credit is active and net payable is in range', () => {
     const walletSelection: WalletSelection = { use: true, amount: 5000 };
 
-    expect(getKlumpDisabledReason(settings, 120000, walletSelection)).toBe(
-      'Wallet credit cannot be combined with Klump'
-    );
+    expect(
+      getKlumpDisabledReason(settings, 115000, walletSelection)
+    ).toBeUndefined();
   });
 
-  it('disables Klump when savings plan credit is active', () => {
+  it('keeps Klump enabled when savings plan credit is active and net payable is in range', () => {
     const savingsSelection: SavingsSelection = {
       amount: 5000,
       goalId: 'goal-1',
@@ -36,8 +36,17 @@ describe('klump checkout helpers', () => {
     };
 
     expect(
-      getKlumpDisabledReason(settings, 120000, undefined, savingsSelection)
-    ).toBe('Savings plan cannot be combined with Klump');
+      getKlumpDisabledReason(settings, 115000, undefined, savingsSelection)
+    ).toBeUndefined();
+  });
+
+  it('disables Klump when net payable balance is zero or negative', () => {
+    expect(getKlumpDisabledReason(settings, 0)).toBe(
+      'No payable balance remains for Klump checkout'
+    );
+    expect(getKlumpDisabledReason(settings, -100)).toBe(
+      'No payable balance remains for Klump checkout'
+    );
   });
 
   it('uses merchant configured amount boundaries for disabled reasons', () => {

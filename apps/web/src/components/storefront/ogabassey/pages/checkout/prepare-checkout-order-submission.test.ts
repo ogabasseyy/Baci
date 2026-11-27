@@ -113,8 +113,8 @@ describe('prepareCheckoutOrderSubmission', () => {
     expect(result).toEqual({ kind: 'issue', issue: 'paystack-unavailable' });
   });
 
-  it('requires Klump to charge the full order amount before submitting', () => {
-    const result = prepareCheckoutOrderSubmission(
+  it('allows Klump with partial credit when positive payable balance remains and blocks zero balance', () => {
+    const partialResult = prepareCheckoutOrderSubmission(
       input({
         payment: {
           method: 'klump',
@@ -128,7 +128,23 @@ describe('prepareCheckoutOrderSubmission', () => {
       })
     );
 
-    expect(result).toEqual({ kind: 'issue', issue: 'klump-unavailable' });
+    expect(partialResult.kind).toBe('ready');
+
+    const zeroResult = prepareCheckoutOrderSubmission(
+      input({
+        payment: {
+          method: 'klump',
+          bankTransferAvailable: true,
+          paystackAvailable: true,
+          korapayAvailable: true,
+          redvaultAvailable: true,
+          remainingAmount: 0,
+          total: 120,
+        },
+      })
+    );
+
+    expect(zeroResult).toEqual({ kind: 'issue', issue: 'klump-unavailable' });
   });
 
   it('rejects a selected shipping quote that has expired from the current quote set', () => {

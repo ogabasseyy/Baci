@@ -87,6 +87,20 @@ export async function POST(
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
 
+  // A reply that names its store (a notification reply) must be for the store
+  // this session is signed in to, never another store's chat with the same id.
+  if (
+    body.data.merchantId &&
+    body.data.merchantId.toLowerCase() !==
+      resolved.binding.merchantId.toLowerCase()
+  ) {
+    return merchantInboxError(
+      409,
+      'This message was for another store. Switch to that store to reply.',
+      'merchant_mismatch'
+    );
+  }
+
   const result = await sendMerchantInboxReply(resolved.binding, {
     conversationId: conversationId.data,
     content: body.data.content,

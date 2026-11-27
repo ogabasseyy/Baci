@@ -240,3 +240,60 @@ it.each([
   expect(residentialContext).toHaveBeenCalledTimes(retiredDraft ? 1 : 0);
   expect(execute).not.toHaveBeenCalled();
 });
+
+it('submits saved address with proof when optional landmark is blank', async () => {
+  const snapshot = {
+    workflowId: 'workflow',
+    version: 1,
+    stage: 'booked',
+    executionEnabled: true,
+    state: { bookingReference: 'booking', kyc: { address_status: 'NOT_DONE' } },
+  } as OxygenRuntimeSnapshot;
+  const client = {
+    draft: {
+      read: jest.fn().mockResolvedValue({
+        draft: {
+          fields: {
+            home_state: 'Lagos',
+            home_lga: 'Ikeja',
+            home_city: 'Ikeja',
+            home_street: 'Allen',
+            home_house_number: '1',
+          },
+        },
+      }),
+    },
+  } as unknown as OxygenClient;
+  const execute = jest.fn().mockResolvedValue(undefined);
+  const proof = {
+    bytes: new Uint8Array([1, 2, 3]),
+    type: 'image/png',
+    name: 'proof.png',
+  };
+  render(
+    <OxygenBookedAddress
+      snapshot={snapshot}
+      client={client}
+      proof={proof}
+      busy={false}
+      onExecute={execute}
+      onRefresh={jest.fn()}
+    />
+  );
+  const submit = await screen.findByText('Submit saved home address and proof');
+  await act(async () => {
+    fireEvent.press(submit);
+  });
+  expect(execute).toHaveBeenCalledWith(
+    {
+      action: 'submit_address',
+      state: 'Lagos',
+      lga: 'Ikeja',
+      city: 'Ikeja',
+      street: 'Allen',
+      landmark: '',
+      house_number: '1',
+    },
+    proof
+  );
+});

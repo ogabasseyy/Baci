@@ -5,14 +5,26 @@ import { allowsLocalOxygenNetwork } from '@/lib/api-core';
 import { getOxygenMobileProfile } from '@/lib/oxygen-mobile-profile';
 import { oxygenNativeSession } from '@/services/oxygen/native-session';
 import { useAuthStore } from '@/stores/auth-store';
-import { hasVoucherIdentifier } from '@/stores/cart-line';
 import type { CartItem } from '@/stores/cart-store';
 
 const unavailable =
   'Oxygen checkout is unavailable. Check your connection and try again.';
 const retryDelaysMs = [2000, 8000];
 
-export function useOxygenCheckoutAvailability(items: CartItem[]) {
+async function checkGuestOxygenStorefrontAvailability(
+  apiOrigin: string,
+  merchantId: string
+): Promise<boolean> {
+  const response = await fetch(
+    `${apiOrigin}/api/payments/oxygen/storefront-availability?merchantId=${encodeURIComponent(merchantId)}`,
+    { headers: { Accept: 'application/json' } }
+  );
+  if (!response.ok) throw new Error(unavailable);
+  const body = (await response.json()) as { available?: unknown };
+  return body.available === true;
+}
+
+export function useOxygenCheckoutAvailability(_items: CartItem[]) {
   const userId = useAuthStore((state) => state.user?.id);
   const customerId = useAuthStore((state) => state.customer?.id);
   const customerUserId = useAuthStore((state) => state.customer?.user_id);
@@ -21,6 +33,8 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
   );
   const merchantId = useAuthStore((state) => state.merchantId);
   const profile = getOxygenMobileProfile();
+  const profileApiOrigin = profile?.apiOrigin;
+  const profileMerchantId = profile?.merchantId;
   const usesLocalNetwork =
     profile?.environment === 'staging' && allowsLocalOxygenNetwork();
   const linked =
@@ -28,13 +42,21 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
     customerUserId === userId &&
     customerMerchantId === profile?.merchantId &&
     merchantId === profile?.merchantId;
-  const hasVoucher = items.some(hasVoucherIdentifier);
+  const isGuest = !userId;
+  const probeMode: 'linked' | 'guest' | null = profile
+    ? linked
+      ? 'linked'
+      : isGuest && profile.environment === 'production'
+        ? 'guest'
+        : null
+    : null;
   const scope =
-    profile && linked && !hasVoucher
+    profile && probeMode
       ? JSON.stringify([
-          userId,
-          customerId,
-          merchantId,
+          probeMode,
+          userId ?? 'guest',
+          customerId ?? 'guest',
+          merchantId ?? profile.merchantId,
           profile.environment,
           profile.merchantId,
           profile.merchantSlug,
@@ -49,7 +71,7 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
 
   useEffect(() => {
     setReadiness(null);
-    if (!scope) return;
+    if (!scope || !profileApiOrigin || !profileMerchantId || !probeMode) return;
     let probe = 0;
     let delayedProbe: ReturnType<typeof setTimeout> | undefined;
     let previousState: 'unknown' | 'online' | 'offline' | undefined;
@@ -57,11 +79,18 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
 
     const checkReadiness = (currentProbe: number, attempt = 0) => {
       setReadiness(null);
-      void withTimeout(
-        Promise.resolve().then(() => oxygenNativeSession().capabilities(true)),
-        8000,
-        unavailable
-      ).then(
+      const task: Promise<unknown> =
+        probeMode === 'linked'
+          ? Promise.resolve().then(() =>
+              oxygenNativeSession().capabilities(true)
+            )
+          : checkGuestOxygenStorefrontAvailability(
+              profileApiOrigin,
+              profileMerchantId
+            ).then((available) => {
+              if (!available) throw new Error(unavailable);
+            });
+      void withTimeout(task, 8000, unavailable).then(
         () => {
           if (currentProbe === probe)
             setReadiness({ scope, reason: undefined });
@@ -111,13 +140,12 @@ export function useOxygenCheckoutAvailability(items: CartItem[]) {
       clearTimeout(delayedProbe);
       unsubscribe();
     };
-  }, [scope, usesLocalNetwork]);
+  }, [probeMode, profileApiOrigin, profileMerchantId, scope, usesLocalNetwork]);
 
   if (!profile) return { visible: false, disabledReason: undefined };
-  const disabledReason = !linked
-    ? 'Sign in with your linked customer account'
-    : hasVoucher
-      ? 'Oxygen is unavailable for voucher carts'
+  const disabledReason =
+    !linked && !probeMode
+      ? 'Sign in with your linked customer account'
       : readiness?.scope !== scope
         ? 'Checking Oxygen availability'
         : readiness.reason;

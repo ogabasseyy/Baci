@@ -1,7 +1,12 @@
 import { ShoppingBag } from 'lucide-react';
 import type { z } from 'zod';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
-import type { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
+import {
+  getOxygenOrderNetPayable,
+  getOxygenOrderPreGatewayPaid,
+  isOxygenSettledStatus,
+  type oxygenCheckoutOrderSchema,
+} from '@/schemas/oxygen-checkout-order';
 import { oxygenOrderItemImage } from './oxygen-order-item-image';
 
 export function OxygenSavedOrderSummary({
@@ -9,6 +14,10 @@ export function OxygenSavedOrderSummary({
 }: {
   order: z.infer<typeof oxygenCheckoutOrderSchema>;
 }) {
+  const preGatewayPaid = getOxygenOrderPreGatewayPaid(order);
+  const netPayable = getOxygenOrderNetPayable(order);
+  const isSettled = isOxygenSettledStatus(order.payment_status);
+  const isPaid = (order.payment_status ?? '').trim().toLowerCase() === 'paid';
   const money = (amount: number) =>
     new Intl.NumberFormat('en-NG', {
       style: 'currency',
@@ -65,10 +74,31 @@ export function OxygenSavedOrderSummary({
           <dt>Tax</dt>
           <dd>{money(order.tax_amount)}</dd>
         </div>
-        <div className="flex justify-between text-lg font-bold">
-          <dt>Order total</dt>
-          <dd>{money(order.total)}</dd>
-        </div>
+        {preGatewayPaid > 0 && (
+          <div className="flex justify-between text-store-primary">
+            <dt>Store credit</dt>
+            <dd>-{money(preGatewayPaid)}</dd>
+          </div>
+        )}
+        {isSettled && preGatewayPaid > 0 ? (
+          <>
+            <div className="flex justify-between font-semibold">
+              <dt>{isPaid ? 'Paid via Oxygen' : 'Financed principal'}</dt>
+              <dd>{money(netPayable)}</dd>
+            </div>
+            {isPaid && (
+              <div className="flex justify-between text-lg font-bold">
+                <dt>Amount due</dt>
+                <dd>{money(0)}</dd>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex justify-between text-lg font-bold">
+            <dt>{preGatewayPaid > 0 ? 'Amount due' : 'Order total'}</dt>
+            <dd>{money(netPayable)}</dd>
+          </div>
+        )}
       </dl>
     </section>
   );

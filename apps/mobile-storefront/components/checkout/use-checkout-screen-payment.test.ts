@@ -113,4 +113,18 @@ describe('useCheckoutScreenPayment', () => {
       expect.objectContaining({ merchantId: CHECKOUT_MERCHANT_ID })
     );
   });
+
+  it('forwards appliedDiscountCode when provided', () => {
+    renderHook(() =>
+      useCheckoutScreenPayment({
+        ...baseProps,
+        appliedDiscountCode: 'SAVE10',
+        merchantId: 'merchant-1',
+      })
+    );
+
+    expect(mockUseCheckoutPaymentController).toHaveBeenCalledWith(
+      expect.objectContaining({ appliedDiscountCode: 'SAVE10' })
+    );
+  });
 });

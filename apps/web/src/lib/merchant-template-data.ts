@@ -57,6 +57,7 @@ const PUBLIC_FEATURE_SETTING_KEYS = [
   'loyalty_enabled',
   'low_stock_threshold',
   'order_tracking_enabled',
+  'oxygen_enabled',
   'pay_on_delivery_enabled',
   'paystack_enabled',
   'wallet_paystack_dva_enabled',

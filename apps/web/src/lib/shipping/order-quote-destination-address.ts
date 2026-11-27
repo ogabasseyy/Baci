@@ -1,4 +1,4 @@
-import { areLocationStateLabelsEquivalent } from '@baci/shared/lib';
+import { areLocationStateLabelsEquivalent } from '@baci/shared/lib/location-state-aliases';
 import type { OrderCreateInput } from '@/schemas/orders';
 import type { parseStoredQuoteRequest } from './order-shipment-booking-utils';
 

@@ -57,6 +57,14 @@ vi.mock('expo-splash-screen', () => ({
   preventAutoHideAsync: vi.fn(),
 }));
 
+// The keyboard library ships Flow source that the test transform cannot parse;
+// the provider only wraps its children here.
+vi.mock('@/components/ui/AppKeyboardProvider', () => ({
+  AppKeyboardProvider: ({ children }: { children?: React.ReactNode }) => (
+    <>{children}</>
+  ),
+}));
+
 vi.mock('react-native-reanimated', () => ({}));
 
 vi.mock('react-native', async () => {

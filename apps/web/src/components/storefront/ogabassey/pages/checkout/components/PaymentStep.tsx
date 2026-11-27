@@ -147,6 +147,17 @@ export function PaymentStep({
     orderAmount,
     payableAmount: remainingAmount,
   });
+  const creditDirectEligible = isPaymentMethodAvailable({
+    paymentMethod: 'credit_direct',
+    oxygenAllowed,
+    paystackCheckoutAvailable,
+    korapayCheckoutAvailable,
+    bankTransferCheckoutAvailable,
+    featureSettings: merchant?.feature_settings,
+    currency,
+    orderAmount,
+    payableAmount: remainingAmount,
+  });
   const hasInstallmentOptions = hasAnyInstallmentOption({
     oxygenAllowed,
     featureSettings: merchant?.feature_settings,
@@ -198,6 +209,7 @@ export function PaymentStep({
         bankTransferCheckoutAvailable={bankTransferCheckoutAvailable}
         featureSettings={merchant?.feature_settings}
         klumpEligible={klumpEligible}
+        creditDirectEligible={creditDirectEligible}
         oxygenEligible={oxygenEligible}
         hasInstallmentOptions={hasInstallmentOptions}
         currency={currency}

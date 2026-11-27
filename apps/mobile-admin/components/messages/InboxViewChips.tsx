@@ -1,0 +1,85 @@
+import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import {
+  RADIUS,
+  SPACING,
+  type ThemeColors,
+  TYPOGRAPHY,
+} from '@/constants/theme';
+import { INBOX_VIEWS, type InboxView } from '@/schemas/merchant-inbox';
+
+interface InboxViewChipsProps {
+  colors: ThemeColors;
+  onChange: (view: InboxView) => void;
+  value: InboxView;
+}
+
+/** One row of views, so a busy inbox is a tap away from what needs doing. */
+export function InboxViewChips({
+  colors,
+  onChange,
+  value,
+}: InboxViewChipsProps) {
+  return (
+    <ScrollView
+      contentContainerStyle={styles.row}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      // A horizontal ScrollView grows by default and would take screen height.
+      style={styles.scroller}
+    >
+      {INBOX_VIEWS.map((view) => {
+        const selected = view.value === value;
+        return (
+          <Pressable
+            accessibilityLabel={view.label}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            key={view.value}
+            onPress={() => onChange(view.value)}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: selected ? colors.primary : colors.card,
+                borderColor: selected ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.label,
+                {
+                  color: selected ? colors.textOnPrimary : colors.textSecondary,
+                  fontFamily: selected
+                    ? TYPOGRAPHY.fontFamily.semiBold
+                    : TYPOGRAPHY.fontFamily.medium,
+                },
+              ]}
+            >
+              {view.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  chip: {
+    alignItems: 'center',
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    justifyContent: 'center',
+    // Tall enough to tap (#4483); the slimmer sides and per-state weight are
+    // the list's newer look.
+    minHeight: SPACING.touchTarget,
+    paddingHorizontal: SPACING.md,
+  },
+  label: { fontSize: TYPOGRAPHY.size.md },
+  scroller: { flexGrow: 0 },
+  row: {
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+  },
+});

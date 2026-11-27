@@ -1,6 +1,10 @@
 import { type InfiniteData, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { inboxConversationsKey, inboxThreadKey } from '@/lib/inbox-query-keys';
+import {
+  inboxConversationsKey,
+  inboxSearchPrefix,
+  inboxThreadKey,
+} from '@/lib/inbox-query-keys';
 import { isDefinitelyNotSent, sendInboxReply } from '@/lib/merchant-inbox-api';
 import {
   INBOX_REPLY_MAX_LENGTH,
@@ -49,6 +53,19 @@ export function useInboxReply({
     text.length > 0 &&
     text.length <= INBOX_REPLY_MAX_LENGTH;
 
+  /**
+   * A reply changes the chat's last message, so the lists and any cached
+   * search results (which hold whole chat snapshots) are refreshed.
+   */
+  const refreshLists = () => {
+    void queryClient.invalidateQueries({
+      queryKey: inboxConversationsKey(merchantId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: inboxSearchPrefix(merchantId),
+    });
+  };
+
   const appendToThread = (message: InboxMessage) => {
     queryClient.setQueryData<InfiniteData<InboxThreadPage, number | undefined>>(
       inboxThreadKey(merchantId, conversationId),
@@ -88,9 +105,7 @@ export function useInboxReply({
             m.sender === 'store' && m.id > lastKnownId && m.text.trim() === body
         );
         if (delivered) {
-          void queryClient.invalidateQueries({
-            queryKey: inboxConversationsKey(merchantId),
-          });
+          refreshLists();
           setDraft('');
           setStatus('idle');
           return;
@@ -100,9 +115,7 @@ export function useInboxReply({
       }
       const message = await sendInboxReply(conversationId, body);
       appendToThread(message);
-      void queryClient.invalidateQueries({
-        queryKey: inboxConversationsKey(merchantId),
-      });
+      refreshLists();
       setDraft('');
       setStatus('idle');
     } catch (error) {

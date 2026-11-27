@@ -10,6 +10,8 @@ export interface PaymentGatewaySettings {
   preferred_international_gateway: 'paystack' | 'korapay';
   // Credit Direct BNPL
   credit_direct_enabled: boolean;
+  // Oxygen BNPL
+  oxygen_enabled: boolean;
 }
 
 /** Shape of the raw `/api/merchant/features` payload we read here. */
@@ -20,6 +22,7 @@ interface RawPaymentSettings {
   preferred_local_gateway?: string | null;
   preferred_international_gateway?: string | null;
   credit_direct_enabled?: boolean | null;
+  oxygen_enabled?: boolean | null;
 }
 
 // Korapay is opt-in (default OFF) — consistent with the checkout gate and the
@@ -31,6 +34,7 @@ export const DEFAULT_PAYMENT_SETTINGS: PaymentGatewaySettings = {
   preferred_local_gateway: 'paystack',
   preferred_international_gateway: 'korapay',
   credit_direct_enabled: false,
+  oxygen_enabled: false,
 };
 
 function coerceGateway(
@@ -61,5 +65,6 @@ export function normalizePaymentSettings(
       'korapay'
     ),
     credit_direct_enabled: data.credit_direct_enabled ?? false,
+    oxygen_enabled: data.oxygen_enabled ?? false,
   };
 }

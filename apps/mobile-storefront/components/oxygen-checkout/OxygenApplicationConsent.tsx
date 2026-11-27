@@ -14,60 +14,76 @@ const TERMS_URL = 'https://www.oxygenx.africa/terms-of-service';
 export function OxygenApplicationConsent({
   checked,
   disabled,
+  error,
   onChange,
 }: {
   checked: boolean;
   disabled?: boolean;
+  error?: string | null;
   onChange: (value: boolean) => void;
 }) {
   const colors = useOxygenColors();
   return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityLabel="I agree to share these details with Oxygen and accept Oxygen’s terms"
-      accessibilityState={{ checked, disabled }}
-      disabled={disabled}
-      onPress={() => onChange(!checked)}
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.muted,
-          borderColor: checked ? colors.primary : colors.border,
-        },
-      ]}
-    >
-      <View style={styles.check} accessible={false}>
-        <Ionicons
-          name={checked ? 'checkbox' : 'square-outline'}
-          size={24}
-          color={checked ? colors.primary : colors.textSecondary}
-        />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.text, { color: colors.textSecondary }]}>
-          I agree to share these details with Oxygen for this finance
-          application and accept{' '}
-          <Text
-            accessibilityRole="link"
-            accessibilityLabel="Read Oxygen’s terms"
-            onPress={(event) => {
-              event.stopPropagation();
-              void Linking.openURL(TERMS_URL).catch(() =>
-                Alert.alert('Could not open terms', 'Please try again.')
-              );
-            }}
-            style={{
-              color: colors.primary,
-              textDecorationLine: 'underline',
-              fontWeight: '600',
-            }}
-          >
-            Oxygen’s terms
+    <View style={{ gap: 8 }}>
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityLabel="I agree to share these details with Oxygen and accept Oxygen’s terms"
+        accessibilityState={{ checked, disabled }}
+        disabled={disabled}
+        onPress={() => onChange(!checked)}
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.muted,
+            borderColor: error
+              ? colors.error
+              : checked
+                ? colors.primary
+                : colors.border,
+          },
+        ]}
+      >
+        <View style={styles.check} accessible={false}>
+          <Ionicons
+            name={checked ? 'checkbox' : 'square-outline'}
+            size={24}
+            color={checked ? colors.primary : colors.textSecondary}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.text, { color: colors.textSecondary }]}>
+            I agree to share these details with Oxygen for this finance
+            application and accept{' '}
+            <Text
+              accessibilityRole="link"
+              accessibilityLabel="Read Oxygen’s terms"
+              onPress={(event) => {
+                event.stopPropagation();
+                void Linking.openURL(TERMS_URL).catch(() =>
+                  Alert.alert('Could not open terms', 'Please try again.')
+                );
+              }}
+              style={{
+                color: colors.primary,
+                textDecorationLine: 'underline',
+                fontWeight: '600',
+              }}
+            >
+              Oxygen’s terms
+            </Text>
+            .
           </Text>
-          .
+        </View>
+      </Pressable>
+      {error ? (
+        <Text
+          accessibilityRole="alert"
+          style={{ color: colors.error, fontSize: 13 }}
+        >
+          {error}
         </Text>
-      </View>
-    </Pressable>
+      ) : null}
+    </View>
   );
 }
 const styles = StyleSheet.create({

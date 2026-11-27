@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { Text } from 'react-native';
+import type { KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import AppKeyboardAwareScrollView from '@/components/ui/AppKeyboardAwareScrollView';
 import { OxygenActionFooter } from './OxygenActionFooter';
 import { OxygenApplicationHeader } from './OxygenApplicationHeader';
@@ -29,10 +31,26 @@ export interface OxygenApplicationStepsProps
 export function OxygenApplicationSteps(props: OxygenApplicationStepsProps) {
   const { step, fields, onChange, busy, onStepChange, onSubmit, error } = props;
   const colors = useOxygenColors();
+  const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
   const banksUnavailable = Boolean(props.onRetryBanks) && !props.banks.length;
+  const hasEmploymentError = Boolean(
+    props.errors?.employment_status ||
+      props.errors?.name_of_employer ||
+      props.errors?.salary_amount ||
+      props.errors?.salary_date
+  );
+  useEffect(() => {
+    if (step !== 2) return;
+    if (props.consentError) {
+      scrollRef.current?.scrollToEnd?.({ animated: true });
+    } else if (hasEmploymentError) {
+      scrollRef.current?.scrollTo?.({ y: 0, animated: true });
+    }
+  }, [step, props.consentError, hasEmploymentError]);
   return (
     <OxygenDraftSaveContext value={props.onFieldBlur}>
       <AppKeyboardAwareScrollView
+        ref={scrollRef}
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: step === 0 ? 12 : 24, paddingBottom: 24 }}
@@ -64,7 +82,7 @@ export function OxygenApplicationSteps(props: OxygenApplicationStepsProps) {
           <OxygenIncomeStep {...props} />
         )}
         {error ? (
-          <Text accessibilityRole="alert" style={{ color: colors.text }}>
+          <Text accessibilityRole="alert" style={{ color: colors.error }}>
             {error}
           </Text>
         ) : null}
@@ -98,9 +116,7 @@ export function OxygenApplicationSteps(props: OxygenApplicationStepsProps) {
               props.accountChecking ||
               !props.active ||
               (step > 0 && banksUnavailable) ||
-              (step === 1 && props.accountConfirmed === false) ||
-              (step === 2 &&
-                (!props.consent || (!props.proof && !props.proofReceived)))
+              (step === 1 && props.accountConfirmed === false)
             }
             onPress={() =>
               step === 2 ? onSubmit() : onStepChange(step === 0 ? 1 : 2)

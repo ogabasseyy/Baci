@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MerchantInboxUpdate } from '@/schemas/merchant-inbox-manage';
+import { reminderDueAt } from './chat-follow-up-reminder-due-at';
 import { holdUnconfirmedChatFollowUpReminder } from './chat-follow-up-reminder-hold';
 import { reminderCustomerName } from './chat-follow-up-reminder-name';
 import { observeChatFollowUp } from './chat-follow-up-reminder-observe';
@@ -91,7 +92,7 @@ export async function recoverAcceptedFollowUpReminder(
     const held = await holdUnconfirmedChatFollowUpReminder(client, {
       merchantId: binding.merchantId,
       conversationId,
-      dueAt: new Date(requestedAt).toISOString(),
+      dueAt: reminderDueAt(requestedAt),
       customerName: reminderCustomerName(
         shown?.customerName ?? sent.customerName
       ),

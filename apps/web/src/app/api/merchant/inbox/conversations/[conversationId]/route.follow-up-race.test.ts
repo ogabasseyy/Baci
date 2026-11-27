@@ -41,10 +41,13 @@ type Change = { followUpAt: string | null };
 let table: ReturnType<typeof fakeReminderTable>;
 let engine: Record<string, unknown>;
 
+/** The engine is sent, and shows, whole seconds only. */
 const snoozed = (until: string) => ({
   status: 'snoozed',
   followUp: true,
-  snoozedUntil: until,
+  snoozedUntil: new Date(
+    Math.floor(Date.parse(until) / 1000) * 1000
+  ).toISOString(),
 });
 const cleared = { status: 'open', followUp: false, snoozedUntil: null };
 const shown = () => ({
@@ -139,6 +142,16 @@ describe('bugfix: two team members changing one follow-up at the same moment', (
     await existing('2026-11-25T08:00:00.000Z');
     await overtaken({ followUpAt: nine }, { followUpAt: justAfterNine });
     expect(dueTimes()).toEqual([justAfterNine]);
+  });
+
+  it('an older save cannot tell itself from a newer one within the same second', async () => {
+    await existing('2026-11-25T08:00:00.000Z');
+    await overtaken(
+      { followUpAt: '2026-11-25T09:00:00.100Z' },
+      { followUpAt: '2026-11-25T09:00:00.900Z' }
+    );
+    // Both are one snooze to the engine, so they are one reminder.
+    expect(dueTimes()).toEqual([nine]);
   });
 
   it.each([

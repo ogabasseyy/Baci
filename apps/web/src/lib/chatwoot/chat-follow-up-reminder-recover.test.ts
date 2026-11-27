@@ -128,6 +128,15 @@ describe('recoverAcceptedFollowUpReminder', () => {
     expect(mocks.sync).not.toHaveBeenCalled();
   });
 
+  it('holds the time to the whole second the engine was sent', async () => {
+    engine({ status: 'open' });
+    await recover('2026-11-25T09:00:00.900Z', {
+      state: 'unconfirmed',
+      customerName: 'Ada',
+    });
+    expect(mocks.hold.mock.calls[0][1].dueAt).toBe('2026-11-25T09:00:00.000Z');
+  });
+
   it('records an unconfirmed follow-up as usual once the chat shows it', async () => {
     await recover(requested, { state: 'unconfirmed', customerName: 'Ada' });
     expect(mocks.sync).toHaveBeenCalledTimes(1);

@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MerchantInboxUpdate } from '@/schemas/merchant-inbox-manage';
 import { clearChatFollowUpReminder } from './chat-follow-up-reminder-clear';
+import { reminderDueAt } from './chat-follow-up-reminder-due-at';
 import { reminderCustomerName } from './chat-follow-up-reminder-name';
 import type { ObservedFollowUp } from './chat-follow-up-reminder-observe';
 import { saveChatFollowUpReminder } from './chat-follow-up-reminder-save';
@@ -70,6 +71,7 @@ export async function syncChatFollowUpReminder(
     conversationId: input.conversationId,
   };
   try {
+    const dueAt = requestedAt === null ? null : reminderDueAt(requestedAt);
     let version = input.seen;
     let observed = input.observed;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
@@ -80,19 +82,19 @@ export async function syncChatFollowUpReminder(
         observed = await input.recheck();
         if (!observed) break;
       }
-      if (supersededByAnotherSet(requestedAt, observed)) return 'unchanged';
+      if (supersededByAnotherSet(dueAt, observed)) return 'unchanged';
       if (version === undefined) continue;
       if (
         reread &&
         version &&
         observed &&
-        mayBeNewer(requestedAt, observed, version.dueAt)
+        mayBeNewer(dueAt, observed, version.dueAt)
       ) {
         return 'unchanged';
       }
       const revision = version?.revision ?? null;
       const outcome =
-        requestedAt === null
+        dueAt === null
           ? await clearChatFollowUpReminder(client, {
               ...chat,
               version: revision,
@@ -100,7 +102,7 @@ export async function syncChatFollowUpReminder(
           : await saveChatFollowUpReminder(client, {
               ...chat,
               version: revision,
-              dueAt: new Date(requestedAt).toISOString(),
+              dueAt,
               customerName: reminderCustomerName(input.customerName),
             });
       if (outcome === 'done') return report(true, wanted, input);

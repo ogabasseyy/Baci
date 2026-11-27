@@ -1,9 +1,11 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SnowEffect } from './SnowEffect';
+import { SNOW_STOPPED_KEY } from './use-snow-dismissal';
 
+const themeState = vi.hoisted(() => ({ theme: 'santa' }));
 vi.mock('../providers/v2-theme-context', () => ({
-  useV2Theme: () => ({ theme: 'santa' }),
+  useV2Theme: () => themeState,
 }));
 
 function stubMatchMedia(initial: boolean) {
@@ -14,8 +16,10 @@ function stubMatchMedia(initial: boolean) {
       return reduce && query.includes('prefers-reduced-motion');
     },
     media: query,
-    addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
-    removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+    addEventListener: (_type: string, listener: () => void) =>
+      listeners.add(listener),
+    removeEventListener: (_type: string, listener: () => void) =>
+      listeners.delete(listener),
   }));
   return (next: boolean) => {
     reduce = next;
@@ -23,64 +27,80 @@ function stubMatchMedia(initial: boolean) {
   };
 }
 
+const snow = () => screen.queryByTestId('snow-effect');
+const stopButton = () => screen.queryByRole('button', { name: /stop snow/i });
+
 describe('SnowEffect', () => {
-  const raf = vi.fn(() => 1);
-  const cancelRaf = vi.fn();
+  const store = new Map<string, string>();
 
   beforeEach(() => {
-    raf.mockClear();
-    cancelRaf.mockClear();
-    vi.stubGlobal('requestAnimationFrame', raf);
-    vi.stubGlobal('cancelAnimationFrame', cancelRaf);
-    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
-      clearRect: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      arc: vi.fn(),
-      fill: vi.fn(),
-    })) as unknown as HTMLCanvasElement['getContext'];
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 11, 10));
+    themeState.theme = 'santa';
+    store.clear();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+    });
+    stubMatchMedia(false);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
-  it('animates the snow canvas when motion is allowed', () => {
-    stubMatchMedia(false);
-    const { container } = render(<SnowEffect />);
-    expect(container.querySelector('canvas')).not.toBeNull();
-    expect(raf).toHaveBeenCalled();
-  });
-
-  it('renders nothing and never animates when the shopper prefers reduced motion', () => {
-    stubMatchMedia(true);
-    const { container } = render(<SnowEffect />);
-    expect(container.querySelector('canvas')).toBeNull();
+  it('shows the snow and a stop button without any JavaScript animation loop', () => {
+    const raf = vi.fn(() => 1);
+    vi.stubGlobal('requestAnimationFrame', raf);
+    render(<SnowEffect />);
+    expect(snow()).toHaveAttribute('aria-hidden', 'true');
+    expect(stopButton()).toBeInTheDocument();
     expect(raf).not.toHaveBeenCalled();
   });
 
-  it('stops and restarts the snow when the setting changes while the page is open', () => {
-    const setReducedMotion = stubMatchMedia(false);
+  it('renders nothing outside the Santa theme', () => {
+    themeState.theme = 'standard';
     const { container } = render(<SnowEffect />);
-
-    act(() => setReducedMotion(true));
-    expect(container.querySelector('canvas')).toBeNull();
-    expect(cancelRaf).toHaveBeenCalled();
-
-    raf.mockClear();
-    act(() => setReducedMotion(false));
-    expect(container.querySelector('canvas')).not.toBeNull();
-    expect(raf).toHaveBeenCalled();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it('overlays the page without blocking taps, without relying on route stylesheets', () => {
-    stubMatchMedia(false);
+  it('follows the reduce-motion setting, including live changes', () => {
+    const setReducedMotion = stubMatchMedia(true);
+    const { container } = render(<SnowEffect />);
+    expect(container).toBeEmptyDOMElement();
+    act(() => setReducedMotion(false));
+    expect(snow()).toBeInTheDocument();
+  });
+
+  it('stops on request and stays stopped for the rest of this year', () => {
+    const first = render(<SnowEffect />);
+    fireEvent.click(screen.getByRole('button', { name: /stop snow/i }));
+    expect(snow()).not.toBeInTheDocument();
+    expect(stopButton()).not.toBeInTheDocument();
+    expect(store.get(SNOW_STOPPED_KEY)).toBe('2026');
+    first.unmount();
     render(<SnowEffect />);
-    expect(screen.getByTestId('snow-effect')).toHaveStyle({
-      position: 'fixed',
-      pointerEvents: 'none',
-      zIndex: '100',
+    expect(snow()).not.toBeInTheDocument();
+  });
+
+  it('returns the following December', () => {
+    store.set(SNOW_STOPPED_KEY, '2025');
+    render(<SnowEffect />);
+    expect(snow()).toBeInTheDocument();
+  });
+
+  it('still stops for this visit when browser storage is blocked', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('blocked');
+      },
     });
+    render(<SnowEffect />);
+    fireEvent.click(screen.getByRole('button', { name: /stop snow/i }));
+    expect(snow()).not.toBeInTheDocument();
   });
 });
-

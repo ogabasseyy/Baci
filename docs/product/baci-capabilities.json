@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-27T07:14:51+01:00",
-  "source_revision": "a6202b2ab516beda55056895d0711f6a44ecd5de",
-  "evidence_digest": "243ed7ab6f1ac31a057871fcac257166f2507a546d2f416a37d484afba484ca1",
-  "claims_digest": "c21735245fc780034f51569cad5c800f86fa9a5611d73497b69aa97d4ec24189",
-  "review_scope": "Source evidence only. Re-reviewed paid-order bank-return recovery and incoming tender evidence. Unresolved order-bound receipts and allocated top-ups whose orders remain cancel-eligible keep the source account stable; an open return claim also blocks rotation. After cancellation or fulfillment removes that path, exact accepted tender receipts replay across account rotation only when immutable identity matches, while new receipts require the active account and cutover. Added SQL regressions for pre-confirmation and allocated-top-up rotation, registered append-only migrations for replay, and split oversized mobile test files below 300 lines. Pilot controls remain disabled; no production availability, transaction, or capability is asserted. Reused a shared UUID validator in web and mobile repayment controls without changing the accepted evidence format or claiming production behavior.",
+  "reviewed_at": "2026-11-27T09:34:58+01:00",
+  "source_revision": "215f5d6b504baa91fb6370aa7a136ff5d7e9070c",
+  "evidence_digest": "d56c202b362cbf6293b72ef2bd9c6b974c93775d85e4e8281be6b9a4e7ba15fe",
+  "claims_digest": "b10c67529f61fcdcec485148176c0481e14892d389d0de8bfd29fdc6c94b3804",
+  "review_scope": "Source evidence only. Re-reviewed paid-order bank-return recovery and tender evidence: unresolved order-bound receipts, cancel-eligible allocated top-ups and open claims preserve the source account; after cancellation or fulfillment, exact receipt replay survives rotation only for immutable matches, while new receipts require the active account and cutover. Re-reviewed route-specific paid-order amendment admission, mobile retry recovery and merchant-scoped case-insensitive POS refund deduplication. Verified no production availability or capability promotion; pilot controls remain disabled. Reviewed SQL regressions, append-only replay registrations and shared UUID validation; accepted evidence formats are unchanged.",
   "capabilities": [
     {
       "id": "payments",

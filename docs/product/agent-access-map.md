@@ -1,12 +1,13 @@
 # Baci capabilities and agent access
 
 Reviewed 27 November 2026 against source revision
-`eb016dbc48c9aa61d5ba4e2423af0a7392ecbbf6`. Re-reviewed paid-order bank-return
-recovery and incoming tender evidence: unresolved order-bound receipts block
-account rotation; exact receipt replays remain merchant-scoped across rotation
-only when immutable identity matches; new receipts require the active account
-and cutover. The mobile test files now remain below 300 lines. The pilot remains
-disabled.
+`aacbb18a990692357c0a10c24cb1cd0159611fb5`. Re-reviewed paid-order bank-return
+recovery and incoming tender evidence: unresolved receipts, active allocated
+top-ups, and open return claims preserve their source account until cancellation
+or fulfillment closes that route. Exact receipt replay remains merchant-scoped
+across a later rotation only when immutable identity matches; new receipts
+require the active account and cutover. Mobile test files remain below 300
+lines. The pilot remains disabled.
 
 Baci's positioning is **agent-native commerce infrastructure for African
 merchants**: merchant-owned stores, structured discovery, controlled transactions

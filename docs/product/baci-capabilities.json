@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-27T06:01:22+01:00",
-  "source_revision": "eb016dbc48c9aa61d5ba4e2423af0a7392ecbbf6",
-  "evidence_digest": "785ceac5f9b9a16eb56119269bf5375513532ada1a510b051be4860f67b63e9d",
-  "claims_digest": "6267bc207e8e0bf492ca94b7edfcbbf236b1389550d443f68df36358c4782a5c",
-  "review_scope": "Source evidence only. Re-reviewed paid-order bank-return recovery and incoming tender evidence. Bank-account rotation stays blocked while an order-bound incoming receipt is unresolved; exact accepted tender receipts replay merchant-wide across account rotation only when immutable receipt identity matches, while new receipts still require the active account and cutover. Added SQL regressions for unresolved cash/POS rotation and allocated-receipt replay, registered the migration for chronological replay, and split oversized mobile test files below 300 lines. Pilot controls remain disabled; no production availability, transaction, or capability is asserted.",
+  "reviewed_at": "2026-11-27T06:47:11+01:00",
+  "source_revision": "aacbb18a990692357c0a10c24cb1cd0159611fb5",
+  "evidence_digest": "d6c07f5d5f6dd963d32e515d5a57720d12705775488db7850cb622502e0950f8",
+  "claims_digest": "c28ea450abf46899945750ae3451f93952bcd1cc91e4540a3d172c5f7c12e4ef",
+  "review_scope": "Source evidence only. Re-reviewed paid-order bank-return recovery and incoming tender evidence. Unresolved order-bound receipts and allocated top-ups whose orders remain cancel-eligible keep the source account stable; an open return claim also blocks rotation. After cancellation or fulfillment removes that path, exact accepted tender receipts replay across account rotation only when immutable identity matches, while new receipts require the active account and cutover. Added SQL regressions for pre-confirmation and allocated-top-up rotation, registered append-only migrations for replay, and split oversized mobile test files below 300 lines. Pilot controls remain disabled; no production availability, transaction, or capability is asserted.",
   "capabilities": [
     {
       "id": "payments",

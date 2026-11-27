@@ -311,3 +311,25 @@ it('grants execution framing only to the private builder response among admin pa
     uninstall();
   }
 });
+
+it('exempts /api/search/autocomplete from the generic /api no-cache override while keeping other /api routes uncached', () => {
+  const autocomplete = applySecurityHeaders(
+    NextResponse.next(),
+    '/api/search/autocomplete',
+    'Mozilla',
+    'storefront',
+    false
+  );
+  const otherApi = applySecurityHeaders(
+    NextResponse.next(),
+    '/api/orders',
+    'Mozilla',
+    'storefront',
+    false
+  );
+
+  expect(autocomplete.headers.get('Cache-Control')).toBeNull();
+  expect(otherApi.headers.get('Cache-Control')).toBe(
+    'no-cache, must-revalidate, max-age=0'
+  );
+});

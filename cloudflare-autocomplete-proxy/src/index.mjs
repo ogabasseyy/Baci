@@ -2,30 +2,73 @@
  * Cloudflare Worker: Storefront Search Autocomplete
  *
  * Moves `/api/search/autocomplete` completely off Vercel Fluid Compute onto
- * Cloudflare's edge with built-in Cache API (`caches.default`) caching.
+ * Cloudflare's edge with built-in Cache API (`caches.default`) caching,
+ * per-isolate in-flight request coalescing, and a bounded concurrency cap.
  * Uses ONLY the public Supabase anon key under RLS (never service-role).
+ *
+ * Note on Cloudflare Cache API: `caches.default` is per-datacenter (colo)
+ * and does not replicate across colos. Per-key in-flight coalescing and
+ * `MAX_IN_FLIGHT` protect Supabase from bursty concurrent cache misses
+ * within an isolate.
  */
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Exact parity with `SEARCH_QUERY_SANITIZATION_REGEX` in apps/web/src/lib/sanitize-core.ts
+const SEARCH_QUERY_SANITIZATION_REGEX = /[<>'"`;\\,()|]/g;
+const MAX_QUERY_LENGTH = 200;
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 10;
 const EDGE_CACHE_TTL_SECONDS = 120;
 const EDGE_CACHE_SWR_SECONDS = 600;
 const UPSTREAM_TIMEOUT_MS = 5000;
+export const MAX_IN_FLIGHT = 256;
 
+/** @type {Map<string, Promise<{ suggestions: unknown[], popularSearches: unknown[] }>>} */
+const inFlightRequests = new Map();
+
+/**
+ * Exact parity with `sanitizeSearchQuery` in apps/web/src/lib/sanitize-core.ts.
+ * Preserves internal whitespace because exact/fuzzy SKU ranking and cache
+ * identity depend on it (see storefront-search-autocomplete.ts).
+ */
 export function sanitizeQuery(value) {
   if (typeof value !== 'string') return '';
-  return value.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return value
+    .replace(SEARCH_QUERY_SANITIZATION_REGEX, '')
+    .trim()
+    .slice(0, MAX_QUERY_LENGTH);
+}
+
+/**
+ * Exact parity with `isSafeUrl` in apps/web/src/lib/product-image.ts.
+ * Allows relative paths (excluding protocol-relative `//...`) and http/https URLs.
+ */
+export function isSafeProductImageUrl(url) {
+  if (typeof url !== 'string' || !url) return false;
+  if (url.startsWith('//')) return false;
+  if (url.startsWith('/')) return true;
+  try {
+    const parsed = new URL(url, 'https://placeholder.invalid');
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export function getPrimaryImage(images) {
   if (!Array.isArray(images) || images.length === 0) return null;
   for (const item of images) {
-    if (typeof item === 'string' && item.trim()) return item.trim();
-    if (item && typeof item === 'object' && typeof item.url === 'string') {
+    if (typeof item === 'string') {
+      const trimmed = item.trim();
+      if (trimmed && isSafeProductImageUrl(trimmed)) return trimmed;
+    } else if (
+      item &&
+      typeof item === 'object' &&
+      typeof item.url === 'string'
+    ) {
       const trimmed = item.url.trim();
-      if (trimmed) return trimmed;
+      if (trimmed && isSafeProductImageUrl(trimmed)) return trimmed;
     }
   }
   return null;
@@ -37,8 +80,10 @@ export function isOriginAllowed(origin, allowedOriginsEnv) {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
 
+  // Fail closed when no allowlist is configured so arbitrary third-party
+  // origins cannot use this worker as an open cross-origin backend.
   if (configured.length === 0) {
-    return true;
+    return false;
   }
 
   let parsedOrigin;
@@ -71,12 +116,8 @@ export function buildCorsHeaders(request, env = {}) {
     Vary: 'Origin',
   });
 
-  if (origin) {
-    if (isOriginAllowed(origin, env.ALLOWED_ORIGINS)) {
-      headers.set('Access-Control-Allow-Origin', origin);
-    }
-  } else if (!env.ALLOWED_ORIGINS?.trim()) {
-    headers.set('Access-Control-Allow-Origin', '*');
+  if (origin && isOriginAllowed(origin, env.ALLOWED_ORIGINS)) {
+    headers.set('Access-Control-Allow-Origin', origin);
   }
 
   return headers;
@@ -219,6 +260,34 @@ async function queryAutocomplete({
   }
 }
 
+export function runBoundedCoalescedQuery(
+  coalesceKey,
+  work,
+  maxInFlight = MAX_IN_FLIGHT
+) {
+  const existing = inFlightRequests.get(coalesceKey);
+  if (existing) {
+    return existing;
+  }
+
+  if (inFlightRequests.size >= maxInFlight) {
+    const error = new Error('Autocomplete request capacity exceeded');
+    error.code = 'autocomplete_saturated';
+    return Promise.reject(error);
+  }
+
+  const pending = Promise.resolve()
+    .then(work)
+    .finally(() => {
+      if (inFlightRequests.get(coalesceKey) === pending) {
+        inFlightRequests.delete(coalesceKey);
+      }
+    });
+
+  inFlightRequests.set(coalesceKey, pending);
+  return pending;
+}
+
 export default {
   async fetch(request, env = {}, ctx = undefined) {
     const url = new URL(request.url);
@@ -313,6 +382,7 @@ export default {
     );
     normalizedCacheUrl.searchParams.set('q', query.toLowerCase());
     normalizedCacheUrl.searchParams.set('limit', String(parsedLimit));
+    const coalesceKey = normalizedCacheUrl.search;
     const cacheKey = new Request(normalizedCacheUrl.toString(), {
       method: 'GET',
     });
@@ -326,14 +396,25 @@ export default {
       }
     }
 
+    const parsedMaxInFlight = Number(env.MAX_IN_FLIGHT);
+    const maxInFlight =
+      Number.isInteger(parsedMaxInFlight) && parsedMaxInFlight > 0
+        ? parsedMaxInFlight
+        : MAX_IN_FLIGHT;
+
     try {
-      const result = await queryAutocomplete({
-        supabaseUrl,
-        anonKey,
-        merchantId,
-        query,
-        limit: parsedLimit,
-      });
+      const result = await runBoundedCoalescedQuery(
+        coalesceKey,
+        () =>
+          queryAutocomplete({
+            supabaseUrl,
+            anonKey,
+            merchantId,
+            query,
+            limit: parsedLimit,
+          }),
+        maxInFlight
+      );
 
       const response = jsonResponse(result, 200, {
         'Cache-Control': `public, max-age=${EDGE_CACHE_TTL_SECONDS}, stale-while-revalidate=${EDGE_CACHE_SWR_SECONDS}`,
@@ -349,7 +430,17 @@ export default {
       }
 
       return withCors(response, corsHeaders);
-    } catch {
+    } catch (error) {
+      if (error && error.code === 'autocomplete_saturated') {
+        return withCors(
+          jsonResponse({ suggestions: [], popularSearches: [] }, 200, {
+            'Cache-Control': 'no-store',
+            'X-Autocomplete-Degraded': 'autocomplete_saturated',
+          }),
+          corsHeaders
+        );
+      }
+
       return withCors(
         jsonResponse({ error: 'Failed to get autocomplete suggestions' }, 500, {
           'Cache-Control': 'no-store',

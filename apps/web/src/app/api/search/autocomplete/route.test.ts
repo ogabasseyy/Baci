@@ -65,6 +65,45 @@ describe('GET /api/search/autocomplete', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+    expect(response.headers.get('CDN-Cache-Control')).toBeNull();
+  });
+
+  it('leaves query-timeout (57014) fallback responses uncached at the edge', async () => {
+    mockGetStorefrontAutocompleteProducts.mockRejectedValueOnce({
+      code: '57014',
+    });
+
+    const response = await GET(
+      new NextRequest(
+        `https://ogabassey.com/api/search/autocomplete?q=iphone&merchant_id=${MERCHANT_ID}`
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
+    expect(response.headers.get('CDN-Cache-Control')).toBeNull();
+    expect(await response.json()).toEqual({
+      suggestions: [],
+      popularSearches: [],
+    });
+  });
+
+  it('leaves 500 error responses uncached at the edge', async () => {
+    mockGetStorefrontAutocompleteProducts.mockRejectedValueOnce(
+      new Error('supabase unavailable')
+    );
+
+    const response = await GET(
+      new NextRequest(
+        `https://ogabassey.com/api/search/autocomplete?q=iphone&merchant_id=${MERCHANT_ID}`
+      )
+    );
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(response.headers.get('Vercel-CDN-Cache-Control')).toBeNull();
     expect(response.headers.get('CDN-Cache-Control')).toBeNull();
   });

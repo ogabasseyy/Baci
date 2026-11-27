@@ -3,6 +3,7 @@ main = "src/index.mjs"
 compatibility_date = "2026-04-01"
 
 [vars]
-# Optional comma-separated origin allowlist (empty = allow any HTTPS storefront origin)
-ALLOWED_ORIGINS = ""
-# Public Supabase URL & anon key are configured via `wrangler secret put` or [vars]
+# Comma-separated browser origin allowlist (supports *.usebaci.com wildcards; empty fails closed)
+ALLOWED_ORIGINS = "https://usebaci.com,*.usebaci.com,https://ogabassey.com,https://www.ogabassey.com"
+# Public Supabase URL & anon key are configured via `wrangler secret put`
+# Deploy from this directory with: pnpm run deploy (or `npx wrangler deploy`)

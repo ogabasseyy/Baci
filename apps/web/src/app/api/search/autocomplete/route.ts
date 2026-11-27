@@ -10,6 +10,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 
 const POSTGRES_QUERY_CANCELED_CODE = '57014';
+const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' } as const;
 const AUTOCOMPLETE_CACHE_HEADERS = {
   'Cache-Control': 'public, max-age=30, stale-while-revalidate=300',
   'CDN-Cache-Control':
@@ -99,26 +100,32 @@ export async function GET(request: NextRequest) {
       console.warn(
         'Autocomplete saturated; returning empty suggestions for this request'
       );
-      return NextResponse.json({
-        suggestions: [],
-        popularSearches: [],
-      });
+      return NextResponse.json(
+        {
+          suggestions: [],
+          popularSearches: [],
+        },
+        { headers: NO_STORE_HEADERS }
+      );
     }
 
     if (errorCode === POSTGRES_QUERY_CANCELED_CODE) {
       console.warn(
         'Autocomplete timed out; returning empty suggestions for this request'
       );
-      return NextResponse.json({
-        suggestions: [],
-        popularSearches: [],
-      });
+      return NextResponse.json(
+        {
+          suggestions: [],
+          popularSearches: [],
+        },
+        { headers: NO_STORE_HEADERS }
+      );
     }
 
     console.error('Autocomplete error:', error);
     return NextResponse.json(
       { error: 'Failed to get autocomplete suggestions' },
-      { status: 500 }
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }

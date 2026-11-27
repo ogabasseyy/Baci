@@ -26,6 +26,7 @@ import {
   deleteNote,
   installHarness,
   json,
+  notifyOtherTab,
   publishIdentity,
   setNote,
   uninstallHarness,
@@ -67,6 +68,41 @@ describe('bugfix: one passing error left a signed-in shopper unlinked', () => {
 
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
     expect(deleteNote).not.toHaveBeenCalled();
+  });
+
+  it('bugfix: an account that took over in another tab gets its own second try', async () => {
+    mocks.fetch
+      .mockResolvedValueOnce(json(503))
+      .mockResolvedValueOnce(json(503))
+      .mockResolvedValueOnce(json(503))
+      .mockResolvedValueOnce(json(200, { token: 'account.b' }));
+
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await later(15_000); // Account A has used its one retry.
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+
+    // Later, another tab switched to account B; the hint still says signed in.
+    await later(60_000);
+    act(() => notifyOtherTab());
+    await later(15_000);
+
+    expect(mocks.fetch).toHaveBeenCalledTimes(4);
+    expect(setNote).toHaveBeenCalledWith({
+      baci_customer_link: 'account.b',
+    });
+  });
+
+  it('gives no further try when this tab is only looked at again', async () => {
+    mocks.fetch.mockResolvedValue(json(503));
+
+    renderHook(() => useChatwootCustomerLink('ogabassey', true));
+    await later(15_000);
+    await later(60_000);
+    act(() => notifyOtherTab('resume'));
+    await later(120_000);
+
+    // The first check, its retry, and the one check for the refocus.
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
   });
 
   it('does not ask again when the server says there is no session', async () => {

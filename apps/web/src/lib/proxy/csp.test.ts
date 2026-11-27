@@ -299,3 +299,22 @@ it('allows the configured PostHog relay origin in admin, auth, and storefront CS
     vi.unstubAllEnvs();
   }
 });
+
+it('allows the configured autocomplete worker origin only in storefront connect-src', () => {
+  vi.stubEnv(
+    'NEXT_PUBLIC_AUTOCOMPLETE_URL',
+    'https://baci-autocomplete-proxy.ogabassey-ai.workers.dev'
+  );
+  try {
+    expect(
+      directive(generateCSP('storefront', false), 'connect-src')
+    ).toContain('https://baci-autocomplete-proxy.ogabassey-ai.workers.dev');
+    for (const routeType of ['admin', 'auth', 'api'] as const) {
+      expect(generateCSP(routeType, false)).not.toContain(
+        'https://baci-autocomplete-proxy.ogabassey-ai.workers.dev'
+      );
+    }
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

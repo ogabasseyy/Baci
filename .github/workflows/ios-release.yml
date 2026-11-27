@@ -34,7 +34,7 @@ permissions:
 env:
   NODE_VERSION: '24'
   RUBY_VERSION: '3.4'
-  XCODE_VERSION: '26.2'
+  XCODE_VERSION: '27.2'
   WORKING_DIR: apps/mobile-admin
   # Offset added to github.run_number to avoid collisions with
   # build numbers previously uploaded via EAS or manual Xcode archives.
@@ -46,7 +46,7 @@ env:
 jobs:
   build-and-submit:
     name: Build IPA & Submit to App Store Connect
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 150
 
     steps:

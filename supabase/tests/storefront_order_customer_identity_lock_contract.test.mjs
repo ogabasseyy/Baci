@@ -16,22 +16,38 @@ const correctiveMigration = readFileSync(
   ),
   'utf8'
 );
+const catalogLockMigration = readFileSync(
+  new URL(
+    '../migrations/20261127122000_storefront_catalog_identity_lock_order.sql',
+    import.meta.url
+  ),
+  'utf8'
+);
 
 test('storefront resolves and locks guest customer identity before checkout delegation', () => {
-  const wrapperStart = migration.indexOf(
+  const wrapperStart = catalogLockMigration.indexOf(
     'CREATE OR REPLACE FUNCTION private.create_storefront_order('
   );
-  const helperCall = migration.indexOf(
+  const productLock = catalogLockMigration.indexOf('PERFORM p.id', wrapperStart);
+  const variantLock = catalogLockMigration.indexOf('PERFORM v.id', productLock);
+  const offersLock = catalogLockMigration.indexOf(
+    'PERFORM offer.id',
+    variantLock
+  );
+  const helperCall = catalogLockMigration.indexOf(
     'private.lock_storefront_order_entrypoint_identity(',
     wrapperStart
   );
-  const uncheckedCall = migration.indexOf(
+  const uncheckedCall = catalogLockMigration.indexOf(
     'private.create_storefront_order_unchecked(',
     wrapperStart
   );
 
   assert.notEqual(wrapperStart, -1);
-  assert.ok(helperCall > wrapperStart);
+  assert.ok(productLock > wrapperStart);
+  assert.ok(variantLock > productLock);
+  assert.ok(offersLock > variantLock);
+  assert.ok(helperCall > offersLock);
   assert.ok(uncheckedCall > helperCall);
 });
 

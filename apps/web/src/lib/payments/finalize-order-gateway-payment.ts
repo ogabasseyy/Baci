@@ -13,6 +13,7 @@ export type {
 } from './finalize-order-gateway-payment-types';
 
 import { fileSettlementCaptureFailureReview } from '@/lib/payments/file-settlement-capture-failure-review';
+import { handlePaymentForCancelledOrder } from '@/lib/payments/handle-payment-for-cancelled-order';
 import { schedulePaidOrderNotifications } from '@/lib/payments/notify-paid-order';
 import { toRichPaidOrder } from '@/lib/payments/paid-order-normalization';
 import { persistPaidOrderSideEffectRetry } from '@/lib/payments/paid-order-retry-persistence';
@@ -122,6 +123,33 @@ export async function finalizeOrderGatewayPayment({
       });
     }
     return { error: orderFetchError, kind: 'order_fetch_failed' };
+  }
+
+  if (
+    completion.timeout_inventory_confirmed &&
+    (order.payment_status !== 'paid' ||
+      order.cancelled_at !== null ||
+      order.paid_transaction_id !== transaction.id ||
+      ['cancelled', 'canceled'].includes(order.shipping_status ?? ''))
+  ) {
+    const isRefunded = order.payment_status === 'refunded';
+    const reviewFiled = await handlePaymentForCancelledOrder({
+      gatewayReference: transaction.gateway_reference ?? reference,
+      issueType: isRefunded ? 'payment_received_after_refund' : undefined,
+      order: {
+        cancelled_at: order.cancelled_at,
+        id: orderId,
+        shipping_status: order.shipping_status,
+      },
+      reason:
+        'Late payment order changed state after inventory was confirmed; paid side effects were suppressed',
+      transactionId: transaction.id,
+    });
+    if (!reviewFiled) return { kind: 'review_failed' };
+    if (isRefunded) {
+      return { kind: 'order_skipped', paymentStatus: order.payment_status };
+    }
+    return { kind: 'order_cancelled', orderNumber: order.order_number ?? null };
   }
 
   let richOrder: ReturnType<typeof toRichPaidOrder>;

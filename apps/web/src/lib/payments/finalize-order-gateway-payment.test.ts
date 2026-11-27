@@ -214,6 +214,37 @@ describe('finalizeOrderGatewayPayment', () => {
     expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
   });
 
+  it('rechecks a reinstated order before skipping inventory confirmation', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(
+      completion({ timeout_inventory_confirmed: true })
+    );
+    const order = {
+      ...richOrderRow,
+      cancelled_at: '2026-11-27T10:00:00Z',
+      paid_transaction_id: null,
+      payment_status: 'refunded',
+      shipping_status: 'cancelled',
+    };
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: order }))
+    );
+
+    expect(outcome).toEqual({
+      kind: 'order_skipped',
+      paymentStatus: 'refunded',
+    });
+    expect(mocks.handlePaymentForCancelledOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issueType: 'payment_received_after_refund',
+        transactionId: 'txn-1',
+      })
+    );
+    expect(mocks.ensurePaidOrderInventoryConfirmed).not.toHaveBeenCalled();
+    expect(mocks.notifyPaymentReceived).not.toHaveBeenCalled();
+    expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
+  });
+
   it('fails closed when a blocked-order review cannot be filed', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue(
       completion({

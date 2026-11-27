@@ -39,7 +39,7 @@ export const SNOW_CSS = `
 .oga-snow-layer{position:absolute;left:-20px;right:-20px;bottom:0;will-change:transform}
 .oga-snow-lights{position:absolute;top:0;left:0;right:0;height:4px;filter:blur(4px);background:linear-gradient(to right,var(--store-primary),var(--store-accent),var(--store-primary));opacity:0.25}
 .oga-snow-stop{position:fixed;left:12px;bottom:calc(env(safe-area-inset-bottom, 0px) + 168px);z-index:46;min-height:32px;padding:6px 12px;border:1px solid var(--store-primary-text);border-radius:999px;background:var(--store-primary);color:var(--store-primary-text);font-size:12px;line-height:1;cursor:pointer}
-@media (min-width: 768px){.oga-snow-stop{bottom:16px}}
+@media (min-width: 64rem){.oga-snow-stop{bottom:16px}}
 @media (prefers-reduced-motion: reduce){.oga-snow,.oga-snow-stop{display:none}}
 ${SNOW_LAYERS.map(layerCss).join('')}
 `;

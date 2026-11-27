@@ -45,4 +45,12 @@ describe('snow styles', () => {
       expect(rule).not.toMatch(/#[0-9a-f]{3}|rgb/i);
     }
   });
+
+  it('keeps the stop button raised while the cart checkout bar can show', () => {
+    // The cart bar is fixed to the bottom below 64rem (1024px).
+    expect(SNOW_CSS).toContain(
+      '@media (min-width: 64rem){.oga-snow-stop{bottom:16px}}'
+    );
+    expect(SNOW_CSS).not.toContain('min-width: 768px');
+  });
 });

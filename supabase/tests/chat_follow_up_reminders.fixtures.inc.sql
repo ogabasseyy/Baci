@@ -34,10 +34,12 @@ CREATE FUNCTION pg_temp.record_proof(p_secret text, p_issued_at bigint, p_mercha
 $$;
 CREATE FUNCTION pg_temp.due(p_limit integer DEFAULT 25, p_age integer DEFAULT 0, p_secret text DEFAULT 'synthetic-chat-event-secret-0123456789abcdef')
 RETURNS SETOF public.chat_follow_up_reminders LANGUAGE sql AS $$
+  -- LEFT JOIN: an inner join to an empty table may never call the list function,
+  -- so a refused proof would look accepted.
   SELECT r.* FROM public.list_due_chat_follow_up_reminders(
     pg_temp.list_proof(p_secret, extract(epoch FROM now())::bigint - p_age, p_limit),
     extract(epoch FROM now())::bigint - p_age, p_limit) l
-  JOIN public.chat_follow_up_reminders r ON r.id = l.reminder_id;
+  LEFT JOIN public.chat_follow_up_reminders r ON r.id = l.reminder_id;
 $$;
 CREATE FUNCTION pg_temp.take(p_reminder uuid, p_send boolean DEFAULT true, p_merchant uuid DEFAULT 'c4a73000-0000-4000-8000-0000000000b1', p_age integer DEFAULT 0, p_secret text DEFAULT 'synthetic-chat-event-secret-0123456789abcdef')
 RETURNS jsonb LANGUAGE sql AS $$

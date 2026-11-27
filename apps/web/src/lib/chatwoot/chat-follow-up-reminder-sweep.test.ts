@@ -24,6 +24,7 @@ const mocks = {
   push: vi.fn(),
   release: vi.fn(),
   now: vi.fn(),
+  random: vi.fn(),
 };
 const deps = mocks as unknown as Parameters<
   typeof sweepChatFollowUpReminders
@@ -33,6 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   mocks.now.mockReturnValue(0);
+  mocks.random.mockReturnValue(0);
   mocks.release.mockResolvedValue(true);
   mocks.list.mockResolvedValue({ ok: true, reminders: [reminder(1)] });
   mocks.check.mockResolvedValue('due');

@@ -233,6 +233,15 @@ BEGIN
     p_merchant_id, v_row.conversation_id, v_outcome, 'follow_up'
   );
 
+  -- The same bounded housekeeping as the message and handover intakes, so a
+  -- store that only uses follow-ups does not keep events for ever.
+  DELETE FROM public.chat_message_events
+  WHERE merchant_id = p_merchant_id AND event_key IN (
+    SELECT event_key FROM public.chat_message_events
+    WHERE merchant_id = p_merchant_id AND created_at < pg_catalog.now() - interval '30 days'
+    LIMIT 200
+  );
+
   IF v_outcome = 'notified' THEN
     RETURN pg_catalog.jsonb_build_object('outcome', v_outcome, 'take', v_row.attempts);
   END IF;

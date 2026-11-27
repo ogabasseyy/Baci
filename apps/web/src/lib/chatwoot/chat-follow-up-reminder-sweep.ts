@@ -37,6 +37,8 @@ const SWEEP_BUDGET_MS = 30_000;
 
 type Dependencies = {
   now: () => number;
+  /** A number from 0 up to, not including, 1: where in the batch to start. */
+  random: () => number;
   list: typeof listDueChatFollowUpReminders;
   check: typeof checkFollowUpStillDue;
   record: typeof recordChatFollowUpReminder;
@@ -46,6 +48,7 @@ type Dependencies = {
 
 const defaults: Dependencies = {
   now: () => Date.now(),
+  random: () => Math.random(),
   list: listDueChatFollowUpReminders,
   check: checkFollowUpStillDue,
   record: recordChatFollowUpReminder,
@@ -122,6 +125,10 @@ async function handleReminder(
  * apart. Only a push that may have left is given up. Never throws for one
  * reminder's failure: the others still go out.
  *
+ * Each run starts at a random place in the batch and wraps round: slow
+ * reminders at the front would otherwise use up the time budget every run and
+ * leave the ones behind them until their day had passed.
+ *
  * Delivery is at most once on purpose. "May have left" starts at the mark
  * written just before the request to the delivery provider, so a run killed
  * between the two loses that one push: sending first would instead risk
@@ -150,7 +157,11 @@ export async function sweepChatFollowUpReminders(
     failed: 0,
   };
   const startedAt = deps.now();
-  for (const reminder of listed.reminders) {
+  const start = Math.floor(deps.random() * listed.reminders.length);
+  for (const reminder of [
+    ...listed.reminders.slice(start),
+    ...listed.reminders.slice(0, start),
+  ]) {
     if (deps.now() - startedAt > SWEEP_BUDGET_MS) {
       // Untouched reminders stay unhandled and are picked up by the next sweep.
       summary.deferred += 1;

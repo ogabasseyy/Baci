@@ -200,6 +200,27 @@ BEGIN
   END IF;
 END $$;
 
+-- Taking a reminder also does the same bounded cleanup as the other chat
+-- intakes, so a store that only uses follow-ups does not keep events for ever.
+INSERT INTO public.chat_message_events(merchant_id, event_key, conversation_id, outcome, kind, created_at) VALUES
+  ('c4a73000-0000-4000-8000-0000000000b1', 'evt-fu-expired', 451, 'notified', 'follow_up', now() - interval '31 days'),
+  ('c4a73000-0000-4000-8000-0000000000b1', 'evt-fu-recent', 452, 'notified', 'follow_up', now() - interval '29 days'),
+  ('c4a73000-0000-4000-8000-0000000000b2', 'evt-fu-other-store', 453, 'notified', 'follow_up', now() - interval '31 days');
+INSERT INTO public.chat_follow_up_reminders(id, merchant_id, conversation_id, due_at) VALUES
+  ('c4a73000-0000-4000-8000-0000000000e4', 'c4a73000-0000-4000-8000-0000000000b1', 304, now() - interval '10 minutes');
+DO $$
+BEGIN
+  IF pg_temp.take('c4a73000-0000-4000-8000-0000000000e4') <> '{"outcome":"notified","take":1}'::jsonb THEN
+    RAISE EXCEPTION 'the cleanup take did not notify';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.chat_message_events WHERE event_key = 'evt-fu-expired') THEN
+    RAISE EXCEPTION 'an event older than 30 days survived a follow-up take';
+  END IF;
+  IF (SELECT count(*) FROM public.chat_message_events WHERE event_key IN ('evt-fu-recent', 'evt-fu-other-store')) <> 2 THEN
+    RAISE EXCEPTION 'the cleanup removed a recent event or another store''s event';
+  END IF;
+END $$;
+
 -- Deleting the store removes its reminders.
 DO $$
 BEGIN

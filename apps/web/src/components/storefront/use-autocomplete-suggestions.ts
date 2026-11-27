@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { trackEvent } from '@/lib/event-tracking';
+import { getAutocompleteEndpoint } from '@/lib/storefront-autocomplete-endpoint';
 import type {
   AutocompletePopularSearch,
   AutocompleteProduct,
@@ -89,7 +90,7 @@ export function useAutocompleteSuggestions({
     // the current query.
     setSettledQuery(null);
     fetch(
-      `/api/search/autocomplete?q=${encodeURIComponent(debouncedValue)}&merchant_id=${merchantId}&limit=10`,
+      `${getAutocompleteEndpoint()}?q=${encodeURIComponent(debouncedValue)}&merchant_id=${merchantId}&limit=10`,
       { signal: controller.signal }
     )
       // The route returns JSON even for failures (e.g. a 500 body), which

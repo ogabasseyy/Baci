@@ -2,8 +2,9 @@ SAVEPOINT paged_reader;
 UPDATE private.brilstash_installations SET admission = 'suspended', retired_at = now()
 WHERE id = '30000000-0000-4000-8000-000000000001';
 INSERT INTO auth.users VALUES ('10000000-0000-4000-8000-000000000003');
-INSERT INTO private.brilstash_installations(id, merchant_id, partner_identity, single_page_only)
-VALUES ('30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000001', 'fixture-paged', false);
+INSERT INTO private.brilstash_installations(id, merchant_id, partner_identity, single_page_only, source_on_demand)
+VALUES ('30000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000001', 'fixture-paged', :brilstash_on_demand, :brilstash_on_demand);
+SELECT set_config('fixture.on_demand_feed', :'brilstash_on_demand', true);
 INSERT INTO private.brilstash_builder_entitlements
 VALUES ('30000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000003');
 INSERT INTO private.brilstash_category_mappings VALUES
@@ -14,13 +15,16 @@ INSERT INTO public.products (
 )
 SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid,
   '20000000-0000-4000-8000-000000000001', 'active', 'Fixture ' || n, 'paged-' || n,
-  '50000000-0000-4000-8000-000000000001', 'new', 50000 + n * 70000, '["https://MEDIA.example.invalid.:443/approved"]'::jsonb,
-  false, false, n, n, true, 'off'
+  '50000000-0000-4000-8000-000000000001', 'new', (CASE WHEN :brilstash_on_demand THEN 180000 ELSE 50000 END) + n * 70000, '["https://MEDIA.example.invalid.:443/approved"]'::jsonb,
+  false, false, n, n, NOT :brilstash_on_demand, 'off'
 FROM generate_series(1, 7) n;
+\if :brilstash_on_demand
+\else
 UPDATE public.products SET has_condition_offers = true WHERE slug = 'paged-2';
 INSERT INTO public.product_offers (id, merchant_id, product_id, condition, status, price, stock_quantity, images)
 SELECT '43000000-0000-4000-8000-000000000002', merchant_id, id, 'used', 'active', price, stock_quantity, images
 FROM public.products WHERE slug = 'paged-2';
+\endif
 -- An internal inventory anchor does not change a simple listing into a
 -- variant listing. The simple listing must still stage, activate, and serve.
 INSERT INTO public.product_variants (
@@ -54,9 +58,9 @@ INSERT INTO private.brilstash_listings (
   id, installation_id, source_kind, source_id, parent_product_id, external_id, pilot_slot, reviewed_identity
 )
 SELECT ('61000000-0000-4000-8000-00000000000' || n)::uuid, '30000000-0000-4000-8000-000000000003',
-  CASE WHEN n = 2 THEN 'offer' ELSE 'product' END,
-  CASE WHEN n = 2 THEN '43000000-0000-4000-8000-000000000002'::uuid ELSE product_id END,
-  product_id, 'paged-' || n, n, jsonb_build_object('condition', CASE WHEN n = 2 THEN 'used' ELSE 'new' END)
+  CASE WHEN n = 2 AND NOT :brilstash_on_demand THEN 'offer' ELSE 'product' END,
+  CASE WHEN n = 2 AND NOT :brilstash_on_demand THEN '43000000-0000-4000-8000-000000000002'::uuid ELSE product_id END,
+  product_id, 'paged-' || n, n, jsonb_build_object('condition', CASE WHEN n = 2 AND NOT :brilstash_on_demand THEN 'used' ELSE 'new' END)
 FROM generate_series(1, 7) n
 CROSS JOIN LATERAL (SELECT ('41000000-0000-4000-8000-00000000000' || n)::uuid AS product_id) fixture;
 INSERT INTO private.brilstash_listing_facts (
@@ -75,8 +79,11 @@ DECLARE installation uuid := '30000000-0000-4000-8000-000000000003';
 DECLARE read_result jsonb := public.load_brilstash_catalogue_sources(installation);
 DECLARE payload jsonb;
 BEGIN
-  IF NOT ((read_result->'rows') @> '[{"externalId":"paged-1","visible":true,"inventory":{"kind":"quantity","units":1}}]'::jsonb)
-  THEN RAISE EXCEPTION 'inventory anchor hid a simple listing'; END IF;
+  IF NOT ((read_result->'rows') @> jsonb_build_array(jsonb_build_object(
+    'externalId', 'paged-1', 'visible', true, 'inventory',
+    CASE WHEN current_setting('fixture.on_demand_feed')::boolean THEN '{"kind":"on-demand","units":100}'::jsonb
+      ELSE '{"kind":"quantity","units":1}'::jsonb END
+  ))) THEN RAISE EXCEPTION 'inventory anchor hid a simple listing or changed its approved quantity'; END IF;
   SELECT jsonb_agg(jsonb_build_object(
     'external_id', item->>'externalId', 'title', item->>'name',
     'product_url', 'https://shop.example.invalid/products/' || (item->>'slug') ||
@@ -233,6 +240,34 @@ BEGIN
   );
 END $$;
 RESET ROLE;
+\if :brilstash_on_demand
+SET LOCAL ROLE anon;
+DO $$
+DECLARE result jsonb := fixture.read_brilstash_page(repeat('p', 43), 1, 100, 250000);
+BEGIN
+  IF result->>'status' IS DISTINCT FROM 'ok' OR result->>'totalCount' IS DISTINCT FROM '7'
+    OR result->>'totalPages' IS DISTINCT FROM '1'
+    OR result->'products' IS DISTINCT FROM current_setting('fixture.paged_input')::jsonb->'payload'
+    OR EXISTS (SELECT 1 FROM jsonb_array_elements(result->'products') item
+      WHERE item->>'stock_quantity' IS DISTINCT FROM '100' OR (item->>'price_naira')::numeric < 250000)
+  THEN RAISE EXCEPTION 'on-demand partner pull did not return seven complete 100-unit listings: %', result; END IF;
+END $$;
+RESET ROLE;
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE target uuid := '30000000-0000-4000-8000-000000000003';
+DECLARE state jsonb := public.inspect_brilstash_probe_state(target);
+DECLARE feed_url text := 'https://feed.example.invalid/partners/yield/brilpay/products?page=1&limit=100&min_price=';
+BEGIN
+  BEGIN
+    PERFORM public.record_brilstash_handoff_probe(target, state, gen_random_uuid(), feed_url || '0');
+    RAISE EXCEPTION 'on-demand handoff accepted a probe with the wrong price filter';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  PERFORM public.record_brilstash_handoff_probe(target, state, gen_random_uuid(), feed_url || '250000');
+END $$;
+RESET ROLE;
+\else
 SET LOCAL ROLE anon;
 DO $$
 DECLARE combined jsonb := '[]'::jsonb;
@@ -254,6 +289,19 @@ BEGIN
   THEN RAISE EXCEPTION 'pagination did not preserve the payload or inclusive price filter'; END IF;
 END $$;
 RESET ROLE;
+-- A single-page request must fail closed when the price floor would omit listings.
+UPDATE private.brilstash_installations SET single_page_only = true
+WHERE id = '30000000-0000-4000-8000-000000000003';
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  IF fixture.read_brilstash_page(repeat('p', 43), 1, 100, 250000)->>'status' IS DISTINCT FROM 'unavailable'
+  THEN RAISE EXCEPTION 'the financing floor silently returned a partial live generation'; END IF;
+END $$;
+RESET ROLE;
+UPDATE private.brilstash_installations SET single_page_only = false
+WHERE id = '30000000-0000-4000-8000-000000000003';
 \ir paged-reader-live-eligibility.inc.sql
+\endif
 ROLLBACK TO SAVEPOINT paged_reader;
 RELEASE SAVEPOINT paged_reader;

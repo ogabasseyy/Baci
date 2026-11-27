@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import {
   BRILSTASH_FULL_FEED_QUERY,
+  BRILSTASH_PARTNER_PRICE_FLOOR,
   BRILSTASH_PILOT_LISTING_LIMIT,
 } from '@/config/brilstash-feed';
 import { checkBrilStashFeedRateLimit } from '@/lib/brilstash/feed-rate-limit';
@@ -51,12 +52,15 @@ export async function GET(request: NextRequest): Promise<Response> {
   // The live contract accepts any limit that fits the entire assortment
   // on one page. The separate handoff probe always uses the default limit.
   const query = parseBrilStashFeedQuery(url.searchParams);
+  const wholeCataloguePrice =
+    query?.min_price === BRILSTASH_FULL_FEED_QUERY.min_price ||
+    query?.min_price === BRILSTASH_PARTNER_PRICE_FLOOR;
   const validQuery =
     query !== null &&
     (!deployment.singlePageOnly ||
       (query.page === BRILSTASH_FULL_FEED_QUERY.page &&
         query.limit >= BRILSTASH_PILOT_LISTING_LIMIT &&
-        query.min_price === BRILSTASH_FULL_FEED_QUERY.min_price));
+        wholeCataloguePrice));
 
   const budget = await checkBrilStashFeedRateLimit(
     request,
@@ -120,7 +124,7 @@ export async function GET(request: NextRequest): Promise<Response> {
       if (
         query.page === BRILSTASH_FULL_FEED_QUERY.page &&
         query.limit === BRILSTASH_FULL_FEED_QUERY.limit &&
-        query.min_price === BRILSTASH_FULL_FEED_QUERY.min_price
+        wholeCataloguePrice
       ) {
         // The unsigned hash correlates this response with the server log.
         // Auth and payload verification are handled separately.

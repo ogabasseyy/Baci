@@ -6,6 +6,7 @@ export const BRILSTASH_PILOT_LISTING_LIMIT = 7;
 
 // Matches the opt-in on-demand policy in the BrilStash source reader.
 export const BRILSTASH_ON_DEMAND_CAPACITY = 100;
+export const BRILSTASH_PARTNER_PRICE_FLOOR = 250_000;
 
 // Match the database reader's live page rules and the handoff probe URL check.
 export const BRILSTASH_FULL_FEED_QUERY = {

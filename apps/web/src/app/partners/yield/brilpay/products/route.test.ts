@@ -171,6 +171,8 @@ describe('BrilStash feed GET', () => {
     ['?page=1&limit=100', 200],
     ['?page=2', 400],
     ['?min_price=1', 400],
+    ['?page=1&limit=100&min_price=250000', 200],
+    ['?page=1&limit=100&min_price=250001', 400],
   ])('enforces the live single-page contract for %s', async (query, status) => {
     vi.stubEnv('BRILSTASH_FEED_ENV', 'live');
     vi.stubEnv('VERCEL_ENV', 'production');

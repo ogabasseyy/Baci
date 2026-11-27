@@ -22,7 +22,7 @@ async function main() {
   // The handoff RPC binds this exact query order in the verified URL.
   const { page, limit, min_price } = BRILSTASH_FULL_FEED_QUERY;
   const target = new URL(
-    `https://${host.data}${BRILSTASH_FEED_PATH}?page=${page}&limit=${limit}&min_price=${min_price}`
+    `https://${host.data}${BRILSTASH_FEED_PATH}?page=${page}&limit=${limit}&min_price=${parsed.data.minPrice ?? min_price}`
   );
   const { installationId, expectedGenerationId, expectedPayloadDigest } = parsed.data;
   const client = await createBrilStashToolClient();

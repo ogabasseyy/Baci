@@ -9,6 +9,9 @@ const input = {
 
 it('accepts explicitly pinned probe inputs', () => {
   expect(brilStashProbeInputSchema.parse(input)).toEqual(input);
+  expect(
+    brilStashProbeInputSchema.parse({ ...input, minPrice: 250_000 })
+  ).toEqual({ ...input, minPrice: 250_000 });
 });
 
 it.each([
@@ -16,6 +19,7 @@ it.each([
   { expectedGenerationId: 'bad' },
   { expectedPayloadDigest: 'a'.repeat(63) },
   { expectedPayloadDigest: 'A'.repeat(64) },
+  { minPrice: 250_001 },
   { extra: true },
 ])('rejects invalid probe bindings %#', (override) => {
   expect(

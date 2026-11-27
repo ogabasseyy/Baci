@@ -103,7 +103,7 @@ function resolveProductCanonicalPath(p) {
       continue;
     }
     const name = s.startsWith(':') ? s.slice(1) : s.slice(1, -1);
-    if (name === 'category' || name === 'categorySlug' || name === 'collection' || name === 'collectionSlug') {
+    if (name === 'category' || name === 'categoryId' || name === 'categorySlug' || name === 'collection' || name === 'collectionId' || name === 'collectionSlug') {
       if (typeof p.categorySlug !== 'string' || p.categorySlug.length === 0) return undefined;
       out.push(encodeURIComponent(p.categorySlug));
     } else if (name === 'productId') {

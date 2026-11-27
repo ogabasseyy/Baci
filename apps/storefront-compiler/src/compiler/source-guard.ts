@@ -3,6 +3,7 @@ import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import {
   BANNED_MERCHANT_SUBPATH_SPECIFIERS,
   BENIGN_OBJECT_DATA_KEYS,
+  FORBIDDEN_BROWSER_CAPABILITY_GLOBALS,
   FORBIDDEN_BROWSER_NAV_GLOBALS,
   FORBIDDEN_STORAGE_GLOBALS,
   isProhibitedImportSpecifier,
@@ -266,15 +267,17 @@ export function scanManifestSourceSafety(
             `Direct browser storage/cookie access via "${node.text}" is forbidden; use @baci/experience-sdk`
           );
         } else if (
-          FORBIDDEN_BROWSER_NAV_GLOBALS.has(node.text) &&
+          (FORBIDDEN_BROWSER_NAV_GLOBALS.has(node.text) ||
+            FORBIDDEN_BROWSER_CAPABILITY_GLOBALS.has(node.text)) &&
           !hasLocalLexicalBinding(node, node.text)
         ) {
           fail(
             'DYNAMIC_CODE_EVAL',
-            `Direct browser navigation via "${node.text}" is forbidden; use @baci/experience-sdk navigation`
+            `Direct browser capability or navigation via "${node.text}" is forbidden; use @baci/experience-sdk`
           );
         } else if (
           SENSITIVE_GLOBAL_ROOTS.has(node.text) &&
+          !hasLocalLexicalBinding(node, node.text) &&
           !isAllowedSensitiveRootPosition(node)
         ) {
           fail(

@@ -80,7 +80,34 @@ export const FORBIDDEN_BROWSER_NAV_GLOBALS: ReadonlySet<string> = new Set([
   'history',
   'navigation',
   'open',
+  'opener',
 ]);
+
+export const SAFE_NAVIGATOR_MEMBERS: ReadonlySet<string> = new Set([
+  'language',
+  'languages',
+  'onLine',
+  'maxTouchPoints',
+  'userAgent',
+  'vendor',
+]);
+
+export const FORBIDDEN_BROWSER_CAPABILITY_GLOBALS: ReadonlySet<string> =
+  new Set(
+    [
+      'Notification|PaymentRequest|PublicKeyCredential|CredentialsContainer',
+      'showOpenFilePicker|showSaveFilePicker|showDirectoryPicker|queryLocalFonts',
+      'EyeDropper|IdleDetector|BarcodeDetector|SpeechRecognition|webkitSpeechRecognition',
+      'speechSynthesis|RTCPeerConnection|webkitRTCPeerConnection|MediaRecorder',
+      'Accelerometer|Gyroscope|Magnetometer|AmbientLightSensor',
+      'AbsoluteOrientationSensor|RelativeOrientationSensor',
+      'Worker|SharedWorker|BroadcastChannel|MessageChannel',
+      'geolocation|mediaDevices|clipboard|credentials|permissions',
+      'bluetooth|usb|hid|serial|wakeLock|locks|sendBeacon|share|xr',
+    ]
+      .join('|')
+      .split('|')
+  );
 
 export const BENIGN_OBJECT_DATA_KEYS: ReadonlySet<string> = new Set([
   'assign',

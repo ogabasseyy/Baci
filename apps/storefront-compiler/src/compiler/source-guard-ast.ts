@@ -1,13 +1,16 @@
 import ts from '@typescript/typescript6';
 import {
   DYNAMIC_CODE_NAMES,
+  FORBIDDEN_BROWSER_CAPABILITY_GLOBALS,
   FORBIDDEN_BROWSER_NAV_GLOBALS,
   FORBIDDEN_STORAGE_MEMBERS,
+  SAFE_NAVIGATOR_MEMBERS,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
+import { resolveStaticString } from './const-string-fold';
 import { hasLocalLexicalBinding } from './jsx-tag-safety';
 
-export { hasLocalLexicalBinding };
+export { hasLocalLexicalBinding, resolveStaticString };
 
 export interface SourceSafetyViolation {
   filePath: string;
@@ -50,11 +53,47 @@ function isDocumentReceiver(expr: ts.Expression): boolean {
   return false;
 }
 
+function isNavigatorReceiver(expr: ts.Expression): boolean {
+  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
+    return isNavigatorReceiver(expr.expression);
+  }
+  if (ts.isIdentifier(expr)) {
+    return (
+      expr.text === 'navigator' && !hasLocalLexicalBinding(expr, 'navigator')
+    );
+  }
+  if (ts.isPropertyAccessExpression(expr)) {
+    return (
+      expr.name.text === 'navigator' &&
+      isSensitiveGlobalReceiver(expr.expression)
+    );
+  }
+  if (ts.isElementAccessExpression(expr)) {
+    return (
+      resolveStaticString(expr.argumentExpression) === 'navigator' &&
+      isSensitiveGlobalReceiver(expr.expression)
+    );
+  }
+  return false;
+}
+
 function isSensitiveGlobalReceiver(expr: ts.Expression): boolean {
   if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
     return isSensitiveGlobalReceiver(expr.expression);
   }
-  if (ts.isIdentifier(expr)) return SENSITIVE_GLOBAL_ROOTS.has(expr.text);
+  if (ts.isIdentifier(expr)) {
+    return (
+      SENSITIVE_GLOBAL_ROOTS.has(expr.text) &&
+      !hasLocalLexicalBinding(expr, expr.text)
+    );
+  }
+  if (
+    ts.isCallExpression(expr) &&
+    (ts.isPropertyAccessExpression(expr.expression) ||
+      ts.isElementAccessExpression(expr.expression))
+  ) {
+    return isSensitiveGlobalReceiver(expr.expression.expression);
+  }
   if (ts.isPropertyAccessExpression(expr)) {
     return (
       SENSITIVE_GLOBAL_ROOTS.has(expr.name.text) ||
@@ -99,6 +138,8 @@ export function classifyMemberName(
   receiver?: ts.Expression,
   memberAccessNode?: ts.Node
 ): void {
+  const push = (rule: SourceSafetyViolation['rule'], detail: string) =>
+    violations.push({ filePath, rule, detail });
   const lowerMember = memberName.toLowerCase();
   const isUnsafeWrite =
     (memberName === 'write' || memberName === 'writeln') &&
@@ -108,108 +149,78 @@ export function classifyMemberName(
         memberAccessNode.parent.expression === memberAccessNode) ||
       (receiver !== undefined && isDocumentReceiver(receiver)));
   if (LOWERCASE_HTML_SINK_NAMES.has(lowerMember) || isUnsafeWrite) {
-    violations.push({
-      filePath,
-      rule: 'DANGEROUS_INNER_HTML',
-      detail: `Forbidden raw HTML or React element sink "${memberName}"`,
-    });
+    push(
+      'DANGEROUS_INNER_HTML',
+      `Forbidden raw HTML or React element sink "${memberName}"`
+    );
   } else if (
     FORBIDDEN_BROWSER_NAV_GLOBALS.has(memberName) &&
     receiver !== undefined &&
     isSensitiveGlobalReceiver(receiver)
   ) {
-    violations.push({
-      filePath,
-      rule: 'DYNAMIC_CODE_EVAL',
-      detail: `Direct browser navigation via "${memberName}" is forbidden; use @baci/experience-sdk navigation`,
-    });
+    push(
+      'DYNAMIC_CODE_EVAL',
+      `Direct browser navigation via "${memberName}" is forbidden; use @baci/experience-sdk navigation`
+    );
   } else if (memberName === 'click' || memberName === 'submit') {
-    violations.push({
-      filePath,
-      rule: 'DYNAMIC_CODE_EVAL',
-      detail: `Imperative DOM "${memberName}" activation is forbidden; use declarative events or SDK navigation`,
-    });
+    push(
+      'DYNAMIC_CODE_EVAL',
+      `Imperative DOM "${memberName}" activation is forbidden; use declarative events or SDK navigation`
+    );
   } else if (
     memberName === 'assign' &&
     !isAllowedObjectAssignCall(memberAccessNode)
   ) {
-    violations.push({
-      filePath,
-      rule: 'DANGEROUS_INNER_HTML',
-      detail:
-        'Unbounded .assign() mutation or navigation is forbidden; use object spread or SDK navigation',
-    });
+    push(
+      'DANGEROUS_INNER_HTML',
+      'Unbounded .assign() mutation or navigation is forbidden; use object spread or SDK navigation'
+    );
   } else if (
     memberName === 'createElement' ||
     memberName === 'createElementNS' ||
     memberName === 'cloneElement' ||
     memberName === 'createFactory'
   ) {
-    violations.push({
-      filePath,
-      rule: 'DANGEROUS_INNER_HTML',
-      detail: `Direct React factory "${memberName}" is forbidden; use JSX syntax`,
-    });
+    push(
+      'DANGEROUS_INNER_HTML',
+      `Direct React factory "${memberName}" is forbidden; use JSX syntax`
+    );
   } else if (DYNAMIC_CODE_NAMES.has(memberName)) {
-    violations.push({
-      filePath,
-      rule: 'DYNAMIC_CODE_EVAL',
-      detail: `Dynamic code access via "${memberName}" is forbidden`,
-    });
+    push(
+      'DYNAMIC_CODE_EVAL',
+      `Dynamic code access via "${memberName}" is forbidden`
+    );
   } else if (memberName === 'serviceWorker') {
-    violations.push({
-      filePath,
-      rule: 'SERVICE_WORKER_ACCESS',
-      detail:
-        'Service Worker registration or control is forbidden on storefronts',
-    });
+    push(
+      'SERVICE_WORKER_ACCESS',
+      'Service Worker registration or control is forbidden on storefronts'
+    );
   } else if (
     FORBIDDEN_STORAGE_MEMBERS.has(memberName) ||
     ((memberName === 'caches' || memberName === 'storage') &&
       receiver !== undefined &&
       isSensitiveGlobalReceiver(receiver))
   ) {
-    violations.push({
-      filePath,
-      rule: 'DIRECT_COOKIE_ACCESS',
-      detail:
-        'Custom storefronts are cookie/storage-free; use @baci/experience-sdk APIs',
-    });
-  }
-}
-
-/** Constant-folds string literals, templates, and `+` concatenations. */
-export function resolveStaticString(node: ts.Expression): string | null {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return node.text;
-  }
-  if (
-    ts.isParenthesizedExpression(node) ||
-    ts.isAsExpression(node) ||
-    ts.isSatisfiesExpression(node) ||
-    ts.isNonNullExpression(node) ||
-    ts.isTypeAssertionExpression(node)
+    push(
+      'DIRECT_COOKIE_ACCESS',
+      'Custom storefronts are cookie/storage-free; use @baci/experience-sdk APIs'
+    );
+  } else if (
+    receiver !== undefined &&
+    ((isNavigatorReceiver(receiver) &&
+      !SAFE_NAVIGATOR_MEMBERS.has(memberName)) ||
+      (isSensitiveGlobalReceiver(receiver) &&
+        (FORBIDDEN_BROWSER_CAPABILITY_GLOBALS.has(memberName) ||
+          memberName === 'valueOf' ||
+          memberName === 'top' ||
+          memberName === 'parent' ||
+          memberName === 'frames')))
   ) {
-    return resolveStaticString(node.expression);
+    push(
+      'DYNAMIC_CODE_EVAL',
+      `Forbidden browser permission or capability API "${memberName}"`
+    );
   }
-  if (
-    ts.isBinaryExpression(node) &&
-    node.operatorToken.kind === ts.SyntaxKind.PlusToken
-  ) {
-    const left = resolveStaticString(node.left);
-    const right = resolveStaticString(node.right);
-    return left !== null && right !== null ? left + right : null;
-  }
-  if (ts.isTemplateExpression(node)) {
-    let acc = node.head.text;
-    for (const span of node.templateSpans) {
-      const mid = resolveStaticString(span.expression);
-      if (mid === null) return null;
-      acc += mid + span.literal.text;
-    }
-    return acc;
-  }
-  return null;
 }
 
 export function isPropertyOrDeclarationName(node: ts.Identifier): boolean {
@@ -225,16 +236,8 @@ export function isPropertyOrDeclarationName(node: ts.Identifier): boolean {
       ts.isGetAccessorDeclaration(p) ||
       ts.isSetAccessorDeclaration(p) ||
       ts.isJsxAttribute(p) ||
-      ts.isEnumMember(p)) &&
-    p.name === node
-  ) {
-    return true;
-  }
-  if (ts.isBindingElement(p) && (p.propertyName === node || p.name === node)) {
-    return true;
-  }
-  if (
-    (ts.isVariableDeclaration(p) ||
+      ts.isEnumMember(p) ||
+      ts.isVariableDeclaration(p) ||
       ts.isParameter(p) ||
       ts.isFunctionDeclaration(p) ||
       ts.isClassDeclaration(p) ||
@@ -249,8 +252,10 @@ export function isPropertyOrDeclarationName(node: ts.Identifier): boolean {
     return true;
   }
   if (
-    (ts.isImportSpecifier(p) || ts.isExportSpecifier(p)) &&
-    (p.name === node || p.propertyName === node)
+    (ts.isBindingElement(p) ||
+      ts.isImportSpecifier(p) ||
+      ts.isExportSpecifier(p)) &&
+    (p.propertyName === node || p.name === node)
   ) {
     return true;
   }

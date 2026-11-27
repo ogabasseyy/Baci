@@ -1,6 +1,38 @@
 import ts from '@typescript/typescript6';
 import { bindingContainsName, hasDeclareModifier } from './jsx-export-graph';
-import { resolveStaticString } from './source-guard-ast';
+
+export function resolveStaticString(node: ts.Expression): string | null {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isNonNullExpression(node) ||
+    ts.isTypeAssertionExpression(node)
+  ) {
+    return resolveStaticString(node.expression);
+  }
+  if (
+    ts.isBinaryExpression(node) &&
+    node.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    const left = resolveStaticString(node.left);
+    const right = resolveStaticString(node.right);
+    return left !== null && right !== null ? left + right : null;
+  }
+  if (ts.isTemplateExpression(node)) {
+    let acc = node.head.text;
+    for (const span of node.templateSpans) {
+      const mid = resolveStaticString(span.expression);
+      if (mid === null) return null;
+      acc += mid + span.literal.text;
+    }
+    return acc;
+  }
+  return null;
+}
 
 export function resolveStaticOrConstString(
   expr: ts.Expression,

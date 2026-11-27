@@ -209,7 +209,7 @@ export default {
             (lastEntry ? lastEntry[1] : '')
           : '');
       const categoryVal =
-        matchedRoute.params.category || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionSlug || '';
+        matchedRoute.params.category || matchedRoute.params.categoryId || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionId || matchedRoute.params.collectionSlug || '';
       const categoryQuery = categoryVal ? \`category=\${encodeURIComponent(categoryVal)}&\` : '';
       const lookupQuery = productSlug ? \`productSlug=\${encodeURIComponent(productSlug)}\` : \`productId=\${encodeURIComponent(explicitId)}\`;
       const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?\${categoryQuery}\${lookupQuery}\`, 'product');

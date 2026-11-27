@@ -1,6 +1,5 @@
 'use client';
 import type React from 'react';
-import { CheckoutReplay } from '@/components/analytics/checkout-replay';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -280,10 +279,6 @@ export const CheckoutPage: React.FC<
   });
   return (
     <BankCardOfferOptionsContext.Provider value={bankCards.model}>
-      {merchant?.slug === 'ogabassey' &&
-        currentStep === 'payment' &&
-        !searchParams.has('orderId') &&
-        !searchParams.has('oxygenOrderId') && <CheckoutReplay />}
       <CheckoutCartScreen
         model={{ ...screenModel, ...oxygenSlots }}
         order={resumedOrder}

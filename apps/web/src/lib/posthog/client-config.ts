@@ -7,11 +7,21 @@ import {
   type PostHogEnv,
 } from '@/lib/posthog/config';
 import { sanitizePostHogExceptionText } from '@/lib/posthog/exception-text';
+import { PLATFORM_ROOT_ROUTE_SEGMENTS } from '@/lib/posthog/platform-root-routes';
 import { isPublicBlogPathname } from '@/lib/posthog/public-blog-path';
 import { getPostHogTracingHeaderHostnames } from '@/lib/posthog/tracing-hostnames';
 
-// Checkout starts replay explicitly. The SDK keeps sampling session-stable.
-const SESSION_RECORDING_SAMPLE_RATE = 0.01;
+// Record replay only on checkout routes at 100% (WEIGHT-B P1, updated
+// 2026-11-25): rrweb's input serializer (`maskAllInputs` masking every
+// keystroke) was the single worst field INP contributor — a 1,096ms
+// #document.oninput LoAF on forms and search-as-you-type. Keeping
+// `disable_session_recording: true` on all non-checkout pages removes 100% of
+// recorder overhead from storefront/blog/dashboard CWV while capturing every
+// checkout session to diagnose drop-offs. posthog-js's
+// `session_recording.sampleRate` (0..1) takes precedence over the project's
+// remote sampling config — verified against @posthog/types
+// `SessionRecordingOptions.sampleRate` in posthog-js@1.393.5.
+const CHECKOUT_SESSION_RECORDING_SAMPLE_RATE = 1;
 
 const SENSITIVE_PROPERTY_TOKENS = new Set([
   'password',
@@ -51,42 +61,6 @@ const RESERVED_WEB_TENANT_SUBDOMAINS = new Set([
   'dashboard',
   'mail',
   'smtp',
-]);
-const PLATFORM_ROOT_ROUTE_SEGMENTS = new Set([
-  '',
-  '_next',
-  'about',
-  'admin',
-  'api',
-  'auth',
-  'blog',
-  'builder',
-  'cart',
-  'checkout',
-  'contact',
-  'dashboard',
-  'debug-auth',
-  'delete-account',
-  'demo',
-  'developers',
-  'favicon.ico',
-  'features',
-  'feeds',
-  'invite',
-  'login',
-  'manifest.webmanifest',
-  'onboarding',
-  'pricing',
-  'privacy',
-  'products',
-  'reset-password',
-  'robots.txt',
-  'signup',
-  'sitemap.xml',
-  'staff',
-  'template-preview',
-  'terms',
-  'track',
 ]);
 const VALID_MERCHANT_SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const TENANT_CONTEXT_PROPERTY_KEYS = [
@@ -548,6 +522,11 @@ export interface PostHogClientConfigOptions {
    * preserving manual pageview capture and privacy sanitization.
    */
   lightweight?: boolean;
+  /**
+   * Enables rrweb session recording exclusively on checkout surfaces so
+   * non-checkout pages pay zero Core Web Vitals / INP overhead.
+   */
+  sessionRecording?: boolean;
 }
 
 const LIGHTWEIGHT_PUBLIC_BLOG_CONFIG_OVERRIDES: Partial<PostHogConfig> = {
@@ -603,14 +582,14 @@ export function buildPostHogClientConfig(
     // metrics selectively without leaving extra observers active after SPA
     // transitions.
     capture_performance: false,
-    disable_session_recording: true,
+    disable_session_recording: options.sessionRecording !== true,
     disable_surveys: true,
     session_recording: {
       maskAllInputs: true,
       maskTextFn: () => REDACTED_VALUE,
       maskTextSelector: 'body',
       blockSelector: 'iframe, [data-ph-block], [data-session-replay-block]',
-      sampleRate: SESSION_RECORDING_SAMPLE_RATE,
+      sampleRate: CHECKOUT_SESSION_RECORDING_SAMPLE_RATE,
     },
     // Project credential keys are intentionally absent here:
     // restorePostHogProjectCredentialProperties rewrites token/api_key after

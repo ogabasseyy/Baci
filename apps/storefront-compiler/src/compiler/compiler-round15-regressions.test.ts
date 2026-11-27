@@ -189,8 +189,8 @@ describe('Round-15 Codex SDK Link path validation, JSX <style> ban, and hydrated
           'const CommerceProvider = "CommerceProvider"; const createCommerceClient = (fn) => { __capture(fn); return fn; };'
         )
         .replace(
-          "import { createElement } from 'react';",
-          'const createElement = () => ({});'
+          "import { createElement, useEffect } from 'react';",
+          'const createElement = () => ({}); const useEffect = () => {};'
         )
         .replace(
           "import { hydrateRoot } from 'react-dom/client';",

@@ -37,10 +37,7 @@ export interface CompiledStorefrontRelease {
   workerCode: string;
   clientCode: string;
   cssCode: string;
-  assets: {
-    clientAssetPath: string;
-    cssAssetPath: string;
-  };
+  assets: { clientAssetPath: string; cssAssetPath: string };
   metrics: {
     workerRawBytes: number;
     workerGzipBytes: number;
@@ -56,10 +53,7 @@ export interface CompiledStorefrontRelease {
 
 function sha256Hex(chunks: readonly string[]): string {
   const hash = createHash('sha256');
-  for (const chunk of chunks) {
-    hash.update(chunk);
-    hash.update('\0');
-  }
+  for (const chunk of chunks) hash.update(chunk).update('\0');
   return hash.digest('hex');
 }
 
@@ -135,7 +129,8 @@ export async function compileStorefrontWorker(
     buildClientHydrationEntrySource(
       PREBUNDLE_VIRTUAL_ENTRY,
       assetsMap,
-      manifest.routes
+      manifest.routes,
+      manifest.previewOrigin
     )
   );
 
@@ -271,6 +266,9 @@ export async function compileStorefrontWorker(
       connectOrigins: [...manifest.cspAllowlist.connectOrigins].sort(),
       imgOrigins: [...manifest.cspAllowlist.imgOrigins].sort(),
     },
+    ...(manifest.previewOrigin
+      ? { previewOrigin: manifest.previewOrigin }
+      : {}),
     files: [...manifest.files]
       .sort((a, b) => cmpStr(a.path, b.path))
       .map((f) => ({ path: f.path, content: f.content })),

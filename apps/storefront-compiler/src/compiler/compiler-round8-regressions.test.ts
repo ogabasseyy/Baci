@@ -76,8 +76,8 @@ describe('Round-8 Codex DOM attribute sinks, navigation safety/shapes, CSS comme
         'const CommerceProvider = "CommerceProvider"; const createCommerceClient = (fn) => { __captureTransport(fn); return fn; };'
       )
       .replace(
-        "import { createElement } from 'react';",
-        'const createElement = () => ({});'
+        "import { createElement, useEffect } from 'react';",
+        'const createElement = () => ({}); const useEffect = () => {};'
       )
       .replace(
         "import { hydrateRoot } from 'react-dom/client';",
@@ -181,6 +181,7 @@ describe('Round-8 Codex DOM attribute sinks, navigation safety/shapes, CSS comme
     });
     expect(postedMessages).toHaveLength(0);
 
+    windowMock.parent = windowMock;
     const checkoutOpen = await capturedTransport('checkout.open', {});
     expect(checkoutOpen).toMatchObject({
       status: 'error',

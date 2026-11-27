@@ -3,13 +3,14 @@ import {
   cssColorTokenSchema,
   RESERVED_ROUTE_PARAM_NAMES,
 } from './css-color-token';
+import { httpsOriginSchema, previewOriginSchema } from './origin-schemas';
 
 export {
   type CspGovernanceSummary,
   PLATFORM_VETTED_CSP_BY_DIRECTIVE,
   summarizeCspGovernance,
 } from '../compiler/csp-header';
-export { cssColorTokenSchema };
+export { cssColorTokenSchema, httpsOriginSchema, previewOriginSchema };
 
 const utf8ByteLength = (value: string): number =>
   new TextEncoder().encode(value).length;
@@ -36,32 +37,6 @@ export const ALLOWED_STOREFRONT_PACKAGES = [
 ] as const;
 export type AllowedStorefrontPackage =
   (typeof ALLOWED_STOREFRONT_PACKAGES)[number];
-const IPV4_OR_IPV6_HOST = /^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\])$/;
-
-export const httpsOriginSchema = z
-  .string()
-  .min(8)
-  .max(200)
-  .refine((raw) => {
-    if (raw.includes('*')) return false;
-    try {
-      const parsed = new URL(raw);
-      return (
-        parsed.protocol === 'https:' &&
-        parsed.port === '' &&
-        parsed.origin === raw &&
-        parsed.username === '' &&
-        parsed.password === '' &&
-        parsed.pathname === '/' &&
-        parsed.search === '' &&
-        parsed.hash === '' &&
-        parsed.hostname.includes('.') &&
-        !IPV4_OR_IPV6_HOST.test(parsed.hostname)
-      );
-    } catch {
-      return false;
-    }
-  }, 'CSP allowlist entry must be a bare HTTPS hostname origin without wildcards or raw IPs');
 
 export const relativeSourcePathSchema = z
   .string()
@@ -187,6 +162,7 @@ export const workerStorefrontManifestSchema = z
         accent: 'hsl(0 84% 60%)',
       }),
     cspAllowlist: cspAllowlistSchema,
+    previewOrigin: previewOriginSchema.optional(),
   })
   .superRefine((manifest, ctx) => {
     const normalizedPaths = manifest.files.map((file) =>

@@ -169,7 +169,13 @@ export default {
         matchedRoute.params.collectionSlug ||
         (trailingFilter ? matchedRoute.params.handle || matchedRoute.params.slug || (prevCol ? prevCol[1] : '') : '') ||
         (lastCol ? lastCol[1] : '');
-      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\`, 'collection');
+      const colQuery = canonicalizeSearchParams(url.searchParams);
+      colQuery.set('category', categoryParam);
+      if (matchedRoute.params.brand) colQuery.set('brand', matchedRoute.params.brand);
+      if (matchedRoute.params.condition) colQuery.set('condition', matchedRoute.params.condition);
+      if (matchedRoute.params.page) colQuery.set('page', matchedRoute.params.page);
+      if (matchedRoute.params.filter && !colQuery.get('q')) colQuery.set('q', matchedRoute.params.filter);
+      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?\${colQuery.toString()}\`, 'collection');
       if (!upstream.ok) {
         status = 502; title = 'Category Temporarily Unavailable';
       } else if (!upstream.data.categoryExists) {

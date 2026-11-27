@@ -4,17 +4,18 @@ import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
 export function buildClientHydrationEntrySource(
   entryPath: string,
   assetsMap: Readonly<Record<string, string>> = {},
-  routes: ReadonlyArray<{ path: string; view: string }> = []
+  routes: ReadonlyArray<{ path: string; view: string }> = [],
+  previewOrigin?: string
 ): string {
   return `
 import { CommerceProvider, createCommerceClient } from '@baci/experience-sdk';
-import { createElement } from 'react';
+import { createElement, useEffect } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 
 const ASSETS_MAP = ${JSON.stringify(assetsMap)};
 const DECLARED_ROUTES = ${JSON.stringify(routes)};
 ${buildDeclaredRouteMatcherSnippet()}
-${buildFramedHostPortSnippet()}
+${buildFramedHostPortSnippet(previewOrigin)}
 const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;
 function resolveSafeInternalPath(p) {
   if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || UNSAFE_PATH_CHARS.test(p)) {
@@ -171,23 +172,57 @@ if (rootElement && stateScript?.textContent) {
           }
           return { status: 'ok', value: { presented: false } };
         }
+        if (
+          window.parent &&
+          window.parent !== window &&
+          (method === 'checkout.prepare' ||
+            method === 'checkout.open' ||
+            method === 'cart.readPublic' ||
+            method === 'cart.reconcile' ||
+            method === 'cart.add' ||
+            method === 'cart.remove' ||
+            method === 'cart.set_quantity')
+        ) {
+          return dispatchFramedCartOrCheckout(method, args, routeEpoch);
+        }
         if (method === 'checkout.prepare' || method === 'checkout.open') {
           return { status: 'error', code: 'CART_ENROLLMENT_REQUIRED', message: 'Cart session enrollment required before checkout' };
         }
         return { status: 'error', code: 'CART_ENROLLMENT_REQUIRED', message: 'Commerce transport requires active storefront session' };
       });
+      function HydrationCommitGate(props) {
+        useEffect(() => {
+          notifyHostRenderCommitted();
+        }, []);
+        return props.children;
+      }
       const mod = await import(${JSON.stringify(`./${entryPath}`)});
-      if (!mod || !mod.default) return;
+      if (!mod || !mod.default) {
+        notifyHostRenderFailed();
+        return;
+      }
       hydrateRoot(
         rootElement,
-        createElement(CommerceProvider, { commerce, assets: runtimeAssets }, createElement(mod.default, initialProps))
+        createElement(
+          CommerceProvider,
+          { commerce, assets: runtimeAssets },
+          createElement(HydrationCommitGate, null, createElement(mod.default, initialProps))
+        ),
+        {
+          onRecoverableError: () => notifyHostRenderFailed(),
+          onUncaughtError: () => notifyHostRenderFailed(),
+          onCaughtError: () => notifyHostRenderFailed(),
+        }
       );
     } catch (err) {
+      notifyHostRenderFailed();
       if (typeof console !== 'undefined' && typeof console.error === 'function') {
         console.error('[baci-storefront] Client hydration error:', err);
       }
     }
   })();
+} else {
+  notifyHostRenderFailed();
 }
 `;
 }

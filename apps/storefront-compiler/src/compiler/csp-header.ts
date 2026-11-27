@@ -100,6 +100,11 @@ export function buildContentSecurityPolicyHeader(
   const connectSrc = Array.from(
     new Set(["'self'", 'https://api.usebaci.com', ...connectOrigins])
   ).join(' ');
+  const frameAncestors = manifest.previewOrigin
+    ? Array.from(new Set(['https://usebaci.com', manifest.previewOrigin])).join(
+        ' '
+      )
+    : 'https://usebaci.com';
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
@@ -108,7 +113,7 @@ export function buildContentSecurityPolicyHeader(
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
     `form-action 'self' https://${manifest.merchantSlug}.usebaci.com https://usebaci.com`,
-    'frame-ancestors https://usebaci.com',
+    `frame-ancestors ${frameAncestors}`,
     "worker-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",

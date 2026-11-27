@@ -91,8 +91,8 @@ describe('Round-9 Codex Object.assign, CSP wildcard, popup presented, and route 
         'const CommerceProvider = "CommerceProvider"; const createCommerceClient = (fn) => { __capture(fn); return fn; };'
       )
       .replace(
-        "import { createElement } from 'react';",
-        'const createElement = () => ({});'
+        "import { createElement, useEffect } from 'react';",
+        'const createElement = () => ({}); const useEffect = () => {};'
       )
       .replace(
         "import { hydrateRoot } from 'react-dom/client';",

@@ -17,10 +17,14 @@ function isValidAvailabilityFields(obj, requireExplicit) {
   return !requireExplicit || typeof obj.available === 'boolean' || typeof obj.inStock === 'boolean';
 }
 
+function isNonNegativePrice(v) {
+  return isFiniteNumber(v) && v >= 0;
+}
+
 function isValidPriceFields(obj) {
-  if (obj.priceNgn !== undefined && !isFiniteNumber(obj.priceNgn)) return false;
-  if (obj.price !== undefined && !isFiniteNumber(obj.price)) return false;
-  return isFiniteNumber(obj.priceNgn) || isFiniteNumber(obj.price);
+  if (obj.priceNgn !== undefined && !isNonNegativePrice(obj.priceNgn)) return false;
+  if (obj.price !== undefined && !isNonNegativePrice(obj.price)) return false;
+  return isNonNegativePrice(obj.priceNgn) || isNonNegativePrice(obj.price);
 }
 
 function isValidCatalogVariantRecord(v) {

@@ -140,7 +140,7 @@ describe('Round-17 Codex class-heritage scan, reserved /_baci route, Tailwind ca
           'const CommerceProvider = "CommerceProvider"; const createCommerceClient = (fn) => { __capture(fn); return fn; };'
         )
         .replace(
-          "import { createElement } from 'react';",
+          "import { createElement, useEffect } from 'react';",
           'const createElement = (type, props) => { if (type === "CommerceProvider" && props?.assets) __captureAssets(props.assets); return {}; };'
         )
         .replace(

@@ -100,8 +100,8 @@ describe('Round 22 compiler & runtime regressions', () => {
         'const CommerceProvider = "CommerceProvider"; const createCommerceClient = (fn) => { __capture(fn); return fn; };'
       )
       .replace(
-        "import { createElement } from 'react';",
-        'const createElement = () => ({});'
+        "import { createElement, useEffect } from 'react';",
+        'const createElement = () => ({}); const useEffect = () => {};'
       )
       .replace(
         "import { hydrateRoot } from 'react-dom/client';",
@@ -212,7 +212,11 @@ describe('Round 22 compiler & runtime regressions', () => {
       },
       ports: [mockPort],
     });
-    expect(sentOverPort[0]).toEqual({ type: 'ready', nonce: 'nonce-1' });
+    expect(sentOverPort[0]).toEqual({
+      type: 'ready',
+      nonce: 'nonce-1',
+      readiness: 'react-commit/v1',
+    });
 
     // Undeclared destination is STILL rejected before sending over MessagePort
     const undeclaredFramed = await capturedTransport('navigation.open', {

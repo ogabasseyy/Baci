@@ -82,8 +82,8 @@ describe('Round 21 compiler & runtime regressions', () => {
         'const CommerceProvider = "CommerceProvider"; const createCommerceClient = (fn) => { __capture(fn); return fn; };'
       )
       .replace(
-        "import { createElement } from 'react';",
-        'const createElement = () => ({});'
+        "import { createElement, useEffect } from 'react';",
+        'const createElement = () => ({}); const useEffect = () => {};'
       )
       .replace(
         "import { hydrateRoot } from 'react-dom/client';",

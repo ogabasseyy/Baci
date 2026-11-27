@@ -35,6 +35,7 @@ const recover = (
   recoverAcceptedFollowUpReminder(client, binding, {
     conversationId: 7,
     update: { followUpAt, priority: 'high' },
+    seen: 'rev-1',
     sent,
   });
 const unreadable = () =>
@@ -58,6 +59,8 @@ describe('recoverAcceptedFollowUpReminder', () => {
       conversationId: 7,
       update: { followUpAt: requested, priority: 'high' },
       customerName: 'Ada',
+      seen: 'rev-1',
+      recheck: expect.any(Function),
       observed: {
         status: 'snoozed',
         followUp: true,
@@ -102,6 +105,8 @@ describe('recoverAcceptedFollowUpReminder', () => {
       conversationId: 7,
       update: { followUpAt: requested, priority: 'high' },
       customerName: 'Ada',
+      seen: 'rev-1',
+      recheck: expect.any(Function),
       observed: undefined,
     });
     expect(mocks.hold).not.toHaveBeenCalled();
@@ -137,6 +142,7 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
     recoverAcceptedFollowUpReminder(client, binding, {
       conversationId: 7,
       update,
+      seen: 'rev-1',
       cancelSent,
     });
 
@@ -151,6 +157,8 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
       conversationId: 7,
       update,
       customerName: 'Ada',
+      seen: 'rev-1',
+      recheck: expect.any(Function),
       observed: { status: 'open', followUp: true, snoozedUntil: undefined },
     });
     expect(mocks.hold).not.toHaveBeenCalled();
@@ -164,6 +172,8 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
       conversationId: 7,
       update: { followUpAt: null },
       customerName: '',
+      seen: 'rev-1',
+      recheck: expect.any(Function),
       observed: undefined,
     });
   });

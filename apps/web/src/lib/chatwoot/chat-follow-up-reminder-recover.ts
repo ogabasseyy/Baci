@@ -4,7 +4,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MerchantInboxUpdate } from '@/schemas/merchant-inbox-manage';
 import { holdUnconfirmedChatFollowUpReminder } from './chat-follow-up-reminder-hold';
 import { reminderCustomerName } from './chat-follow-up-reminder-name';
+import { observeChatFollowUp } from './chat-follow-up-reminder-observe';
 import { syncChatFollowUpReminder } from './chat-follow-up-reminder-sync';
+import type { ReminderVersion } from './chat-follow-up-reminder-version';
 import { getMerchantInboxConversation } from './merchant-inbox-client';
 import type { MerchantInboxBinding } from './merchant-inbox-config';
 import type { SentFollowUp } from './merchant-inbox-manage-client';
@@ -32,13 +34,16 @@ export async function recoverAcceptedFollowUpReminder(
   input: {
     conversationId: number;
     update: MerchantInboxUpdate;
+    /** The reminder's version, read before the chat was changed. */
+    seen: ReminderVersion;
     /** Set when the snooze was sent and not refused. */
     sent?: SentFollowUp;
     /** Set when Done or a reopen was sent and not refused. */
     cancelSent?: SentFollowUp['state'];
   }
 ): Promise<void> {
-  const { conversationId, update, sent, cancelSent } = input;
+  const { conversationId, update, seen, sent, cancelSent } = input;
+  const recheck = () => observeChatFollowUp(binding, conversationId);
   const requestedAt = update.followUpAt;
   if (typeof requestedAt !== 'string' && !cancelSent) return;
   const read = await getMerchantInboxConversation(binding, conversationId);
@@ -56,7 +61,9 @@ export async function recoverAcceptedFollowUpReminder(
       conversationId,
       update,
       customerName: shown?.customerName ?? '',
+      seen,
       observed,
+      recheck,
     });
     return;
   }
@@ -72,8 +79,10 @@ export async function recoverAcceptedFollowUpReminder(
       conversationId,
       update,
       customerName,
+      seen,
       // A snooze to another time here means a newer change won.
       observed,
+      recheck,
     });
     return;
   }

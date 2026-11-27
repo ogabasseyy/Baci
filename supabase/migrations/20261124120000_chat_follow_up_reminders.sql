@@ -42,6 +42,10 @@ CREATE TABLE IF NOT EXISTS public.chat_follow_up_reminders (
   -- How many times the sweep took this reminder. A push that provably never
   -- left the server is retried, and this bounds how often.
   attempts smallint NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  -- Stamped anew on every signed-in write, even one repeating the same time.
+  -- The server writes only over the stamp it read before it changed the chat,
+  -- so an older request cannot replace or remove a newer reminder.
+  revision uuid NOT NULL DEFAULT gen_random_uuid(),
   created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
   -- Also the index on merchant_id for the foreign key.
@@ -105,6 +109,7 @@ BEGIN
   IF current_user NOT IN ('anon', 'authenticated') THEN
     RETURN NEW;
   END IF;
+  NEW.revision := pg_catalog.gen_random_uuid();
   IF TG_OP = 'UPDATE' AND NEW.due_at = OLD.due_at
     AND NEW.merchant_id = OLD.merchant_id AND NEW.conversation_id = OLD.conversation_id THEN
     NEW.id := OLD.id;

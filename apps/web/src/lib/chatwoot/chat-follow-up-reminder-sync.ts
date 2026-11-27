@@ -4,7 +4,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MerchantInboxUpdate } from '@/schemas/merchant-inbox-manage';
 import { clearChatFollowUpReminder } from './chat-follow-up-reminder-clear';
 import { reminderCustomerName } from './chat-follow-up-reminder-name';
+import type { ObservedFollowUp } from './chat-follow-up-reminder-observe';
 import { saveChatFollowUpReminder } from './chat-follow-up-reminder-save';
+import {
+  type ReminderVersion,
+  readChatFollowUpReminderVersion,
+} from './chat-follow-up-reminder-version';
 
 export type ChatFollowUpSyncResult =
   | 'saved'
@@ -12,13 +17,22 @@ export type ChatFollowUpSyncResult =
   | 'unchanged'
   | 'failed';
 
+/** Writes tried before giving up on a chat that keeps being changed. */
+const MAX_ATTEMPTS = 3;
+
 /**
  * Keeps the pending reminder in step with a change the engine just accepted:
  * a follow-up time records (or replaces) it, and clearing the follow-up,
  * Done or reopening removes it (reopening cancels a snooze). A change that
- * touches neither (priority, tags) leaves it alone. Best effort and never
- * throws: the chat has already been changed, so a failure here only costs the
- * reminder and is logged without customer text.
+ * touches neither (priority, tags) leaves it alone.
+ *
+ * Two team members may change one chat at nearly the same moment. The write
+ * only goes over the reminder read before the chat was changed; if that one
+ * was written meanwhile, the reminder and then the chat are read again, so the
+ * older request stands down and the newer one still lands.
+ *
+ * Best effort and never throws: the chat has already been changed, so a
+ * failure here only costs the reminder and is logged without customer text.
  */
 export async function syncChatFollowUpReminder(
   client: Pick<SupabaseClient, 'from'>,
@@ -27,48 +41,57 @@ export async function syncChatFollowUpReminder(
     conversationId: number;
     update: MerchantInboxUpdate;
     customerName: string;
+    /** The reminder's version, read before the chat was changed. */
+    seen: ReminderVersion;
     /**
      * What the engine showed when it was read back after the change. If it
      * shows another follow-up than this change left (a different snooze time
      * after a set, a pending snooze after a clear), another team member
-     * changed the follow-up at the same moment and their sync owns the
-     * reminder.
+     * changed the follow-up and their sync owns the reminder.
      */
-    observed?: {
-      status: string;
-      followUp?: boolean;
-      snoozedUntil?: string | null;
-    };
+    observed?: ObservedFollowUp;
+    /** Reads the chat again after the reminder turned out to have changed. */
+    recheck: () => Promise<ObservedFollowUp | undefined>;
   }
 ): Promise<ChatFollowUpSyncResult> {
   const { update } = input;
-  const wanted = typeof update.followUpAt === 'string' ? 'saved' : 'cleared';
+  const requestedAt =
+    typeof update.followUpAt === 'string' ? update.followUpAt : null;
+  const cancels =
+    update.followUpAt === null ||
+    update.status === 'resolved' ||
+    update.status === 'open';
+  if (requestedAt === null && !cancels) return 'unchanged';
+  const wanted = requestedAt === null ? 'cleared' : 'saved';
+  const chat = {
+    merchantId: input.merchantId,
+    conversationId: input.conversationId,
+  };
   try {
-    if (typeof update.followUpAt === 'string') {
-      if (supersededByAnotherSet(update.followUpAt, input.observed)) {
-        return 'unchanged';
+    let version = input.seen;
+    let observed = input.observed;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      if (attempt > 0 || input.seen === undefined) {
+        // Reminder first, chat second: a write in between is then caught.
+        version = await readChatFollowUpReminderVersion(client, chat);
+        observed = await input.recheck();
+        if (!observed) break;
       }
-      const saved = await saveChatFollowUpReminder(client, {
-        merchantId: input.merchantId,
-        conversationId: input.conversationId,
-        dueAt: new Date(update.followUpAt).toISOString(),
-        customerName: reminderCustomerName(input.customerName),
-      });
-      return report(saved, 'saved', input);
+      if (supersededByAnotherSet(requestedAt, observed)) return 'unchanged';
+      if (version === undefined) continue;
+      const outcome =
+        requestedAt === null
+          ? await clearChatFollowUpReminder(client, { ...chat, version })
+          : await saveChatFollowUpReminder(client, {
+              ...chat,
+              version,
+              dueAt: new Date(requestedAt).toISOString(),
+              customerName: reminderCustomerName(input.customerName),
+            });
+      if (outcome === 'done') return report(true, wanted, input);
+      if (outcome === 'failed') break;
     }
-    if (
-      update.followUpAt === null ||
-      update.status === 'resolved' ||
-      update.status === 'open'
-    ) {
-      if (supersededByAnotherSet(null, input.observed)) return 'unchanged';
-      const cleared = await clearChatFollowUpReminder(client, {
-        merchantId: input.merchantId,
-        conversationId: input.conversationId,
-      });
-      return report(cleared, 'cleared', input);
-    }
-    return 'unchanged';
+    return report(false, wanted, input);
   } catch {
     return report(false, wanted, input);
   }
@@ -78,19 +101,15 @@ export async function syncChatFollowUpReminder(
 const SNOOZE_TOLERANCE_MS = 60_000;
 
 /**
- * True when the engine read-back shows a follow-up this request did not leave:
- * after a set, another snooze time than the requested one; after a clear, Done
- * or reopen (which all remove the follow-up), a snooze still pending. A
+ * True when the engine shows a follow-up this request did not leave: after a
+ * set, another snooze time than the requested one; after a clear, Done or
+ * reopen (which all remove the follow-up), a snooze still pending. A
  * concurrent change won, and applying this request to the reminder would lose
- * the newer follow-up. (A change landing between that read-back and this write
- * is not detectable without an engine version; the sweep then finds the snooze
- * moved, consumes the reminder as stale and never pushes a wrong one.)
+ * the newer follow-up.
  */
 function supersededByAnotherSet(
   requestedAt: string | null,
-  observed:
-    | { status: string; followUp?: boolean; snoozedUntil?: string | null }
-    | undefined
+  observed: ObservedFollowUp | undefined
 ): boolean {
   if (!observed) return false;
   if (requestedAt === null) {

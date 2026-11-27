@@ -1,6 +1,8 @@
 import type { NextRequest } from 'next/server';
+import { observeChatFollowUp } from '@/lib/chatwoot/chat-follow-up-reminder-observe';
 import { recoverAcceptedFollowUpReminder } from '@/lib/chatwoot/chat-follow-up-reminder-recover';
 import { syncChatFollowUpReminder } from '@/lib/chatwoot/chat-follow-up-reminder-sync';
+import { readChatFollowUpReminderVersion } from '@/lib/chatwoot/chat-follow-up-reminder-version';
 import { readMerchantInboxJsonBody } from '@/lib/chatwoot/merchant-inbox-body';
 import { updateMerchantInboxConversation } from '@/lib/chatwoot/merchant-inbox-manage-client';
 import {
@@ -41,6 +43,17 @@ export async function PATCH(
     return merchantInboxError(400, 'Invalid request', 'invalid_request');
   }
 
+  const chat = {
+    merchantId: resolved.binding.merchantId,
+    conversationId: conversationId.data,
+  };
+  // Read before the chat changes: the reminder is then only written over this
+  // version, so a teammate's newer one is noticed.
+  const seen =
+    update.data.followUpAt !== undefined || update.data.status !== undefined
+      ? await readChatFollowUpReminderVersion(resolved.supabase, chat)
+      : undefined;
+
   const result = await updateMerchantInboxConversation(resolved.binding, {
     conversationId: conversationId.data,
     update: update.data,
@@ -49,10 +62,11 @@ export async function PATCH(
     // The push reminder follows the change the chat engine just accepted. It
     // is best effort: a failure here never fails the change itself.
     await syncChatFollowUpReminder(resolved.supabase, {
-      merchantId: resolved.binding.merchantId,
-      conversationId: conversationId.data,
+      ...chat,
       update: update.data,
       customerName: result.conversation.customerName,
+      seen,
+      recheck: () => observeChatFollowUp(resolved.binding, conversationId.data),
       observed: {
         status: result.conversation.status,
         followUp: result.conversation.followUp,
@@ -76,6 +90,7 @@ export async function PATCH(
   await recoverAcceptedFollowUpReminder(resolved.supabase, resolved.binding, {
     conversationId: conversationId.data,
     update: update.data,
+    seen,
     sent: 'followUpSent' in result ? result.followUpSent : undefined,
     cancelSent:
       'followUpCancelSent' in result ? result.followUpCancelSent : undefined,

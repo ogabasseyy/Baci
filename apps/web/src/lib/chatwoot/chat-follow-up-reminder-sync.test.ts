@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ save: vi.fn(), clear: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  save: vi.fn(),
+  clear: vi.fn(),
+  version: vi.fn(),
+}));
 vi.mock('server-only', () => ({}));
 vi.mock('./chat-follow-up-reminder-save', () => ({
   saveChatFollowUpReminder: mocks.save,
@@ -8,20 +12,26 @@ vi.mock('./chat-follow-up-reminder-save', () => ({
 vi.mock('./chat-follow-up-reminder-clear', () => ({
   clearChatFollowUpReminder: mocks.clear,
 }));
+vi.mock('./chat-follow-up-reminder-version', () => ({
+  readChatFollowUpReminderVersion: mocks.version,
+}));
 
 import { syncChatFollowUpReminder } from './chat-follow-up-reminder-sync';
 
 const client = {} as never;
-const base = {
+const chat = {
   merchantId: 'c4a70000-0000-4000-8000-0000000000b1',
   conversationId: 7,
-  customerName: 'Ada',
 };
+const recheck = vi.fn();
+const base = { ...chat, customerName: 'Ada', seen: 'rev-1', recheck };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.save.mockResolvedValue(true);
-  mocks.clear.mockResolvedValue(true);
+  mocks.save.mockResolvedValue('done');
+  mocks.clear.mockResolvedValue('done');
+  mocks.version.mockResolvedValue('rev-2');
+  recheck.mockResolvedValue({ status: 'open', followUp: false });
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -36,12 +46,15 @@ describe('syncChatFollowUpReminder', () => {
 
     expect(mocks.save).toHaveBeenCalledTimes(1);
     expect(mocks.save).toHaveBeenCalledWith(client, {
-      merchantId: base.merchantId,
-      conversationId: 7,
+      ...chat,
+      version: 'rev-1',
       dueAt: '2026-11-25T09:00:00.000Z',
       customerName: 'Ada',
     });
     expect(mocks.clear).not.toHaveBeenCalled();
+    // Nothing competed, so neither the reminder nor the chat is read again.
+    expect(mocks.version).not.toHaveBeenCalled();
+    expect(recheck).not.toHaveBeenCalled();
   });
 
   it('replaces the reminder when the follow-up time is changed', async () => {
@@ -140,8 +153,8 @@ describe('syncChatFollowUpReminder', () => {
       syncChatFollowUpReminder(client, { ...base, update })
     ).resolves.toBe('cleared');
     expect(mocks.clear).toHaveBeenCalledWith(client, {
-      merchantId: base.merchantId,
-      conversationId: 7,
+      ...chat,
+      version: 'rev-1',
     });
     expect(mocks.save).not.toHaveBeenCalled();
   });
@@ -158,7 +171,7 @@ describe('syncChatFollowUpReminder', () => {
   });
 
   it('reports a failed write without throwing or logging customer text', async () => {
-    mocks.save.mockResolvedValue(false);
+    mocks.save.mockResolvedValue('failed');
     await expect(
       syncChatFollowUpReminder(client, {
         ...base,
@@ -178,5 +191,75 @@ describe('syncChatFollowUpReminder', () => {
         update: { followUpAt: null },
       })
     ).resolves.toBe('failed');
+  });
+});
+
+describe('syncChatFollowUpReminder when the reminder changed meanwhile', () => {
+  const nine = '2026-11-25T09:00:00Z';
+  const set = (from: { seen?: string } = { seen: 'rev-1' }) =>
+    syncChatFollowUpReminder(client, {
+      ...base,
+      seen: from.seen,
+      update: { followUpAt: nine },
+    });
+  const showsSnooze = (snoozedUntil: string) =>
+    recheck.mockResolvedValue({
+      status: 'snoozed',
+      followUp: true,
+      snoozedUntil,
+    });
+
+  it('reads the reminder, then the chat, and writes over the new version', async () => {
+    mocks.save.mockResolvedValueOnce('conflict');
+    showsSnooze(nine);
+
+    await expect(set()).resolves.toBe('saved');
+
+    expect(mocks.save.mock.calls[1][1].version).toBe('rev-2');
+    expect(mocks.version.mock.invocationCallOrder[0]).toBeLessThan(
+      recheck.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('stands down when the chat now shows another follow-up', async () => {
+    mocks.save.mockResolvedValueOnce('conflict');
+    showsSnooze('2026-11-25T10:00:00.000Z');
+
+    await expect(set()).resolves.toBe('unchanged');
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      'the chat cannot be read again',
+      () => recheck.mockResolvedValue(undefined),
+    ],
+    [
+      'the reminder cannot be read again',
+      () => mocks.version.mockResolvedValue(undefined),
+    ],
+  ])('writes nothing more when %s', async (_label, arrange) => {
+    mocks.save.mockResolvedValueOnce('conflict');
+    showsSnooze(nine);
+    arrange();
+
+    await expect(set()).resolves.toBe('failed');
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up after three writes on a chat that keeps changing', async () => {
+    mocks.save.mockResolvedValue('conflict');
+    showsSnooze(nine);
+
+    await expect(set()).resolves.toBe('failed');
+    expect(mocks.save).toHaveBeenCalledTimes(3);
+  });
+
+  it('reads both first when the reminder could not be read before the change', async () => {
+    showsSnooze(nine);
+
+    await expect(set({})).resolves.toBe('saved');
+    expect(mocks.save.mock.calls[0][1].version).toBe('rev-2');
+    expect(recheck).toHaveBeenCalledTimes(1);
   });
 });

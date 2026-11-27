@@ -217,4 +217,53 @@ BEGIN
 END $$;
 RESET ROLE;
 
+-- Every signed-in write stamps a new revision, even one repeating the same time
+-- (which keeps the identity), and no writer chooses it. The app replaces and
+-- removes only over the revision it read, so an older request changes nothing.
+SELECT pg_temp.as_user('c4a73000-0000-4000-8000-0000000000a6');
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  m uuid := 'c4a73000-0000-4000-8000-0000000000b1';
+  chosen uuid := 'c4a73000-0000-4000-8000-000000000130';
+  first public.chat_follow_up_reminders; again public.chat_follow_up_reminders; v_changed integer;
+BEGIN
+  INSERT INTO public.chat_follow_up_reminders(merchant_id, conversation_id, due_at, revision)
+  VALUES (m, 130, now() + interval '1 day', chosen);
+  SELECT * INTO first FROM public.chat_follow_up_reminders WHERE conversation_id = 130;
+  IF first.revision IS NOT DISTINCT FROM chosen THEN RAISE EXCEPTION 'a writer chose the revision'; END IF;
+  UPDATE public.chat_follow_up_reminders SET due_at = due_at, revision = first.revision
+  WHERE conversation_id = 130 AND revision = first.revision;
+  SELECT * INTO again FROM public.chat_follow_up_reminders WHERE conversation_id = 130;
+  IF again.id IS DISTINCT FROM first.id OR again.revision IS NOT DISTINCT FROM first.revision THEN
+    RAISE EXCEPTION 'a repeated time did not keep the identity under a new revision';
+  END IF;
+  UPDATE public.chat_follow_up_reminders SET customer_name = 'older'
+  WHERE conversation_id = 130 AND revision = first.revision;
+  GET DIAGNOSTICS v_changed = ROW_COUNT;
+  IF v_changed <> 0 THEN RAISE EXCEPTION 'an older save replaced a newer reminder'; END IF;
+  DELETE FROM public.chat_follow_up_reminders WHERE conversation_id = 130 AND revision = first.revision;
+  GET DIAGNOSTICS v_changed = ROW_COUNT;
+  IF v_changed <> 0 THEN RAISE EXCEPTION 'an older clear removed a newer reminder'; END IF;
+  DELETE FROM public.chat_follow_up_reminders WHERE conversation_id = 130 AND revision = again.revision;
+  GET DIAGNOSTICS v_changed = ROW_COUNT;
+  IF v_changed <> 1 THEN RAISE EXCEPTION 'the current revision could not clear the reminder'; END IF;
+END $$;
+RESET ROLE;
+
+-- The sweep's bookkeeping is not a team write: it leaves the revision alone.
+DO $$
+DECLARE before uuid; after uuid;
+BEGIN
+  INSERT INTO public.chat_follow_up_reminders(merchant_id, conversation_id, due_at)
+  VALUES ('c4a73000-0000-4000-8000-0000000000b1', 131, now() + interval '1 day');
+  SELECT revision INTO before FROM public.chat_follow_up_reminders WHERE conversation_id = 131;
+  UPDATE public.chat_follow_up_reminders SET last_listed_at = now(), processed_at = now(), attempts = 1
+  WHERE conversation_id = 131;
+  SELECT revision INTO after FROM public.chat_follow_up_reminders WHERE conversation_id = 131;
+  IF before IS NULL OR after IS DISTINCT FROM before THEN
+    RAISE EXCEPTION 'sweep bookkeeping changed the revision';
+  END IF;
+END $$;
+
 ROLLBACK;

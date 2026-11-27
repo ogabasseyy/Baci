@@ -12,6 +12,11 @@ export const dueChatFollowUpReminderSchema = z.object({
   customer_name: z.string().max(80),
 });
 
+/** The write stamp of a chat's pending reminder, read before changing it. */
+export const chatFollowUpReminderVersionSchema = z.object({
+  revision: z.string().min(1).max(64),
+});
+
 /** The listed rows, each still unchecked: one bad row must not reject the rest. */
 export const dueChatFollowUpReminderListSchema = z.array(z.unknown()).max(50);
 

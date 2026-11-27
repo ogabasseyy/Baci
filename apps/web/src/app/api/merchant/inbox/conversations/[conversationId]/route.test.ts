@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   csrf: vi.fn(),
   read: vi.fn(),
+  version: vi.fn(),
 }));
 
 vi.mock('@/lib/chatwoot/merchant-inbox-request', () => ({
@@ -20,6 +21,9 @@ vi.mock('@/lib/chatwoot/merchant-inbox-client', () => ({
 }));
 vi.mock('@/lib/chatwoot/merchant-inbox-manage-client', () => ({
   updateMerchantInboxConversation: mocks.update,
+}));
+vi.mock('@/lib/chatwoot/chat-follow-up-reminder-version', () => ({
+  readChatFollowUpReminderVersion: mocks.version,
 }));
 vi.mock('@/lib/chatwoot/chat-follow-up-reminder-sync', () => ({
   syncChatFollowUpReminder: mocks.sync,
@@ -50,6 +54,7 @@ beforeEach(() => {
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.resolve.mockResolvedValue({ ok: true, binding, supabase });
   mocks.sync.mockResolvedValue('unchanged');
+  mocks.version.mockResolvedValue('rev-1');
   mocks.read.mockResolvedValue({
     ok: true,
     conversation: { id: 7, customerName: 'Ada', status: 'open' },
@@ -99,12 +104,31 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       conversationId: 7,
       update: { followUpAt: '2026-11-25T09:00:00Z' },
       customerName: 'Ada',
+      seen: 'rev-1',
+      recheck: expect.any(Function),
       observed: {
         status: 'snoozed',
         followUp: true,
         snoozedUntil: '2026-11-25T09:00:00.000Z',
       },
     });
+  });
+
+  it('bugfix: reads the reminder version before changing the chat', async () => {
+    await patch('7', { followUpAt: '2026-11-25T09:00:00Z' });
+
+    expect(mocks.version).toHaveBeenCalledWith(supabase, {
+      merchantId: 'm',
+      conversationId: 7,
+    });
+    expect(mocks.version.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.update.mock.invocationCallOrder[0]
+    );
+  });
+
+  it('does not read the reminder for a change that cannot touch it', async () => {
+    await patch('7', { priority: 'high' });
+    expect(mocks.version).not.toHaveBeenCalled();
   });
 
   it('still answers success when the reminder could not be recorded', async () => {
@@ -142,6 +166,8 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       conversationId: 7,
       update,
       customerName: 'Ada',
+      seen: 'rev-1',
+      recheck: expect.any(Function),
       observed: snoozed,
     });
   });

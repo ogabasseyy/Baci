@@ -158,6 +158,14 @@ describe('ConversationThread customer card', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks keeps implementations, so set each one a test here reads
+    // (some tests override them), instead of inheriting an earlier test's.
+    mocks.isFocused.mockReturnValue(true);
+    mocks.customer.mockReturnValue({ data: null });
+    mocks.refetch.mockResolvedValue({
+      isError: false,
+      data: { pages: [{ messages }] },
+    });
     mocks.thread.mockReturnValue({
       conversation: {
         id: 9,

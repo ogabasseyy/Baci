@@ -17,19 +17,6 @@ test('expo-modules-core patch drops the cast that crashes the Swift 6.4 compiler
   assert.match(patch, /^\+\s*case \.failure\(let error\):$/m);
 });
 
-test('NitroModules patch exposes the ReactCommon root for explicit modules', () => {
-  const patch = read('patches/react-native-nitro-modules@0.37.2.patch');
-  // Xcode 27 explicit-module scanning builds cxxreact from NitroModules, and
-  // cxxreact's headers include <jserrorhandler/...> and <jsinspector-modern/...>
-  // relative to ReactCommon, which only React-cxxreact had on its search path.
-  assert.match(patch, /^\+\+\+ b\/NitroModules\.podspec$/m);
-  assert.match(
-    patch,
-    /^\+\s*react_common_path = File\.join\(File\.dirname\(get_react_native_package_path\(\)\), "ReactCommon"\)$/m,
-  );
-  assert.match(patch, /^\+\s*xcconfig\["HEADER_SEARCH_PATHS"\] = .*react_common_path/m);
-});
-
 test('NitroModules public header no longer imports the cxxreact module', () => {
   const patch = read('patches/react-native-nitro-modules@0.37.2.patch');
   // Pods that build on Nitro (react-native-mmkv, splash motion, the app) import

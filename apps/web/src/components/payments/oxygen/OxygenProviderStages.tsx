@@ -61,7 +61,7 @@ type Props = {
   };
   approval: ReturnType<typeof useOxygenApprovedPayment>;
   bookingProgress: ReturnType<typeof useOxygenBookingProgress>;
-  residentialContext: ReturnType<typeof useOxygenResidentialContext>;
+  residentialContext?: ReturnType<typeof useOxygenResidentialContext>;
   residential: ReturnType<typeof useOxygenResidentialSubmission>;
 };
 export function OxygenProviderStages({
@@ -71,7 +71,6 @@ export function OxygenProviderStages({
   actions,
   approval,
   bookingProgress,
-  residentialContext,
   residential,
 }: Props) {
   const {
@@ -112,27 +111,22 @@ export function OxygenProviderStages({
           preserved.
         </p>
       )}
-      {snapshot.stage === 'application_required' &&
-        residentialContext.ready && (
-          <OxygenCustomerForm
-            workflowId={snapshot.workflowId}
-            prefill={prefill}
-            conversational={conversational}
-            checkoutAddress={residentialContext.address}
-            onResidentialReady={(proof) =>
-              residential.prepare(snapshot.workflowId, proof)
-            }
-            phone={snapshot.checkoutPhone}
-            busy={disabled}
-            submit={submit}
-            onProgress={(stage, completed) => {
-              if (completed)
-                trackOxygenJourney('step_completed', orderId, completed);
-              onProgress?.(stage);
-              trackOxygenJourney('stage_reached', orderId, stage);
-            }}
-          />
-        )}
+      {snapshot.stage === 'application_required' && (
+        <OxygenCustomerForm
+          workflowId={snapshot.workflowId}
+          prefill={prefill}
+          conversational={conversational}
+          phone={snapshot.checkoutPhone}
+          busy={disabled}
+          submit={submit}
+          onProgress={(stage, completed) => {
+            if (completed)
+              trackOxygenJourney('step_completed', orderId, completed);
+            onProgress?.(stage);
+            trackOxygenJourney('stage_reached', orderId, stage);
+          }}
+        />
+      )}
       <OxygenGuidedVerification
         enabled={active}
         snapshot={snapshot}

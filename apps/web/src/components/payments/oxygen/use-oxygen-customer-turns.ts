@@ -7,10 +7,9 @@ import {
 
 export function useOxygenCustomerTurns(
   savedStep: number,
-  conversational: boolean,
-  collectAddress: boolean
+  conversational: boolean
 ) {
-  const [step, setStep] = useState(Math.min(savedStep, 1));
+  const [step, setStep] = useState(Math.min(Math.max(savedStep, 0), 2));
   const [chatTurn, setChatTurn] = useState(0);
   const turn = conversational ? chatTurn : undefined;
   const bankSelection = step === 1 && turn === oxygenBankTurns.bank;
@@ -25,7 +24,7 @@ export function useOxygenCustomerTurns(
   }
   function advanceQuestion() {
     setChatTurn(
-      step === 2 && chatTurn === oxygenIncomeTurns.payday && !collectAddress
+      step === 2 && chatTurn === oxygenIncomeTurns.payday
         ? oxygenIncomeTurns.consent
         : chatTurn + 1
     );
@@ -33,7 +32,7 @@ export function useOxygenCustomerTurns(
   function back() {
     if (turn !== undefined && turn > 0) {
       setChatTurn(
-        step === 2 && turn === oxygenIncomeTurns.consent && !collectAddress
+        step === 2 && turn === oxygenIncomeTurns.consent
           ? oxygenIncomeTurns.payday
           : turn - 1
       );
@@ -56,10 +55,8 @@ export function useOxygenCustomerTurns(
     bankSelection,
     checkingAccount,
     nextQuestion,
-    addressQuestion: step === 2 && turn === oxygenIncomeTurns.address,
     goToStep,
     advanceQuestion,
     back,
-    showAddress: () => setChatTurn(oxygenIncomeTurns.address),
   };
 }

@@ -242,5 +242,10 @@ export const systemErrorStyleSheet = `
 }
 `
   .replace(/\s+/g, ' ')
-  .replace(/\s*([{};])\s*/g, '$1')
+  .replace(/\s*([{};,])\s*/g, '$1')
+  .replace(/;\}/g, '}')
+  .replace(/:\s+/g, ':')
+  .replace(/@media\s*\(([^)]+)\)/g, (_match, features: string) => {
+    return `@media (${features.replace(/:\s*/g, ': ')})`;
+  })
   .trim();

@@ -3,13 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Footer } from './Footer';
 
 vi.mock('next/link', () => ({
-  default: ({
-    children,
-    href,
-  }: {
-    children: React.ReactNode;
-    href: string;
-  }) => <a href={href}>{children}</a>,
+  default: ({ children, href, prefetch, ...props }: { children: React.ReactNode; href: string; prefetch?: boolean; className?: string }) => (
+    <a href={href} data-prefetch={prefetch !== undefined ? String(prefetch) : undefined} {...props}>{children}</a>
+  ),
 }));
 
 vi.mock('next/image', () => ({
@@ -276,5 +272,24 @@ describe('Ogabassey Footer', () => {
       screen.getByRole('link', { name: 'account-private@gmail.com' })
     ).toHaveAttribute('href', 'mailto:account-private@gmail.com');
     expect(screen.getByText('2 Olaide Tomori St, Ikeja, Lagos')).toBeVisible();
+  });
+
+  it('disables prefetch on internal links and keeps footer link touch targets at least 24x24px', () => {
+    mockBuildMerchantTrustProfile.mockReturnValue({ socialLinks: {}, derivedLinks: {} });
+    const { container } = render(<Footer storeSlug="ogabassey" merchant={merchantFixture} />);
+    const internalLinks = Array.from(container.querySelectorAll('footer a[href^="/"]'));
+    expect(internalLinks.length).toBeGreaterThan(0);
+    for (const link of internalLinks) {
+      expect(link).toHaveAttribute('data-prefetch', 'false');
+      expect(link).toHaveClass('min-h-6', 'min-w-6');
+    }
+    expect(screen.getByRole('link', { name: 'Blog' })).toHaveClass(
+      'min-h-6',
+      'min-w-6',
+      'justify-center'
+    );
+    expect(screen.getByRole('link', { name: 'Instagram' })).toHaveClass('min-h-6', 'min-w-6');
+    expect(screen.getByRole('link', { name: merchantFixture.email })).toHaveClass('min-h-6', 'min-w-6', 'leading-6');
+    expect(screen.getByRole('link', { name: merchantFixture.phone })).toHaveClass('min-h-6', 'min-w-6', 'leading-6');
   });
 });

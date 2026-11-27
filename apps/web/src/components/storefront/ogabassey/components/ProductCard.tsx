@@ -163,6 +163,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     >
       <Link
         href={productHref}
+        prefetch={false}
         title={linkTitle}
         aria-label={linkAriaLabel}
         className="absolute inset-0 z-0"

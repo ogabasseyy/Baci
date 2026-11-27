@@ -217,6 +217,7 @@ export async function BlogPostBody({
               <Link
                 key={related.id}
                 href={`${basePath}/blog/${related.slug}` as Route}
+                prefetch={false}
               >
                 <Card className="group h-full transition-shadow hover:shadow-lg">
                   {related.featured_image_url && (

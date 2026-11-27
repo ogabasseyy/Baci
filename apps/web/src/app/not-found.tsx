@@ -1,44 +1,35 @@
-import Link from 'next/link';
-import {
-  systemErrorClassNames,
-  systemErrorStyleSheet,
-} from './system-error-styles';
+'use client';
+
+import dynamic from 'next/dynamic';
+
+function NotFoundLoadingFallback() {
+  return (
+    <main
+      style={{
+        alignItems: 'center',
+        display: 'flex',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        padding: '1.5rem',
+        textAlign: 'center',
+      }}
+    >
+      <section aria-labelledby="not-found-loading-title">
+        <h1 id="not-found-loading-title">Page not found</h1>
+        <p>We could not find the page you are looking for.</p>
+      </section>
+    </main>
+  );
+}
+
+// Lazy-load the 404 UI + inline stylesheet on demand so 200 routes neither
+// serialize systemErrorStyleSheet into __next_f nor eagerly load its JS chunk.
+// Default ssr: true preserves synchronous inline <style> SSR HTML on 404s.
+const NotFoundContent = dynamic(() => import('./not-found-content'), {
+  loading: NotFoundLoadingFallback,
+});
 
 export default function NotFound() {
-  return (
-    <>
-      <style>{systemErrorStyleSheet}</style>
-      <main className={systemErrorClassNames.page}>
-        <section
-          aria-labelledby="not-found-title"
-          className={systemErrorClassNames.shell}
-        >
-          <Link className={systemErrorClassNames.brand} href="/">
-            Baci
-          </Link>
-          <p aria-hidden="true" className={systemErrorClassNames.statusCode}>
-            404
-          </p>
-          <h1 className={systemErrorClassNames.title} id="not-found-title">
-            Page not found
-          </h1>
-          <p className={systemErrorClassNames.copy}>
-            We could not find the page you are looking for. It may have moved,
-            or the link may be incorrect.
-          </p>
-          <div className={systemErrorClassNames.actions}>
-            <Link className={systemErrorClassNames.button} href="/">
-              Go home
-            </Link>
-            <Link
-              className={`${systemErrorClassNames.button} ${systemErrorClassNames.buttonSecondary}`}
-              href="/contact"
-            >
-              Contact support
-            </Link>
-          </div>
-        </section>
-      </main>
-    </>
-  );
+  return <NotFoundContent />;
 }

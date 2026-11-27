@@ -247,10 +247,13 @@ describe('OgabasseyV2Blog', () => {
       />
     );
 
-    expect(screen.getByRole('link', { name: 'View Green Tips' })).toHaveAttribute(
+    const greenTipsLink = screen.getByRole('link', { name: 'View Green Tips' });
+    expect(greenTipsLink).toHaveAttribute(
       'href',
       '/test-store/blog/category/tips-and-tricks'
     );
+    expect(greenTipsLink).toHaveClass('bg-green-700');
+    expect(greenTipsLink).not.toHaveClass('bg-green-600');
   });
 
   it('renders UTC-stable date labels to avoid hydration drift', () => {

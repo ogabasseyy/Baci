@@ -116,7 +116,7 @@ function StorefrontSemanticFooterFallback({
       >
         {links.map(([label, path]) => (
           <a
-            className="text-store-background-text/75 underline-offset-4 hover:text-store-primary hover:underline"
+            className="inline-flex min-h-6 min-w-6 items-center justify-center text-store-background-text/75 underline-offset-4 hover:text-store-primary hover:underline"
             href={buildFooterHref(basePath, path)}
             key={path}
           >

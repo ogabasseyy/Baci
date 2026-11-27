@@ -3,10 +3,6 @@
   "roots": ["components", "hooks", "lib", "services", "stores"],
   "modules": [
     {
-      "path": "components/bnpl-checkout/bnpl-checkout.helpers.ts",
-      "lineCount": 346
-    },
-    {
       "path": "components/checkout/CheckoutScreenView.styles.ts",
       "lineCount": 307
     },

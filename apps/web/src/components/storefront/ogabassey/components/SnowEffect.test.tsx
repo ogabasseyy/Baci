@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SnowEffect } from './SnowEffect';
 
@@ -72,4 +72,15 @@ describe('SnowEffect', () => {
     expect(container.querySelector('canvas')).not.toBeNull();
     expect(raf).toHaveBeenCalled();
   });
+
+  it('overlays the page without blocking taps, without relying on route stylesheets', () => {
+    stubMatchMedia(false);
+    render(<SnowEffect />);
+    expect(screen.getByTestId('snow-effect')).toHaveStyle({
+      position: 'fixed',
+      pointerEvents: 'none',
+      zIndex: '100',
+    });
+  });
 });
+

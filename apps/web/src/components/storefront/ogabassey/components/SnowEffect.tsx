@@ -22,6 +22,32 @@ interface Snowflake {
   angle: number;
 }
 
+const OVERLAY_STYLE: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  overflow: 'hidden',
+  pointerEvents: 'none',
+  zIndex: 100,
+};
+
+const CANVAS_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+};
+
+const LIGHTS_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 4,
+  filter: 'blur(4px)',
+  background:
+    'linear-gradient(to right, rgb(239 68 68 / 0.2), rgb(34 197 94 / 0.2), rgb(239 68 68 / 0.2))',
+};
+
 export const SnowEffect: React.FC = () => {
   const { theme } = useV2Theme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -121,14 +147,13 @@ export const SnowEffect: React.FC = () => {
 
   if (theme !== 'santa' || reducedMotion) return null;
 
+  // Inline styles: storefront routes ship partitioned Tailwind stylesheets, so
+  // utility classes used only here would be missing on some of them.
   return (
-    <div className="fixed inset-0 pointer-events-none z-100 overflow-hidden">
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-      />
-      {/* Festive Lights Decoration - CSS Overlay */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-red-500/20 via-green-500/20 to-red-500/20 blur-xs" />
+    <div aria-hidden="true" data-testid="snow-effect" style={OVERLAY_STYLE}>
+      <canvas ref={canvasRef} style={CANVAS_STYLE} />
+      {/* Festive lights strip */}
+      <div style={LIGHTS_STYLE} />
     </div>
   );
 };

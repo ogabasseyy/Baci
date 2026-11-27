@@ -2,64 +2,55 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const migration = readFileSync(
+const finalLockOrderMigration = readFileSync(
   new URL(
-    '../migrations/20261124090000_prelock_storefront_customer_identity.sql',
-    import.meta.url
-  ),
-  'utf8'
-);
-const correctiveMigration = readFileSync(
-  new URL(
-    '../migrations/20261127120000_fix_guest_identity_phone_prelock.sql',
-    import.meta.url
-  ),
-  'utf8'
-);
-const catalogLockMigration = readFileSync(
-  new URL(
-    '../migrations/20261127122000_storefront_catalog_identity_lock_order.sql',
+    '../migrations/20261127123000_identity_before_catalog_lock_order.sql',
     import.meta.url
   ),
   'utf8'
 );
 
-test('storefront resolves and locks guest customer identity before checkout delegation', () => {
-  const wrapperStart = catalogLockMigration.indexOf(
+test('storefront locks customer identity before delegating to the catalog writer', () => {
+  const wrapperStart = finalLockOrderMigration.indexOf(
     'CREATE OR REPLACE FUNCTION private.create_storefront_order('
   );
-  const productLock = catalogLockMigration.indexOf('PERFORM p.id', wrapperStart);
-  const variantLock = catalogLockMigration.indexOf('PERFORM v.id', productLock);
-  const offersLock = catalogLockMigration.indexOf(
-    'PERFORM offer.id',
-    variantLock
-  );
-  const helperCall = catalogLockMigration.indexOf(
+  const helperCall = finalLockOrderMigration.indexOf(
     'private.lock_storefront_order_entrypoint_identity(',
     wrapperStart
   );
-  const uncheckedCall = catalogLockMigration.indexOf(
+  const uncheckedCall = finalLockOrderMigration.indexOf(
     'private.create_storefront_order_unchecked(',
     wrapperStart
   );
 
   assert.notEqual(wrapperStart, -1);
-  assert.ok(productLock > wrapperStart);
-  assert.ok(variantLock > productLock);
-  assert.ok(offersLock > variantLock);
-  assert.ok(helperCall > offersLock);
+  assert.ok(helperCall > wrapperStart);
   assert.ok(uncheckedCall > helperCall);
 });
 
+test('reinstatement locks customer identity before product and variant rows', () => {
+  const recoveryStart = finalLockOrderMigration.indexOf(
+    'CREATE OR REPLACE FUNCTION public.reinstate_timeout_order_payment('
+  );
+  const recovery = finalLockOrderMigration.slice(recoveryStart);
+  const identityLock = recovery.indexOf('private.lock_order_replacement_identity(');
+  const productLock = recovery.indexOf('PERFORM p.id');
+  const variantLock = recovery.indexOf('PERFORM v.id');
+
+  assert.ok(recoveryStart >= 0);
+  assert.ok(identityLock >= 0 && productLock > identityLock);
+  assert.ok(variantLock > productLock);
+});
+
 test('entrypoint identity locks follow phone, user, then email order', () => {
-  const helperStart = migration.indexOf(
+  const helperStart = finalLockOrderMigration.indexOf(
     'CREATE OR REPLACE FUNCTION private.lock_storefront_order_entrypoint_identity('
   );
-  const helperEnd = migration.indexOf(
+  const helperEnd = finalLockOrderMigration.indexOf(
     'ALTER FUNCTION private.lock_storefront_order_entrypoint_identity',
     helperStart
   );
-  const helper = migration.slice(helperStart, helperEnd);
+  const helper = finalLockOrderMigration.slice(helperStart, helperEnd);
   const phoneLock = helper.indexOf('hashtext(v_phone)');
   const userLock = helper.indexOf(
     "hashtextextended(p_merchant_id::text || ':' || v_user_id::text, 0)"
@@ -69,22 +60,28 @@ test('entrypoint identity locks follow phone, user, then email order', () => {
   );
 
   assert.ok(phoneLock >= 0 && userLock > phoneLock && emailLock > userLock);
-  assert.match(helper, /coalesce\(auth\.uid\(\), p_user_id\)/);
+  assert.match(
+    helper,
+    /CASE\s+WHEN public\.is_agentic_checkout_context\(\) THEN NULL\s+ELSE coalesce\(auth\.uid\(\), p_user_id\)\s+END/s
+  );
   assert.match(helper, /lower\(c\.email\) = v_email/);
   assert.match(helper, /c\.phone = v_phone/);
 });
 
 test('authenticated callers that omit p_user_id skip guest identity confirmation', () => {
   assert.match(
-    correctiveMigration,
-    /IF auth\.uid\(\) IS NULL AND p_user_id IS NULL THEN/
+    finalLockOrderMigration,
+    /IF public\.is_agentic_checkout_context\(\)\s+OR \(auth\.uid\(\) IS NULL AND p_user_id IS NULL\) THEN/s
   );
-  assert.match(correctiveMigration, /coalesce\(auth\.uid\(\), p_user_id\)/);
+  assert.match(
+    finalLockOrderMigration,
+    /public\.is_agentic_checkout_context\(\) THEN NULL/
+  );
 });
 
 test('guest phone prelock ignores registered customers before email fallback', () => {
   assert.equal(
-    (correctiveMigration.match(/AND c\.user_id IS NULL/g) ?? []).length,
+    (finalLockOrderMigration.match(/AND c\.user_id IS NULL/g) ?? []).length,
     2
   );
 });

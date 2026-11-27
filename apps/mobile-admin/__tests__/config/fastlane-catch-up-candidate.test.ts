@@ -28,12 +28,14 @@ describe('admin iOS catch-up: which build to send', () => {
         { number: 606 },
       ],
     });
-    expect(output).toContain('build=606');
+    // 607 to 609 came from later releases, so 606 is out of date too.
+    expect(output).toContain('send=none');
+    expect(output).toContain('build 606 is out of date');
   });
 
   it('only sends builds a push to main uploaded', () => {
     const output = runCandidate({
-      builds: [610, 609, 608, 607, 606, 611].map((number) => ({ number })),
+      builds: [610, 609, 608, 606, 611].map((number) => ({ number })),
       runs: [
         mainRun(610, {
           event: 'workflow_dispatch',
@@ -42,12 +44,24 @@ describe('admin iOS catch-up: which build to send', () => {
         mainRun(609, { branch: 'v609-admin-ios' }),
         // Manual runs stay TestFlight-only, as in a normal release.
         mainRun(608, { event: 'workflow_dispatch' }),
-        mainRun(607, { upload: 'failure' }),
         mainRun(606),
         // 611 has no release run at all (a local or EAS upload).
       ],
     });
     expect(output).toContain('build=606');
+  });
+
+  // The release workflow withholds a build once a later app change is on main.
+  it.each([
+    'failure',
+    'skipped',
+  ])('sends nothing older once a later release from main ends in %s', (upload) => {
+    const output = runCandidate({
+      builds: [{ number: 607 }, { number: 606 }],
+      runs: [mainRun(607, { upload }), mainRun(606)],
+    });
+    expect(output).toContain('send=none');
+    expect(output).toContain('build 606 is out of date');
   });
 
   it('finds a main build behind a full page of uploads from elsewhere', () => {

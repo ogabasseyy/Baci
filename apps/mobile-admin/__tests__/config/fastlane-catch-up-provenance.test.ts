@@ -23,10 +23,10 @@ describe('admin iOS catch-up: proving a build came from main', () => {
   it('passes over a build whose version is not the one main uploaded', () => {
     // Same build number as main's 607, uploaded from elsewhere as 2.1.
     const output = runCandidate({
-      builds: [{ number: 607, version: '2.1.607' }, { number: 606 }],
-      runs: [mainRun(607), mainRun(606)],
+      builds: [{ number: 607, version: '2.1.607' }, { number: 607 }],
+      runs: [mainRun(607)],
     });
-    expect(output).toContain('send=2.0.606 build=606');
+    expect(output).toContain('send=2.0.607 build=607');
   });
 
   it('takes the version from the release workflow of that run', () => {

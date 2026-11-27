@@ -1,6 +1,7 @@
 # Chooses the build the scheduled check sends: the newest valid, unexpired
-# TestFlight build that a push to main uploaded and that is newer than the live
-# version. It only reads; the submit lane does the sending.
+# TestFlight build that a push to main uploaded, that is newer than the live
+# version and that no later push to main has overtaken. It only reads; the
+# submit lane does the sending.
 
 # Apple or a person turned the attached build down, so a person decides.
 TURNED_DOWN_VERSION_STATES = %w[
@@ -52,6 +53,13 @@ def catch_up_candidate(app_id:)
 
   build = newest_main_build(app, runs, newer_than: live.version_string)
   return skip_catch_up("nothing newer than #{live.version_string} from main is on TestFlight.") unless build
+
+  if overtaken_on_main?(runs, build.version.to_i)
+    return skip_catch_up(
+      "build #{build.version} is out of date: a later release from main has no build " \
+      "to send. Re-run or fix that release."
+    )
+  end
   return skip_catch_up("build #{build.version} is still processing.") if build.processing_state == "PROCESSING"
 
   editable = app.get_edit_app_store_version(platform: platform)

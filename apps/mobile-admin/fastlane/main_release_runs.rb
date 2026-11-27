@@ -41,15 +41,17 @@ def release_run_active?(runs)
   runs.any? { |run| run["event"] == "push" && run["status"] != "completed" }
 end
 
+def main_push?(run)
+  run["event"] == "push" && run["head_branch"] == "main"
+end
+
 # The push to main with this run number. Older pages are read until it is found
 # or its number has been passed.
 def main_release_run(runs, run_number)
   page = 1
   loop do
     found = runs.find do |candidate|
-      candidate["event"] == "push" &&
-        candidate["head_branch"] == "main" &&
-        candidate["run_number"] == run_number
+      main_push?(candidate) && candidate["run_number"] == run_number
     end
     return found if found
     return if runs.length < RELEASE_RUNS_PER_PAGE || runs.last["run_number"] <= run_number
@@ -57,6 +59,22 @@ def main_release_run(runs, run_number)
     page += 1
     runs = release_runs_page(page)
   end
+end
+
+# A later push to main changed the app, so the release workflow withholds this
+# build as stale and it must not go out from here either.
+def overtaken_on_main?(runs, build_number)
+  run_number = build_number - Integer(ENV.fetch("BUILD_NUMBER_BASE"), 10)
+  page = 1
+  until runs.empty?
+    newest = runs.select { |run| main_push?(run) }.map { |run| run["run_number"] }.max
+    return newest > run_number if newest
+
+    page += 1
+    runs = release_runs_page(page)
+  end
+  # No run from main at all: nothing shows the build is current.
+  true
 end
 
 # The version that run gave its build, from the workflow as it stood then.

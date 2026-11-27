@@ -3,7 +3,9 @@ import type {
   WorkerStorefrontManifest,
 } from '../schemas/worker-manifest';
 
-export const PLATFORM_VETTED_CSP_BY_DIRECTIVE = {
+const PRIVATE_VETTED_CSP_SETS: Readonly<
+  Record<keyof CspAllowlist, ReadonlySet<string>>
+> = {
   scriptOrigins: new Set([
     'https://connect.facebook.net',
     'https://www.googletagmanager.com',
@@ -20,7 +22,19 @@ export const PLATFORM_VETTED_CSP_BY_DIRECTIVE = {
     'https://www.facebook.com',
     'https://www.google-analytics.com',
   ]),
-} as const;
+};
+
+export const PLATFORM_VETTED_CSP_BY_DIRECTIVE: Readonly<
+  Record<keyof CspAllowlist, readonly string[]>
+> = Object.freeze({
+  scriptOrigins: Object.freeze(
+    Array.from(PRIVATE_VETTED_CSP_SETS.scriptOrigins)
+  ),
+  connectOrigins: Object.freeze(
+    Array.from(PRIVATE_VETTED_CSP_SETS.connectOrigins)
+  ),
+  imgOrigins: Object.freeze(Array.from(PRIVATE_VETTED_CSP_SETS.imgOrigins)),
+});
 
 export interface CspGovernanceSummary {
   allowlist: CspAllowlist;
@@ -45,7 +59,7 @@ export function summarizeCspGovernance(
     'connectOrigins',
     'imgOrigins',
   ] as const) {
-    const vettedOrigins = PLATFORM_VETTED_CSP_BY_DIRECTIVE[directive];
+    const vettedOrigins = PRIVATE_VETTED_CSP_SETS[directive];
     for (const origin of allowlist[directive]) {
       const canonicalOrigin = new URL(origin).origin.toLowerCase();
       if (vettedOrigins.has(canonicalOrigin)) {

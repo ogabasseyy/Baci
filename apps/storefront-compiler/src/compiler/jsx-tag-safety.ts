@@ -2,9 +2,76 @@ import ts from '@typescript/typescript6';
 import {
   bindingContainsName,
   createVirtualComponentExportResolver,
+  hasDeclareModifier,
   isDirectComponentExpr,
   resolveVirtualModule,
 } from './jsx-export-graph';
+
+export function hasLocalLexicalBinding(
+  atNode: ts.Node,
+  target: string
+): boolean {
+  let cur: ts.Node | undefined = atNode.parent;
+  while (cur) {
+    if (
+      ts.isCatchClause(cur) &&
+      cur.variableDeclaration &&
+      bindingContainsName(cur.variableDeclaration.name, target)
+    ) {
+      return true;
+    }
+    if (
+      (ts.isFunctionDeclaration(cur) && Boolean(cur.body)) ||
+      ts.isFunctionExpression(cur) ||
+      ts.isArrowFunction(cur) ||
+      (ts.isMethodDeclaration(cur) && Boolean(cur.body)) ||
+      (ts.isConstructorDeclaration(cur) && Boolean(cur.body))
+    ) {
+      if (cur.parameters.some((p) => bindingContainsName(p.name, target))) {
+        return true;
+      }
+      if (ts.isFunctionExpression(cur) && cur.name?.text === target) {
+        return true;
+      }
+    }
+    if (ts.isBlock(cur) || ts.isSourceFile(cur)) {
+      for (const stmt of cur.statements) {
+        if (hasDeclareModifier(stmt)) continue;
+        if (
+          ts.isVariableStatement(stmt) &&
+          stmt.declarationList.declarations.some((d) =>
+            bindingContainsName(d.name, target)
+          )
+        ) {
+          return true;
+        }
+        if (
+          ((ts.isFunctionDeclaration(stmt) && Boolean(stmt.body)) ||
+            ts.isClassDeclaration(stmt)) &&
+          stmt.name?.text === target
+        ) {
+          return true;
+        }
+        if (
+          ts.isImportDeclaration(stmt) &&
+          stmt.importClause &&
+          !stmt.importClause.isTypeOnly &&
+          (stmt.importClause.name?.text === target ||
+            (stmt.importClause.namedBindings &&
+              (ts.isNamespaceImport(stmt.importClause.namedBindings)
+                ? stmt.importClause.namedBindings.name.text === target
+                : stmt.importClause.namedBindings.elements.some(
+                    (e) => !e.isTypeOnly && e.name.text === target
+                  ))))
+        ) {
+          return true;
+        }
+      }
+    }
+    cur = cur.parent;
+  }
+  return false;
+}
 
 const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set([
   'script',
@@ -142,6 +209,7 @@ export function createJsxTagValidator(
             return 'unsafe';
           }
           for (const stmt of cur.statements) {
+            if (hasDeclareModifier(stmt)) continue;
             if (ts.isVariableStatement(stmt)) {
               const isConst =
                 (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0;
@@ -161,7 +229,8 @@ export function createJsxTagValidator(
                 }
               }
             } else if (
-              (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
+              ((ts.isFunctionDeclaration(stmt) && Boolean(stmt.body)) ||
+                ts.isClassDeclaration(stmt)) &&
               stmt.name?.text === target
             ) {
               return 'component';

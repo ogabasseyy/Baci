@@ -12,9 +12,8 @@ import { StorefrontCompilerError } from './closed-graph-plugin';
 import {
   assertAllowedAssetUrl,
   CANDIDATE_TOKEN_RE,
-  CSS_URL_RE,
   decodeCssEscapes,
-  extractMatchedCssUrl,
+  extractAllCssResourceUrls,
   stripCssComments,
   validateAndNormalizeMerchantCss,
 } from './css-safety';
@@ -63,12 +62,8 @@ export function extractTailwindCandidates(
     for (const match of file.content.matchAll(CANDIDATE_TOKEN_RE)) {
       const token = match[0];
       if (!token || token.length > 120) continue;
-      for (const urlMatch of token.matchAll(CSS_URL_RE)) {
-        assertAllowedAssetUrl(
-          extractMatchedCssUrl(urlMatch),
-          file.path,
-          declaredAssets
-        );
+      for (const rawUrl of extractAllCssResourceUrls(token)) {
+        assertAllowedAssetUrl(rawUrl, file.path, declaredAssets);
       }
       candidates.add(token);
     }
@@ -210,12 +205,8 @@ export async function compileStorefrontTailwindCss(
   });
 
   const css = minified.code;
-  for (const match of css.matchAll(CSS_URL_RE)) {
-    assertAllowedAssetUrl(
-      extractMatchedCssUrl(match),
-      'compiled-stylesheet',
-      declaredAssets
-    );
+  for (const rawUrl of extractAllCssResourceUrls(css)) {
+    assertAllowedAssetUrl(rawUrl, 'compiled-stylesheet', declaredAssets);
   }
   const rawBytes = Buffer.byteLength(css, 'utf8');
   if (rawBytes > WORKER_COMPILER_LIMITS.maxCssRawBytes) {

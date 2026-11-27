@@ -1,17 +1,8 @@
 import path from 'node:path';
 import ts from '@typescript/typescript6';
 
-const VIRTUAL_SUFFIXES = [
-  '',
-  '.tsx',
-  '.ts',
-  '.jsx',
-  '.js',
-  '/index.tsx',
-  '/index.ts',
-  '/index.jsx',
-  '/index.js',
-] as const;
+const VIRTUAL_SUFFIXES =
+  '|.tsx|.ts|.jsx|.js|/index.tsx|/index.ts|/index.jsx|/index.js'.split('|');
 
 function unwrapExpr(expr: ts.Expression): ts.Expression {
   if (
@@ -69,6 +60,16 @@ export function bindingContainsName(
   return false;
 }
 
+export function hasDeclareModifier(node: ts.Node): boolean {
+  return (
+    ts.canHaveModifiers(node) &&
+    (ts
+      .getModifiers(node)
+      ?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword) ??
+      false)
+  );
+}
+
 export function resolveVirtualModule(
   fromPath: string,
   spec: string,
@@ -103,14 +104,17 @@ export function createVirtualComponentExportResolver(
 
     if (sf) {
       for (const stmt of sf.statements) {
+        if (hasDeclareModifier(stmt)) continue;
         if (
-          (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
+          ((ts.isFunctionDeclaration(stmt) && Boolean(stmt.body)) ||
+            ts.isClassDeclaration(stmt)) &&
           stmt.name
         ) {
           localSafe.add(stmt.name.text);
         } else if (
           ts.isImportDeclaration(stmt) &&
           stmt.importClause &&
+          !stmt.importClause.isTypeOnly &&
           ts.isStringLiteral(stmt.moduleSpecifier)
         ) {
           const spec = stmt.moduleSpecifier.text.trim();

@@ -1,5 +1,12 @@
 import ts from '@typescript/typescript6';
-import { DYNAMIC_CODE_NAMES } from './banned-specifiers';
+import {
+  DYNAMIC_CODE_NAMES,
+  FORBIDDEN_BROWSER_NAV_GLOBALS,
+  SENSITIVE_GLOBAL_ROOTS,
+} from './banned-specifiers';
+import { hasLocalLexicalBinding } from './jsx-tag-safety';
+
+export { hasLocalLexicalBinding };
 
 export interface SourceSafetyViolation {
   filePath: string;
@@ -57,6 +64,27 @@ function isDocumentReceiver(expr: ts.Expression): boolean {
   return false;
 }
 
+function isSensitiveGlobalReceiver(expr: ts.Expression): boolean {
+  if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {
+    return isSensitiveGlobalReceiver(expr.expression);
+  }
+  if (ts.isIdentifier(expr)) return SENSITIVE_GLOBAL_ROOTS.has(expr.text);
+  if (ts.isPropertyAccessExpression(expr)) {
+    return (
+      SENSITIVE_GLOBAL_ROOTS.has(expr.name.text) ||
+      isSensitiveGlobalReceiver(expr.expression)
+    );
+  }
+  if (ts.isElementAccessExpression(expr)) {
+    const k = resolveStaticString(expr.argumentExpression);
+    return (
+      (k !== null && SENSITIVE_GLOBAL_ROOTS.has(k)) ||
+      isSensitiveGlobalReceiver(expr.expression)
+    );
+  }
+  return false;
+}
+
 function isSafeStaticObjectLiteral(expr: ts.Expression): boolean {
   return (
     ts.isObjectLiteralExpression(expr) &&
@@ -98,6 +126,16 @@ export function classifyMemberName(
       filePath,
       rule: 'DANGEROUS_INNER_HTML',
       detail: `Forbidden raw HTML or React element sink "${memberName}"`,
+    });
+  } else if (
+    FORBIDDEN_BROWSER_NAV_GLOBALS.has(memberName) &&
+    receiver !== undefined &&
+    isSensitiveGlobalReceiver(receiver)
+  ) {
+    violations.push({
+      filePath,
+      rule: 'DYNAMIC_CODE_EVAL',
+      detail: `Direct browser navigation via "${memberName}" is forbidden; use @baci/experience-sdk navigation`,
     });
   } else if (
     memberName === 'assign' &&

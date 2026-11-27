@@ -53,6 +53,10 @@ export function isValidCssColorToken(value: string): boolean {
   );
 }
 
+export const RESERVED_ROUTE_PARAM_NAMES: ReadonlySet<string> = new Set([
+  '__proto__',
+]);
+
 export const cssColorTokenSchema = z
   .string()
   .trim()

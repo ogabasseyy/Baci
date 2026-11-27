@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { cssColorTokenSchema } from './css-color-token';
+import {
+  cssColorTokenSchema,
+  RESERVED_ROUTE_PARAM_NAMES,
+} from './css-color-token';
 
 export {
   type CspGovernanceSummary,
@@ -225,10 +228,13 @@ export const workerStorefrontManifestSchema = z
             : seg.startsWith('[') && seg.endsWith(']')
               ? seg.slice(1, -1)
               : '';
-          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(paramName)) {
+          if (
+            !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(paramName) ||
+            RESERVED_ROUTE_PARAM_NAMES.has(paramName)
+          ) {
             ctx.addIssue({
               code: 'custom',
-              message: `Invalid dynamic route segment "${seg}" in "${route.path}"`,
+              message: `Invalid or reserved dynamic route segment "${seg}" in "${route.path}"`,
             });
           } else if (paramNames.has(paramName)) {
             ctx.addIssue({

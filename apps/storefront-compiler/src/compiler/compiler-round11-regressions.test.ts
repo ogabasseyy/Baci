@@ -117,4 +117,113 @@ describe('Round-11 Codex execCommand/setHTMLUnsafe, multi-param custom product r
       );
     }
   });
+
+  it.each([
+    [
+      'window.location.replace',
+      `import { useEffect } from 'react';
+       export default function X() { useEffect(() => { window.location.replace('https://evil.example'); }, []); return <p>x</p>; }`,
+    ],
+    [
+      'bare location.href',
+      `export default function X() { return <button type="button" onClick={() => { location.href = 'https://evil.example'; }}>x</button>; }`,
+    ],
+    [
+      'window.open',
+      `export default function X() { return <button type="button" onClick={() => { window.open('https://evil.example'); }}>x</button>; }`,
+    ],
+    [
+      'ambient declare function open bypass',
+      `declare function open(url: string): void;
+       export default function X() { return <button type="button" onClick={() => { open('https://evil.example'); }}>x</button>; }`,
+    ],
+    [
+      'history.pushState',
+      `export default function X() { return <button type="button" onClick={() => { history.pushState({}, '', '/x'); }}>x</button>; }`,
+    ],
+  ])('rejects direct browser navigation: %s', async (_label, navEscape) => {
+    const m = createOgabasseyStorefrontManifest();
+    m.files = [{ path: 'src/StorefrontApp.tsx', content: navEscape }];
+    await expect(compileStorefrontWorker(m)).rejects.toThrow(
+      /Direct browser navigation/
+    );
+  });
+
+  it('permits local prop named open and SDK commerce.navigation.open', async () => {
+    const safeOpen = createOgabasseyStorefrontManifest();
+    safeOpen.files = [
+      {
+        path: 'src/StorefrontApp.tsx',
+        content: `
+          import { useCommerce } from '@baci/experience-sdk';
+          function Drawer({ open }: { open: boolean }) { return open ? <div>open</div> : null; }
+          export default function App() {
+            const commerce = useCommerce();
+            return <main onClick={() => { void commerce.navigation.open('/search'); }}><Drawer open={true} /></main>;
+          }
+        `,
+      },
+    ];
+    expect(
+      (await compileStorefrontWorker(safeOpen)).workerCode.length
+    ).toBeGreaterThan(500);
+  });
+
+  it('scans image-set() string URLs safely without cross-string type() masking or EOF truncation', async () => {
+    for (const badCss of [
+      `.hero { background-image: image-set("https://images.unsplash.com/pixel.png" 1x); }`,
+      `.hero { background-image: image-set("/assets/hero-banner type('" 1x, "https://images.unsplash.com/x" 2x, "')" 3x); }`,
+      `.hero { background-image: image-set("https://images.unsplash.com/eof.png"`,
+    ]) {
+      const m = createOgabasseyStorefrontManifest();
+      m.files = [
+        { path: 'src/hero.css', content: badCss },
+        {
+          path: 'src/StorefrontApp.tsx',
+          content: `export default function X() { return <main className="hero">ok</main>; }`,
+        },
+      ];
+      await expect(compileStorefrontWorker(m)).rejects.toBeInstanceOf(
+        StorefrontCompilerError
+      );
+    }
+
+    const okImageSet = createOgabasseyStorefrontManifest();
+    okImageSet.files = [
+      {
+        path: 'src/hero.css',
+        content: `.hero { background-image: image-set("/assets/hero-banner" type("image/webp") 1x); }`,
+      },
+      {
+        path: 'src/StorefrontApp.tsx',
+        content: `export default function X() { return <main className="hero">ok</main>; }`,
+      },
+    ];
+    expect((await compileStorefrontWorker(okImageSet)).cssCode).toContain(
+      '/assets/hero-banner'
+    );
+  });
+
+  it('rejects /:__proto__ while preserving /product/:constructor and deeply freezes PLATFORM_VETTED_CSP_BY_DIRECTIVE', async () => {
+    const protoRoute = createOgabasseyStorefrontManifest();
+    protoRoute.routes.push({ path: '/c/:__proto__', view: 'collection' });
+    expect(() => parseWorkerStorefrontManifest(protoRoute)).toThrow(
+      /reserved dynamic route segment/
+    );
+
+    const ctorRoute = createOgabasseyStorefrontManifest();
+    ctorRoute.routes.push({ path: '/product/:constructor', view: 'product' });
+    expect(parseWorkerStorefrontManifest(ctorRoute).routes).toHaveLength(6);
+
+    const { PLATFORM_VETTED_CSP_BY_DIRECTIVE } = await import('./csp-header');
+    expect(Object.isFrozen(PLATFORM_VETTED_CSP_BY_DIRECTIVE)).toBe(true);
+    expect(
+      Object.isFrozen(PLATFORM_VETTED_CSP_BY_DIRECTIVE.scriptOrigins)
+    ).toBe(true);
+    expect(() => {
+      (
+        PLATFORM_VETTED_CSP_BY_DIRECTIVE.scriptOrigins as unknown as string[]
+      ).push('https://evil.example');
+    }).toThrow(TypeError);
+  });
 });

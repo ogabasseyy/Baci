@@ -47,12 +47,18 @@ export const SENSITIVE_GLOBAL_ROOTS: ReadonlySet<string> = new Set([
   'self',
   'document',
   'navigator',
-  'location',
   'top',
   'parent',
   'frames',
   'caches',
   'indexedDB',
+]);
+
+export const FORBIDDEN_BROWSER_NAV_GLOBALS: ReadonlySet<string> = new Set([
+  'location',
+  'history',
+  'navigation',
+  'open',
 ]);
 
 export const DYNAMIC_CODE_NAMES: ReadonlySet<string> = new Set([

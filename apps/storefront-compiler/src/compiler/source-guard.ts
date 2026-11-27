@@ -2,12 +2,14 @@ import ts from '@typescript/typescript6';
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import {
   BANNED_MERCHANT_SUBPATH_SPECIFIERS,
+  FORBIDDEN_BROWSER_NAV_GLOBALS,
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
 import { createJsxTagValidator } from './jsx-tag-safety';
 import {
   classifyMemberName,
+  hasLocalLexicalBinding,
   isAllowedSensitiveRootPosition,
   isPropertyOrDeclarationName,
   resolveStaticString,
@@ -47,7 +49,6 @@ export function scanManifestSourceSafety(
   for (const [filePath, sourceFile] of parsedFiles.entries()) {
     const checkJsxTag = buildFileJsxChecker(filePath, sourceFile);
     const file = { path: filePath };
-
     const visit = (node: ts.Node): void => {
       if (
         ts.isTypeNode(node) ||
@@ -56,12 +57,10 @@ export function scanManifestSourceSafety(
       ) {
         return;
       }
-
       if (ts.isConstructorDeclaration(node)) {
         ts.forEachChild(node, visit);
         return;
       }
-
       if (
         (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
         node.moduleSpecifier &&
@@ -77,7 +76,6 @@ export function scanManifestSourceSafety(
           detail: `Prohibited runtime specifier "${node.moduleSpecifier.text}"`,
         });
       }
-
       if (
         ts.isCallExpression(node) &&
         node.expression.kind === ts.SyntaxKind.ImportKeyword
@@ -102,7 +100,6 @@ export function scanManifestSourceSafety(
           });
         }
       }
-
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const jsxError = checkJsxTag(node.tagName);
         if (jsxError !== null) {
@@ -113,7 +110,6 @@ export function scanManifestSourceSafety(
           });
         }
       }
-
       if (ts.isJsxAttribute(node)) {
         classifyMemberName(
           file.path,
@@ -121,12 +117,10 @@ export function scanManifestSourceSafety(
           violations
         );
       }
-
       if (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) {
         const specName = (node.propertyName ?? node.name).text;
         classifyMemberName(file.path, specName, violations);
       }
-
       if (ts.isJsxSpreadAttribute(node)) {
         const isSafeStaticLiteral =
           ts.isObjectLiteralExpression(node.expression) &&
@@ -269,6 +263,15 @@ export function scanManifestSourceSafety(
             rule: 'DIRECT_COOKIE_ACCESS',
             detail:
               'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
+          });
+        } else if (
+          FORBIDDEN_BROWSER_NAV_GLOBALS.has(node.text) &&
+          !hasLocalLexicalBinding(node, node.text)
+        ) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DYNAMIC_CODE_EVAL',
+            detail: `Direct browser navigation via "${node.text}" is forbidden; use @baci/experience-sdk navigation`,
           });
         } else if (
           SENSITIVE_GLOBAL_ROOTS.has(node.text) &&

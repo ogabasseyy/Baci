@@ -70,7 +70,7 @@ function matchDeclaredRoute(pathname) {
   for (const route of DECLARED_ROUTES) {
     const patSegs = route.path.split('/').filter(Boolean);
     if (patSegs.length !== reqSegs.length) continue;
-    const params = {};
+    const params = Object.create(null);
     let matched = true;
     for (let i = 0; i < patSegs.length; i++) {
       const pat = patSegs[i];

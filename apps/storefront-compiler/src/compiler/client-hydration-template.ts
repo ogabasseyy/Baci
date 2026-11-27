@@ -1,3 +1,4 @@
+import { buildFramedAnchorInterceptorSnippet } from './framed-anchor-snippet';
 import { buildFramedHostPortSnippet } from './host-port-snippet';
 import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
 
@@ -16,14 +17,19 @@ const ASSETS_MAP = ${JSON.stringify(assetsMap)};
 const DECLARED_ROUTES = ${JSON.stringify(routes)};
 ${buildDeclaredRouteMatcherSnippet()}
 ${buildFramedHostPortSnippet(previewOrigin)}
+${buildFramedAnchorInterceptorSnippet()}
 const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;
 function resolveSafeInternalPath(p) {
   if (typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || UNSAFE_PATH_CHARS.test(p)) {
     return null;
   }
   try {
-    const resolved = new URL(p, window.location.origin);
-    if (resolved.origin !== window.location.origin) return null;
+    const safeOrigin =
+      typeof window.location?.origin === 'string' && /^https?:\\/\\//i.test(window.location.origin)
+        ? window.location.origin
+        : 'https://storefront.baci.internal';
+    const resolved = new URL(p, safeOrigin);
+    if (resolved.origin !== safeOrigin) return null;
     if (resolved.pathname === '/_baci' || resolved.pathname.startsWith('/_baci/')) return null;
     const normalized = resolved.pathname + resolved.search + resolved.hash;
     if (!normalized.startsWith('/') || normalized.startsWith('//') || UNSAFE_PATH_CHARS.test(normalized)) {
@@ -209,11 +215,10 @@ if (rootElement && stateScript?.textContent) {
           createElement(HydrationCommitGate, null, createElement(mod.default, initialProps))
         ),
         {
-          onRecoverableError: () => notifyHostRenderFailed(),
           onUncaughtError: () => notifyHostRenderFailed(),
-          onCaughtError: () => notifyHostRenderFailed(),
         }
       );
+      attachFramedNavigationInterceptors(rootElement, commerce, initialProps);
     } catch (err) {
       notifyHostRenderFailed();
       if (typeof console !== 'undefined' && typeof console.error === 'function') {

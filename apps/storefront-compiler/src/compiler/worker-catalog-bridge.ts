@@ -40,13 +40,21 @@ function isValidCatalogVariantRecord(v) {
   );
 }
 
+const MAX_CATALOG_PRODUCTS = 48;
+const MAX_PRODUCT_VARIANTS = 100;
+const MAX_FACET_BUCKETS = 100;
+
 function isValidCatalogProductRecord(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
   if (!isNonEmptyStr(p.id) || !isNonEmptyStr(p.slug) || !isNonEmptyStr(p.name)) {
     return false;
   }
   if (!isValidPriceFields(p)) return false;
-  if (!Array.isArray(p.variants) || !p.variants.every(isValidCatalogVariantRecord)) {
+  if (
+    !Array.isArray(p.variants) ||
+    p.variants.length > MAX_PRODUCT_VARIANTS ||
+    !p.variants.every(isValidCatalogVariantRecord)
+  ) {
     return false;
   }
   if (!isValidAvailabilityFields(p, false)) {
@@ -63,6 +71,7 @@ ${buildSsrCatalogProjectionSnippet()}
 function isValidFacetsBucket(list) {
   return (
     Array.isArray(list) &&
+    list.length <= MAX_FACET_BUCKETS &&
     list.every(
       (b) =>
         b !== null &&
@@ -86,7 +95,11 @@ function isValidCatalogPayload(data, kind) {
   if (data.title !== undefined && (typeof data.title !== 'string' || data.title.length > 300)) {
     return false;
   }
-  if (!Array.isArray(data.products) || !data.products.every(isValidCatalogProductRecord)) {
+  if (
+    !Array.isArray(data.products) ||
+    data.products.length > MAX_CATALOG_PRODUCTS ||
+    !data.products.every(isValidCatalogProductRecord)
+  ) {
     return false;
   }
   if (data.facets !== undefined) {

@@ -39,6 +39,63 @@ function isDestructuredSensitiveMember(
   return false;
 }
 
+function collectFunctionReturns(
+  fn: ts.FunctionLikeDeclaration
+): ts.Expression[] {
+  if (!fn.body) return [];
+  if (!ts.isBlock(fn.body)) return [fn.body];
+  const out: ts.Expression[] = [];
+  const walk = (n: ts.Node): void => {
+    if (
+      n !== fn.body &&
+      (ts.isFunctionDeclaration(n) ||
+        ts.isFunctionExpression(n) ||
+        ts.isArrowFunction(n) ||
+        ts.isMethodDeclaration(n))
+    ) {
+      return;
+    }
+    if (ts.isReturnStatement(n) && n.expression) out.push(n.expression);
+    ts.forEachChild(n, walk);
+  };
+  walk(fn.body);
+  return out;
+}
+
+function findLocalFunctionDeclaration(
+  id: ts.Identifier
+): ts.FunctionLikeDeclaration | undefined {
+  let cur: ts.Node | undefined = id.parent;
+  while (cur) {
+    if (ts.isBlock(cur) || ts.isSourceFile(cur)) {
+      for (const stmt of cur.statements) {
+        if (
+          ts.isFunctionDeclaration(stmt) &&
+          stmt.name?.text === id.text &&
+          stmt.body
+        ) {
+          return stmt;
+        }
+        if (ts.isVariableStatement(stmt)) {
+          for (const d of stmt.declarationList.declarations) {
+            if (
+              ts.isIdentifier(d.name) &&
+              d.name.text === id.text &&
+              d.initializer &&
+              (ts.isArrowFunction(d.initializer) ||
+                ts.isFunctionExpression(d.initializer))
+            ) {
+              return d.initializer;
+            }
+          }
+        }
+      }
+    }
+    cur = cur.parent;
+  }
+  return undefined;
+}
+
 function findLocalBindingSource(id: ts.Identifier): {
   initializer?: ts.Expression;
   isSensitiveDestructure: boolean;
@@ -189,12 +246,28 @@ export function isSensitiveGlobalReceiver(
       isSensitiveGlobalReceiver(src.initializer, seen)
     );
   }
-  if (
-    ts.isCallExpression(expr) &&
-    (ts.isPropertyAccessExpression(expr.expression) ||
-      ts.isElementAccessExpression(expr.expression))
-  ) {
-    return isSensitiveGlobalReceiver(expr.expression.expression, seen);
+  if (ts.isCallExpression(expr)) {
+    if (expr.arguments.some((a) => isSensitiveGlobalReceiver(a, seen))) {
+      return true;
+    }
+    if (ts.isIdentifier(expr.expression)) {
+      const fn = findLocalFunctionDeclaration(expr.expression);
+      if (
+        fn &&
+        collectFunctionReturns(fn).some((r) =>
+          isSensitiveGlobalReceiver(r, seen)
+        )
+      ) {
+        return true;
+      }
+    }
+    if (
+      ts.isPropertyAccessExpression(expr.expression) ||
+      ts.isElementAccessExpression(expr.expression)
+    ) {
+      return isSensitiveGlobalReceiver(expr.expression.expression, seen);
+    }
+    return false;
   }
   if (ts.isPropertyAccessExpression(expr)) {
     return (

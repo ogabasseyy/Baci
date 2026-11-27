@@ -39,6 +39,23 @@ function isSafeStaticObjectLiteral(expr: ts.Expression): boolean {
   );
 }
 
+function isAllowedSdkOpenReceiver(receiver?: ts.Expression): boolean {
+  if (!receiver) return false;
+  if (
+    ts.isParenthesizedExpression(receiver) ||
+    ts.isAsExpression(receiver) ||
+    ts.isNonNullExpression(receiver)
+  ) {
+    return isAllowedSdkOpenReceiver(receiver.expression);
+  }
+  if (ts.isPropertyAccessExpression(receiver)) {
+    return (
+      receiver.name.text === 'navigation' || receiver.name.text === 'checkout'
+    );
+  }
+  return false;
+}
+
 function isAllowedObjectAssignCall(memberAccessNode?: ts.Node): boolean {
   if (!memberAccessNode?.parent) return false;
   const call = memberAccessNode.parent;
@@ -72,6 +89,27 @@ export function classifyMemberName(
     push(
       'DANGEROUS_INNER_HTML',
       `Forbidden raw HTML or React element sink "${memberName}"`
+    );
+  } else if (
+    (memberName === 'location' ||
+      memberName === 'history' ||
+      memberName === 'opener') &&
+    receiver !== undefined
+  ) {
+    push(
+      'DYNAMIC_CODE_EVAL',
+      `Direct browser navigation via "${memberName}" is forbidden; use @baci/experience-sdk navigation`
+    );
+  } else if (
+    memberName === 'open' &&
+    memberAccessNode?.parent !== undefined &&
+    ts.isCallExpression(memberAccessNode.parent) &&
+    memberAccessNode.parent.expression === memberAccessNode &&
+    !isAllowedSdkOpenReceiver(receiver)
+  ) {
+    push(
+      'DYNAMIC_CODE_EVAL',
+      'Direct browser navigation via "open" is forbidden; use @baci/experience-sdk navigation'
     );
   } else if (
     FORBIDDEN_BROWSER_NAV_GLOBALS.has(memberName) &&

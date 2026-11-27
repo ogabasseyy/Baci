@@ -18,6 +18,10 @@ import {
   buildSafeJsxRuntimeSource,
   JSX_RUNTIME_VIRTUAL_PATH,
 } from './jsx-runtime-guard';
+import {
+  PREBUNDLE_VIRTUAL_ENTRY,
+  prebundleMerchantEntrySource,
+} from './prebundle-merchant-entry';
 import { scanManifestSourceSafety } from './source-guard';
 import { compileStorefrontTailwindCss } from './tailwind-css';
 import {
@@ -115,10 +119,20 @@ export async function compileStorefrontWorker(
     manifest.files.map((f) => [f.path, f.content])
   );
   clientVirtualFiles.set(JSX_RUNTIME_VIRTUAL_PATH, jsxRuntimeSource);
+  clientVirtualFiles.set(
+    PREBUNDLE_VIRTUAL_ENTRY,
+    await prebundleMerchantEntrySource({
+      entry: manifest.entry,
+      virtualFiles: clientVirtualFiles,
+      declaredPackages,
+      declaredAssetIds,
+      targetRuntime: 'client',
+    })
+  );
   const clientEntryName = '__baci_client_entry__.tsx';
   clientVirtualFiles.set(
     clientEntryName,
-    buildClientHydrationEntrySource(manifest.entry, assetsMap)
+    buildClientHydrationEntrySource(PREBUNDLE_VIRTUAL_ENTRY, assetsMap)
   );
 
   let clientBuild: Awaited<ReturnType<typeof build>>;
@@ -170,11 +184,21 @@ export async function compileStorefrontWorker(
     manifest.files.map((f) => [f.path, f.content])
   );
   workerVirtualFiles.set(JSX_RUNTIME_VIRTUAL_PATH, jsxRuntimeSource);
+  workerVirtualFiles.set(
+    PREBUNDLE_VIRTUAL_ENTRY,
+    await prebundleMerchantEntrySource({
+      entry: manifest.entry,
+      virtualFiles: workerVirtualFiles,
+      declaredPackages,
+      declaredAssetIds,
+      targetRuntime: 'worker',
+    })
+  );
   const workerEntryName = '__baci_worker_entry__.tsx';
   workerVirtualFiles.set(
     workerEntryName,
     buildWorkerSsrEntrySource({
-      manifest,
+      manifest: { ...manifest, entry: PREBUNDLE_VIRTUAL_ENTRY },
       cssAssetPath,
       clientAssetPath,
     })
@@ -224,18 +248,15 @@ export async function compileStorefrontWorker(
     );
   }
 
+  const cmpStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   const canonicalManifest = {
     format: manifest.format,
     mode: manifest.mode,
     merchantSlug: manifest.merchantSlug,
     entry: manifest.entry,
     routes: manifest.routes.map((r) => ({ path: r.path, view: r.view })),
-    packages: [...manifest.packages].sort((a, b) =>
-      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-    ),
-    assets: [...manifest.assets].sort((a, b) =>
-      a.assetId < b.assetId ? -1 : a.assetId > b.assetId ? 1 : 0
-    ),
+    packages: [...manifest.packages].sort((a, b) => cmpStr(a.name, b.name)),
+    assets: [...manifest.assets].sort((a, b) => cmpStr(a.assetId, b.assetId)),
     themeTokens: {
       primary: manifest.themeTokens.primary,
       secondary: manifest.themeTokens.secondary,
@@ -247,7 +268,7 @@ export async function compileStorefrontWorker(
       imgOrigins: [...manifest.cspAllowlist.imgOrigins].sort(),
     },
     files: [...manifest.files]
-      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+      .sort((a, b) => cmpStr(a.path, b.path))
       .map((f) => ({ path: f.path, content: f.content })),
   };
   const sourceDigest = sha256Hex([JSON.stringify(canonicalManifest)]);
@@ -259,10 +280,7 @@ export async function compileStorefrontWorker(
     workerCode,
     clientCode,
     cssCode: compiledCss.css,
-    assets: {
-      clientAssetPath,
-      cssAssetPath,
-    },
+    assets: { clientAssetPath, cssAssetPath },
     metrics: {
       workerRawBytes,
       workerGzipBytes,

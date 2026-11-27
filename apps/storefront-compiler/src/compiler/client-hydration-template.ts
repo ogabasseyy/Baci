@@ -67,12 +67,14 @@ if (rootElement && stateScript?.textContent) {
             return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'Catalog fetch unavailable' };
           }
           const op = method.slice('catalog.'.length);
+          const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+          const timer = ctrl && typeof setTimeout === 'function' ? setTimeout(() => ctrl.abort(), 4000) : null;
           try {
             const ep = new URL(
               \`/_baci/catalog?op=\${op}&\${paramKey}=\${encodeURIComponent(rawVal.trim())}\`,
               window.location.origin
             );
-            const res = await fetch(ep.href, { headers: { accept: 'application/json' } });
+            const res = await fetch(ep.href, ctrl ? { headers: { accept: 'application/json' }, signal: ctrl.signal } : { headers: { accept: 'application/json' } });
             const payload = await res.json();
             if (payload && typeof payload === 'object' && (payload.status === 'ok' || payload.status === 'error')) {
               if (payload.assets && typeof payload.assets === 'object' && !Array.isArray(payload.assets)) {
@@ -86,6 +88,8 @@ if (rootElement && stateScript?.textContent) {
             return { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed catalog response' };
           } catch {
             return { status: 'error', code: 'SNAPSHOT_STALE', message: 'Catalog request failed' };
+          } finally {
+            if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer);
           }
         }
         if (method === 'navigation.go') {

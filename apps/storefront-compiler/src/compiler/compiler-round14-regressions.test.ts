@@ -124,6 +124,7 @@ describe('Round-14 Codex & CodeRabbit resource APIs, JSX nav/spread safety, chec
                 slug: '/evil.example/hijack',
                 name: 'Item',
                 priceNgn: 1000,
+                variants: [],
               },
             ],
             facets: { brands: [], conditions: [], totalMatches: 1 },

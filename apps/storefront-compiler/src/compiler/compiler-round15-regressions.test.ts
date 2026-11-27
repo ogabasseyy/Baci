@@ -117,6 +117,7 @@ describe('Round-15 Codex SDK Link path validation, JSX <style> ban, and hydrated
                 slug: '/evil.example/hijack',
                 name: 'Item',
                 priceNgn: 1000,
+                variants: [],
               },
             ],
             facets: { brands: [], conditions: [], totalMatches: 1 },

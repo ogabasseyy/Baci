@@ -90,15 +90,21 @@ function matchDeclaredRoute(pathname) {
   return null;
 }
 
+const CATALOG_FETCH_TIMEOUT_MS = 2500;
+
 async function fetchCatalogJson(endpointUrl, kind) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CATALOG_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(endpointUrl);
+    const res = await fetch(endpointUrl, { signal: ctrl.signal });
     if (!res.ok) return { ok: false, status: res.status };
     const data = await res.json();
     if (!isValidCatalogPayload(data, kind)) return { ok: false, status: 502 };
     return { ok: true, data };
   } catch {
     return { ok: false, status: 502 };
+  } finally {
+    clearTimeout(timer);
   }
 }
 ${buildWorkerCatalogBridgeSnippet()}
@@ -192,25 +198,21 @@ export default {
       const lastEntry = paramEntries[paramEntries.length - 1];
       const prevEntry = paramEntries[paramEntries.length - 2];
       const trailingIsVariant = lastEntry && (lastEntry[0] === 'variant' || lastEntry[0] === 'variantId');
+      const explicitId = matchedRoute.params.productId || '';
       const productSlug =
         matchedRoute.params.productSlug ||
-        matchedRoute.params.productId ||
         matchedRoute.params.product ||
         matchedRoute.params.itemSlug ||
         matchedRoute.params.sku ||
-        (trailingIsVariant ? matchedRoute.params.slug || matchedRoute.params.handle || (prevEntry ? prevEntry[1] : '') : '') ||
-        (lastEntry ? lastEntry[1] : '');
+        (!explicitId
+          ? (trailingIsVariant ? matchedRoute.params.slug || matchedRoute.params.handle || (prevEntry ? prevEntry[1] : '') : '') ||
+            (lastEntry ? lastEntry[1] : '')
+          : '');
       const categoryVal =
-        matchedRoute.params.category ||
-        matchedRoute.params.categorySlug ||
-        matchedRoute.params.collection ||
-        matchedRoute.params.collectionSlug ||
-        '';
+        matchedRoute.params.category || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionSlug || '';
       const categoryQuery = categoryVal ? \`category=\${encodeURIComponent(categoryVal)}&\` : '';
-      const upstream = await fetchCatalogJson(
-        \`https://catalog.baci.internal/v1/product?\${categoryQuery}productSlug=\${encodeURIComponent(productSlug)}\`,
-        'product'
-      );
+      const lookupQuery = productSlug ? \`productSlug=\${encodeURIComponent(productSlug)}\` : \`productId=\${encodeURIComponent(explicitId)}\`;
+      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?\${categoryQuery}\${lookupQuery}\`, 'product');
       if (!upstream.ok) {
         status = 502;
         title = 'Product Temporarily Unavailable';

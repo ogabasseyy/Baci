@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'esbuild';
+import { BANNED_MERCHANT_SUBPATH_SPECIFIERS } from './banned-specifiers';
 import { JSX_RUNTIME_VIRTUAL_PATH } from './jsx-runtime-guard';
 import {
   isProhibitedImportSpecifier,
@@ -87,8 +88,14 @@ export function createClosedStorefrontGraphPlugin(options: {
   virtualFiles: ReadonlyMap<string, string>;
   declaredPackages: ReadonlySet<string>;
   declaredAssetIds: ReadonlySet<string>;
+  externalSingletons?: ReadonlySet<string>;
 }): Plugin {
-  const { virtualFiles, declaredPackages, declaredAssetIds } = options;
+  const {
+    virtualFiles,
+    declaredPackages,
+    declaredAssetIds,
+    externalSingletons,
+  } = options;
 
   return {
     name: 'closed-storefront-graph',
@@ -174,10 +181,20 @@ export function createClosedStorefrontGraphPlugin(options: {
           );
         }
 
+        if (args.namespace === 'singleton-cjs') {
+          return { path: args.path, external: true };
+        }
+
         if (
           args.namespace === 'source' &&
           !args.importer.startsWith('__baci_')
         ) {
+          if (BANNED_MERCHANT_SUBPATH_SPECIFIERS.has(args.path.trim())) {
+            throw new StorefrontCompilerError(
+              'GRAPH_ESCAPE_BLOCKED',
+              `Prohibited merchant subpath specifier: "${args.path}"`
+            );
+          }
           const packageRoot = args.path.startsWith('@')
             ? args.path.split('/').slice(0, 2).join('/')
             : (args.path.split('/')[0] ?? '');
@@ -187,6 +204,15 @@ export function createClosedStorefrontGraphPlugin(options: {
               `Undeclared package "${packageRoot}" (must be listed in manifest.packages)`
             );
           }
+        }
+
+        const resolvedRoot = args.path.startsWith('@')
+          ? args.path.split('/').slice(0, 2).join('/')
+          : (args.path.split('/')[0] ?? '');
+        if (externalSingletons?.has(resolvedRoot)) {
+          return args.kind === 'require-call'
+            ? { path: args.path, namespace: 'singleton-cjs' }
+            : { path: args.path, external: true };
         }
 
         return buildCtx.resolve(args.path, {
@@ -220,6 +246,12 @@ export function createClosedStorefrontGraphPlugin(options: {
           resolveDir: COMPILER_ROOT,
         };
       });
+
+      buildCtx.onLoad({ filter: /.*/, namespace: 'singleton-cjs' }, (args) => ({
+        contents: `import * as __ns from ${JSON.stringify(args.path)};\nmodule.exports = 'default' in __ns && __ns.default && typeof __ns.default === 'object' ? Object.assign({}, __ns.default, __ns) : __ns;\n`,
+        loader: 'js',
+        resolveDir: COMPILER_ROOT,
+      }));
 
       buildCtx.onLoad({ filter: /.*/, namespace: 'file' }, (args) => {
         const pkgName = resolveOwningPackageName(args.path);

@@ -4,26 +4,32 @@ function isFiniteNumber(v) {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+function isNonEmptyStr(v) {
+  return typeof v === 'string' && v.trim().length > 0;
+}
+
 function isValidCatalogVariantRecord(v) {
   return (
     v !== null &&
     typeof v === 'object' &&
     !Array.isArray(v) &&
-    typeof v.id === 'string' &&
-    typeof v.label === 'string' &&
+    isNonEmptyStr(v.id) &&
+    isNonEmptyStr(v.label) &&
     (isFiniteNumber(v.priceNgn) || isFiniteNumber(v.price))
   );
 }
 
-function isValidCatalogProductRecord(p, requireVariantsArray) {
+function isValidCatalogProductRecord(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
-  if (typeof p.slug !== 'string' || typeof p.name !== 'string') return false;
+  if (!isNonEmptyStr(p.id) || !isNonEmptyStr(p.slug) || !isNonEmptyStr(p.name)) {
+    return false;
+  }
   if (!isFiniteNumber(p.priceNgn) && !isFiniteNumber(p.price)) return false;
-  if (requireVariantsArray && !Array.isArray(p.variants)) return false;
-  if ('variants' in p && p.variants !== undefined) {
-    if (!Array.isArray(p.variants) || !p.variants.every(isValidCatalogVariantRecord)) {
-      return false;
-    }
+  if (!Array.isArray(p.variants) || !p.variants.every(isValidCatalogVariantRecord)) {
+    return false;
+  }
+  if ((p.has_variants === true || p.requiresVariant === true) && p.variants.length === 0) {
+    return false;
   }
   return true;
 }
@@ -46,12 +52,12 @@ function isValidCatalogPayload(data, kind) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
   if (kind === 'product') {
     if (!('product' in data)) return false;
-    return data.product === null || isValidCatalogProductRecord(data.product, true);
+    return data.product === null || isValidCatalogProductRecord(data.product);
   }
   if (kind === 'collection' && typeof data.categoryExists !== 'boolean') {
     return false;
   }
-  if (!Array.isArray(data.products) || !data.products.every((p) => isValidCatalogProductRecord(p, false))) {
+  if (!Array.isArray(data.products) || !data.products.every(isValidCatalogProductRecord)) {
     return false;
   }
   if (data.facets !== undefined) {
@@ -136,8 +142,8 @@ function collectCatalogAssetUrls(baseAssets, list, single) {
 }
 
 function toSdkPublicProduct(p, assetOut) {
-  if (!isValidCatalogProductRecord(p, false)) return null;
-  const rawVars = Array.isArray(p.variants) ? p.variants : [];
+  if (!isValidCatalogProductRecord(p)) return null;
+  const rawVars = p.variants;
   const variants = rawVars.map((v) => ({
     id: v.id,
     label: v.label,

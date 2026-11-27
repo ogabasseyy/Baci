@@ -77,7 +77,7 @@ describe('Round-11 Codex execCommand/setHTMLUnsafe, multi-param custom product r
       );
       expect(res.status).toBe(200);
       expect(requestedUrls).toEqual([
-        'https://catalog.baci.internal/v1/product?productSlug=sku-1',
+        'https://catalog.baci.internal/v1/product?productId=sku-1',
       ]);
     } finally {
       await mf.dispose();

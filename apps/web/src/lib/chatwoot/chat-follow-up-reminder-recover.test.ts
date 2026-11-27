@@ -23,6 +23,7 @@ const binding = { merchantId: 'm' } as unknown as Parameters<
   typeof recoverAcceptedFollowUpReminder
 >[1];
 const requested = '2026-11-25T09:00:00Z';
+const seen = { revision: 'rev-1', dueAt: '2026-11-25T08:00:00.000Z' };
 const engine = (conversation: Record<string, unknown>) =>
   mocks.read.mockResolvedValue({
     ok: true,
@@ -35,7 +36,7 @@ const recover = (
   recoverAcceptedFollowUpReminder(client, binding, {
     conversationId: 7,
     update: { followUpAt, priority: 'high' },
-    seen: 'rev-1',
+    seen,
     sent,
   });
 const unreadable = () =>
@@ -59,7 +60,7 @@ describe('recoverAcceptedFollowUpReminder', () => {
       conversationId: 7,
       update: { followUpAt: requested, priority: 'high' },
       customerName: 'Ada',
-      seen: 'rev-1',
+      seen,
       recheck: expect.any(Function),
       observed: {
         status: 'snoozed',
@@ -105,7 +106,7 @@ describe('recoverAcceptedFollowUpReminder', () => {
       conversationId: 7,
       update: { followUpAt: requested, priority: 'high' },
       customerName: 'Ada',
-      seen: 'rev-1',
+      seen,
       recheck: expect.any(Function),
       observed: undefined,
     });
@@ -142,7 +143,7 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
     recoverAcceptedFollowUpReminder(client, binding, {
       conversationId: 7,
       update,
-      seen: 'rev-1',
+      seen,
       cancelSent,
     });
 
@@ -157,7 +158,7 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
       conversationId: 7,
       update,
       customerName: 'Ada',
-      seen: 'rev-1',
+      seen,
       recheck: expect.any(Function),
       observed: { status: 'open', followUp: true, snoozedUntil: undefined },
     });
@@ -172,7 +173,7 @@ describe('bugfix: a cancellation that failed partway still drops the reminder', 
       conversationId: 7,
       update: { followUpAt: null },
       customerName: '',
-      seen: 'rev-1',
+      seen,
       recheck: expect.any(Function),
       observed: undefined,
     });

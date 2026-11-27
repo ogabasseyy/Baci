@@ -22,16 +22,19 @@ function readClient(answer: () => Promise<unknown>) {
 }
 
 describe('readChatFollowUpReminderVersion', () => {
-  it('returns the stamp of this store and chat only', async () => {
+  it('returns the stamp and time of this store and chat only', async () => {
     const { client, select, byMerchant, byChat } = readClient(async () => ({
-      data: { revision: 'rev-1' },
+      data: { revision: 'rev-1', due_at: '2026-11-25T09:00:00+00:00' },
       error: null,
     }));
 
-    await expect(readChatFollowUpReminderVersion(client, chat)).resolves.toBe(
-      'rev-1'
-    );
-    expect(select).toHaveBeenCalledWith('revision');
+    await expect(
+      readChatFollowUpReminderVersion(client, chat)
+    ).resolves.toEqual({
+      revision: 'rev-1',
+      dueAt: '2026-11-25T09:00:00+00:00',
+    });
+    expect(select).toHaveBeenCalledWith('revision, due_at');
     expect(byMerchant).toHaveBeenCalledWith('merchant_id', chat.merchantId);
     expect(byChat).toHaveBeenCalledWith('conversation_id', 7);
   });

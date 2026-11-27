@@ -52,8 +52,8 @@ describe('clearChatFollowUpReminder', () => {
   });
 
   it.each([
-    ['rev-1', 'rev-2'],
-    [null, 'rev-2'],
+    ['rev-1', { revision: 'rev-2', dueAt: '2026-11-25T09:00:00Z' }],
+    [null, { revision: 'rev-2', dueAt: '2026-11-25T09:00:00Z' }],
   ])('leaves a reminder written meanwhile (read %s)', async (version, left) => {
     mocks.version.mockResolvedValue(left);
     await expect(

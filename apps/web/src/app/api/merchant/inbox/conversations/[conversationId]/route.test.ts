@@ -34,6 +34,7 @@ import { PATCH } from './route';
 
 const binding = { merchantId: 'm', accountId: 2, inboxId: 20 };
 const supabase = { marker: 'session-client' };
+const seen = { revision: 'rev-1', dueAt: '2026-11-25T08:00:00.000Z' };
 
 function patch(conversationId: string, body: unknown, raw = false) {
   return PATCH(
@@ -54,7 +55,7 @@ beforeEach(() => {
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.resolve.mockResolvedValue({ ok: true, binding, supabase });
   mocks.sync.mockResolvedValue('unchanged');
-  mocks.version.mockResolvedValue('rev-1');
+  mocks.version.mockResolvedValue(seen);
   mocks.read.mockResolvedValue({
     ok: true,
     conversation: { id: 7, customerName: 'Ada', status: 'open' },
@@ -104,7 +105,7 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       conversationId: 7,
       update: { followUpAt: '2026-11-25T09:00:00Z' },
       customerName: 'Ada',
-      seen: 'rev-1',
+      seen,
       recheck: expect.any(Function),
       observed: {
         status: 'snoozed',
@@ -166,7 +167,7 @@ describe('PATCH /api/merchant/inbox/conversations/[conversationId]', () => {
       conversationId: 7,
       update,
       customerName: 'Ada',
-      seen: 'rev-1',
+      seen,
       recheck: expect.any(Function),
       observed: snoozed,
     });

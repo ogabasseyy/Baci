@@ -28,8 +28,10 @@ const MAX_ATTEMPTS = 3;
  *
  * Two team members may change one chat at nearly the same moment. The write
  * only goes over the reminder read before the chat was changed; if that one
- * was written meanwhile, the reminder and then the chat are read again, so the
- * older request stands down and the newer one still lands.
+ * was written meanwhile, the reminder and then the chat are read again, and the
+ * one there is only replaced or removed when the chat shows that this request's
+ * follow-up is the one in force. So the older request stands down and the newer
+ * one still lands.
  *
  * Best effort and never throws: the chat has already been changed, so a
  * failure here only costs the reminder and is logged without customer text.
@@ -71,7 +73,8 @@ export async function syncChatFollowUpReminder(
     let version = input.seen;
     let observed = input.observed;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-      if (attempt > 0 || input.seen === undefined) {
+      const reread = attempt > 0 || input.seen === undefined;
+      if (reread) {
         // Reminder first, chat second: a write in between is then caught.
         version = await readChatFollowUpReminderVersion(client, chat);
         observed = await input.recheck();
@@ -79,12 +82,24 @@ export async function syncChatFollowUpReminder(
       }
       if (supersededByAnotherSet(requestedAt, observed)) return 'unchanged';
       if (version === undefined) continue;
+      if (
+        reread &&
+        version &&
+        observed &&
+        mayBeNewer(requestedAt, observed, version.dueAt)
+      ) {
+        return 'unchanged';
+      }
+      const revision = version?.revision ?? null;
       const outcome =
         requestedAt === null
-          ? await clearChatFollowUpReminder(client, { ...chat, version })
+          ? await clearChatFollowUpReminder(client, {
+              ...chat,
+              version: revision,
+            })
           : await saveChatFollowUpReminder(client, {
               ...chat,
-              version,
+              version: revision,
               dueAt: new Date(requestedAt).toISOString(),
               customerName: reminderCustomerName(input.customerName),
             });
@@ -95,6 +110,27 @@ export async function syncChatFollowUpReminder(
   } catch {
     return report(false, wanted, input);
   }
+}
+
+/**
+ * For a reminder found written by someone else: true unless the chat shows that
+ * ours is the follow-up in force. A set needs a snooze closer to our time than
+ * to the recorded one (no time shown confirms nothing); a clear needs the
+ * follow-up label gone or the chat Done.
+ */
+function mayBeNewer(
+  requestedAt: string | null,
+  observed: ObservedFollowUp,
+  recordedAt: string
+): boolean {
+  if (requestedAt === null) {
+    return observed.status !== 'resolved' && observed.followUp === true;
+  }
+  const shown = Date.parse(observed.snoozedUntil ?? '');
+  const ours = Math.abs(shown - Date.parse(requestedAt));
+  const theirs = Math.abs(shown - Date.parse(recordedAt));
+  // An unreadable time (NaN) is never closer.
+  return !(ours < theirs);
 }
 
 /** The engine may round a snooze by a few seconds. */

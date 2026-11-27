@@ -12,9 +12,10 @@ export const dueChatFollowUpReminderSchema = z.object({
   customer_name: z.string().max(80),
 });
 
-/** The write stamp of a chat's pending reminder, read before changing it. */
+/** A chat's pending reminder as read before changing it: write stamp and time. */
 export const chatFollowUpReminderVersionSchema = z.object({
   revision: z.string().min(1).max(64),
+  due_at: z.string().min(1).max(64),
 });
 
 /** The listed rows, each still unchecked: one bad row must not reject the rest. */

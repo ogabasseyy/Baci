@@ -32,6 +32,9 @@ import { PATCH } from './route';
 const merchantId = 'c4a70000-0000-4000-8000-0000000000b1';
 const nine = '2026-11-25T09:00:00.000Z';
 const ten = '2026-11-25T10:00:00.000Z';
+const justAfterNine = '2026-11-25T09:00:30.000Z';
+/** A customer message reopens a snoozed chat; the follow-up label stays. */
+const reopened = { status: 'open', followUp: true, snoozedUntil: null };
 
 type Change = { followUpAt: string | null };
 
@@ -71,13 +74,19 @@ const apply = (change: Change) => {
 
 /**
  * `older` is applied and read back by the engine, then `newer` runs from start
- * to finish before `older` gets to write its reminder.
+ * to finish (and `meanwhile` may change the chat) before `older` gets to write
+ * its reminder.
  */
-async function overtaken(older: Change, newer: Change) {
+async function overtaken(
+  older: Change,
+  newer: Change,
+  meanwhile?: typeof reopened
+) {
   mocks.update.mockImplementationOnce(async () => {
     const answer = apply(older);
     mocks.update.mockImplementationOnce(async () => apply(newer));
     await patch(newer);
+    if (meanwhile) engine = meanwhile;
     return answer;
   });
   await patch(older);
@@ -126,10 +135,33 @@ describe('bugfix: two team members changing one follow-up at the same moment', (
     expect(dueTimes()).toEqual([ten]);
   });
 
+  it('an older save does not replace a newer one set seconds later', async () => {
+    await existing('2026-11-25T08:00:00.000Z');
+    await overtaken({ followUpAt: nine }, { followUpAt: justAfterNine });
+    expect(dueTimes()).toEqual([justAfterNine]);
+  });
+
+  it.each([
+    ['save', { followUpAt: nine }],
+    ['clear', { followUpAt: null }],
+  ])('an older %s leaves the newer reminder when the chat has reopened', async (_label, older) => {
+    await existing('2026-11-25T08:00:00.000Z');
+    await overtaken(older, { followUpAt: ten }, reopened);
+    expect(dueTimes()).toEqual([ten]);
+  });
+
   it.each([
     ['a chat with a reminder', true],
     ['a chat without one', false],
   ])('the newer save still lands when the older one writes first, on %s', async (_label, hasReminder) => {
+    await olderWritesFirst(hasReminder, ten);
+  });
+
+  it('the newer save still lands when it is only seconds after the older', async () => {
+    await olderWritesFirst(true, justAfterNine);
+  });
+
+  async function olderWritesFirst(hasReminder: boolean, later: string) {
     if (hasReminder) await existing('2026-11-25T08:00:00.000Z');
     const answers: Array<() => void> = [];
     const heldBack = (change: Change) => () => {
@@ -138,17 +170,17 @@ describe('bugfix: two team members changing one follow-up at the same moment', (
     };
     mocks.update
       .mockImplementationOnce(heldBack({ followUpAt: nine }))
-      .mockImplementationOnce(heldBack({ followUpAt: ten }));
+      .mockImplementationOnce(heldBack({ followUpAt: later }));
 
     const older = patch({ followUpAt: nine });
     await vi.waitFor(() => expect(answers).toHaveLength(1));
-    const newer = patch({ followUpAt: ten });
+    const newer = patch({ followUpAt: later });
     await vi.waitFor(() => expect(answers).toHaveLength(2));
     answers[0]();
     await older;
     answers[1]();
     await newer;
 
-    expect(dueTimes()).toEqual([ten]);
-  });
+    expect(dueTimes()).toEqual([later]);
+  }
 });

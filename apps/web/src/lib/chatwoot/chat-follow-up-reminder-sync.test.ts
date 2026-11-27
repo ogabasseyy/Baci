@@ -24,13 +24,17 @@ const chat = {
   conversationId: 7,
 };
 const recheck = vi.fn();
-const base = { ...chat, customerName: 'Ada', seen: 'rev-1', recheck };
+const read = (revision: string) => ({
+  revision,
+  dueAt: '2026-11-25T08:00:00.000Z',
+});
+const base = { ...chat, customerName: 'Ada', seen: read('rev-1'), recheck };
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.save.mockResolvedValue('done');
   mocks.clear.mockResolvedValue('done');
-  mocks.version.mockResolvedValue('rev-2');
+  mocks.version.mockResolvedValue(read('rev-2'));
   recheck.mockResolvedValue({ status: 'open', followUp: false });
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
@@ -196,7 +200,7 @@ describe('syncChatFollowUpReminder', () => {
 
 describe('syncChatFollowUpReminder when the reminder changed meanwhile', () => {
   const nine = '2026-11-25T09:00:00Z';
-  const set = (from: { seen?: string } = { seen: 'rev-1' }) =>
+  const set = (from: { seen?: typeof base.seen } = { seen: base.seen }) =>
     syncChatFollowUpReminder(client, {
       ...base,
       seen: from.seen,
@@ -261,5 +265,33 @@ describe('syncChatFollowUpReminder when the reminder changed meanwhile', () => {
     await expect(set({})).resolves.toBe('saved');
     expect(mocks.save.mock.calls[0][1].version).toBe('rev-2');
     expect(recheck).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['no snooze time to compare', null],
+    ['a time closer to the recorded one', '2026-11-25T08:00:00.000Z'],
+  ])('keeps the other reminder when the chat shows %s', async (_label, until) => {
+    mocks.save.mockResolvedValueOnce('conflict');
+    recheck.mockResolvedValue({ status: 'open', snoozedUntil: until });
+
+    await expect(set()).resolves.toBe('unchanged');
+    expect(mocks.save).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['keeps it while the follow-up label is on', 'open', true, 'unchanged', 1],
+    ['removes it once the label is gone', 'open', false, 'cleared', 2],
+    ['removes it when the chat is Done', 'resolved', true, 'cleared', 2],
+  ])('after another write, a clear %s', async (_label, status, followUp, result, writes) => {
+    mocks.clear.mockResolvedValueOnce('conflict');
+    recheck.mockResolvedValue({ status, followUp });
+
+    await expect(
+      syncChatFollowUpReminder(client, {
+        ...base,
+        update: { followUpAt: null },
+      })
+    ).resolves.toBe(result);
+    expect(mocks.clear).toHaveBeenCalledTimes(writes);
   });
 });

@@ -92,18 +92,33 @@ describe('sitemap-data', () => {
 
   it('serializes sitemap XML responses with image namespace when needed', async () => {
     const { createSitemapResponse } = sitemapData;
-    const response = createSitemapResponse([
-      {
-        url: 'https://ogabassey.com/smartphones/iphone-15',
-        lastModified: new Date('2026-01-15T00:00:00Z'),
-        changeFrequency: 'weekly',
-        priority: 0.8,
-        images: ['https://img.example.com/iphone.jpg'],
-      },
-    ]);
+    const response = createSitemapResponse(
+      [
+        {
+          url: 'https://ogabassey.com/smartphones/iphone-15',
+          lastModified: new Date('2026-01-15T00:00:00Z'),
+          changeFrequency: 'weekly',
+          priority: 0.8,
+          images: ['https://img.example.com/iphone.jpg'],
+        },
+      ],
+      'merchant-1'
+    );
     const body = await response.text();
 
     expect(response.headers.get('content-type')).toContain('application/xml');
+    expect(response.headers.get('cache-control')).toBe(
+      'public, max-age=300, stale-while-revalidate=86400'
+    );
+    expect(response.headers.get('cdn-cache-control')).toBe(
+      'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400'
+    );
+    expect(response.headers.get('vercel-cdn-cache-control')).toBe(
+      'public, max-age=3600, stale-while-revalidate=86400'
+    );
+    expect(response.headers.get('vercel-cache-tag')).toBe(
+      'sitemap,products-merchant-1'
+    );
     expect(body).toContain('<urlset');
     expect(body).toContain('xmlns:image=');
     expect(body).toContain(

@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'esbuild';
+import { JSX_RUNTIME_VIRTUAL_PATH } from './jsx-runtime-guard';
 import {
   isProhibitedImportSpecifier,
   type SourceSafetyViolation,
@@ -106,6 +107,14 @@ export function createClosedStorefrontGraphPlugin(options: {
           );
         }
 
+        if (
+          !args.importer.startsWith('__baci_') &&
+          (args.path === 'react/jsx-runtime' ||
+            args.path === 'react/jsx-dev-runtime')
+        ) {
+          return { path: JSX_RUNTIME_VIRTUAL_PATH, namespace: 'source' };
+        }
+
         if (args.namespace === 'source' && args.path.startsWith('.')) {
           const normalized = path.posix.normalize(
             path.posix.join(path.posix.dirname(args.importer), args.path)
@@ -169,12 +178,6 @@ export function createClosedStorefrontGraphPlugin(options: {
           args.namespace === 'source' &&
           !args.importer.startsWith('__baci_')
         ) {
-          if (
-            args.path === 'react/jsx-runtime' ||
-            args.path === 'react/jsx-dev-runtime'
-          ) {
-            return { path: '__baci_jsx_runtime__.ts', namespace: 'source' };
-          }
           const packageRoot = args.path.startsWith('@')
             ? args.path.split('/').slice(0, 2).join('/')
             : (args.path.split('/')[0] ?? '');

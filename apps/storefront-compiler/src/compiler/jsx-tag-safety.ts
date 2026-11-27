@@ -3,7 +3,7 @@ import {
   bindingContainsName,
   createVirtualComponentExportResolver,
   hasDeclareModifier,
-  isDirectComponentExpr,
+  resolveDirectComponentKind,
   resolveVirtualModule,
 } from './jsx-export-graph';
 
@@ -75,6 +75,7 @@ export function hasLocalLexicalBinding(
 
 const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set([
   'script',
+  'style',
   'object',
   'embed',
   'base',
@@ -83,7 +84,7 @@ const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set([
   'meta',
 ]);
 
-type BindingKind = 'component' | 'motion' | 'unsafe';
+type BindingKind = 'component' | 'sdkLink' | 'motion' | 'unsafe';
 
 function hasHoistedVarBinding(root: ts.Node, target: string): boolean {
   let found = false;
@@ -116,13 +117,18 @@ function hasHoistedVarBinding(root: ts.Node, target: string): boolean {
   return found;
 }
 
+export interface FileJsxTagInspector {
+  checkJsxTag: (tagName: ts.JsxTagNameExpression) => string | null;
+  isSdkLinkTag: (tagName: ts.JsxTagNameExpression) => boolean;
+}
+
 export function createJsxTagValidator(
   parsedFiles: ReadonlyMap<string, ts.SourceFile>
-) {
+): (filePath: string, sf: ts.SourceFile) => FileJsxTagInspector {
   const getSafeComponentExports =
     createVirtualComponentExportResolver(parsedFiles);
 
-  return (filePath: string, sf: ts.SourceFile) => {
+  return (filePath: string, sf: ts.SourceFile): FileJsxTagInspector => {
     const importBindings = new Map<string, BindingKind>();
     for (const stmt of sf.statements) {
       if (
@@ -134,11 +140,11 @@ export function createJsxTagValidator(
         const clause = stmt.importClause;
         if (spec.startsWith('.')) {
           const resolved = resolveVirtualModule(filePath, spec, parsedFiles);
-          const exp = resolved ? getSafeComponentExports(resolved) : new Set();
+          const exp = resolved ? getSafeComponentExports(resolved) : new Map();
           if (clause.name) {
             importBindings.set(
               clause.name.text,
-              exp.has('default') ? 'component' : 'unsafe'
+              exp.get('default') ?? 'unsafe'
             );
           }
           if (clause.namedBindings) {
@@ -148,9 +154,7 @@ export function createJsxTagValidator(
               for (const el of clause.namedBindings.elements) {
                 importBindings.set(
                   el.name.text,
-                  exp.has((el.propertyName ?? el.name).text)
-                    ? 'component'
-                    : 'unsafe'
+                  exp.get((el.propertyName ?? el.name).text) ?? 'unsafe'
                 );
               }
             }
@@ -164,9 +168,11 @@ export function createJsxTagValidator(
                 el.name.text,
                 spec === 'framer-motion' && orig === 'motion'
                   ? 'motion'
-                  : /^[A-Z]/.test(orig)
-                    ? 'component'
-                    : 'unsafe'
+                  : spec === '@baci/experience-sdk' && orig === 'Link'
+                    ? 'sdkLink'
+                    : /^[A-Z]/.test(orig)
+                      ? 'component'
+                      : 'unsafe'
               );
             }
           }
@@ -215,17 +221,16 @@ export function createJsxTagValidator(
                 (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0;
               for (const d of stmt.declarationList.declarations) {
                 if (bindingContainsName(d.name, target)) {
-                  return isConst &&
-                    ts.isIdentifier(d.name) &&
-                    d.initializer !== undefined &&
-                    isDirectComponentExpr(
-                      d.initializer,
-                      (n) =>
-                        n !== target &&
-                        resolveBindingAt(d, n, depth + 1) === 'component'
-                    )
-                    ? 'component'
-                    : 'unsafe';
+                  if (!isConst || !ts.isIdentifier(d.name) || !d.initializer) {
+                    return 'unsafe';
+                  }
+                  return (
+                    resolveDirectComponentKind(d.initializer, (n) => {
+                      if (n === target) return null;
+                      const k = resolveBindingAt(d, n, depth + 1);
+                      return k === 'component' || k === 'sdkLink' ? k : null;
+                    }) ?? 'unsafe'
+                  );
                 }
               }
             } else if (
@@ -245,28 +250,35 @@ export function createJsxTagValidator(
       return 'unsafe';
     };
 
-    return (tagName: ts.JsxTagNameExpression): string | null => {
-      if (ts.isIdentifier(tagName)) {
-        const t = tagName.text;
-        if (/^[a-z]/.test(t)) {
-          return FORBIDDEN_INTRINSIC_JSX_TAGS.has(t)
-            ? `Executable or document-level JSX element "<${t}>" is forbidden`
-            : null;
+    return {
+      isSdkLinkTag: (tagName: ts.JsxTagNameExpression): boolean =>
+        ts.isIdentifier(tagName) &&
+        /^[A-Z]/.test(tagName.text) &&
+        resolveBindingAt(tagName, tagName.text) === 'sdkLink',
+      checkJsxTag: (tagName: ts.JsxTagNameExpression): string | null => {
+        if (ts.isIdentifier(tagName)) {
+          const t = tagName.text;
+          if (/^[a-z]/.test(t)) {
+            return FORBIDDEN_INTRINSIC_JSX_TAGS.has(t)
+              ? `Executable or document-level JSX element "<${t}>" is forbidden`
+              : null;
+          }
+          const k = resolveBindingAt(tagName, t);
+          return k === 'component' || k === 'sdkLink'
+            ? null
+            : `JSX component "<${t}>" must reference a statically verified component function`;
         }
-        return resolveBindingAt(tagName, t) === 'component'
-          ? null
-          : `JSX component "<${t}>" must reference a statically verified component function`;
-      }
-      if (
-        ts.isPropertyAccessExpression(tagName) &&
-        ts.isIdentifier(tagName.expression) &&
-        resolveBindingAt(tagName, tagName.expression.text) === 'motion' &&
-        /^[a-z][a-zA-Z0-9]*$/.test(tagName.name.text) &&
-        !FORBIDDEN_INTRINSIC_JSX_TAGS.has(tagName.name.text)
-      ) {
-        return null;
-      }
-      return `Dynamic or unverified JSX member tag "<${tagName.getText(sf)}>" is forbidden`;
+        if (
+          ts.isPropertyAccessExpression(tagName) &&
+          ts.isIdentifier(tagName.expression) &&
+          resolveBindingAt(tagName, tagName.expression.text) === 'motion' &&
+          /^[a-z][a-zA-Z0-9]*$/.test(tagName.name.text) &&
+          !FORBIDDEN_INTRINSIC_JSX_TAGS.has(tagName.name.text)
+        ) {
+          return null;
+        }
+        return `Dynamic or unverified JSX member tag "<${tagName.getText(sf)}>" is forbidden`;
+      },
     };
   };
 }

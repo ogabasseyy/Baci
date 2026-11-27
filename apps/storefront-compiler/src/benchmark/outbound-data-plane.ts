@@ -19,7 +19,11 @@ const ALLOWED_SEARCH_QUERY_KEYS = [
   'page',
   'q',
 ] as const;
-const ALLOWED_PRODUCT_QUERY_KEYS = ['category', 'productSlug'] as const;
+const ALLOWED_PRODUCT_QUERY_KEYS = [
+  'category',
+  'productId',
+  'productSlug',
+] as const;
 
 export type CacheKeyStrategy = 'single-generation' | 'split-availability';
 
@@ -38,11 +42,7 @@ export interface OutboundTelemetry {
   spoofedTenantIgnoredCount: number;
 }
 
-/**
- * Simulates Supabase PostgREST + Outbound Worker `caches.default` behavior,
- * enforcing trusted WfP outbound parameter tenant binding and comparing
- * Strategy A (`single-generation`) vs Strategy B (`split-availability`).
- */
+/** Simulates WfP Outbound Worker tenant binding + split-availability edge cache. */
 export class SimulatedPostgrestOutboundPlane {
   private readonly catalogByMerchant = new Map<
     string,

@@ -32,6 +32,35 @@ if (rootElement && stateScript?.textContent) {
     try {
       const initialProps = JSON.parse(stateScript.textContent);
       const commerce = createCommerceClient(async (method, args) => {
+        if (
+          method === 'catalog.collection' ||
+          method === 'catalog.product' ||
+          method === 'catalog.variants'
+        ) {
+          const paramKey = method === 'catalog.variants' ? 'productId' : 'handle';
+          const rawVal = args ? args[paramKey] : undefined;
+          if (typeof rawVal !== 'string' || rawVal.trim().length === 0) {
+            return { status: 'error', code: 'INVALID_REQUEST', message: \`Catalog \${paramKey} must be a non-empty string\` };
+          }
+          if (typeof fetch !== 'function') {
+            return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'Catalog fetch unavailable' };
+          }
+          const op = method.slice('catalog.'.length);
+          try {
+            const ep = new URL(
+              \`/_baci/catalog?op=\${op}&\${paramKey}=\${encodeURIComponent(rawVal.trim())}\`,
+              window.location.origin
+            );
+            const res = await fetch(ep.href, { headers: { accept: 'application/json' } });
+            const payload = await res.json();
+            if (payload && typeof payload === 'object' && (payload.status === 'ok' || payload.status === 'error')) {
+              return payload;
+            }
+            return { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed catalog response' };
+          } catch {
+            return { status: 'error', code: 'SNAPSHOT_STALE', message: 'Catalog request failed' };
+          }
+        }
         if (method === 'navigation.go') {
           const safePath = resolveSafeInternalPath(args.path);
           if (!safePath) {
@@ -83,8 +112,10 @@ if (rootElement && stateScript?.textContent) {
         rootElement,
         createElement(CommerceProvider, { commerce, assets: ASSETS_MAP }, createElement(mod.default, initialProps))
       );
-    } catch {
-      // Contain merchant browser-only module initialization or hydration failures cleanly.
+    } catch (err) {
+      if (typeof console !== 'undefined' && typeof console.error === 'function') {
+        console.error('[baci-storefront] Client hydration error:', err);
+      }
     }
   })();
 }

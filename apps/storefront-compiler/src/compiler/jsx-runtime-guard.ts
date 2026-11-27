@@ -1,9 +1,17 @@
-export function buildSafeJsxRuntimeSource(merchantSlug: string): string {
+export const JSX_RUNTIME_VIRTUAL_PATH = '__baci_jsx_runtime__.ts';
+
+export function buildSafeJsxRuntimeSource(
+  merchantSlug: string,
+  declaredAssetIds: readonly string[] = []
+): string {
   const trustedOrigin = `https://${merchantSlug}.usebaci.com`;
   return `
 import { Fragment, jsx as rawJsx, jsxs as rawJsxs } from 'react/jsx-runtime';
 
 const TRUSTED_ORIGIN = ${JSON.stringify(trustedOrigin)};
+const DECLARED_ASSETS = new Set(${JSON.stringify(declaredAssetIds)});
+const CSS_RES_TOKEN_RE = /url\\s*\\(|src\\s*\\(|image-set\\s*\\(|\\\\/i;
+const SAFE_ASSET_URL_RE = /^url\\(\\s*(?:"(\\/assets\\/[A-Za-z0-9._-]+|#[A-Za-z0-9._-]+)"|'(\\/assets\\/[A-Za-z0-9._-]+|#[A-Za-z0-9._-]+)'|(\\/assets\\/[A-Za-z0-9._-]+|#[A-Za-z0-9._-]+))\\s*\\)$/i;
 
 function isNavPropKey(key) {
   const lower = key.toLowerCase();
@@ -40,6 +48,28 @@ function isSafeCompletedNavTarget(val) {
   }
 }
 
+function isSafeInlineStyleValue(val) {
+  if (typeof val !== 'string' || !CSS_RES_TOKEN_RE.test(val)) return true;
+  const m = SAFE_ASSET_URL_RE.exec(val.trim());
+  if (!m) return false;
+  const ref = m[1] || m[2] || m[3] || '';
+  return ref.startsWith('#') || DECLARED_ASSETS.has(ref.slice('/assets/'.length));
+}
+
+function sanitizeInlineStyle(styleObj) {
+  if (!styleObj || typeof styleObj !== 'object' || Array.isArray(styleObj)) return styleObj;
+  let cloned = null;
+  const keys = Object.keys(styleObj);
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (!isSafeInlineStyleValue(styleObj[k])) {
+      if (!cloned) cloned = { ...styleObj };
+      delete cloned[k];
+    }
+  }
+  return cloned || styleObj;
+}
+
 function sanitizeJsxNavProps(type, props) {
   if (
     (typeof type !== 'string' && (typeof type !== 'object' || type === null)) ||
@@ -52,7 +82,13 @@ function sanitizeJsxNavProps(type, props) {
   const keys = Object.keys(props);
   for (let i = 0; i < keys.length; i++) {
     const k = keys[i];
-    if (
+    if (k === 'style') {
+      const nextStyle = sanitizeInlineStyle(props.style);
+      if (nextStyle !== props.style) {
+        if (!cloned) cloned = { ...props };
+        cloned.style = nextStyle;
+      }
+    } else if (
       isNavPropKey(k) &&
       props[k] !== undefined &&
       props[k] !== null &&

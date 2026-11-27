@@ -59,9 +59,14 @@ export function executeSimulatedAnonCatalogRpc(
 
   if (url.pathname === '/v1/product') {
     const slug = url.searchParams.get('productSlug') ?? '';
+    const productId = url.searchParams.get('productId') ?? '';
     const category = url.searchParams.get('category');
     const found = publishedRows.find(
-      (row) => row.slug === slug && (!category || row.categorySlug === category)
+      (row) =>
+        ((slug !== '' && row.slug === slug) ||
+          (productId !== '' &&
+            (row.id === productId || row.slug === productId))) &&
+        (!category || row.categorySlug === category)
     );
     return JSON.stringify({
       merchantId,

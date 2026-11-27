@@ -1,6 +1,8 @@
 import path from 'node:path';
 import ts from '@typescript/typescript6';
 
+export type SafeExportKind = 'component' | 'sdkLink';
+
 const VIRTUAL_SUFFIXES =
   '|.tsx|.ts|.jsx|.js|/index.tsx|/index.ts|/index.jsx|/index.js'.split('|');
 
@@ -27,24 +29,37 @@ function isWrapperHocCallee(callee: ts.Expression): boolean {
   );
 }
 
-export function isDirectComponentExpr(
+export function resolveDirectComponentKind(
   expr: ts.Expression,
-  isKnownComponent: (name: string) => boolean
-): boolean {
+  lookupKind: (name: string) => SafeExportKind | null
+): SafeExportKind | null {
   const inner = unwrapExpr(expr);
   if (
     ts.isArrowFunction(inner) ||
     ts.isFunctionExpression(inner) ||
     ts.isClassExpression(inner)
   ) {
-    return true;
+    return 'component';
   }
-  if (ts.isIdentifier(inner)) return isKnownComponent(inner.text);
+  if (ts.isIdentifier(inner)) return lookupKind(inner.text);
   if (ts.isCallExpression(inner) && isWrapperHocCallee(inner.expression)) {
     const arg0 = inner.arguments[0];
-    return arg0 !== undefined && isDirectComponentExpr(arg0, isKnownComponent);
+    return arg0 !== undefined
+      ? resolveDirectComponentKind(arg0, lookupKind)
+      : null;
   }
-  return false;
+  return null;
+}
+
+export function isDirectComponentExpr(
+  expr: ts.Expression,
+  isKnownComponent: (name: string) => boolean
+): boolean {
+  return (
+    resolveDirectComponentKind(expr, (n) =>
+      isKnownComponent(n) ? 'component' : null
+    ) !== null
+  );
 }
 
 export function bindingContainsName(
@@ -86,21 +101,33 @@ export function resolveVirtualModule(
   return null;
 }
 
+function classifyPackageExport(
+  spec: string,
+  exportedName: string
+): SafeExportKind | null {
+  if (spec === '@baci/experience-sdk' && exportedName === 'Link') {
+    return 'sdkLink';
+  }
+  return /^[A-Z]/.test(exportedName) ? 'component' : null;
+}
+
 export function createVirtualComponentExportResolver(
   parsedFiles: ReadonlyMap<string, ts.SourceFile>
-): (filePath: string) => ReadonlySet<string> {
-  const exportCache = new Map<string, ReadonlySet<string>>();
+): (filePath: string) => ReadonlyMap<string, SafeExportKind> {
+  const exportCache = new Map<string, ReadonlyMap<string, SafeExportKind>>();
   const visiting = new Set<string>();
 
-  const getSafeComponentExports = (filePath: string): ReadonlySet<string> => {
+  const getSafeExports = (
+    filePath: string
+  ): ReadonlyMap<string, SafeExportKind> => {
     const cached = exportCache.get(filePath);
     if (cached) return cached;
-    if (visiting.has(filePath)) return new Set();
+    if (visiting.has(filePath)) return new Map();
     visiting.add(filePath);
 
     const sf = parsedFiles.get(filePath);
-    const localSafe = new Set<string>();
-    const exported = new Set<string>();
+    const localSafe = new Map<string, SafeExportKind>();
+    const exported = new Map<string, SafeExportKind>();
 
     if (sf) {
       for (const stmt of sf.statements) {
@@ -110,7 +137,7 @@ export function createVirtualComponentExportResolver(
             ts.isClassDeclaration(stmt)) &&
           stmt.name
         ) {
-          localSafe.add(stmt.name.text);
+          localSafe.set(stmt.name.text, 'component');
         } else if (
           ts.isImportDeclaration(stmt) &&
           stmt.importClause &&
@@ -121,30 +148,31 @@ export function createVirtualComponentExportResolver(
           const clause = stmt.importClause;
           if (spec.startsWith('.')) {
             const target = resolveVirtualModule(filePath, spec, parsedFiles);
-            const exp = target ? getSafeComponentExports(target) : new Set();
-            if (clause.name && exp.has('default')) {
-              localSafe.add(clause.name.text);
-            }
+            const exp = target ? getSafeExports(target) : new Map();
+            const defKind = exp.get('default');
+            if (clause.name && defKind)
+              localSafe.set(clause.name.text, defKind);
             if (
               clause.namedBindings &&
               ts.isNamedImports(clause.namedBindings)
             ) {
               for (const el of clause.namedBindings.elements) {
-                if (exp.has((el.propertyName ?? el.name).text)) {
-                  localSafe.add(el.name.text);
-                }
+                const k = exp.get((el.propertyName ?? el.name).text);
+                if (k) localSafe.set(el.name.text, k);
               }
             }
           } else {
-            if (clause.name) localSafe.add(clause.name.text);
+            if (clause.name) localSafe.set(clause.name.text, 'component');
             if (
               clause.namedBindings &&
               ts.isNamedImports(clause.namedBindings)
             ) {
               for (const el of clause.namedBindings.elements) {
-                if (/^[A-Z]/.test((el.propertyName ?? el.name).text)) {
-                  localSafe.add(el.name.text);
-                }
+                const k = classifyPackageExport(
+                  spec,
+                  (el.propertyName ?? el.name).text
+                );
+                if (k) localSafe.set(el.name.text, k);
               }
             }
           }
@@ -156,16 +184,17 @@ export function createVirtualComponentExportResolver(
           (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0
         ) {
           for (const d of stmt.declarationList.declarations) {
-            if (
-              ts.isIdentifier(d.name) &&
-              d.initializer &&
-              isDirectComponentExpr(d.initializer, (n) => localSafe.has(n))
-            ) {
-              localSafe.add(d.name.text);
+            if (ts.isIdentifier(d.name) && d.initializer) {
+              const k = resolveDirectComponentKind(
+                d.initializer,
+                (n) => localSafe.get(n) ?? null
+              );
+              if (k) localSafe.set(d.name.text, k);
             }
           }
         }
       }
+      const starTargets: string[] = [];
       for (const stmt of sf.statements) {
         if (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) {
           const mods = ts.canHaveModifiers(stmt)
@@ -177,58 +206,64 @@ export function createVirtualComponentExportResolver(
           const isDef = mods?.some(
             (m) => m.kind === ts.SyntaxKind.DefaultKeyword
           );
-          if (isDef) exported.add('default');
-          else if (isExp && stmt.name) exported.add(stmt.name.text);
+          if (isDef) exported.set('default', 'component');
+          else if (isExp && stmt.name) {
+            exported.set(stmt.name.text, 'component');
+          }
         } else if (
           ts.isVariableStatement(stmt) &&
           stmt.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
         ) {
           for (const d of stmt.declarationList.declarations) {
-            if (ts.isIdentifier(d.name) && localSafe.has(d.name.text)) {
-              exported.add(d.name.text);
-            }
+            const k = ts.isIdentifier(d.name)
+              ? localSafe.get(d.name.text)
+              : undefined;
+            if (ts.isIdentifier(d.name) && k) exported.set(d.name.text, k);
           }
         } else if (ts.isExportAssignment(stmt) && !stmt.isExportEquals) {
-          if (isDirectComponentExpr(stmt.expression, (n) => localSafe.has(n))) {
-            exported.add('default');
-          }
+          const k = resolveDirectComponentKind(
+            stmt.expression,
+            (n) => localSafe.get(n) ?? null
+          );
+          if (k) exported.set('default', k);
         } else if (ts.isExportDeclaration(stmt)) {
-          if (
-            !stmt.exportClause &&
-            stmt.moduleSpecifier &&
-            ts.isStringLiteral(stmt.moduleSpecifier)
-          ) {
-            const target = resolveVirtualModule(
-              filePath,
-              stmt.moduleSpecifier.text,
-              parsedFiles
-            );
-            if (target) {
-              for (const name of getSafeComponentExports(target)) {
-                if (name !== 'default') exported.add(name);
-              }
-            }
+          const modSpec =
+            stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)
+              ? stmt.moduleSpecifier.text.trim()
+              : null;
+          if (!stmt.exportClause && modSpec?.startsWith('.')) {
+            const target = resolveVirtualModule(filePath, modSpec, parsedFiles);
+            if (target) starTargets.push(target);
           } else if (
             stmt.exportClause &&
             ts.isNamedExports(stmt.exportClause)
           ) {
-            const sourceSet =
-              stmt.moduleSpecifier && ts.isStringLiteral(stmt.moduleSpecifier)
-                ? (() => {
-                    const t = resolveVirtualModule(
-                      filePath,
-                      stmt.moduleSpecifier.text,
-                      parsedFiles
-                    );
-                    return t ? getSafeComponentExports(t) : new Set<string>();
-                  })()
-                : localSafe;
+            const virtualSource = modSpec?.startsWith('.')
+              ? (() => {
+                  const t = resolveVirtualModule(
+                    filePath,
+                    modSpec,
+                    parsedFiles
+                  );
+                  return t ? getSafeExports(t) : new Map();
+                })()
+              : null;
             for (const el of stmt.exportClause.elements) {
-              if (sourceSet.has((el.propertyName ?? el.name).text)) {
-                exported.add(el.name.text);
-              }
+              const orig = (el.propertyName ?? el.name).text;
+              const k =
+                modSpec === null
+                  ? localSafe.get(orig)
+                  : virtualSource
+                    ? virtualSource.get(orig)
+                    : classifyPackageExport(modSpec, orig);
+              if (k) exported.set(el.name.text, k);
             }
           }
+        }
+      }
+      for (const target of starTargets) {
+        for (const [name, k] of getSafeExports(target).entries()) {
+          if (name !== 'default' && !exported.has(name)) exported.set(name, k);
         }
       }
     }
@@ -238,5 +273,5 @@ export function createVirtualComponentExportResolver(
     return exported;
   };
 
-  return getSafeComponentExports;
+  return getSafeExports;
 }

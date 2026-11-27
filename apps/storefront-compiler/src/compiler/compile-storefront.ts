@@ -14,7 +14,10 @@ import {
   createClosedStorefrontGraphPlugin,
   StorefrontCompilerError,
 } from './closed-graph-plugin';
-import { buildSafeJsxRuntimeSource } from './jsx-runtime-guard';
+import {
+  buildSafeJsxRuntimeSource,
+  JSX_RUNTIME_VIRTUAL_PATH,
+} from './jsx-runtime-guard';
 import { scanManifestSourceSafety } from './source-guard';
 import { compileStorefrontTailwindCss } from './tailwind-css';
 import {
@@ -103,13 +106,15 @@ export async function compileStorefrontWorker(
     manifest.assets.map((a) => [a.assetId, `/assets/${a.assetId}`])
   );
 
-  const jsxRuntimeName = '__baci_jsx_runtime__.ts';
-  const jsxRuntimeSource = buildSafeJsxRuntimeSource(manifest.merchantSlug);
+  const jsxRuntimeSource = buildSafeJsxRuntimeSource(
+    manifest.merchantSlug,
+    manifest.assets.map((a) => a.assetId)
+  );
 
   const clientVirtualFiles = new Map(
     manifest.files.map((f) => [f.path, f.content])
   );
-  clientVirtualFiles.set(jsxRuntimeName, jsxRuntimeSource);
+  clientVirtualFiles.set(JSX_RUNTIME_VIRTUAL_PATH, jsxRuntimeSource);
   const clientEntryName = '__baci_client_entry__.tsx';
   clientVirtualFiles.set(
     clientEntryName,
@@ -164,7 +169,7 @@ export async function compileStorefrontWorker(
   const workerVirtualFiles = new Map(
     manifest.files.map((f) => [f.path, f.content])
   );
-  workerVirtualFiles.set(jsxRuntimeName, jsxRuntimeSource);
+  workerVirtualFiles.set(JSX_RUNTIME_VIRTUAL_PATH, jsxRuntimeSource);
   const workerEntryName = '__baci_worker_entry__.tsx';
   workerVirtualFiles.set(
     workerEntryName,

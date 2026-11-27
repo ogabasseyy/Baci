@@ -1,6 +1,7 @@
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import { buildClientHydrationEntrySource } from './client-hydration-template';
 import { buildContentSecurityPolicyHeader } from './csp-header';
+import { buildWorkerCatalogBridgeSnippet } from './worker-catalog-bridge';
 
 export { buildClientHydrationEntrySource, buildContentSecurityPolicyHeader };
 
@@ -103,7 +104,7 @@ async function fetchCatalogJson(endpointUrl, kind) {
     return { ok: false, status: 502 };
   }
 }
-
+${buildWorkerCatalogBridgeSnippet()}
 export default {
   async fetch(request) {
     const startedAt = performance.now();
@@ -113,10 +114,9 @@ export default {
         headers: { Allow: 'GET, HEAD', 'content-security-policy': CSP_HEADER },
       });
     }
-
     const url = new URL(request.url);
+    if (url.pathname === '/_baci/catalog') return handleCatalogBridgeRequest(url, request.method);
     const merchantSlug = TRUSTED_MERCHANT_SLUG;
-
     const matchedRoute = matchDeclaredRoute(url.pathname);
     if (matchedRoute && matchedRoute.view === 'bad_request') {
       return new Response('Bad Request', {

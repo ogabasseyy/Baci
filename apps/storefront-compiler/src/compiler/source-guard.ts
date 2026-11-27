@@ -49,10 +49,21 @@ export function scanManifestSourceSafety(
       )
     );
   }
+  const declaredAssetIds = new Set(manifest.assets.map((a) => a.assetId));
   const buildFileJsxChecker = createJsxTagValidator(parsedFiles);
 
   for (const [filePath, sourceFile] of parsedFiles.entries()) {
-    const checkJsxTag = buildFileJsxChecker(filePath, sourceFile);
+    const { checkJsxTag, isSdkLinkTag } = buildFileJsxChecker(
+      filePath,
+      sourceFile
+    );
+    const jsxEnv = {
+      filePath,
+      merchantSlug: manifest.merchantSlug,
+      declaredAssetIds,
+      isSdkLinkTag,
+      violations,
+    };
     const file = { path: filePath };
     const visit = (node: ts.Node): void => {
       if (
@@ -116,25 +127,14 @@ export function scanManifestSourceSafety(
         }
       }
       if (ts.isJsxAttribute(node)) {
-        checkJsxAttributeSafety(
-          file.path,
-          node,
-          sourceFile,
-          manifest.merchantSlug,
-          violations
-        );
+        checkJsxAttributeSafety(jsxEnv, node, sourceFile);
       }
       if (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) {
         const specName = (node.propertyName ?? node.name).text;
         classifyMemberName(file.path, specName, violations);
       }
       if (ts.isJsxSpreadAttribute(node)) {
-        checkJsxSpreadAttributeSafety(
-          file.path,
-          node,
-          manifest.merchantSlug,
-          violations
-        );
+        checkJsxSpreadAttributeSafety(jsxEnv, node);
       }
 
       if (

@@ -106,6 +106,27 @@ export function decodeCssEscapes(rawCss: string): string {
   );
 }
 
+export function assertInlineStyleTextSafe(
+  styleValue: string,
+  filePath: string,
+  declaredAssetIds: ReadonlySet<string>
+): string | null {
+  const withoutComments = stripCssComments(styleValue);
+  for (const candidate of [
+    withoutComments,
+    decodeCssEscapes(withoutComments),
+  ]) {
+    for (const rawUrl of extractAllCssResourceUrls(candidate)) {
+      try {
+        assertAllowedAssetUrl(rawUrl, filePath, declaredAssetIds);
+      } catch (err) {
+        return err instanceof Error ? err.message : 'Disallowed style URL';
+      }
+    }
+  }
+  return null;
+}
+
 export function validateAndNormalizeMerchantCss(
   cssContent: string,
   filePath: string,

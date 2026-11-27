@@ -161,46 +161,46 @@ export default {
       title = 'Your Cart';
     } else if (matchedRoute.view === 'editorial') {
       const paramValues = Object.values(matchedRoute.params);
-      title =
-        matchedRoute.params.slug ||
-        matchedRoute.params.page ||
-        paramValues[0] ||
-        'Editorial';
+      title = matchedRoute.params.slug || matchedRoute.params.page || paramValues[0] || 'Editorial';
     } else if (matchedRoute.view === 'collection') {
       const paramValues = Object.values(matchedRoute.params);
       const categoryParam =
         matchedRoute.params.category ||
-        matchedRoute.params.handle ||
+        matchedRoute.params.categorySlug ||
+        matchedRoute.params.collection ||
         matchedRoute.params.collectionSlug ||
+        matchedRoute.params.handle ||
         matchedRoute.params.slug ||
         paramValues[0] ||
         '';
-      const upstream = await fetchCatalogJson(
-        \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\`
-      );
+      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(categoryParam)}\`);
       if (!upstream.ok) {
-        status = 502;
-        title = 'Category Temporarily Unavailable';
+        status = 502; title = 'Category Temporarily Unavailable';
       } else if (!upstream.data.categoryExists) {
-        status = 404;
-        view = 'not_found';
-        title = 'Category Not Found';
+        status = 404; view = 'not_found'; title = 'Category Not Found';
       } else {
-        title = upstream.data.title || categoryParam;
-        products = upstream.data.products || [];
-        facets = upstream.data.facets || EMPTY_FACETS;
+        title = upstream.data.title || categoryParam; products = upstream.data.products || []; facets = upstream.data.facets || EMPTY_FACETS;
       }
     } else if (matchedRoute.view === 'product') {
-      const paramValues = Object.values(matchedRoute.params);
+      const paramEntries = Object.entries(matchedRoute.params);
+      const lastEntry = paramEntries[paramEntries.length - 1];
+      const prevEntry = paramEntries[paramEntries.length - 2];
+      const trailingIsVariant = lastEntry && (lastEntry[0] === 'variant' || lastEntry[0] === 'variantId');
       const productSlug =
         matchedRoute.params.productSlug ||
-        matchedRoute.params.slug ||
-        matchedRoute.params.handle ||
-        paramValues[paramValues.length - 1] ||
+        matchedRoute.params.productId ||
+        matchedRoute.params.product ||
+        matchedRoute.params.itemSlug ||
+        matchedRoute.params.sku ||
+        (trailingIsVariant ? matchedRoute.params.slug || matchedRoute.params.handle || (prevEntry ? prevEntry[1] : '') : '') ||
+        (lastEntry ? lastEntry[1] : '');
+      const categoryVal =
+        matchedRoute.params.category ||
+        matchedRoute.params.categorySlug ||
+        matchedRoute.params.collection ||
+        matchedRoute.params.collectionSlug ||
         '';
-      const categoryQuery = matchedRoute.params.category
-        ? \`category=\${encodeURIComponent(matchedRoute.params.category)}&\`
-        : '';
+      const categoryQuery = categoryVal ? \`category=\${encodeURIComponent(categoryVal)}&\` : '';
       const upstream = await fetchCatalogJson(
         \`https://catalog.baci.internal/v1/product?\${categoryQuery}productSlug=\${encodeURIComponent(productSlug)}\`
       );

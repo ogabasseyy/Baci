@@ -225,12 +225,8 @@ describe('Round-9 Codex Object.assign, CSP wildcard, popup presented, route norm
     forwardRefManifest.files = [
       {
         path: 'src/StorefrontApp.tsx',
-        content: `
-          import { forwardRef } from 'react';
-          export default forwardRef<HTMLElement, { title: string }>(function App(props, ref) {
-            return <main ref={ref}>{props.title}</main>;
-          });
-        `,
+        content: `import { forwardRef } from 'react';
+export default forwardRef<HTMLElement, { title: string }>(function App(props, ref) { return <main ref={ref}>{props.title}</main>; });`,
       },
     ];
     const forwardRefCompiled =

@@ -32,6 +32,13 @@ const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set([
   'setnameditemns',
   'getattributenode',
   'getattributenodens',
+  'execcommand',
+  'sethtmlunsafe',
+  'parsehtmlunsafe',
+  'sethtml',
+  'createhtml',
+  'createscript',
+  'createscripturl',
 ]);
 
 function isDocumentReceiver(expr: ts.Expression): boolean {

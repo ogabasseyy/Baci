@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,51 @@ test('NitroModules public header no longer imports the cxxreact module', () => {
   assert.ok(source, 'patch must edit cpp/views/RawPropsCompat.cpp');
   assert.match(header, /^-#include <cxxreact\/ReactNativeVersion\.h>$/m);
   assert.match(source, /^\+#include <cxxreact\/ReactNativeVersion\.h>$/m);
+});
+
+// Walks the installed (patched) NitroModules header graph from every public
+// header in the podspec, following quoted includes inside the package.
+function publicHeaderGraphIncludes(nitroRoot) {
+  const podspec = readFileSync(join(nitroRoot, 'NitroModules.podspec'), 'utf8');
+  const publicBlock = podspec.match(/s\.public_header_files = \[([\s\S]*?)\]/)?.[1] ?? '';
+  const queue = [...publicBlock.matchAll(/"([^"]+\.hpp)"/g)].map((m) => join(nitroRoot, m[1]));
+  assert.ok(queue.length > 10, 'podspec public header list must be readable');
+  const seen = new Set();
+  const angleIncludes = [];
+  while (queue.length > 0) {
+    const file = queue.pop();
+    if (seen.has(file) || !existsSync(file)) continue;
+    seen.add(file);
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      const quoted = line.match(/^\s*#\s*include\s+"([^"]+)"/);
+      if (quoted) queue.push(resolve(dirname(file), quoted[1]));
+      const angle = line.match(/^\s*#\s*include\s+<([^>]+)>/);
+      if (angle) angleIncludes.push({ file: file.slice(nitroRoot.length + 1), header: angle[1] });
+    }
+  }
+  return { headers: seen, angleIncludes };
+}
+
+const installedNitro = process.env.NITRO_MODULES_DIR ?? join(root, 'node_modules/react-native-nitro-modules');
+
+test('installed NitroModules public headers never reach the cxxreact module', {
+  skip: existsSync(join(installedNitro, 'NitroModules.podspec')) ? false : 'react-native-nitro-modules is not installed',
+}, () => {
+  const { headers, angleIncludes } = publicHeaderGraphIncludes(installedNitro);
+  assert.ok(
+    [...headers].some((file) => file.endsWith('cpp/views/ReactNativeCore.hpp')),
+    'the walk must reach ReactNativeCore.hpp through the public view headers',
+  );
+  const cxxreact = angleIncludes.filter(({ header }) => header.startsWith('cxxreact/'));
+  assert.deepEqual(cxxreact, [], 'public headers must not include <cxxreact/...>');
+
+  const rawProps = readFileSync(join(installedNitro, 'cpp/views/RawPropsCompat.cpp'), 'utf8');
+  const versionInclude = rawProps.indexOf('#include <cxxreact/ReactNativeVersion.h>');
+  assert.ok(versionInclude >= 0, 'RawPropsCompat.cpp must include the version header itself');
+  assert.ok(
+    versionInclude < rawProps.indexOf('REACT_NATIVE_VERSION_MINOR'),
+    'the version header must come before the first version macro use',
+  );
 });
 
 const xcodeWorkflows = [

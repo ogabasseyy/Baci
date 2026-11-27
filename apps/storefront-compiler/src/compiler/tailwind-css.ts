@@ -9,14 +9,13 @@ import {
   type WorkerStorefrontManifest,
 } from '../schemas/worker-manifest';
 import { StorefrontCompilerError } from './closed-graph-plugin';
-import {
-  assertAllowedAssetUrl,
-  CANDIDATE_TOKEN_RE,
-  decodeCssEscapes,
-  extractAllCssResourceUrls,
-  stripCssComments,
-  validateAndNormalizeMerchantCss,
-} from './css-safety';
+import { assertAllowedAssetUrl } from './css-asset-policy';
+import { extractAllCssResourceUrls } from './css-resource-urls';
+import { validateAndNormalizeMerchantCss } from './css-safety';
+import { normalizeCssForInspection } from './css-text-normalize';
+
+const CANDIDATE_TOKEN_RE =
+  /(?:[A-Za-z0-9_:/\-.%!#()+*&=$^~]|\[(?:[^[\]\s]|\[[^[\]\s]{0,80}\]){1,100}\])+/g;
 
 const requireFromHere = createRequire(import.meta.url);
 const tailwindPkgDir = path.dirname(
@@ -104,9 +103,8 @@ export async function compileStorefrontTailwindCss(
   for (const [cssPath, content] of virtualCssByPath.entries()) {
     const dir = path.posix.dirname(`/virtual/${cssPath}`);
     const deps: string[] = [];
-    for (const match of decodeCssEscapes(stripCssComments(content)).matchAll(
-      localImportRe
-    )) {
+    const { unescaped } = normalizeCssForInspection(content);
+    for (const match of unescaped.matchAll(localImportRe)) {
       const target = (match[1] ?? match[2] ?? match[3] ?? '').trim();
       if (!target || ALLOWED_ROOT_TAILWIND_STYLESHEETS[target]) continue;
       const resolved = path.posix.normalize(path.posix.join(dir, target));
@@ -201,11 +199,13 @@ export async function compileStorefrontTailwindCss(
   });
 
   const css = minified.code;
+  const normRaw = normalizeCssForInspection(rawBuiltCss);
+  const normMin = normalizeCssForInspection(css);
   for (const candidateCss of [
     rawBuiltCss,
-    decodeCssEscapes(stripCssComments(rawBuiltCss)),
+    normRaw.unescaped,
     css,
-    decodeCssEscapes(stripCssComments(css)),
+    normMin.unescaped,
   ]) {
     for (const rawUrl of extractAllCssResourceUrls(candidateCss)) {
       assertAllowedAssetUrl(rawUrl, 'compiled-stylesheet', declaredAssets);

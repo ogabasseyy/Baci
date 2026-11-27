@@ -111,7 +111,14 @@ describe('Round-15 Codex SDK Link path validation, JSX <style> ban, and hydrated
       outboundService: async () =>
         new Response(
           JSON.stringify({
-            products: [{ slug: '/evil.example/hijack' }],
+            products: [
+              {
+                id: '1',
+                slug: '/evil.example/hijack',
+                name: 'Item',
+                priceNgn: 1000,
+              },
+            ],
             facets: { brands: [], conditions: [], totalMatches: 1 },
           }),
           { headers: { 'content-type': 'application/json' } }

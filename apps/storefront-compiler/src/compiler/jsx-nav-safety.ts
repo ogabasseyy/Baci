@@ -1,11 +1,31 @@
 import ts from '@typescript/typescript6';
 import { resolveStaticOrConstString } from './const-string-fold';
-import { assertInlineStyleTextSafe } from './css-safety';
+import { assertAllowedAssetUrl } from './css-asset-policy';
+import { extractAllCssResourceUrls } from './css-resource-urls';
+import { normalizeCssForInspection } from './css-text-normalize';
 import {
   classifyMemberName,
   resolveStaticString,
   type SourceSafetyViolation,
 } from './source-guard-ast';
+
+function assertInlineStyleTextSafe(
+  styleValue: string,
+  filePath: string,
+  declaredAssetIds: ReadonlySet<string>
+): string | null {
+  const { withoutComments, unescaped } = normalizeCssForInspection(styleValue);
+  for (const candidate of [withoutComments, unescaped]) {
+    for (const rawUrl of extractAllCssResourceUrls(candidate)) {
+      try {
+        assertAllowedAssetUrl(rawUrl, filePath, declaredAssetIds);
+      } catch (err) {
+        return err instanceof Error ? err.message : 'Disallowed style URL';
+      }
+    }
+  }
+  return null;
+}
 
 const LOWER_NAV_JSX_ATTRS: ReadonlySet<string> = new Set(
   'href|action|formaction|xlinkhref|xlink:href'.split('|')

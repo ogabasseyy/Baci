@@ -118,7 +118,14 @@ describe('Round-14 Codex & CodeRabbit resource APIs, JSX nav/spread safety, chec
       outboundService: async (_req: MiniflareRequest) =>
         new Response(
           JSON.stringify({
-            products: [{ slug: '/evil.example/hijack' }],
+            products: [
+              {
+                id: '1',
+                slug: '/evil.example/hijack',
+                name: 'Item',
+                priceNgn: 1000,
+              },
+            ],
             facets: { brands: [], conditions: [], totalMatches: 1 },
           }),
           { headers: { 'content-type': 'application/json' } }

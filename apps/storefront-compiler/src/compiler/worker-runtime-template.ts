@@ -95,10 +95,7 @@ async function fetchCatalogJson(endpointUrl, kind) {
     const res = await fetch(endpointUrl);
     if (!res.ok) return { ok: false, status: res.status };
     const data = await res.json();
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false, status: 502 };
-    if (kind === 'search' && !Array.isArray(data.products)) return { ok: false, status: 502 };
-    if (kind === 'collection' && (typeof data.categoryExists !== 'boolean' || !Array.isArray(data.products))) return { ok: false, status: 502 };
-    if (kind === 'product' && (!('product' in data) || (data.product !== null && (typeof data.product !== 'object' || Array.isArray(data.product) || typeof data.product.name !== 'string')))) return { ok: false, status: 502 };
+    if (!isValidCatalogPayload(data, kind)) return { ok: false, status: 502 };
     return { ok: true, data };
   } catch {
     return { ok: false, status: 502 };

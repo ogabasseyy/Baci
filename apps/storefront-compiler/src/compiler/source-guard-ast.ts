@@ -20,46 +20,23 @@ export interface SourceSafetyViolation {
   detail: string;
 }
 
-const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set([
-  'dangerouslysetinnerhtml',
-  '__html',
-  '$$typeof',
-  'innerhtml',
-  'outerhtml',
-  'insertadjacenthtml',
-  'srcdoc',
-  'createcontextualfragment',
-  'parsefromstring',
-  'setattribute',
-  'setattributens',
-  'setattributenode',
-  'setattributenodens',
-  'createattribute',
-  'createattributens',
-  'setnameditem',
-  'setnameditemns',
-  'getattributenode',
-  'getattributenodens',
-  'execcommand',
-  'sethtmlunsafe',
-  'parsehtmlunsafe',
-  'sethtml',
-  'createhtml',
-  'createscript',
-  'createscripturl',
-  'ownerdocument',
-  'contentdocument',
-  'contentwindow',
-  'defaultview',
-  'preinit',
-  'preinitmodule',
-  'preload',
-  'preloadmodule',
-  'prefetchdns',
-  'preconnect',
-  'requestsubmit',
-  'dispatchevent',
-]);
+const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
+  [
+    'dangerouslysetinnerhtml|__html|$$typeof|innerhtml|outerhtml|insertadjacenthtml',
+    'srcdoc|createcontextualfragment|parsefromstring|setattribute|setattributens',
+    'setattributenode|setattributenodens|createattribute|createattributens',
+    'setnameditem|setnameditemns|getattributenode|getattributenodens|execcommand',
+    'sethtmlunsafe|parsehtmlunsafe|sethtml|createhtml|createscript|createscripturl',
+    'ownerdocument|contentdocument|contentwindow|defaultview|preinit|preinitmodule',
+    'preload|preloadmodule|prefetchdns|preconnect|requestsubmit|dispatchevent',
+    'implementation|createdocument|createhtmldocument|createdocumenttype',
+    'createdocumentfragment|createrange|importnode|adoptnode|clonenode',
+    'attachshadow|shadowroot|appendchild|insertbefore|replacechild|replacechildren',
+    'insertadjacentelement|insertadjacenttext|prepend|replacewith',
+  ]
+    .join('|')
+    .split('|')
+);
 
 function isDocumentReceiver(expr: ts.Expression): boolean {
   if (ts.isParenthesizedExpression(expr) || ts.isAsExpression(expr)) {

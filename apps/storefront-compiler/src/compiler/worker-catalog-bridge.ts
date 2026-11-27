@@ -1,5 +1,124 @@
 export function buildWorkerCatalogBridgeSnippet(): string {
   return `
+function isFiniteNumber(v) {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+function isValidCatalogVariantRecord(v) {
+  return (
+    v !== null &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    typeof v.id === 'string' &&
+    typeof v.label === 'string' &&
+    (isFiniteNumber(v.priceNgn) || isFiniteNumber(v.price))
+  );
+}
+
+function isValidCatalogProductRecord(p, requireVariantsArray) {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return false;
+  if (typeof p.slug !== 'string' || typeof p.name !== 'string') return false;
+  if (!isFiniteNumber(p.priceNgn) && !isFiniteNumber(p.price)) return false;
+  if (requireVariantsArray && !Array.isArray(p.variants)) return false;
+  if ('variants' in p && p.variants !== undefined) {
+    if (!Array.isArray(p.variants) || !p.variants.every(isValidCatalogVariantRecord)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isValidFacetsBucket(list) {
+  return (
+    Array.isArray(list) &&
+    list.every(
+      (b) =>
+        b !== null &&
+        typeof b === 'object' &&
+        !Array.isArray(b) &&
+        typeof b.value === 'string' &&
+        isFiniteNumber(b.count)
+    )
+  );
+}
+
+function isValidCatalogPayload(data, kind) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (kind === 'product') {
+    if (!('product' in data)) return false;
+    return data.product === null || isValidCatalogProductRecord(data.product, true);
+  }
+  if (kind === 'collection' && typeof data.categoryExists !== 'boolean') {
+    return false;
+  }
+  if (!Array.isArray(data.products) || !data.products.every((p) => isValidCatalogProductRecord(p, false))) {
+    return false;
+  }
+  if (data.facets !== undefined) {
+    const f = data.facets;
+    if (
+      !f ||
+      typeof f !== 'object' ||
+      Array.isArray(f) ||
+      !isValidFacetsBucket(f.brands) ||
+      !isValidFacetsBucket(f.conditions) ||
+      !isFiniteNumber(f.totalMatches)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function resolveProductCanonicalPath(p) {
+  if (typeof p.canonicalPath === 'string' && p.canonicalPath.startsWith('/') && !p.canonicalPath.startsWith('//')) {
+    return p.canonicalPath;
+  }
+  const slug = typeof p.slug === 'string' && p.slug.length > 0 ? p.slug : '';
+  if (!slug || !Array.isArray(DECLARED_ROUTES)) return undefined;
+  const prodRoute = DECLARED_ROUTES.find((r) => r && r.view === 'product' && typeof r.path === 'string');
+  if (!prodRoute) return undefined;
+  const segs = prodRoute.path.split('/').filter(Boolean);
+  const dynIdx = [];
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (s.startsWith(':') || (s.startsWith('[') && s.endsWith(']'))) dynIdx.push(i);
+  }
+  const lastDyn = dynIdx[dynIdx.length - 1];
+  const prevDyn = dynIdx[dynIdx.length - 2];
+  const lastSeg = lastDyn !== undefined ? segs[lastDyn] : '';
+  const lastParam = lastSeg.startsWith(':') ? lastSeg.slice(1) : lastSeg.slice(1, -1);
+  const slugIdx = lastParam === 'variant' || lastParam === 'variantId' ? prevDyn : lastDyn;
+  const out = [];
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (!s.startsWith(':') && !(s.startsWith('[') && s.endsWith(']'))) {
+      out.push(s);
+      continue;
+    }
+    const name = s.startsWith(':') ? s.slice(1) : s.slice(1, -1);
+    if (name === 'category' || name === 'categorySlug' || name === 'collection' || name === 'collectionSlug') {
+      if (typeof p.categorySlug !== 'string' || p.categorySlug.length === 0) return undefined;
+      out.push(encodeURIComponent(p.categorySlug));
+    } else if (name === 'productId') {
+      out.push(encodeURIComponent(typeof p.id === 'string' && p.id.length > 0 ? p.id : slug));
+    } else if (name === 'sku') {
+      out.push(encodeURIComponent(typeof p.sku === 'string' && p.sku.length > 0 ? p.sku : slug));
+    } else if (name === 'variant' || name === 'variantId') {
+      const v0 = Array.isArray(p.variants) && p.variants[0] && p.variants[0].id ? String(p.variants[0].id) : '';
+      if (!v0) return undefined;
+      out.push(encodeURIComponent(v0));
+    } else if (name === 'productSlug' || name === 'product' || name === 'itemSlug' || i === slugIdx) {
+      out.push(encodeURIComponent(slug));
+    } else if (dynIdx.length === 2 && i === dynIdx[0] && typeof p.categorySlug === 'string' && p.categorySlug.length > 0) {
+      out.push(encodeURIComponent(p.categorySlug));
+    } else {
+      return undefined;
+    }
+  }
+  return '/' + out.join('/');
+}
+
 function collectCatalogAssetUrls(baseAssets, list, single) {
   const merged = { ...baseAssets };
   const rows = Array.isArray(list) ? (single ? [...list, single] : list) : single ? [single] : [];
@@ -17,28 +136,14 @@ function collectCatalogAssetUrls(baseAssets, list, single) {
 }
 
 function toSdkPublicProduct(p, assetOut) {
-  if (!p || typeof p !== 'object' || Array.isArray(p) || typeof p.name !== 'string') {
-    return null;
-  }
-  if ('variants' in p && p.variants !== undefined && !Array.isArray(p.variants)) {
-    return null;
-  }
+  if (!isValidCatalogProductRecord(p, false)) return null;
   const rawVars = Array.isArray(p.variants) ? p.variants : [];
-  const variants = [];
-  for (let i = 0; i < rawVars.length; i++) {
-    const v = rawVars[i];
-    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
-    variants.push({
-      id: String(v.id ?? ''),
-      label: String(v.label ?? ''),
-      available: typeof v.available === 'boolean' ? v.available : Boolean(v.inStock),
-      ...(typeof v.price === 'number'
-        ? { price: v.price }
-        : typeof v.priceNgn === 'number'
-          ? { price: v.priceNgn }
-          : {}),
-    });
-  }
+  const variants = rawVars.map((v) => ({
+    id: v.id,
+    label: v.label,
+    available: typeof v.available === 'boolean' ? v.available : Boolean(v.inStock),
+    ...(isFiniteNumber(v.price) ? { price: v.price } : isFiniteNumber(v.priceNgn) ? { price: v.priceNgn } : {}),
+  }));
   const available =
     typeof p.available === 'boolean'
       ? p.available
@@ -46,45 +151,23 @@ function toSdkPublicProduct(p, assetOut) {
         ? p.inStock
         : variants.some((v) => v.available);
   let image = null;
-  if (
-    p.image &&
-    typeof p.image === 'object' &&
-    !Array.isArray(p.image) &&
-    typeof p.image.assetId === 'string' &&
-    p.image.assetId.length > 0
-  ) {
-    image = {
-      assetId: p.image.assetId,
-      alt: typeof p.image.alt === 'string' && p.image.alt.length > 0 ? p.image.alt : p.name,
-    };
-    if (assetOut && typeof p.imageUrl === 'string' && p.imageUrl.length > 0) {
-      assetOut[p.image.assetId] = p.imageUrl;
-    }
+  if (p.image && typeof p.image === 'object' && !Array.isArray(p.image) && typeof p.image.assetId === 'string' && p.image.assetId.length > 0) {
+    image = { assetId: p.image.assetId, alt: typeof p.image.alt === 'string' && p.image.alt.length > 0 ? p.image.alt : p.name };
+    if (assetOut && typeof p.imageUrl === 'string' && p.imageUrl.length > 0) assetOut[p.image.assetId] = p.imageUrl;
   } else if (typeof p.imageUrl === 'string' && p.imageUrl.length > 0) {
     const assetId = \`catalog-product-\${String(p.id || p.slug || 'item')}\`;
     if (assetOut) assetOut[assetId] = p.imageUrl;
-    image = {
-      assetId,
-      alt: typeof p.imageAlt === 'string' && p.imageAlt.length > 0 ? p.imageAlt : p.name,
-    };
+    image = { assetId, alt: typeof p.imageAlt === 'string' && p.imageAlt.length > 0 ? p.imageAlt : p.name };
   }
   return {
     id: String(p.id ?? ''),
-    slug: String(p.slug ?? ''),
+    slug: p.slug,
     name: p.name,
-    price: typeof p.price === 'number' ? p.price : Number(p.priceNgn || 0),
+    price: isFiniteNumber(p.price) ? p.price : Number(p.priceNgn || 0),
     currency: typeof p.currency === 'string' ? p.currency : 'NGN',
-    canonicalPath:
-      p.categorySlug && p.slug
-        ? \`/\${p.categorySlug}/\${p.slug}\`
-        : p.slug
-          ? \`/\${p.slug}\`
-          : undefined,
+    canonicalPath: resolveProductCanonicalPath(p),
     available,
-    requiresVariant:
-      typeof p.requiresVariant === 'boolean'
-        ? p.requiresVariant
-        : Boolean(p.has_variants) || variants.length > 0,
+    requiresVariant: typeof p.requiresVariant === 'boolean' ? p.requiresVariant : Boolean(p.has_variants) || variants.length > 0,
     image,
     variants,
   };
@@ -106,76 +189,43 @@ async function handleCatalogBridgeRequest(url, method) {
   const op = url.searchParams.get('op');
   if (op === 'collection') {
     const handle = (url.searchParams.get('handle') || '').trim();
-    if (!handle) {
-      return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Collection handle is required' }, method);
-    }
+    if (!handle) return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Collection handle is required' }, method);
     const isAll = handle === 'all';
-    const ep = isAll
-      ? 'https://catalog.baci.internal/v1/search?limit=24'
-      : \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(handle)}\`;
+    const ep = isAll ? 'https://catalog.baci.internal/v1/search?limit=24' : \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(handle)}\`;
     const up = await fetchCatalogJson(ep, isAll ? 'search' : 'collection');
-    if (!up.ok) {
-      return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Catalog temporarily unavailable' }, method);
-    }
-    if (!isAll && !up.data.categoryExists) {
-      return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Collection not found' }, method);
-    }
-    const mapped = [];
+    if (!up.ok) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Catalog temporarily unavailable' }, method);
+    if (!isAll && !up.data.categoryExists) return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Collection not found' }, method);
     const assets = {};
-    for (const row of up.data.products || []) {
-      const item = toSdkPublicProduct(row, assets);
-      if (!item) {
-        return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed catalog product record' }, method);
-      }
-      mapped.push(item);
-    }
+    const mapped = (up.data.products || []).map((row) => toSdkPublicProduct(row, assets));
+    if (mapped.some((m) => m === null)) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed catalog product record' }, method);
     const gen = up.data.generation;
     const availGen = up.data.availabilityGeneration;
-    const revision =
-      gen != null && availGen != null
-        ? \`\${gen}:\${availGen}\`
-        : String(gen ?? availGen ?? '0');
+    const revision = gen != null && availGen != null ? \`\${gen}:\${availGen}\` : String(gen ?? availGen ?? '0');
     return jsonCatalogBridgeResponse(200, { status: 'ok', value: { products: mapped, revision }, assets }, method);
   }
   if (op === 'product') {
     const raw = (url.searchParams.get('handle') || '').trim().replace(/^\\/+|\\/+$/g, '');
-    if (!raw) {
-      return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Product handle is required' }, method);
-    }
+    if (!raw) return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Product handle is required' }, method);
     const segs = raw.split('/').filter(Boolean);
     const slug = segs[segs.length - 1] || '';
     const cat = segs.length === 2 ? segs[0] : '';
     const catQ = cat ? \`category=\${encodeURIComponent(cat)}&\` : '';
     const up = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?\${catQ}productSlug=\${encodeURIComponent(slug)}\`, 'product');
-    if (!up.ok) {
-      return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Product temporarily unavailable' }, method);
-    }
-    if (!up.data.product) {
-      return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Product not found' }, method);
-    }
+    if (!up.ok) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Product temporarily unavailable' }, method);
+    if (!up.data.product) return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Product not found' }, method);
     const assets = {};
     const mapped = toSdkPublicProduct(up.data.product, assets);
-    if (!mapped) {
-      return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed product record' }, method);
-    }
+    if (!mapped) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed product record' }, method);
     return jsonCatalogBridgeResponse(200, { status: 'ok', value: mapped, assets }, method);
   }
   if (op === 'variants') {
     const productId = (url.searchParams.get('productId') || '').trim();
-    if (!productId) {
-      return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Product ID is required' }, method);
-    }
+    if (!productId) return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Product ID is required' }, method);
     const up = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?productId=\${encodeURIComponent(productId)}&productSlug=\${encodeURIComponent(productId)}\`, 'product');
-    if (!up.ok) {
-      return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Variants temporarily unavailable' }, method);
-    }
-    if (!up.data.product) {
-      return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Product not found' }, method);
-    }
+    if (!up.ok) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Variants temporarily unavailable' }, method);
+    if (!up.data.product) return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Product not found' }, method);
     const mapped = toSdkPublicProduct(up.data.product, null);
-    if (!mapped) {
-      return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed variant record' }, method);
-    }
+    if (!mapped) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed variant record' }, method);
     return jsonCatalogBridgeResponse(200, { status: 'ok', value: mapped.variants }, method);
   }
   return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Unsupported catalog operation' }, method);

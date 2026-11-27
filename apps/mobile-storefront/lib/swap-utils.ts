@@ -10,9 +10,9 @@ export const SWAP_ELIGIBLE_DEVICES = [
 
 export const SWAP_HOW_IT_WORKS = [
   {
-    title: 'Record Video',
-    desc: 'Quick 10s video showing screen and body',
-    icon: 'videocam-outline',
+    title: 'Photos or Video',
+    desc: 'A few photos or a quick 10s video of screen and body',
+    icon: 'camera-outline',
   },
   {
     title: 'AI Analysis',

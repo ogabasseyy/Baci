@@ -17,12 +17,12 @@ export function SwapTradeInModal({
   isAnalyzing,
   result,
   step,
-  videoUri,
+  mediaLabel,
   visible,
   onAcceptOffer,
   onClose,
-  onClearVideo,
-  onPickVideo,
+  onClearMedia,
+  onPickMedia,
   onRecordVideo,
   onReset,
   onStartAnalysis,
@@ -56,11 +56,11 @@ export function SwapTradeInModal({
                 colors={colors}
                 error={error}
                 isAnalyzing={isAnalyzing}
-                onClearVideo={onClearVideo}
-                onPickVideo={onPickVideo}
+                onClearMedia={onClearMedia}
+                onPickMedia={onPickMedia}
                 onRecordVideo={onRecordVideo}
                 onStartAnalysis={onStartAnalysis}
-                videoUri={videoUri}
+                mediaLabel={mediaLabel}
               />
             )}
 

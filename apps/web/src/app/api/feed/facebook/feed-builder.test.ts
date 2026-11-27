@@ -97,6 +97,49 @@ describe('generateFacebookCatalogFeed', () => {
     expect(xml).not.toContain('<image_link></image_link>');
   });
 
+  it('keeps OgaBassey condition and packaging out of variant titles', () => {
+    const product: FeedProduct = {
+      ...baseProduct,
+      name: '16" MacBook Pro M1 Pro (2021)',
+      compare_at_price: undefined,
+      variant_model: 'sku_matrix',
+      variants: [
+        {
+          id: 'mac-16gb-1tb',
+          condition: 'used',
+          price_override: 1_300_000,
+          attributes: {
+            storage: '1TB',
+            ram: '16GB',
+            package_status: 'Boxed',
+            processor: 'M1 Pro',
+          },
+        },
+      ],
+    };
+
+    const xml = generateFacebookCatalogFeed(
+      [product],
+      merchant,
+      'https://ogabassey.com',
+      imageManifest
+    );
+
+    expect(xml).toContain(
+      '<g:title>16&quot; MacBook Pro M1 Pro (2021) - 1TB - 16GB</g:title>'
+    );
+    expect(xml).toContain('<g:condition>used</g:condition>');
+    expect(xml).toContain('<g:price>1300000.00 NGN</g:price>');
+
+    const otherXml = generateFacebookCatalogFeed(
+      [product],
+      { ...merchant, slug: 'another-merchant' },
+      'https://example.com',
+      imageManifest
+    );
+    expect(otherXml).toContain(' - Boxed - M1 Pro - Used</g:title>');
+  });
+
   it('skips products without verified primary images', () => {
     const xml = generateFacebookCatalogFeed(
       [baseProduct],

@@ -30,6 +30,7 @@ export interface VariantFeedInput {
   brand: string;
   platform: 'google' | 'facebook';
   familyRow?: boolean;
+  specOnlyTitles?: boolean;
   collectListing?: (listing: GoogleMerchantListing) => void;
   renderXml?: boolean;
 }
@@ -160,21 +161,30 @@ export function buildVariantFeedItems(input: VariantFeedInput): string {
             !['gtin', 'mpn', 'color_hex'].includes(key)
         )
         .sort();
-      const title = [
-        product.name,
-        ...[...titleKeys, ...remainingKeys]
-          .map((key) => attributes[key])
-          .filter(
-            (value): value is string =>
-              typeof value === 'string' && value !== ''
-          ),
+      const specOnlyTitles = platform === 'facebook' && input.specOnlyTitles;
+      const normalizeTitle = (value: string) =>
+        ` ${value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()} `;
+      const familyTitle = normalizeTitle(product.name);
+      const conditionLabel =
         variant.condition === 'open_box'
           ? 'Open Box'
           : condition === 'refurbished'
             ? 'Refurbished'
             : condition === 'used'
               ? 'Used'
-              : 'New',
+              : 'New';
+      const title = [
+        product.name,
+        ...[...titleKeys, ...remainingKeys]
+          .filter((key) => !specOnlyTitles || key !== 'package_status')
+          .map((key) => attributes[key])
+          .filter(
+            (value): value is string =>
+              typeof value === 'string' &&
+              value !== '' &&
+              (!specOnlyTitles || !familyTitle.includes(normalizeTitle(value)))
+          ),
+        ...(specOnlyTitles ? [] : [conditionLabel]),
       ].join(' - ');
       const maxTitle = FEED_CONSTANTS.TITLE_MAX_LENGTH;
       const boundedTitle =

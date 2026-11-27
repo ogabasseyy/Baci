@@ -132,18 +132,6 @@ BEGIN
     IF public.confirm_paid_order_amendment(o,payload) IS DISTINCT FROM result THEN
       RAISE EXCEPTION 'Confirmation replay drift';
     END IF;
-    IF method IN ('cash','pos') THEN
-      rotation_account := gen_random_uuid();
-      rotation_cutover := now() + interval '1 second';
-      UPDATE private.paid_order_amendment_config
-      SET bank_account_id = rotation_account,bank_evidence_cutover = rotation_cutover
-      WHERE merchant_id = m;
-      IF public.register_paid_order_tender_receipt(
-        o,method,'FIXTURE-' || o,'AUDITED-REGISTER-' || o,2000000,now()) IS DISTINCT FROM receipt THEN
-        RAISE EXCEPTION 'Exact tender receipt replay changed across account rotation';
-      END IF;
-    END IF;
-
     IF method = 'downgrade' THEN
       IF result->>'state' IS DISTINCT FROM 'awaiting_refund' THEN RAISE EXCEPTION 'Expected explicit lender hold'; END IF;
       payload := '{"action":"record_verified_lender_refund","idempotencyKey":"fixture-lender-refund"}';
@@ -172,6 +160,20 @@ BEGIN
       SELECT id,gateway_reference INTO STRICT paid_leg,paid_reference FROM public.transactions
       WHERE order_id = o AND transaction_type = 'payment' AND gateway = 'manual'
         AND amount = 20000 AND metadata->>'payment_method' = method;
+      IF method IN ('cash','pos') THEN
+        BEGIN
+          UPDATE private.paid_order_amendment_config
+          SET bank_account_id = gen_random_uuid(),bank_evidence_cutover = now()
+          WHERE merchant_id = m;
+          RAISE EXCEPTION 'Bank account rotated before an allocated top-up could be returned';
+        EXCEPTION WHEN raise_exception THEN
+          IF SQLERRM <> 'bank_return_claim_open' THEN RAISE; END IF;
+        END;
+        IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+          IS DISTINCT FROM bank_account THEN
+          RAISE EXCEPTION 'Rejected allocated-top-up rotation changed the configured account';
+        END IF;
+      END IF;
     END IF;
 
     IF method = 'bank_transfer' THEN
@@ -229,7 +231,7 @@ BEGIN
     PERFORM set_config('request.jwt.claim.role','authenticated',true);
     PERFORM set_config('request.jwt.claim.sub',f->>'actor',true);
     IF public.read_paid_order_amendment_workspace(o)->>'verifiedCancellationReady'
-      IS DISTINCT FROM CASE WHEN method = 'bank_transfer' THEN 'false' ELSE 'true' END THEN
+      IS DISTINCT FROM (CASE WHEN method = 'bank_transfer' THEN 'false' ELSE 'true' END) THEN
       RAISE EXCEPTION 'Cancellation readiness did not match pending refund evidence';
     END IF;
     IF method = 'bank_transfer' THEN
@@ -298,6 +300,23 @@ BEGIN
       OR (public.read_paid_order_amendment_document(o,'current')#>>'{inputs,order,amount_paid}')::numeric
         IS DISTINCT FROM 0::numeric THEN
       RAISE EXCEPTION 'Verified cancellation refund, idempotency, restock or invoice drift: %',result;
+    END IF;
+    IF method IN ('cash','pos') THEN
+      rotation_account := gen_random_uuid();
+      rotation_cutover := now() + interval '1 second';
+      UPDATE private.paid_order_amendment_config
+      SET bank_account_id = rotation_account,bank_evidence_cutover = rotation_cutover
+      WHERE merchant_id = m;
+      IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+        IS DISTINCT FROM rotation_account THEN
+        RAISE EXCEPTION 'Bank account rotation remained blocked after order cancellation';
+      END IF;
+      PERFORM set_config('request.jwt.claim.role','service_role',true);
+      IF public.register_paid_order_tender_receipt(
+        o,method,'FIXTURE-' || o,'AUDITED-REGISTER-' || o,2000000,now()) IS DISTINCT FROM receipt THEN
+        RAISE EXCEPTION 'Exact tender receipt replay changed after account rotation';
+      END IF;
+      PERFORM set_config('request.jwt.claim.role','authenticated',true);
     END IF;
     IF method = 'bank_transfer' THEN
       rotation_account := gen_random_uuid();

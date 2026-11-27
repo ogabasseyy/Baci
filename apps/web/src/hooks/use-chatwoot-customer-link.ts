@@ -212,8 +212,12 @@ export function useChatwootCustomerLink(
       }
       // Another tab changed something and the hint still says signed in: it may
       // be a different account, so the note comes off until the server says who
-      // this is. A mere refocus keeps it.
-      if (source !== 'resume') clearLink();
+      // this is, and that account gets its own second try. A mere refocus
+      // keeps the note and grants no new try.
+      if (source === 'notice') {
+        retried = false;
+        clearLink();
+      }
       const wait = RESYNC_MIN_MS - (Date.now() - lastSyncAt);
       if (changed || wait <= 0) {
         cancelTrailing();

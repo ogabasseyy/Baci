@@ -84,21 +84,43 @@ export function extractTailwindCandidates(
   return Array.from(candidates);
 }
 
+function decodeCssEscapes(rawCss: string): string {
+  return rawCss.replace(
+    /\\([0-9a-fA-F]{1,6})\s?|\\(.)/g,
+    (_match, hex: string | undefined, ch: string | undefined) => {
+      if (hex !== undefined) {
+        const codePoint = Number.parseInt(hex, 16);
+        if (
+          Number.isFinite(codePoint) &&
+          codePoint > 0 &&
+          codePoint <= 0x10ffff
+        ) {
+          return String.fromCodePoint(codePoint);
+        }
+      }
+      return ch ?? '';
+    }
+  );
+}
+
 function validateMerchantCssSafety(
   cssContent: string,
   filePath: string,
   declaredAssetIds: ReadonlySet<string>
 ): void {
-  if (EXTERNAL_CSS_IMPORT_RE.test(cssContent)) {
-    throw new Error(`External @import URL forbidden in "${filePath}"`);
-  }
-  if (FORBIDDEN_TAILWIND_DIRECTIVE_RE.test(cssContent)) {
-    throw new Error(
-      `Forbidden @plugin/@config/@source directive in "${filePath}"`
-    );
-  }
-  for (const match of cssContent.matchAll(CSS_URL_RE)) {
-    assertAllowedAssetUrl(match[2] ?? '', filePath, declaredAssetIds);
+  const unescaped = decodeCssEscapes(cssContent);
+  for (const candidate of [cssContent, unescaped]) {
+    if (EXTERNAL_CSS_IMPORT_RE.test(candidate)) {
+      throw new Error(`External @import URL forbidden in "${filePath}"`);
+    }
+    if (FORBIDDEN_TAILWIND_DIRECTIVE_RE.test(candidate)) {
+      throw new Error(
+        `Forbidden @plugin/@config/@source directive in "${filePath}"`
+      );
+    }
+    for (const match of candidate.matchAll(CSS_URL_RE)) {
+      assertAllowedAssetUrl(match[2] ?? '', filePath, declaredAssetIds);
+    }
   }
 }
 
@@ -219,6 +241,13 @@ export async function compileStorefrontTailwindCss(
   });
 
   const css = minified.code;
+  for (const match of css.matchAll(CSS_URL_RE)) {
+    assertAllowedAssetUrl(
+      match[2] ?? '',
+      'compiled-stylesheet',
+      declaredAssets
+    );
+  }
   const rawBytes = Buffer.byteLength(css, 'utf8');
   if (rawBytes > WORKER_COMPILER_LIMITS.maxCssRawBytes) {
     throw new Error(

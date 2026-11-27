@@ -1,4 +1,64 @@
 import ts from '@typescript/typescript6';
+import { DYNAMIC_CODE_NAMES } from './banned-specifiers';
+
+export interface SourceSafetyViolation {
+  filePath: string;
+  rule:
+    | 'DYNAMIC_CODE_EVAL'
+    | 'SERVICE_WORKER_ACCESS'
+    | 'DIRECT_COOKIE_ACCESS'
+    | 'DANGEROUS_INNER_HTML'
+    | 'PROHIBITED_RUNTIME_IMPORT';
+  detail: string;
+}
+
+export function classifyMemberName(
+  filePath: string,
+  memberName: string,
+  violations: SourceSafetyViolation[]
+): void {
+  if (
+    memberName === 'dangerouslySetInnerHTML' ||
+    memberName === '__html' ||
+    memberName === '$$typeof'
+  ) {
+    violations.push({
+      filePath,
+      rule: 'DANGEROUS_INNER_HTML',
+      detail: `Forbidden raw HTML or React element symbol property "${memberName}"`,
+    });
+  } else if (
+    memberName === 'createElement' ||
+    memberName === 'cloneElement' ||
+    memberName === 'createFactory'
+  ) {
+    violations.push({
+      filePath,
+      rule: 'DANGEROUS_INNER_HTML',
+      detail: `Direct React factory "${memberName}" is forbidden; use JSX syntax`,
+    });
+  } else if (DYNAMIC_CODE_NAMES.has(memberName)) {
+    violations.push({
+      filePath,
+      rule: 'DYNAMIC_CODE_EVAL',
+      detail: `Dynamic code access via "${memberName}" is forbidden`,
+    });
+  } else if (memberName === 'serviceWorker') {
+    violations.push({
+      filePath,
+      rule: 'SERVICE_WORKER_ACCESS',
+      detail:
+        'Service Worker registration or control is forbidden on storefronts',
+    });
+  } else if (memberName === 'cookie' || memberName === 'cookieStore') {
+    violations.push({
+      filePath,
+      rule: 'DIRECT_COOKIE_ACCESS',
+      detail:
+        'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
+    });
+  }
+}
 
 /**
  * Constant-folds string literals, templates, and `+` concatenations so
@@ -86,7 +146,7 @@ export function isPropertyOrDeclarationName(node: ts.Identifier): boolean {
   );
 }
 
-export function isAllowedSensitiveRootPosition(node: ts.Identifier): boolean {
+export function isAllowedSensitiveRootPosition(node: ts.Expression): boolean {
   const p = node.parent;
   if (!p) return false;
   if (ts.isPropertyAccessExpression(p) && p.expression === node) return true;

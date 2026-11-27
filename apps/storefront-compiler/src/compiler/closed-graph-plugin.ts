@@ -124,6 +124,8 @@ export function createClosedStorefrontGraphPlugin(options: {
             '.css',
             '/index.tsx',
             '/index.ts',
+            '/index.jsx',
+            '/index.js',
           ];
           const matched = suffixes
             .map((suffix) => `${normalized}${suffix}`)
@@ -162,7 +164,10 @@ export function createClosedStorefrontGraphPlugin(options: {
           );
         }
 
-        if (args.namespace === 'source') {
+        if (
+          args.namespace === 'source' &&
+          !args.importer.startsWith('__baci_')
+        ) {
           const packageRoot = args.path.startsWith('@')
             ? args.path.split('/').slice(0, 2).join('/')
             : (args.path.split('/')[0] ?? '');

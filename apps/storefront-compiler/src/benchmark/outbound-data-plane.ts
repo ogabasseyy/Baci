@@ -255,7 +255,10 @@ export class SimulatedPostgrestOutboundPlane {
         });
       }
       const parsedOverlay = JSON.parse(availJson) as Record<string, boolean>;
-      responseJson = applyVariantStockOverlayToJson(baseJson, parsedOverlay);
+      responseJson = applyVariantStockOverlayToJson(baseJson, parsedOverlay, {
+        coupled: generations.coupled,
+        availability: generations.availability,
+      });
     }
 
     return new Response(responseJson, {

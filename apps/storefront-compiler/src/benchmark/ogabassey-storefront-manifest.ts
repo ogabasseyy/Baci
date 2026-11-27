@@ -36,12 +36,12 @@ export function createOgabasseyStorefrontManifest(): WorkerStorefrontManifest {
         path: 'src/styles/theme.css',
         content: `
 .storefront-shell {
-  background-color: var(--theme-secondary);
-  color: var(--theme-primary);
+  background-color: var(--store-secondary);
+  color: var(--store-primary);
 }
 .accent-cta {
-  background-color: var(--theme-accent);
-  color: var(--theme-secondary);
+  background-color: var(--store-accent);
+  color: var(--store-secondary);
 }
 `,
       },

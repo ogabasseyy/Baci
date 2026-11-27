@@ -14,8 +14,14 @@ export function buildWorkerSsrEntrySource(options: {
   const themeTokensJson = JSON.stringify(manifest.themeTokens);
   const declaredRoutesJson = JSON.stringify(manifest.routes);
   const cspHeaderValue = buildContentSecurityPolicyHeader(manifest);
+  const assetsMapJson = JSON.stringify(
+    Object.fromEntries(
+      manifest.assets.map((a) => [a.assetId, `/assets/${a.assetId}`])
+    )
+  );
 
   return `
+import { CommerceProvider, createCommerceClient } from '@baci/experience-sdk';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server.browser';
 import StorefrontApp from ${JSON.stringify(entryImportPath)};
@@ -24,49 +30,31 @@ const THEME_TOKENS = ${themeTokensJson};
 const DECLARED_ROUTES = ${declaredRoutesJson};
 const CSP_HEADER = ${JSON.stringify(cspHeaderValue)};
 const TRUSTED_MERCHANT_SLUG = ${JSON.stringify(manifest.merchantSlug)};
+const ASSETS_MAP = ${assetsMapJson};
+const SSR_COMMERCE = createCommerceClient(async () => ({ status: 'error', code: 'UNAVAILABLE', message: 'SSR' }));
 const EMPTY_FACETS = { brands: [], conditions: [], totalMatches: 0 };
 
 function escapeHtmlAttr(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function escapeJsonForScript(value) {
-  return JSON.stringify(value)
-    .replace(/</g, '\\\\u003c')
-    .replace(/>/g, '\\\\u003e')
-    .replace(/&/g, '\\\\u0026');
+  return JSON.stringify(value).replace(/</g, '\\\\u003c').replace(/>/g, '\\\\u003e').replace(/&/g, '\\\\u0026');
 }
 
-const ALLOWED_SEARCH_PARAMS = [
-  'brand',
-  'category',
-  'condition',
-  'limit',
-  'page',
-  'q',
-];
+const ALLOWED_SEARCH_PARAMS = ['brand', 'category', 'condition', 'limit', 'page', 'q'];
 
 function canonicalizeSearchParams(inputParams) {
   const canonical = new URLSearchParams();
   for (const key of ALLOWED_SEARCH_PARAMS) {
     const value = inputParams.get(key);
-    if (value !== null && value !== '') {
-      canonical.set(key, value);
-    }
+    if (value !== null && value !== '') canonical.set(key, value);
   }
   return canonical;
 }
 
 function safeDecodeSegment(raw) {
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return null;
-  }
+  try { return decodeURIComponent(raw); } catch { return null; }
 }
 
 function matchDeclaredRoute(pathname) {
@@ -236,7 +224,13 @@ export default {
     const appHtml =
       status === 502
         ? \`<main class="storefront-shell min-h-screen p-8 max-w-3xl mx-auto"><h1>\${escapeHtmlAttr(title)}</h1><p>Please try again in a moment.</p></main>\`
-        : renderToString(createElement(StorefrontApp, renderProps));
+        : renderToString(
+            createElement(
+              CommerceProvider,
+              { commerce: SSR_COMMERCE, assets: ASSETS_MAP },
+              createElement(StorefrontApp, renderProps)
+            )
+          );
     const renderMs = performance.now() - renderStart;
 
     const jsonLd =
@@ -269,7 +263,7 @@ export default {
   <title>\${escapeHtmlAttr(title)}</title>
   \${robotsMeta}
   <link rel="stylesheet" href="${cssAssetPath}" />
-  <style>:root{--theme-primary:\${escapeHtmlAttr(THEME_TOKENS.primary)};--theme-secondary:\${escapeHtmlAttr(THEME_TOKENS.secondary)};--theme-accent:\${escapeHtmlAttr(THEME_TOKENS.accent)};}</style>
+  <style>:root{--store-primary:\${escapeHtmlAttr(THEME_TOKENS.primary)};--store-secondary:\${escapeHtmlAttr(THEME_TOKENS.secondary)};--store-accent:\${escapeHtmlAttr(THEME_TOKENS.accent)};--theme-primary:\${escapeHtmlAttr(THEME_TOKENS.primary)};--theme-secondary:\${escapeHtmlAttr(THEME_TOKENS.secondary)};--theme-accent:\${escapeHtmlAttr(THEME_TOKENS.accent)};}</style>
   <script type="application/ld+json">\${escapeJsonForScript(jsonLd)}</script>
 </head>
 <body>

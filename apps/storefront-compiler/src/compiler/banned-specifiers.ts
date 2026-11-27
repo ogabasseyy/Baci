@@ -58,10 +58,18 @@ export const SENSITIVE_GLOBAL_ROOTS: ReadonlySet<string> = new Set([
 export const DYNAMIC_CODE_NAMES: ReadonlySet<string> = new Set([
   'eval',
   'Function',
+  'Reflect',
+  'Proxy',
   'constructor',
+  'prototype',
+  '__proto__',
   'fromEntries',
   'defineProperty',
   'defineProperties',
+  'getOwnPropertyDescriptor',
+  'getOwnPropertyDescriptors',
+  'getPrototypeOf',
+  'setPrototypeOf',
 ]);
 
 export const BANNED_MERCHANT_SUBPATH_SPECIFIERS: ReadonlySet<string> = new Set([

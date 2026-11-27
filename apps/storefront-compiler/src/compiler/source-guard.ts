@@ -2,82 +2,24 @@ import ts from '@typescript/typescript6';
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import {
   BANNED_MERCHANT_SUBPATH_SPECIFIERS,
-  DYNAMIC_CODE_NAMES,
   isProhibitedImportSpecifier,
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
 import {
+  classifyMemberName,
   isAllowedSensitiveRootPosition,
   isPropertyOrDeclarationName,
   resolveStaticString,
+  type SourceSafetyViolation,
 } from './source-guard-ast';
 
-export { isProhibitedImportSpecifier };
-
-export interface SourceSafetyViolation {
-  filePath: string;
-  rule:
-    | 'DYNAMIC_CODE_EVAL'
-    | 'SERVICE_WORKER_ACCESS'
-    | 'DIRECT_COOKIE_ACCESS'
-    | 'DANGEROUS_INNER_HTML'
-    | 'PROHIBITED_RUNTIME_IMPORT';
-  detail: string;
-}
+export { isProhibitedImportSpecifier, type SourceSafetyViolation };
 
 function scriptKindForPath(filePath: string): ts.ScriptKind {
   if (filePath.endsWith('.tsx')) return ts.ScriptKind.TSX;
   if (filePath.endsWith('.jsx')) return ts.ScriptKind.JSX;
   if (filePath.endsWith('.js')) return ts.ScriptKind.JS;
   return ts.ScriptKind.TS;
-}
-
-function classifyMemberName(
-  filePath: string,
-  memberName: string,
-  violations: SourceSafetyViolation[]
-): void {
-  if (
-    memberName === 'dangerouslySetInnerHTML' ||
-    memberName === '__html' ||
-    memberName === '$$typeof'
-  ) {
-    violations.push({
-      filePath,
-      rule: 'DANGEROUS_INNER_HTML',
-      detail: `Forbidden raw HTML or React element symbol property "${memberName}"`,
-    });
-  } else if (
-    memberName === 'createElement' ||
-    memberName === 'cloneElement' ||
-    memberName === 'createFactory'
-  ) {
-    violations.push({
-      filePath,
-      rule: 'DANGEROUS_INNER_HTML',
-      detail: `Direct React factory "${memberName}" is forbidden; use JSX syntax`,
-    });
-  } else if (DYNAMIC_CODE_NAMES.has(memberName)) {
-    violations.push({
-      filePath,
-      rule: 'DYNAMIC_CODE_EVAL',
-      detail: `Dynamic code access via "${memberName}" is forbidden`,
-    });
-  } else if (memberName === 'serviceWorker') {
-    violations.push({
-      filePath,
-      rule: 'SERVICE_WORKER_ACCESS',
-      detail:
-        'Service Worker registration or control is forbidden on storefronts',
-    });
-  } else if (memberName === 'cookie' || memberName === 'cookieStore') {
-    violations.push({
-      filePath,
-      rule: 'DIRECT_COOKIE_ACCESS',
-      detail:
-        'Custom storefronts are cookie-free; use @baci/experience-sdk cart APIs',
-    });
-  }
 }
 
 export function scanManifestSourceSafety(
@@ -234,6 +176,17 @@ export function scanManifestSourceSafety(
         ts.isPropertyAccessExpression(node)
       ) {
         classifyMemberName(file.path, node.name.text, violations);
+        if (
+          ts.isPropertyAccessExpression(node) &&
+          SENSITIVE_GLOBAL_ROOTS.has(node.name.text) &&
+          !isAllowedSensitiveRootPosition(node)
+        ) {
+          violations.push({
+            filePath: file.path,
+            rule: 'DYNAMIC_CODE_EVAL',
+            detail: `Aliasing or passing sensitive global "${node.name.text}" is forbidden`,
+          });
+        }
       }
 
       if (ts.isElementAccessExpression(node)) {
@@ -241,6 +194,16 @@ export function scanManifestSourceSafety(
           const folded = resolveStaticString(node.argumentExpression);
           if (folded !== null) {
             classifyMemberName(file.path, folded, violations);
+            if (
+              SENSITIVE_GLOBAL_ROOTS.has(folded) &&
+              !isAllowedSensitiveRootPosition(node)
+            ) {
+              violations.push({
+                filePath: file.path,
+                rule: 'DYNAMIC_CODE_EVAL',
+                detail: `Aliasing or passing sensitive global "${folded}" is forbidden`,
+              });
+            }
           } else {
             violations.push({
               filePath: file.path,
@@ -253,7 +216,12 @@ export function scanManifestSourceSafety(
       }
 
       if (ts.isIdentifier(node) && !isPropertyOrDeclarationName(node)) {
-        if (node.text === 'eval' || node.text === 'Function') {
+        if (
+          node.text === 'eval' ||
+          node.text === 'Function' ||
+          node.text === 'Reflect' ||
+          node.text === 'Proxy'
+        ) {
           violations.push({
             filePath: file.path,
             rule: 'DYNAMIC_CODE_EVAL',

@@ -98,6 +98,9 @@ export async function compileStorefrontWorker(
     }
   }
   const declaredAssetIds = new Set(manifest.assets.map((a) => a.assetId));
+  const assetsMap = Object.fromEntries(
+    manifest.assets.map((a) => [a.assetId, `/assets/${a.assetId}`])
+  );
 
   const clientVirtualFiles = new Map(
     manifest.files.map((f) => [f.path, f.content])
@@ -105,7 +108,7 @@ export async function compileStorefrontWorker(
   const clientEntryName = '__baci_client_entry__.tsx';
   clientVirtualFiles.set(
     clientEntryName,
-    buildClientHydrationEntrySource(manifest.entry)
+    buildClientHydrationEntrySource(manifest.entry, assetsMap)
   );
 
   let clientBuild: Awaited<ReturnType<typeof build>>;

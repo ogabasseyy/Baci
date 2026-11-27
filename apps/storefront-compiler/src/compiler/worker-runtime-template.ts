@@ -24,7 +24,15 @@ export function buildWorkerSsrEntrySource(options: {
 import { CommerceProvider, createCommerceClient } from '@baci/experience-sdk';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server.browser';
-import StorefrontApp from ${JSON.stringify(entryImportPath)};
+
+let cachedStorefrontApp = null;
+async function loadStorefrontApp() {
+  if (cachedStorefrontApp) return cachedStorefrontApp;
+  const mod = await import(${JSON.stringify(entryImportPath)});
+  if (!mod || !mod.default) throw new Error('Missing default export');
+  cachedStorefrontApp = mod.default;
+  return cachedStorefrontApp;
+}
 
 const THEME_TOKENS = ${themeTokensJson};
 const DECLARED_ROUTES = ${declaredRoutesJson};
@@ -219,6 +227,7 @@ export default {
       appHtml = \`<main class="storefront-shell min-h-screen p-8 max-w-3xl mx-auto"><h1>\${escapeHtmlAttr(title)}</h1><p>Please try again in a moment.</p></main>\`;
     } else {
       try {
+        const StorefrontApp = await loadStorefrontApp();
         appHtml = renderToString(
           createElement(CommerceProvider, { commerce: SSR_COMMERCE, assets: ASSETS_MAP }, createElement(StorefrontApp, renderProps))
         );

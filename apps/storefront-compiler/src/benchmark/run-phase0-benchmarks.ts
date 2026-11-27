@@ -167,22 +167,18 @@ export async function runPhase0Benchmarks(options?: {
       },
     });
 
-  const benchmarkRoutes: readonly {
-    route: string;
-    expectedStatus: number;
-  }[] = [
-    { route: '/', expectedStatus: 200 },
-    { route: '/smartphones', expectedStatus: 200 },
-    {
-      route: '/search?q=iphone&brand=Apple&condition=New',
-      expectedStatus: 200,
-    },
-    {
-      route: '/smartphones/apple-iphone-16-pro-max-1',
-      expectedStatus: 200,
-    },
-    { route: '/unknown-category-slug', expectedStatus: 404 },
-  ];
+  const benchmarkRoutes: readonly { route: string; expectedStatus: number }[] =
+    [
+      { route: '/', expectedStatus: 200 },
+      { route: '/smartphones', expectedStatus: 200 },
+      {
+        route: '/search?q=iphone&brand=Apple&condition=New',
+        expectedStatus: 200,
+      },
+      { route: '/smartphones/apple-iphone-16-pro-max-1', expectedStatus: 200 },
+      { route: '/unknown-category-slug', expectedStatus: 404 },
+      { route: '/smartphones/nonexistent-product-slug', expectedStatus: 404 },
+    ];
 
   const routeMetrics: RouteBenchmarkMetrics[] = [];
   let true404Verified = true;

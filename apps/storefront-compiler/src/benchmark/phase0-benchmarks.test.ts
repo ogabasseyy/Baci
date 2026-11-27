@@ -83,6 +83,10 @@ describe('Phase 0 workerd SSR, Outbound tenant binding, and generation-churn ben
       (r) => r.route === '/unknown-category-slug'
     );
     expect(notFoundRoute?.expectedStatus).toBe(404);
+    const notFoundProductRoute = report.workerdSsr.routes.find(
+      (r) => r.route === '/smartphones/nonexistent-product-slug'
+    );
+    expect(notFoundProductRoute?.expectedStatus).toBe(404);
 
     // Amendment 2 proof: across 96 unique listing+PDP URLs at 60 inventory writes/min,
     // single-generation suffers heavy cache churn every 15s while split-availability preserves >94% catalog cache hits!

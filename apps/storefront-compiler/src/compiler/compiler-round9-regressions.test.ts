@@ -166,6 +166,102 @@ describe('Round-9 Codex Object.assign, CSP wildcard, popup presented, route norm
     expect(() => parseWorkerStorefrontManifest(bracketDup)).toThrow(
       /Duplicate normalized route pattern/
     );
+
+    const cssEntry = createOgabasseyStorefrontManifest();
+    cssEntry.files.push({
+      path: 'src/only.css',
+      content: '.a { color: red; }',
+    });
+    cssEntry.entry = 'src/only.css';
+    expect(() => parseWorkerStorefrontManifest(cssEntry)).toThrow(/executable/);
+  });
+
+  it('contains top-level merchant module-evaluation failures before fetch() and serves bounded 500 with CSP', async () => {
+    const manifest = createOgabasseyStorefrontManifest();
+    manifest.files = [
+      {
+        path: 'src/StorefrontApp.tsx',
+        content: `
+          const brokenTopLevelWidth = window.innerWidth;
+          export default function App() {
+            return <main>{String(brokenTopLevelWidth)}</main>;
+          }
+        `,
+      },
+    ];
+    const compiled = await compileStorefrontWorker(manifest);
+    const mf = new Miniflare({
+      modules: [
+        { type: 'ESModule', path: 'worker.mjs', contents: compiled.workerCode },
+      ],
+      compatibilityDate: '2026-07-01',
+      bindings: {},
+      outboundService: () =>
+        new MiniflareResponse(
+          JSON.stringify({
+            title: 'Home',
+            products: [],
+            facets: { brands: [], conditions: [], totalMatches: 0 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        ),
+    });
+    try {
+      const res = await mf.dispatchFetch('https://ogabassey.mybaci.store/');
+      expect(res.status).toBe(500);
+      expect(res.headers.get('content-security-policy')).toContain(
+        "default-src 'self'"
+      );
+      const html = await res.text();
+      expect(html).toContain('noindex, nofollow');
+      expect(html).toContain('Storefront Render Error');
+      expect(html).not.toContain('__BACI_STOREFRONT_STATE__');
+    } finally {
+      await mf.dispose();
+    }
+
+    // Also permits valid object-valued React default exports such as forwardRef(...)
+    const forwardRefManifest = createOgabasseyStorefrontManifest();
+    forwardRefManifest.files = [
+      {
+        path: 'src/StorefrontApp.tsx',
+        content: `
+          import { forwardRef } from 'react';
+          export default forwardRef<HTMLElement, { title: string }>(function App(props, ref) {
+            return <main ref={ref}>{props.title}</main>;
+          });
+        `,
+      },
+    ];
+    const forwardRefCompiled =
+      await compileStorefrontWorker(forwardRefManifest);
+    const mfOk = new Miniflare({
+      modules: [
+        {
+          type: 'ESModule',
+          path: 'worker.mjs',
+          contents: forwardRefCompiled.workerCode,
+        },
+      ],
+      compatibilityDate: '2026-07-01',
+      bindings: {},
+      outboundService: () =>
+        new MiniflareResponse(
+          JSON.stringify({
+            title: 'ForwardRef Home',
+            products: [],
+            facets: { brands: [], conditions: [], totalMatches: 0 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        ),
+    });
+    try {
+      const okRes = await mfOk.dispatchFetch('https://ogabassey.mybaci.store/');
+      expect(okRes.status).toBe(200);
+      expect(await okRes.text()).toContain('ForwardRef Home');
+    } finally {
+      await mfOk.dispose();
+    }
   });
 
   it('contains merchant SSR exceptions inside fetch() and serves a bounded 500 fallback with CSP and noindex', async () => {

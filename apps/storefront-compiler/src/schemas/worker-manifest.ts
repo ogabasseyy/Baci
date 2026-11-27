@@ -29,10 +29,8 @@ export const ALLOWED_STOREFRONT_PACKAGES = [
   '@baci/shared',
   'framer-motion',
 ] as const;
-
 export type AllowedStorefrontPackage =
   (typeof ALLOWED_STOREFRONT_PACKAGES)[number];
-
 const IPV4_OR_IPV6_HOST = /^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\])$/;
 const HEX_COLOR_RE =
   /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
@@ -141,7 +139,10 @@ export const workerStorefrontManifestSchema = z
     format: z.literal('baci.storefront-worker/v1'),
     mode: z.enum(['composable', 'full-code']),
     merchantSlug: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/),
-    entry: relativeSourcePathSchema,
+    entry: relativeSourcePathSchema.refine(
+      (p) => /\.(?:tsx|ts|jsx|js)$/.test(p),
+      'Manifest entry must be an executable .tsx, .ts, .jsx, or .js module'
+    ),
     files: z
       .array(
         z.strictObject({

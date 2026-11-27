@@ -28,6 +28,7 @@ export { type ChurnScenarioMetrics, runGenerationChurnBenchmarkAsync };
 export interface RouteBenchmarkMetrics {
   route: string;
   expectedStatus: number;
+  observedStatus: number;
   coldWallMs: number;
   warmP50WallMs: number;
   warmP95WallMs: number;
@@ -63,15 +64,16 @@ export interface Phase0BenchmarkReport {
 function percentile(values: readonly number[], p: number): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
-  const rawIdx = Math.ceil((p / 100) * sorted.length) - 1;
-  return Number(
-    (sorted[Math.min(sorted.length - 1, Math.max(0, rawIdx))] ?? 0).toFixed(2)
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)
   );
+  return Number((sorted[idx] ?? 0).toFixed(2));
 }
 
 function parseServerTimingSsrMs(headerValue: string | null): number {
-  const match = headerValue ? /ssr;dur=([0-9.]+)/.exec(headerValue) : null;
-  return match?.[1] ? Number.parseFloat(match[1]) : 0;
+  const m = headerValue ? /ssr;dur=([0-9.]+)/.exec(headerValue) : null;
+  return m?.[1] ? Number.parseFloat(m[1]) : 0;
 }
 
 export async function runPhase0Benchmarks(options?: {
@@ -192,10 +194,9 @@ export async function runPhase0Benchmarks(options?: {
       const coldRes = await mf.dispatchFetch(fullUrl);
       const coldHtml = await coldRes.text();
       const coldWallMs = Number((performance.now() - coldStart).toFixed(2));
+      let observedStatus = coldRes.status;
 
-      if (coldRes.status !== item.expectedStatus) {
-        true404Verified = false;
-      }
+      if (observedStatus !== item.expectedStatus) true404Verified = false;
       if (
         coldHtml.includes('costPriceNgn') ||
         coldHtml.includes('supplierInternalCode') ||
@@ -210,6 +211,10 @@ export async function runPhase0Benchmarks(options?: {
         const wStart = performance.now();
         const wRes = await mf.dispatchFetch(fullUrl);
         await wRes.text();
+        if (wRes.status !== item.expectedStatus) {
+          observedStatus = wRes.status;
+          true404Verified = false;
+        }
         warmWalls.push(performance.now() - wStart);
         warmIsolateSsrs.push(
           parseServerTimingSsrMs(wRes.headers.get('server-timing'))
@@ -219,6 +224,7 @@ export async function runPhase0Benchmarks(options?: {
       routeMetrics.push({
         route: item.route,
         expectedStatus: item.expectedStatus,
+        observedStatus,
         coldWallMs,
         warmP50WallMs: percentile(warmWalls, 50),
         warmP95WallMs: percentile(warmWalls, 95),

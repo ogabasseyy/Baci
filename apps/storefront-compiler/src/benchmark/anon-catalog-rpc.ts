@@ -64,8 +64,7 @@ export function executeSimulatedAnonCatalogRpc(
     const found = publishedRows.find(
       (row) =>
         ((slug !== '' && row.slug === slug) ||
-          (productId !== '' &&
-            (row.id === productId || row.slug === productId))) &&
+          (productId !== '' && row.id === productId)) &&
         (!category || row.categorySlug === category)
     );
     return JSON.stringify({

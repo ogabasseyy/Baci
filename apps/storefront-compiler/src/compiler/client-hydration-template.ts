@@ -129,6 +129,14 @@ if (rootElement && stateScript?.textContent) {
         if (method === 'navigation.go') {
           const resolved = resolveDeclaredNavigationTarget(args?.path);
           if (!resolved.ok) return resolved.error;
+          if (window.parent && window.parent !== window) {
+            const framedRes = await dispatchFramedNavigation('navigation.go', resolved.normalized, routeEpoch);
+            if (framedRes.status === 'ok') {
+              routeEpoch = framedRes.value.epoch;
+              currentRevision = framedRes.value.publicDataRevision;
+            }
+            return framedRes;
+          }
           const nextState = {
             epoch: ++routeEpoch,
             routeId: resolved.routeId,
@@ -144,7 +152,7 @@ if (rootElement && stateScript?.textContent) {
           if (!resolved.ok) return resolved.error;
           const safePath = resolved.normalized;
           if (window.parent && window.parent !== window) {
-            return dispatchFramedNavigationOpen(safePath, routeEpoch);
+            return dispatchFramedNavigation('navigation.open', safePath, routeEpoch);
           }
           if (typeof window.open !== 'function') {
             return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'New browsing context unavailable' };

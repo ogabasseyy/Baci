@@ -1,3 +1,5 @@
+import { buildSsrCatalogProjectionSnippet } from './ssr-catalog-projection';
+
 export function buildWorkerCatalogBridgeSnippet(): string {
   return `
 function isFiniteNumber(v) {
@@ -51,41 +53,7 @@ function isValidCatalogProductRecord(p) {
   return true;
 }
 
-function normalizeSsrCatalogProduct(p) {
-  const rawVars = Array.isArray(p.variants) ? p.variants : [];
-  const variants = rawVars.map((v) => {
-    const vPrice = isFiniteNumber(v.priceNgn) ? v.priceNgn : v.price;
-    const vAvail = typeof v.available === 'boolean' ? v.available : v.inStock === true;
-    return {
-      ...v,
-      priceNgn: vPrice,
-      price: isFiniteNumber(v.price) ? v.price : vPrice,
-      inStock: vAvail,
-      available: vAvail,
-    };
-  });
-  const pPrice = isFiniteNumber(p.priceNgn) ? p.priceNgn : p.price;
-  const pAvail =
-    typeof p.available === 'boolean'
-      ? p.available
-      : typeof p.inStock === 'boolean'
-        ? p.inStock
-        : variants.some((v) => v.available);
-  return {
-    ...p,
-    priceNgn: pPrice,
-    price: isFiniteNumber(p.price) ? p.price : pPrice,
-    inStock: pAvail,
-    available: pAvail,
-    categorySlug: typeof p.categorySlug === 'string' ? p.categorySlug : '',
-    brand: typeof p.brand === 'string' ? p.brand : '',
-    condition: typeof p.condition === 'string' ? p.condition : '',
-    imageUrl: typeof p.imageUrl === 'string' ? p.imageUrl : '',
-    imageAlt: typeof p.imageAlt === 'string' && p.imageAlt.length > 0 ? p.imageAlt : p.name,
-    shortSpecs: typeof p.shortSpecs === 'string' ? p.shortSpecs : '',
-    variants,
-  };
-}
+${buildSsrCatalogProjectionSnippet()}
 
 function isValidFacetsBucket(list) {
   return (
@@ -249,11 +217,9 @@ async function handleCatalogBridgeRequest(url, method) {
   if (op === 'collection') {
     const handle = (url.searchParams.get('handle') || '').trim();
     if (!handle) return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Collection handle is required' }, method);
-    const isAll = handle === 'all';
-    const ep = isAll ? 'https://catalog.baci.internal/v1/search?limit=24' : \`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(handle)}\`;
-    const up = await fetchCatalogJson(ep, isAll ? 'search' : 'collection');
+    const up = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?category=\${encodeURIComponent(handle)}\`, 'collection');
     if (!up.ok) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Catalog temporarily unavailable' }, method);
-    if (!isAll && !up.data.categoryExists) return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Collection not found' }, method);
+    if (!up.data.categoryExists) return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Collection not found' }, method);
     const assets = {};
     const mapped = (up.data.products || []).map((row) => toSdkPublicProduct(row, assets));
     if (mapped.some((m) => m === null)) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Malformed catalog product record' }, method);
@@ -280,7 +246,7 @@ async function handleCatalogBridgeRequest(url, method) {
   if (op === 'variants') {
     const productId = (url.searchParams.get('productId') || '').trim();
     if (!productId) return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Product ID is required' }, method);
-    const up = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?productId=\${encodeURIComponent(productId)}&productSlug=\${encodeURIComponent(productId)}\`, 'product');
+    const up = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?productId=\${encodeURIComponent(productId)}\`, 'product');
     if (!up.ok) return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: 'Variants temporarily unavailable' }, method);
     if (!up.data.product) return jsonCatalogBridgeResponse(404, { status: 'error', code: 'NOT_FOUND', message: 'Product not found' }, method);
     const mapped = toSdkPublicProduct(up.data.product, null);

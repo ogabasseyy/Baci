@@ -52,12 +52,28 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
   window.addEventListener('message', onHostConnect);
 }
 
-function dispatchFramedNavigationOpen(safePath, fallbackEpoch) {
-  if (!/^\\/[a-zA-Z0-9_/-]*$/.test(safePath)) {
+function isValidHostRouteState(v) {
+  return (
+    v !== null &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    Number.isSafeInteger(v.epoch) &&
+    v.epoch >= 1 &&
+    typeof v.routeId === 'string' &&
+    v.params !== null &&
+    typeof v.params === 'object' &&
+    !Array.isArray(v.params) &&
+    typeof v.canonicalPath === 'string' &&
+    typeof v.publicDataRevision === 'string'
+  );
+}
+
+function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
+  if (typeof safePath !== 'string' || safePath.length === 0 || safePath.length > 500) {
     return Promise.resolve({
       status: 'error',
       code: 'INVALID_REQUEST',
-      message: 'Framed navigation path must be a canonical pathname',
+      message: 'Framed navigation path exceeds maximum length',
     });
   }
   if (!hostPort) {
@@ -98,13 +114,17 @@ function dispatchFramedNavigationOpen(safePath, fallbackEpoch) {
       routeEpoch: hostEpoch || fallbackEpoch,
       requestId,
       capability: 'navigation',
-      method: 'navigation.open',
+      method,
       args: { path: safePath },
     });
   }).then((raw) => {
     if (raw && typeof raw === 'object') {
-      if (raw.status === 'ok' && typeof raw.value?.presented === 'boolean') {
+      if (method === 'navigation.open' && raw.status === 'ok' && typeof raw.value?.presented === 'boolean') {
         return { status: 'ok', value: { presented: raw.value.presented } };
+      }
+      if (method === 'navigation.go' && raw.status === 'ok' && isValidHostRouteState(raw.value)) {
+        if (raw.value.epoch > hostEpoch) hostEpoch = raw.value.epoch;
+        return { status: 'ok', value: raw.value };
       }
       if (raw.status === 'error' && typeof raw.code === 'string' && typeof raw.message === 'string') {
         return { status: 'error', code: raw.code, message: raw.message };

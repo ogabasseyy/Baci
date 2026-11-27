@@ -10,10 +10,14 @@ export function formatPhase0MarkdownReport(
 ): string {
   const { compiler, workerdSsr, generationChurn } = report;
   const routeRows = workerdSsr.routes
-    .map(
-      (r) =>
-        `| \`${r.route}\` | \`${r.expectedStatus}\` | ${r.coldWallMs} ms | ${r.warmP50WallMs} ms | ${r.warmP95WallMs} ms | ${r.warmP50IsolateSsrMs} ms | ${r.warmP95IsolateSsrMs} ms | ${(r.htmlBytes / 1024).toFixed(1)} KiB |`
-    )
+    .map((r) => {
+      const obs = r.observedStatus ?? r.expectedStatus;
+      const statusCell =
+        obs === r.expectedStatus
+          ? `\`${obs}\``
+          : `\`${obs}\` (expected \`${r.expectedStatus}\`)`;
+      return `| \`${r.route}\` | ${statusCell} | ${r.coldWallMs} ms | ${r.warmP50WallMs} ms | ${r.warmP95WallMs} ms | ${r.warmP50IsolateSsrMs} ms | ${r.warmP95IsolateSsrMs} ms | ${(r.htmlBytes / 1024).toFixed(1)} KiB |`;
+    })
     .join('\n');
 
   const churnRows = generationChurn

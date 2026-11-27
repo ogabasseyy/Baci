@@ -131,7 +131,7 @@ export default {
       } else {
         title = upstream.data.title || 'Featured Devices';
         products = (upstream.data.products || []).map(normalizeSsrCatalogProduct);
-        facets = upstream.data.facets || EMPTY_FACETS;
+        facets = normalizeSsrCatalogFacets(upstream.data.facets);
         publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     } else if (matchedRoute.view === 'search') {
@@ -147,7 +147,7 @@ export default {
       } else {
         title = upstream.data.title || 'Search Catalog';
         products = (upstream.data.products || []).map(normalizeSsrCatalogProduct);
-        facets = upstream.data.facets || EMPTY_FACETS;
+        facets = normalizeSsrCatalogFacets(upstream.data.facets);
         publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     } else if (matchedRoute.view === 'cart') {
@@ -175,7 +175,7 @@ export default {
       } else if (!upstream.data.categoryExists) {
         status = 404; view = 'not_found'; title = 'Category Not Found';
       } else {
-        title = upstream.data.title || categoryParam; products = (upstream.data.products || []).map(normalizeSsrCatalogProduct); facets = upstream.data.facets || EMPTY_FACETS; publicDataRevision = formatUpstreamRevision(upstream.data);
+        title = upstream.data.title || categoryParam; products = (upstream.data.products || []).map(normalizeSsrCatalogProduct); facets = normalizeSsrCatalogFacets(upstream.data.facets); publicDataRevision = formatUpstreamRevision(upstream.data);
       }
     } else if (matchedRoute.view === 'product') {
       const paramEntries = Object.entries(matchedRoute.params);

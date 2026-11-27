@@ -14,6 +14,7 @@ type ConfirmationOutcome = 'confirmed' | 'competing' | 'unknown';
 
 const definitiveReplayConflicts = new Set([
   'already_amended',
+  'amendment_fulfillment_open',
   'amendment_ineligible',
   'bank_evidence_conflict',
   'bank_evidence_required',

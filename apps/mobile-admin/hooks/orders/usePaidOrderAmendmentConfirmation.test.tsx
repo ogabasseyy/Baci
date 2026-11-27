@@ -180,6 +180,7 @@ describe('usePaidOrderAmendment', () => {
   });
 
   it.each([
+    'amendment_fulfillment_open',
     'staff_pos_receipt_used',
     'scenario_disabled',
     'bank_evidence_required',

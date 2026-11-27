@@ -5080,6 +5080,119 @@ describe('POST /api/payments/webhook', () => {
       );
     });
 
+    it('bugfix: credits a card wallet top-up whose customer paid the Paystack fee on top', async () => {
+      const body = {
+        event: 'charge.success',
+        data: { reference: 'WAL-FEE-1' },
+      };
+      const signature = createSignature(
+        JSON.stringify(body),
+        'test-paystack-secret'
+      );
+      const request = createMockRequest(body, {
+        'x-paystack-signature': signature,
+      });
+
+      const { verifyTransaction } = await import('@/lib/paystack');
+      vi.mocked(verifyTransaction).mockResolvedValue({
+        success: true,
+        data: {
+          id: 1,
+          status: 'success',
+          amount: 101_500,
+          requested_amount: 100_000,
+          reference: 'WAL-FEE-1',
+          currency: 'NGN',
+          channel: 'card',
+          paid_at: '2026-11-26T09:54:00Z',
+          created_at: '2026-11-26T09:53:46Z',
+          customer: {
+            customer_code: 'CUS_test',
+            email: 'wallet@example.com',
+            first_name: 'Wallet',
+            id: 1,
+            last_name: null,
+            phone: '+2348012345678',
+          },
+          metadata: { transaction_type: 'wallet_topup' },
+          fees: 1_500,
+          fees_split: null,
+        },
+      });
+      setupSuccessfulTransactionMocks({
+        amount: '1000',
+        gateway_reference: 'WAL-FEE-1',
+        metadata: {
+          customer_id: 'customer-1',
+          transaction_type: 'wallet_topup',
+        },
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+      expect(mockCreditWalletTopUp).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 1000, reference: 'WAL-FEE-1' })
+      );
+    });
+
+    it('rejects a card wallet top-up whose gross amount is not proven to be principal plus fee', async () => {
+      const body = {
+        event: 'charge.success',
+        data: { reference: 'WAL-FEE-1' },
+      };
+      const signature = createSignature(
+        JSON.stringify(body),
+        'test-paystack-secret'
+      );
+      const request = createMockRequest(body, {
+        'x-paystack-signature': signature,
+      });
+
+      const { verifyTransaction } = await import('@/lib/paystack');
+      vi.mocked(verifyTransaction).mockResolvedValue({
+        success: true,
+        data: {
+          id: 1,
+          status: 'success',
+          amount: 101_500,
+          requested_amount: 100_000,
+          reference: 'WAL-FEE-1',
+          currency: 'NGN',
+          channel: 'card',
+          paid_at: '2026-11-26T09:54:00Z',
+          created_at: '2026-11-26T09:53:46Z',
+          customer: {
+            customer_code: 'CUS_test',
+            email: 'wallet@example.com',
+            first_name: 'Wallet',
+            id: 1,
+            last_name: null,
+            phone: '+2348012345678',
+          },
+          metadata: { transaction_type: 'wallet_topup' },
+          fees: 1_000,
+          fees_split: null,
+        },
+      });
+      setupSuccessfulTransactionMocks({
+        amount: '1000',
+        gateway_reference: 'WAL-FEE-1',
+        metadata: {
+          customer_id: 'customer-1',
+          transaction_type: 'wallet_topup',
+        },
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: 'Payment amount mismatch',
+      });
+      expect(mockCreditWalletTopUp).not.toHaveBeenCalled();
+    });
+
     it('routes duplicate Paystack savings webhooks through the savings handler when the transaction is already completed', async () => {
       const body = {
         event: 'charge.success',

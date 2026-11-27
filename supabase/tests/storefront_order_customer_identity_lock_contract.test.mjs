@@ -34,11 +34,13 @@ test('reinstatement locks customer identity before product and variant rows', ()
   );
   const recovery = finalLockOrderMigration.slice(recoveryStart);
   const identityLock = recovery.indexOf('private.lock_order_replacement_identity(');
+  const replacementOrderLock = recovery.indexOf('SELECT ARRAY(');
   const productLock = recovery.indexOf('PERFORM p.id');
   const variantLock = recovery.indexOf('PERFORM v.id');
 
   assert.ok(recoveryStart >= 0);
-  assert.ok(identityLock >= 0 && productLock > identityLock);
+  assert.ok(identityLock >= 0 && replacementOrderLock > identityLock);
+  assert.ok(productLock > replacementOrderLock);
   assert.ok(variantLock > productLock);
 });
 

@@ -207,29 +207,6 @@ BEGIN
     v_order_identity.customer_phone
   );
 
-  -- Keep identity-before-catalog ordering consistent with storefront checkout
-  -- and the order-insert identity trigger. This prevents a checkout or direct
-  -- order creator from holding catalog locks while waiting for this identity.
-  PERFORM p.id
-  FROM public.products p
-  WHERE p.merchant_id = v_order_identity.merchant_id
-    AND p.id IN (
-      SELECT oi.product_id FROM public.order_items oi
-      WHERE oi.order_id = p_order_id AND oi.product_id IS NOT NULL
-    )
-  ORDER BY p.id
-  FOR UPDATE;
-
-  PERFORM v.id
-  FROM public.product_variants v
-  WHERE v.merchant_id = v_order_identity.merchant_id
-    AND v.id IN (
-      SELECT oi.variant_id FROM public.order_items oi
-      WHERE oi.order_id = p_order_id AND oi.variant_id IS NOT NULL
-    )
-  ORDER BY v.id
-  FOR UPDATE;
-
   SELECT * INTO v_payment FROM public.transactions WHERE id = p_transaction_id FOR UPDATE;
   SELECT * INTO v_order FROM public.orders WHERE id = p_order_id FOR UPDATE;
 
@@ -396,6 +373,31 @@ BEGIN
   ) THEN
     RETURN 'blocked';
   END IF;
+
+  -- Lock relevant orders before catalog rows. Inventory confirmation locks an
+  -- order first, then its product/variant rows; following that order here
+  -- avoids a row/catalog cycle with a newer matching order being paid.
+  -- Identity locks above still prevent a replacement checkout from inserting
+  -- a matching order after the replacement scan.
+  PERFORM p.id
+  FROM public.products p
+  WHERE p.merchant_id = v_order_identity.merchant_id
+    AND p.id IN (
+      SELECT oi.product_id FROM public.order_items oi
+      WHERE oi.order_id = p_order_id AND oi.product_id IS NOT NULL
+    )
+  ORDER BY p.id
+  FOR UPDATE;
+
+  PERFORM v.id
+  FROM public.product_variants v
+  WHERE v.merchant_id = v_order_identity.merchant_id
+    AND v.id IN (
+      SELECT oi.variant_id FROM public.order_items oi
+      WHERE oi.order_id = p_order_id AND oi.variant_id IS NOT NULL
+    )
+  ORDER BY v.id
+  FOR UPDATE;
 
   BEGIN
     PERFORM pg_catalog.set_config('baci.reinstating_order_id', p_order_id::text, true);

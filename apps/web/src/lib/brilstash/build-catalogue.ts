@@ -18,6 +18,7 @@ type Inventory =
   | { kind: 'quantity'; units: number | null; legacyUnits?: number | null }
   | { kind: 'serialized'; units: number | null }
   | { kind: 'untracked' }
+  | { kind: 'on-demand'; units: number }
   | { kind: 'withdrawn'; units: 0; approvalId: string };
 
 type ApprovedFacts = {
@@ -89,8 +90,8 @@ export type CatalogueBuildResult = {
   rejected: Rejection[];
 };
 
-// The upstream loader supplies a resolved authoritative count and excludes
-// aggregate parent rows. Neither condition offers nor variants inherit stock.
+// The upstream loader supplies tracked stock or explicitly approved sourcing
+// capacity. Neither condition offers nor variants inherit a parent count.
 function resolveStock(inventory: Inventory): number | null {
   if (inventory.kind === 'untracked') return null;
   const { units } = inventory;

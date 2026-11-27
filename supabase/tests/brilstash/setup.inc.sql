@@ -66,6 +66,7 @@ BEGIN
   PERFORM set_config('fixture.new_key', new_key::text, true);
 END $$;
 RESET ROLE;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -106,3 +107,58 @@ BEGIN
   THEN RAISE EXCEPTION 'retirement did not revoke the prior credential'; END IF;
 END $$;
 RESET ROLE;
+
+SAVEPOINT on_demand_inventory;
+UPDATE public.products SET manage_stock = false, inventory_tracking_policy = 'off', status = 'active'
+WHERE id = '40000000-0000-4000-8000-000000000001';
+UPDATE public.product_variants SET stock_quantity = 5, inventory_tracking_policy = 'inherit'
+WHERE id = '40000000-0000-4000-8000-000000000011';
+
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  merchant uuid := '20000000-0000-4000-8000-000000000001';
+  product_id uuid := '40000000-0000-4000-8000-000000000001';
+  variant_id uuid := '40000000-0000-4000-8000-000000000011';
+  installation uuid;
+BEGIN
+  BEGIN
+    PERFORM public.bind_brilstash_on_demand_installation(
+      '20000000-0000-4000-8000-000000000002', 'foreign-on-demand'
+    );
+    RAISE EXCEPTION 'on-demand binding accepted a foreign merchant';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  installation := public.bind_brilstash_on_demand_installation(merchant, 'on-demand-fixture');
+  PERFORM public.set_brilstash_category_mapping(
+    installation, 0, '50000000-0000-4000-8000-000000000001', 'Phones & Tablets'
+  );
+  PERFORM public.approve_brilstash_listing_facts(
+    installation, 1, 'variant', variant_id, product_id, 1,
+    '{"condition":"new","attributes":{"storage":"128GB"}}', '128GB', 'Phone only', '30 days', 'Verified listing'
+  );
+  PERFORM set_config('fixture.on_demand_installation', installation::text, true);
+END $$;
+RESET ROLE;
+DO $$
+DECLARE
+  installation uuid := current_setting('fixture.on_demand_installation')::uuid;
+  merchant uuid := '20000000-0000-4000-8000-000000000001';
+  product_id uuid := '40000000-0000-4000-8000-000000000001';
+BEGIN
+  IF (SELECT row->'inventory'
+      FROM private.brilstash_source_rows(installation, merchant) AS source(row))
+    IS DISTINCT FROM '{"kind":"on-demand","units":100}'::jsonb
+  THEN RAISE EXCEPTION 'approved on-demand variant must advertise 100 available units'; END IF;
+
+  UPDATE public.products p SET manage_stock = true WHERE p.id = product_id;
+  IF (SELECT row->'inventory'->>'units'
+      FROM private.brilstash_source_rows(installation, merchant) AS source(row)) IS DISTINCT FROM '5'
+  THEN RAISE EXCEPTION 'on-demand policy replaced tracked stock'; END IF;
+
+  UPDATE public.products p SET manage_stock = false, status = 'archived' WHERE p.id = product_id;
+  IF EXISTS (SELECT 1 FROM private.brilstash_source_rows(installation, merchant) AS source(row)
+     WHERE row->>'visible' = 'true' OR row->'inventory'->>'units' = '100')
+  THEN RAISE EXCEPTION 'on-demand policy exposed an archived listing'; END IF;
+END $$;
+ROLLBACK TO SAVEPOINT on_demand_inventory;

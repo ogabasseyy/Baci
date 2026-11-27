@@ -127,6 +127,30 @@ describe('loadBrilStashSources', () => {
     );
   });
 
+  it('accepts the approved on-demand capacity and rejects a different count', async () => {
+    const inventory = { kind: 'on-demand', units: 100 };
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: { ...result, rows: [{ ...row, inventory }] },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          ...result,
+          rows: [{ ...row, inventory: { ...inventory, units: 10000 } }],
+        },
+        error: null,
+      });
+    const context = { installationId, merchantId, storefrontOrigin: origin };
+    expect(
+      (await loadBrilStashSources({ rpc }, context)).sources[0]?.inventory
+    ).toEqual(inventory);
+    await expect(loadBrilStashSources({ rpc }, context)).rejects.toThrow(
+      'Invalid BrilStash source response'
+    );
+  });
+
   it('keeps ineligible approvals in the expected assortment', async () => {
     const rpc = vi.fn(async () => ({
       data: {

@@ -4,6 +4,9 @@ export const BRILSTASH_FEED_PATH = '/partners/yield/brilpay/products';
 // first-activation checks in the BrilStash migrations.
 export const BRILSTASH_PILOT_LISTING_LIMIT = 7;
 
+// Matches the opt-in on-demand policy in the BrilStash source reader.
+export const BRILSTASH_ON_DEMAND_CAPACITY = 100;
+
 // Match the database reader's live page rules and the handoff probe URL check.
 export const BRILSTASH_FULL_FEED_QUERY = {
   page: 1,

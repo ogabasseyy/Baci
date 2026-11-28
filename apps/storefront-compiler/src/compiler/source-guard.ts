@@ -15,6 +15,7 @@ import {
   checkJsxAttributeSafety,
   checkJsxSpreadAttributeSafety,
 } from './jsx-nav-safety';
+import { checkJsxPragmaComments } from './jsx-pragma-guard';
 import { createJsxTagValidator } from './jsx-tag-safety';
 import { checkDynamicImportOrRequireNode } from './module-call-guard';
 import { checkOpenDestructuringSafety } from './open-binding-guard';
@@ -104,10 +105,6 @@ export function scanManifestSourceSafety(
         return;
       }
       if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
-        return;
-      }
-      if (ts.isConstructorDeclaration(node)) {
-        ts.forEachChild(node, visit);
         return;
       }
       if (
@@ -288,6 +285,7 @@ export function scanManifestSourceSafety(
     };
 
     visit(sourceFile);
+    checkJsxPragmaComments(sourceFile, filePath, violations);
     checkOpenDestructuringSafety(
       sourceFile,
       filePath,

@@ -200,6 +200,12 @@ export default class Storefront extends PureComponent<{ title: string }> { rende
 
   it('signals framed server-render 502/500 failures immediately via frame-error.js without loading merchant client bundle', async () => {
     const manifest = createOgabasseyStorefrontManifest();
+    manifest.mode = 'composable';
+    manifest.routes = [
+      { path: '/', view: 'home' },
+      { path: '/collections/[handle]', view: 'collection' },
+      { path: '/products/[handle]', view: 'product' },
+    ];
     manifest.hostOrigin = 'https://shop.ogabassey.com';
     const compiled = await compileStorefrontWorker(manifest);
     const mf = new Miniflare({

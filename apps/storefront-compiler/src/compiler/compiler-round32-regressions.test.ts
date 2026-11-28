@@ -8,13 +8,22 @@ import { buildContentSecurityPolicyHeader } from './csp-header';
 
 describe('Round 32 canonical hostOrigin framing & handshake regressions', () => {
   it('includes default tenant subdomain and custom hostOrigin in CSP frame-ancestors and sourceDigest', async () => {
+    const composableRoutes = [
+      { path: '/', view: 'home' as const },
+      { path: '/collections/[handle]', view: 'collection' as const },
+      { path: '/products/[handle]', view: 'product' as const },
+    ];
     const baseManifest = createOgabasseyStorefrontManifest();
+    baseManifest.mode = 'composable';
+    baseManifest.routes = composableRoutes;
     const defaultCsp = buildContentSecurityPolicyHeader(baseManifest);
     expect(defaultCsp).toContain(
       'frame-ancestors https://usebaci.com https://ogabassey.usebaci.com'
     );
 
     const customManifest = createOgabasseyStorefrontManifest();
+    customManifest.mode = 'composable';
+    customManifest.routes = composableRoutes;
     customManifest.hostOrigin = 'https://shop.ogabassey.com';
     customManifest.previewOrigin = 'https://baci-preview.vercel.app';
     customManifest.files = [

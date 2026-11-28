@@ -7,6 +7,7 @@ import {
   canonicalExperiencePath,
   type createNavigationPresentation,
   type PresentedCanonicalLink,
+  splitExperienceOpenPath,
 } from './experience-navigation-open';
 import { createPreviewDispatcher } from './experience-preview-dispatch';
 import type { createRouteCoordinator } from './experience-route-coordinator';
@@ -27,11 +28,14 @@ export function createFrameDispatcher({
   return host
     ? async (request: import('@baci/shared/experience').BridgeRequest) => {
         if (request.method === 'navigation.open') {
-          const path = await host.resolveNavigation(String(request.args.path));
+          const { pathname, suffix } = splitExperienceOpenPath(
+            String(request.args.path)
+          );
+          const path = await host.resolveNavigation(pathname);
           const presented = nav.presentCanonicalLink(
             {
               requestId: request.requestId,
-              path,
+              path: `${path}${suffix}`,
             },
             path
           );

@@ -131,7 +131,8 @@ export async function compileStorefrontWorker(
       assetsMap,
       manifest.routes,
       manifest.previewOrigin,
-      canonicalHostOrigin
+      canonicalHostOrigin,
+      manifest.mode
     )
   );
 

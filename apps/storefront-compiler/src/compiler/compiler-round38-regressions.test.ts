@@ -27,9 +27,18 @@ describe('Round 38 variant-only product route rejection and content-hashed frame
   });
 
   it('versions the frame-error module URL by content hash when hostOrigin or previewOrigin changes', async () => {
+    const composableRoutes = [
+      { path: '/', view: 'home' as const },
+      { path: '/collections/[handle]', view: 'collection' as const },
+      { path: '/products/[handle]', view: 'product' as const },
+    ];
     const m1 = createOgabasseyStorefrontManifest();
+    m1.mode = 'composable';
+    m1.routes = composableRoutes;
     m1.hostOrigin = 'https://shop-a.ogabassey.com';
     const m2 = createOgabasseyStorefrontManifest();
+    m2.mode = 'composable';
+    m2.routes = composableRoutes;
     m2.hostOrigin = 'https://shop-b.ogabassey.com';
 
     const asset1 = buildFrameErrorAsset(m1);

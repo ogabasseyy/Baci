@@ -4,6 +4,7 @@ import {
   createClosedStorefrontGraphPlugin,
   StorefrontCompilerError,
 } from './closed-graph-plugin';
+import { assertPrebundledOutputUsesGuardedJsxRuntime } from './jsx-pragma-guard';
 
 export const PREBUNDLE_VIRTUAL_ENTRY = '__baci_prebundled_app__.js';
 
@@ -41,6 +42,7 @@ export async function prebundleMerchantEntrySource(options: {
         : {}),
       format: 'esm',
       jsx: 'automatic',
+      legalComments: 'none',
       treeShaking: true,
       write: false,
       minify: false,
@@ -55,7 +57,14 @@ export async function prebundleMerchantEntrySource(options: {
         }),
       ],
     });
-    return result.outputFiles?.[0]?.text ?? '';
+    const outputText = result.outputFiles?.[0]?.text ?? '';
+    if (!assertPrebundledOutputUsesGuardedJsxRuntime(outputText)) {
+      throw new StorefrontCompilerError(
+        'SOURCE_SAFETY_VIOLATION',
+        'Prebundled merchant source bypassed the guarded automatic JSX runtime'
+      );
+    }
+    return outputText;
   } catch (error) {
     if (error instanceof StorefrontCompilerError) throw error;
     throw new StorefrontCompilerError(

@@ -84,6 +84,10 @@ it('presents a fetched categorized product using trusted resolution without same
   const setLink = vi.fn();
   const navigate = vi.fn();
   const resolveNavigation = vi.fn(async () => '/phones/related');
+  let currentNow = 1000;
+  const nowStep = () => {
+    currentNow += 1000;
+  };
   const nav = createNavigationPresentation({
     base: 'https://shop.test/qa1',
     routes: ['/products/[handle]', '/phones/current'],
@@ -94,7 +98,7 @@ it('presents a fetched categorized product using trusted resolution without same
       transition: false,
       active: true,
     }),
-    now: () => 1000,
+    now: () => currentNow,
   });
   const run = createFrameDispatcher({
     host: { resolveNavigation, navigate } as never,
@@ -113,6 +117,21 @@ it('presents a fetched categorized product using trusted resolution without same
   expect(resolveNavigation).toHaveBeenCalledWith('/phones/related');
   expect(setLink).toHaveBeenCalledWith(
     expect.objectContaining({ href: 'https://shop.test/qa1/phones/related' })
+  );
+  nav.cancel();
+  nowStep();
+  await expect(
+    run({
+      method: 'navigation.open',
+      requestId: 'related-query',
+      args: { path: '/phones/related?variant=blue#specs' },
+    } as never)
+  ).resolves.toMatchObject({ status: 'ok' });
+  expect(resolveNavigation).toHaveBeenLastCalledWith('/phones/related');
+  expect(setLink).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      href: 'https://shop.test/qa1/phones/related?variant=blue#specs',
+    })
   );
   expect(navigate).not.toHaveBeenCalled();
 });

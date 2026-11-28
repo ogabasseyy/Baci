@@ -5,14 +5,19 @@ export function buildFrameErrorModuleSource(
   manifest: Pick<
     WorkerStorefrontManifest,
     'merchantSlug' | 'previewOrigin' | 'hostOrigin'
-  >
+  > & { mode?: 'composable' | 'full-code' }
 ): string {
+  const allowPublishedHost = manifest.mode !== 'full-code';
   const allowedOrigins = Array.from(
     new Set([
       'https://usebaci.com',
-      `https://${manifest.merchantSlug}.usebaci.com`,
+      ...(allowPublishedHost
+        ? [`https://${manifest.merchantSlug}.usebaci.com`]
+        : []),
       ...(manifest.previewOrigin ? [manifest.previewOrigin] : []),
-      ...(manifest.hostOrigin ? [manifest.hostOrigin] : []),
+      ...(allowPublishedHost && manifest.hostOrigin
+        ? [manifest.hostOrigin]
+        : []),
     ])
   );
   return `const ALLOWED = ${JSON.stringify(allowedOrigins)};
@@ -51,7 +56,7 @@ export function buildFrameErrorAsset(
   manifest: Pick<
     WorkerStorefrontManifest,
     'merchantSlug' | 'previewOrigin' | 'hostOrigin'
-  >
+  > & { mode?: 'composable' | 'full-code' }
 ): { path: string; source: string } {
   const source = buildFrameErrorModuleSource(manifest);
   const hash = sha256Hex([source]).slice(0, 12);

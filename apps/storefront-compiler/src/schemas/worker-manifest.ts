@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import {
+  validateComposablePublishedRoute,
+  validateRouteViewShape,
+} from './composable-route-guard';
+import {
   cssColorTokenSchema,
   RESERVED_ROUTE_PARAM_NAMES,
 } from './css-color-token';
@@ -8,7 +12,6 @@ import {
   cspAllowlistSchema,
   hostOriginSchema,
   httpsOriginSchema,
-  isValidProductRouteParams,
   previewOriginSchema,
 } from './origin-schemas';
 
@@ -264,22 +267,9 @@ export const workerStorefrontManifestSchema = z
       }
       seenNormalizedRoutes.add(matcherPattern);
 
-      if (
-        (route.view === 'collection' || route.view === 'product') &&
-        !hasDynamic
-      ) {
-        ctx.addIssue({
-          code: 'custom',
-          message: `${route.view} route "${route.path}" must capture a dynamic segment`,
-        });
-      } else if (
-        route.view === 'product' &&
-        !isValidProductRouteParams(Array.from(paramNames))
-      ) {
-        ctx.addIssue({
-          code: 'custom',
-          message: `product route "${route.path}" must capture a product-identifying parameter with recognized qualifier segments`,
-        });
+      validateRouteViewShape(route, hasDynamic, paramNames, ctx);
+      if (manifest.mode === 'composable') {
+        validateComposablePublishedRoute(route, ctx);
       }
     }
   });

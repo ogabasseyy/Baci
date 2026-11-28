@@ -102,13 +102,22 @@ export function buildContentSecurityPolicyHeader(
   ).join(' ');
   const tenantSubdomainOrigin = `https://${manifest.merchantSlug}.usebaci.com`;
   const canonicalHostOrigin = manifest.hostOrigin ?? tenantSubdomainOrigin;
-  const frameAncestors = Array.from(
-    new Set([
-      'https://usebaci.com',
-      ...(manifest.previewOrigin ? [manifest.previewOrigin] : []),
-      tenantSubdomainOrigin,
-      canonicalHostOrigin,
-    ])
+  const frameAncestors = (
+    manifest.mode === 'composable'
+      ? Array.from(
+          new Set([
+            'https://usebaci.com',
+            ...(manifest.previewOrigin ? [manifest.previewOrigin] : []),
+            tenantSubdomainOrigin,
+            canonicalHostOrigin,
+          ])
+        )
+      : Array.from(
+          new Set([
+            'https://usebaci.com',
+            ...(manifest.previewOrigin ? [manifest.previewOrigin] : []),
+          ])
+        )
   ).join(' ');
   const formActions = Array.from(
     new Set([

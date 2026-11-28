@@ -2,18 +2,21 @@ import { buildFramedBridgeDispatchersSnippet } from './framed-bridge-dispatchers
 
 export function buildFramedHostPortSnippet(
   previewOrigin?: string,
-  hostOrigin?: string
+  hostOrigin?: string,
+  mode: 'composable' | 'full-code' = 'composable'
 ): string {
+  const allowPublishedHost = mode === 'composable';
   const allowedOrigins = Array.from(
     new Set([
       'https://usebaci.com',
       ...(previewOrigin ? [previewOrigin] : []),
-      ...(hostOrigin ? [hostOrigin] : []),
+      ...(allowPublishedHost && hostOrigin ? [hostOrigin] : []),
     ])
   );
   return `
 const ALLOWED_HOST_ORIGINS = ${JSON.stringify(allowedOrigins)};
 const TRUSTED_HOST_ORIGIN = ${JSON.stringify(hostOrigin ?? '')};
+const ALLOW_PUBLISHED_HOST_CONNECT = ${JSON.stringify(allowPublishedHost)};
 let hostPort = null;
 let hostInstanceId = '';
 let hostBuildDigest = '';
@@ -75,6 +78,7 @@ function notifyHostRenderFailed() {
 
 function isAllowedConnectOrigin(origin) {
   if (ALLOWED_HOST_ORIGINS.includes(origin)) return true;
+  if (!ALLOW_PUBLISHED_HOST_CONNECT) return false;
   try {
     const raw = typeof document !== 'undefined' ? document.getElementById('__BACI_STOREFRONT_STATE__')?.textContent : '';
     const slug = raw ? JSON.parse(raw)?.merchantSlug : '';

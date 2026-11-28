@@ -40,17 +40,23 @@ function rememberEnrichedProducts(cache, state) {
     const prev =
       (typeof r.id === 'string' && cache.get('id:' + r.id)) ||
       (typeof r.slug === 'string' && cache.get('slug:' + r.slug)) ||
+      (typeof r.sku === 'string' && cache.get('sku:' + r.sku)) ||
       {};
     const merged = {
       brand: typeof r.brand === 'string' && r.brand.length > 0 ? r.brand : prev.brand || '',
       condition: typeof r.condition === 'string' && r.condition.length > 0 ? r.condition : prev.condition || '',
       shortSpecs: typeof r.shortSpecs === 'string' && r.shortSpecs.length > 0 ? r.shortSpecs : prev.shortSpecs || '',
+      sku: typeof r.sku === 'string' && r.sku.length > 0 ? r.sku : prev.sku || '',
       categorySlug: typeof r.categorySlug === 'string' && r.categorySlug.length > 0 ? r.categorySlug : prev.categorySlug || '',
       imageUrl: typeof r.imageUrl === 'string' && r.imageUrl.length > 0 ? r.imageUrl : prev.imageUrl || '',
       imageAlt: typeof r.imageAlt === 'string' && r.imageAlt.length > 0 ? r.imageAlt : prev.imageAlt || '',
     };
     if (typeof r.id === 'string' && r.id.length > 0) cache.set('id:' + r.id, merged);
     if (typeof r.slug === 'string' && r.slug.length > 0) cache.set('slug:' + r.slug, merged);
+    if (merged.sku) cache.set('sku:' + merged.sku, merged);
+    if (Array.isArray(r.variants)) {
+      for (const v of r.variants) if (typeof v?.sku === 'string' && v.sku) cache.set('sku:' + v.sku, merged);
+    }
   }
 }
 
@@ -87,13 +93,14 @@ function buildFacetsFromProducts(list) {
 function normalizeHostBootstrapProduct(p, assetsTarget, fallbackCategory, enrichedCache) {
   const pid = String(p.id || '');
   const pslug = String(p.slug || '');
-  const existing = (pid && enrichedCache?.get('id:' + pid)) || (pslug && enrichedCache?.get('slug:' + pslug)) || null;
+  const psku = typeof p.sku === 'string' ? p.sku : '';
+  const existing = (pid && enrichedCache?.get('id:' + pid)) || (pslug && enrichedCache?.get('slug:' + pslug)) || (psku && enrichedCache?.get('sku:' + psku)) || null;
   const basePrice = typeof p.priceNgn === 'number' ? p.priceNgn : typeof p.price === 'number' ? p.price : 0;
   const rawVars = Array.isArray(p.variants) ? p.variants : [];
   const variants = rawVars.map((v) => {
     const vp = typeof v?.priceNgn === 'number' ? v.priceNgn : typeof v?.price === 'number' ? v.price : basePrice;
     const va = typeof v?.available === 'boolean' ? v.available : Boolean(v?.inStock);
-    return { id: String(v?.id || ''), label: String(v?.label || ''), price: vp, priceNgn: vp, available: va, inStock: va };
+    return { id: String(v?.id || ''), ...(typeof v?.sku === 'string' && v.sku ? { sku: v.sku } : {}), label: String(v?.label || ''), price: vp, priceNgn: vp, available: va, inStock: va };
   });
   const avail =
     typeof p.available === 'boolean'
@@ -131,6 +138,7 @@ function normalizeHostBootstrapProduct(p, assetsTarget, fallbackCategory, enrich
   return {
     id: pid,
     slug: pslug,
+    ...(psku || existing?.sku ? { sku: psku || existing.sku } : {}),
     name: String(p.name || ''),
     categorySlug,
     brand: typeof p.brand === 'string' && p.brand.length > 0 ? p.brand : existing?.brand || '',
@@ -245,11 +253,13 @@ function deriveNextRenderProps(prevProps, routeObj, catalogObj, assetsTarget, en
   if (view !== 'product') {
     productDetail = null;
   } else if (hasCanonical || hasCatalog) {
-    const wantSlug = mergedParams.productSlug || mergedParams.product || mergedParams.itemSlug || mergedParams.slug || mergedParams.handle || pathname.split('/').filter(Boolean).pop() || '';
+    const wantSku = mergedParams.sku || '';
+    const explicitSlug = mergedParams.productSlug || mergedParams.product || mergedParams.itemSlug || mergedParams.slug || mergedParams.handle || '';
+    const wantSlug = explicitSlug || (!wantSku && !mergedParams.productId ? pathname.split('/').filter(Boolean).pop() || '' : '');
     const wantId = mergedParams.productId || '';
     productDetail =
-      products.find((p) => (wantSlug && p.slug === wantSlug) || (wantId && p.id === wantId) || p.canonicalPath === pathname) ||
-      (products.length === 1 && !wantSlug ? products[0] : null);
+      products.find((p) => (wantSku && (p.sku === wantSku || (Array.isArray(p.variants) && p.variants.some((v) => v?.sku === wantSku)))) || (wantSlug && p.slug === wantSlug) || (wantId && p.id === wantId) || p.canonicalPath === pathname) ||
+      (hasCatalog && products.length === 1 && (Boolean(wantSku) || (!wantSlug && !wantId)) ? products[0] : null);
   }
   const effectiveView = view === 'product' && (hasCanonical || hasCatalog) && !productDetail ? 'not_found' : view;
   let title = prevProps.title;

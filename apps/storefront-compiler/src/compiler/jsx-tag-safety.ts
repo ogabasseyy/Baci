@@ -110,7 +110,7 @@ export function createJsxTagValidator(
 
   return (filePath: string, sf: ts.SourceFile): FileJsxTagInspector => {
     const importBindings = new Map<string, BindingKind>();
-    const { reactClassBases, reactNamespaces } =
+    const { reactClassBases, reactHocWrappers, reactNamespaces } =
       collectFileReactClassImports(sf);
     for (const stmt of sf.statements) {
       if (
@@ -160,6 +160,7 @@ export function createJsxTagValidator(
 
     const makeClassEnv = (nextDepth: number) => ({
       reactClassBases,
+      reactHocWrappers,
       reactNamespaces,
       isVerifiedLocalClass: (at: ts.Node, ident: string) =>
         resolveBindingAt(at, ident, nextDepth) === 'reactClass',
@@ -233,7 +234,8 @@ export function createJsxTagValidator(
                           : null;
                       },
                       (cls) =>
-                        isVerifiedReactClassNode(cls, makeClassEnv(depth + 1))
+                        isVerifiedReactClassNode(cls, makeClassEnv(depth + 1)),
+                      makeClassEnv(depth + 1)
                     ) ?? 'unsafe'
                   );
                 }

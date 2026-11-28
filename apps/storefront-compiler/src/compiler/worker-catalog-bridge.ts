@@ -1,4 +1,5 @@
 import { buildProductCanonicalPathSnippet } from './product-canonical-path-snippet';
+import { buildRouteCatalogLoaderSnippet } from './route-catalog-loader-snippet';
 import { buildSsrCatalogProjectionSnippet } from './ssr-catalog-projection';
 
 export function buildWorkerCatalogBridgeSnippet(): string {
@@ -128,6 +129,7 @@ function isValidCatalogPayload(data, kind) {
 }
 
 ${buildProductCanonicalPathSnippet()}
+${buildRouteCatalogLoaderSnippet()}
 
 function isDeclaredStaticAssetId(id, baseAssets) {
   const map = baseAssets || (typeof ASSETS_MAP === 'object' && ASSETS_MAP !== null ? ASSETS_MAP : null);
@@ -203,12 +205,17 @@ function toSdkPublicProduct(p, assetOut) {
   };
 }
 
+function requestMethodForbidden(method) {
+  return method !== 'GET' && method !== 'HEAD';
+}
+
 function jsonCatalogBridgeResponse(httpStatus, payload, method) {
   return new Response(method === 'HEAD' ? null : JSON.stringify(payload), {
     status: httpStatus,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
+      'access-control-allow-origin': '*',
       'content-security-policy': CSP_HEADER,
       'x-robots-tag': 'noindex, nofollow',
     },
@@ -216,7 +223,30 @@ function jsonCatalogBridgeResponse(httpStatus, payload, method) {
 }
 
 async function handleCatalogBridgeRequest(url, method) {
+  if (requestMethodForbidden(method)) {
+    return jsonCatalogBridgeResponse(405, { status: 'error', code: 'INVALID_REQUEST', message: 'Method not allowed' }, method);
+  }
   const op = url.searchParams.get('op');
+  if (op === 'route') {
+    const rawPath = (url.searchParams.get('path') || '').trim();
+    if (!rawPath.startsWith('/') || rawPath.startsWith('//') || /[\\\\\\u0000-\\u001f\\u007f]/.test(rawPath)) {
+      return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Valid route path is required' }, method);
+    }
+    const parsedTarget = new URL(rawPath, 'https://storefront.baci.internal');
+    if (parsedTarget.origin !== 'https://storefront.baci.internal' || parsedTarget.pathname.startsWith('/_baci')) {
+      return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Invalid route path' }, method);
+    }
+    const matched = matchDeclaredRoute(parsedTarget.pathname);
+    if (matched && matched.view === 'bad_request') {
+      return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Malformed route path' }, method);
+    }
+    const routeData = await loadDeclaredRouteCatalog(matched, parsedTarget.searchParams);
+    if (routeData.status >= 500) {
+      return jsonCatalogBridgeResponse(502, { status: 'error', code: 'SNAPSHOT_STALE', message: routeData.title }, method);
+    }
+    const extraAssets = collectCatalogAssetUrls({}, routeData.products, routeData.productDetail);
+    return jsonCatalogBridgeResponse(200, { status: 'ok', value: { ...routeData, pathname: parsedTarget.pathname }, assets: extraAssets }, method);
+  }
   if (op === 'collection') {
     const handle = (url.searchParams.get('handle') || '').trim();
     if (!handle) return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Collection handle is required' }, method);

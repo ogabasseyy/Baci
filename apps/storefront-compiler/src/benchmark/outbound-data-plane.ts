@@ -23,6 +23,7 @@ const ALLOWED_PRODUCT_QUERY_KEYS = [
   'category',
   'productId',
   'productSlug',
+  'sku',
 ] as const;
 
 export type CacheKeyStrategy = 'single-generation' | 'split-availability';

@@ -100,17 +100,22 @@ ${buildWorkerCatalogBridgeSnippet()}
 export default {
   async fetch(request) {
     const startedAt = performance.now();
+    const url = new URL(request.url);
+    if (url.pathname === '/_baci/catalog' && request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, HEAD, OPTIONS', 'access-control-allow-headers': 'accept', 'cache-control': 'no-store' } });
+    }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Method Not Allowed', {
         status: 405,
         headers: { Allow: 'GET, HEAD', 'content-security-policy': CSP_HEADER },
       });
     }
-    const url = new URL(request.url);
     if (url.pathname === '${FRAME_ERROR_SCRIPT_PATH}') {
       return new Response(request.method === 'HEAD' ? null : ${JSON.stringify(buildFrameErrorModuleSource(manifest))}, { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400', 'content-security-policy': CSP_HEADER, 'x-robots-tag': 'noindex, nofollow' } });
     }
-    if (url.pathname === '/_baci/catalog') return handleCatalogBridgeRequest(url, request.method);
+    if (url.pathname === '/_baci/catalog') {
+      return handleCatalogBridgeRequest(url, request.method);
+    }
     if (url.pathname === '/_baci' || url.pathname.startsWith('/_baci/')) {
       return new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'content-security-policy': CSP_HEADER, 'x-robots-tag': 'noindex, nofollow' } });
     }
@@ -122,114 +127,17 @@ export default {
         headers: { 'content-type': 'text/plain; charset=utf-8', 'content-security-policy': CSP_HEADER, 'x-robots-tag': 'noindex, nofollow' },
       });
     }
-    let status = 200;
-    let view = matchedRoute ? matchedRoute.view : 'not_found';
-    let title = 'Storefront';
-    let products = [];
-    let facets = EMPTY_FACETS;
-    let productDetail = null;
-    let publicDataRevision = '0';
-
-    if (!matchedRoute) {
-      status = 404;
-      view = 'not_found';
-      title = 'Page Not Found';
-    } else if (matchedRoute.view === 'home') {
-      const upstream = await fetchCatalogJson('https://catalog.baci.internal/v1/search?limit=12', 'search');
-      if (!upstream.ok) {
-        status = 502;
-        title = 'Catalog Temporarily Unavailable';
-      } else {
-        title = upstream.data.title || 'Featured Devices';
-        products = (upstream.data.products || []).map(normalizeSsrCatalogProduct);
-        facets = normalizeSsrCatalogFacets(upstream.data.facets);
-        publicDataRevision = formatUpstreamRevision(upstream.data);
-      }
-    } else if (matchedRoute.view === 'search') {
-      const canonical = canonicalizeSearchParams(url.searchParams);
-      const qs = canonical.toString();
-      const endpoint = qs
-        ? \`https://catalog.baci.internal/v1/search?\${qs}\`
-        : 'https://catalog.baci.internal/v1/search';
-      const upstream = await fetchCatalogJson(endpoint, 'search');
-      if (!upstream.ok) {
-        status = 502;
-        title = 'Search Temporarily Unavailable';
-      } else {
-        title = upstream.data.title || 'Search Catalog';
-        products = (upstream.data.products || []).map(normalizeSsrCatalogProduct);
-        facets = normalizeSsrCatalogFacets(upstream.data.facets);
-        publicDataRevision = formatUpstreamRevision(upstream.data);
-      }
-    } else if (matchedRoute.view === 'cart') {
-      title = 'Your Cart';
-    } else if (matchedRoute.view === 'editorial') {
-      const paramValues = Object.values(matchedRoute.params);
-      title = matchedRoute.params.pageSlug || matchedRoute.params.pageId || matchedRoute.params.page || paramValues[paramValues.length - 1] || 'Editorial';
-    } else if (matchedRoute.view === 'collection') {
-      const colEntries = Object.entries(matchedRoute.params);
-      const lastCol = colEntries[colEntries.length - 1];
-      const prevCol = colEntries[colEntries.length - 2];
-      const trailingFilter = lastCol && (lastCol[0] === 'brand' || lastCol[0] === 'filter' || lastCol[0] === 'page');
-      const categoryParam =
-        matchedRoute.params.category ||
-        matchedRoute.params.categoryId ||
-        matchedRoute.params.categorySlug ||
-        matchedRoute.params.collection ||
-        matchedRoute.params.collectionId ||
-        matchedRoute.params.collectionSlug ||
-        (trailingFilter ? matchedRoute.params.handle || matchedRoute.params.slug || (prevCol ? prevCol[1] : '') : '') ||
-        (lastCol ? lastCol[1] : '');
-      const colQuery = canonicalizeSearchParams(url.searchParams);
-      colQuery.set('category', categoryParam);
-      if (matchedRoute.params.brand) colQuery.set('brand', matchedRoute.params.brand);
-      if (matchedRoute.params.condition) colQuery.set('condition', matchedRoute.params.condition);
-      if (matchedRoute.params.page) colQuery.set('page', matchedRoute.params.page);
-      if (matchedRoute.params.filter && !colQuery.get('q')) colQuery.set('q', matchedRoute.params.filter);
-      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/search?\${colQuery.toString()}\`, 'collection');
-      if (!upstream.ok) {
-        status = 502; title = 'Category Temporarily Unavailable';
-      } else if (!upstream.data.categoryExists) {
-        status = 404; view = 'not_found'; title = 'Category Not Found';
-      } else {
-        title = upstream.data.title || categoryParam; products = (upstream.data.products || []).map(normalizeSsrCatalogProduct); facets = normalizeSsrCatalogFacets(upstream.data.facets); publicDataRevision = formatUpstreamRevision(upstream.data);
-      }
-    } else if (matchedRoute.view === 'product') {
-      const paramEntries = Object.entries(matchedRoute.params);
-      const lastEntry = paramEntries[paramEntries.length - 1];
-      const prevEntry = paramEntries[paramEntries.length - 2];
-      const trailingIsVariant = lastEntry && (lastEntry[0] === 'variant' || lastEntry[0] === 'variantId');
-      const explicitId = matchedRoute.params.productId || '';
-      const productSlug =
-        matchedRoute.params.productSlug ||
-        matchedRoute.params.product ||
-        matchedRoute.params.itemSlug ||
-        matchedRoute.params.sku ||
-        (!explicitId
-          ? (trailingIsVariant ? matchedRoute.params.slug || matchedRoute.params.handle || (prevEntry ? prevEntry[1] : '') : '') ||
-            (lastEntry ? lastEntry[1] : '')
-          : '');
-      const categoryVal =
-        matchedRoute.params.category || matchedRoute.params.categoryId || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionId || matchedRoute.params.collectionSlug || '';
-      const categoryQuery = categoryVal ? \`category=\${encodeURIComponent(categoryVal)}&\` : '';
-      const lookupQuery = productSlug ? \`productSlug=\${encodeURIComponent(productSlug)}\` : \`productId=\${encodeURIComponent(explicitId)}\`;
-      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?\${categoryQuery}\${lookupQuery}\`, 'product');
-      if (!upstream.ok) {
-        status = 502;
-        title = 'Product Temporarily Unavailable';
-      } else if (!upstream.data.product) {
-        status = 404;
-        view = 'not_found';
-        title = 'Product Not Found';
-      } else {
-        productDetail = normalizeSsrCatalogProduct(upstream.data.product);
-        title = productDetail.name;
-        publicDataRevision = formatUpstreamRevision(upstream.data);
-      }
-    }
+    const routeData = await loadDeclaredRouteCatalog(matchedRoute, url.searchParams);
+    let status = routeData.status;
+    let view = routeData.view;
+    let title = routeData.title;
+    const products = routeData.products;
+    const facets = routeData.facets;
+    const productDetail = routeData.productDetail;
+    const publicDataRevision = routeData.publicDataRevision;
 
     const renderProps = {
-      view, pathname: url.pathname, merchantSlug, title, products, facets, productDetail, publicDataRevision,
+      view, pathname: url.pathname, workerOrigin: url.origin, merchantSlug, title, products, facets, productDetail, publicDataRevision,
     };
 
     const renderStart = performance.now();
@@ -283,11 +191,14 @@ export default {
 </html>\`;
 
     const totalMs = performance.now() - startedAt;
+    const htmlCspHeader = /^https?:\\/\\//i.test(url.origin)
+      ? CSP_HEADER.replace(/connect-src ([^;]+)/, \`connect-src $1 \${url.origin}\`)
+      : CSP_HEADER;
     return new Response(request.method === 'HEAD' ? null : html, {
       status,
       headers: {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': CSP_HEADER,
+        'content-security-policy': htmlCspHeader,
         'server-timing': \`ssr;dur=\${renderMs.toFixed(2)},total;dur=\${totalMs.toFixed(2)}\`,
       },
     });

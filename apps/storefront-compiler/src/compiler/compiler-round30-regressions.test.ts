@@ -270,10 +270,12 @@ describe('Round 30 compiler & runtime regressions', () => {
           k === 'href' ? '/smartphones' : k === 'target' ? '_blank' : null,
       },
     });
-    expect(blankPrevented).toBe(false);
+    expect(blankPrevented).toBe(true);
+    expect(sent.at(-1)).toMatchObject({
+      method: 'navigation.open',
+      args: { path: '/smartphones' },
+    });
     expect(rootListeners.has('auxclick')).toBe(false);
-
-    // Explicit empty formtarget="" on submitter overrides form target="_blank" and intercepts via navigation.go
     let submitPrevented = false;
     rootListeners.get('submit')?.({
       type: 'submit',

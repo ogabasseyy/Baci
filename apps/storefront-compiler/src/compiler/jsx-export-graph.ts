@@ -82,7 +82,7 @@ export function createVirtualComponentExportResolver(
 
     if (sf) {
       const reassigned = collectReassignedIdentifiers(sf);
-      const { reactClassBases, reactNamespaces } =
+      const { reactClassBases, reactHocWrappers, reactNamespaces } =
         collectFileReactClassImports(sf);
       for (const stmt of sf.statements) {
         if (hasDeclareModifier(stmt)) continue;
@@ -132,6 +132,7 @@ export function createVirtualComponentExportResolver(
       }
       const classEnv = {
         reactClassBases,
+        reactHocWrappers,
         reactNamespaces,
         isVerifiedLocalClass: (at: ts.Node, ident: string) =>
           !reassigned.has(ident) &&
@@ -162,7 +163,8 @@ export function createVirtualComponentExportResolver(
                 d.initializer,
                 (n) =>
                   n === d.name.getText(sf) ? null : (localSafe.get(n) ?? null),
-                isValidClassExpr
+                isValidClassExpr,
+                classEnv
               );
               if (k) localSafe.set(d.name.text, k);
             }
@@ -204,7 +206,8 @@ export function createVirtualComponentExportResolver(
           const k = resolveDirectComponentKind(
             stmt.expression.right,
             (n) => localSafe.get(n) ?? null,
-            isValidClassExpr
+            isValidClassExpr,
+            classEnv
           );
           if (k) exported.set('default', k);
         } else if (
@@ -221,7 +224,8 @@ export function createVirtualComponentExportResolver(
           const k = resolveDirectComponentKind(
             stmt.expression,
             (n) => localSafe.get(n) ?? null,
-            isValidClassExpr
+            isValidClassExpr,
+            classEnv
           );
           if (k) exported.set('default', k);
         } else if (ts.isExportDeclaration(stmt)) {

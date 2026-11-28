@@ -1,6 +1,7 @@
 import { buildFramedAnchorInterceptorSnippet } from './framed-anchor-snippet';
 import { buildHostBootstrapStateSnippet } from './host-bootstrap-state-snippet';
 import { buildFramedHostPortSnippet } from './host-port-snippet';
+import { buildRouteEnrichmentSnippet } from './route-enrichment-snippet';
 import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
 
 export function buildClientHydrationEntrySource(
@@ -20,6 +21,7 @@ const DECLARED_ROUTES = ${JSON.stringify(routes)};
 ${buildDeclaredRouteMatcherSnippet()}
 ${buildFramedHostPortSnippet(previewOrigin, hostOrigin)}
 ${buildHostBootstrapStateSnippet()}
+${buildRouteEnrichmentSnippet()}
 ${buildFramedAnchorInterceptorSnippet()}
 const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;
 function resolveSafeInternalPath(p) {
@@ -60,29 +62,6 @@ function resolveDeclaredNavigationTarget(rawPath) {
   }
   const fallbackId = target.pathname === '/' ? 'home' : target.pathname.split('/').filter(Boolean)[0] || 'route';
   return { ok: true, normalized: target.normalized, routeId: fallbackId, params: {} };
-}
-function isDeclaredManifestAsset(id) {
-  return typeof id === 'string' && Object.prototype.hasOwnProperty.call(ASSETS_MAP, id);
-}
-function seedInitialCatalogAssets(target, state) {
-  const rows = Array.isArray(state?.products)
-    ? state.productDetail
-      ? [...state.products, state.productDetail]
-      : state.products
-    : state?.productDetail
-      ? [state.productDetail]
-      : [];
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    if (r && typeof r === 'object' && typeof r.imageUrl === 'string' && r.imageUrl.length > 0) {
-      const rawAid =
-        r.image && typeof r.image === 'object' && typeof r.image.assetId === 'string' && r.image.assetId.length > 0
-          ? r.image.assetId
-          : '';
-      const aid = rawAid && !isDeclaredManifestAsset(rawAid) ? rawAid : \`catalog-product-\${String(r.id || r.slug || i)}\`;
-      if (!isDeclaredManifestAsset(aid)) target[aid] = r.imageUrl;
-    }
-  }
 }
 const rootElement = document.getElementById('root');
 const stateScript = document.getElementById('__BACI_STOREFRONT_STATE__');
@@ -253,6 +232,16 @@ if (rootElement && stateScript?.textContent) {
       reactRoot = hydrateRoot(rootElement, buildAppTree(currentProps, 0, routeEpoch), {
         onUncaughtError: () => notifyHostRenderFailed(),
       });
+      const refreshRouteEnrichment = createRouteEnricher(
+        initialProps,
+        runtimeAssets,
+        enrichedCatalogCache,
+        () => ({ props: currentProps, epoch: routeEpoch }),
+        (nextProps) => {
+          currentProps = nextProps;
+          scheduleHydratedRender();
+        }
+      );
       registerHostStateHandlers(
         (bootstrap) => {
           if (!bootstrap || typeof bootstrap !== 'object') return false;
@@ -269,6 +258,7 @@ if (rootElement && stateScript?.textContent) {
             bootstrap,
           };
           currentRevision = currentProps.publicDataRevision;
+          refreshRouteEnrichment(currentProps.pathname, routeEpoch, bootstrap);
           return scheduleHydratedRender();
         },
         (route) => {
@@ -278,6 +268,7 @@ if (rootElement && stateScript?.textContent) {
           }
           currentProps = deriveNextRenderProps(currentProps, route, null, runtimeAssets, enrichedCatalogCache);
           currentRevision = currentProps.publicDataRevision;
+          refreshRouteEnrichment(currentProps.pathname, routeEpoch, null);
           scheduleHydratedRender();
         }
       );

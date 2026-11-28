@@ -7,6 +7,7 @@ function normalizeSsrCatalogProduct(p) {
     const vAvail = typeof v.available === 'boolean' ? v.available : v.inStock === true;
     return {
       id: v.id,
+      ...(typeof v.sku === 'string' && v.sku.length > 0 ? { sku: v.sku } : {}),
       label: v.label,
       ...(typeof v.storage === 'string' ? { storage: v.storage } : {}),
       ...(typeof v.color === 'string' ? { color: v.color } : {}),
@@ -43,6 +44,7 @@ function normalizeSsrCatalogProduct(p) {
   return {
     id: p.id,
     slug: p.slug,
+    ...(typeof p.sku === 'string' && p.sku.length > 0 ? { sku: p.sku } : {}),
     name: p.name,
     categorySlug: typeof p.categorySlug === 'string' ? p.categorySlug : '',
     ...(typeof p.categoryName === 'string' ? { categoryName: p.categoryName } : {}),

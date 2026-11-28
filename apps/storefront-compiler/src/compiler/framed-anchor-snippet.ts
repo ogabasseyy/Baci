@@ -34,7 +34,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
   container.addEventListener('click', (event) => {
     if (!event || event.defaultPrevented || event.type !== 'click') return;
     if (typeof event.button === 'number' && event.button !== 0) return;
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (event.shiftKey || event.altKey) return;
     let node = event.target;
     while (node && node !== container) {
       const tag = typeof node.tagName === 'string' ? node.tagName.toUpperCase() : '';
@@ -44,9 +44,11 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     const foundTag = node && typeof node.tagName === 'string' ? node.tagName.toUpperCase() : '';
     if (foundTag !== 'A' && foundTag !== 'AREA') return;
     const targetAttr = readDomStringAttr(node, 'target', 'target');
-    if (typeof targetAttr === 'string' && targetAttr.trim().length > 0 && targetAttr.trim().toLowerCase() !== '_self') {
+    const normalizedTarget = typeof targetAttr === 'string' ? targetAttr.trim().toLowerCase() : '';
+    if (normalizedTarget.length > 0 && normalizedTarget !== '_self' && normalizedTarget !== '_blank') {
       return;
     }
+    const wantsNewTab = normalizedTarget === '_blank' || Boolean(event.metaKey || event.ctrlKey);
     const rawHref = readDomStringAttr(node, 'href', 'href');
     if (typeof rawHref !== 'string' || rawHref.length === 0 || rawHref.startsWith('#')) return;
     try {
@@ -54,7 +56,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
       const baseOrigin = new URL(baseHref).origin;
       const parsed = new URL(rawHref, baseHref);
       if (!isStorefrontCanonicalOrigin(parsed.origin, baseOrigin)) {
-        if (parsed.origin !== 'https://usebaci.com') event.preventDefault();
+        if (!wantsNewTab && parsed.origin !== 'https://usebaci.com') event.preventDefault();
         return;
       }
       if ((rawHref.startsWith('/') && rawHref.includes('//')) || /[%\\\\]/.test(rawHref) || parsed.pathname.includes('//')) {
@@ -68,7 +70,15 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
       }
       if (parsed.search || parsed.hash) return;
       event.preventDefault();
-      void commerce.navigation.go(parsed.pathname);
+      if (wantsNewTab) {
+        void Promise.resolve(commerce.navigation.open(parsed.pathname)).then((res) => {
+          if (res && res.status === 'ok' && res.value && res.value.presented === false) {
+            void commerce.navigation.go(parsed.pathname);
+          }
+        });
+      } else {
+        void commerce.navigation.go(parsed.pathname);
+      }
     } catch {}
   });
 

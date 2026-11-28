@@ -22,9 +22,11 @@ function unwrapExpr(expr: ts.Expression): ts.Expression {
 
 export function collectFileReactClassImports(sf: ts.SourceFile): {
   reactClassBases: Set<string>;
+  reactHocWrappers: Map<string, 'memo' | 'forwardRef'>;
   reactNamespaces: Set<string>;
 } {
   const reactClassBases = new Set<string>();
+  const reactHocWrappers = new Map<string, 'memo' | 'forwardRef'>();
   const reactNamespaces = new Set<string>();
   for (const stmt of sf.statements) {
     if (
@@ -47,12 +49,14 @@ export function collectFileReactClassImports(sf: ts.SourceFile): {
           const orig = (el.propertyName ?? el.name).text;
           if (orig === 'Component' || orig === 'PureComponent') {
             reactClassBases.add(el.name.text);
+          } else if (orig === 'memo' || orig === 'forwardRef') {
+            reactHocWrappers.set(el.name.text, orig);
           }
         }
       }
     }
   }
-  return { reactClassBases, reactNamespaces };
+  return { reactClassBases, reactHocWrappers, reactNamespaces };
 }
 
 function hasConcreteInstanceRenderMember(
@@ -117,22 +121,39 @@ export function isVerifiedReactClassNode(
   return false;
 }
 
-function isWrapperHocCallee(callee: ts.Expression): boolean {
-  if (ts.isIdentifier(callee)) {
-    return callee.text === 'forwardRef' || callee.text === 'memo';
+export interface ReactHocEnv {
+  reactHocWrappers: ReadonlyMap<string, 'memo' | 'forwardRef'>;
+  reactNamespaces: ReadonlySet<string>;
+  isShadowed?: (atNode: ts.Node, ident: string) => boolean;
+}
+
+function getWrapperHocKind(
+  callee: ts.Expression,
+  env?: ReactHocEnv
+): 'memo' | 'forwardRef' | null {
+  if (!env) return null;
+  const inner = unwrapExpr(callee);
+  if (ts.isIdentifier(inner)) {
+    if (env.isShadowed?.(inner, inner.text)) return null;
+    return env.reactHocWrappers.get(inner.text) ?? null;
   }
-  return (
-    ts.isPropertyAccessExpression(callee) &&
-    ts.isIdentifier(callee.expression) &&
-    callee.expression.text === 'React' &&
-    (callee.name.text === 'forwardRef' || callee.name.text === 'memo')
-  );
+  if (
+    ts.isPropertyAccessExpression(inner) &&
+    ts.isIdentifier(inner.expression) &&
+    !env.isShadowed?.(inner.expression, inner.expression.text) &&
+    env.reactNamespaces.has(inner.expression.text)
+  ) {
+    const name = inner.name.text;
+    return name === 'forwardRef' || name === 'memo' ? name : null;
+  }
+  return null;
 }
 
 export function resolveDirectComponentKind(
   expr: ts.Expression,
   lookupKind: (name: string) => SafeExportKind | null,
-  isValidClass?: (cls: ts.ClassExpression) => boolean
+  isValidClass?: (cls: ts.ClassExpression) => boolean,
+  hocEnv?: ReactHocEnv
 ): SafeExportKind | null {
   const inner = unwrapExpr(expr);
   if (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) {
@@ -142,14 +163,26 @@ export function resolveDirectComponentKind(
     return isValidClass?.(inner) ? 'reactClass' : null;
   }
   if (ts.isIdentifier(inner)) return lookupKind(inner.text);
-  if (ts.isCallExpression(inner) && isWrapperHocCallee(inner.expression)) {
+  if (ts.isCallExpression(inner)) {
+    const hocKind = getWrapperHocKind(inner.expression, hocEnv);
+    if (!hocKind) return null;
     const arg0 = inner.arguments[0];
     if (arg0 === undefined) return null;
+    const unwrappedArg = unwrapExpr(arg0);
+    if (
+      hocKind === 'forwardRef' &&
+      ts.isCallExpression(unwrappedArg) &&
+      getWrapperHocKind(unwrappedArg.expression, hocEnv) !== null
+    ) {
+      return null;
+    }
     const innerKind = resolveDirectComponentKind(
       arg0,
       lookupKind,
-      isValidClass
+      isValidClass,
+      hocEnv
     );
+    if (hocKind === 'forwardRef' && innerKind === 'reactClass') return null;
     return innerKind === 'reactClass' ? 'component' : innerKind;
   }
   return null;

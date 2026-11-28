@@ -60,10 +60,13 @@ export function executeSimulatedAnonCatalogRpc(
   if (url.pathname === '/v1/product') {
     const slug = url.searchParams.get('productSlug') ?? '';
     const productId = url.searchParams.get('productId') ?? '';
+    const sku = url.searchParams.get('sku') ?? '';
     const category = url.searchParams.get('category');
     const found = publishedRows.find(
       (row) =>
-        ((slug !== '' && row.slug === slug) ||
+        ((sku !== '' &&
+          (row.slug === sku || row.variants.some((v) => v.sku === sku))) ||
+          (slug !== '' && row.slug === slug) ||
           (productId !== '' && row.id === productId)) &&
         (!category || row.categorySlug === category)
     );

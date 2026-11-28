@@ -250,7 +250,7 @@ export default {
           : Array.isArray(productDetail.variants) && productDetail.variants.some((v) => (typeof v.available === 'boolean' ? v.available : v.inStock === true))
       : false;
     const jsonLd = status === 200 && view === 'product' && productDetail
-      ? { '@context': 'https://schema.org', '@type': 'Product', name: productDetail.name, brand: { '@type': 'Brand', name: productDetail.brand }, offers: { '@type': 'Offer', priceCurrency: 'NGN', price: productDetail.priceNgn ?? productDetail.price, availability: pdInStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } }
+      ? { '@context': 'https://schema.org', '@type': 'Product', name: productDetail.name, brand: { '@type': 'Brand', name: productDetail.brand }, offers: { '@type': 'Offer', priceCurrency: productDetail.currency || 'NGN', price: productDetail.priceNgn ?? productDetail.price, availability: pdInStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } }
       : { '@context': 'https://schema.org', '@type': view === 'collection' ? 'CollectionPage' : 'WebSite', name: title, url: url.origin + url.pathname };
     const robotsMeta = status !== 200 ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow" />';
     const hydrationBootstrap = status >= 500 ? '' : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;

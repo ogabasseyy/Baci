@@ -10,6 +10,22 @@ const KNOWN_STOREFRONT_VIEWS = new Set([
   'not_found',
 ]);
 
+function hasOwnEnrichedCardFields(p) {
+  return (
+    (typeof p?.brand === 'string' && p.brand.length > 0) ||
+    (typeof p?.condition === 'string' && p.condition.length > 0) ||
+    (typeof p?.shortSpecs === 'string' && p.shortSpecs.length > 0)
+  );
+}
+
+function isUncachedNarrowBootstrapRow(p, cache) {
+  if (!p || typeof p !== 'object' || hasOwnEnrichedCardFields(p)) return false;
+  const pid = typeof p.id === 'string' && p.id.length > 0 ? 'id:' + p.id : '';
+  const pslug = typeof p.slug === 'string' && p.slug.length > 0 ? 'slug:' + p.slug : '';
+  const cached = (pid && cache?.get(pid)) || (pslug && cache?.get(pslug)) || null;
+  return !hasOwnEnrichedCardFields(cached);
+}
+
 function rememberEnrichedProducts(cache, state) {
   const rows = Array.isArray(state?.products)
     ? state.productDetail
@@ -144,31 +160,73 @@ function deriveNextRenderProps(prevProps, routeObj, catalogObj, assetsTarget, en
     : prevProps.view;
   const mergedParams = { ...(matched?.params || {}), ...(routeObj?.params && typeof routeObj.params === 'object' ? routeObj.params : {}) };
   const fallbackCat = mergedParams.category || mergedParams.categorySlug || mergedParams.collection || mergedParams.handle || '';
+  const prevList = Array.isArray(prevProps.products) ? prevProps.products : [];
+  const prevProductsPath =
+    typeof prevProps._productsPathname === 'string' && prevProps._productsPathname.length > 0
+      ? prevProps._productsPathname
+      : prevProps.pathname || '/';
   const hasCatalog = Array.isArray(catalogObj?.products);
-  const products = hasCatalog
-    ? catalogObj.products.filter((p) => p && typeof p === 'object').map((p) => normalizeHostBootstrapProduct(p, assetsTarget, fallbackCat, enrichedCache))
-    : Array.isArray(prevProps.products)
-      ? prevProps.products
-      : [];
+  const rawCatalogRows = hasCatalog ? catalogObj.products.filter((p) => p && typeof p === 'object') : [];
+  const keepSsrSubsetOnSameRoute =
+    hasCatalog &&
+    rawCatalogRows.length > 0 &&
+    prevList.length > 0 &&
+    pathname === prevProductsPath &&
+    view === prevProps.view &&
+    rawCatalogRows.some((p) => isUncachedNarrowBootstrapRow(p, enrichedCache));
+  let products = prevList;
+  let preservedSsrSubset = false;
+  if (hasCatalog) {
+    if (rawCatalogRows.length === 0) {
+      products = [];
+    } else if (keepSsrSubsetOnSameRoute) {
+      const byId = new Map();
+      const bySlug = new Map();
+      for (let i = 0; i < rawCatalogRows.length; i++) {
+        const row = rawCatalogRows[i];
+        if (typeof row.id === 'string' && row.id) byId.set(row.id, row);
+        if (typeof row.slug === 'string' && row.slug) bySlug.set(row.slug, row);
+      }
+      const matchedPrev = [];
+      for (let i = 0; i < prevList.length; i++) {
+        const prevItem = prevList[i];
+        const liveRow = (prevItem?.id && byId.get(prevItem.id)) || (prevItem?.slug && bySlug.get(prevItem.slug)) || null;
+        if (liveRow) matchedPrev.push(normalizeHostBootstrapProduct(liveRow, assetsTarget, fallbackCat, enrichedCache));
+      }
+      if (matchedPrev.length > 0) {
+        products = matchedPrev;
+        preservedSsrSubset = true;
+      } else {
+        products = rawCatalogRows.map((p) => normalizeHostBootstrapProduct(p, assetsTarget, fallbackCat, enrichedCache));
+      }
+    } else {
+      products = rawCatalogRows.map((p) => normalizeHostBootstrapProduct(p, assetsTarget, fallbackCat, enrichedCache));
+    }
+  }
   let facets = prevProps.facets;
   if (catalogObj?.facets && Array.isArray(catalogObj.facets.brands) && Array.isArray(catalogObj.facets.conditions)) {
     facets = catalogObj.facets;
   } else if (hasCatalog) {
-    const derived = buildFacetsFromProducts(products);
-    const prevList = Array.isArray(prevProps.products) ? prevProps.products : [];
-    const sameMembership =
-      products.length > 0 &&
-      prevList.length === products.length &&
-      products.every((p, idx) => (p.id && p.id === prevList[idx]?.id) || (p.slug && p.slug === prevList[idx]?.slug));
-    const preservePrevFacets =
-      sameMembership &&
-      derived.brands.length === 0 &&
-      derived.conditions.length === 0 &&
-      pathname === prevProps.pathname &&
-      prevProps.facets &&
-      (Array.isArray(prevProps.facets.brands) && prevProps.facets.brands.length > 0 ||
-        Array.isArray(prevProps.facets.conditions) && prevProps.facets.conditions.length > 0);
-    facets = preservePrevFacets ? { ...prevProps.facets, totalMatches: products.length } : derived;
+    if (products.length === 0) {
+      facets = { brands: [], conditions: [], totalMatches: 0 };
+    } else if (preservedSsrSubset && products.length === prevList.length && prevProps.facets) {
+      facets = prevProps.facets;
+    } else {
+      const derived = buildFacetsFromProducts(products);
+      const sameMembership =
+        pathname === prevProductsPath &&
+        products.length > 0 &&
+        prevList.length === products.length &&
+        products.every((p, idx) => (p.id && p.id === prevList[idx]?.id) || (p.slug && p.slug === prevList[idx]?.slug));
+      facets =
+        sameMembership &&
+        derived.brands.length === 0 &&
+        derived.conditions.length === 0 &&
+        prevProps.facets &&
+        (prevProps.facets.brands?.length > 0 || prevProps.facets.conditions?.length > 0)
+          ? { ...prevProps.facets, totalMatches: products.length }
+          : derived;
+    }
   }
   let productDetail = prevProps.productDetail ?? null;
   if (view !== 'product') {
@@ -200,6 +258,7 @@ function deriveNextRenderProps(prevProps, routeObj, catalogObj, assetsTarget, en
         : prevProps.publicDataRevision || '0';
   const nextState = {
     ...prevProps,
+    _productsPathname: hasCatalog ? pathname : prevProductsPath,
     view: effectiveView,
     pathname,
     title,

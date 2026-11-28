@@ -65,11 +65,10 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
   const isPermittedTargetOrigin = (origin, baseOrigin) =>
     origin === baseOrigin || origin === 'https://usebaci.com' || origin === \`https://\${slug}.usebaci.com\`;
 
-  const handleAnchorEvent = (event) => {
-    if (!event || event.defaultPrevented) return;
-    const isAux = event.type === 'auxclick';
-    if (isAux && event.button !== 1) return;
-    if (!isAux && typeof event.button === 'number' && event.button !== 0) return;
+  container.addEventListener('click', (event) => {
+    if (!event || event.defaultPrevented || event.type !== 'click') return;
+    if (typeof event.button === 'number' && event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     let node = event.target;
     while (node && node !== container) {
       const tag = typeof node.tagName === 'string' ? node.tagName.toUpperCase() : '';
@@ -78,11 +77,13 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     }
     const foundTag = node && typeof node.tagName === 'string' ? node.tagName.toUpperCase() : '';
     if (foundTag !== 'A' && foundTag !== 'AREA') return;
+    const targetAttr = readDomStringAttr(node, 'target', 'target');
+    if (typeof targetAttr === 'string' && targetAttr.trim().length > 0 && targetAttr.trim().toLowerCase() !== '_self') {
+      return;
+    }
     const rawHref = readDomStringAttr(node, 'href', 'href');
     if (typeof rawHref !== 'string' || rawHref.length === 0 || rawHref.startsWith('#')) return;
     event.preventDefault();
-    const targetAttr = readDomStringAttr(node, 'target', 'target');
-    const openNew = isAux || targetAttr === '_blank' || Boolean(event.metaKey || event.ctrlKey || event.shiftKey);
     try {
       const baseHref = getBaseHref();
       const baseOrigin = new URL(baseHref).origin;
@@ -93,15 +94,19 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
         return;
       }
       const rel = parsed.pathname + parsed.search + parsed.hash;
-      void (openNew ? commerce.navigation.open(rel) : commerce.navigation.go(rel));
+      void commerce.navigation.go(rel);
     } catch {}
-  };
-  container.addEventListener('click', handleAnchorEvent);
-  container.addEventListener('auxclick', handleAnchorEvent);
+  });
+
   container.addEventListener('submit', (event) => {
     if (!event || event.defaultPrevented) return;
     const form = event.target;
     const submitter = event.submitter || null;
+    const subTarget = readDomStringAttr(submitter, 'formtarget', 'formTarget');
+    const chosenTarget = subTarget !== null ? subTarget : readDomStringAttr(form, 'target', 'target');
+    if (typeof chosenTarget === 'string' && chosenTarget.trim().length > 0 && chosenTarget.trim().toLowerCase() !== '_self') {
+      return;
+    }
     const subMethod = readDomStringAttr(submitter, 'formmethod', 'formMethod');
     const rawMethod = subMethod !== null && subMethod.trim().length > 0 ? subMethod : readDomStringAttr(form, 'method', 'method');
     const formMethod = typeof rawMethod === 'string' && rawMethod.trim().length > 0 ? rawMethod.trim().toLowerCase() : 'get';
@@ -111,8 +116,6 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     const subAction = readDomStringAttr(submitter, 'formaction', 'formAction');
     const formAction = readDomStringAttr(form, 'action', 'action');
     const chosenAction = subAction !== null ? subAction : formAction;
-    const subTarget = readDomStringAttr(submitter, 'formtarget', 'formTarget');
-    const chosenTarget = subTarget !== null && subTarget.length > 0 ? subTarget : readDomStringAttr(form, 'target', 'target');
     try {
       const baseHref = getBaseHref();
       const baseOrigin = new URL(baseHref).origin;
@@ -126,7 +129,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
       const qs = serializeGetFormParams(form, submitter).toString();
       parsed.search = qs ? \`?\${qs}\` : '';
       const rel = parsed.pathname + parsed.search + parsed.hash;
-      void (chosenTarget === '_blank' ? commerce.navigation.open(rel) : commerce.navigation.go(rel));
+      void commerce.navigation.go(rel);
     } catch {}
   });
 }

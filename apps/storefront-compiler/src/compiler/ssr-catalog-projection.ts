@@ -37,7 +37,7 @@ function normalizeSsrCatalogProduct(p) {
     condition: typeof p.condition === 'string' ? p.condition : '',
     priceNgn: pPrice,
     price: isFiniteNumber(p.price) ? p.price : pPrice,
-    currency: typeof p.currency === 'string' ? p.currency : 'NGN',
+    currency: typeof p.currency === 'string' && /^[A-Z]{3}$/.test(p.currency) ? p.currency : 'NGN',
     inStock: pAvail,
     available: pAvail,
     ...(typeof p.requiresVariant === 'boolean' ? { requiresVariant: p.requiresVariant } : {}),

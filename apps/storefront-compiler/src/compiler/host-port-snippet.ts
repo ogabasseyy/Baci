@@ -12,6 +12,7 @@ let hostEpoch = 1;
 let hostReqSeq = 0;
 let hostBootstrapReceived = false;
 let hostRenderCommitted = false;
+let hostCommittedEpoch = 0;
 let hostRenderFailed = false;
 let hostCommitSent = false;
 let lastHostBootstrap = null;
@@ -36,10 +37,19 @@ function registerHostStateHandlers(onBootstrap, onRoute) {
   }
 }
 
-function notifyHostRenderCommitted() {
+function notifyHostRenderCommitted(epochArg) {
   if (hostRenderFailed) return;
   hostRenderCommitted = true;
-  if (hostPort && hostNonce && hostBootstrapReceived && !hostCommitSent) {
+  const effectiveEpoch =
+    Number.isSafeInteger(epochArg) && epochArg >= 1 ? epochArg : hostEpoch;
+  if (effectiveEpoch > hostCommittedEpoch) hostCommittedEpoch = effectiveEpoch;
+  if (
+    hostPort &&
+    hostNonce &&
+    hostBootstrapReceived &&
+    !hostCommitSent &&
+    (epochArg === undefined || hostCommittedEpoch >= hostEpoch)
+  ) {
     hostCommitSent = true;
     hostPort.postMessage({ type: 'render-committed', nonce: hostNonce, epoch: hostEpoch });
   }
@@ -80,10 +90,11 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
         hostBootstrapReceived = true;
         lastHostBootstrap = m.bootstrap;
         lastHostRoute = m.bootstrap.route;
+        let rerenderInFlight = false;
         if (typeof onHostBootstrapUpdate === 'function') {
-          onHostBootstrapUpdate(m.bootstrap);
+          rerenderInFlight = onHostBootstrapUpdate(m.bootstrap) === true;
         }
-        if (hostRenderCommitted && !hostRenderFailed && !hostCommitSent) {
+        if (!rerenderInFlight && hostRenderCommitted && !hostRenderFailed && !hostCommitSent) {
           hostCommitSent = true;
           hostPort?.postMessage({ type: 'render-committed', nonce: hostNonce, epoch: hostEpoch });
         }
@@ -216,6 +227,9 @@ function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
       if (method === 'navigation.go' && raw.status === 'ok' && isValidHostRouteState(raw.value)) {
         if (raw.value.epoch > hostEpoch) hostEpoch = raw.value.epoch;
         return { status: 'ok', value: raw.value };
+      }
+      if (method === 'navigation.open' && raw.status === 'error' && raw.code === 'INVALID_REQUEST' && raw.message === 'Use the trusted storefront link.') {
+        return { status: 'ok', value: { presented: false } };
       }
       if (raw.status === 'error' && typeof raw.code === 'string' && typeof raw.message === 'string') {
         return { status: 'error', code: raw.code, message: raw.message };

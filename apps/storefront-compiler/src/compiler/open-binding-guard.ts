@@ -27,24 +27,17 @@ function isPureBooleanOpenRead(id: ts.Identifier): boolean {
       op === ts.SyntaxKind.ExclamationEqualsToken
     )
       return true;
-    if (
-      (op === ts.SyntaxKind.AmpersandAmpersandToken ||
-        op === ts.SyntaxKind.BarBarToken ||
-        op === ts.SyntaxKind.QuestionQuestionToken) &&
-      p.left === id
-    )
+    if (op === ts.SyntaxKind.AmpersandAmpersandToken && p.left === id)
       return true;
   }
-  if (
+  return (
     ts.isCallExpression(p) &&
     ts.isIdentifier(p.expression) &&
     p.expression.text === 'Boolean' &&
     p.arguments.length === 1 &&
     p.arguments[0] === id &&
     !hasLocalLexicalBinding(p.expression, 'Boolean')
-  )
-    return true;
-  return ts.isJsxExpression(p) && ts.isJsxAttribute(p.parent);
+  );
 }
 
 function scopeDeclaresShadow(scope: ts.Node, target: string): boolean {
@@ -118,6 +111,7 @@ export function checkOpenDestructuringSafety(
           !param ||
           !fnScope ||
           node.dotDotDotToken ||
+          node.propertyName !== undefined ||
           !ts.isIdentifier(node.name)
         ) {
           violations.push({

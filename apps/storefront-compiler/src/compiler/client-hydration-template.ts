@@ -99,6 +99,7 @@ if (rootElement && stateScript?.textContent) {
       let StorefrontApp = null;
       let hydrationCommitted = false;
       let pendingPostCommitRender = false;
+      let renderSeq = 0;
       const commerce = createCommerceClient(async (method, args) => {
         if (
           method === 'catalog.collection' ||
@@ -211,11 +212,14 @@ if (rootElement && stateScript?.textContent) {
           if (pendingPostCommitRender) {
             pendingPostCommitRender = false;
             if (reactRoot && typeof reactRoot.render === 'function') {
-              reactRoot.render(buildAppTree(currentProps));
+              reactRoot.render(buildAppTree(currentProps, ++renderSeq, routeEpoch));
+              return;
             }
+            notifyHostRenderCommitted();
+            return;
           }
-          notifyHostRenderCommitted();
-        }, []);
+          notifyHostRenderCommitted(props.renderEpoch);
+        }, [props.renderSeq, props.renderEpoch]);
         return props.children;
       }
       const mod = await import(${JSON.stringify(`./${entryPath}`)});
@@ -224,27 +228,29 @@ if (rootElement && stateScript?.textContent) {
         return;
       }
       StorefrontApp = mod.default;
-      const buildAppTree = (propsToRender) =>
+      const buildAppTree = (propsToRender, seq = renderSeq, epochVal = routeEpoch) =>
         createElement(
           CommerceProvider,
           { commerce, assets: runtimeAssets },
-          createElement(HydrationCommitGate, null, createElement(StorefrontApp, propsToRender))
+          createElement(HydrationCommitGate, { renderSeq: seq, renderEpoch: epochVal }, createElement(StorefrontApp, propsToRender))
         );
       const scheduleHydratedRender = () => {
         if (!hydrationCommitted) {
           pendingPostCommitRender = true;
-          return;
+          return true;
         }
         if (reactRoot && typeof reactRoot.render === 'function') {
-          reactRoot.render(buildAppTree(currentProps));
+          reactRoot.render(buildAppTree(currentProps, ++renderSeq, routeEpoch));
+          return true;
         }
+        return false;
       };
-      reactRoot = hydrateRoot(rootElement, buildAppTree(currentProps), {
+      reactRoot = hydrateRoot(rootElement, buildAppTree(currentProps, 0, routeEpoch), {
         onUncaughtError: () => notifyHostRenderFailed(),
       });
       registerHostStateHandlers(
         (bootstrap) => {
-          if (!bootstrap || typeof bootstrap !== 'object') return;
+          if (!bootstrap || typeof bootstrap !== 'object') return false;
           if (bootstrap.assets && typeof bootstrap.assets === 'object' && !Array.isArray(bootstrap.assets)) {
             for (const [aid, aurl] of Object.entries(bootstrap.assets)) {
               if (typeof aurl === 'string') runtimeAssets[aid] = aurl;
@@ -258,7 +264,7 @@ if (rootElement && stateScript?.textContent) {
             bootstrap,
           };
           currentRevision = currentProps.publicDataRevision;
-          scheduleHydratedRender();
+          return scheduleHydratedRender();
         },
         (route) => {
           if (!route || typeof route !== 'object') return;

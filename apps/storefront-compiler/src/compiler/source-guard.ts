@@ -27,6 +27,7 @@ import {
   resolveStaticString,
   type SourceSafetyViolation,
 } from './source-guard-ast';
+import { checkBrowserGlobalSsrSafety } from './ssr-browser-global-guard';
 
 export { isProhibitedImportSpecifier, type SourceSafetyViolation };
 
@@ -293,7 +294,7 @@ export function scanManifestSourceSafety(
       violations,
       isSdkOpenReceiver.isCommerceRoot
     );
+    checkBrowserGlobalSsrSafety(sourceFile, filePath, violations);
   }
-
   return violations;
 }

@@ -13,8 +13,8 @@ import {
 describe('Round-10 & Round-12 SSR containment, aliased JSX tags, ownerDocument.write, and catalog JSON validation', () => {
   it('contains top-level and render-time merchant failures inside fetch() while allowing forwardRef default exports', async () => {
     for (const crashingSource of [
-      `const brokenTopLevelWidth = window.innerWidth;
-       export default function App() { return <main>{String(brokenTopLevelWidth)}</main>; }`,
+      `const brokenTopLevelConfig = JSON.parse('{malformed');
+       export default function App() { return <main>{String(brokenTopLevelConfig)}</main>; }`,
       `export default function CrashingApp(props: { productDetail: { name: string } | null }) {
          if (!props.productDetail) throw new Error('Merchant bug');
          return <main>{props.productDetail.name}</main>;

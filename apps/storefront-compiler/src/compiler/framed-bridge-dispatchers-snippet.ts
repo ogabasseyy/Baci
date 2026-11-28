@@ -42,7 +42,7 @@ function dispatchFramedNavigationNow(method, safePath, fallbackEpoch, timeoutMs 
   });
 }
 
-function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
+function dispatchFramedNavigation(method, safePath, fallbackEpoch, navHooks) {
   if (method !== 'navigation.go') {
     return dispatchFramedNavigationNow(method, safePath, fallbackEpoch);
   }
@@ -60,9 +60,14 @@ function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
   const next = framedNavigationChain
     .then(() => {
       const rem = deadline - Date.now();
-      return rem <= 0
-        ? { status: 'error', code: 'INVALID_REQUEST', message: 'Host bridge request timed out' }
-        : dispatchFramedNavigationNow(method, safePath, fallbackEpoch, rem);
+      if (rem <= 0) {
+        return { status: 'error', code: 'INVALID_REQUEST', message: 'Host bridge request timed out' };
+      }
+      const navToken = typeof navHooks?.onSend === 'function' ? navHooks.onSend() : null;
+      return dispatchFramedNavigationNow(method, safePath, fallbackEpoch, rem).then((res) => {
+        if (typeof navHooks?.onSettle === 'function') navHooks.onSettle(navToken, res);
+        return res;
+      });
     })
     .finally(() => {
       framedNavBacklog--;

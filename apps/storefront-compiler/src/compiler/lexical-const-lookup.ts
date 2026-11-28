@@ -133,6 +133,7 @@ export function hasInnerShadowing(atNode: ts.Node, target: string): boolean {
       ts.isFunctionExpression(cur) ||
       ts.isArrowFunction(cur) ||
       ts.isMethodDeclaration(cur) ||
+      ts.isSetAccessorDeclaration(cur) ||
       ts.isConstructorDeclaration(cur)
     ) {
       if (cur.parameters.some((p) => bindingContainsName(p.name, target))) {
@@ -192,6 +193,7 @@ export function findLexicalConstDeclaration(
       ts.isFunctionExpression(cur) ||
       ts.isArrowFunction(cur) ||
       ts.isMethodDeclaration(cur) ||
+      ts.isSetAccessorDeclaration(cur) ||
       ts.isConstructorDeclaration(cur)
     ) {
       if (cur.parameters.some((p) => bindingContainsName(p.name, target))) {

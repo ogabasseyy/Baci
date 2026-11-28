@@ -139,10 +139,8 @@ if (rootElement && stateScript?.textContent) {
           const resolved = resolveDeclaredNavigationTarget(args?.path);
           if (!resolved.ok) return resolved.error;
           if (window.parent && window.parent !== window) {
-            if (resolved.search && refreshRouteEnrichment?.rememberPendingQuery) {
-              refreshRouteEnrichment.rememberPendingQuery(resolved.pathname, resolved.search);
-            }
-            const framedRes = await dispatchFramedNavigation('navigation.go', resolved.pathname, routeEpoch);
+            const navHooks = refreshRouteEnrichment?.createNavHooks?.(resolved.pathname, resolved.search);
+            const framedRes = await dispatchFramedNavigation('navigation.go', resolved.pathname, routeEpoch, navHooks);
             if (framedRes.status === 'ok') {
               if (framedRes.value.epoch > routeEpoch) routeEpoch = framedRes.value.epoch;
               currentRevision = framedRes.value.publicDataRevision;
@@ -255,29 +253,27 @@ if (rootElement && stateScript?.textContent) {
               if (typeof aurl === 'string' && !isDeclaredManifestAsset(aid)) runtimeAssets[aid] = aurl;
             }
           }
-          if (Number.isSafeInteger(bootstrap.route?.epoch) && bootstrap.route.epoch > routeEpoch) {
-            routeEpoch = bootstrap.route.epoch;
-          }
+          const bootEpoch = Number.isSafeInteger(bootstrap.route?.epoch) ? bootstrap.route.epoch : routeEpoch;
+          if (bootEpoch > routeEpoch) routeEpoch = bootEpoch;
           currentProps = {
             ...deriveNextRenderProps(currentProps, bootstrap.route, bootstrap.catalog, runtimeAssets, enrichedCatalogCache),
             bootstrap,
           };
           currentRevision = currentProps.publicDataRevision;
-          refreshRouteEnrichment(currentProps.pathname, routeEpoch, bootstrap);
+          refreshRouteEnrichment(currentProps.pathname, bootEpoch, bootstrap);
           return scheduleHydratedRender();
         },
         (route) => {
           if (!route || typeof route !== 'object') return;
-          if (Number.isSafeInteger(route.epoch) && route.epoch > routeEpoch) {
-            routeEpoch = route.epoch;
-          }
+          const evtEpoch = Number.isSafeInteger(route.epoch) ? route.epoch : routeEpoch;
+          if (evtEpoch > routeEpoch) routeEpoch = evtEpoch;
           currentProps = deriveNextRenderProps(currentProps, route, null, runtimeAssets, enrichedCatalogCache);
           currentRevision = currentProps.publicDataRevision;
-          refreshRouteEnrichment(currentProps.pathname, routeEpoch, null);
+          refreshRouteEnrichment(currentProps.pathname, evtEpoch, null);
           scheduleHydratedRender();
         }
       );
-      attachFramedNavigationInterceptors(rootElement, commerce, initialProps, () => currentProps?.pathname, refreshRouteEnrichment.rememberPendingQuery);
+      attachFramedNavigationInterceptors(rootElement, commerce, initialProps, () => currentProps?.pathname);
     } catch (err) {
       notifyHostRenderFailed();
       if (typeof console !== 'undefined' && typeof console.error === 'function') {

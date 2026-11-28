@@ -13,7 +13,7 @@ function readDomStringAttr(el, attrName, propName) {
   return typeof p === 'string' ? p : null;
 }
 
-function attachFramedNavigationInterceptors(container, commerce, initialProps, getPathname, onPendingQuerySearch) {
+function attachFramedNavigationInterceptors(container, commerce, initialProps, getPathname) {
   const roots = [];
   if (container && typeof container.addEventListener === 'function') roots.push(container);
   if (typeof document !== 'undefined' && document !== container && typeof document.addEventListener === 'function') {
@@ -105,11 +105,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
         }
       }
       event.preventDefault();
-      const rememberQuery = () => {
-        if (parsed.search && typeof onPendingQuerySearch === 'function') {
-          onPendingQuerySearch(parsed.pathname, parsed.search);
-        }
-      };
+      const goDest = parsed.search ? parsed.pathname + parsed.search : parsed.pathname;
       if (wantsNewTab) {
         const openDest = parsed.pathname + parsed.search + parsed.hash;
         void Promise.resolve(commerce.navigation.open(openDest)).then((res) => {
@@ -118,8 +114,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
             ((res.status === 'ok' && res.value && res.value.presented === false) ||
               (res.status === 'error' && res.code === 'INVALID_REQUEST' && Boolean(parsed.search || parsed.hash)));
           if (fallbackSameFrame) {
-            rememberQuery();
-            void Promise.resolve(commerce.navigation.go(parsed.pathname)).then((goRes) => {
+            void Promise.resolve(commerce.navigation.go(goDest)).then((goRes) => {
               if (goRes && goRes.status === 'ok' && parsed.hash && typeof setTimeout === 'function') {
                 setTimeout(scrollHashTarget, 0);
               }
@@ -127,8 +122,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
           }
         });
       } else {
-        rememberQuery();
-        void Promise.resolve(commerce.navigation.go(parsed.pathname)).then((goRes) => {
+        void Promise.resolve(commerce.navigation.go(goDest)).then((goRes) => {
           if (goRes && goRes.status === 'ok' && parsed.hash && typeof setTimeout === 'function') {
             setTimeout(scrollHashTarget, 0);
           }

@@ -33,6 +33,7 @@ export function hasLocalLexicalBinding(
       ts.isFunctionExpression(cur) ||
       ts.isArrowFunction(cur) ||
       (ts.isMethodDeclaration(cur) && Boolean(cur.body)) ||
+      (ts.isSetAccessorDeclaration(cur) && Boolean(cur.body)) ||
       (ts.isConstructorDeclaration(cur) && Boolean(cur.body))
     ) {
       if (cur.parameters.some((p) => bindingContainsName(p.name, target))) {

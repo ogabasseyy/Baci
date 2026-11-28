@@ -239,13 +239,17 @@ export function isPropertyOrDeclarationName(node: ts.Identifier): boolean {
 }
 
 export function isAllowedSensitiveRootPosition(node: ts.Expression): boolean {
-  const p = node.parent;
+  let cur: ts.Expression = node;
+  while (cur.parent && ts.isParenthesizedExpression(cur.parent)) {
+    cur = cur.parent;
+  }
+  const p = cur.parent;
   if (!p) return false;
-  if (ts.isPropertyAccessExpression(p) && p.expression === node) return true;
-  if (ts.isTypeOfExpression(p) && p.expression === node) return true;
+  if (ts.isPropertyAccessExpression(p) && p.expression === cur) return true;
+  if (ts.isTypeOfExpression(p) && p.expression === cur) return true;
   return (
     ts.isElementAccessExpression(p) &&
-    p.expression === node &&
+    p.expression === cur &&
     resolveStaticString(p.argumentExpression) !== null
   );
 }

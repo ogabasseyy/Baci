@@ -1,10 +1,107 @@
 import ts from '@typescript/typescript6';
 import { resolveStaticString } from './const-string-fold';
+import { bindingContainsName } from './jsx-export-graph';
 
 export const MUTABLE_DOM_SUBOBJECT_MEMBERS: ReadonlySet<string> = new Set([
   'style',
   'attributes',
 ]);
+
+function findHoistedVarDecl(root: ts.Node, name: string): ts.Node | null {
+  let hit: ts.Node | null = null;
+  const walk = (n: ts.Node): void => {
+    if (hit) return;
+    if (
+      n !== root &&
+      (ts.isFunctionDeclaration(n) ||
+        ts.isFunctionExpression(n) ||
+        ts.isArrowFunction(n) ||
+        ts.isMethodDeclaration(n) ||
+        ts.isSetAccessorDeclaration(n) ||
+        ts.isConstructorDeclaration(n))
+    ) {
+      return;
+    }
+    if (
+      ts.isVariableDeclarationList(n) &&
+      (n.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0
+    ) {
+      const found = n.declarations.find((d) =>
+        bindingContainsName(d.name, name)
+      );
+      if (found) {
+        hit = found;
+        return;
+      }
+    }
+    ts.forEachChild(n, walk);
+  };
+  walk(root);
+  return hit;
+}
+
+export function resolveLexicalDeclaration(id: ts.Identifier): ts.Node | null {
+  const name = id.text;
+  let cur: ts.Node | undefined = id.parent;
+  while (cur) {
+    if (
+      ts.isCatchClause(cur) &&
+      cur.variableDeclaration &&
+      bindingContainsName(cur.variableDeclaration.name, name)
+    ) {
+      return cur.variableDeclaration;
+    }
+    if (
+      (ts.isForStatement(cur) ||
+        ts.isForInStatement(cur) ||
+        ts.isForOfStatement(cur)) &&
+      cur.initializer &&
+      ts.isVariableDeclarationList(cur.initializer)
+    ) {
+      const hit = cur.initializer.declarations.find((d) =>
+        bindingContainsName(d.name, name)
+      );
+      if (hit) return hit;
+    }
+    if (
+      ts.isFunctionDeclaration(cur) ||
+      ts.isFunctionExpression(cur) ||
+      ts.isArrowFunction(cur) ||
+      ts.isMethodDeclaration(cur) ||
+      ts.isSetAccessorDeclaration(cur) ||
+      ts.isConstructorDeclaration(cur)
+    ) {
+      const hoisted = findHoistedVarDecl(cur, name);
+      if (hoisted) return hoisted;
+      const param = cur.parameters.find((p) =>
+        bindingContainsName(p.name, name)
+      );
+      if (param) return param;
+      if (ts.isFunctionExpression(cur) && cur.name?.text === name) return cur;
+    }
+    if (ts.isBlock(cur) || ts.isSourceFile(cur)) {
+      for (const s of cur.statements) {
+        if (ts.isVariableStatement(s)) {
+          const hit = s.declarationList.declarations.find((d) =>
+            bindingContainsName(d.name, name)
+          );
+          if (hit) return hit;
+        } else if (
+          (ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s)) &&
+          s.name?.text === name
+        ) {
+          return s;
+        }
+      }
+      if (ts.isSourceFile(cur)) {
+        const hoisted = findHoistedVarDecl(cur, name);
+        if (hoisted) return hoisted;
+      }
+    }
+    cur = cur.parent;
+  }
+  return null;
+}
 
 function resolvePropKey(keyNode: ts.PropertyName): string | null {
   if (
@@ -56,9 +153,11 @@ export function bindingDestructuresSubobject(
 
 export function assignmentDestructuresSubobject(
   lhs: ts.Expression,
-  target: string,
+  target: string | ((id: ts.Identifier) => boolean),
   underSubobject: boolean
 ): boolean {
+  const matches = (id: ts.Identifier): boolean =>
+    typeof target === 'function' ? target(id) : id.text === target;
   if (ts.isParenthesizedExpression(lhs)) {
     return assignmentDestructuresSubobject(
       lhs.expression,
@@ -66,7 +165,7 @@ export function assignmentDestructuresSubobject(
       underSubobject
     );
   }
-  if (ts.isIdentifier(lhs)) return underSubobject && lhs.text === target;
+  if (ts.isIdentifier(lhs)) return underSubobject && matches(lhs);
   if (ts.isArrayLiteralExpression(lhs)) {
     return lhs.elements.some((el) =>
       assignmentDestructuresSubobject(
@@ -89,7 +188,7 @@ export function assignmentDestructuresSubobject(
         return (
           (underSubobject ||
             MUTABLE_DOM_SUBOBJECT_MEMBERS.has(prop.name.text)) &&
-          prop.name.text === target
+          matches(prop.name)
         );
       }
       if (ts.isPropertyAssignment(prop)) {

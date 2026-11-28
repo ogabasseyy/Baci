@@ -109,10 +109,26 @@ async function fetchWorkerRouteEnrichment(workerOrigin, targetPathname) {
 function createRouteEnricher(initialProps, runtimeAssets, enrichedCache, getState, applyEnriched) {
   const workerOrigin = resolveWorkerCatalogOrigin(initialProps);
   let enrichedKey = typeof initialProps?.pathname === 'string' && initialProps.pathname.startsWith('/') ? initialProps.pathname : '/';
-  let pendingQuery = null;
+  let inFlightNav = null;
+  const queriesByEpoch = new Map();
+  const resolveEpochQuery = (targetPath, targetEpoch) => {
+    if (Number.isSafeInteger(targetEpoch) && queriesByEpoch.has(targetEpoch)) {
+      const bound = queriesByEpoch.get(targetEpoch);
+      return bound && bound.pathname === targetPath ? bound.search : '';
+    }
+    if (
+      inFlightNav &&
+      inFlightNav.pathname === targetPath &&
+      Number.isSafeInteger(targetEpoch) &&
+      targetEpoch > inFlightNav.startEpoch
+    ) {
+      queriesByEpoch.set(targetEpoch, { pathname: targetPath, search: inFlightNav.search });
+      return inFlightNav.search;
+    }
+    return '';
+  };
   const enrich = (targetPath, targetEpoch, liveBootstrap) => {
-    const querySuffix = pendingQuery && pendingQuery.pathname === targetPath ? pendingQuery.search : '';
-    if (querySuffix) pendingQuery = null;
+    const querySuffix = resolveEpochQuery(targetPath, targetEpoch);
     const fullTarget = targetPath + querySuffix;
     const hasUncached =
       Array.isArray(liveBootstrap?.catalog?.products) &&
@@ -142,9 +158,24 @@ function createRouteEnricher(initialProps, runtimeAssets, enrichedCache, getStat
     });
     return true;
   };
-  enrich.rememberPendingQuery = (pathname, search) => {
-    pendingQuery = typeof search === 'string' && search.startsWith('?') ? { pathname, search } : null;
-  };
+  enrich.createNavHooks = (pathname, search) => ({
+    onSend: () => {
+      const baseEpoch = Number.isSafeInteger(hostEpoch) ? hostEpoch : Number(getState()?.epoch) || 1;
+      const slot = { pathname, search: typeof search === 'string' && search.startsWith('?') ? search : '', startEpoch: baseEpoch };
+      inFlightNav = slot;
+      return slot;
+    },
+    onSettle: (slot, res) => {
+      if (inFlightNav === slot) inFlightNav = null;
+      if (slot && res && res.status === 'ok' && Number.isSafeInteger(res.value?.epoch)) {
+        const ep = res.value.epoch;
+        queriesByEpoch.set(ep, { pathname: slot.pathname, search: slot.search });
+        for (const k of queriesByEpoch.keys()) {
+          if (k < ep - 16) queriesByEpoch.delete(k);
+        }
+      }
+    },
+  });
   return enrich;
 }
 

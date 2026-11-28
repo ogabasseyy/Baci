@@ -11,6 +11,7 @@ import { formatNaira } from './kuda-format-naira';
 import { normalizeKudaItemCode } from './kuda-item-code';
 import { isKudaNoResponse } from './kuda-no-response';
 import { providerMatchesNetwork } from './kuda-provider-matches-network';
+import { hasUnreadableNetworkPeer } from './kuda-unreadable-network-peer';
 
 const DATA_PLAN_CACHE_TTL_MS = 60_000;
 
@@ -222,12 +223,11 @@ export async function resolveKudaDataPlanForPurchase({
     ({ item }) => normalizeComparable(item.itemCode) === normalizedCode
   );
   if (exactMatch) {
-    // A malformed plan list (this provider's or another on the network) may
-    // hide the same code at another price, so no plan can be confirmed.
-    const hidden = (p: Biller) =>
-      p.packagesUnreadable &&
-      (p === exactMatch.provider || providerMatchesNetwork(p, networkProvider));
-    if (providers.some(hidden))
+    // A malformed plan list (this provider's, or another on the requested
+    // or the plan's own network) may hide the same code at another price.
+    if (
+      hasUnreadableNetworkPeer(providers, exactMatch.provider, networkProvider)
+    )
       throw new Error(KUDA_BILL_PRICE_UNCONFIRMED_MESSAGE);
     // Includes an unreadable fixed price (mapped to 0).
     if (

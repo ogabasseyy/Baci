@@ -46,7 +46,8 @@ export function chosenListings<T extends { biller: Biller }>(
     return path !== null && acceptsPath(listed, path) ? name.length : 0;
   };
   // Each tier scores a listed biller: 0 = no match, higher = more specific;
-  // among decorated matches only the longest listed name counts.
+  // among decorated matches (plain or provider-stripped) only the longest
+  // listed name counts.
   // Exact names (plain, then provider-stripped) are resolved before any
   // decorated prefix, so "DSTV - PREMIUM (Kuda)" shown as "DSTV - PREMIUM"
   // is never captured as a "PREMIUM" path under a plain "DSTV".
@@ -54,8 +55,13 @@ export function chosenListings<T extends { biller: Biller }>(
     (listed) => (plainOf(listed) === sentPlain ? 1 : 0),
     (listed) =>
       normOf(listed) !== '' && normOf(listed) === sentNormalized ? 1 : 0,
-    (listed) => decorated(listed, plainOf(listed), sentPlain),
-    (listed) => decorated(listed, normOf(listed), sentNormalized),
+    // One decorated tier for both forms, so a longer provider-tagged biller
+    // ("DSTV - PREMIUM (Kuda)") beats a shorter plain one ("DSTV").
+    (listed) =>
+      Math.max(
+        decorated(listed, plainOf(listed), sentPlain),
+        decorated(listed, normOf(listed), sentNormalized)
+      ),
   ];
   for (const score of tiers) {
     const scored = listing.map((entry) => ({ entry, s: score(entry.biller) }));

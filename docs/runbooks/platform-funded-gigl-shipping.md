@@ -51,7 +51,7 @@ JOIN public.orders o ON o.id = c.order_id AND o.shipment_id = s.id
 WHERE c.id = '<charge id>' AND c.funding_source = 'platform';
 ```
 
-Cancelling the shipment makes the tracking trigger set the order's `shipping_status` to `cancelled`, which blocks re-quoting (409), so the order update below restores it to `processing`. Shipping economics are left as they are; re-quote in the admin app to re-book.
+For an open order, the shipment update below makes the tracking trigger (`private.sync_gigl_tracking_order_status`) reopen the order itself: `shipping_status = 'processing'` and `shipment_id` cleared. When the trigger does not reopen it, the order stays linked. The order update therefore matches the order in both states (still linked to this shipment, or already unlinked) and clears the booking lock; it matches nothing if the order has since moved to a different shipment. Shipping economics are left as they are; re-quote in the admin app to re-book.
 
 Copy-pasteable transaction (replace the placeholders; every statement must report 1 row):
 
@@ -69,7 +69,7 @@ UPDATE public.orders
 SET shipment_id = NULL, tracking_number = NULL,
     shipment_booking_lock_token = NULL, shipment_booking_started_at = NULL,
     shipping_status = 'processing', updated_at = now()
-WHERE id = '<order id>' AND shipment_id = '<shipment id>';
+WHERE id = '<order id>' AND (shipment_id = '<shipment id>' OR shipment_id IS NULL);
 -- COMMIT only if all three updates affected exactly one row; otherwise ROLLBACK.
 ```
 

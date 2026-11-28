@@ -34,10 +34,25 @@ const STOREFRONT_CLUSTER_RULES: StorefrontClusterRule[] = Object.entries(
   rule_order: ruleOrder,
 }));
 
+const GAMING_LAPTOP_CLUSTER_RULES = STOREFRONT_CLUSTER_RULES.filter(
+  (rule) => rule.category_slug !== 'gaming' && rule.category_slug !== 'laptops'
+);
+
 export function isSupportedClusterCategory(
   categorySlug: string
 ): categorySlug is SupportedClusterCategory {
   return Object.hasOwn(CONTENT_CLUSTER_SUPPORT, categorySlug);
+}
+
+export function getStorefrontClusterGuideRules(
+  categorySlug: string
+): StorefrontClusterRule[] {
+  if (!isSupportedClusterCategory(categorySlug)) {
+    return [];
+  }
+  return categorySlug === 'gaming-laptops'
+    ? GAMING_LAPTOP_CLUSTER_RULES
+    : STOREFRONT_CLUSTER_RULES;
 }
 
 /**
@@ -57,17 +72,9 @@ export function buildStorefrontClusterGuideRequest(
     };
   }
 
-  const rules =
-    categorySlug === 'gaming-laptops'
-      ? STOREFRONT_CLUSTER_RULES.filter(
-          (rule) =>
-            rule.category_slug !== 'gaming' && rule.category_slug !== 'laptops'
-        )
-      : STOREFRONT_CLUSTER_RULES;
-
   return {
     p_category_slug: categorySlug,
-    p_cluster_rules: rules,
+    p_cluster_rules: getStorefrontClusterGuideRules(categorySlug),
     p_search_query: buildClusterGuideSearchQuery({
       ...context,
       categorySlug,

@@ -89,6 +89,16 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
   });
 
   it('sweeps from the last observed baseline when the DB deadline clock advances a watermark between idle ticks', async () => {
+    const workerOptions = { deadlineMode: 'database-clock' } as const;
+    const idleResponses = {
+      set_quiz_runtime_control_v2: { updated: true },
+      expire_unclaimed_ranked_quiz_awards_v2: { expired: 0 },
+      close_due_product_quiz_events: 0,
+    };
+    mocks.rpc.mockImplementation(async (name: keyof typeof idleResponses) => ({
+      data: idleResponses[name],
+      error: null,
+    }));
     const tick1Watermarks = makeOkWatermarks('ok');
     const tick2Watermarks = {
       ...makeOkWatermarks('ok'),
@@ -104,15 +114,13 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
       hasPendingRecoverySweep: false,
     });
     mocks.resolveQuizSweepWatermarks.mockResolvedValueOnce(tick1Watermarks);
-    queueRpcSequence();
-    await finalizeDueQuizEvents();
+    await finalizeDueQuizEvents(workerOptions);
     expect(mocks.invalidateQuizProductCaches).not.toHaveBeenCalled();
 
     // Tick 2: DB deadline clock advanced events.floor before pre-RPC probe,
     // so worker RPCs return 0; must sweep from tick1Watermarks.
     mocks.resolveQuizSweepWatermarks.mockResolvedValue(tick2Watermarks);
-    queueRpcSequence();
-    await finalizeDueQuizEvents();
+    await finalizeDueQuizEvents(workerOptions);
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledWith(
       expect.anything(),
@@ -120,8 +128,7 @@ describe('finalizeDueQuizEvents recovery and cold-start sweeps', () => {
     );
 
     // Tick 3: unchanged from tick2Watermarks -> idle skip resumes.
-    queueRpcSequence();
-    await finalizeDueQuizEvents();
+    await finalizeDueQuizEvents(workerOptions);
     expect(mocks.invalidateQuizProductCaches).toHaveBeenCalledTimes(1);
   });
 

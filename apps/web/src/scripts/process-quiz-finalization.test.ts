@@ -40,7 +40,7 @@ describe('process-quiz-finalization', () => {
     expect(logger.error).toHaveBeenCalledWith('[quiz-finalization] failed');
   });
 
-  it('runs finalization serially on the one-second deadline cadence', async () => {
+  it('runs maintenance serially while the database clock owns deadlines', async () => {
     const runJob = vi.fn().mockResolvedValue({ body: { failed: 0 }, status: 200 });
     const delay = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('stop'));
 
@@ -49,6 +49,12 @@ describe('process-quiz-finalization', () => {
     ).resolves.toBe(1);
 
     expect(runJob).toHaveBeenCalledTimes(2);
+    expect(runJob).toHaveBeenNthCalledWith(1, {
+      deadlineMode: 'database-clock',
+    });
+    expect(runJob).toHaveBeenNthCalledWith(2, {
+      deadlineMode: 'database-clock',
+    });
     expect(delay).toHaveBeenNthCalledWith(1, 1_000);
   });
 });

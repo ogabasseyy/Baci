@@ -52,6 +52,31 @@ describe('finalizeDueQuizEvents', () => {
     mocks.rpc.mockResolvedValue({ data: {}, error: null });
   });
 
+  it('keeps worker maintenance and cache invalidation while the database owns deadlines', async () => {
+    mocks.phase.mockReturnValue('production');
+    mocks.approved.mockReturnValue(true);
+    mocks.rpc
+      .mockResolvedValueOnce({ data: { updated: true }, error: null })
+      .mockResolvedValueOnce({
+        data: { expired: 1, released: 1 },
+        error: null,
+      });
+
+    const result = await finalizeDueQuizEvents({
+      deadlineMode: 'database-clock',
+    });
+
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).toEqual([
+      'set_quiz_runtime_control_v2',
+      'expire_unclaimed_ranked_quiz_awards_v2',
+      'close_due_product_quiz_events',
+      'finalize_due_quiz_events',
+    ]);
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ expired: 1, released: 1 });
+    expect(mocks.invalidateQuizProductCaches).toHaveBeenCalled();
+  });
+
   it('commits the runtime gate before processing the deadline lifecycle', async () => {
     mocks.rpc
       .mockResolvedValueOnce({ data: { updated: true }, error: null })

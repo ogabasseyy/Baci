@@ -299,7 +299,7 @@ test('the OTA publish workflow keeps its release gate refusal guard', () => {
     '- name: Renamed rollback guard'
   );
   assert.deepEqual(collectGateFailures(withFiles({ [OTA_PUBLISH_WORKFLOW]: withoutRollbackGuard })), [
-    `${OTA_PUBLISH_WORKFLOW} must run "Refuse rollback target held by the storefront release gate" before "Rollback OTA update on ota.usebaci.com and smoke-check manifest" in its publish job`,
+    `${OTA_PUBLISH_WORKFLOW} must run "Refuse rollback target held by the storefront release gate" before "Rollback OTA update on ota.ogabassey.com and smoke-check manifest" in its publish job`,
   ]);
   const conditionalRollbackGuard = publish.replace(
     '- name: Refuse rollback target held by the storefront release gate\n',

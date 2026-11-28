@@ -17,7 +17,13 @@ function assertEnvironmentParity(nativeEnv, otaEnv) {
   assert.equal(otaEnv.EXPO_PUBLIC_BUILD_SHA, '${{ inputs.source_sha }}');
   // TikTok's build-only secret must never enter the public OTA export.
   assert.ok(!Object.hasOwn(otaEnv, 'STOREFRONT_TIKTOK_APP_SECRET'));
-  const exceptions = new Set(['EXPO_PUBLIC_BUILD_SHA', 'STOREFRONT_TIKTOK_APP_SECRET']);
+  const exceptions = new Set([
+    'EXPO_PUBLIC_BUILD_SHA',
+    'STOREFRONT_TIKTOK_APP_SECRET',
+    'EXPO_PUBLIC_OTA_UPDATES_URL',
+    'EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH',
+    'EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID',
+  ]);
   for (const [name, value] of Object.entries(nativeEnv)) {
     if ((name.startsWith('EXPO_PUBLIC_') || name.startsWith('STOREFRONT_')) && !exceptions.has(name)) {
       assert.equal(otaEnv[name], value, `OTA production value differs for ${name}`);

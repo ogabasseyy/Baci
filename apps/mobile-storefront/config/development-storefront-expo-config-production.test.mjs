@@ -147,23 +147,43 @@ test('production updates default to ON_LOAD and fallback EAS URL when no OTA ove
 
 test('supports EXPO_PUBLIC_OTA_UPDATES_URL and optional code signing certificate path', () => {
   const config = loadProductionConfigWithEnv({
-    EXPO_PUBLIC_OTA_UPDATES_URL: '  https://ota.usebaci.com/api/manifest  ',
-    EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: './certs/ota-cert.pem',
+    EXPO_PUBLIC_OTA_UPDATES_URL: '  https://ota.ogabassey.com/api/manifest  ',
+    EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH:
+      './certs/ota-code-signing.crt',
     EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: 'baci-2026',
+    EAS_BUILD: 'true',
+    EXPO_PUBLIC_SENTRY_DSN: 'https://synthetic.example/1',
+    SENTRY_ORG: 'synthetic-org',
+    SENTRY_PROJECT: 'synthetic-project',
+    SENTRY_AUTH_TOKEN: 'synthetic-upload-token',
   });
   assert.deepEqual(config.updates, {
-    url: 'https://ota.usebaci.com/api/manifest',
+    url: 'https://ota.ogabassey.com/api/manifest',
     checkAutomatically: 'ON_LOAD',
     fallbackToCacheTimeout: 0,
     requestHeaders: {
       'expo-channel-name': 'production',
     },
-    codeSigningCertificate: './certs/ota-cert.pem',
+    codeSigningCertificate: './certs/ota-code-signing.crt',
     codeSigningMetadata: {
       alg: 'rsa-v1_5-sha256',
       keyid: 'baci-2026',
     },
   });
+
+  const legacyHostConfig = loadProductionConfigWithEnv({
+    EXPO_PUBLIC_OTA_UPDATES_URL: 'https://ota.usebaci.com/api/manifest',
+    EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH:
+      './certs/ota-code-signing.crt',
+  });
+  assert.equal(
+    legacyHostConfig.updates.url,
+    'https://ota.usebaci.com/api/manifest'
+  );
+  assert.equal(
+    legacyHostConfig.updates.codeSigningCertificate,
+    './certs/ota-code-signing.crt'
+  );
 });
 
 test('rejects inline PEM contents or missing build-time certificate path', () => {
@@ -242,21 +262,22 @@ test('enforces pairing between self-hosted OTA URL and code signing certificate 
   assert.throws(
     () =>
       loadProductionConfigWithEnv({
-        EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: './certs/ota-cert.pem',
+        EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH:
+          './certs/ota-code-signing.crt',
       }),
-    /requires EXPO_PUBLIC_OTA_UPDATES_URL="https:\/\/ota\.usebaci\.com\/api\/manifest"/
+    /requires EXPO_PUBLIC_OTA_UPDATES_URL="https:\/\/ota\.ogabassey\.com\/api\/manifest"/
   );
   assert.throws(
     () =>
       loadProductionConfigWithEnv({
-        EXPO_PUBLIC_OTA_UPDATES_URL: 'https://ota.usebaci.com/api/manifest',
+        EXPO_PUBLIC_OTA_UPDATES_URL: 'https://ota.ogabassey.com/api/manifest',
       }),
     /requires EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH unless EXPO_PUBLIC_OTA_ALLOW_UNSIGNED=true/
   );
   const optedIn = loadProductionConfigWithEnv({
-    EXPO_PUBLIC_OTA_UPDATES_URL: 'https://ota.usebaci.com/api/manifest',
+    EXPO_PUBLIC_OTA_UPDATES_URL: 'https://ota.ogabassey.com/api/manifest',
     EXPO_PUBLIC_OTA_ALLOW_UNSIGNED: 'true',
   });
-  assert.equal(optedIn.updates.url, 'https://ota.usebaci.com/api/manifest');
+  assert.equal(optedIn.updates.url, 'https://ota.ogabassey.com/api/manifest');
   assert.equal(optedIn.updates.codeSigningCertificate, undefined);
 });

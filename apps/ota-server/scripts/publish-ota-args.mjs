@@ -47,7 +47,7 @@ export function parseCliArgs(argv) {
     dryRun: false,
     rollback: false,
     toEmbedded: false,
-    serverUrl: process.env.OTA_SERVER_URL || 'https://ota.usebaci.com',
+    serverUrl: process.env.OTA_SERVER_URL || 'https://ota.ogabassey.com',
     token: process.env.OTA_ADMIN_TOKEN || '',
   };
 

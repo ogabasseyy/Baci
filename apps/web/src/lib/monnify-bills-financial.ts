@@ -1,7 +1,6 @@
 import type { PurchaseResult } from '@/lib/kuda';
 import {
   monnifyEnvelopeSchema,
-  requeryResponseBodySchema,
   validateCustomerRequestSchema,
   validateCustomerResponseBodySchema,
   vendRequestSchema,
@@ -18,9 +17,18 @@ import {
   isMonnifyBusinessSuccess,
   MONNIFY_FINANCIAL_TIMEOUT_MS,
 } from './monnify-bills-shared';
-import { classifyMonnifyBillStatus } from './monnify-bills-status';
-import { isMonnifyDefiniteBusinessRefusal } from './monnify-business-refusal';
-import { readMonnifyResponseCode } from './monnify-response-code';
+import {
+  classifyMonnifyBillStatus,
+  hasConflictingVendStatuses,
+  isMonnifyPlainFreshDecline,
+  readMonnifyBillToken,
+  toBillStatusInput,
+} from './monnify-bills-status';
+import { buildMonnifyUnresolvedVendResult } from './monnify-unresolved-vend-result';
+import {
+  buildMonnifyBusinessRejectionResult,
+  buildMonnifyHttpRejectionResult,
+} from './monnify-vend-rejection-result';
 
 export async function verifyBillCustomer(
   _billerCode: string,
@@ -119,27 +127,12 @@ export async function purchaseBill(
     );
 
     if (!isMonnifyBusinessSuccess(parsedEnvelope)) {
-      const rawMessage = getMonnifyEnvelopeMessage({
-        fallback: 'Monnify business failure',
-        responseCode: parsedEnvelope.responseCode,
-        responseMessage: parsedEnvelope.responseMessage,
-      });
-      return {
-        success: false,
-        reference: requestReference,
-        // Scrubbed like HTTP error details: Monnify may echo the customer's
-        // number, and this text is persisted and logged. Classification
-        // reads the full answer, before it is cut short.
-        message: sanitizeMonnifyErrorDetail(rawMessage),
-        status: 'failed',
+      return buildMonnifyBusinessRejectionResult({
         amount,
-        providerDefiniteFailure: isMonnifyDefiniteBusinessRefusal({
-          envelope,
-          rawMessage,
-          responseCode: parsedEnvelope.responseCode,
-        }),
-        providerResponseCode: readMonnifyResponseCode(parsedEnvelope),
-      };
+        envelope,
+        parsedEnvelope,
+        requestReference,
+      });
     }
 
     const body = parsedEnvelope.responseBody;
@@ -149,20 +142,82 @@ export async function purchaseBill(
       );
     }
 
-    const transactionReference = body.transactionReference || undefined;
-    const vendReference = body.vendReference || undefined;
-    const { isSuccess, isProcessing, isFailed } =
-      classifyMonnifyBillStatus(body);
+    const transactionReference = body.transactionReference?.trim() || undefined;
+    const vendReference = body.vendReference?.trim() || undefined;
+    const classified = classifyMonnifyBillStatus(toBillStatusInput(body));
+    const { isProcessing, isFailed } = classified;
+    // A delivered token is conclusive even when the status is missing or a
+    // state we do not know: without it the customer would never get the
+    // voucher they paid for.
+    const hasToken = !!readMonnifyBillToken(body);
+    const isSuccess =
+      classified.isSuccess || (hasToken && !isProcessing && !isFailed);
 
-    if (isSuccess && !transactionReference && !vendReference) {
+    if (hasConflictingVendStatuses(body)) {
+      // vendStatus and transactionStatus contradict each other: hold.
+      return buildMonnifyUnresolvedVendResult({
+        amount,
+        message: sanitizeMonnifyErrorDetail(
+          parsedEnvelope.responseMessage || 'Vend outcome unclear'
+        ),
+        ...(hasToken && { providerTokenSeen: true }),
+        providerVendReference: vendReference,
+        requestReference,
+      });
+    }
+
+    // A delivered token is enough on its own: throwing for a missing reference
+    // here would re-vend an already-delivered purchase.
+    if (isSuccess && !transactionReference && !vendReference && !hasToken) {
       throw new MonnifyTransientVendError(
         'Monnify success vend response missing both transaction and vend references'
       );
+    }
+    if (isProcessing && !vendReference && hasToken) {
+      // Pending but already carrying a token, and nothing to requery by: hold
+      // it (the token is not stored on a pending row) instead of re-vending.
+      return buildMonnifyUnresolvedVendResult({
+        amount,
+        message: sanitizeMonnifyErrorDetail(
+          parsedEnvelope.responseMessage || 'Vend outcome unclear'
+        ),
+        providerTokenSeen: true,
+        requestReference,
+      });
     }
     if (isProcessing && !vendReference) {
       throw new MonnifyTransientVendError(
         'Monnify pending vend response missing a requeryable vend reference'
       );
+    }
+
+    if (isSuccess && !classified.isSuccess) {
+      // A token completed this vend although its status was missing or not
+      // one we know: a fixed label (no provider text) so support can spot a
+      // bad-token pattern.
+      console.warn('Monnify vend settled on a token with an unnamed status');
+    }
+    const isFreshDecline = isMonnifyPlainFreshDecline(
+      body,
+      hasToken || !!vendReference || !!transactionReference
+    );
+    if (
+      !isFreshDecline &&
+      ((!isSuccess && !isProcessing && !isFailed) || (isFailed && hasToken))
+    ) {
+      // A vend state Monnify did not name as success, in progress or failed
+      // (missing, REVERSED, UNKNOWN...) proves nothing: hold, never refund.
+      // A FAILED vend that also carries a token contradicts itself (the
+      // customer may hold a voucher): hold it too.
+      return buildMonnifyUnresolvedVendResult({
+        amount,
+        message: sanitizeMonnifyErrorDetail(
+          parsedEnvelope.responseMessage || 'Vend outcome unclear'
+        ),
+        ...(hasToken && { providerTokenSeen: true }),
+        providerVendReference: vendReference,
+        requestReference,
+      });
     }
 
     const status = isSuccess
@@ -175,7 +230,9 @@ export async function purchaseBill(
       reference: requestReference,
       transactionId: transactionReference ?? vendReference,
       providerVendReference: vendReference,
-      pin: body.metaData?.token || body.token || undefined,
+      // Only a completed vend carries its token: a pending row holding a
+      // voucherPin would never settle or notify (reconciliation fills it in).
+      pin: status === 'successful' ? readMonnifyBillToken(body) : undefined,
       units: body.metaData?.unit || undefined,
       message: sanitizeMonnifyErrorDetail(
         parsedEnvelope.responseMessage ||
@@ -183,41 +240,27 @@ export async function purchaseBill(
       ),
       status,
       amount,
+      // A pending vend that already carries a token: flag it (the token is not
+      // stored on a processing row) so support knows a voucher was issued.
+      ...(status === 'pending' && hasToken && { providerTokenSeen: true }),
     };
   } catch (error) {
-    if (error instanceof MonnifyHttpError && error.isClientError) {
-      return {
-        success: false,
-        reference: requestReference,
-        message:
-          'Monnify rejected the bill payment request. Please verify the details and try again.',
-        providerErrorDetail: error.diagnosticMessage,
-        providerResponseCode: error.responseCode,
-        status: 'failed',
+    // A 4xx is a rejection; an HTTP 5xx that already carries a voucher token is
+    // held too (a retry could submit after delivery).
+    if (
+      error instanceof MonnifyHttpError &&
+      (error.isClientError ||
+        error.bodyHasToken ||
+        // A body that says the vend was delivered: a retry would pay it twice.
+        error.showsDeliveredStatus ||
+        // Monnify already identified the vend: hold and requery it, don't re-vend.
+        !!error.providerVendReference(requestReference))
+    ) {
+      return buildMonnifyHttpRejectionResult({
         amount,
-        // A refusal Monnify gave before vending: a known refusal (the amount
-        // check, Baci's Monnify float too low). A 401/403 never qualifies
-        // (owner decision): Monnify does not document that its auth check runs
-        // before any vend, so a login rejection is refunded, not re-vended. A
-        // timeout (408), a throttle (429) or anything that may be a duplicate
-        // never qualifies. Any answer that talks about the service being
-        // unavailable or a vend outcome, or whose body carries a vend status or
-        // reference, may come after a vend that ran, so it never qualifies.
-        providerDefiniteFailure:
-          // Only reachable for 4xx (isClientError above); kept explicit so a
-          // future refactor can never let a 5xx (unknown outcome) through.
-          error.status < 500 &&
-          error.status !== 401 &&
-          error.status !== 403 &&
-          error.status !== 408 &&
-          error.status !== 429 &&
-          !error.isDuplicateReference &&
-          !error.reportsUnexpectedError &&
-          !error.mentionsVendOutcome &&
-          !error.showsVendEvidence &&
-          !error.mentionsAuthWording &&
-          error.isKnownRefusal,
-      };
+        error,
+        requestReference,
+      });
     }
 
     const errorMsg =
@@ -233,49 +276,4 @@ export async function purchaseBill(
   }
 }
 
-export async function checkTransactionStatus(
-  transactionReference: string
-): Promise<{
-  status: string;
-  message: string;
-  pin?: string;
-  responseCode?: string;
-  units?: string;
-}> {
-  const envelope = await monnifyRequest(
-    `/api/v1/vas/bills-payment/requery?reference=${encodeURIComponent(transactionReference)}`,
-    { method: 'GET', timeoutMs: MONNIFY_FINANCIAL_TIMEOUT_MS }
-  );
-  const parsed = monnifyEnvelopeSchema(requeryResponseBodySchema).parse(
-    envelope
-  );
-
-  if (isMonnifyBusinessSuccess(parsed) && parsed.responseBody) {
-    const body = parsed.responseBody;
-    const { isSuccess, isProcessing } = classifyMonnifyBillStatus(body);
-    if (isSuccess) {
-      return {
-        status: 'successful',
-        message: parsed.responseMessage || 'success',
-        pin: body.metaData?.token || body.token || undefined,
-        units: body.metaData?.unit || undefined,
-      };
-    }
-    if (isProcessing) {
-      return {
-        status: 'processing',
-        message: parsed.responseMessage || 'processing',
-      };
-    }
-  }
-
-  return {
-    status: 'failed',
-    responseCode: readMonnifyResponseCode(parsed),
-    message: getMonnifyEnvelopeMessage({
-      fallback: 'failed',
-      responseCode: parsed.responseCode,
-      responseMessage: parsed.responseMessage,
-    }),
-  };
-}
+export { checkTransactionStatus } from './monnify-bills-requery-status';

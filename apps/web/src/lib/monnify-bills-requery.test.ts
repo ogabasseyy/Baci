@@ -148,7 +148,7 @@ describe('Monnify bill requery', () => {
     expect(result.pin).toBeUndefined();
   });
 
-  it('fails closed for HTTP OK non-zero responseCode', async () => {
+  it('never fails a row on a rejected requery whose body says SUCCESSFUL', async () => {
     const mockResponse = {
       requestSuccessful: true,
       responseCode: '1',
@@ -165,7 +165,9 @@ describe('Monnify bill requery', () => {
     });
 
     const result = await checkTransactionStatus('MON-TX-123');
-    expect(result.status).toBe('failed');
+    // Not proof of failure (the vend reads SUCCESSFUL): left processing,
+    // where a refund could pay the customer twice.
+    expect(result.status).toBe('unknown');
     expect(result.message).toContain('Status lookup failed');
   });
 
@@ -212,5 +214,68 @@ describe('bugfix: requery failures keep the Monnify response code', () => {
 
     expect(result.status).toBe('failed');
     expect(result.responseCode).toBeUndefined();
+  });
+});
+
+describe('bugfix: a returned requery token completes the vend even with an unknown status', () => {
+  it('returns successful with the token when the status is missing', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: {
+          transactionReference: 'MON-TX-1',
+          metaData: { token: '1111-2222-3333', unit: '4.5' },
+        },
+      }),
+    });
+
+    const result = await checkTransactionStatus('MFBP-1');
+
+    expect(result).toMatchObject({
+      status: 'successful',
+      pin: '1111-2222-3333',
+      units: '4.5',
+    });
+  });
+
+  it('stays unknown for an unrecognised status with no token', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: { transactionReference: 'MON-TX-1', vendStatus: 'WEIRD' },
+      }),
+    });
+
+    await expect(checkTransactionStatus('MFBP-1')).resolves.toMatchObject({
+      status: 'unknown',
+    });
+  });
+});
+
+describe('bugfix: a FAILED requery that returns a token is not proof of failure', () => {
+  it('returns unknown for vendStatus FAILED with a token', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        requestSuccessful: true,
+        responseCode: '0',
+        responseMessage: 'success',
+        responseBody: {
+          transactionReference: 'MON-TX-1',
+          vendStatus: 'FAILED',
+          metaData: { token: '1111-2222-3333' },
+        },
+      }),
+    });
+
+    await expect(checkTransactionStatus('MFBP-1')).resolves.toMatchObject({
+      status: 'unknown',
+    });
   });
 });

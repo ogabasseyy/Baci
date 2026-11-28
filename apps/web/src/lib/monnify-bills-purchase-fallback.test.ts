@@ -59,6 +59,7 @@ describe('Monnify vend failures handed to Kuda', () => {
     ])('never hands a login rejection (%i, %s) to Kuda', async (status, statusText, message) => {
       mockHttpError(status, statusText, message);
 
+      // Owner decision 2026-11-18: a login rejection is refunded, never held.
       await expect(vend()).resolves.toMatchObject({
         providerDefiniteFailure: false,
         status: 'failed',
@@ -151,9 +152,11 @@ describe('Monnify vend failures handed to Kuda', () => {
     it('never hands a 408 timeout to Kuda', async () => {
       mockHttpError(408, 'Request Timeout', 'Insufficient wallet balance');
 
+      // A timeout leaves the outcome open: held, never refunded or re-vended.
       await expect(vend()).resolves.toMatchObject({
         providerDefiniteFailure: false,
-        status: 'failed',
+        providerOutcomeUnresolved: true,
+        status: 'pending',
       });
     });
 
@@ -205,9 +208,11 @@ describe('Monnify vend failures handed to Kuda', () => {
     ])('never marks a duplicate reference (%i %s) as definite', async (status, statusText, message) => {
       mockHttpError(status, statusText, message);
 
+      // Monnify may already hold (and deliver) this vend: held, not refunded.
       await expect(vend()).resolves.toMatchObject({
         providerDefiniteFailure: false,
-        status: 'failed',
+        providerOutcomeUnresolved: true,
+        status: 'pending',
       });
     });
   });

@@ -40,7 +40,7 @@ function resolveSafeInternalPath(p) {
     if (!normalized.startsWith('/') || normalized.startsWith('//') || UNSAFE_PATH_CHARS.test(normalized)) {
       return null;
     }
-    return { normalized, pathname: resolved.pathname };
+    return { normalized, pathname: resolved.pathname, search: resolved.search, hash: resolved.hash };
   } catch {
     return null;
   }
@@ -58,10 +58,10 @@ function resolveDeclaredNavigationTarget(rawPath) {
     if (matched.view === 'bad_request') {
       return { ok: false, error: { status: 'error', code: 'INVALID_REQUEST', message: 'Malformed navigation path segment' } };
     }
-    return { ok: true, normalized: target.normalized, routeId: matched.view, params: { ...matched.params } };
+    return { ok: true, normalized: target.normalized, pathname: target.pathname, search: target.search, hash: target.hash, routeId: matched.view, params: { ...matched.params } };
   }
   const fallbackId = target.pathname === '/' ? 'home' : target.pathname.split('/').filter(Boolean)[0] || 'route';
-  return { ok: true, normalized: target.normalized, routeId: fallbackId, params: {} };
+  return { ok: true, normalized: target.normalized, pathname: target.pathname, search: target.search, hash: target.hash, routeId: fallbackId, params: {} };
 }
 const rootElement = document.getElementById('root');
 const stateScript = document.getElementById('__BACI_STOREFRONT_STATE__');
@@ -80,6 +80,7 @@ if (rootElement && stateScript?.textContent) {
           ? initialProps.publicDataRevision
           : '0';
       let reactRoot = null;
+      let refreshRouteEnrichment = null;
       let StorefrontApp = null;
       let hydrationCommitted = false;
       let pendingPostCommitRender = false;
@@ -138,10 +139,14 @@ if (rootElement && stateScript?.textContent) {
           const resolved = resolveDeclaredNavigationTarget(args?.path);
           if (!resolved.ok) return resolved.error;
           if (window.parent && window.parent !== window) {
-            const framedRes = await dispatchFramedNavigation('navigation.go', resolved.normalized, routeEpoch);
+            if (resolved.search && refreshRouteEnrichment?.rememberPendingQuery) {
+              refreshRouteEnrichment.rememberPendingQuery(resolved.pathname, resolved.search);
+            }
+            const framedRes = await dispatchFramedNavigation('navigation.go', resolved.pathname, routeEpoch);
             if (framedRes.status === 'ok') {
               if (framedRes.value.epoch > routeEpoch) routeEpoch = framedRes.value.epoch;
               currentRevision = framedRes.value.publicDataRevision;
+              scrollHashFragment(resolved.hash);
             }
             return framedRes;
           }
@@ -160,7 +165,7 @@ if (rootElement && stateScript?.textContent) {
           if (!resolved.ok) return resolved.error;
           const safePath = resolved.normalized;
           if (window.parent && window.parent !== window) {
-            return dispatchFramedNavigation('navigation.open', safePath, routeEpoch);
+            return dispatchFramedNavigation('navigation.open', resolved.pathname, routeEpoch);
           }
           if (typeof window.open !== 'function') {
             return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'New browsing context unavailable' };
@@ -232,7 +237,7 @@ if (rootElement && stateScript?.textContent) {
       reactRoot = hydrateRoot(rootElement, buildAppTree(currentProps, 0, routeEpoch), {
         onUncaughtError: () => notifyHostRenderFailed(),
       });
-      const refreshRouteEnrichment = createRouteEnricher(
+      refreshRouteEnrichment = createRouteEnricher(
         initialProps,
         runtimeAssets,
         enrichedCatalogCache,

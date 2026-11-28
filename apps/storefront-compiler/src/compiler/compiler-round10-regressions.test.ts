@@ -181,8 +181,10 @@ export default forwardRef<HTMLElement, { title: string }>(function App(props, re
       bindings: {},
       outboundService: (req: MiniflareRequest) => {
         const u = new URL(req.url);
-        if (u.searchParams.has('category')) {
-          queriedCategories.push(u.searchParams.get('category') ?? '');
+        const cat =
+          u.searchParams.get('category') ?? u.searchParams.get('categoryId');
+        if (cat !== null) {
+          queriedCategories.push(cat);
         }
         return new MiniflareResponse(responseBody, {
           status: 200,

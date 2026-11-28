@@ -86,6 +86,11 @@ const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set(
     '|'
   )
 );
+const FORBIDDEN_MOTION_ELEMENT_TAGS: ReadonlySet<string> = new Set(
+  'a|area|form|button|input|img|picture|source|video|audio|track|image|use|feimage|foreignobject|map'.split(
+    '|'
+  )
+);
 
 type BindingKind = 'component' | 'reactClass' | 'sdkLink' | 'motion' | 'unsafe';
 
@@ -279,7 +284,8 @@ export function createJsxTagValidator(
           ts.isIdentifier(tagName.expression) &&
           resolveBindingAt(tagName, tagName.expression.text) === 'motion' &&
           /^[a-z][a-zA-Z0-9]*$/.test(tagName.name.text) &&
-          !FORBIDDEN_INTRINSIC_JSX_TAGS.has(tagName.name.text)
+          !FORBIDDEN_INTRINSIC_JSX_TAGS.has(tagName.name.text) &&
+          !FORBIDDEN_MOTION_ELEMENT_TAGS.has(tagName.name.text.toLowerCase())
         ) {
           return null;
         }

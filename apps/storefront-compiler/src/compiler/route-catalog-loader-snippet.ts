@@ -32,12 +32,12 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
     const canonical = canonicalizeSearchParams(searchParams);
     const searchCat =
       matchedRoute.params.category ||
-      matchedRoute.params.categoryId ||
       matchedRoute.params.categorySlug ||
       matchedRoute.params.collection ||
-      matchedRoute.params.collectionId ||
       matchedRoute.params.collectionSlug ||
       '';
+    const searchCatId =
+      matchedRoute.params.categoryId || matchedRoute.params.collectionId || '';
     const searchTerm =
       matchedRoute.params.q ||
       matchedRoute.params.query ||
@@ -57,6 +57,7 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
       )?.[1] ||
         '');
     if (searchCat) canonical.set('category', searchCat);
+    if (searchCatId) canonical.set('categoryId', searchCatId);
     if (matchedRoute.params.brand) canonical.set('brand', matchedRoute.params.brand);
     if (matchedRoute.params.condition) canonical.set('condition', matchedRoute.params.condition);
     if (matchedRoute.params.page) canonical.set('page', matchedRoute.params.page);
@@ -85,22 +86,25 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
     const lastCol = colEntries[colEntries.length - 1];
     const prevCol = colEntries[colEntries.length - 2];
     const trailingFilter = Boolean(lastCol && isFilterOnlyRouteParam(lastCol[0]));
+    const catIdParam =
+      matchedRoute.params.categoryId || matchedRoute.params.collectionId || '';
     const categoryParam =
       matchedRoute.params.category ||
-      matchedRoute.params.categoryId ||
       matchedRoute.params.categorySlug ||
       matchedRoute.params.collection ||
-      matchedRoute.params.collectionId ||
       matchedRoute.params.collectionSlug ||
-      (trailingFilter
-        ? matchedRoute.params.handle ||
-          matchedRoute.params.slug ||
-          (prevCol && !isFilterOnlyRouteParam(prevCol[0]) ? prevCol[1] : '')
-        : lastCol && !isFilterOnlyRouteParam(lastCol[0])
-          ? lastCol[1]
-          : '');
+      (!catIdParam
+        ? trailingFilter
+          ? matchedRoute.params.handle ||
+            matchedRoute.params.slug ||
+            (prevCol && !isFilterOnlyRouteParam(prevCol[0]) ? prevCol[1] : '')
+          : lastCol && !isFilterOnlyRouteParam(lastCol[0])
+            ? lastCol[1]
+            : ''
+        : '');
     const colQuery = canonicalizeSearchParams(searchParams);
     if (categoryParam) colQuery.set('category', categoryParam);
+    if (catIdParam) colQuery.set('categoryId', catIdParam);
     if (matchedRoute.params.brand) colQuery.set('brand', matchedRoute.params.brand);
     if (matchedRoute.params.condition) colQuery.set('condition', matchedRoute.params.condition);
     if (matchedRoute.params.page) colQuery.set('page', matchedRoute.params.page);
@@ -109,11 +113,12 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
     const endpoint = qs
       ? \`https://catalog.baci.internal/v1/search?\${qs}\`
       : 'https://catalog.baci.internal/v1/search';
-    const upstream = await fetchCatalogJson(endpoint, categoryParam ? 'collection' : 'search');
+    const hasCatFilter = Boolean(categoryParam || catIdParam);
+    const upstream = await fetchCatalogJson(endpoint, hasCatFilter ? 'collection' : 'search');
     if (!upstream.ok) {
       status = 502;
       title = 'Category Temporarily Unavailable';
-    } else if (categoryParam && !upstream.data.categoryExists) {
+    } else if (hasCatFilter && !upstream.data.categoryExists) {
       status = 404;
       view = 'not_found';
       title = 'Category Not Found';
@@ -121,6 +126,7 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
       title =
         upstream.data.title ||
         categoryParam ||
+        catIdParam ||
         matchedRoute.params.brand ||
         matchedRoute.params.condition ||
         matchedRoute.params.filter ||
@@ -149,9 +155,12 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
       title = 'Product Not Found';
     } else {
       const categoryVal =
-        matchedRoute.params.category || matchedRoute.params.categoryId || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionId || matchedRoute.params.collectionSlug || '';
+        matchedRoute.params.category || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionSlug || '';
+      const categoryIdVal =
+        matchedRoute.params.categoryId || matchedRoute.params.collectionId || '';
       const qParts = [];
       if (categoryVal) qParts.push(\`category=\${encodeURIComponent(categoryVal)}\`);
+      if (categoryIdVal) qParts.push(\`categoryId=\${encodeURIComponent(categoryIdVal)}\`);
       if (explicitSku) qParts.push(\`sku=\${encodeURIComponent(explicitSku)}\`);
       if (productSlug) qParts.push(\`productSlug=\${encodeURIComponent(productSlug)}\`);
       else if (explicitId) qParts.push(\`productId=\${encodeURIComponent(explicitId)}\`);
@@ -169,12 +178,13 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
         const reqCond = matchedRoute.params.condition || '';
         const reqVariant = matchedRoute.params.variantId || matchedRoute.params.variant || '';
         const catMismatch = Boolean(categoryVal) && (!candidate.categorySlug || candidate.categorySlug.toLowerCase() !== categoryVal.toLowerCase());
+        const catIdMismatch = Boolean(categoryIdVal) && (!candidate.categoryId || candidate.categoryId.toLowerCase() !== categoryIdVal.toLowerCase());
         const brandMismatch = Boolean(reqBrand) && (!candidate.brand || candidate.brand.toLowerCase() !== reqBrand.toLowerCase());
         const condMismatch = Boolean(reqCond) && (!candidate.condition || candidate.condition.toLowerCase() !== reqCond.toLowerCase());
         const variantMismatch =
           Boolean(reqVariant) &&
           (!Array.isArray(candidate.variants) || !candidate.variants.some((v) => v && String(v.id) === reqVariant));
-        if (catMismatch || brandMismatch || condMismatch || variantMismatch) {
+        if (catMismatch || catIdMismatch || brandMismatch || condMismatch || variantMismatch) {
           status = 404;
           view = 'not_found';
           title = 'Product Not Found';

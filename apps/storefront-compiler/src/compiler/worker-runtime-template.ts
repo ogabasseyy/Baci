@@ -58,7 +58,7 @@ function escapeJsonForScript(value) {
   return JSON.stringify(value).replace(/</g, '\\\\u003c').replace(/>/g, '\\\\u003e').replace(/&/g, '\\\\u0026');
 }
 
-const ALLOWED_SEARCH_PARAMS = ['brand', 'category', 'condition', 'limit', 'page', 'q'];
+const ALLOWED_SEARCH_PARAMS = ['brand', 'category', 'categoryId', 'condition', 'limit', 'page', 'q'];
 
 function canonicalizeSearchParams(inputParams) {
   const canonical = new URLSearchParams();

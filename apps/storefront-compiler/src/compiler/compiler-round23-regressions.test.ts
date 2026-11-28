@@ -265,7 +265,7 @@ describe('Round 23 compiler & runtime regressions', () => {
       protocol: 'baci-commerce/1',
       capability: 'navigation',
       method: 'navigation.go',
-      args: { path: '/search?q=iphone#top' },
+      args: { path: '/search' },
     });
   });
 

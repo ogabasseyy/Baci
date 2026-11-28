@@ -62,13 +62,15 @@ export function executeSimulatedAnonCatalogRpc(
     const productId = url.searchParams.get('productId') ?? '';
     const sku = url.searchParams.get('sku') ?? '';
     const category = url.searchParams.get('category');
+    const categoryId = url.searchParams.get('categoryId');
     const found = publishedRows.find(
       (row) =>
         ((sku !== '' &&
           (row.slug === sku || row.variants.some((v) => v.sku === sku))) ||
           (slug !== '' && row.slug === slug) ||
           (productId !== '' && row.id === productId)) &&
-        (!category || row.categorySlug === category)
+        (!category || row.categorySlug === category) &&
+        (!categoryId || row.categoryId === categoryId)
     );
     return JSON.stringify({
       merchantId,
@@ -82,6 +84,7 @@ export function executeSimulatedAnonCatalogRpc(
   const category = (url.searchParams.get('category') ?? '')
     .trim()
     .toLowerCase();
+  const categoryId = (url.searchParams.get('categoryId') ?? '').trim();
   const brand = (url.searchParams.get('brand') ?? '').trim().toLowerCase();
   const condition = (url.searchParams.get('condition') ?? '')
     .trim()
@@ -96,10 +99,16 @@ export function executeSimulatedAnonCatalogRpc(
   const page = Number.isFinite(rawPage) ? Math.max(Math.trunc(rawPage), 1) : 1;
 
   const categoryExists =
-    !category || publishedRows.some((row) => row.categorySlug === category);
+    (!category && !categoryId) ||
+    publishedRows.some(
+      (row) =>
+        (!category || row.categorySlug === category) &&
+        (!categoryId || row.categoryId === categoryId)
+    );
 
   const matched = publishedRows.filter((row) => {
     if (category && row.categorySlug !== category) return false;
+    if (categoryId && row.categoryId !== categoryId) return false;
     if (brand && row.brand.toLowerCase() !== brand) return false;
     if (condition && row.condition.toLowerCase() !== condition) return false;
     if (

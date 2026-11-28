@@ -47,6 +47,7 @@ function normalizeSsrCatalogProduct(p) {
     ...(typeof p.sku === 'string' && p.sku.length > 0 ? { sku: p.sku } : {}),
     name: p.name,
     categorySlug: typeof p.categorySlug === 'string' ? p.categorySlug : '',
+    ...(typeof p.categoryId === 'string' && p.categoryId.length > 0 ? { categoryId: p.categoryId } : {}),
     ...(typeof p.categoryName === 'string' ? { categoryName: p.categoryName } : {}),
     brand: typeof p.brand === 'string' ? p.brand : '',
     condition: typeof p.condition === 'string' ? p.condition : '',

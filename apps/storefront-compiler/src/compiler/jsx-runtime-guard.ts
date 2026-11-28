@@ -182,6 +182,39 @@ function sanitizeInlineStyle(styleObj) {
   return cloned || styleObj;
 }
 
+const MOTION_PROP_KEYS = new Set(['initial', 'animate', 'exit', 'whileHover', 'whileTap', 'whileFocus', 'whileDrag', 'whileInView', 'variants', 'values', 'transitionEnd']);
+const MOTION_BLOCKED_ATTRS = new Set(['href', 'xlinkhref', 'xlink:href', 'action', 'formaction', 'src', 'srcset', 'poster', 'data', 'cite', 'ping', 'srcdoc', 'target', 'formtarget', 'rel', 'download']);
+
+function sanitizeMotionValue(val, depth = 0) {
+  if (depth > 4 || !val || typeof val !== 'object') return val;
+  if (Array.isArray(val)) {
+    let changed = false;
+    const next = val.map((item) => {
+      const s = sanitizeMotionValue(item, depth + 1);
+      if (s !== item) changed = true;
+      return s;
+    });
+    return changed ? next : val;
+  }
+  let cloned = null;
+  const keys = Object.keys(val);
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    const v = val[k];
+    if (MOTION_BLOCKED_ATTRS.has(k.toLowerCase()) || (typeof v === 'string' && !isSafeInlineStyleValue(v))) {
+      if (!cloned) cloned = { ...val };
+      delete cloned[k];
+    } else if (v && typeof v === 'object') {
+      const sub = sanitizeMotionValue(v, depth + 1);
+      if (sub !== v) {
+        if (!cloned) cloned = { ...val };
+        cloned[k] = sub;
+      }
+    }
+  }
+  return cloned || val;
+}
+
 function sanitizeJsxNavProps(type, props) {
   if (!type || !props || typeof props !== 'object') {
     return props;
@@ -195,6 +228,12 @@ function sanitizeJsxNavProps(type, props) {
       if (nextStyle !== props.style) {
         if (!cloned) cloned = { ...props };
         cloned.style = nextStyle;
+      }
+    } else if (MOTION_PROP_KEYS.has(k)) {
+      const nextMotion = sanitizeMotionValue(props[k], 0);
+      if (nextMotion !== props[k]) {
+        if (!cloned) cloned = { ...props };
+        cloned[k] = nextMotion;
       }
     } else if (
       isNavPropKey(k) &&

@@ -1,31 +1,15 @@
 import ts from '@typescript/typescript6';
 import { resolveStaticOrConstString } from './const-string-fold';
-import { assertAllowedAssetUrl } from './css-asset-policy';
-import { extractAllCssResourceUrls } from './css-resource-urls';
-import { normalizeCssForInspection } from './css-text-normalize';
+import {
+  checkMotionAnimationProp,
+  findInlineCssUrlViolation,
+  MOTION_ANIMATION_PROP_NAMES,
+} from './motion-prop-safety';
 import {
   classifyMemberName,
   resolveStaticString,
   type SourceSafetyViolation,
 } from './source-guard-ast';
-
-function assertInlineStyleTextSafe(
-  styleValue: string,
-  filePath: string,
-  declaredAssetIds: ReadonlySet<string>
-): string | null {
-  const { withoutComments, unescaped } = normalizeCssForInspection(styleValue);
-  for (const candidate of [withoutComments, unescaped]) {
-    for (const rawUrl of extractAllCssResourceUrls(candidate)) {
-      try {
-        assertAllowedAssetUrl(rawUrl, filePath, declaredAssetIds);
-      } catch (err) {
-        return err instanceof Error ? err.message : 'Disallowed style URL';
-      }
-    }
-  }
-  return null;
-}
 
 const LOWER_NAV_JSX_ATTRS: ReadonlySet<string> = new Set(
   'href|action|formaction|xlinkhref|xlink:href'.split('|')
@@ -132,6 +116,16 @@ function checkJsxPropSafety(
     return;
   }
   classifyMemberName(env.filePath, attrName, env.violations);
+  if (hasInit && MOTION_ANIMATION_PROP_NAMES.has(attrName)) {
+    checkMotionAnimationProp(
+      env.filePath,
+      attrName,
+      expr,
+      env.declaredAssetIds,
+      env.violations
+    );
+    return;
+  }
   if (
     lower === 'style' &&
     hasInit &&
@@ -143,7 +137,7 @@ function checkJsxPropSafety(
       const val = resolveStaticOrConstString(p.initializer);
       const err =
         val !== null
-          ? assertInlineStyleTextSafe(val, env.filePath, env.declaredAssetIds)
+          ? findInlineCssUrlViolation(val, env.filePath, env.declaredAssetIds)
           : null;
       if (err) {
         env.violations.push({

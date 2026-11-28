@@ -101,6 +101,7 @@ describe('Round-20 Codex navigator/permission API allowlist and product route :c
               slug: 'pro-case',
               name: 'Pro Case (Phones)',
               categorySlug: 'smartphones',
+              categoryId: 'cat_phones_uuid',
               brand: 'Apple',
               priceNgn: 15000,
               inStock: true,
@@ -114,11 +115,11 @@ describe('Round-20 Codex navigator/permission API allowlist and product route :c
 
     try {
       const res = await mf.dispatchFetch(
-        'https://ogabassey.mybaci.store/smartphones/pro-case'
+        'https://ogabassey.mybaci.store/cat_phones_uuid/pro-case'
       );
       expect(res.status).toBe(200);
       expect(requestedUrls).toEqual([
-        'https://catalog.baci.internal/v1/product?category=smartphones&productSlug=pro-case',
+        'https://catalog.baci.internal/v1/product?categoryId=cat_phones_uuid&productSlug=pro-case',
       ]);
     } finally {
       await mf.dispose();

@@ -14,6 +14,7 @@ export type { CatalogSearchResponse };
 const ALLOWED_SEARCH_QUERY_KEYS = [
   'brand',
   'category',
+  'categoryId',
   'condition',
   'limit',
   'page',
@@ -21,6 +22,7 @@ const ALLOWED_SEARCH_QUERY_KEYS = [
 ] as const;
 const ALLOWED_PRODUCT_QUERY_KEYS = [
   'category',
+  'categoryId',
   'productId',
   'productSlug',
   'sku',

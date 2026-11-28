@@ -40,7 +40,10 @@ function tryBuildSingleProductRoute(p, routePath, slug) {
       continue;
     }
     const name = s.startsWith(':') ? s.slice(1) : s.slice(1, -1);
-    if (name === 'category' || name === 'categoryId' || name === 'categorySlug' || name === 'collection' || name === 'collectionId' || name === 'collectionSlug') {
+    if (name === 'categoryId' || name === 'collectionId') {
+      if (typeof p.categoryId !== 'string' || p.categoryId.length === 0) return undefined;
+      out.push(encodeURIComponent(p.categoryId));
+    } else if (name === 'category' || name === 'categorySlug' || name === 'collection' || name === 'collectionSlug') {
       if (typeof p.categorySlug !== 'string' || p.categorySlug.length === 0) return undefined;
       out.push(encodeURIComponent(p.categorySlug));
     } else if (name === 'brand') {

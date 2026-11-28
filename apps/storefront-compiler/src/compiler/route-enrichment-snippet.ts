@@ -147,5 +147,17 @@ function createRouteEnricher(initialProps, runtimeAssets, enrichedCache, getStat
   };
   return enrich;
 }
+
+function scrollHashFragment(hash) {
+  if (!hash || typeof hash !== 'string' || !hash.startsWith('#') || typeof setTimeout !== 'function') return;
+  setTimeout(() => {
+    try {
+      const fid = decodeURIComponent(hash.slice(1));
+      if (fid && typeof document !== 'undefined' && typeof document.getElementById === 'function') {
+        document.getElementById(fid)?.scrollIntoView?.();
+      }
+    } catch {}
+  }, 0);
+}
 `;
 }

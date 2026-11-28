@@ -21,6 +21,7 @@ const publicProductSchema = z.strictObject({
   sku: z.string().optional(),
   name: z.string(),
   categorySlug: z.string(),
+  categoryId: z.string().optional(),
   categoryName: z.string().optional(),
   brand: z.string(),
   condition: z.string(),

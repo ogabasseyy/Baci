@@ -17,6 +17,7 @@ export interface BackingCatalogProduct {
   slug: string;
   name: string;
   categorySlug: string;
+  categoryId?: string;
   categoryName: string;
   brand: string;
   condition: 'New' | 'Open Box' | 'UK Used';
@@ -45,6 +46,7 @@ export interface PublicProjectedProduct {
   slug: string;
   name: string;
   categorySlug: string;
+  categoryId?: string;
   categoryName: string;
   brand: string;
   condition: 'New' | 'Open Box' | 'UK Used';

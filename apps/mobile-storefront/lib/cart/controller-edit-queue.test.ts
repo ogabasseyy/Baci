@@ -116,3 +116,73 @@ it('releases the prediction when the queue refuses the slot before running', asy
   expect(t.deps.run).not.toHaveBeenCalled();
   expect(t.deps.edits.revert()).toBeNull();
 });
+
+const unreachable = (indeterminate = false) =>
+  new NativeCartError('temporarily_unavailable', indeterminate);
+
+it('quietly retries once when the store was unreachable before the edit was sent', async () => {
+  const t = setup();
+  t.deps.transmission.sent.mockReturnValue(false);
+  t.deps.run.mockRejectedValueOnce(unreachable()).mockResolvedValue(undefined);
+  await t.enqueue(add);
+  expect(t.deps.run).toHaveBeenCalledTimes(2);
+  expect(t.deps.notify.onWriteFailed).not.toHaveBeenCalled();
+  expect(t.deps.notify.onWriteSucceeded).toHaveBeenCalledTimes(1);
+  expect(t.deps.edits.revert()).toBeNull();
+});
+
+it('sends the edit after recovering a cart creation lost on a slow connection', async () => {
+  const t = setup();
+  t.deps.transmission.sent.mockReturnValue(false);
+  t.deps.run
+    .mockRejectedValueOnce(unreachable(true))
+    .mockResolvedValue(undefined);
+  await t.enqueue(add);
+  expect(t.deps.refresh).toHaveBeenCalledTimes(1);
+  expect(t.deps.run).toHaveBeenCalledTimes(2);
+  expect(t.deps.notify.onWriteFailed).not.toHaveBeenCalled();
+});
+
+it('reports the failure when the single retry fails too', async () => {
+  const t = setup();
+  t.deps.transmission.sent.mockReturnValue(false);
+  t.deps.run.mockRejectedValue(unreachable());
+  await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
+  expect(t.deps.run).toHaveBeenCalledTimes(2);
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalledTimes(1);
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalledWith(
+    add,
+    expect.anything(),
+    'rolled_back'
+  );
+});
+
+it('never repeats an edit whose own command already reached the network', async () => {
+  const t = setup();
+  t.deps.run.mockRejectedValue(unreachable(true));
+  await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
+  expect(t.deps.run).toHaveBeenCalledTimes(1);
+});
+
+it('does not retry while the lost cart creation is still unrecovered', async () => {
+  const t = setup();
+  t.deps.transmission.sent.mockReturnValue(false);
+  t.deps.run.mockRejectedValue(unreachable(true));
+  t.deps.hasRetainedRequest.mockResolvedValue(true);
+  await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
+  expect(t.deps.run).toHaveBeenCalledTimes(1);
+  expect(t.deps.notify.onWriteFailed).toHaveBeenCalledWith(
+    add,
+    expect.anything(),
+    'rolled_back'
+  );
+});
+
+it('does not retry when the recovery refresh fails', async () => {
+  const t = setup();
+  t.deps.transmission.sent.mockReturnValue(false);
+  t.deps.run.mockRejectedValue(unreachable(true));
+  t.deps.refresh.mockRejectedValue(unreachable());
+  await expect(t.enqueue(add)).rejects.toBeInstanceOf(NativeCartError);
+  expect(t.deps.run).toHaveBeenCalledTimes(1);
+});

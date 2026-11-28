@@ -15,6 +15,13 @@ export function isIndeterminateFailure(error: unknown): boolean {
   return error instanceof NativeCartError && error.indeterminate;
 }
 
+/** The request never got an answer: a slow or dropped connection, or the store briefly down. */
+function isUnreachable(error: unknown): boolean {
+  return (
+    error instanceof NativeCartError && error.code === 'temporarily_unavailable'
+  );
+}
+
 interface EditQueueDeps {
   edits: ReturnType<typeof createPendingEdits>;
   /** True only while a confirmed, unfinished cart is held, the one case a screen prediction is safe. */
@@ -46,61 +53,78 @@ export function createEditQueue(deps: EditQueueDeps) {
         : null;
     const unpin = deps.edits.pin(action);
     let started = false;
+    /** Settles one failed attempt; true means the edit is safe to send again. */
+    async function settleFailure(
+      error: unknown,
+      firstAttempt: boolean
+    ): Promise<boolean> {
+      // Blocked behind an earlier saved request: this edit was never sent,
+      // so recovering that request says nothing about it.
+      const blocked =
+        error instanceof NativeCartError && error.code === 'pending_operation';
+      const outcome: EditOutcome =
+        !blocked &&
+        (isIndeterminateFailure(error) ||
+          (await deps.hasRetainedRequest().catch(() => true)))
+          ? 'unconfirmed'
+          : 'rolled_back';
+      const sent = deps.transmission.sent();
+      // The store was unreachable before this edit's own command left the
+      // phone (slow connection while opening the cart), so sending it once
+      // more cannot apply it twice.
+      const retryable = firstAttempt && !sent && isUnreachable(error);
+      if (outcome === 'rolled_back' && retryable) return true;
+      // The write may have landed; settle against the server inside this
+      // slot so nothing else (checkout) runs on a guess.
+      let recovered = false;
+      // Recovering a lost cart creation says nothing about an edit never sent.
+      const unsent = outcome === 'unconfirmed' && !sent;
+      if (outcome === 'unconfirmed') {
+        if (edit && !unsent) deps.edits.markLanded(edit);
+        const refreshed = await deps.refresh().then(
+          () => true,
+          () => false
+        );
+        // Server truth is on screen and nothing is queued for retry: nothing left to explain.
+        const settled =
+          refreshed && !(await deps.hasRetainedRequest().catch(() => true));
+        if (settled && retryable) return true;
+        recovered = !unsent && settled;
+      }
+      if (recovered) deps.notify.onWriteSucceeded?.();
+      else
+        deps.notify.onWriteFailed?.(
+          action,
+          error,
+          unsent ? 'rolled_back' : outcome
+        );
+      return false;
+    }
     return deps
       .serial(async () => {
         started = true;
         try {
-          deps.transmission.reset();
           if (edit) deps.edits.startRun(edit);
-          const resolved = deps.edits.resolve(action);
-          if (resolved) {
-            await deps.run(resolved);
-            deps.notify.onWriteSucceeded?.();
+          for (let attempt = 0; ; attempt += 1) {
+            deps.transmission.reset();
+            try {
+              const resolved = deps.edits.resolve(action);
+              if (resolved) {
+                await deps.run(resolved);
+                deps.notify.onWriteSucceeded?.();
+              }
+              // The line this tap targeted never reached the cart.
+              else
+                deps.notify.onWriteFailed?.(
+                  action,
+                  new NativeCartError('invalid_item'),
+                  'rolled_back'
+                );
+              return;
+            } catch (error) {
+              if (!(await settleFailure(error, attempt === 0))) throw error;
+            }
           }
-          // The line this tap targeted never reached the cart.
-          else
-            deps.notify.onWriteFailed?.(
-              action,
-              new NativeCartError('invalid_item'),
-              'rolled_back'
-            );
-        } catch (error) {
-          // Blocked behind an earlier saved request: this edit was never sent,
-          // so recovering that request says nothing about it.
-          const blocked =
-            error instanceof NativeCartError &&
-            error.code === 'pending_operation';
-          const outcome: EditOutcome =
-            !blocked &&
-            (isIndeterminateFailure(error) ||
-              (await deps.hasRetainedRequest().catch(() => true)))
-              ? 'unconfirmed'
-              : 'rolled_back';
-          // The write may have landed; settle against the server inside this
-          // slot so nothing else (checkout) runs on a guess.
-          let recovered = false;
-          // Recovering a lost cart creation says nothing about an edit never sent.
-          const unsent = outcome === 'unconfirmed' && !deps.transmission.sent();
-          if (outcome === 'unconfirmed') {
-            if (edit && !unsent) deps.edits.markLanded(edit);
-            const refreshed = await deps.refresh().then(
-              () => true,
-              () => false
-            );
-            // Server truth is on screen and nothing is queued for retry: nothing left to explain.
-            recovered =
-              !unsent &&
-              refreshed &&
-              !(await deps.hasRetainedRequest().catch(() => true));
-          }
-          if (recovered) deps.notify.onWriteSucceeded?.();
-          else
-            deps.notify.onWriteFailed?.(
-              action,
-              error,
-              unsent ? 'rolled_back' : outcome
-            );
-          throw error;
         } finally {
           unpin();
           if (edit) deps.edits.settle(edit);

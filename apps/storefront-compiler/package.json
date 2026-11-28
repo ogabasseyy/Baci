@@ -9,7 +9,7 @@
     "./benchmark": "./src/benchmark/index.ts"
   },
   "scripts": {
-    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --external:esbuild --external:tailwindcss --external:@typescript/typescript6 --outfile=dist/cli.mjs",
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --external:esbuild --external:tailwindcss --outfile=dist/cli.mjs",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "typecheck:ci": "pnpm run typecheck",
@@ -19,7 +19,6 @@
   "dependencies": {
     "@baci/experience-sdk": "workspace:*",
     "@baci/shared": "workspace:*",
-    "@typescript/typescript6": "~6.0.2",
     "esbuild": "^0.28.1",
     "framer-motion": "^12.40.0",
     "react": "19.2.3",

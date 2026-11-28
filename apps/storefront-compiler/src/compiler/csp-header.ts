@@ -119,14 +119,6 @@ export function buildContentSecurityPolicyHeader(
           ])
         )
   ).join(' ');
-  const formActions = Array.from(
-    new Set([
-      "'self'",
-      tenantSubdomainOrigin,
-      canonicalHostOrigin,
-      'https://usebaci.com',
-    ])
-  ).join(' ');
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
@@ -134,7 +126,7 @@ export function buildContentSecurityPolicyHeader(
     `img-src ${imgSrc}`,
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
-    `form-action ${formActions}`,
+    "form-action 'none'",
     `frame-ancestors ${frameAncestors}`,
     "frame-src 'none'",
     "worker-src 'none'",

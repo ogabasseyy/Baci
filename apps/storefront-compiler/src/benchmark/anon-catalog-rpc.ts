@@ -25,6 +25,7 @@ export function projectSafeProduct(
     const qty = stockOverride?.get(variant.id) ?? variant.stockQty;
     return {
       id: variant.id,
+      sku: variant.sku,
       label: variant.label,
       storage: variant.storage,
       color: variant.color,
@@ -35,6 +36,7 @@ export function projectSafeProduct(
   return {
     id: row.id,
     slug: row.slug,
+    ...(row.sku ? { sku: row.sku } : {}),
     name: row.name,
     categorySlug: row.categorySlug,
     categoryName: row.categoryName,
@@ -68,7 +70,7 @@ export function executeSimulatedAnonCatalogRpc(
       (row) =>
         hasProdFilter &&
         (sku === '' ||
-          row.slug === sku ||
+          row.sku === sku ||
           row.variants.some((v) => v.sku === sku)) &&
         (slug === '' || row.slug === slug) &&
         (productId === '' || row.id === productId) &&

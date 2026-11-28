@@ -9,10 +9,12 @@ import {
   type WorkerStorefrontManifest,
 } from '../schemas/worker-manifest';
 import { StorefrontCompilerError } from './closed-graph-plugin';
-import { assertAllowedAssetUrl } from './css-asset-policy';
-import { extractAllCssResourceUrls } from './css-resource-urls';
-import { validateAndNormalizeMerchantCss } from './css-safety';
-import { normalizeCssForInspection } from './css-text-normalize';
+import {
+  assertAllowedAssetUrl,
+  extractAllCssResourceUrls,
+  normalizeCssForInspection,
+  validateAndNormalizeMerchantCss,
+} from './css-safety';
 
 const CANDIDATE_TOKEN_RE =
   /(?:[A-Za-z0-9_:/\-.%!#()+*&=$^~]|\[(?:[^[\]\s]|\[[^[\]\s]{0,80}\]){1,100}\])+/g;

@@ -1,13 +1,9 @@
+export { isProhibitedImportSpecifier } from './compiler/banned-specifiers';
 export {
   type CompiledStorefrontRelease,
   compileStorefrontWorker,
   StorefrontCompilerError,
 } from './compiler/compile-storefront';
-export {
-  isProhibitedImportSpecifier,
-  type SourceSafetyViolation,
-  scanManifestSourceSafety,
-} from './compiler/source-guard';
 export {
   type CompiledStorefrontCss,
   compileStorefrontTailwindCss,

@@ -15,6 +15,7 @@ export interface BackingCatalogVariant {
 export interface BackingCatalogProduct {
   id: string;
   slug: string;
+  sku?: string;
   name: string;
   categorySlug: string;
   categoryId?: string;
@@ -34,6 +35,7 @@ export interface BackingCatalogProduct {
 
 export interface PublicProjectedVariant {
   id: string;
+  sku?: string;
   label: string;
   storage: string;
   color: string;
@@ -44,6 +46,7 @@ export interface PublicProjectedVariant {
 export interface PublicProjectedProduct {
   id: string;
   slug: string;
+  sku?: string;
   name: string;
   categorySlug: string;
   categoryId?: string;

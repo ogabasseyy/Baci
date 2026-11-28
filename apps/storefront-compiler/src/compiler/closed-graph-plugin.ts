@@ -1,12 +1,10 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'esbuild';
-import { BANNED_MERCHANT_SUBPATH_SPECIFIERS } from './banned-specifiers';
-import { JSX_RUNTIME_VIRTUAL_PATH } from './jsx-runtime-guard';
 import {
+  BANNED_MERCHANT_SUBPATH_SPECIFIERS,
   isProhibitedImportSpecifier,
-  type SourceSafetyViolation,
-} from './source-guard';
+} from './banned-specifiers';
 
 function resolveCompilerPackageRoot(startDir: string): string {
   let currentDir = path.resolve(startDir);
@@ -45,20 +43,13 @@ const PINNED_PACKAGE_ALLOWLIST: ReadonlySet<string> = new Set([
 export class StorefrontCompilerError extends Error {
   public readonly code:
     | 'INVALID_MANIFEST'
-    | 'SOURCE_SAFETY_VIOLATION'
     | 'GRAPH_ESCAPE_BLOCKED'
     | 'BUDGET_EXCEEDED';
-  public readonly violations?: SourceSafetyViolation[];
 
-  constructor(
-    code: StorefrontCompilerError['code'],
-    message: string,
-    violations?: SourceSafetyViolation[]
-  ) {
+  constructor(code: StorefrontCompilerError['code'], message: string) {
     super(message);
     this.name = 'StorefrontCompilerError';
     this.code = code;
-    this.violations = violations;
   }
 }
 
@@ -112,14 +103,6 @@ export function createClosedStorefrontGraphPlugin(options: {
             'GRAPH_ESCAPE_BLOCKED',
             `Prohibited runtime specifier: "${args.path}"`
           );
-        }
-
-        if (
-          !args.importer.startsWith('__baci_') &&
-          (args.path === 'react/jsx-runtime' ||
-            args.path === 'react/jsx-dev-runtime')
-        ) {
-          return { path: JSX_RUNTIME_VIRTUAL_PATH, namespace: 'source' };
         }
 
         if (args.namespace === 'source' && args.path.startsWith('.')) {

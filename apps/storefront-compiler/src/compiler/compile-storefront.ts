@@ -14,10 +14,6 @@ import {
   StorefrontCompilerError,
 } from './closed-graph-plugin';
 import {
-  buildSafeJsxRuntimeSource,
-  JSX_RUNTIME_VIRTUAL_PATH,
-} from './jsx-runtime-guard';
-import {
   computeManifestSourceDigest,
   sha256Hex,
 } from './manifest-source-digest';
@@ -25,7 +21,6 @@ import {
   PREBUNDLE_VIRTUAL_ENTRY,
   prebundleMerchantEntrySource,
 } from './prebundle-merchant-entry';
-import { scanManifestSourceSafety } from './source-guard';
 import { compileStorefrontTailwindCss } from './tailwind-css';
 import {
   buildClientHydrationEntrySource,
@@ -54,6 +49,14 @@ export interface CompiledStorefrontRelease {
   cspGovernance: CspGovernanceSummary;
 }
 
+/**
+ * Compiles a merchant storefront manifest into an isolated Worker + client release.
+ *
+ * Security is enforced by capability boundaries rather than static JS AST denylisting:
+ * 1. Closed-graph esbuild + Tailwind v4 resolution (pinned package allowlist, virtual files, declared assets).
+ * 2. Zero-binding V8 isolate (`bindings: []`) + Outbound Worker (`merchant_id` bound from dispatch params) + runtime SSR try/catch fallback.
+ * 3. Strict runtime CSP (`form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'`) and opaque `sandbox="allow-scripts"` iframe + authenticated MessagePort host validation.
+ */
 export async function compileStorefrontWorker(
   rawInput: unknown
 ): Promise<CompiledStorefrontRelease> {
@@ -64,15 +67,6 @@ export async function compileStorefrontWorker(
     throw new StorefrontCompilerError(
       'INVALID_MANIFEST',
       error instanceof Error ? error.message : 'Invalid storefront manifest'
-    );
-  }
-
-  const safetyViolations = scanManifestSourceSafety(manifest);
-  if (safetyViolations.length > 0) {
-    throw new StorefrontCompilerError(
-      'SOURCE_SAFETY_VIOLATION',
-      safetyViolations.map((v) => `${v.filePath}: ${v.detail}`).join('; '),
-      safetyViolations
     );
   }
 
@@ -100,19 +94,12 @@ export async function compileStorefrontWorker(
   const assetsMap = Object.fromEntries(
     manifest.assets.map((a) => [a.assetId, `/assets/${a.assetId}`])
   );
-
   const canonicalHostOrigin =
     manifest.hostOrigin ?? `https://${manifest.merchantSlug}.usebaci.com`;
-  const jsxRuntimeSource = buildSafeJsxRuntimeSource(
-    manifest.merchantSlug,
-    manifest.assets.map((a) => a.assetId),
-    canonicalHostOrigin
-  );
 
   const clientVirtualFiles = new Map(
     manifest.files.map((f) => [f.path, f.content])
   );
-  clientVirtualFiles.set(JSX_RUNTIME_VIRTUAL_PATH, jsxRuntimeSource);
   clientVirtualFiles.set(
     PREBUNDLE_VIRTUAL_ENTRY,
     await prebundleMerchantEntrySource({
@@ -184,7 +171,6 @@ export async function compileStorefrontWorker(
   const workerVirtualFiles = new Map(
     manifest.files.map((f) => [f.path, f.content])
   );
-  workerVirtualFiles.set(JSX_RUNTIME_VIRTUAL_PATH, jsxRuntimeSource);
   workerVirtualFiles.set(
     PREBUNDLE_VIRTUAL_ENTRY,
     await prebundleMerchantEntrySource({

@@ -1,13 +1,114 @@
 import path from 'node:path';
-import { assertAllowedAssetUrl } from './css-asset-policy';
-import { extractAllCssResourceUrls } from './css-resource-urls';
-import { normalizeCssForInspection } from './css-text-normalize';
 
+const CSS_URL_RE =
+  /url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^'")\s]+))\s*\)/gi;
+const CSS_SRC_FN_RE =
+  /\bsrc\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^'")\s]+))\s*\)/gi;
+const IMAGE_SET_START_RE = /(?:-[a-z]+-)?image-set\s*\(/gi;
+const IMAGE_SET_TOKEN_RE =
+  /\b(?:url|type)\s*\(\s*(?:"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'|[^'")\s]*)\s*\)|"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'/gi;
 const EXTERNAL_CSS_IMPORT_RE =
   /@import\s+(?:url\s*\(\s*)?['"]?(?:https?:|\/\/|data:|file:)/i;
 const FORBIDDEN_TAILWIND_DIRECTIVE_RE = /@(?:plugin|config|source)\b/i;
 const IMPORT_URL_CALL_RE =
   /@import\s+url\(\s*(?:"((?:[^"\\]|\\[\s\S])*)"|'((?:[^'\\]|\\[\s\S])*)'|([^'")\s]+))\s*\)/gi;
+
+function stripCssComments(rawCss: string): string {
+  return rawCss.replace(
+    /(\\([\s\S])|"(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*')|\/\*[\s\S]*?(?:\*\/|$)/g,
+    (_match, kept: string | undefined) => (kept !== undefined ? kept : '/**/')
+  );
+}
+
+function decodeCssEscapes(rawCss: string): string {
+  return rawCss.replace(
+    /\\([0-9a-fA-F]{1,6})\s?|\\(.)/g,
+    (_match, hex: string | undefined, ch: string | undefined) => {
+      if (hex !== undefined) {
+        const codePoint = Number.parseInt(hex, 16);
+        if (
+          Number.isFinite(codePoint) &&
+          codePoint > 0 &&
+          codePoint <= 0x10ffff
+        ) {
+          return String.fromCodePoint(codePoint);
+        }
+      }
+      return ch ?? '';
+    }
+  );
+}
+
+export function normalizeCssForInspection(rawCss: string): {
+  withoutComments: string;
+  unescaped: string;
+} {
+  const withoutComments = stripCssComments(rawCss);
+  return {
+    withoutComments,
+    unescaped: decodeCssEscapes(withoutComments),
+  };
+}
+
+export function extractAllCssResourceUrls(cssText: string): string[] {
+  const urls: string[] = [];
+  for (const m of cssText.matchAll(CSS_URL_RE)) {
+    urls.push(m[1] ?? m[2] ?? m[3] ?? '');
+  }
+  for (const m of cssText.matchAll(CSS_SRC_FN_RE)) {
+    urls.push(m[1] ?? m[2] ?? m[3] ?? '');
+  }
+  for (const startMatch of cssText.matchAll(IMAGE_SET_START_RE)) {
+    let idx = (startMatch.index ?? 0) + startMatch[0].length;
+    let depth = 1;
+    const bodyStart = idx;
+    while (idx < cssText.length && depth > 0) {
+      const ch = cssText[idx];
+      if (ch === '\\') {
+        idx += 2;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        const quote = ch;
+        idx += 1;
+        while (idx < cssText.length && cssText[idx] !== quote) {
+          idx += cssText[idx] === '\\' ? 2 : 1;
+        }
+        idx += 1;
+        continue;
+      }
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      idx += 1;
+    }
+    const endIdx = depth === 0 ? idx - 1 : Math.min(idx, cssText.length);
+    const rawBody = cssText.slice(bodyStart, Math.max(bodyStart, endIdx));
+    for (const tok of rawBody.matchAll(IMAGE_SET_TOKEN_RE)) {
+      const strUrl = tok[1] ?? tok[2];
+      if (strUrl !== undefined) urls.push(strUrl);
+    }
+  }
+  return urls;
+}
+
+export function assertAllowedAssetUrl(
+  rawUrl: string,
+  sourceLabel: string,
+  declaredAssetIds: ReadonlySet<string>
+): void {
+  const trimmed = decodeCssEscapes(rawUrl).trim();
+  if (trimmed.startsWith('#')) return;
+  if (trimmed.startsWith('/assets/')) {
+    const assetId = trimmed.slice('/assets/'.length);
+    if (!declaredAssetIds.has(assetId)) {
+      throw new Error(`Undeclared asset URL "${trimmed}" in "${sourceLabel}"`);
+    }
+    return;
+  }
+  throw new Error(
+    `Disallowed CSS url("${trimmed}") in "${sourceLabel}"; declare media in manifest.assets`
+  );
+}
 
 export function validateAndNormalizeMerchantCss(
   cssContent: string,

@@ -65,12 +65,12 @@ export async function setPrimaryDomain(
       throw new Error('Only active domains can be set as primary');
     }
 
-    // Update domain to be primary
-    // The database trigger will handle unsetting other primary domains
-    const { error: updateError } = await supabase
-      .from('domains')
-      .update({ is_primary: true })
-      .eq('id', domainRecord.id);
+    // Atomically swap primary domain through the guarded lifecycle RPC
+    // (works for both SaaS-bound and legacy/purchased domains).
+    const { error: updateError } = await supabase.rpc(
+      'set_merchant_primary_domain',
+      { p_domain: domain.trim().toLowerCase() }
+    );
 
     if (updateError) {
       throw new Error('Failed to set primary domain');

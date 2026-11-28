@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
         'reserve_merchant_domain_onboarding',
         {
           p_hostname: domain,
-          p_is_primary: isPrimary,
+          p_is_primary: isPrimary ?? null,
         }
       );
 
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
         dns_routing_provider: 'cloudflare_saas',
         cloudflare_zone_id: cfConfig.zoneId,
         cloudflare_hostname_id: null,
-        requested_is_primary: isPrimary,
+        requested_is_primary: isPrimary ?? false,
         lifecycle_state: reserved.lifecycle_state,
         current_operation_id: reserved.operation_id,
         in_flight_lease_until: null,
@@ -357,7 +357,7 @@ export async function POST(request: NextRequest) {
         ssl_status: sslStatus,
         verification_token: verificationToken,
         verification_token_expires_at: verificationTokenExpiresAt,
-        is_primary: isPrimary,
+        is_primary: isPrimary ?? false,
       })
       .select(DOMAIN_SELECT)
       .single();

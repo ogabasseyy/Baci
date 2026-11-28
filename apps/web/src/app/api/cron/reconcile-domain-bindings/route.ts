@@ -48,12 +48,24 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   let reconciled = 0;
   let released = 0;
+  let withdrewRouting = 0;
   let failed = 0;
 
   for (const binding of claimedBindings) {
     try {
       if (binding.lifecycle_state === 'provisioning') {
         await reconcileProvisioningBinding(binding, { cfConfig, writer });
+        reconciled += 1;
+      } else if (
+        binding.lifecycle_state === 'verifying_routing' &&
+        binding.current_operation_id
+      ) {
+        // Recover interrupted verifying_routing probes whose lease expired
+        await writer.withdrawVerifyingRouting(
+          binding.domain_id,
+          binding.current_operation_id
+        );
+        withdrewRouting += 1;
         reconciled += 1;
       } else if (
         binding.lifecycle_state === 'deleting' ||
@@ -77,7 +89,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
   }
 
-  if (released > 0) {
+  if (released > 0 || withdrewRouting > 0) {
     await triggerDomainEdgeConfigSync().catch(() => undefined);
   }
 

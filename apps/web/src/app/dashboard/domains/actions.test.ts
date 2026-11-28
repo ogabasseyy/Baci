@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
       getUser: vi.fn(),
     },
     from: vi.fn(),
+    rpc: vi.fn(),
   },
 }));
 
@@ -70,6 +71,10 @@ describe('setPrimaryDomain', () => {
       error: null,
     });
     mocks.updateDomainQuery.eq.mockResolvedValue({ error: null });
+    mocks.supabaseClient.rpc.mockResolvedValue({
+      data: { status: 'updated' },
+      error: null,
+    });
     mocks.getUser.mockResolvedValue({
       data: { user: { id: 'user-1' } },
       error: null,
@@ -113,10 +118,10 @@ describe('setPrimaryDomain', () => {
       'merchant_id',
       'merchant-1'
     );
-    expect(mocks.domainsTable.update).toHaveBeenCalledWith({
-      is_primary: true,
-    });
-    expect(mocks.updateDomainQuery.eq).toHaveBeenCalledWith('id', 'domain-1');
+    expect(mocks.supabaseClient.rpc).toHaveBeenCalledWith(
+      'set_merchant_primary_domain',
+      { p_domain: 'shop.example.com' }
+    );
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/dashboard/domains');
     expect(mocks.revalidateMerchantFeed).toHaveBeenCalledWith('merchant-1');
     expect(mocks.triggerDomainEdgeConfigSync).toHaveBeenCalled();

@@ -91,7 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_domain_provider_bindings_merchant_id
 
 CREATE INDEX IF NOT EXISTS idx_domain_provider_bindings_reconcile_due
   ON public.domain_provider_bindings (next_reconcile_at)
-  WHERE lifecycle_state IN ('provisioning', 'deleting', 'deleting_reconciling');
+  WHERE lifecycle_state IN ('provisioning', 'verifying_routing', 'deleting', 'deleting_reconciling');
 
 CREATE TABLE IF NOT EXISTS domain_lifecycle_private.domain_provider_attempts (
   attempt_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -117,23 +117,16 @@ CREATE POLICY domain_provider_bindings_merchant_select
   FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1
-      FROM public.merchants m
-      WHERE m.id = domain_provider_bindings.merchant_id
-        AND m.user_id = auth.uid()
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM public.staff_members s
-      WHERE s.merchant_id = domain_provider_bindings.merchant_id
-        AND s.user_id = auth.uid()
-        AND s.status = 'active'
+    public.check_staff_permission(
+      auth.uid(),
+      domain_provider_bindings.merchant_id,
+      'settings',
+      'view'
     )
   );
 
 -- Protect SaaS-bound parent `public.domains` rows from direct client mutations
--- to routing-authoritative columns.
+-- to routing-authoritative columns AND from direct client DELETEs.
 CREATE OR REPLACE FUNCTION domain_lifecycle_private.guard_saas_bound_domains_parent_update()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -142,6 +135,9 @@ SET search_path = ''
 AS $trigger$
 BEGIN
   IF pg_catalog.current_setting('app.domain_lifecycle_bypass', true) = 'on' THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
     RETURN NEW;
   END IF;
 
@@ -150,6 +146,12 @@ BEGIN
     FROM public.domain_provider_bindings b
     WHERE b.domain_id = OLD.id
   ) THEN
+    IF TG_OP = 'DELETE' THEN
+      RAISE EXCEPTION
+        'SaaS-bound domains must be deleted through domain lifecycle RPCs'
+        USING ERRCODE = '42501';
+    END IF;
+
     IF NEW.domain IS DISTINCT FROM OLD.domain
       OR NEW.merchant_id IS DISTINCT FROM OLD.merchant_id
       OR NEW.status IS DISTINCT FROM OLD.status
@@ -163,17 +165,21 @@ BEGIN
     END IF;
   END IF;
 
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
   RETURN NEW;
 END;
 $trigger$;
 
 DROP TRIGGER IF EXISTS trg_guard_saas_bound_domains_parent_update ON public.domains;
 CREATE TRIGGER trg_guard_saas_bound_domains_parent_update
-  BEFORE UPDATE ON public.domains
+  BEFORE UPDATE OR DELETE ON public.domains
   FOR EACH ROW
   EXECUTE FUNCTION domain_lifecycle_private.guard_saas_bound_domains_parent_update();
 
--- Helper: resolve caller's merchant_id and enforce owner or active staff with settings.edit
+-- Helper: resolve caller's merchant_id and enforce owner or active staff with
+-- effective settings.edit permission (honoring explicit per-user revocations).
 CREATE OR REPLACE FUNCTION domain_lifecycle_private.resolve_authorized_merchant_for_domain_edit()
 RETURNS uuid
 LANGUAGE plpgsql
@@ -203,10 +209,7 @@ BEGIN
   FROM public.staff_members s
   WHERE s.user_id = v_uid
     AND s.status = 'active'
-    AND (
-      s.role::text = 'admin'
-      OR (s.permissions -> 'settings' ->> 'edit') = 'true'
-    )
+    AND public.check_staff_permission(v_uid, s.merchant_id, 'settings', 'edit')
   LIMIT 1;
 
   IF v_merchant_id IS NULL THEN
@@ -220,7 +223,7 @@ $fn$;
 -- Merchant-callable Intent RPC 1: Reserve BYOD SaaS domain onboarding
 CREATE OR REPLACE FUNCTION public.reserve_merchant_domain_onboarding(
   p_hostname text,
-  p_is_primary boolean DEFAULT false
+  p_is_primary boolean DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -242,7 +245,7 @@ BEGIN
 
   IF v_hostname = ''
     OR length(v_hostname) > 253
-    OR v_hostname !~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+    OR v_hostname !~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'
   THEN
     RAISE EXCEPTION 'invalid_hostname' USING ERRCODE = '22023';
   END IF;
@@ -439,6 +442,22 @@ BEGIN
     RAISE EXCEPTION 'in_flight_lease_active' USING ERRCODE = 'P0001';
   END IF;
 
+  IF v_binding.lifecycle_state IN ('deleting', 'deleting_reconciling')
+    AND v_binding.in_flight_lease_until IS NOT NULL
+    AND v_binding.in_flight_lease_until > now()
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'in_flight',
+      'domain_id', v_domain_id,
+      'binding_id', v_binding.id,
+      'operation_id', v_binding.current_operation_id,
+      'cloudflare_zone_id', v_binding.cloudflare_zone_id,
+      'cloudflare_hostname_id', v_binding.cloudflare_hostname_id,
+      'cloudflare_create_state', v_binding.cloudflare_create_state,
+      'vercel_create_state', v_binding.vercel_create_state
+    );
+  END IF;
+
   UPDATE public.domain_provider_bindings
   SET lifecycle_state = 'deleting',
       current_operation_id = v_op_id,
@@ -460,11 +479,91 @@ BEGIN
 END;
 $fn$;
 
+-- Merchant-callable Intent RPC 3: Atomically set an active domain as primary
+-- (handles SaaS-bound domains cleanly without bypassing the parent guard trigger)
+CREATE OR REPLACE FUNCTION public.set_merchant_primary_domain(
+  p_domain text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_merchant_id uuid;
+  v_hostname text;
+  v_entitled boolean := false;
+  v_target public.domains%ROWTYPE;
+BEGIN
+  v_merchant_id := domain_lifecycle_private.resolve_authorized_merchant_for_domain_edit();
+  v_hostname := pg_catalog.lower(pg_catalog.btrim(coalesce(p_domain, '')));
+
+  SELECT (
+    (
+      jsonb_typeof(m.premium_features) = 'array'
+      AND (
+        m.premium_features ? 'custom_domain'
+        OR m.premium_features ? 'all_features'
+      )
+    )
+    OR (
+      m.plan_tier IN ('starter', 'pro', 'business', 'enterprise')
+      AND (m.plan_expires_at IS NULL OR m.plan_expires_at > now())
+    )
+  )
+  INTO v_entitled
+  FROM public.merchants m
+  WHERE m.id = v_merchant_id;
+
+  IF coalesce(v_entitled, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'custom_domain_entitlement_required' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT d.*
+  INTO v_target
+  FROM public.domains d
+  WHERE d.merchant_id = v_merchant_id
+    AND pg_catalog.lower(d.domain) = v_hostname
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'domain_not_found' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF v_target.status <> 'active' THEN
+    RAISE EXCEPTION 'domain_not_active' USING ERRCODE = 'P0001';
+  END IF;
+
+  PERFORM pg_catalog.set_config('app.domain_lifecycle_bypass', 'on', true);
+
+  UPDATE public.domains
+  SET is_primary = false,
+      updated_at = now()
+  WHERE merchant_id = v_merchant_id
+    AND is_primary IS TRUE
+    AND id <> v_target.id;
+
+  UPDATE public.domains
+  SET is_primary = true,
+      updated_at = now()
+  WHERE id = v_target.id;
+
+  RETURN jsonb_build_object(
+    'status', 'updated',
+    'domain_id', v_target.id,
+    'domain', v_target.domain
+  );
+END;
+$fn$;
+
 REVOKE ALL ON FUNCTION public.reserve_merchant_domain_onboarding(text, boolean) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.reserve_merchant_domain_onboarding(text, boolean) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.request_merchant_domain_deletion(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.request_merchant_domain_deletion(text) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.set_merchant_primary_domain(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.set_merchant_primary_domain(text) TO authenticated;
 
 -- Trusted Server-Only RPC 1: Claim due bindings exclusively (post-commit safe)
 CREATE OR REPLACE FUNCTION domain_lifecycle_private.claim_due_domain_bindings(
@@ -486,13 +585,8 @@ BEGIN
     SELECT b.id
     FROM public.domain_provider_bindings b
     WHERE (b.in_flight_lease_until IS NULL OR b.in_flight_lease_until <= now())
-      AND b.lifecycle_state IN ('provisioning', 'deleting', 'deleting_reconciling')
-      AND (
-        b.next_reconcile_at IS NULL
-        OR b.next_reconcile_at <= now()
-        OR b.cloudflare_create_state IN ('in_flight', 'indeterminate')
-        OR b.vercel_create_state IN ('in_flight', 'indeterminate')
-      )
+      AND b.lifecycle_state IN ('provisioning', 'verifying_routing', 'deleting', 'deleting_reconciling')
+      AND (b.next_reconcile_at IS NULL OR b.next_reconcile_at <= now())
     ORDER BY coalesce(b.next_reconcile_at, b.updated_at) ASC
     LIMIT v_limit
     FOR UPDATE SKIP LOCKED
@@ -584,7 +678,10 @@ BEGIN
         ELSE lifecycle_state
       END,
       in_flight_lease_until = CASE
-        WHEN p_state IN ('confirmed', 'deleted') AND lifecycle_state = 'provisioning' THEN NULL
+        WHEN lifecycle_state = 'provisioning'
+          AND (CASE WHEN p_provider = 'cloudflare' THEN p_state ELSE cloudflare_create_state END) = 'confirmed'
+          AND (CASE WHEN p_provider = 'vercel' THEN p_state ELSE vercel_create_state END) = 'confirmed'
+        THEN NULL
         ELSE in_flight_lease_until
       END,
       updated_at = now()
@@ -596,6 +693,8 @@ END;
 $fn$;
 
 -- Trusted Server-Only RPC 3: Advance to verifying_routing (inbound-only Edge Config probe)
+-- Sets a 30s lease + next_reconcile_at so an interrupted probe is automatically
+-- recovered by the reconciler or by a subsequent verify retry after lease expiry.
 CREATE OR REPLACE FUNCTION domain_lifecycle_private.advance_domain_to_verifying_routing(
   p_domain_id uuid,
   p_operation_id uuid
@@ -607,13 +706,22 @@ SET search_path = ''
 AS $fn$
 DECLARE
   v_binding public.domain_provider_bindings%ROWTYPE;
+  v_lease_until timestamptz := now() + interval '30 seconds';
 BEGIN
   UPDATE public.domain_provider_bindings
   SET lifecycle_state = 'verifying_routing',
       current_operation_id = p_operation_id,
+      in_flight_lease_until = v_lease_until,
+      next_reconcile_at = v_lease_until,
       updated_at = now()
   WHERE domain_id = p_domain_id
-    AND lifecycle_state = 'pending_verification'
+    AND (
+      lifecycle_state = 'pending_verification'
+      OR (
+        lifecycle_state = 'verifying_routing'
+        AND (in_flight_lease_until IS NULL OR in_flight_lease_until <= now())
+      )
+    )
   RETURNING * INTO v_binding;
 
   IF NOT FOUND THEN
@@ -756,12 +864,30 @@ BEGIN
 END;
 $fn$;
 
+-- Trusted Server-Only RPC 7: List active SaaS hostnames & zones for cache purge
+-- Avoids constructing a service-role client outside the approved cache-drain route.
+CREATE OR REPLACE FUNCTION domain_lifecycle_private.list_active_saas_purge_targets(
+  p_merchant_id uuid
+)
+RETURNS TABLE (hostname text, cloudflare_zone_id text)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT b.hostname, b.cloudflare_zone_id
+  FROM public.domain_provider_bindings b
+  WHERE b.merchant_id = p_merchant_id
+    AND b.lifecycle_state = 'active'
+    AND b.dns_routing_provider = 'cloudflare_saas';
+$fn$;
+
 REVOKE ALL ON FUNCTION domain_lifecycle_private.claim_due_domain_bindings(int, int) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION domain_lifecycle_private.record_domain_provider_result(uuid, uuid, text, text, text, text, jsonb, int) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION domain_lifecycle_private.advance_domain_to_verifying_routing(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION domain_lifecycle_private.commit_domain_active(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION domain_lifecycle_private.withdraw_domain_verifying_routing(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION domain_lifecycle_private.finalize_domain_deletion(uuid, uuid, boolean) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION domain_lifecycle_private.list_active_saas_purge_targets(uuid) FROM PUBLIC, anon, authenticated, service_role;
 
 GRANT EXECUTE ON FUNCTION domain_lifecycle_private.claim_due_domain_bindings(int, int) TO baci_domain_lifecycle_writer;
 GRANT EXECUTE ON FUNCTION domain_lifecycle_private.record_domain_provider_result(uuid, uuid, text, text, text, text, jsonb, int) TO baci_domain_lifecycle_writer;
@@ -769,3 +895,4 @@ GRANT EXECUTE ON FUNCTION domain_lifecycle_private.advance_domain_to_verifying_r
 GRANT EXECUTE ON FUNCTION domain_lifecycle_private.commit_domain_active(uuid, uuid) TO baci_domain_lifecycle_writer;
 GRANT EXECUTE ON FUNCTION domain_lifecycle_private.withdraw_domain_verifying_routing(uuid, uuid) TO baci_domain_lifecycle_writer;
 GRANT EXECUTE ON FUNCTION domain_lifecycle_private.finalize_domain_deletion(uuid, uuid, boolean) TO baci_domain_lifecycle_writer;
+GRANT EXECUTE ON FUNCTION domain_lifecycle_private.list_active_saas_purge_targets(uuid) TO baci_domain_lifecycle_writer;

@@ -193,11 +193,31 @@ export async function POST(
         );
       }
 
+      const { data: merchantRow } = await supabase
+        .from('merchants')
+        .select('slug')
+        .eq('id', merchantId)
+        .maybeSingle();
+
+      const expectedSlug = merchantRow?.slug ?? '';
+      if (!expectedSlug) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Merchant slug is unavailable for routing verification',
+          },
+          { status: 500 }
+        );
+      }
+
       const verifyOpId = crypto.randomUUID();
       await writer.advanceToVerifyingRouting(domainRecord.id, verifyOpId);
       await triggerDomainEdgeConfigSync();
 
-      const probe = await probeStorefrontRouting(bindingRow.hostname);
+      const probe = await probeStorefrontRouting(
+        bindingRow.hostname,
+        expectedSlug
+      );
       if (!probe.ok) {
         await writer.withdrawVerifyingRouting(domainRecord.id, verifyOpId);
         await triggerDomainEdgeConfigSync();

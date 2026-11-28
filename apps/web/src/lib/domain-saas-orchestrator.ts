@@ -250,7 +250,15 @@ export async function reconcileDeletingBinding(
         targetConfig
       );
 
-      if (!wasUnresolved || result.resolvedId !== null) {
+      // A 404 on an already-known Cloudflare hostname ID is terminal (the object
+      // was deleted on an earlier attempt whose response was lost). Only keep
+      // `indeterminate` when no provider ID was ever recorded for an unresolved create.
+      const isTerminalMissing =
+        !wasUnresolved ||
+        result.resolvedId !== null ||
+        binding.cloudflare_hostname_id !== null;
+
+      if (isTerminalMissing) {
         binding = await writer.recordProviderResult({
           domainId: binding.domain_id,
           operationId,
@@ -258,8 +266,7 @@ export async function reconcileDeletingBinding(
           state: 'deleted',
         });
       } else {
-        // Unresolved create not visible yet: schedule another check instead of
-        // assuming it will never appear.
+        // Unresolved create with no known ID not visible yet: schedule another check.
         binding = await writer.recordProviderResult({
           domainId: binding.domain_id,
           operationId,
@@ -296,7 +303,9 @@ export async function reconcileDeletingBinding(
       const message = error instanceof Error ? error.message.toLowerCase() : '';
       const isNotFound =
         message.includes('not found') || message.includes('404');
-      if (isNotFound && binding.vercel_create_state === 'confirmed') {
+      if (isNotFound) {
+        // Not-found on Vercel DELETE is terminal for confirmed, in_flight, and
+        // indeterminate attempts (including lost-response retries).
         binding = await writer.recordProviderResult({
           domainId: binding.domain_id,
           operationId,
@@ -326,21 +335,59 @@ export async function reconcileDeletingBinding(
 
 export async function probeStorefrontRouting(
   hostname: string,
+  expectedMerchantSlug: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<{ ok: boolean; status?: number; error?: string }> {
   try {
     const response = await fetchImpl(`https://${hostname}/`, {
-      method: 'HEAD',
+      method: 'GET',
       redirect: 'manual',
       signal: AbortSignal.timeout(5000),
     });
-    if (response.status >= 200 && response.status < 400) {
+    if (response.status < 200 || response.status >= 300) {
+      return {
+        ok: false,
+        status: response.status,
+        error: `Routing probe returned HTTP ${response.status}`,
+      };
+    }
+
+    const normalizedSlug = expectedMerchantSlug.trim().toLowerCase();
+    const headerSlug = response.headers
+      .get('x-baci-merchant-slug')
+      ?.trim()
+      .toLowerCase();
+    if (headerSlug) {
+      if (headerSlug === normalizedSlug) {
+        return { ok: true, status: response.status };
+      }
+      return {
+        ok: false,
+        status: response.status,
+        error: 'Routing probe reached a different storefront tenant',
+      };
+    }
+
+    const bodyText = await response.text().catch(() => '');
+    const metaMatch = bodyText.match(
+      /<meta[^>]+name=["']baci-merchant-slug["'][^>]+content=["']([^"']+)["']/i
+    );
+    const dataAttrMatch = bodyText.match(
+      /data-baci-merchant-slug=["']([^"']+)["']/i
+    );
+    const markerSlug = (metaMatch?.[1] ?? dataAttrMatch?.[1] ?? '')
+      .trim()
+      .toLowerCase();
+
+    if (markerSlug && markerSlug === normalizedSlug) {
       return { ok: true, status: response.status };
     }
+
     return {
       ok: false,
       status: response.status,
-      error: `Routing probe returned HTTP ${response.status}`,
+      error:
+        'Routing probe did not confirm expected storefront tenant response',
     };
   } catch (error) {
     return {

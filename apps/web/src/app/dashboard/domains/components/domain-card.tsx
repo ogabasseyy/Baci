@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -38,6 +39,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
+import type { DomainVerificationRecord } from '@/schemas/cloudflare-saas';
 import { setPrimaryDomain } from '../actions';
 
 export interface Domain {
@@ -81,8 +83,10 @@ async function runVerifyDomain({
   toast,
   router,
   setIsVerifying,
+  setPendingRecords,
 }: DomainActionContext & {
   setIsVerifying: (verifying: boolean) => void;
+  setPendingRecords: (records: DomainVerificationRecord[]) => void;
 }): Promise<void> {
   const controller = new AbortController();
   const timeoutId = setTimeout(
@@ -102,12 +106,16 @@ async function runVerifyDomain({
     const data = await response.json();
 
     if (response.ok && data.success) {
+      setPendingRecords([]);
       toast({
         title: 'Domain Verified! ✅',
         description: `${domainName} has been verified and is now active.`,
       });
       router.refresh();
     } else {
+      if (Array.isArray(data.verificationRecords)) {
+        setPendingRecords(data.verificationRecords);
+      }
       toast({
         title: 'Verification Failed',
         description:
@@ -229,6 +237,9 @@ export function DomainCard({ domain }: DomainCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSettingPrimary, setIsSettingPrimary] = useState(false);
+  const [pendingRecords, setPendingRecords] = useState<
+    DomainVerificationRecord[]
+  >([]);
 
   const getStatusBadge = (status: Domain['status']) => {
     const variants: Record<
@@ -282,6 +293,7 @@ export function DomainCard({ domain }: DomainCardProps) {
       toast,
       router,
       setIsVerifying,
+      setPendingRecords,
     });
   };
 
@@ -451,6 +463,29 @@ export function DomainCard({ domain }: DomainCardProps) {
             </div>
           </div>
         </CardHeader>
+        {pendingRecords.length > 0 && (
+          <CardContent className="pt-0">
+            <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-xs">
+              <p className="font-medium text-foreground">
+                Required DNS records to complete verification:
+              </p>
+              {pendingRecords.map((record) => (
+                <div
+                  key={`${record.type}-${record.name}-${record.value}`}
+                  className="grid gap-1 rounded border bg-background p-2 font-mono"
+                >
+                  <div>
+                    <span className="font-semibold">{record.type}</span>{' '}
+                    <span className="break-all">{record.name}</span>
+                  </div>
+                  <div className="break-all text-muted-foreground">
+                    {record.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

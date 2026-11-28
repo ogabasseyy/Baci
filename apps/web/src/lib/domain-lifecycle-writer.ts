@@ -19,14 +19,20 @@ const VERIFY_SESSION_SQL = `SELECT current_database() AS database_name,
       JOIN pg_catalog.pg_roles parent ON parent.oid = membership.roleid
       WHERE membership.member = role.oid AND parent.rolname <> 'baci_domain_lifecycle_writer')
     AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domain_provider_bindings', 'SELECT')
+    AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domain_provider_bindings', 'INSERT')
     AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domain_provider_bindings', 'UPDATE')
+    AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domain_provider_bindings', 'DELETE')
+    AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domains', 'SELECT')
+    AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domains', 'INSERT')
     AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domains', 'UPDATE')
+    AND NOT pg_catalog.has_table_privilege(SESSION_USER, 'public.domains', 'DELETE')
     AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.claim_due_domain_bindings(integer,integer)', 'EXECUTE')
     AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.record_domain_provider_result(uuid,uuid,text,text,text,text,jsonb,integer)', 'EXECUTE')
     AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.advance_domain_to_verifying_routing(uuid,uuid)', 'EXECUTE')
     AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.commit_domain_active(uuid,uuid)', 'EXECUTE')
     AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.withdraw_domain_verifying_routing(uuid,uuid)', 'EXECUTE')
-    AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.finalize_domain_deletion(uuid,uuid,boolean)', 'EXECUTE')) AS safe,
+    AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.finalize_domain_deletion(uuid,uuid,boolean)', 'EXECUTE')
+    AND pg_catalog.has_function_privilege(SESSION_USER, 'domain_lifecycle_private.list_active_saas_purge_targets(uuid)', 'EXECUTE')) AS safe,
   EXISTS(SELECT 1 FROM pg_catalog.pg_stat_ssl WHERE pid = pg_catalog.pg_backend_pid() AND ssl) AS tls
   FROM pg_catalog.pg_roles role WHERE role.rolname = SESSION_USER`;
 
@@ -84,6 +90,9 @@ export interface DomainLifecycleWriter {
     operationId: string,
     operatorReconciled?: boolean
   ): Promise<boolean>;
+  listActiveSaasPurgeTargets(
+    merchantId: string
+  ): Promise<Array<{ hostname: string; cloudflare_zone_id: string | null }>>;
 }
 
 export class DomainLifecycleWriterError extends Error {
@@ -283,6 +292,19 @@ export function createDomainLifecycleWriter(
           [domainId, operationId, operatorReconciled]
         );
         return res.rows[0]?.released === true;
+      });
+    },
+
+    listActiveSaasPurgeTargets(merchantId) {
+      return withVerifiedClient(config, async (client) => {
+        const res = await client.query<{
+          hostname: string;
+          cloudflare_zone_id: string | null;
+        }>(
+          'SELECT hostname, cloudflare_zone_id FROM domain_lifecycle_private.list_active_saas_purge_targets($1::uuid)',
+          [merchantId]
+        );
+        return res.rows;
       });
     },
   };

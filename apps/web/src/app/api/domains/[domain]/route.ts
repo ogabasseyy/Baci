@@ -268,13 +268,21 @@ export async function DELETE(
     }
 
     // Check if this domain has a Cloudflare for SaaS binding
-    const { data: bindingRow } = await supabase
+    const { data: bindingRow, error: bindingError } = await supabase
       .from('domain_provider_bindings')
       .select(
         'id, domain_id, merchant_id, hostname, dns_routing_provider, cloudflare_zone_id, cloudflare_hostname_id, requested_is_primary, lifecycle_state, current_operation_id, in_flight_lease_until, cloudflare_create_state, vercel_create_state, next_reconcile_at, provider_verification_records'
       )
       .eq('domain_id', ownedDomain.id)
       .maybeSingle();
+
+    if (bindingError) {
+      console.error('Error querying domain provider binding:', bindingError);
+      return NextResponse.json(
+        { error: 'Failed to inspect domain lifecycle state' },
+        { status: 500 }
+      );
+    }
 
     if (bindingRow) {
       const cfConfig = readCloudflareSaasConfig();
@@ -305,7 +313,7 @@ export async function DELETE(
       }
 
       const reqData = deletionReq as {
-        status: 'not_found' | 'legacy' | 'deleting';
+        status: 'not_found' | 'legacy' | 'deleting' | 'in_flight';
         domain_id?: string;
         binding_id?: string;
         operation_id?: string;
@@ -314,6 +322,17 @@ export async function DELETE(
         cloudflare_create_state?: DomainBindingRow['cloudflare_create_state'];
         vercel_create_state?: DomainBindingRow['vercel_create_state'];
       };
+
+      if (reqData.status === 'in_flight') {
+        return NextResponse.json(
+          {
+            success: true,
+            released: false,
+            lifecycleState: 'deleting',
+          },
+          { status: 202 }
+        );
+      }
 
       if (reqData.status === 'deleting' && reqData.operation_id) {
         const result = await reconcileDeletingBinding(

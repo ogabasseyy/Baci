@@ -120,10 +120,15 @@ export async function GET(
             );
 
         if (remote) {
-          verificationRecords = extractCloudflareVerificationRecords(
+          const cfRecords = extractCloudflareVerificationRecords(
             bindingRow.hostname,
             remote
           );
+          const persistedVercelRecords = verificationRecords.filter(
+            (record: { purpose?: string }) =>
+              record?.purpose === 'vercel_ownership'
+          );
+          verificationRecords = [...cfRecords, ...persistedVercelRecords];
         }
       } catch (error) {
         console.warn('Cloudflare verification record refresh failed:', error);

@@ -84,4 +84,19 @@ describe('drainStorefrontCacheInvalidation dynamic SaaS purge', () => {
     const res = await drainStorefrontCacheInvalidation(NEW_MERCHANT_CLAIM);
     expect(res).toEqual({ ok: false, errorCode: 'cloudflare_http_502' });
   });
+
+  it('batches SaaS hostnames in groups of at most 30 per zone', async () => {
+    const hosts = Array.from({ length: 35 }, (_, i) => `shop-${i}.example.com`);
+    mockResolveMerchantSaasPurgeTargets.mockResolvedValue({
+      ok: true,
+      zones: new Map([['zone_saas_1', hosts]]),
+    });
+    mockStrictCloudflarePurge.mockResolvedValue({ ok: true });
+
+    const res = await drainStorefrontCacheInvalidation(NEW_MERCHANT_CLAIM);
+    expect(res).toEqual({ ok: true });
+    expect(mockStrictCloudflarePurge).toHaveBeenCalledTimes(2);
+    expect(mockStrictCloudflarePurge.mock.calls[0]?.[0]).toHaveLength(30);
+    expect(mockStrictCloudflarePurge.mock.calls[1]?.[0]).toHaveLength(5);
+  });
 });

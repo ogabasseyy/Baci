@@ -203,17 +203,27 @@ export async function drainStorefrontCacheInvalidation(
     }
   }
 
-  // Purge active Cloudflare-for-SaaS hostnames grouped by zone, failing closed
-  // if any zone purge fails so the outbox retries.
+  // Purge active Cloudflare-for-SaaS hostnames grouped by zone in batches of
+  // at most 30 (Cloudflare API host-purge batch limit), failing closed on error.
+  const MAX_CLOUDFLARE_HOSTS_PER_BATCH = 30;
   for (const [zoneId, zoneHostnames] of saasTargets.zones.entries()) {
     const uniqueZoneHosts = uniqueStable(zoneHostnames);
-    if (uniqueZoneHosts.length === 0) continue;
-    const zoneKey = `${claimKey}:zone:${zoneId}:${[...uniqueZoneHosts].sort().join('|')}::${[...vercelTags].sort().join('|')}`;
-    const zoneResult = await cloudflarePurgeSingleFlight.run(zoneKey, () =>
-      strictCloudflareHostnamePurge(uniqueZoneHosts, { zoneId })
-    );
-    if (!zoneResult.ok) {
-      return zoneResult;
+    for (
+      let offset = 0;
+      offset < uniqueZoneHosts.length;
+      offset += MAX_CLOUDFLARE_HOSTS_PER_BATCH
+    ) {
+      const batch = uniqueZoneHosts.slice(
+        offset,
+        offset + MAX_CLOUDFLARE_HOSTS_PER_BATCH
+      );
+      const zoneKey = `${claimKey}:zone:${zoneId}:${[...batch].sort().join('|')}::${[...vercelTags].sort().join('|')}`;
+      const zoneResult = await cloudflarePurgeSingleFlight.run(zoneKey, () =>
+        strictCloudflareHostnamePurge(batch, { zoneId })
+      );
+      if (!zoneResult.ok) {
+        return zoneResult;
+      }
     }
   }
 

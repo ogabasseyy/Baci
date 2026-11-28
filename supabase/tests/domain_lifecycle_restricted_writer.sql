@@ -14,7 +14,8 @@ DECLARE
     'domain_lifecycle_private.advance_domain_to_verifying_routing(uuid,uuid)',
     'domain_lifecycle_private.commit_domain_active(uuid,uuid)',
     'domain_lifecycle_private.withdraw_domain_verifying_routing(uuid,uuid)',
-    'domain_lifecycle_private.finalize_domain_deletion(uuid,uuid,boolean)'
+    'domain_lifecycle_private.finalize_domain_deletion(uuid,uuid,boolean)',
+    'domain_lifecycle_private.list_active_saas_purge_targets(uuid)'
   ];
 BEGIN
   FOREACH v_fn IN ARRAY v_fns LOOP
@@ -77,8 +78,8 @@ VALUES
 
 INSERT INTO public.staff_members (merchant_id, user_id, email, role, status, permissions)
 VALUES
-  ('97110000-0000-4000-8000-000000000001', '97110000-0000-4000-8000-000000000103', 'saas-staff-allowed@example.test', 'manager', 'active', '{"settings":{"edit":true}}'::jsonb),
-  ('97110000-0000-4000-8000-000000000001', '97110000-0000-4000-8000-000000000104', 'saas-staff-denied@example.test', 'support', 'active', '{"settings":{"edit":false}}'::jsonb);
+  ('97110000-0000-4000-8000-000000000001', '97110000-0000-4000-8000-000000000103', 'saas-staff-allowed@example.test', 'manager', 'active', '{"settings":{"edit":true,"view":true}}'::jsonb),
+  ('97110000-0000-4000-8000-000000000001', '97110000-0000-4000-8000-000000000104', 'saas-staff-denied@example.test', 'customer_service', 'active', '{"settings":{"edit":false,"view":false}}'::jsonb);
 
 -- Existing primary domain on Pro merchant to exercise unique primary index
 INSERT INTO public.domains (

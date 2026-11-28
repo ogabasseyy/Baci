@@ -74,6 +74,7 @@ function makeWriter(initial: DomainBindingRow): DomainLifecycleWriter {
         current.vercel_create_state === 'none';
       return cfDone && vercelDone;
     }),
+    listActiveSaasPurgeTargets: vi.fn(async () => []),
   };
 }
 
@@ -196,5 +197,33 @@ describe('domain-saas-orchestrator', () => {
     expect(sweep2.released).toBe(true);
     expect(sweep2.binding.cloudflare_create_state).toBe('deleted');
     expect(lateAppearFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats 404 on a known Cloudflare hostname ID and Vercel not-found as terminal after lost delete responses', async () => {
+    const initial = makeBinding({
+      lifecycle_state: 'deleting_reconciling',
+      cloudflare_hostname_id: 'cf_known_1',
+      cloudflare_create_state: 'indeterminate',
+      vercel_create_state: 'indeterminate',
+    });
+    const writer = makeWriter(initial);
+
+    const cf404Fetch = vi.fn(async () => new Response('', { status: 404 }));
+    const vercelClient = {
+      addDomain: vi.fn(),
+      verifyDomain: vi.fn(),
+      removeDomain: vi.fn(async () => {
+        throw new Error('Domain not found (404)');
+      }),
+    };
+
+    const res = await reconcileDeletingBinding(initial, {
+      cfConfig: { apiToken: 'tok', zoneId: 'zone_1', fetchImpl: cf404Fetch },
+      writer,
+      vercelClient,
+    });
+    expect(res.released).toBe(true);
+    expect(res.binding.cloudflare_create_state).toBe('deleted');
+    expect(res.binding.vercel_create_state).toBe('deleted');
   });
 });

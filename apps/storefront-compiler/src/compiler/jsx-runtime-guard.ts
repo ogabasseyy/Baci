@@ -65,7 +65,6 @@ function isSafeCompletedNavTarget(val) {
       return false;
     }
     return (
-      u.origin === 'https://usebaci.com' ||
       u.origin === TRUSTED_ORIGIN ||
       (CUSTOM_HOST_ORIGIN.length > 0 && u.origin === CUSTOM_HOST_ORIGIN)
     );

@@ -233,7 +233,7 @@ async function handleCatalogBridgeRequest(url, method) {
       return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Valid route path is required' }, method);
     }
     const parsedTarget = new URL(rawPath, 'https://storefront.baci.internal');
-    if (parsedTarget.origin !== 'https://storefront.baci.internal' || parsedTarget.pathname.startsWith('/_baci')) {
+    if (parsedTarget.origin !== 'https://storefront.baci.internal' || /^\\/_baci(?:\\/|$)/i.test(parsedTarget.pathname)) {
       return jsonCatalogBridgeResponse(400, { status: 'error', code: 'INVALID_REQUEST', message: 'Invalid route path' }, method);
     }
     const matched = matchDeclaredRoute(parsedTarget.pathname);

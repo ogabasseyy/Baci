@@ -39,13 +39,15 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     (typeof TRUSTED_HOST_ORIGIN === 'string' && TRUSTED_HOST_ORIGIN.length > 0 && origin === TRUSTED_HOST_ORIGIN);
 
   const handleClick = (boundRoot) => (event) => {
-    if (!event || event.defaultPrevented || event.type !== 'click') return;
+    if (!event || event.defaultPrevented) return;
+    const isAuxClick = event.type === 'auxclick';
+    if (event.type !== 'click' && !isAuxClick) return;
+    if (isAuxClick ? event.button !== 1 : (typeof event.button === 'number' && event.button !== 0)) return;
+    if (event.altKey) return;
     if (seenClicks && typeof event === 'object') {
       if (seenClicks.has(event)) return;
       seenClicks.add(event);
     }
-    if (typeof event.button === 'number' && event.button !== 0) return;
-    if (event.shiftKey || event.altKey) return;
     let node = event.target;
     while (node && node !== boundRoot) {
       const tag = typeof node.tagName === 'string' ? node.tagName.toUpperCase() : '';
@@ -57,9 +59,14 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     const targetAttr = readDomStringAttr(node, 'target', 'target');
     const normalizedTarget = typeof targetAttr === 'string' ? targetAttr.trim().toLowerCase() : '';
     if (normalizedTarget.length > 0 && normalizedTarget !== '_self' && normalizedTarget !== '_blank') {
+      event.preventDefault();
       return;
     }
-    const wantsNewTab = normalizedTarget === '_blank' || Boolean(event.metaKey || event.ctrlKey);
+    const wantsNewTab =
+      normalizedTarget === '_blank' ||
+      isAuxClick ||
+      event.button === 1 ||
+      Boolean(event.metaKey || event.ctrlKey || event.shiftKey);
     const rawHref = readDomStringAttr(node, 'href', 'href');
     if (typeof rawHref !== 'string' || rawHref.length === 0 || rawHref.startsWith('#')) return;
     try {
@@ -67,7 +74,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
       const baseOrigin = new URL(baseHref).origin;
       const parsed = new URL(rawHref, baseHref);
       if (!isStorefrontCanonicalOrigin(parsed.origin, baseOrigin)) {
-        if (!wantsNewTab && parsed.origin !== 'https://usebaci.com') event.preventDefault();
+        event.preventDefault();
         return;
       }
       if ((rawHref.startsWith('/') && rawHref.includes('//')) || /[%\\\\]/.test(rawHref) || parsed.pathname.includes('//')) {
@@ -145,8 +152,27 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     event.preventDefault();
   };
 
+  const disarmImmediateStop = (event) => {
+    if (!event || typeof event !== 'object') return;
+    try {
+      const fallbackStop = typeof event.stopPropagation === 'function' ? event.stopPropagation.bind(event) : null;
+      Object.defineProperty(event, 'stopImmediatePropagation', {
+        configurable: true,
+        value: () => {
+          if (fallbackStop) fallbackStop();
+        },
+      });
+    } catch {}
+  };
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('click', disarmImmediateStop, true);
+    window.addEventListener('auxclick', disarmImmediateStop, true);
+    window.addEventListener('submit', disarmImmediateStop, true);
+  }
   for (const r of roots) {
-    r.addEventListener('click', handleClick(r));
+    const onRootClick = handleClick(r);
+    r.addEventListener('click', onRootClick);
+    r.addEventListener('auxclick', onRootClick);
     r.addEventListener('submit', handleSubmit);
   }
 }

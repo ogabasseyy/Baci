@@ -275,7 +275,7 @@ describe('Round 30 compiler & runtime regressions', () => {
       method: 'navigation.open',
       args: { path: '/smartphones' },
     });
-    expect(rootListeners.has('auxclick')).toBe(false);
+    expect(rootListeners.has('auxclick')).toBe(true);
     let submitPrevented = false;
     rootListeners.get('submit')?.({
       type: 'submit',

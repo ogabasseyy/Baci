@@ -76,7 +76,6 @@ function isSafeStaticNavTarget(
     if (u.username || u.password || u.search !== '' || u.hash !== '')
       return false;
     return (
-      u.origin === 'https://usebaci.com' ||
       u.origin === `https://${merchantSlug}.usebaci.com` ||
       (Boolean(hostOrigin) && u.origin === hostOrigin)
     );
@@ -216,8 +215,7 @@ function checkJsxPropSafety(
     const safePrefix =
       (head.startsWith('/') && !head.startsWith('//')) ||
       (!isSdkLinkPath &&
-        (head.startsWith('https://usebaci.com/') ||
-          head.startsWith(`https://${env.merchantSlug}.usebaci.com/`) ||
+        (head.startsWith(`https://${env.merchantSlug}.usebaci.com/`) ||
           (Boolean(env.hostOrigin) && head.startsWith(`${env.hostOrigin}/`))));
     // Completed dynamic template targets are validated at render time by
     // JSX_RUNTIME_VIRTUAL_PATH (jsx-runtime-guard.ts -> '#') and framed-anchor-snippet.ts.

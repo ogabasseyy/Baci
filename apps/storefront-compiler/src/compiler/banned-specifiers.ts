@@ -129,6 +129,7 @@ export const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
     'sethtmlunsafe|parsehtmlunsafe|sethtml|createhtml|createscript|createscripturl',
     'ownerdocument|contentdocument|contentwindow|defaultview|preinit|preinitmodule',
     'preload|preloadmodule|prefetchdns|preconnect|requestsubmit|dispatchevent',
+    'stopimmediatepropagation|cancelbubble|addeventlistener|onclickcapture|onauxclickcapture|onsubmitcapture',
     'implementation|createdocument|createhtmldocument|createdocumenttype',
     'createdocumentfragment|createrange|importnode|adoptnode|clonenode',
     'attachshadow|shadowroot|appendchild|insertbefore|replacechild|replacechildren',

@@ -99,7 +99,7 @@ describe('Round 34 origin, framed-anchor, iframe, timeout, and asset-namespace r
     const clickHandler = rootListeners.get('click');
     expect(clickHandler).toBeDefined();
 
-    // Apex https://usebaci.com/privacy must NOT be stripped to tenant /privacy
+    // Apex https://usebaci.com/privacy must NOT be stripped to tenant /privacy AND must not reload the iframe natively
     let apexPrevented = false;
     clickHandler?.({
       type: 'click',
@@ -115,7 +115,7 @@ describe('Round 34 origin, framed-anchor, iframe, timeout, and asset-namespace r
           k === 'href' ? 'https://usebaci.com/privacy' : null,
       },
     });
-    expect(apexPrevented).toBe(false);
+    expect(apexPrevented).toBe(true);
     expect(navCalls).toHaveLength(0);
 
     // Merchant canonical origin https://shop.ogabassey.com/smartphones IS routed via navigation.go

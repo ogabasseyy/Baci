@@ -66,14 +66,19 @@ export function buildSupabase(
   const maybeSingle = vi
     .fn()
     .mockResolvedValue({ data: { payment_method: 'paystack' }, error: null });
-  const eq = vi.fn().mockReturnValue({ limit, maybeSingle, single });
-  const select = vi.fn().mockReturnValue({ eq });
+  const eq = vi.fn();
+  const query = { eq, limit, maybeSingle, single };
+  eq.mockReturnValue(query);
+  const select = vi.fn().mockReturnValue(query);
   const deleteChain: Record<string, unknown> = { error: null };
   deleteChain.eq = vi.fn(() => deleteChain);
   deleteChain.delete = vi.fn(() => deleteChain);
-  return {
-    from: vi.fn().mockReturnValue({ ...deleteChain, select }),
-  } as unknown as SupabaseClient;
+  return Object.assign(
+    {
+      from: vi.fn().mockReturnValue({ ...deleteChain, select }),
+    },
+    { eq }
+  ) as unknown as SupabaseClient;
 }
 
 export function baseArgs(

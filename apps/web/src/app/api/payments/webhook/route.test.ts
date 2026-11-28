@@ -6315,7 +6315,9 @@ describe('POST /api/payments/webhook', () => {
                 cancelled_at: '2026-01-01T00:00:00Z',
                 order_number: 'ORD-123',
               }
-            : null;
+            : name === 'reinstate_timeout_order_payment'
+              ? 'blocked'
+              : null;
         const result = { data, error: null };
         return Object.assign(Promise.resolve(result), {
           single: () => Promise.resolve(result),

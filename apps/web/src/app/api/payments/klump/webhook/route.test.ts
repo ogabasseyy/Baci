@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   transactionSelectSingle: vi.fn(),
   transactionUpdateMaybeSingle: vi.fn(),
   orderUpdateSingle: vi.fn(),
+  orderUpdateEq: vi.fn(),
   orderUpdateNeq: vi.fn(),
 }));
 
@@ -140,6 +141,7 @@ function createSupabaseMock({
   settlementResult = { data: null, error: null },
   transactionAmount = '50000',
   transactionStatus = 'pending',
+  reinstatementResult = 'blocked',
 }: {
   inventoryConfirmationResult?: { data: unknown; error: unknown };
   merchantAmount?: number | string | null;
@@ -149,6 +151,7 @@ function createSupabaseMock({
   settlementResult?: { data: unknown; error: unknown };
   transactionAmount?: number | string | null;
   transactionStatus?: string;
+  reinstatementResult?: 'blocked' | 'reinstated';
   transactionUpdateResult?: { data: unknown; error: unknown };
 } = {}) {
   return {
@@ -185,6 +188,10 @@ function createSupabaseMock({
           update: vi.fn((payload: unknown) => {
             mocks.orderUpdateSingle(payload);
             const chain = makeUpdateChain(orderUpdateResult);
+            chain.eq = vi.fn((...args: unknown[]) => {
+              mocks.orderUpdateEq(...args);
+              return chain;
+            });
             chain.neq = vi.fn((...args: unknown[]) => {
               mocks.orderUpdateNeq(...args);
               return chain;
@@ -225,6 +232,10 @@ function createSupabaseMock({
       throw new Error(`Unexpected table ${table}`);
     }),
     rpc: vi.fn((name: string, args: unknown) => {
+      if (name === 'reinstate_timeout_order_payment') {
+        return Promise.resolve({ data: reinstatementResult, error: null });
+      }
+
       if (name === 'record_merchant_settlement') {
         mocks.recordMerchantSettlement(args);
         return Promise.resolve(settlementResult);
@@ -395,6 +406,10 @@ describe('POST /api/payments/klump/webhook', () => {
         shipping_status: 'processing',
       })
     );
+    expect(mocks.orderUpdateEq).toHaveBeenCalledWith(
+      'merchant_id',
+      'merchant-123'
+    );
     // A payment-only cancellation is terminal: the paid write must
     // exclude both cancelled spellings so a late capture cannot
     // reopen an order whose loyalty claim was already released.
@@ -484,6 +499,37 @@ describe('POST /api/payments/klump/webhook', () => {
     expect(mocks.orderUpdateSingle).not.toHaveBeenCalled();
   });
 
+  it('checks the current order after reinstatement before running settlement', async () => {
+    const cancelledOrder = {
+      id: 'order-123',
+      merchant_id: 'merchant-123',
+      payment_status: 'cancelled',
+      shipping_status: 'cancelled',
+      cancelled_at: '2026-06-15T00:00:00Z',
+    };
+    mocks.createAdminClient.mockReturnValue(
+      createSupabaseMock({
+        orderUpdateResult: { data: cancelledOrder, error: null },
+        preUpdateOrderStatusResult: { data: cancelledOrder, error: null },
+        reinstatementResult: 'reinstated',
+      })
+    );
+    const response = await POST(
+      createRequest(
+        successfulPayload,
+        signPayload(JSON.stringify(successfulPayload), 'klump-secret')
+      )
+    );
+    expect(await response.json()).toMatchObject({
+      success: true,
+      message: 'Payment recorded; order filed for review',
+    });
+    expect(mocks.recordMerchantSettlement).not.toHaveBeenCalled();
+    expect(mocks.reconciliationInsert).toHaveBeenCalledWith(
+      expect.objectContaining({ order_id: 'order-123' })
+    );
+  });
+
   it('suppresses settlement + notification and files reconciliation when the order was clamped as cancelled', async () => {
     mocks.createAdminClient.mockReturnValue(
       createSupabaseMock({
@@ -558,6 +604,46 @@ describe('POST /api/payments/klump/webhook', () => {
         issue_type: 'payment_received_after_cancellation',
       })
     );
+  });
+
+  it('keeps a refunded Klump order terminal and files a refund review', async () => {
+    mocks.createAdminClient.mockReturnValue(
+      createSupabaseMock({
+        orderUpdateResult: { data: null, error: null },
+        preUpdateOrderStatusResult: {
+          data: {
+            id: 'order-123',
+            payment_status: 'refunded',
+            shipping_status: 'pending',
+          },
+          error: null,
+        },
+      })
+    );
+
+    const rawBody = JSON.stringify(successfulPayload);
+    const response = await POST(
+      createRequest(successfulPayload, signPayload(rawBody, 'klump-secret'))
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      message: 'Klump payment recorded; refunded order filed for review',
+      success: true,
+    });
+    expect(mocks.orderUpdateNeq).toHaveBeenCalledWith(
+      'payment_status',
+      'refunded'
+    );
+    expect(mocks.reconciliationInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'payment_received_after_refund',
+        order_id: 'order-123',
+      })
+    );
+    expect(mocks.recordMerchantSettlement).not.toHaveBeenCalled();
+    expect(mocks.notifyNewOrder).not.toHaveBeenCalled();
   });
 
   it('files reconciliation when the paid update was filtered out by a shipping-only cancellation', async () => {

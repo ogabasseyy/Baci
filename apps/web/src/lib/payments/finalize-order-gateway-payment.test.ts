@@ -214,6 +214,37 @@ describe('finalizeOrderGatewayPayment', () => {
     expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
   });
 
+  it('rechecks a reinstated order before skipping inventory confirmation', async () => {
+    mocks.completeOrderGatewayPayment.mockResolvedValue(
+      completion({ timeout_inventory_confirmed: true })
+    );
+    const order = {
+      ...richOrderRow,
+      cancelled_at: '2026-11-27T10:00:00Z',
+      paid_transaction_id: null,
+      payment_status: 'refunded',
+      shipping_status: 'cancelled',
+    };
+
+    const outcome = await finalizeOrderGatewayPayment(
+      baseArgs(buildSupabase({ data: order }))
+    );
+
+    expect(outcome).toEqual({
+      kind: 'order_skipped',
+      paymentStatus: 'refunded',
+    });
+    expect(mocks.handlePaymentForCancelledOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issueType: 'payment_received_after_refund',
+        transactionId: 'txn-1',
+      })
+    );
+    expect(mocks.ensurePaidOrderInventoryConfirmed).not.toHaveBeenCalled();
+    expect(mocks.notifyPaymentReceived).not.toHaveBeenCalled();
+    expect(mocks.runPaidOrderSideEffects).not.toHaveBeenCalled();
+  });
+
   it('fails closed when a blocked-order review cannot be filed', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue(
       completion({
@@ -236,10 +267,9 @@ describe('finalizeOrderGatewayPayment', () => {
   it('completes the happy path: inventory, push, and side effects', async () => {
     mocks.completeOrderGatewayPayment.mockResolvedValue(completion());
     mocks.ensurePaidOrderInventoryConfirmed.mockResolvedValue(undefined);
+    const supabase = buildSupabase({ data: richOrderRow });
 
-    const outcome = await finalizeOrderGatewayPayment(
-      baseArgs(buildSupabase({ data: richOrderRow }))
-    );
+    const outcome = await finalizeOrderGatewayPayment(baseArgs(supabase));
 
     expect(outcome).toEqual({
       capturedOnPaidOrder: false,
@@ -252,6 +282,9 @@ describe('finalizeOrderGatewayPayment', () => {
       'merchant-1',
       'order-1'
     );
+    expect(
+      (supabase as unknown as { eq: ReturnType<typeof vi.fn> }).eq
+    ).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(mocks.notifyPaymentReceived).toHaveBeenCalled();
     expect(mocks.runPaidOrderSideEffects).toHaveBeenCalledWith(
       expect.objectContaining({

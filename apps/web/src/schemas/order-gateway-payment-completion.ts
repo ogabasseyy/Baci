@@ -5,6 +5,10 @@ import { z } from 'zod';
 // Parsed at the RPC boundary so route/cron callers never touch raw jsonb.
 const optionalCompletionFields = {
   actor: z.string().nullish(),
+  amount_paid: z.union([z.number(), z.string()]).nullish(),
+  paid_at: z.string().nullish(),
+  paid_transaction_id: z.string().nullish(),
+  timeout_inventory_confirmed: z.boolean().optional(),
   already_completed: z.boolean().optional(),
   cancelled_at: z.string().nullish(),
   merchant_invoice_partial_recorded: z.boolean().optional(),
@@ -35,6 +39,10 @@ const completionErrorSchema = z.object({
 
 const completionSuccessSchema = z.object({
   actor: z.string().nullable(),
+  amount_paid: z.union([z.number(), z.string()]).nullish(),
+  paid_at: z.string().nullish(),
+  paid_transaction_id: z.string().nullish(),
+  timeout_inventory_confirmed: z.boolean().optional(),
   already_completed: z.boolean(),
   cancelled_at: z.string().nullable(),
   merchant_invoice_partial_recorded: z.boolean().optional(),

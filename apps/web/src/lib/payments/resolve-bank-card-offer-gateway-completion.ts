@@ -146,6 +146,7 @@ export async function resolveBankCardOfferGatewayCompletion({
     actor,
     expectedOutstandingMinor,
     gatewayResponse: verified.gatewayResponse,
+    merchantId,
     orderId,
     supabase,
     transactionId,

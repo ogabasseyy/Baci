@@ -30,6 +30,7 @@ import {
   triggerPurchaseConversion,
 } from '@/lib/trigger-purchase-conversion';
 import { sendEmail } from '@/lib/zeptomail';
+import { finalizeJuicywayTerminalOrder } from './finalize-juicyway-terminal-order';
 
 // Juicyway webhook IP whitelist (from docs)
 const JUICYWAY_IPS = [
@@ -242,6 +243,7 @@ export async function POST(request: NextRequest) {
               'id, order_number, total, currency, customer_id, customer_name, customer_email, customer_phone, shipping_address, order_items(id, product_id, condition, name, price, quantity, variant_name), ad_tracking, payment_status, shipping_status, cancelled_at'
             )
             .eq('id', transaction.order_id)
+            .eq('merchant_id', transaction.merchant_id)
             .maybeSingle();
 
         if (completedOrderError) {
@@ -265,19 +267,32 @@ export async function POST(request: NextRequest) {
 
         const completedOrderIsCancelled =
           isOrderClampedAsCancelled(completedOrder);
-        if (completedOrderIsCancelled) {
-          const reviewFiled = await handlePaymentForCancelledOrder({
-            gatewayReference: reference,
-            order: completedOrder ?? { id: transaction.order_id },
-            reason:
-              'Juicyway completed-transaction retry observed a cancelled order',
-            transactionId: transaction.id,
-          });
-          if (!reviewFiled) {
-            return NextResponse.json(
-              { error: 'Payment reconciliation review unavailable' },
-              { status: 500 }
-            );
+        if (
+          completedOrderIsCancelled ||
+          completedOrder?.payment_status === 'cancelled'
+        ) {
+          // Modern sessions have the locked amount/currency needed to
+          // revalidate before attempting reinstatement. Older captures
+          // still get an operations record on redelivery.
+          if (
+            transaction.metadata?.juicyway_expected_amount != null &&
+            transaction.metadata?.juicyway_expected_currency != null
+          ) {
+            healWedgedOrder = true;
+          } else {
+            const reviewFiled = await handlePaymentForCancelledOrder({
+              gatewayReference: reference,
+              order: completedOrder ?? { id: transaction.order_id },
+              reason:
+                'Juicyway completed-transaction retry observed a cancelled order',
+              transactionId: transaction.id,
+            });
+            if (!reviewFiled) {
+              return NextResponse.json(
+                { error: 'Payment reconciliation review unavailable' },
+                { status: 500 }
+              );
+            }
           }
         } else if (completedOrder?.payment_status === 'refunded') {
           const reviewFiled = await handlePaymentForCancelledOrder({
@@ -514,6 +529,7 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', transaction.order_id)
+        .eq('merchant_id', transaction.merchant_id)
         .eq('shipping_status', 'pending')
         .in('payment_status', ELIGIBLE_ORDER_PAYMENT_STATUSES);
       if (shippingAdvanceError) {
@@ -538,31 +554,61 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', transaction.order_id)
+        .eq('merchant_id', transaction.merchant_id)
         .in('payment_status', ELIGIBLE_ORDER_PAYMENT_STATUSES)
         .select(
           'id, order_number, merchant_id, customer_id, total, subtotal, shipping_fee, customer_name, customer_email, customer_phone, shipping_address, currency, payment_status, shipping_status, cancelled_at, updated_at, ad_tracking, order_items(id, product_id, condition, name, price, quantity, variant_name)'
         )
         .maybeSingle();
 
-      if (!response.error && !response.data) {
-        const { data: terminalOrder, error: terminalOrderError } =
-          await supabase
-            .from('orders')
-            .select(
-              'id, payment_status, shipping_status, cancelled_at, order_number'
-            )
-            .eq('id', transaction.order_id)
-            .maybeSingle();
-        if (terminalOrderError || !terminalOrder) {
-          return NextResponse.json(
-            { error: 'Order state lookup failed' },
-            { status: 500 }
-          );
-        }
+      const terminalResolution =
+        !response.error && !response.data
+          ? await finalizeJuicywayTerminalOrder({
+              gatewayResponse: data as unknown as Record<string, unknown>,
+              // Legacy sessions lack locked amount/currency metadata, so late
+              // captures stay in reconciliation instead of auto-reopening.
+              allowReinstatement: requireExpectedSettlementMetadata,
+              orderId: transaction.order_id,
+              reference,
+              scheduleAfter: (task) => after(task),
+              supabase,
+              transaction: { ...transaction, gateway_reference: reference },
+            })
+          : null;
+      if (terminalResolution?.kind === 'failed') {
+        return NextResponse.json(
+          {
+            error:
+              terminalResolution.stage === 'lookup'
+                ? 'Order state lookup failed'
+                : 'Order payment completion failed',
+          },
+          { status: 500 }
+        );
+      }
+      if (terminalResolution?.kind === 'completed') {
+        return NextResponse.json({
+          success: true,
+          message: 'Payment processed',
+        });
+      }
+      if (terminalResolution?.kind === 'order_cancelled') {
+        return NextResponse.json({
+          message: 'Payment recorded; terminal order filed for review',
+          success: true,
+        });
+      }
+      const terminalOrder =
+        terminalResolution?.kind === 'not_cancelled'
+          ? terminalResolution.order
+          : null;
+
+      if (terminalOrder) {
         const terminalIssueType =
           terminalOrder.payment_status === 'refunded'
             ? 'payment_received_after_refund'
-            : isOrderClampedAsCancelled(terminalOrder)
+            : isOrderClampedAsCancelled(terminalOrder) ||
+                ['cancelled', 'canceled'].includes(terminalOrder.payment_status)
               ? 'payment_received_after_cancellation'
               : null;
         if (terminalIssueType) {
@@ -670,6 +716,7 @@ export async function POST(request: NextRequest) {
                 'id, order_number, total, currency, customer_id, customer_name, customer_email, customer_phone, shipping_address, order_items(id, product_id, condition, name, price, quantity, variant_name), ad_tracking'
               )
               .eq('id', transaction.order_id)
+              .eq('merchant_id', transaction.merchant_id)
               .single();
           if (conversionOrderError || !conversionOrderRow) {
             return NextResponse.json(

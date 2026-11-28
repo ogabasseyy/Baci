@@ -197,6 +197,7 @@ it.each([
   expect(complete).toHaveBeenCalledWith(
     expect.objectContaining({
       gatewayResponse,
+      merchantId: input.merchantId,
       orderId: input.orderId,
       transactionId: input.transactionId,
       supabase,

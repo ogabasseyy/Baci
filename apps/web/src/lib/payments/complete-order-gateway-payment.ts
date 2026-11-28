@@ -3,6 +3,7 @@ import {
   type OrderGatewayPaymentCompletion,
   orderGatewayPaymentCompletionSchema,
 } from '@/schemas/order-gateway-payment-completion';
+import { reinstateTimeoutOrderPayment } from './reinstate-timeout-order-payment';
 
 export type CompleteOrderGatewayPaymentResult =
   | { ok: true; completion: OrderGatewayPaymentCompletion }
@@ -22,12 +23,14 @@ export async function completeOrderGatewayPayment({
   gatewayResponse,
   actor,
   expectedOutstandingMinor,
+  merchantId,
 }: {
   supabase: SupabaseClient;
   transactionId: string;
   orderId: string;
   gatewayResponse: Record<string, unknown> | null;
   actor: string;
+  merchantId?: string;
   /**
    * Outstanding balance (minor units) observed by the caller before
    * completion. When set, the RPC recomputes the outstanding under
@@ -53,5 +56,68 @@ export async function completeOrderGatewayPayment({
     return { error: parsed.error, ok: false };
   }
 
+  if (parsed.data.order_cancelled && gatewayResponse) {
+    if (!merchantId) {
+      return {
+        error: new Error('Late payment requires a merchant identity'),
+        ok: false,
+      };
+    }
+    try {
+      const reinstatement = await reinstateTimeoutOrderPayment(
+        supabase,
+        orderId,
+        transactionId,
+        merchantId
+      );
+      if (reinstatement !== 'blocked') {
+        const { data: reinstatedOrder, error: reinstatedOrderError } =
+          await supabase
+            .from('orders')
+            .select(
+              'amount_paid, paid_transaction_id, paid_at, payment_status, shipping_status, cancelled_at'
+            )
+            .eq('id', orderId)
+            .eq('merchant_id', merchantId)
+            .maybeSingle();
+        if (
+          reinstatedOrderError ||
+          !reinstatedOrder ||
+          reinstatedOrder.payment_status !== 'paid' ||
+          reinstatedOrder.paid_transaction_id !== transactionId ||
+          reinstatedOrder.cancelled_at !== null ||
+          ['cancelled', 'canceled'].includes(
+            reinstatedOrder.shipping_status ?? ''
+          )
+        ) {
+          return {
+            error:
+              reinstatedOrderError ??
+              new Error('Reinstated order is no longer paid'),
+            ok: false,
+          };
+        }
+        return {
+          completion: {
+            ...parsed.data,
+            amount_paid: reinstatedOrder.amount_paid,
+            paid_at: reinstatedOrder.paid_at,
+            paid_transaction_id: reinstatedOrder.paid_transaction_id,
+            already_completed: reinstatement === 'already_reinstated',
+            cancelled_at: null,
+            order_already_paid: reinstatement === 'already_reinstated',
+            order_cancelled: false,
+            order_updated: reinstatement === 'reinstated',
+            payment_status: reinstatedOrder.payment_status,
+            shipping_status: reinstatedOrder.shipping_status,
+            timeout_inventory_confirmed: true,
+          },
+          ok: true,
+        };
+      }
+    } catch (reinstatementError) {
+      return { error: reinstatementError, ok: false };
+    }
+  }
   return { completion: parsed.data, ok: true };
 }

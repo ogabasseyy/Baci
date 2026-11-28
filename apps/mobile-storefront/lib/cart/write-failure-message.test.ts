@@ -34,3 +34,17 @@ it('says an uncertain failure is still saving instead of claiming it was undone'
   expect(message).toMatch(/still saving/i);
   expect(message).not.toMatch(/put your cart back|no longer available/i);
 });
+
+it('points at the connection when the store could not be reached', () => {
+  const message = writeFailureMessage(
+    new NativeCartError('temporarily_unavailable')
+  );
+  expect(message).toMatch(/connection/i);
+  expect(message).toMatch(/try again/i);
+});
+
+it('explains an edit blocked behind an earlier unfinished change', () => {
+  expect(writeFailureMessage(new NativeCartError('pending_operation'))).toMatch(
+    /earlier change/i
+  );
+});

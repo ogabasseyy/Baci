@@ -188,7 +188,7 @@ describe('OgabasseyHomePage', () => {
           storeSlug: 'test-store',
           products: testProducts,
           initialDisplayCount: 8,
-          inlineAdBreakpoints: [12, 24],
+          inlineAdBreakpoints: [8, 16, 24],
         })
       );
     });
@@ -218,13 +218,13 @@ describe('OgabasseyHomePage', () => {
     expect(within(hero).queryByRole('link')).toBeNull();
   });
 
-  it('keeps the homepage strip ad out of the no-interaction main-thread window', () => {
+  it('keeps the homepage strip ad out of the no-interaction main-thread window while booting immediately on shopper scroll or interaction', () => {
     render(<OgabasseyHomePage products={[]} categories={[]} />);
 
     expect(mockDeferredAdUnit).toHaveBeenCalledWith(
       expect.objectContaining({
         placementKey: 'HOMEPAGE_STRIP',
-        bootDelayMs: expect.any(Number),
+        bootDelayMs: 0,
       })
     );
 
@@ -234,12 +234,12 @@ describe('OgabasseyHomePage', () => {
     );
 
     expect(homepageStripCall).toBeDefined();
-    expect(
-      (homepageStripCall?.[0] as { bootDelayMs?: number }).bootDelayMs
-    ).toBeGreaterThanOrEqual(9000);
     expect(homepageStripCall?.[0]).toEqual(
       expect.objectContaining({
         activateOnInteraction: true,
+        activateOnScroll: true,
+        deferInteractionActivationUntilNextPaint: true,
+        bootDelayMs: 0,
         timeoutMs: 0,
       })
     );
@@ -248,7 +248,7 @@ describe('OgabasseyHomePage', () => {
     ).toBeUndefined();
   });
 
-  it('gives the Suspense boundary around HomeProductGridGate an explicit 1200px inline-styled fallback', () => {
+  it('gives the Suspense boundary around HomeProductGridGate an explicit 1500px inline-styled fallback covering the initial grid + MPU', () => {
     type ReserveProps = {
       children?: ReactNode;
       'data-ogabassey-grid-gate-reserve'?: string;
@@ -278,7 +278,7 @@ describe('OgabasseyHomePage', () => {
     const inner = fallback.props.children;
     expect(isValidElement<ReserveProps>(inner)).toBe(true);
     if (isValidElement<ReserveProps>(inner)) {
-      expect(inner.props.style).toEqual({ minHeight: '1200px' });
+      expect(inner.props.style).toEqual({ minHeight: '1500px' });
     }
   });
 });

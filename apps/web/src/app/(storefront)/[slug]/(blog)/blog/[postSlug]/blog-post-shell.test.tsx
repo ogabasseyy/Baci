@@ -90,7 +90,8 @@ describe('BlogPostShell', () => {
     expect(screen.getByRole('article')).toHaveClass(
       'bg-card',
       'text-card-foreground',
-      'border-border'
+      'border-border',
+      'overflow-clip'
     );
     expect(
       screen.getByText('Back to Blog').parentElement?.parentElement

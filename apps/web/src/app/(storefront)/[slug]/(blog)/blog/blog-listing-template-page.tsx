@@ -38,6 +38,7 @@ export async function BlogListingTemplatePage({
   hideLiveFeatured,
   itemListSchema,
   merchantName,
+  merchantSlug,
   organizationSchema,
   paginationHeadLinks,
   posts,
@@ -60,6 +61,7 @@ export async function BlogListingTemplatePage({
   hideLiveFeatured: boolean;
   itemListSchema?: JsonLdScriptData;
   merchantName: string;
+  merchantSlug?: string;
   organizationSchema: JsonLdScriptData;
   paginationHeadLinks: ReactNode;
   posts: TemplateListingPost[];
@@ -117,6 +119,7 @@ export async function BlogListingTemplatePage({
         categoryGuide={categoryGuide}
         category={category}
         searchQuery={effectiveSearchQuery}
+        merchantSlug={merchantSlug}
         hideFeaturedStory={hideLiveFeatured}
       />
       <BlogListingPagination

@@ -1,8 +1,11 @@
 import { getProductImageAlt } from '@baci/shared/lib/product-image-alt';
 import { prioritizeSmartphoneProducts } from '@baci/shared/storefront/prioritize-smartphone-products';
+import { Fragment } from 'react';
 import { PLACEHOLDER_IMAGE } from '@/lib/image-utils';
 import { getProductUrl } from '@/lib/product-url';
+import { AD_CONFIG } from '../config/ads';
 import type { Product } from '../types';
+import { AdSlotShell } from './ad-slot-shell';
 import { getProductConditionClass } from './product-condition-class';
 import { resolveProductImageSource } from './product-image-source';
 import { FALLBACK_RENDERED_IMAGE_COUNT } from './home-product-grid-constants';
@@ -15,6 +18,7 @@ interface HomeProductGridStaticFallbackProps {
   title?: string;
   showViewAll?: boolean;
   initialDisplayCount?: number;
+  inlineAdBreakpoints?: number[];
   allProductsHref?: string;
   /**
    * How many leading cards render a real `<img>`. Defaults to
@@ -46,6 +50,7 @@ export function HomeProductGridStaticFallback({
   title = 'Featured Products',
   showViewAll = true,
   initialDisplayCount = 8,
+  inlineAdBreakpoints = [],
   allProductsHref,
   serverRenderedImageCount = FALLBACK_RENDERED_IMAGE_COUNT,
 }: HomeProductGridStaticFallbackProps) {
@@ -103,60 +108,78 @@ export function HomeProductGridStaticFallback({
                 });
 
             return (
-              <div key={product.id} className="ogabassey-home-product-card">
-                <a
-                  href={productHref}
-                  title={
-                    `${product.name}${product.brand ? ` - ${product.brand}` : ''}`.trim()
-                  }
-                  className="absolute inset-0 z-0"
-                >
-                  <span className="sr-only">
-                    View {product.name} for {product.price}
-                  </span>
-                </a>
+              <Fragment key={product.id}>
+                <div className="ogabassey-home-product-card">
+                  <a
+                    href={productHref}
+                    title={
+                      `${product.name}${product.brand ? ` - ${product.brand}` : ''}`.trim()
+                    }
+                    className="absolute inset-0 z-0"
+                  >
+                    <span className="sr-only">
+                      View {product.name} for {product.price}
+                    </span>
+                  </a>
 
-                <div className="ogabassey-home-product-card__media">
-                  {product.condition && (
-                    <div
-                      className={`ogabassey-home-product-card__condition ${getProductConditionClass(product.condition)}`}
-                    >
-                      {product.condition}
-                    </div>
-                  )}
-
-                  {shouldRenderImage ? (
-                    <HomeProductGridFallbackImage
-                      alt={productImageAlt}
-                      src={productImage.src}
-                    />
-                  ) : (
-                    <div className="ogabassey-home-product-card__placeholder" />
-                  )}
-                </div>
-
-                <div className="ogabassey-home-product-card__body">
-                  <h3 className="ogabassey-home-product-card__title">
-                    {product.name}
-                    {product.spec && (
-                      <span className="ogabassey-home-product-card__spec">
-                        {product.spec}
-                      </span>
+                  <div className="ogabassey-home-product-card__media">
+                    {product.condition && (
+                      <div
+                        className={`ogabassey-home-product-card__condition ${getProductConditionClass(product.condition)}`}
+                      >
+                        {product.condition}
+                      </div>
                     )}
-                  </h3>
 
-                  <ProductRatingRow rating={product.rating} />
+                    {shouldRenderImage ? (
+                      <HomeProductGridFallbackImage
+                        alt={productImageAlt}
+                        src={productImage.src}
+                      />
+                    ) : (
+                      <div className="ogabassey-home-product-card__placeholder" />
+                    )}
+                  </div>
 
-                  <div className="ogabassey-home-product-card__footer">
-                    <span className="ogabassey-home-product-card__price">
-                      {product.price}
-                    </span>
-                    <span className="ogabassey-home-product-card__details">
-                      Details
-                    </span>
+                  <div className="ogabassey-home-product-card__body">
+                    <h3 className="ogabassey-home-product-card__title">
+                      {product.name}
+                      {product.spec && (
+                        <span className="ogabassey-home-product-card__spec">
+                          {product.spec}
+                        </span>
+                      )}
+                    </h3>
+
+                    <ProductRatingRow rating={product.rating} />
+
+                    <div className="ogabassey-home-product-card__footer">
+                      <span className="ogabassey-home-product-card__price">
+                        {product.price}
+                      </span>
+                      <span className="ogabassey-home-product-card__details">
+                        Details
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
+
+                {inlineAdBreakpoints.includes(index + 1) && (
+                  <div
+                    aria-hidden="true"
+                    className="col-span-2 -mx-3 my-2 hidden items-center justify-center min-[300px]:flex sm:mx-0 md:my-4 lg:col-span-4"
+                  >
+                    <AdSlotShell
+                      ariaHidden
+                      height={AD_CONFIG.PRODUCT_GRID_MPU.height}
+                      mobileHeight={AD_CONFIG.PRODUCT_GRID_MPU.mobileHeight}
+                      mobileWidth={AD_CONFIG.PRODUCT_GRID_MPU.mobileWidth}
+                      name={AD_CONFIG.PRODUCT_GRID_MPU.name}
+                      width={AD_CONFIG.PRODUCT_GRID_MPU.width}
+                    />
+                  </div>
+                )}
+              </Fragment>
             );
           })}
         </div>

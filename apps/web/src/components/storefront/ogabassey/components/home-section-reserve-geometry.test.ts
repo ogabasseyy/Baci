@@ -7,7 +7,7 @@ describe('home-section-reserve-geometry', () => {
       `min-h-[${OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.style.minHeight}]`
     );
     expect(OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.style).toEqual({
-      minHeight: '1200px',
+      minHeight: '1500px',
     });
   });
 

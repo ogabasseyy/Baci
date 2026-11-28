@@ -215,4 +215,26 @@ describe('HomeProductGridStaticFallback', () => {
       HOME_PRODUCT_GRID_CARD_IMAGE_SIZES
     );
   });
+
+  it('reserves a matching AdSlotShell at configured inlineAdBreakpoints so swap causes zero CLS', () => {
+    const eightProducts: Product[] = Array.from({ length: 8 }, (_, idx) => ({
+      ...baseProduct,
+      id: `product-${idx + 1}`,
+      name: `Phone ${idx + 1}`,
+      slug: `phone-${idx + 1}`,
+    }));
+
+    const { container } = render(
+      <HomeProductGridStaticFallback
+        basePath=""
+        products={eightProducts}
+        initialDisplayCount={8}
+        inlineAdBreakpoints={[8, 16, 24]}
+      />
+    );
+
+    const adSlot = container.querySelector('.ogabassey-ad-slot') as HTMLElement;
+    expect(adSlot).not.toBeNull();
+    expect(adSlot.style.getPropertyValue('--ad-slot-h')).toBe('250px');
+  });
 });

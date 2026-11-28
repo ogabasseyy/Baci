@@ -56,6 +56,8 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
       <div className="max-w-[1400px] mx-auto px-4 md:px-6 py-4">
         <DeferredAdUnit
           activateOnInteraction
+          activateOnScroll
+          deferInteractionActivationUntilNextPaint
           placementKey="HOMEPAGE_STRIP"
           bootDelayMs={HOMEPAGE_STRIP_AD_BOOT_DELAY_MS}
           timeoutMs={0}
@@ -90,12 +92,13 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
           storeSlug={storeSlug}
           products={products}
           initialDisplayCount={8}
-          inlineAdBreakpoints={[12, 24]}
+          inlineAdBreakpoints={[8, 16, 24]}
           fallback={
             <HomeProductGridStaticFallback
               basePath={routeBasePath}
               products={products}
               initialDisplayCount={8}
+              inlineAdBreakpoints={[8, 16, 24]}
             />
           }
         />

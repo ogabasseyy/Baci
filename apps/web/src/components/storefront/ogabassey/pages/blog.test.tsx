@@ -61,8 +61,10 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-vi.mock('./ad-unit', () => ({
-  AdUnit: () => <div data-testid="ad-unit" />,
+vi.mock('../components/deferred-ad-unit', () => ({
+  DeferredAdUnit: ({ placementKey, slotInstance }: { placementKey: string; slotInstance?: string }) => (
+    <div data-placement={placementKey} data-slot-instance={slotInstance} data-testid="deferred-ad-unit" />
+  ),
 }));
 
 describe('OgabasseyV2Blog', () => {

@@ -22,6 +22,8 @@ export interface TemplateBlogPageProps extends TemplatePageProps {
   category?: string;
   /** Current search query if filtering by search */
   searchQuery?: string;
+  /** Canonical merchant slug or domain identifier for tenant-scoped features. */
+  merchantSlug?: string;
   /** Set when the listing hero/LCP image is rendered outside this component. */
   hideFeaturedStory?: boolean;
 }

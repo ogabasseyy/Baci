@@ -147,21 +147,25 @@ export const OgabasseyV2CategoryPage: React.FC<
       </div>
 
       <div className="max-w-[1400px] mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4 xl:grid-cols-[300px_minmax(0,1fr)]">
           {/* Sidebar Filters (Desktop) */}
-          <div className="hidden lg:block lg:col-span-1">
-            <div className="sticky top-24">
-              <CategoryFiltersSidebar
-                filters={filters}
-                availableOptions={availableOptions}
-                onFilterChange={handleFilterChange}
-                onClearFilters={() => setFilters(initialFilterState)}
+          <div className="hidden lg:col-span-1 lg:block xl:col-span-1">
+            <CategoryFiltersSidebar
+              filters={filters}
+              availableOptions={availableOptions}
+              onFilterChange={handleFilterChange}
+              onClearFilters={() => setFilters(initialFilterState)}
+            />
+            <div className="mt-6 hidden xl:sticky xl:top-24 xl:block">
+              <AdUnit
+                placementKey="SIDEBAR_HALF_PAGE"
+                slotInstance="category-sidebar"
               />
             </div>
           </div>
 
           {/* Product Grid */}
-          <div className="lg:col-span-3">
+          <div className="min-w-0 lg:col-span-3 xl:col-span-1">
             {filteredProducts.length === 0 ? (
               <div className="text-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm">
                 <div className="size-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">

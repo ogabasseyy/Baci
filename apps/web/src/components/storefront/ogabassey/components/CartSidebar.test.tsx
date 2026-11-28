@@ -260,4 +260,9 @@ describe('CartSidebar', () => {
     fireEvent.click(closeButton);
     expect(mockSetIsCartOpen).toHaveBeenCalledWith(false);
   });
+
+  it('keeps the cart drawer free of off-site display ads to protect checkout conversion', () => {
+    render(<CartSidebar />);
+    expect(screen.queryByTestId('ad-unit')).not.toBeInTheDocument();
+  });
 });

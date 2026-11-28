@@ -14,6 +14,8 @@ interface DeferredAdUnitModule {
 export interface DeferredAdUnitProps extends AdUnitProps {
   activateOnIdle?: boolean;
   activateOnInteraction?: boolean;
+  activateOnScroll?: boolean;
+  deferInteractionActivationUntilNextPaint?: boolean;
   enabled?: boolean;
   fallback?: ReactNode;
   loadAdUnitModule?: () => Promise<DeferredAdUnitModule>;
@@ -25,6 +27,8 @@ const loadDefaultAdUnitModule = () => import('./AdUnit');
 export function DeferredAdUnit({
   activateOnIdle = false,
   activateOnInteraction = false,
+  activateOnScroll = false,
+  deferInteractionActivationUntilNextPaint = false,
   enabled = true,
   fallback,
   loadAdUnitModule = loadDefaultAdUnitModule,
@@ -36,6 +40,8 @@ export function DeferredAdUnit({
   const isActivated = useDeferredActivation({
     activateOnIdle,
     activateOnInteraction,
+    activateOnScroll,
+    deferInteractionActivationUntilNextPaint,
     enabled,
     timeoutMs,
   });

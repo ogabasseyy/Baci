@@ -147,4 +147,41 @@ describe('DeferredAdUnit', () => {
 
     expect(loadAdUnitModule).not.toHaveBeenCalled();
   });
+
+  it('activates on window scroll when activateOnScroll is enabled while staying idle without interaction', async () => {
+    const loadAdUnitModule = vi.fn(() =>
+      Promise.resolve({
+        AdUnit: ({ placementKey }: { placementKey: string }) => (
+          <div data-testid="ad-unit">{placementKey}</div>
+        ),
+      })
+    );
+
+    render(
+      <DeferredAdUnit
+        activateOnInteraction
+        activateOnScroll
+        fallback={<div>Reserved ad space</div>}
+        loadAdUnitModule={loadAdUnitModule}
+        placementKey="HOMEPAGE_STRIP"
+        timeoutMs={0}
+      />
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(15_000);
+    });
+    expect(loadAdUnitModule).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(loadAdUnitModule).toHaveBeenCalledOnce();
+    expect(screen.getByText('HOMEPAGE_STRIP')).toBeInTheDocument();
+  });
 });

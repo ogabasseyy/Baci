@@ -228,6 +228,7 @@ export async function BlogPageContent({
       hideLiveFeatured,
       itemListSchema: schemas.itemListSchema as JsonLdScriptData | undefined,
       merchantName: merchant.business_name,
+      merchantSlug: merchant.slug || slug,
       organizationSchema: organizationSchema as JsonLdScriptData,
       paginationHeadLinks,
       posts,

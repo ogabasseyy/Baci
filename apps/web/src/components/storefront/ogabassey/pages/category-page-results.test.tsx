@@ -3,7 +3,21 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 
 vi.mock('@/lib/routes', () => ({ asRoute: (p: string) => p }));
-vi.mock('../components/AdUnit', () => ({ AdUnit: () => null }));
+vi.mock('../components/AdUnit', () => ({
+  AdUnit: ({
+    placementKey,
+    slotInstance,
+  }: {
+    placementKey: string;
+    slotInstance?: string;
+  }) => (
+    <div
+      data-placement={placementKey}
+      data-slot-instance={slotInstance}
+      data-testid="category-ad-unit"
+    />
+  ),
+}));
 vi.mock('../components/CategoryFiltersSidebar', () => ({
   CategoryFiltersSidebar: () => <div aria-label="Filters sidebar" />,
 }));
@@ -216,5 +230,25 @@ describe('CategoryPageResults', () => {
     const card = screen.getByRole('article', { name: 'Phone A' });
     expect(card).not.toHaveClass('content-auto');
     expect(card.className).toBe('');
+  });
+
+  it('mounts SIDEBAR_HALF_PAGE in a separate xl-gated sticky wrapper outside the filter panel', () => {
+    renderResults({ canShowFilters: true });
+
+    const ads = screen.getAllByTestId('category-ad-unit');
+    const sidebarAd = ads.find(
+      (ad) => ad.dataset.slotInstance === 'category-sidebar'
+    );
+    expect(sidebarAd).toBeDefined();
+    expect(sidebarAd?.dataset.placement).toBe('SIDEBAR_HALF_PAGE');
+    expect(sidebarAd?.parentElement).toHaveClass(
+      'hidden',
+      'xl:block',
+      'xl:sticky',
+      'xl:top-24'
+    );
+    expect(
+      screen.getByLabelText('Filters sidebar').parentElement
+    ).not.toHaveClass('sticky');
   });
 });

@@ -7,7 +7,6 @@ import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { analytics } from '@/lib/analytics';
 import { asRoute } from '@/lib/routes';
-import { AdUnit } from './AdUnit';
 // import { ActionTooltip } from './Tooltip';
 import { hasCartMerchantContext } from './cart-sidebar-merchant-context';
 import { CartSidebarFooter } from './cart-sidebar-footer';
@@ -202,11 +201,6 @@ export const CartSidebar: React.FC = () => {
                       onToggleAssurance={toggleAssurance}
                     />
                   ))}
-
-                  {/* Dynamic Ad Placement in Cart */}
-                  <div className="mt-8 border-t border-store-border pt-4">
-                    <AdUnit placementKey="CART_MPU" />
-                  </div>
                 </>
               )}
             </div>

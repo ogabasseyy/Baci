@@ -9,12 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { rewriteStorefrontContentHref } from '@/lib/storefront-content-link-rewriting';
 import { isDeadStorefrontContentHref } from '@/lib/storefront-content-link-targets';
+import { isOgabasseyBlogStaticTenant } from '../blog-category-routing';
 import { BlogLegacyContent } from './BlogLegacyContent';
+import { OgabasseyBlogPostAdLayout } from './BlogPostAdLayout';
+import { OgabasseyBlogEndAd } from './BlogPostEndAd';
 import { BlogRelatedProducts } from './BlogRelatedProducts';
 import { BlogVideoPanel } from './BlogVideoPanel';
 import { resolveContentLinks } from './blog-content-link-resolution';
 import { buildBlogUrl, resolveBlogPostContent } from './blog-post-content';
 import type { BlogRelatedProduct } from './blog-related-product';
+import { renderOgabasseyBlogInlineAdSlot } from './render-blog-inline-ad-slot';
 
 export interface BlogPostBodyProps {
   basePath: string;
@@ -132,82 +136,97 @@ export async function BlogPostBody({
     ];
   });
 
+  const showOgabasseyBlogAds = isOgabasseyBlogStaticTenant(merchantSlug);
+
   return (
     <div className="content-auto [contain-intrinsic-size:1152px_2400px]">
-      {isJson && <TableOfContents />}
+      <OgabasseyBlogPostAdLayout
+        enabled={showOgabasseyBlogAds}
+        postId={post.id}
+      >
+        {isJson && <TableOfContents />}
 
-      <div className="mb-8">
-        {isJson ? (
-          <BlogContentRenderer
-            json={renderedContent}
-            basePath={basePath}
-            baseUrl={baseUrl}
-            contentLinkRewrites={hasContentLinkRewrites ? rewrites : undefined}
-            deadContentLinks={
-              hasDeadContentLinks ? deadContentLinks : undefined
-            }
-            merchantSlug={merchantSlug}
-            priorityInlineImageSrc={hasPreloadedHeroImage ? null : undefined}
-          />
-        ) : (
-          <BlogLegacyContent
-            html={legacyHtml}
-            featuredImageUrl={post.featured_image_url}
-            trustedPriorityImageSources={legacyPriorityImageSources}
-          />
+        <div className="mb-8">
+          {isJson ? (
+            <BlogContentRenderer
+              json={renderedContent}
+              basePath={basePath}
+              baseUrl={baseUrl}
+              contentLinkRewrites={
+                hasContentLinkRewrites ? rewrites : undefined
+              }
+              deadContentLinks={
+                hasDeadContentLinks ? deadContentLinks : undefined
+              }
+              inArticleAdSlot={renderOgabasseyBlogInlineAdSlot(
+                post.id,
+                showOgabasseyBlogAds
+              )}
+              merchantSlug={merchantSlug}
+              priorityInlineImageSrc={hasPreloadedHeroImage ? null : undefined}
+            />
+          ) : (
+            <BlogLegacyContent
+              html={legacyHtml}
+              featuredImageUrl={post.featured_image_url}
+              trustedPriorityImageSources={legacyPriorityImageSources}
+            />
+          )}
+        </div>
+
+        <OgabasseyBlogEndAd enabled={showOgabasseyBlogAds} postId={post.id} />
+
+        {video && <BlogVideoPanel video={video} />}
+
+        {post.tags && post.tags.length > 0 && (
+          <div className="mb-8 flex flex-wrap items-center gap-2 border-t pt-8">
+            <Tag className="size-4 text-muted-foreground" />
+            {post.tags.map((tag) => (
+              <Badge key={tag} variant="outline">
+                {tag}
+              </Badge>
+            ))}
+          </div>
         )}
-      </div>
 
-      {video && <BlogVideoPanel video={video} />}
-
-      {post.tags && post.tags.length > 0 && (
-        <div className="mb-8 flex flex-wrap items-center gap-2 border-t pt-8">
-          <Tag className="size-4 text-muted-foreground" />
-          {post.tags.map((tag) => (
-            <Badge key={tag} variant="outline">
-              {tag}
-            </Badge>
-          ))}
+        <div className="mb-12 flex items-center gap-4 border-b pb-8">
+          <span className="text-sm text-muted-foreground">
+            Share this article:
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="min-h-11" asChild>
+              <a
+                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(shareUrl)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Share on Twitter (opens in new tab)"
+              >
+                Twitter
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="min-h-11" asChild>
+              <a
+                href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Share on LinkedIn (opens in new tab)"
+              >
+                LinkedIn
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="min-h-11" asChild>
+              <a
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Share on Facebook (opens in new tab)"
+              >
+                Facebook
+              </a>
+            </Button>
+          </div>
         </div>
-      )}
-
-      <div className="mb-12 flex items-center gap-4 border-b pb-8">
-        <span className="text-sm text-muted-foreground">
-          Share this article:
-        </span>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="min-h-11" asChild>
-            <a
-              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(shareUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Share on Twitter (opens in new tab)"
-            >
-              Twitter
-            </a>
-          </Button>
-          <Button variant="outline" size="sm" className="min-h-11" asChild>
-            <a
-              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Share on LinkedIn (opens in new tab)"
-            >
-              LinkedIn
-            </a>
-          </Button>
-          <Button variant="outline" size="sm" className="min-h-11" asChild>
-            <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Share on Facebook (opens in new tab)"
-            >
-              Facebook
-            </a>
-          </Button>
-        </div>
-      </div>
+      </OgabasseyBlogPostAdLayout>
 
       {relatedPosts.length > 0 && (
         <section>

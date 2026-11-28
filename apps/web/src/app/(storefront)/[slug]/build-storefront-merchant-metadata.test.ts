@@ -40,16 +40,30 @@ describe('buildStorefrontMerchantMetadata', () => {
     });
   });
 
-  it('isolates canonicals, verification, favicon, and the platform manifest', () => {
-    const metadata = buildStorefrontMerchantMetadata(merchant, 'ogabassey');
+  it('preserves the AdSense ownership meta on Ogabassey while isolating third-party stores', () => {
+    const ogabasseyMetadata = buildStorefrontMerchantMetadata(
+      merchant,
+      'ogabassey'
+    );
 
-    expect(metadata.alternates).toBeNull();
-    expect(metadata.manifest).toBeNull();
-    expect(metadata.applicationName).toBe('Ogabassey');
-    expect(metadata.verification).toEqual({ google: 'verify-123' });
-    expect(metadata.icons).toEqual({
+    expect(ogabasseyMetadata.alternates).toBeNull();
+    expect(ogabasseyMetadata.manifest).toBeNull();
+    expect(ogabasseyMetadata.applicationName).toBe('Ogabassey');
+    expect(ogabasseyMetadata.verification).toEqual({
+      google: 'verify-123',
+      other: {
+        'google-adsense-account': 'ca-pub-9332275663101466',
+      },
+    });
+    expect(ogabasseyMetadata.icons).toEqual({
       icon: [{ url: 'https://cdn.example.com/logo.png' }],
       apple: [{ url: 'https://cdn.example.com/logo.png' }],
     });
+
+    const thirdPartyMetadata = buildStorefrontMerchantMetadata(
+      { ...merchant, business_name: 'Other Store', slug: 'other-store' },
+      'other-store'
+    );
+    expect(thirdPartyMetadata.verification).toEqual({ google: 'verify-123' });
   });
 });

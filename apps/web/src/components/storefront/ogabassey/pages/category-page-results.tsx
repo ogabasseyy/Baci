@@ -109,24 +109,41 @@ export function CategoryPageResults({
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 md:px-6">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Sidebar Filters (Desktop) */}
+      <div
+        className={
+          canShowFilters
+            ? 'grid grid-cols-1 gap-8 lg:grid-cols-4 xl:grid-cols-[300px_minmax(0,1fr)]'
+            : 'grid grid-cols-1 gap-8'
+        }
+      >
+        {/* Sidebar Filters (Desktop). Filter panel scrolls naturally so it
+            never pushes the 600px ad below the viewport; the rail ad only
+            displays and sticks at `xl` (>=1280px) where the sidebar column is
+            guaranteed 300px wide. */}
         {canShowFilters && (
-          <div className="hidden lg:block lg:col-span-1">
-            <div className="sticky top-24">
-              <CategoryFiltersSidebar
-                filters={filters}
-                availableOptions={availableOptions}
-                onFilterChange={onFilterChange}
-                onClearFilters={onClearFilters}
-                showPriceFilter={showPriceFilter}
+          <div className="hidden lg:col-span-1 lg:block xl:col-span-1">
+            <CategoryFiltersSidebar
+              filters={filters}
+              availableOptions={availableOptions}
+              onFilterChange={onFilterChange}
+              onClearFilters={onClearFilters}
+              showPriceFilter={showPriceFilter}
+            />
+            <div className="mt-6 hidden xl:sticky xl:top-24 xl:block">
+              <AdUnit
+                placementKey="SIDEBAR_HALF_PAGE"
+                slotInstance="category-sidebar"
               />
             </div>
           </div>
         )}
 
         {/* Product Grid */}
-        <div className={canShowFilters ? 'lg:col-span-3' : 'lg:col-span-4'}>
+        <div
+          className={
+            canShowFilters ? 'min-w-0 lg:col-span-3 xl:col-span-1' : 'min-w-0'
+          }
+        >
           <h2 className="sr-only">{pageTitle} Product Catalog</h2>
           {!hasKnownProducts ? (
             <div className="text-center py-20 bg-store-background rounded-2xl border border-store-background-text/10 shadow-sm">

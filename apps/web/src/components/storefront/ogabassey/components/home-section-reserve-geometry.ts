@@ -12,9 +12,9 @@ import type { CSSProperties } from 'react';
  */
 export const OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY = {
   product: {
-    minHeightClass: 'min-h-[1200px]',
+    minHeightClass: 'min-h-[1500px]',
     style: {
-      minHeight: '1200px',
+      minHeight: '1500px',
     } satisfies CSSProperties,
   },
   discovery: {

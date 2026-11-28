@@ -101,30 +101,37 @@ function StorefrontSemanticFooterFallback({
   const links = buildSemanticFooterFallbackLinks(basePath, merchant);
 
   return (
-    <footer
-      aria-label="Semantic storefront footer"
-      // Reserve the real Ogabassey footer's stacked height per breakpoint so the
-      // deferred fallback -> full subtree swap (footer + FOOTER_BANNER wrapper)
-      // has no height delta. Without this, the short link-list fallback was
-      // replaced by the stacked footer and ad wrapper once deferred chrome
-      // activated, shifting the footer pattern and content below it.
-      className="min-h-[1100px] border-store-border border-t bg-store-background px-4 py-8 text-store-background-text md:min-h-[910px] lg:min-h-[770px]"
-    >
-      <nav
-        aria-label="Footer navigation"
-        className="mx-auto flex max-w-[1400px] flex-wrap gap-x-6 gap-y-3 text-sm"
+    <>
+      {/* Mirrors `StorefrontDeferredFooterChrome`'s above-footer `FOOTER_BANNER`
+          reservation (~200px mobile / ~350px desktop) before the footer so
+          activating the deferred subtree never pushes visible footer links down. */}
+      <div
+        aria-hidden="true"
+        className="min-h-[200px] border-store-border border-t bg-store-background py-4 md:min-h-[350px]"
+        data-testid="footer-ad-fallback-reserve"
+      />
+      <footer
+        aria-label="Semantic storefront footer"
+        // Reserves the Ogabassey `<Footer />` height below the pre-footer ad
+        // wrapper (`200+900 = 1100px`, `350+560 = 910px`, `350+420 = 770px`).
+        className="min-h-[900px] border-store-border border-t bg-store-background px-4 py-8 text-store-background-text md:min-h-[560px] lg:min-h-[420px]"
       >
-        {links.map(([label, path]) => (
-          <a
-            className="text-store-background-text/75 underline-offset-4 hover:text-store-primary hover:underline"
-            href={buildFooterHref(basePath, path)}
-            key={path}
-          >
-            {label}
-          </a>
-        ))}
-      </nav>
-    </footer>
+        <nav
+          aria-label="Footer navigation"
+          className="mx-auto flex max-w-[1400px] flex-wrap gap-x-6 gap-y-3 text-sm"
+        >
+          {links.map(([label, path]) => (
+            <a
+              className="text-store-background-text/75 underline-offset-4 hover:text-store-primary hover:underline"
+              href={buildFooterHref(basePath, path)}
+              key={path}
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+      </footer>
+    </>
   );
 }
 

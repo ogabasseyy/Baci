@@ -1,6 +1,5 @@
 import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
-
-export const FRAME_ERROR_SCRIPT_PATH = '/_baci/assets/frame-error.js';
+import { sha256Hex } from './manifest-source-digest';
 
 export function buildFrameErrorModuleSource(
   manifest: Pick<
@@ -46,4 +45,15 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
   window.addEventListener('message', onConnect);
 }
 `;
+}
+
+export function buildFrameErrorAsset(
+  manifest: Pick<
+    WorkerStorefrontManifest,
+    'merchantSlug' | 'previewOrigin' | 'hostOrigin'
+  >
+): { path: string; source: string } {
+  const source = buildFrameErrorModuleSource(manifest);
+  const hash = sha256Hex([source]).slice(0, 12);
+  return { path: `/_baci/assets/frame-error.${hash}.js`, source };
 }

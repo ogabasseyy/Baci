@@ -102,6 +102,8 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
     const paramEntries = Object.entries(matchedRoute.params);
     const lastEntry = paramEntries[paramEntries.length - 1];
     const prevEntry = paramEntries[paramEntries.length - 2];
+    const isNonProductParam = (k) =>
+      k === 'variant' || k === 'variantId' || k === 'category' || k === 'categoryId' || k === 'categorySlug' || k === 'collection' || k === 'collectionId' || k === 'collectionSlug' || isFilterOnlyRouteParam(k);
     const trailingIsVariant = lastEntry && (lastEntry[0] === 'variant' || lastEntry[0] === 'variantId');
     const explicitId = matchedRoute.params.productId || '';
     const explicitSku = matchedRoute.params.sku || '';
@@ -110,28 +112,35 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
       matchedRoute.params.product ||
       matchedRoute.params.itemSlug ||
       (!explicitId && !explicitSku
-        ? (trailingIsVariant ? matchedRoute.params.slug || matchedRoute.params.handle || (prevEntry ? prevEntry[1] : '') : '') ||
-          (lastEntry ? lastEntry[1] : '')
+        ? (trailingIsVariant
+            ? matchedRoute.params.slug || matchedRoute.params.handle || (prevEntry && !isNonProductParam(prevEntry[0]) ? prevEntry[1] : '')
+            : lastEntry && !isNonProductParam(lastEntry[0]) ? lastEntry[1] : '')
         : '');
-    const categoryVal =
-      matchedRoute.params.category || matchedRoute.params.categoryId || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionId || matchedRoute.params.collectionSlug || '';
-    const qParts = [];
-    if (categoryVal) qParts.push(\`category=\${encodeURIComponent(categoryVal)}\`);
-    if (explicitSku) qParts.push(\`sku=\${encodeURIComponent(explicitSku)}\`);
-    if (productSlug) qParts.push(\`productSlug=\${encodeURIComponent(productSlug)}\`);
-    else if (explicitId) qParts.push(\`productId=\${encodeURIComponent(explicitId)}\`);
-    const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?\${qParts.join('&')}\`, 'product');
-    if (!upstream.ok) {
-      status = 502;
-      title = 'Product Temporarily Unavailable';
-    } else if (!upstream.data.product) {
+    if (!explicitSku && !productSlug && !explicitId) {
       status = 404;
       view = 'not_found';
       title = 'Product Not Found';
     } else {
-      productDetail = normalizeSsrCatalogProduct(upstream.data.product);
-      title = productDetail.name;
-      publicDataRevision = formatUpstreamRevision(upstream.data);
+      const categoryVal =
+        matchedRoute.params.category || matchedRoute.params.categoryId || matchedRoute.params.categorySlug || matchedRoute.params.collection || matchedRoute.params.collectionId || matchedRoute.params.collectionSlug || '';
+      const qParts = [];
+      if (categoryVal) qParts.push(\`category=\${encodeURIComponent(categoryVal)}\`);
+      if (explicitSku) qParts.push(\`sku=\${encodeURIComponent(explicitSku)}\`);
+      if (productSlug) qParts.push(\`productSlug=\${encodeURIComponent(productSlug)}\`);
+      else if (explicitId) qParts.push(\`productId=\${encodeURIComponent(explicitId)}\`);
+      const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?\${qParts.join('&')}\`, 'product');
+      if (!upstream.ok) {
+        status = 502;
+        title = 'Product Temporarily Unavailable';
+      } else if (!upstream.data.product) {
+        status = 404;
+        view = 'not_found';
+        title = 'Product Not Found';
+      } else {
+        productDetail = normalizeSsrCatalogProduct(upstream.data.product);
+        title = productDetail.name;
+        publicDataRevision = formatUpstreamRevision(upstream.data);
+      }
     }
   }
 

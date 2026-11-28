@@ -272,7 +272,7 @@ if (rootElement && stateScript?.textContent) {
           scheduleHydratedRender();
         }
       );
-      attachFramedNavigationInterceptors(rootElement, commerce, initialProps, () => currentProps?.pathname);
+      attachFramedNavigationInterceptors(rootElement, commerce, initialProps, () => currentProps?.pathname, refreshRouteEnrichment.rememberPendingQuery);
     } catch (err) {
       notifyHostRenderFailed();
       if (typeof console !== 'undefined' && typeof console.error === 'function') {

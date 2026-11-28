@@ -4,8 +4,11 @@ import {
   RESERVED_ROUTE_PARAM_NAMES,
 } from './css-color-token';
 import {
+  type CspAllowlist,
+  cspAllowlistSchema,
   hostOriginSchema,
   httpsOriginSchema,
+  NON_PRODUCT_IDENTIFIER_PARAMS,
   previewOriginSchema,
 } from './origin-schemas';
 
@@ -15,6 +18,8 @@ export {
   summarizeCspGovernance,
 } from '../compiler/csp-header';
 export {
+  type CspAllowlist,
+  cspAllowlistSchema,
   cssColorTokenSchema,
   hostOriginSchema,
   httpsOriginSchema,
@@ -80,29 +85,6 @@ export const storefrontRouteViewSchema = z.enum([
 ]);
 
 export type StorefrontRouteView = z.infer<typeof storefrontRouteViewSchema>;
-
-export const cspAllowlistSchema = z
-  .strictObject({
-    scriptOrigins: z
-      .array(httpsOriginSchema)
-      .max(WORKER_COMPILER_LIMITS.maxCspOriginsPerDirective)
-      .default([]),
-    connectOrigins: z
-      .array(httpsOriginSchema)
-      .max(WORKER_COMPILER_LIMITS.maxCspOriginsPerDirective)
-      .default([]),
-    imgOrigins: z
-      .array(httpsOriginSchema)
-      .max(WORKER_COMPILER_LIMITS.maxCspOriginsPerDirective)
-      .default([]),
-  })
-  .default({
-    scriptOrigins: [],
-    connectOrigins: [],
-    imgOrigins: [],
-  });
-
-export type CspAllowlist = z.infer<typeof cspAllowlistSchema>;
 
 export const workerStorefrontManifestSchema = z
   .strictObject({
@@ -278,6 +260,16 @@ export const workerStorefrontManifestSchema = z
         ctx.addIssue({
           code: 'custom',
           message: `${route.view} route "${route.path}" must capture a dynamic segment`,
+        });
+      } else if (
+        route.view === 'product' &&
+        !Array.from(paramNames).some(
+          (p) => !NON_PRODUCT_IDENTIFIER_PARAMS.has(p)
+        )
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `product route "${route.path}" must capture a product-identifying parameter alongside variant/category segments`,
         });
       }
     }

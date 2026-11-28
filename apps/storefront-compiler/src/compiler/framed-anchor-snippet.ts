@@ -13,7 +13,7 @@ function readDomStringAttr(el, attrName, propName) {
   return typeof p === 'string' ? p : null;
 }
 
-function attachFramedNavigationInterceptors(container, commerce, initialProps, getPathname) {
+function attachFramedNavigationInterceptors(container, commerce, initialProps, getPathname, onPendingQuerySearch) {
   if (!window.parent || window.parent === window || typeof container.addEventListener !== 'function') {
     return;
   }
@@ -68,16 +68,48 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
         void commerce.checkout.open();
         return;
       }
-      if (parsed.search || parsed.hash) return;
+      const scrollHashTarget = () => {
+        if (!parsed.hash) return;
+        try {
+          const fragId = decodeURIComponent(parsed.hash.slice(1));
+          if (fragId && typeof document !== 'undefined' && typeof document.getElementById === 'function') {
+            document.getElementById(fragId)?.scrollIntoView?.();
+          }
+        } catch {}
+      };
+      if (!parsed.search && parsed.hash && !wantsNewTab) {
+        const livePath = typeof getPathname === 'function' ? getPathname() : initialProps?.pathname;
+        const curPath = typeof livePath === 'string' && livePath.startsWith('/') ? livePath : '/';
+        if (parsed.pathname === curPath) {
+          event.preventDefault();
+          scrollHashTarget();
+          return;
+        }
+      }
       event.preventDefault();
+      const rememberQuery = () => {
+        if (parsed.search && typeof onPendingQuerySearch === 'function') {
+          onPendingQuerySearch(parsed.pathname, parsed.search);
+        }
+      };
       if (wantsNewTab) {
         void Promise.resolve(commerce.navigation.open(parsed.pathname)).then((res) => {
           if (res && res.status === 'ok' && res.value && res.value.presented === false) {
-            void commerce.navigation.go(parsed.pathname);
+            rememberQuery();
+            void Promise.resolve(commerce.navigation.go(parsed.pathname)).then((goRes) => {
+              if (goRes && goRes.status === 'ok' && parsed.hash && typeof setTimeout === 'function') {
+                setTimeout(scrollHashTarget, 0);
+              }
+            });
           }
         });
       } else {
-        void commerce.navigation.go(parsed.pathname);
+        rememberQuery();
+        void Promise.resolve(commerce.navigation.go(parsed.pathname)).then((goRes) => {
+          if (goRes && goRes.status === 'ok' && parsed.hash && typeof setTimeout === 'function') {
+            setTimeout(scrollHashTarget, 0);
+          }
+        });
       }
     } catch {}
   });

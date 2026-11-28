@@ -7,11 +7,16 @@ function tryBuildSingleProductRoute(p, routePath, slug) {
     const s = segs[i];
     if (s.startsWith(':') || (s.startsWith('[') && s.endsWith(']'))) dynIdx.push(i);
   }
+  const NON_PROD_PARAMS = new Set(['variant', 'variantId', 'category', 'categoryId', 'categorySlug', 'collection', 'collectionId', 'collectionSlug', 'brand', 'condition', 'filter', 'page']);
   const lastDyn = dynIdx[dynIdx.length - 1];
   const prevDyn = dynIdx[dynIdx.length - 2];
   const lastSeg = lastDyn !== undefined ? segs[lastDyn] : '';
   const lastParam = lastSeg.startsWith(':') ? lastSeg.slice(1) : lastSeg.slice(1, -1);
   const slugIdx = lastParam === 'variant' || lastParam === 'variantId' ? prevDyn : lastDyn;
+  if (slugIdx === undefined) return undefined;
+  const slugSeg = segs[slugIdx];
+  const slugParam = slugSeg.startsWith(':') ? slugSeg.slice(1) : slugSeg.slice(1, -1);
+  if (NON_PROD_PARAMS.has(slugParam)) return undefined;
   const out = [];
   for (let i = 0; i < segs.length; i++) {
     const s = segs[i];

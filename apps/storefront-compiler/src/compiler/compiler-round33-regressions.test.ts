@@ -71,7 +71,7 @@ describe('Round 33 canonical JSON-LD URL, connectExperience ban, and query/hash 
     }
   });
 
-  it('does not call preventDefault() or dispatch host navigation when a DOM anchor carries a query or fragment', async () => {
+  it('calls preventDefault() and routes query-bearing DOM anchors over host navigation.go without reloading the iframe', async () => {
     const entrySrc = buildClientHydrationEntrySource('src/App.tsx', {}, [
       { path: '/', view: 'home' },
       { path: '/smartphones', view: 'collection' },
@@ -162,7 +162,11 @@ describe('Round 33 canonical JSON-LD URL, connectExperience ban, and query/hash 
           k === 'href' ? '/smartphones?variant=blue' : null,
       },
     });
-    expect(queryPrevented).toBe(false);
-    expect(sent).toHaveLength(1); // Only initial ready message
+    await new Promise((r) => setImmediate(r));
+    expect(queryPrevented).toBe(true);
+    expect(sent.at(-1)).toMatchObject({
+      method: 'navigation.go',
+      args: { path: '/smartphones' },
+    });
   });
 });

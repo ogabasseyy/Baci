@@ -108,15 +108,19 @@ async function fetchWorkerRouteEnrichment(workerOrigin, targetPathname) {
 
 function createRouteEnricher(initialProps, runtimeAssets, enrichedCache, getState, applyEnriched) {
   const workerOrigin = resolveWorkerCatalogOrigin(initialProps);
-  let enrichedPath = typeof initialProps?.pathname === 'string' && initialProps.pathname.startsWith('/') ? initialProps.pathname : '/';
-  return (targetPath, targetEpoch, liveBootstrap) => {
+  let enrichedKey = typeof initialProps?.pathname === 'string' && initialProps.pathname.startsWith('/') ? initialProps.pathname : '/';
+  let pendingQuery = null;
+  const enrich = (targetPath, targetEpoch, liveBootstrap) => {
+    const querySuffix = pendingQuery && pendingQuery.pathname === targetPath ? pendingQuery.search : '';
+    if (querySuffix) pendingQuery = null;
+    const fullTarget = targetPath + querySuffix;
     const hasUncached =
       Array.isArray(liveBootstrap?.catalog?.products) &&
       liveBootstrap.catalog.products.some((p) => isUncachedNarrowBootstrapRow(p, enrichedCache));
-    if (!workerOrigin || typeof fetch !== 'function' || (targetPath === enrichedPath && !hasUncached)) {
+    if (!workerOrigin || typeof fetch !== 'function' || (fullTarget === enrichedKey && !hasUncached)) {
       return false;
     }
-    void fetchWorkerRouteEnrichment(workerOrigin, targetPath).then((payload) => {
+    void fetchWorkerRouteEnrichment(workerOrigin, fullTarget).then((payload) => {
       const cur = getState();
       if (!payload || targetEpoch < cur.epoch || cur.props?.pathname !== targetPath) return;
       if (payload.assets && typeof payload.assets === 'object' && !Array.isArray(payload.assets)) {
@@ -124,8 +128,8 @@ function createRouteEnricher(initialProps, runtimeAssets, enrichedCache, getStat
           if (typeof aurl === 'string' && !isDeclaredManifestAsset(aid)) runtimeAssets[aid] = aurl;
         }
       }
-      const merged = mergeEnrichedRouteWithLiveBootstrap(payload.value, liveBootstrap || lastHostBootstrap, runtimeAssets, enrichedCache);
-      enrichedPath = targetPath;
+      const merged = mergeEnrichedRouteWithLiveBootstrap(payload.value, querySuffix ? null : (liveBootstrap || lastHostBootstrap), runtimeAssets, enrichedCache);
+      enrichedKey = fullTarget;
       applyEnriched({
         ...cur.props,
         _productsPathname: targetPath,
@@ -138,6 +142,10 @@ function createRouteEnricher(initialProps, runtimeAssets, enrichedCache, getStat
     });
     return true;
   };
+  enrich.rememberPendingQuery = (pathname, search) => {
+    pendingQuery = typeof search === 'string' && search.startsWith('?') ? { pathname, search } : null;
+  };
+  return enrich;
 }
 `;
 }

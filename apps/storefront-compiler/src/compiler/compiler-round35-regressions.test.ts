@@ -7,7 +7,7 @@ import {
   compileStorefrontWorker,
   StorefrontCompilerError,
 } from './compile-storefront';
-import { FRAME_ERROR_SCRIPT_PATH } from './frame-error-script-snippet';
+import { buildFrameErrorAsset } from './frame-error-script-snippet';
 
 describe('Round 35 interpolated anchors, React class verification, and framed 5xx handshake regressions', () => {
   it('neutralizes interpolated ///evil.example and /foo//bar hrefs at runtime and prevents untrusted framed _self navigation', async () => {
@@ -217,12 +217,13 @@ export default class Storefront extends PureComponent<{ title: string }> { rende
       const html502 = await res502.text();
       expect(html502).not.toContain('__BACI_STOREFRONT_STATE__');
       expect(html502).not.toContain(compiled.assets.clientAssetPath);
+      const frameErrorPath = buildFrameErrorAsset(manifest).path;
       expect(html502).toContain(
-        `<script type="module" src="${FRAME_ERROR_SCRIPT_PATH}"></script>`
+        `<script type="module" src="${frameErrorPath}"></script>`
       );
 
       const scriptRes = await mf.dispatchFetch(
-        `https://ogabassey.mybaci.store${FRAME_ERROR_SCRIPT_PATH}`
+        `https://ogabassey.mybaci.store${frameErrorPath}`
       );
       expect(scriptRes.status).toBe(200);
       const scriptText = await scriptRes.text();

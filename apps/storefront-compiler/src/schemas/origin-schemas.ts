@@ -62,6 +62,21 @@ export const previewOriginSchema = z
     }
   }, 'previewOrigin must be a valid HTTPS origin or localhost HTTP origin');
 
+export const NON_PRODUCT_IDENTIFIER_PARAMS: ReadonlySet<string> = new Set([
+  'variant',
+  'variantId',
+  'category',
+  'categoryId',
+  'categorySlug',
+  'collection',
+  'collectionId',
+  'collectionSlug',
+  'brand',
+  'condition',
+  'filter',
+  'page',
+]);
+
 export const hostOriginSchema = z
   .string()
   .min(8)
@@ -89,3 +104,17 @@ export const hostOriginSchema = z
       return false;
     }
   }, 'hostOrigin must be a bare HTTPS storefront origin without wildcards, ports, platform-reserved hosts, or raw IPs');
+
+export const cspAllowlistSchema = z
+  .strictObject({
+    scriptOrigins: z.array(httpsOriginSchema).max(16).default([]),
+    connectOrigins: z.array(httpsOriginSchema).max(16).default([]),
+    imgOrigins: z.array(httpsOriginSchema).max(16).default([]),
+  })
+  .default({
+    scriptOrigins: [],
+    connectOrigins: [],
+    imgOrigins: [],
+  });
+
+export type CspAllowlist = z.infer<typeof cspAllowlistSchema>;

@@ -1,0 +1,2 @@
+supabase/tests/platform_funded_gigl_shipping.sql
+supabase/tests/platform_funded_gigl_shipping_release.sql

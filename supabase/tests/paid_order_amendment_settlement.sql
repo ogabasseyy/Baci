@@ -115,7 +115,16 @@ BEGIN
   END;
   outgoing := pg_temp.amendment_bank(f,5000000,exact_evidence);
   late_evidence := pg_temp.amendment_bank(f,5000000);
-  UPDATE private.paid_order_amendment_config SET bank_account_id = NULL,bank_evidence_cutover = NULL WHERE merchant_id = m;
+  BEGIN
+    UPDATE private.paid_order_amendment_config SET bank_account_id = NULL,bank_evidence_cutover = NULL WHERE merchant_id = m;
+    RAISE EXCEPTION 'An open cancellation claim allowed bank account rotation';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_return_claim_open' THEN RAISE; END IF;
+  END;
+  IF (SELECT bank_account_id FROM private.paid_order_amendment_config WHERE merchant_id = m)
+    IS DISTINCT FROM (f->>'bank')::uuid THEN
+    RAISE EXCEPTION 'Rejected account rotation changed the configured bank';
+  END IF;
   BEGIN
     INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway,metadata)
     VALUES (m,o,'refund',50000,'NGN','completed','manual',jsonb_build_object('payment_transaction_id',paid_transaction));
@@ -164,6 +173,15 @@ BEGIN
     OR (SELECT count(*) FROM public.transactions WHERE order_id = o AND transaction_type = 'refund') <> 1 THEN
     RAISE EXCEPTION 'returning post-cancellation money altered the order ledger';
   END IF;
+  UPDATE private.paid_order_amendment_config
+  SET bank_account_id = NULL,bank_evidence_cutover = NULL WHERE merchant_id = m;
+  BEGIN
+    INSERT INTO public.transactions(merchant_id,order_id,transaction_type,amount,currency,status,gateway,metadata)
+    VALUES (m,o,'refund',50000,'NGN','completed','manual',jsonb_build_object('payment_transaction_id',paid_transaction));
+    RAISE EXCEPTION 'Clearing the account bypassed historical disbursement ownership';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'bank_disbursement_evidence_required' THEN RAISE; END IF;
+  END;
 END;
 $$;
 ROLLBACK;

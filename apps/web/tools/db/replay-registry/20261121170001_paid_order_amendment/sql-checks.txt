@@ -8,3 +8,8 @@ supabase/tests/paid_order_amendment_pilot_pause.sql
 supabase/tests/paid_order_amendment_refund_review.sql
 supabase/tests/paystack_checkout_surcharge_refund.sql
 supabase/tests/paid_order_amendment_preview_budget.sql
+supabase/tests/paid_order_amendment_verified_funding.sql
+supabase/tests/paid_order_amendment_mobile_payment_boundaries.sql
+supabase/tests/paid_order_amendment_verified_tender_settlement.sql
+supabase/tests/paid_order_amendment_tender_import.sql
+supabase/tests/paid_order_amendment_staff_tender.sql

@@ -46,12 +46,16 @@ export function useOrderAmendmentDialog({
   > | null>(null);
   const [reason, setReason] = useState('');
   const [customerAgreed, setCustomerAgreed] = useState(false);
+  const [bankEvidenceId, setBankEvidenceId] = useState('');
   const [key, setKey] = useState('');
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [error, setError] = useState('');
   const money = (minor: number) => formatDisplayCurrency(minor / 100, currency);
   const replacement = options.find((option) => option.id === selected);
+  const requiresBankEvidence = Boolean(
+    preview?.bankEvidence && preview.adjustmentMinor > 0
+  );
 
   async function run(work: () => Promise<void>) {
     setError('');
@@ -97,6 +101,7 @@ export function useOrderAmendmentDialog({
       );
       setKey(crypto.randomUUID());
       setCustomerAgreed(false);
+      setBankEvidenceId('');
     });
   }
 
@@ -121,6 +126,8 @@ export function useOrderAmendmentDialog({
       !preview ||
       !customerAgreed ||
       !reason.trim() ||
+      (requiresBankEvidence &&
+        !preview.bankEvidence?.some((entry) => entry.id === bankEvidenceId)) ||
       (preview.adjustmentMinor < 0 && !canRefund)
     )
       return;
@@ -131,6 +138,7 @@ export function useOrderAmendmentDialog({
           customerAgreed,
           reason: reason.trim(),
           idempotencyKey: key,
+          ...(requiresBankEvidence ? { bankEvidenceId } : {}),
         });
       } catch (failure) {
         if (
@@ -173,6 +181,9 @@ export function useOrderAmendmentDialog({
     setReason,
     customerAgreed,
     setCustomerAgreed,
+    bankEvidenceId,
+    setBankEvidenceId,
+    requiresBankEvidence,
     pending,
     uncertain,
     error,

@@ -1,3 +1,4 @@
+import { staffTopUpSchema } from '@baci/shared/schemas';
 import { z } from 'zod';
 import { paidOrderAmendmentStatusSchema } from './order-amendment-document';
 
@@ -18,13 +19,17 @@ export const amendmentPreviewSchema = z.strictObject({
   }),
 });
 
-export const amendmentConfirmSchema = z.strictObject({
-  customerAgreed: z.literal(true),
-  idempotencyKey: z.string().trim().min(8).max(128),
-  previewId: z.uuid(),
-  reason: z.string().trim().min(1).max(500),
-  supportReference: z.string().trim().min(1).max(200).optional(),
-});
+export const amendmentConfirmSchema = z
+  .strictObject({
+    bankEvidenceId: z.uuid().optional(),
+    customerAgreed: z.literal(true),
+    idempotencyKey: z.string().trim().min(8).max(128),
+    previewId: z.uuid(),
+    reason: z.string().trim().min(1).max(500),
+    supportReference: z.string().trim().min(1).max(200).optional(),
+    staffTopUp: staffTopUpSchema.optional(),
+  })
+  .refine((value) => !(value.bankEvidenceId && value.staffTopUp));
 
 export const amendmentActionParams = amendmentOrderParams.extend({
   amendmentId: z.uuid(),
@@ -63,9 +68,18 @@ export const amendmentActionSchema = z.discriminatedUnion('action', [
     operationId,
   }),
   z.strictObject({
-    action: z.literal(['reverse', 'cancel_for_recovery']),
+    action: z.literal([
+      'reverse',
+      'cancel_for_recovery',
+      'open_verified_cancellation',
+      'cancel_with_verified_refunds',
+    ]),
     idempotencyKey,
     reason,
+  }),
+  z.strictObject({
+    action: z.literal('record_verified_lender_refund'),
+    idempotencyKey,
   }),
 ]);
 
@@ -74,6 +88,11 @@ export const workspaceSchema = z.object({
   confirmationKey: z.string().nullish(),
   canEdit: z.boolean(),
   canRefund: z.boolean(),
+  isVerifiedFunding: z.boolean().optional(),
+  verifiedCreditDirectRefund: z.boolean().nullish(),
+  canOpenVerifiedCancellation: z.boolean().nullish(),
+  verifiedCancellationPending: z.boolean().nullish(),
+  verifiedCancellationReady: z.boolean().nullish(),
   customer: paidOrderAmendmentStatusSchema.nullable(),
   summary: z.object({ amendmentId: z.uuid() }).nullable(),
   events: z.array(
@@ -99,6 +118,7 @@ export const workspaceSchema = z.object({
       status: z.string().nullable(),
       transactionId: z.uuid().nullable(),
       occurredAt: z.string(),
+      method: z.string().optional(),
     })
   ),
 });
@@ -126,6 +146,17 @@ export const amendmentPreviewResult = z.object({
   beforeTotalMinor: z.number().int(),
   afterTotalMinor: z.number().int(),
   adjustmentMinor: z.number().int(),
+  canRecordStaffTopUp: z.boolean().optional(),
+  bankEvidence: z
+    .array(
+      z.object({
+        id: z.uuid(),
+        amountMinor: z.number().int().positive(),
+        method: z.enum(['bank_transfer', 'cash', 'pos']).optional(),
+        occurredAt: z.string(),
+      })
+    )
+    .optional(),
 });
 
 export const amendmentErrorSchema = z.object({

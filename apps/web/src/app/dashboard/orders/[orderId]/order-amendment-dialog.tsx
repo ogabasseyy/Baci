@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { OrderAmendmentEvidenceSelect } from './order-amendment-evidence-select';
 import {
   type AmendmentDialogProps,
   useOrderAmendmentDialog,
@@ -38,6 +39,9 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
     setReason,
     customerAgreed,
     setCustomerAgreed,
+    bankEvidenceId,
+    setBankEvidenceId,
+    requiresBankEvidence,
     pending,
     uncertain,
     error,
@@ -176,12 +180,25 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
                 </div>
               </dl>
               <p className="text-sm">
-                {preview.adjustmentMinor > 0
-                  ? `Balance due ${money(preview.adjustmentMinor)}. Fulfillment will be held.`
-                  : preview.adjustmentMinor < 0
-                    ? `Refund owed ${money(-preview.adjustmentMinor)}. Fulfillment will be held.`
-                    : 'The order total is unchanged.'}
+                {requiresBankEvidence
+                  ? preview.canRecordStaffTopUp && !preview.bankEvidence?.length
+                    ? `Balance due ${money(preview.adjustmentMinor)}.`
+                    : `Select the verified payment of ${money(preview.adjustmentMinor)} to confirm.`
+                  : preview.adjustmentMinor > 0
+                    ? `Balance due ${money(preview.adjustmentMinor)}. Fulfillment will be held.`
+                    : preview.adjustmentMinor < 0
+                      ? `Refund owed ${money(-preview.adjustmentMinor)}. Fulfillment will be held.`
+                      : 'The order total is unchanged.'}
               </p>
+              {requiresBankEvidence && (
+                <OrderAmendmentEvidenceSelect
+                  entries={preview.bankEvidence}
+                  value={bankEvidenceId}
+                  onChange={setBankEvidenceId}
+                  money={money}
+                  canRecordStaffTopUp={preview.canRecordStaffTopUp === true}
+                />
+              )}
               {preview.adjustmentMinor < 0 && !canRefund && (
                 <p role="status" className="text-sm">
                   A staff member with refund permission must confirm this
@@ -254,6 +271,7 @@ export function OrderAmendmentDialog(props: AmendmentDialogProps) {
                     pending ||
                     !customerAgreed ||
                     !reason.trim() ||
+                    (requiresBankEvidence && !bankEvidenceId) ||
                     (preview.adjustmentMinor < 0 && !canRefund)
                   }
                   onClick={confirm}

@@ -16,7 +16,22 @@ type Context = { params: Promise<{ id: string }> };
 type Command = 'preview' | 'confirm' | 'read' | 'action';
 
 const conflicts: ReadonlyMap<string, string> = new Map([
-  ['bank_evidence_required', 'Select a verified bank statement entry.'],
+  [
+    'verified_funding_refund_review_required',
+    'Finance must verify the refund and cancellation workflow for this payment.',
+  ],
+  [
+    'staff_pos_receipt_used',
+    'This staff-recorded payment conflicts with an existing payment entry.',
+  ],
+  [
+    'bank_evidence_required',
+    'Select a verified bank transfer, cash, or POS receipt for this change.',
+  ],
+  [
+    'tender_evidence_required',
+    'Select the verified cash or POS receipt for this order.',
+  ],
   [
     'bank_evidence_conflict',
     'This bank entry has already been allocated or does not match.',

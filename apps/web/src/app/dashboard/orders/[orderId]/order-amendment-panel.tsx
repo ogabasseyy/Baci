@@ -190,7 +190,9 @@ export function OrderAmendmentPanel({
               {status.state === 'settled' && 'Change settled.'}
               {status.state === 'reversed' && 'Change reversed.'}
               {status.state === 'cancelled_for_recovery' &&
-                'Cancelled for recovery.'}
+                (workspace.isVerifiedFunding
+                  ? 'Order cancelled and refunds verified.'
+                  : 'Cancelled for recovery.')}
               {status.holdFulfillment && ' Fulfillment is on hold.'}
             </p>
             <div className="flex flex-wrap gap-2">

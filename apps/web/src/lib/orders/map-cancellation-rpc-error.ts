@@ -25,6 +25,17 @@ export function mapCancellationRpcError(error: {
       status: 409,
     };
   }
+  if (
+    error.code === 'P0001' &&
+    error.message.includes('verified_funding_refund_review_required')
+  ) {
+    return {
+      code: 'REFUND_REVIEW_REQUIRED',
+      error:
+        'Finance must verify the refund before this order can be cancelled.',
+      status: 409,
+    };
+  }
   if (error.code === 'P0001') {
     return {
       code: 'ORDER_NOT_CANCELLABLE',

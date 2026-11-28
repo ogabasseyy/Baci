@@ -8,6 +8,7 @@ import { createController } from './OrderDetailsScreenContent.test-support';
 import { formatOrderDetailsDate } from './order-details.formatters';
 
 const auditTrailCardMock = vi.hoisted(() => vi.fn());
+const changeItemsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('expo-router', () => ({
   router: {
@@ -32,7 +33,7 @@ vi.mock('@react-native-vector-icons/ionicons', () => ({
 // OrderDetailsScreenContent reads the merchant for VAT-breakdown display.
 // Mock it so the real hook's native import graph never loads under vitest.
 vi.mock('@/hooks/useMerchant', () => ({
-  useMerchant: () => ({ merchant: { country: 'NG' } }),
+  useMerchant: () => ({ merchant: { country: 'NG', id: 'merchant-1' } }),
 }));
 
 vi.mock('react-native', async () =>
@@ -66,6 +67,12 @@ vi.mock('@/components/ui/ReceiptPreviewModal', () => ({
 vi.mock('@/components/ui/SuccessModal', () => ({
   SuccessModal: () => null,
 }));
+vi.mock('./PaidOrderChangeItems', () => ({
+  PaidOrderChangeItems: ({ deferWorkspace }: { deferWorkspace: boolean }) => {
+    changeItemsMock(deferWorkspace);
+    return null;
+  },
+}));
 vi.mock('./OrderDetailsFooterBar', () => ({
   OrderDetailsFooterBar: () => null,
 }));
@@ -97,6 +104,28 @@ vi.mock('./OrderAuditTrailCard', () => ({
 }));
 
 describe('OrderDetailsScreenContent', () => {
+  it.each([
+    ['unpaid', 0, 'pending', true],
+    ['pending', 0, 'pending', true],
+    ['pending', 100, 'pending', false],
+    ['paid', 100, 'pending', false],
+    ['refunded', 0, 'pending', false],
+    ['unpaid', 0, 'cancelled', false],
+    ['unpaid', null, 'pending', true],
+  ] as const)('defers the amendment read for %s with amount %s and shipping %s = %s', (paymentStatus, amountPaid, shippingStatus, deferWorkspace) => {
+    const controller = createController();
+    if (!controller.order) throw new Error('Order fixture missing');
+    Object.assign(controller.order, {
+      currency: 'NGN',
+      payment_status: paymentStatus,
+      amount_paid: amountPaid,
+      shipping_status: shippingStatus,
+    });
+    render(<OrderDetailsScreenContent controller={controller} />);
+
+    expect(changeItemsMock).toHaveBeenLastCalledWith(deferWorkspace);
+  });
+
   it('navigates to order edit and renders header share plus audit actions', () => {
     render(<OrderDetailsScreenContent controller={createController()} />);
 

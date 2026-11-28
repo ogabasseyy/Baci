@@ -9,6 +9,12 @@ describe('mapCancellationRpcError', () => {
       409,
       'PAYMENT_RECONCILIATION_REQUIRED',
     ],
+    [
+      'P0001',
+      'verified_funding_refund_review_required',
+      409,
+      'REFUND_REVIEW_REQUIRED',
+    ],
     ['P0001', 'order_not_cancellable', 409, 'ORDER_NOT_CANCELLABLE'],
     ['P0002', 'order_not_found', 404, undefined],
     ['42501', 'order_cancel_forbidden', 403, undefined],

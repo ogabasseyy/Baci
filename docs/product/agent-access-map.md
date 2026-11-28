@@ -1,28 +1,16 @@
 # Baci capabilities and agent access
 
-Reviewed 26 November 2026 against source revision
-`210729ecfffbc6245c7671759fe0674188e05569`. Web checkout `payment-step-availability.ts` (allowing vouchers and store credit with all payment methods when net payable > 0) was re-reviewed alongside payment configuration and the merchant Oxygen admin enablement toggle alongside storefront availability and workflow-start gates. Staff-entered mobile orders were re-reviewed after the delivery-address selection change, rapid street edits, pending Places details and save/quote concurrency checks, following the current-main sync. Current-main customer checkout quote rejection, destination/state matching and stale-quote recovery were also reviewed, alongside the paid partner pickup and parcel-binding evidence and prior expense review. The web order detail, cancellation, and invoice paths were reviewed alongside the feature-gated item replacement flow. The paid-order replacement pilot remains disabled.
-The Shopping MCP row was re-reviewed after the misleading link-only
-`add_to_cart` alias was retired from the server, discovery card and submission metadata, and again after the
-connected cart read tool's description and failure text were reworded (wording only; no claim moved).
-The optional Ogabassey guest-credential mode requires the canonical cart bridge and
-a cart-only server without guest OAuth. Its first add creates a guest cart and
-subsequent operations require the server-issued credential. In this mode the
-widget is a catalog, and the conversation tool is the cart writer. The website
-handoff copies catalog lines into a separate website cart without sharing grants.
-Reopening the same handoff adds nothing. Fresh links after a source edit add
-only new or increased quantities. Shoppers can edit previously copied items on
-the website. This is source evidence;
-production activation and public client credential retention are unverified.
-The mobile-admin follow-up queue no longer treats
-stale unpaid staff-created orders as abandoned checkouts; their failed or BNPL payments still enter it. The source also categorizes Oxygen follow-ups, places reviews first and includes them in the customer badge; Follow-up reads require customer-view permission, and claims and updates also require customer-edit permission. Removing staff or revoking either permission from the staff member or their role releases their open work and preserves its outcome and date. The claim RPC scopes to orders in the same store so a checkout status change can leave its follow-up actionable. Closed records are read-only. Retained follow-up cards show when an order is BNPL approved, paid, refunded, or cancelled. Follow-up rows name known payment methods and lenders. Follow-up dates are optional. Past dates represent overdue work, and closing clears the date. Agentic checkout session quotes now include
-registered-merchant VAT using an exclusive basis; this is source evidence, not deployment or live-flow
-proof. Guest OAuth consent and renewable authorization were re-reviewed and tested. Upstream payment
-review confirms uncertain DVA outcomes retain their reconciliation claim and checkout eligibility
-reflects CredPal retirement.
-Oxygen supports local staging and a separately configured, policy-controlled production pilot; production transactions are not yet verified. This is a navigation map, not authorization or proof of
-current deployment. Check the current implementation, live tool discovery and
-merchant entitlement before calling or claiming a tool.
+Reviewed 27 November 2026 against source revision
+`215f5d6b504baa91fb6370aa7a136ff5d7e9070c`. Re-reviewed paid-order bank-return
+recovery and incoming tender evidence: unresolved receipts, active allocated
+top-ups, and open return claims preserve their source account until cancellation
+or fulfillment closes that route. Exact receipt replay remains merchant-scoped
+across a later rotation only when immutable identity matches; new receipts
+require the active account and cutover. Mobile test files remain below 300
+lines. Reviewed the shared UUID validation used by web and mobile repayment controls; the accepted evidence format is unchanged. The pilot remains disabled.
+Also re-reviewed paid-order amendment route admission, mobile workspace retry
+recovery, and merchant-scoped POS refund reference deduplication. These code
+changes do not establish live production availability or capability.
 
 Baci's positioning is **agent-native commerce infrastructure for African
 merchants**: merchant-owned stores, structured discovery, controlled transactions

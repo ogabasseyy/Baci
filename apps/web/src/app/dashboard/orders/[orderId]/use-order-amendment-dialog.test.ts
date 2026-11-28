@@ -19,7 +19,15 @@ const previewId = '33333333-3333-4333-8333-333333333333';
 const path = '/api/orders/synthetic/amendments';
 const request = vi.mocked(requestAmendment);
 
-async function prepared({ adjustmentMinor = 0, canRefund = true } = {}) {
+async function prepared({
+  adjustmentMinor = 0,
+  canRefund = true,
+  bankEvidence,
+}: {
+  adjustmentMinor?: number;
+  canRefund?: boolean;
+  bankEvidence?: { id: string; amountMinor: number; occurredAt: string }[];
+} = {}) {
   const onConfirmed = vi.fn();
   const onConflict = vi.fn();
   const resolveConfirmation =
@@ -59,6 +67,7 @@ async function prepared({ adjustmentMinor = 0, canRefund = true } = {}) {
     beforeTotalMinor: 500_000,
     afterTotalMinor: 500_000 + adjustmentMinor,
     adjustmentMinor,
+    bankEvidence,
   });
   await act(async () => result.current.fetchPreview());
   act(() => {
@@ -98,6 +107,28 @@ describe('useOrderAmendmentDialog', () => {
     expect(result.current.error).toBe('Preview again.');
     expect(onConfirmed).not.toHaveBeenCalled();
     expect(resolveConfirmation).not.toHaveBeenCalled();
+  });
+
+  it('requires selection of a verified transfer for a verified-funds upgrade', async () => {
+    const amountMinor = 2_000_000;
+    const evidenceId = '44444444-4444-4444-8444-444444444444';
+    const { result, onConfirmed } = await prepared({
+      adjustmentMinor: amountMinor,
+      bankEvidence: [
+        { id: evidenceId, amountMinor, occurredAt: '2026-11-22T09:00:00Z' },
+      ],
+    });
+    request.mockClear();
+    await act(async () => result.current.confirm());
+    expect(request).not.toHaveBeenCalled();
+    act(() => result.current.setBankEvidenceId(evidenceId));
+    request.mockResolvedValueOnce({ amendmentId: lineId });
+    await act(async () => result.current.confirm());
+    expect(request).toHaveBeenCalledWith(
+      path,
+      expect.objectContaining({ bankEvidenceId: evidenceId })
+    );
+    expect(onConfirmed).toHaveBeenCalledOnce();
   });
 
   it('reports a competing confirmation found by the authorized lookup', async () => {

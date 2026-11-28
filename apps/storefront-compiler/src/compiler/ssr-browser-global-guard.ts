@@ -1,6 +1,11 @@
 import ts from '@typescript/typescript6';
+import {
+  collectNamedBrowserOnlyFunctions,
+  collectReactEffectBindings,
+  isDirectBrowserCallbackSlot,
+  type ReactEffectBindings,
+} from './browser-callback-scope';
 import { resolveStaticString } from './const-string-fold';
-import { bindingContainsName } from './jsx-export-graph';
 import { hasLocalLexicalBinding } from './jsx-tag-safety';
 import { hasInnerShadowing } from './lexical-const-lookup';
 import {
@@ -16,133 +21,16 @@ import {
   isSsrGlobalHostReceiver,
 } from './typeof-global-guard';
 
-const REACT_EFFECT_HOOKS: ReadonlySet<string> = new Set([
-  'useEffect',
-  'useLayoutEffect',
-  'useInsertionEffect',
-]);
-
-interface ReactEffectBindings {
-  directHooks: Set<string>;
-  namespaces: Set<string>;
-}
-
-function collectReactEffectBindings(sf: ts.SourceFile): ReactEffectBindings {
-  const directHooks = new Set<string>();
-  const namespaces = new Set<string>();
-  for (const stmt of sf.statements) {
-    if (
-      !ts.isImportDeclaration(stmt) ||
-      stmt.importClause?.isTypeOnly ||
-      !ts.isStringLiteral(stmt.moduleSpecifier) ||
-      stmt.moduleSpecifier.text !== 'react' ||
-      !stmt.importClause
-    ) {
-      continue;
-    }
-    if (stmt.importClause.name) namespaces.add(stmt.importClause.name.text);
-    const bindings = stmt.importClause.namedBindings;
-    if (!bindings) continue;
-    if (ts.isNamespaceImport(bindings)) {
-      namespaces.add(bindings.name.text);
-    } else if (ts.isNamedImports(bindings)) {
-      for (const el of bindings.elements) {
-        if (
-          !el.isTypeOnly &&
-          REACT_EFFECT_HOOKS.has((el.propertyName ?? el.name).text)
-        ) {
-          directHooks.add(el.name.text);
-        }
-      }
-    }
-  }
-  for (const stmt of sf.statements) {
-    if (ts.isVariableStatement(stmt)) {
-      for (const d of stmt.declarationList.declarations) {
-        for (const h of [...directHooks]) {
-          if (bindingContainsName(d.name, h)) directHooks.delete(h);
-        }
-        for (const ns of [...namespaces]) {
-          if (bindingContainsName(d.name, ns)) namespaces.delete(ns);
-        }
-      }
-    } else if (
-      (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
-      stmt.name
-    ) {
-      directHooks.delete(stmt.name.text);
-      namespaces.delete(stmt.name.text);
-    }
-  }
-  return { directHooks, namespaces };
-}
-
 function statementAlwaysExits(stmt: ts.Statement): boolean {
   if (ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt)) return true;
   return ts.isBlock(stmt) && stmt.statements.some(statementAlwaysExits);
 }
 
-function isBrowserOnlyCallbackFunction(
-  fn: ts.ArrowFunction | ts.FunctionExpression,
-  effects: ReactEffectBindings
-): boolean {
-  let exprNode: ts.Node = fn;
-  while (
-    exprNode.parent &&
-    (ts.isParenthesizedExpression(exprNode.parent) ||
-      ts.isAsExpression(exprNode.parent) ||
-      ts.isSatisfiesExpression(exprNode.parent))
-  ) {
-    exprNode = exprNode.parent;
-  }
-  const p = exprNode.parent;
-  if (!p) return false;
-  if (ts.isCallExpression(p) && p.arguments[0] === exprNode) {
-    const c = p.expression;
-    if (
-      ts.isIdentifier(c) &&
-      effects.directHooks.has(c.text) &&
-      !hasInnerShadowing(c, c.text)
-    ) {
-      return true;
-    }
-    const nsHook = ts.isPropertyAccessExpression(c)
-      ? c.name.text
-      : ts.isElementAccessExpression(c)
-        ? resolveStaticString(c.argumentExpression)
-        : null;
-    if (
-      nsHook !== null &&
-      REACT_EFFECT_HOOKS.has(nsHook) &&
-      (ts.isPropertyAccessExpression(c) || ts.isElementAccessExpression(c)) &&
-      ts.isIdentifier(c.expression) &&
-      effects.namespaces.has(c.expression.text) &&
-      !hasInnerShadowing(c.expression, c.expression.text)
-    ) {
-      return true;
-    }
-  }
-  if (ts.isJsxExpression(p) && ts.isJsxAttribute(p.parent)) {
-    const attrName = ts.isIdentifier(p.parent.name) ? p.parent.name.text : '';
-    const jsxElem = p.parent.parent?.parent;
-    if (
-      /^on[A-Z]/.test(attrName) &&
-      jsxElem &&
-      (ts.isJsxOpeningElement(jsxElem) ||
-        ts.isJsxSelfClosingElement(jsxElem)) &&
-      ts.isIdentifier(jsxElem.tagName) &&
-      /^[a-z]/.test(jsxElem.tagName.text)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function isGuardedBrowserGlobalAccess(
   node: ts.Node,
   target: BrowserGlobalName,
-  effects: ReactEffectBindings
+  effects: ReactEffectBindings,
+  namedBrowserFns: ReadonlySet<ts.FunctionLikeDeclaration>
 ): boolean {
   let exprOrParen: ts.Node = node;
   while (
@@ -163,10 +51,14 @@ function isGuardedBrowserGlobalAccess(
   while (cur.parent) {
     const p = cur.parent;
     if (
-      (ts.isArrowFunction(p) || ts.isFunctionExpression(p)) &&
+      (ts.isArrowFunction(p) ||
+        ts.isFunctionExpression(p) ||
+        ts.isFunctionDeclaration(p)) &&
       p.body &&
       (cur === p.body || p.body === node) &&
-      isBrowserOnlyCallbackFunction(p, effects)
+      (namedBrowserFns.has(p) ||
+        ((ts.isArrowFunction(p) || ts.isFunctionExpression(p)) &&
+          isDirectBrowserCallbackSlot(p, effects)))
     ) {
       return true;
     }
@@ -238,6 +130,7 @@ export function checkBrowserGlobalSsrSafety(
   violations: SourceSafetyViolation[]
 ): void {
   const effects = collectReactEffectBindings(sourceFile);
+  const namedBrowserFns = collectNamedBrowserOnlyFunctions(sourceFile, effects);
   const report = (name: BrowserGlobalName) =>
     violations.push({
       filePath,
@@ -266,7 +159,7 @@ export function checkBrowserGlobalSsrSafety(
       !isPropertyOrDeclarationName(node) &&
       !hasLocalLexicalBinding(node, node.text) &&
       !hasInnerShadowing(node, node.text) &&
-      !isGuardedBrowserGlobalAccess(node, node.text, effects)
+      !isGuardedBrowserGlobalAccess(node, node.text, effects, namedBrowserFns)
     ) {
       report(node.text);
     } else if (
@@ -274,7 +167,12 @@ export function checkBrowserGlobalSsrSafety(
       isBrowserGlobalName(node.name.text) &&
       isSsrGlobalHostReceiver(node.expression) &&
       !isOptionalChainedWorkerdGlobalRead(node) &&
-      !isGuardedBrowserGlobalAccess(node, node.name.text, effects)
+      !isGuardedBrowserGlobalAccess(
+        node,
+        node.name.text,
+        effects,
+        namedBrowserFns
+      )
     ) {
       report(node.name.text);
     } else if (ts.isElementAccessExpression(node)) {
@@ -284,7 +182,7 @@ export function checkBrowserGlobalSsrSafety(
         isBrowserGlobalName(k) &&
         isSsrGlobalHostReceiver(node.expression) &&
         !isOptionalChainedWorkerdGlobalRead(node) &&
-        !isGuardedBrowserGlobalAccess(node, k, effects)
+        !isGuardedBrowserGlobalAccess(node, k, effects, namedBrowserFns)
       ) {
         report(k);
       }

@@ -191,13 +191,14 @@ function toSdkPublicProduct(p, assetOut) {
           : p.name;
     image = { assetId, alt: altText };
   }
+  const canonPath = resolveProductCanonicalPath(p);
   return {
     id: String(p.id ?? ''),
     slug: p.slug,
     name: p.name,
     price: isFiniteNumber(p.price) ? p.price : Number(p.priceNgn || 0),
     currency: typeof p.currency === 'string' ? p.currency : 'NGN',
-    canonicalPath: resolveProductCanonicalPath(p),
+    ...(typeof canonPath === 'string' ? { canonicalPath: canonPath } : {}),
     available,
     requiresVariant: typeof p.requiresVariant === 'boolean' ? p.requiresVariant : Boolean(p.has_variants) || variants.length > 0,
     image,

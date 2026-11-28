@@ -55,9 +55,16 @@ function tryBuildSingleProductRoute(p, routePath, slug) {
     } else if (name === 'filter' || name === 'page') {
       return undefined;
     } else if (name === 'productId') {
-      out.push(encodeURIComponent(typeof p.id === 'string' && p.id.length > 0 ? p.id : slug));
+      if (typeof p.id !== 'string' || p.id.length === 0) return undefined;
+      out.push(encodeURIComponent(p.id));
     } else if (name === 'sku') {
-      out.push(encodeURIComponent(typeof p.sku === 'string' && p.sku.length > 0 ? p.sku : slug));
+      const topSku = typeof p.sku === 'string' && p.sku.length > 0 ? p.sku : '';
+      const varSkus = Array.isArray(p.variants)
+        ? Array.from(new Set(p.variants.map((v) => (v && typeof v.sku === 'string' && v.sku.length > 0 ? v.sku : '')).filter(Boolean)))
+        : [];
+      const resolvedSku = topSku || (varSkus.length === 1 ? varSkus[0] : '');
+      if (!resolvedSku) return undefined;
+      out.push(encodeURIComponent(resolvedSku));
     } else if (name === 'variant' || name === 'variantId') {
       const v0 = Array.isArray(p.variants) && p.variants[0] && p.variants[0].id ? String(p.variants[0].id) : '';
       if (!v0) return undefined;

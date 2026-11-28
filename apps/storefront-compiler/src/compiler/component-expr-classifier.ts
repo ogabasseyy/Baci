@@ -1,6 +1,7 @@
 import ts from '@typescript/typescript6';
 import { hasNoStaticallyInvalidReactReturn } from './component-return-validator';
 import { resolveStaticString } from './const-string-fold';
+import { isValidMemoComparatorArg } from './memo-comparator-guard';
 
 export type SafeExportKind = 'component' | 'reactClass' | 'sdkLink';
 
@@ -181,12 +182,15 @@ function getWrapperHocKind(
     return env.reactHocWrappers.get(inner.text) ?? null;
   }
   if (
-    ts.isPropertyAccessExpression(inner) &&
+    (ts.isPropertyAccessExpression(inner) ||
+      ts.isElementAccessExpression(inner)) &&
     ts.isIdentifier(inner.expression) &&
     !env.isShadowed?.(inner.expression, inner.expression.text) &&
     env.reactNamespaces.has(inner.expression.text)
   ) {
-    const name = inner.name.text;
+    const name = ts.isPropertyAccessExpression(inner)
+      ? inner.name.text
+      : resolveStaticString(inner.argumentExpression);
     return name === 'forwardRef' || name === 'memo' ? name : null;
   }
   return null;
@@ -211,9 +215,21 @@ export function resolveDirectComponentKind(
   if (ts.isIdentifier(inner)) return lookupKind(inner.text);
   if (ts.isCallExpression(inner)) {
     const hocKind = getWrapperHocKind(inner.expression, hocEnv);
-    if (!hocKind) return null;
+    if (!hocKind || inner.arguments.some((a) => ts.isSpreadElement(a))) {
+      return null;
+    }
     const arg0 = inner.arguments[0];
     if (arg0 === undefined) return null;
+    if (hocKind === 'forwardRef' && inner.arguments.length > 1) return null;
+    if (hocKind === 'memo') {
+      if (inner.arguments.length > 2) return null;
+      if (
+        inner.arguments.length === 2 &&
+        !isValidMemoComparatorArg(inner.arguments[1], hocEnv?.isShadowed)
+      ) {
+        return null;
+      }
+    }
     const unwrappedArg = unwrapExpr(arg0);
     if (
       hocKind === 'forwardRef' &&

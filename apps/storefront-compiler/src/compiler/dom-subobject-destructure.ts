@@ -79,8 +79,11 @@ export function resolveLexicalDeclaration(id: ts.Identifier): ts.Node | null {
       if (param) return param;
       if (ts.isFunctionExpression(cur) && cur.name?.text === name) return cur;
     }
-    if (ts.isBlock(cur) || ts.isSourceFile(cur)) {
-      for (const s of cur.statements) {
+    if (ts.isBlock(cur) || ts.isSourceFile(cur) || ts.isCaseBlock(cur)) {
+      const stmts = ts.isCaseBlock(cur)
+        ? cur.clauses.flatMap((cl) => cl.statements)
+        : cur.statements;
+      for (const s of stmts) {
         if (ts.isVariableStatement(s)) {
           const hit = s.declarationList.declarations.find((d) =>
             bindingContainsName(d.name, name)

@@ -53,7 +53,10 @@ function isSafeStaticNavTarget(
     try {
       const u = new URL(val, 'https://store.example');
       return (
-        u.origin === 'https://store.example' && !u.pathname.startsWith('//')
+        u.origin === 'https://store.example' &&
+        !u.pathname.startsWith('//') &&
+        u.search === '' &&
+        u.hash === ''
       );
     } catch {
       return false;
@@ -63,7 +66,8 @@ function isSafeStaticNavTarget(
   if (val.startsWith('#')) return true;
   try {
     const u = new URL(val);
-    if (u.username || u.password) return false;
+    if (u.username || u.password || u.search !== '' || u.hash !== '')
+      return false;
     return (
       u.origin === 'https://usebaci.com' ||
       u.origin === `https://${merchantSlug}.usebaci.com` ||
@@ -185,9 +189,14 @@ function checkJsxPropSafety(
   }
   if (ts.isTemplateExpression(expr)) {
     const head = expr.head.text;
+    const hasQueryOrHash = (s: string) => s.includes('?') || s.includes('#');
     const safeLiterals =
       !hasUnsafePathChar(head) &&
-      expr.templateSpans.every((s) => !hasUnsafePathChar(s.literal.text));
+      !hasQueryOrHash(head) &&
+      expr.templateSpans.every(
+        (s) =>
+          !hasUnsafePathChar(s.literal.text) && !hasQueryOrHash(s.literal.text)
+      );
     const safePrefix =
       (head.startsWith('/') && !head.startsWith('//')) ||
       (!isSdkLinkPath &&

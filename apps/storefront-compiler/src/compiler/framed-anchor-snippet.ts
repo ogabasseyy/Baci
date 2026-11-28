@@ -50,17 +50,19 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     }
     const rawHref = readDomStringAttr(node, 'href', 'href');
     if (typeof rawHref !== 'string' || rawHref.length === 0 || rawHref.startsWith('#')) return;
-    event.preventDefault();
     try {
       const baseHref = getBaseHref();
       const baseOrigin = new URL(baseHref).origin;
       const parsed = new URL(rawHref, baseHref);
       if (!isPermittedTargetOrigin(parsed.origin, baseOrigin)) return;
       if (parsed.pathname === '/checkout' || parsed.pathname.startsWith('/checkout/')) {
+        event.preventDefault();
         void commerce.checkout.open();
         return;
       }
-      void commerce.navigation.go(parsed.pathname + parsed.search + parsed.hash);
+      if (parsed.search || parsed.hash) return;
+      event.preventDefault();
+      void commerce.navigation.go(parsed.pathname);
     } catch {}
   });
 

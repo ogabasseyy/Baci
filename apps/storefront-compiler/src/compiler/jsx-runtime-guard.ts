@@ -40,14 +40,14 @@ function isSafeCompletedNavTarget(val) {
   if (val.startsWith('/') && !val.startsWith('//')) {
     try {
       const u = new URL(val, 'https://store.example');
-      return u.origin === 'https://store.example' && !u.pathname.startsWith('//');
+      return u.origin === 'https://store.example' && !u.pathname.startsWith('//') && u.search === '' && u.hash === '';
     } catch {
       return false;
     }
   }
   try {
     const u = new URL(val);
-    if (u.username || u.password) return false;
+    if (u.username || u.password || u.search !== '' || u.hash !== '') return false;
     return (
       u.origin === 'https://usebaci.com' ||
       u.origin === TRUSTED_ORIGIN ||

@@ -137,6 +137,11 @@ export function classifyMemberName(
       'DANGEROUS_INNER_HTML',
       `Direct React factory "${memberName}" is forbidden; use JSX syntax`
     );
+  } else if (memberName === 'connectExperience') {
+    push(
+      'PROHIBITED_RUNTIME_IMPORT',
+      'Platform host bootstrap API "connectExperience" is owned by the storefront runtime; use useCommerce()'
+    );
   } else if (DYNAMIC_CODE_NAMES.has(memberName)) {
     push(
       'DYNAMIC_CODE_EVAL',

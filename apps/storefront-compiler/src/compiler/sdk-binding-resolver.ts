@@ -8,13 +8,9 @@ import {
 } from './lexical-const-lookup';
 
 const SDK_SPECIFIER = '@baci/experience-sdk';
-const COMMERCE_FACTORIES = new Set([
-  'useCommerce',
-  'createCommerceClient',
-  'createMockCommerce',
-]);
+const COMMERCE_HOOKS = new Set(['useCommerce']);
 
-type SdkImportRole = 'commerceFactory' | 'connectFactory' | 'sdkNamespace';
+type SdkImportRole = 'commerceFactory' | 'sdkNamespace';
 
 function unwrap(expr: ts.Expression): ts.Expression {
   if (
@@ -55,7 +51,7 @@ export function createSdkOpenReceiverChecker(
           const spec = stmt.moduleSpecifier.text.trim();
           for (const el of stmt.exportClause.elements) {
             const orig = (el.propertyName ?? el.name).text;
-            if (spec === SDK_SPECIFIER && COMMERCE_FACTORIES.has(orig)) {
+            if (spec === SDK_SPECIFIER && COMMERCE_HOOKS.has(orig)) {
               out.add(el.name.text);
             } else if (spec.startsWith('.')) {
               const rel = resolveVirtualModule(filePath, spec, parsedFiles);
@@ -92,10 +88,8 @@ export function createSdkOpenReceiverChecker(
           for (const el of nb.elements) {
             if (el.isTypeOnly) continue;
             const orig = (el.propertyName ?? el.name).text;
-            if (COMMERCE_FACTORIES.has(orig)) {
+            if (COMMERCE_HOOKS.has(orig)) {
               imports.set(el.name.text, 'commerceFactory');
-            } else if (orig === 'connectExperience') {
-              imports.set(el.name.text, 'connectFactory');
             }
           }
         }
@@ -125,32 +119,6 @@ export function createSdkOpenReceiverChecker(
       !unsafeIds.has(id.text) &&
       !hasInnerShadowing(id, id.text);
 
-    const isConnectExpr = (raw: ts.Expression, depth: number): boolean => {
-      if (depth > 6) return false;
-      const expr = unwrap(raw);
-      if (ts.isCallExpression(expr)) {
-        const callee = unwrap(expr.expression);
-        if (ts.isIdentifier(callee))
-          return isTopLevelRole(callee, 'connectFactory');
-        return (
-          ts.isPropertyAccessExpression(callee) &&
-          ts.isIdentifier(callee.expression) &&
-          isTopLevelRole(callee.expression, 'sdkNamespace') &&
-          callee.name.text === 'connectExperience'
-        );
-      }
-      if (ts.isIdentifier(expr) && !unsafeIds.has(expr.text)) {
-        const found = findLexicalConstDeclaration(expr, expr.text);
-        return Boolean(
-          found &&
-            !found.bindingEl &&
-            found.decl.initializer &&
-            isConnectExpr(found.decl.initializer, depth + 1)
-        );
-      }
-      return false;
-    };
-
     const isCommerceExpr = (raw: ts.Expression, depth: number): boolean => {
       if (depth > 6) return false;
       const expr = unwrap(raw);
@@ -162,27 +130,13 @@ export function createSdkOpenReceiverChecker(
           ts.isPropertyAccessExpression(callee) &&
           ts.isIdentifier(callee.expression) &&
           isTopLevelRole(callee.expression, 'sdkNamespace') &&
-          COMMERCE_FACTORIES.has(callee.name.text)
+          COMMERCE_HOOKS.has(callee.name.text)
         );
-      }
-      if (
-        ts.isPropertyAccessExpression(expr) &&
-        expr.name.text === 'commerce'
-      ) {
-        return isConnectExpr(expr.expression, depth + 1);
       }
       if (ts.isIdentifier(expr) && !unsafeIds.has(expr.text)) {
         const found = findLexicalConstDeclaration(expr, expr.text);
-        if (!found?.decl.initializer) return false;
-        if (!found.bindingEl) {
-          return isCommerceExpr(found.decl.initializer, depth + 1);
-        }
-        const key = found.bindingEl.propertyName ?? found.bindingEl.name;
-        return (
-          ts.isIdentifier(key) &&
-          key.text === 'commerce' &&
-          isConnectExpr(found.decl.initializer, depth + 1)
-        );
+        if (!found?.decl.initializer || found.bindingEl) return false;
+        return isCommerceExpr(found.decl.initializer, depth + 1);
       }
       return false;
     };

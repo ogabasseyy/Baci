@@ -70,7 +70,7 @@ describe('createSdkOpenReceiverChecker & lexical-const-lookup', () => {
       checkFirstOpenCallAllowed({
         'src/App.tsx': `import { connectExperience } from '@baci/experience-sdk';\nexport default function App() { const { commerce } = connectExperience('https://usebaci.com'); const nav = commerce.navigation; nav.open('/cart'); return null; }`,
       })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('rejects parameter shadowing, nested hoisted var shadowing, and loop initializer shadowing', () => {

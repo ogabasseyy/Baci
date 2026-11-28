@@ -17,6 +17,8 @@ export function buildWorkerSsrEntrySource(options: {
   const themeTokensJson = JSON.stringify(manifest.themeTokens);
   const declaredRoutesJson = JSON.stringify(manifest.routes);
   const cspHeaderValue = buildContentSecurityPolicyHeader(manifest);
+  const canonicalHostOrigin =
+    manifest.hostOrigin ?? `https://${manifest.merchantSlug}.usebaci.com`;
   const assetsMapJson = JSON.stringify(
     Object.fromEntries(
       manifest.assets.map((a) => [a.assetId, `/assets/${a.assetId}`])
@@ -41,6 +43,7 @@ const THEME_TOKENS = ${themeTokensJson};
 const DECLARED_ROUTES = ${declaredRoutesJson};
 const CSP_HEADER = ${JSON.stringify(cspHeaderValue)};
 const TRUSTED_MERCHANT_SLUG = ${JSON.stringify(manifest.merchantSlug)};
+const CANONICAL_HOST_ORIGIN = ${JSON.stringify(canonicalHostOrigin)};
 const ASSETS_MAP = ${assetsMapJson};
 const SSR_COMMERCE = createCommerceClient(async () => ({ status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'SSR' }));
 const EMPTY_FACETS = { brands: [], conditions: [], totalMatches: 0 };
@@ -251,7 +254,7 @@ export default {
       : false;
     const jsonLd = status === 200 && view === 'product' && productDetail
       ? { '@context': 'https://schema.org', '@type': 'Product', name: productDetail.name, brand: { '@type': 'Brand', name: productDetail.brand }, offers: { '@type': 'Offer', priceCurrency: productDetail.currency || 'NGN', price: productDetail.priceNgn ?? productDetail.price, availability: pdInStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } }
-      : { '@context': 'https://schema.org', '@type': view === 'collection' ? 'CollectionPage' : 'WebSite', name: title, url: url.origin + url.pathname };
+      : { '@context': 'https://schema.org', '@type': view === 'collection' ? 'CollectionPage' : 'WebSite', name: title, url: CANONICAL_HOST_ORIGIN + url.pathname };
     const robotsMeta = status !== 200 ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow" />';
     const hydrationBootstrap = status >= 500 ? '' : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;
 

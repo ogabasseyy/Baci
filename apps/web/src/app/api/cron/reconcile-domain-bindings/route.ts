@@ -69,10 +69,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         }
       }
     } catch (error) {
-      console.error(
-        `[reconcile-domain-bindings] Failed for ${binding.hostname}:`,
-        error
-      );
+      console.error('[reconcile-domain-bindings] Reconciliation failed:', {
+        hostname: binding.hostname,
+        error,
+      });
       failed += 1;
     }
   }

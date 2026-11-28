@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-26T17:45:09+00:00",
-  "source_revision": "210729ecfffbc6245c7671759fe0674188e05569",
-  "evidence_digest": "ac5f2d16fa1af572163fc5a75ab7ff413f5d27bc16157850e16399dfc38130e1",
-  "claims_digest": "e477444ccc766eccdd0aacf251fb2f144b1049e87150ed5786711f6a6d022239",
-  "review_scope": "Source evidence only. Re-reviewed web checkout payment-step-availability.ts (vouchers/store credit allow Oxygen, Credit Direct, Klump when net payable > 0) alongside payment configuration, Oxygen admin enablement toggle, storefront availability, and workflow-start gates. Re-reviewed staff mobile manual-order address preservation, rapid street edits, duplicate-customer drafts, pending Places details, and GIG quote/save concurrency; current-main checkout quote rejection, destination/state matching, stale-quote recovery, paid partner pickup, parcel-binding, and prior expense evidence; and web order details, ordinary cancellation, invoice paths, and disabled paid-order item replacement. Code-evidenced only; no production capability promotion.",
+  "reviewed_at": "2026-11-28T12:12:00+00:00",
+  "source_revision": "3d4569b0866c3ea4a148b4b30c97569e71ab9d99",
+  "evidence_digest": "62aa4bc7b1e33b108746344a7c03074d130048cda86cc0f1ec9e878e8ca6c5ad",
+  "claims_digest": "3e1f478ca54478a203db945d8d3a4f0158505d8fc158f9c0387670d01af69edf",
+  "review_scope": "Source evidence only. Re-reviewed custom-domain BYOD onboarding, Cloudflare for SaaS multi-tenant lifecycle (restricted writer boundary, verification refresh, scheduled reconciler, inbound-only verifying_routing Edge Config sync, zone-grouped multi-tenant outbox purge, and multi-record connect-domain UI) alongside existing domain claims. Code-evidenced only; no production capability promotion.",
   "capabilities": [
     {
       "id": "payments",

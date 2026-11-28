@@ -15,6 +15,7 @@ interface TemplateBlogRendererProps {
   categoryGuide?: ReactNode;
   category?: string;
   searchQuery?: string;
+  merchantSlug?: string;
   hideFeaturedStory?: boolean;
 }
 
@@ -30,6 +31,7 @@ export function TemplateBlogRenderer({
   categoryGuide,
   category,
   searchQuery,
+  merchantSlug,
   hideFeaturedStory,
 }: TemplateBlogRendererProps) {
   return (
@@ -40,6 +42,7 @@ export function TemplateBlogRenderer({
       {itemListSchema && <JsonLd data={itemListSchema} />}
       <BlogComponent
         storeSlug={basePath}
+        merchantSlug={merchantSlug}
         posts={blogPosts}
         categories={categories}
         category={category}

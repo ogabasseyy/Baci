@@ -167,7 +167,7 @@ export function HomeProductGridStaticFallback({
                 {inlineAdBreakpoints.includes(index + 1) && (
                   <div
                     aria-hidden="true"
-                    className="col-span-2 lg:col-span-4 flex items-center justify-center my-2 md:my-4"
+                    className="col-span-2 -mx-3 my-2 hidden items-center justify-center min-[300px]:flex sm:mx-0 md:my-4 lg:col-span-4"
                   >
                     <AdSlotShell
                       ariaHidden

@@ -239,7 +239,7 @@ export function HomeProductGrid({
               )}
 
               {inlineAdBreakpoints.includes(index + 1) && (
-                <div className="col-span-2 lg:col-span-4 flex items-center justify-center my-2 md:my-4">
+                <div className="col-span-2 -mx-3 my-2 hidden items-center justify-center min-[300px]:flex sm:mx-0 md:my-4 lg:col-span-4">
                   <DeferredAdUnit
                     placementKey="PRODUCT_GRID_MPU"
                     slotInstance={`home-${index + 1}`}

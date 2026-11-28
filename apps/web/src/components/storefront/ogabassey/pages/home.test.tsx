@@ -248,7 +248,7 @@ describe('OgabasseyHomePage', () => {
     ).toBeUndefined();
   });
 
-  it('gives the Suspense boundary around HomeProductGridGate an explicit 1200px inline-styled fallback', () => {
+  it('gives the Suspense boundary around HomeProductGridGate an explicit 1500px inline-styled fallback covering the initial grid + MPU', () => {
     type ReserveProps = {
       children?: ReactNode;
       'data-ogabassey-grid-gate-reserve'?: string;
@@ -278,7 +278,7 @@ describe('OgabasseyHomePage', () => {
     const inner = fallback.props.children;
     expect(isValidElement<ReserveProps>(inner)).toBe(true);
     if (isValidElement<ReserveProps>(inner)) {
-      expect(inner.props.style).toEqual({ minHeight: '1200px' });
+      expect(inner.props.style).toEqual({ minHeight: '1500px' });
     }
   });
 });

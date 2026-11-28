@@ -44,6 +44,7 @@
 @source "../../components/storefront/ogabassey/storefront-layout-providers.tsx";
 @source "../../components/storefront/ogabassey/layout";
 @source "../../components/storefront/ogabassey/components/AdUnit.tsx";
+@source "../../components/storefront/ogabassey/components/ad-slot-shell.tsx";
 @source "../../components/storefront/ogabassey/components/BannerCarousel.tsx";
 @source "../../components/storefront/ogabassey/components/banner-carousel-content.ts";
 @source "../../components/storefront/ogabassey/components/carousel-play-toggle.tsx";
@@ -55,6 +56,8 @@
 @source "../../components/storefront/ogabassey/components/GoogleAdManager.tsx";
 @source "../../components/storefront/ogabassey/components/Hero.tsx";
 @source "../../components/storefront/ogabassey/components/HomeProductGrid.tsx";
+@source "../../components/storefront/ogabassey/components/home-product-grid-static-fallback.tsx";
+@source "../../components/storefront/ogabassey/components/home-section-reserve-geometry.ts";
 @source "../../components/storefront/ogabassey/components/LaunchCarousel.tsx";
 @source "../../components/storefront/ogabassey/components/launch-slide-item.tsx";
 @source "../../components/storefront/ogabassey/components/product-slide-body.tsx";

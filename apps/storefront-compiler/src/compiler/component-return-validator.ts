@@ -6,7 +6,7 @@ import {
 
 const NON_ITERABLE_CONSTRUCTORS: ReadonlySet<string> = new Set(
   [
-    'WeakMap|WeakSet|Date|RegExp|Error|TypeError|RangeError',
+    'Promise|WeakMap|WeakSet|Date|RegExp|Error|TypeError|RangeError',
     'SyntaxError|ReferenceError|URIError|EvalError|Object',
     'URL|Request|Response|Blob|File',
     'ArrayBuffer|SharedArrayBuffer|DataView|AbortController|Event|CustomEvent',
@@ -19,6 +19,7 @@ const NON_RENDERABLE_GLOBAL_METHODS: ReadonlySet<string> = new Set([
   'Object.create',
   'Object.assign',
   'Object.fromEntries',
+  'Promise.resolve',
   'Promise.reject',
   'Promise.all',
   'Promise.race',

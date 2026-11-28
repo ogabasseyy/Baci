@@ -58,5 +58,11 @@ describe('component-return-validator', () => {
     expect(checkDefaultExportFn(`export default () => new WeakSet();`)).toBe(
       false
     );
+    expect(
+      checkDefaultExportFn(`export default () => Promise.resolve('bad');`)
+    ).toBe(false);
+    expect(
+      checkDefaultExportFn(`export default () => new Promise(() => {});`)
+    ).toBe(false);
   });
 });

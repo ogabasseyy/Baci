@@ -131,21 +131,17 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
     }
   } else if (matchedRoute.view === 'product') {
     const paramEntries = Object.entries(matchedRoute.params);
-    const lastEntry = paramEntries[paramEntries.length - 1];
-    const prevEntry = paramEntries[paramEntries.length - 2];
     const isNonProductParam = (k) =>
       k === 'variant' || k === 'variantId' || k === 'category' || k === 'categoryId' || k === 'categorySlug' || k === 'collection' || k === 'collectionId' || k === 'collectionSlug' || isFilterOnlyRouteParam(k);
-    const trailingIsVariant = lastEntry && (lastEntry[0] === 'variant' || lastEntry[0] === 'variantId');
     const explicitId = matchedRoute.params.productId || '';
     const explicitSku = matchedRoute.params.sku || '';
+    const fallbackProdEntry = [...paramEntries].reverse().find((e) => !isNonProductParam(e[0]));
     const productSlug =
       matchedRoute.params.productSlug ||
       matchedRoute.params.product ||
       matchedRoute.params.itemSlug ||
       (!explicitId && !explicitSku
-        ? (trailingIsVariant
-            ? matchedRoute.params.slug || matchedRoute.params.handle || (prevEntry && !isNonProductParam(prevEntry[0]) ? prevEntry[1] : '')
-            : lastEntry && !isNonProductParam(lastEntry[0]) ? lastEntry[1] : '')
+        ? matchedRoute.params.slug || matchedRoute.params.handle || (fallbackProdEntry ? fallbackProdEntry[1] : '')
         : '');
     if (!explicitSku && !productSlug && !explicitId) {
       status = 404;
@@ -171,9 +167,14 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
         const candidate = normalizeSsrCatalogProduct(upstream.data.product);
         const reqBrand = matchedRoute.params.brand || '';
         const reqCond = matchedRoute.params.condition || '';
+        const reqVariant = matchedRoute.params.variantId || matchedRoute.params.variant || '';
+        const catMismatch = Boolean(categoryVal) && (!candidate.categorySlug || candidate.categorySlug.toLowerCase() !== categoryVal.toLowerCase());
         const brandMismatch = Boolean(reqBrand) && (!candidate.brand || candidate.brand.toLowerCase() !== reqBrand.toLowerCase());
         const condMismatch = Boolean(reqCond) && (!candidate.condition || candidate.condition.toLowerCase() !== reqCond.toLowerCase());
-        if (brandMismatch || condMismatch) {
+        const variantMismatch =
+          Boolean(reqVariant) &&
+          (!Array.isArray(candidate.variants) || !candidate.variants.some((v) => v && String(v.id) === reqVariant));
+        if (catMismatch || brandMismatch || condMismatch || variantMismatch) {
           status = 404;
           view = 'not_found';
           title = 'Product Not Found';

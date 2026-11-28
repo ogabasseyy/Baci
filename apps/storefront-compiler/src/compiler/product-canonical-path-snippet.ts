@@ -8,11 +8,26 @@ function tryBuildSingleProductRoute(p, routePath, slug) {
     if (s.startsWith(':') || (s.startsWith('[') && s.endsWith(']'))) dynIdx.push(i);
   }
   const NON_PROD_PARAMS = new Set(['variant', 'variantId', 'category', 'categoryId', 'categorySlug', 'collection', 'collectionId', 'collectionSlug', 'brand', 'condition', 'filter', 'page']);
-  const lastDyn = dynIdx[dynIdx.length - 1];
-  const prevDyn = dynIdx[dynIdx.length - 2];
-  const lastSeg = lastDyn !== undefined ? segs[lastDyn] : '';
-  const lastParam = lastSeg.startsWith(':') ? lastSeg.slice(1) : lastSeg.slice(1, -1);
-  const slugIdx = lastParam === 'variant' || lastParam === 'variantId' ? prevDyn : lastDyn;
+  const EXPLICIT_PROD_PARAMS = new Set(['productSlug', 'product', 'itemSlug', 'productId', 'sku', 'slug', 'handle']);
+  let explicitDyn;
+  for (let d = dynIdx.length - 1; d >= 0; d--) {
+    const seg = segs[dynIdx[d]];
+    const nm = seg.startsWith(':') ? seg.slice(1) : seg.slice(1, -1);
+    if (EXPLICIT_PROD_PARAMS.has(nm)) {
+      explicitDyn = dynIdx[d];
+      break;
+    }
+  }
+  let fallbackDyn;
+  for (let d = dynIdx.length - 1; d >= 0; d--) {
+    const seg = segs[dynIdx[d]];
+    const nm = seg.startsWith(':') ? seg.slice(1) : seg.slice(1, -1);
+    if (!NON_PROD_PARAMS.has(nm)) {
+      fallbackDyn = dynIdx[d];
+      break;
+    }
+  }
+  const slugIdx = explicitDyn !== undefined ? explicitDyn : fallbackDyn;
   if (slugIdx === undefined) return undefined;
   const slugSeg = segs[slugIdx];
   const slugParam = slugSeg.startsWith(':') ? slugSeg.slice(1) : slugSeg.slice(1, -1);
@@ -44,10 +59,8 @@ function tryBuildSingleProductRoute(p, routePath, slug) {
       const v0 = Array.isArray(p.variants) && p.variants[0] && p.variants[0].id ? String(p.variants[0].id) : '';
       if (!v0) return undefined;
       out.push(encodeURIComponent(v0));
-    } else if (name === 'productSlug' || name === 'product' || name === 'itemSlug' || i === slugIdx) {
+    } else if (name === 'productSlug' || name === 'product' || name === 'itemSlug' || name === 'slug' || name === 'handle' || i === slugIdx) {
       out.push(encodeURIComponent(slug));
-    } else if (dynIdx.length === 2 && i === dynIdx[0] && !NON_PROD_PARAMS.has(name) && typeof p.categorySlug === 'string' && p.categorySlug.length > 0) {
-      out.push(encodeURIComponent(p.categorySlug));
     } else {
       return undefined;
     }

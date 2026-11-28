@@ -2,6 +2,15 @@ import { z } from 'zod';
 
 const IPV4_OR_IPV6_HOST = /^(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9a-fA-F:]+\])$/;
 
+function hasCleanDnsHostname(hostname: string): boolean {
+  return (
+    hostname.length > 0 &&
+    !hostname.startsWith('.') &&
+    !hostname.endsWith('.') &&
+    !hostname.includes('..')
+  );
+}
+
 export const httpsOriginSchema = z
   .string()
   .min(8)
@@ -19,6 +28,7 @@ export const httpsOriginSchema = z
         parsed.pathname === '/' &&
         parsed.search === '' &&
         parsed.hash === '' &&
+        hasCleanDnsHostname(parsed.hostname) &&
         parsed.hostname.includes('.') &&
         !IPV4_OR_IPV6_HOST.test(parsed.hostname)
       );
@@ -41,7 +51,8 @@ export const previewOriginSchema = z
         parsed.password !== '' ||
         parsed.pathname !== '/' ||
         parsed.search !== '' ||
-        parsed.hash !== ''
+        parsed.hash !== '' ||
+        !hasCleanDnsHostname(parsed.hostname)
       ) {
         return false;
       }
@@ -77,6 +88,47 @@ export const NON_PRODUCT_IDENTIFIER_PARAMS: ReadonlySet<string> = new Set([
   'page',
 ]);
 
+const EXPLICIT_PRODUCT_ID_PARAMS: ReadonlySet<string> = new Set(
+  'productSlug|product|itemSlug|productId|sku|slug|handle'.split('|')
+);
+
+const RECOGNIZED_PRODUCT_QUALIFIER_PARAMS: ReadonlySet<string> = new Set(
+  'category|categoryId|categorySlug|collection|collectionId|collectionSlug|brand|condition|variant|variantId|slug|handle|productSlug|product|itemSlug|productId|sku'.split(
+    '|'
+  )
+);
+
+export function isValidProductRouteParams(
+  paramList: readonly string[]
+): boolean {
+  if (!paramList.some((p) => !NON_PRODUCT_IDENTIFIER_PARAMS.has(p))) {
+    return false;
+  }
+  if (paramList.length < 2) return true;
+  let explicitIdx = -1;
+  for (let i = paramList.length - 1; i >= 0; i--) {
+    const p = paramList[i];
+    if (p && EXPLICIT_PRODUCT_ID_PARAMS.has(p)) {
+      explicitIdx = i;
+      break;
+    }
+  }
+  let fallbackIdx = -1;
+  for (let i = paramList.length - 1; i >= 0; i--) {
+    const p = paramList[i];
+    if (p && !NON_PRODUCT_IDENTIFIER_PARAMS.has(p)) {
+      fallbackIdx = i;
+      break;
+    }
+  }
+  const primaryIdx = explicitIdx >= 0 ? explicitIdx : fallbackIdx;
+  const primary = paramList[primaryIdx];
+  if (!primary || NON_PRODUCT_IDENTIFIER_PARAMS.has(primary)) return false;
+  return paramList.every(
+    (p, idx) => idx === primaryIdx || RECOGNIZED_PRODUCT_QUALIFIER_PARAMS.has(p)
+  );
+}
+
 export const hostOriginSchema = z
   .string()
   .min(8)
@@ -94,6 +146,7 @@ export const hostOriginSchema = z
         parsed.pathname === '/' &&
         parsed.search === '' &&
         parsed.hash === '' &&
+        hasCleanDnsHostname(parsed.hostname) &&
         parsed.hostname.includes('.') &&
         parsed.hostname !== 'usebaci.com' &&
         parsed.hostname !== 'api.usebaci.com' &&

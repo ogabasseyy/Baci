@@ -8,7 +8,7 @@ import {
   cspAllowlistSchema,
   hostOriginSchema,
   httpsOriginSchema,
-  NON_PRODUCT_IDENTIFIER_PARAMS,
+  isValidProductRouteParams,
   previewOriginSchema,
 } from './origin-schemas';
 
@@ -163,8 +163,19 @@ export const workerStorefrontManifestSchema = z
     previewOrigin: previewOriginSchema.optional(),
   })
   .superRefine((manifest, ctx) => {
+    const normalizedHostOriginHostname = (() => {
+      if (!manifest.hostOrigin) return '';
+      try {
+        return new URL(manifest.hostOrigin).hostname
+          .replace(/\.+$/, '')
+          .toLowerCase();
+      } catch {
+        return '';
+      }
+    })();
     if (
-      manifest.hostOrigin?.endsWith('.usebaci.com') &&
+      (normalizedHostOriginHostname === 'usebaci.com' ||
+        normalizedHostOriginHostname.endsWith('.usebaci.com')) &&
       manifest.hostOrigin !== `https://${manifest.merchantSlug}.usebaci.com`
     ) {
       ctx.addIssue({
@@ -263,13 +274,11 @@ export const workerStorefrontManifestSchema = z
         });
       } else if (
         route.view === 'product' &&
-        !Array.from(paramNames).some(
-          (p) => !NON_PRODUCT_IDENTIFIER_PARAMS.has(p)
-        )
+        !isValidProductRouteParams(Array.from(paramNames))
       ) {
         ctx.addIssue({
           code: 'custom',
-          message: `product route "${route.path}" must capture a product-identifying parameter alongside variant/category segments`,
+          message: `product route "${route.path}" must capture a product-identifying parameter with recognized qualifier segments`,
         });
       }
     }

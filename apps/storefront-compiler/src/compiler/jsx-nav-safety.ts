@@ -50,11 +50,18 @@ function isSafeStaticNavTarget(
 ): boolean {
   if (val.length === 0 || hasUnsafePathChar(val)) return false;
   if (val.startsWith('/') && !val.startsWith('//')) {
+    if (
+      val.includes('//') ||
+      val.includes('%') ||
+      val.split('/').some((seg) => seg === '.' || seg === '..')
+    ) {
+      return false;
+    }
     try {
       const u = new URL(val, 'https://store.example');
       return (
         u.origin === 'https://store.example' &&
-        !u.pathname.startsWith('//') &&
+        u.pathname === val &&
         u.search === '' &&
         u.hash === ''
       );
@@ -189,20 +196,31 @@ function checkJsxPropSafety(
   }
   if (ts.isTemplateExpression(expr)) {
     const head = expr.head.text;
-    const hasQueryOrHash = (s: string) => s.includes('?') || s.includes('#');
+    const headAfterScheme = head.startsWith('https://') ? head.slice(8) : head;
+    const isBadLiteralChunk = (s: string) =>
+      hasUnsafePathChar(s) ||
+      s.includes('?') ||
+      s.includes('#') ||
+      s.includes('%') ||
+      s.includes('//');
     const safeLiterals =
-      !hasUnsafePathChar(head) &&
-      !hasQueryOrHash(head) &&
-      expr.templateSpans.every(
-        (s) =>
-          !hasUnsafePathChar(s.literal.text) && !hasQueryOrHash(s.literal.text)
-      );
+      !isBadLiteralChunk(headAfterScheme) &&
+      expr.templateSpans.every((s) => {
+        if (isBadLiteralChunk(s.literal.text)) return false;
+        const folded = resolveStaticOrConstString(s.expression);
+        return (
+          folded === null ||
+          (!hasUnsafePathChar(folded) && !/[/?#%\\]/.test(folded))
+        );
+      });
     const safePrefix =
       (head.startsWith('/') && !head.startsWith('//')) ||
       (!isSdkLinkPath &&
         (head.startsWith('https://usebaci.com/') ||
           head.startsWith(`https://${env.merchantSlug}.usebaci.com/`) ||
           (Boolean(env.hostOrigin) && head.startsWith(`${env.hostOrigin}/`))));
+    // Completed dynamic template targets are validated at render time by
+    // JSX_RUNTIME_VIRTUAL_PATH (jsx-runtime-guard.ts -> '#') and framed-anchor-snippet.ts.
     if (safeLiterals && safePrefix) return;
   }
   env.violations.push({

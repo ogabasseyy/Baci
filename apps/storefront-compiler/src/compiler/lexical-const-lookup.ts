@@ -1,7 +1,7 @@
 import ts from '@typescript/typescript6';
 import { bindingContainsName, hasDeclareModifier } from './jsx-export-graph';
 
-function hasHoistedVarInScope(root: ts.Node, target: string): boolean {
+export function hasHoistedVarInScope(root: ts.Node, target: string): boolean {
   let found = false;
   const walk = (node: ts.Node): void => {
     if (found) return;

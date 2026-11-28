@@ -2,6 +2,10 @@ import type { WorkerStorefrontManifest } from '../schemas/worker-manifest';
 import { buildBoundedCatalogJsonSnippet } from './bounded-json-snippet';
 import { buildClientHydrationEntrySource } from './client-hydration-template';
 import { buildContentSecurityPolicyHeader } from './csp-header';
+import {
+  buildFrameErrorModuleSource,
+  FRAME_ERROR_SCRIPT_PATH,
+} from './frame-error-script-snippet';
 import { buildDeclaredRouteMatcherSnippet } from './route-matcher-snippet';
 import { buildWorkerCatalogBridgeSnippet } from './worker-catalog-bridge';
 
@@ -103,6 +107,9 @@ export default {
       });
     }
     const url = new URL(request.url);
+    if (url.pathname === '${FRAME_ERROR_SCRIPT_PATH}') {
+      return new Response(request.method === 'HEAD' ? null : ${JSON.stringify(buildFrameErrorModuleSource(manifest))}, { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'public, max-age=86400', 'content-security-policy': CSP_HEADER, 'x-robots-tag': 'noindex, nofollow' } });
+    }
     if (url.pathname === '/_baci/catalog') return handleCatalogBridgeRequest(url, request.method);
     if (url.pathname === '/_baci' || url.pathname.startsWith('/_baci/')) {
       return new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8', 'content-security-policy': CSP_HEADER, 'x-robots-tag': 'noindex, nofollow' } });
@@ -256,7 +263,7 @@ export default {
       ? { '@context': 'https://schema.org', '@type': 'Product', name: productDetail.name, brand: { '@type': 'Brand', name: productDetail.brand }, offers: { '@type': 'Offer', priceCurrency: productDetail.currency || 'NGN', price: productDetail.priceNgn ?? productDetail.price, availability: pdInStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } }
       : { '@context': 'https://schema.org', '@type': view === 'collection' ? 'CollectionPage' : 'WebSite', name: title, url: CANONICAL_HOST_ORIGIN + url.pathname };
     const robotsMeta = status !== 200 ? '<meta name="robots" content="noindex, nofollow" />' : '<meta name="robots" content="index, follow" />';
-    const hydrationBootstrap = status >= 500 ? '' : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;
+    const hydrationBootstrap = status >= 500 ? '<script type="module" src="${FRAME_ERROR_SCRIPT_PATH}"></script>' : \`<script id="__BACI_STOREFRONT_STATE__" type="application/json">\${escapeJsonForScript(renderProps)}</script>\\n  <script type="module" src="${clientAssetPath}"></script>\`;
 
     const html = \`<!DOCTYPE html>
 <html lang="en">

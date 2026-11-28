@@ -2,11 +2,17 @@ import ts from '@typescript/typescript6';
 import {
   bindingContainsName,
   classifyPackageExport,
+  collectFileReactClassImports,
   createVirtualComponentExportResolver,
   hasDeclareModifier,
+  isVerifiedReactClassNode,
   resolveDirectComponentKind,
   resolveVirtualModule,
 } from './jsx-export-graph';
+import {
+  hasHoistedVarInScope,
+  hasInnerShadowing,
+} from './lexical-const-lookup';
 
 export function hasLocalLexicalBinding(
   atNode: ts.Node,
@@ -89,38 +95,7 @@ const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set([
   'meta',
 ]);
 
-type BindingKind = 'component' | 'sdkLink' | 'motion' | 'unsafe';
-
-function hasHoistedVarBinding(root: ts.Node, target: string): boolean {
-  let found = false;
-  const walk = (node: ts.Node): void => {
-    if (found) return;
-    if (
-      node !== root &&
-      (ts.isFunctionDeclaration(node) ||
-        ts.isFunctionExpression(node) ||
-        ts.isArrowFunction(node) ||
-        ts.isMethodDeclaration(node) ||
-        ts.isConstructorDeclaration(node))
-    ) {
-      return;
-    }
-    if (
-      ts.isVariableDeclarationList(node) &&
-      (node.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0
-    ) {
-      for (const d of node.declarations) {
-        if (bindingContainsName(d.name, target)) {
-          found = true;
-          return;
-        }
-      }
-    }
-    ts.forEachChild(node, walk);
-  };
-  walk(root);
-  return found;
-}
+type BindingKind = 'component' | 'reactClass' | 'sdkLink' | 'motion' | 'unsafe';
 
 export interface FileJsxTagInspector {
   checkJsxTag: (tagName: ts.JsxTagNameExpression) => string | null;
@@ -135,6 +110,8 @@ export function createJsxTagValidator(
 
   return (filePath: string, sf: ts.SourceFile): FileJsxTagInspector => {
     const importBindings = new Map<string, BindingKind>();
+    const { reactClassBases, reactNamespaces } =
+      collectFileReactClassImports(sf);
     for (const stmt of sf.statements) {
       if (
         ts.isImportDeclaration(stmt) &&
@@ -181,6 +158,14 @@ export function createJsxTagValidator(
       }
     }
 
+    const makeClassEnv = (nextDepth: number) => ({
+      reactClassBases,
+      reactNamespaces,
+      isVerifiedLocalClass: (at: ts.Node, ident: string) =>
+        resolveBindingAt(at, ident, nextDepth) === 'reactClass',
+      isShadowed: (at: ts.Node, ident: string) => hasInnerShadowing(at, ident),
+    });
+
     const resolveBindingAt = (
       atNode: ts.Node,
       target: string,
@@ -196,6 +181,16 @@ export function createJsxTagValidator(
         ) {
           return 'unsafe';
         }
+        if (ts.isClassExpression(cur) && cur.name?.text === target) {
+          const inHeritage =
+            cur.heritageClauses?.some(
+              (hc) => atNode.pos >= hc.pos && atNode.end <= hc.end
+            ) ?? false;
+          if (inHeritage) return 'unsafe';
+          return isVerifiedReactClassNode(cur, makeClassEnv(depth + 1))
+            ? 'reactClass'
+            : 'unsafe';
+        }
         if (
           ts.isFunctionDeclaration(cur) ||
           ts.isFunctionExpression(cur) ||
@@ -206,13 +201,13 @@ export function createJsxTagValidator(
           for (const p of cur.parameters) {
             if (bindingContainsName(p.name, target)) return 'unsafe';
           }
-          if (hasHoistedVarBinding(cur, target)) return 'unsafe';
+          if (hasHoistedVarInScope(cur, target)) return 'unsafe';
           if (ts.isFunctionExpression(cur) && cur.name?.text === target) {
             return 'component';
           }
         }
         if (ts.isBlock(cur) || ts.isSourceFile(cur)) {
-          if (ts.isSourceFile(cur) && hasHoistedVarBinding(cur, target)) {
+          if (ts.isSourceFile(cur) && hasHoistedVarInScope(cur, target)) {
             return 'unsafe';
           }
           for (const stmt of cur.statements) {
@@ -226,20 +221,36 @@ export function createJsxTagValidator(
                     return 'unsafe';
                   }
                   return (
-                    resolveDirectComponentKind(d.initializer, (n) => {
-                      if (n === target) return null;
-                      const k = resolveBindingAt(d, n, depth + 1);
-                      return k === 'component' || k === 'sdkLink' ? k : null;
-                    }) ?? 'unsafe'
+                    resolveDirectComponentKind(
+                      d.initializer,
+                      (n) => {
+                        if (n === target) return null;
+                        const k = resolveBindingAt(d, n, depth + 1);
+                        return k === 'component' ||
+                          k === 'reactClass' ||
+                          k === 'sdkLink'
+                          ? k
+                          : null;
+                      },
+                      (cls) =>
+                        isVerifiedReactClassNode(cls, makeClassEnv(depth + 1))
+                    ) ?? 'unsafe'
                   );
                 }
               }
             } else if (
-              ((ts.isFunctionDeclaration(stmt) && Boolean(stmt.body)) ||
-                ts.isClassDeclaration(stmt)) &&
+              ts.isFunctionDeclaration(stmt) &&
+              stmt.body &&
               stmt.name?.text === target
             ) {
               return 'component';
+            } else if (
+              ts.isClassDeclaration(stmt) &&
+              stmt.name?.text === target
+            ) {
+              return isVerifiedReactClassNode(stmt, makeClassEnv(depth + 1))
+                ? 'reactClass'
+                : 'unsafe';
             }
           }
           if (ts.isSourceFile(cur)) {
@@ -265,7 +276,7 @@ export function createJsxTagValidator(
               : null;
           }
           const k = resolveBindingAt(tagName, t);
-          return k === 'component' || k === 'sdkLink'
+          return k === 'component' || k === 'reactClass' || k === 'sdkLink'
             ? null
             : `JSX component "<${t}>" must reference a statically verified component function`;
         }

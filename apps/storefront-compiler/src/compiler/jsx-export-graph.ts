@@ -2,15 +2,20 @@ import path from 'node:path';
 import ts from '@typescript/typescript6';
 import {
   classifyPackageExport,
+  collectFileReactClassImports,
   isDirectComponentExpr,
+  isVerifiedReactClassNode,
   resolveDirectComponentKind,
   type SafeExportKind,
 } from './component-expr-classifier';
 import { collectReassignedIdentifiers } from './dom-mutation-guard';
+import { hasInnerShadowing } from './lexical-const-lookup';
 
 export {
   classifyPackageExport,
+  collectFileReactClassImports,
   isDirectComponentExpr,
+  isVerifiedReactClassNode,
   resolveDirectComponentKind,
   type SafeExportKind,
 };
@@ -76,12 +81,16 @@ export function createVirtualComponentExportResolver(
     const exported = new Map<string, SafeExportKind>();
 
     if (sf) {
+      const reassigned = collectReassignedIdentifiers(sf);
+      const { reactClassBases, reactNamespaces } =
+        collectFileReactClassImports(sf);
       for (const stmt of sf.statements) {
         if (hasDeclareModifier(stmt)) continue;
         if (
-          ((ts.isFunctionDeclaration(stmt) && Boolean(stmt.body)) ||
-            ts.isClassDeclaration(stmt)) &&
-          stmt.name
+          ts.isFunctionDeclaration(stmt) &&
+          stmt.body &&
+          stmt.name &&
+          !reassigned.has(stmt.name.text)
         ) {
           localSafe.set(stmt.name.text, 'component');
         } else if (
@@ -121,9 +130,28 @@ export function createVirtualComponentExportResolver(
           }
         }
       }
-      const reassigned = collectReassignedIdentifiers(sf);
+      const classEnv = {
+        reactClassBases,
+        reactNamespaces,
+        isVerifiedLocalClass: (at: ts.Node, ident: string) =>
+          !reassigned.has(ident) &&
+          !hasInnerShadowing(at, ident) &&
+          localSafe.get(ident) === 'reactClass',
+        isShadowed: (at: ts.Node, ident: string) =>
+          reassigned.has(ident) || hasInnerShadowing(at, ident),
+      };
+      const isValidClassExpr = (cls: ts.ClassExpression) =>
+        isVerifiedReactClassNode(cls, classEnv);
       for (const stmt of sf.statements) {
-        if (ts.isVariableStatement(stmt)) {
+        if (hasDeclareModifier(stmt)) continue;
+        if (
+          ts.isClassDeclaration(stmt) &&
+          stmt.name &&
+          !reassigned.has(stmt.name.text) &&
+          isVerifiedReactClassNode(stmt, classEnv)
+        ) {
+          localSafe.set(stmt.name.text, 'reactClass');
+        } else if (ts.isVariableStatement(stmt)) {
           for (const d of stmt.declarationList.declarations) {
             if (
               ts.isIdentifier(d.name) &&
@@ -132,7 +160,9 @@ export function createVirtualComponentExportResolver(
             ) {
               const k = resolveDirectComponentKind(
                 d.initializer,
-                (n) => localSafe.get(n) ?? null
+                (n) =>
+                  n === d.name.getText(sf) ? null : (localSafe.get(n) ?? null),
+                isValidClassExpr
               );
               if (k) localSafe.set(d.name.text, k);
             }
@@ -151,14 +181,16 @@ export function createVirtualComponentExportResolver(
           const isDef = mods?.some(
             (m) => m.kind === ts.SyntaxKind.DefaultKeyword
           );
-          if (isDef && (!ts.isFunctionDeclaration(stmt) || Boolean(stmt.body)))
-            exported.set('default', 'component');
-          else if (
-            isExp &&
-            stmt.name &&
-            (!ts.isFunctionDeclaration(stmt) || Boolean(stmt.body))
-          ) {
-            exported.set(stmt.name.text, 'component');
+          const declKind: SafeExportKind | null = ts.isFunctionDeclaration(stmt)
+            ? stmt.body
+              ? 'component'
+              : null
+            : isVerifiedReactClassNode(stmt, classEnv)
+              ? 'reactClass'
+              : null;
+          if (isDef && declKind) exported.set('default', declKind);
+          else if (isExp && stmt.name && declKind) {
+            exported.set(stmt.name.text, declKind);
           }
         } else if (
           ts.isExpressionStatement(stmt) &&
@@ -171,7 +203,8 @@ export function createVirtualComponentExportResolver(
         ) {
           const k = resolveDirectComponentKind(
             stmt.expression.right,
-            (n) => localSafe.get(n) ?? null
+            (n) => localSafe.get(n) ?? null,
+            isValidClassExpr
           );
           if (k) exported.set('default', k);
         } else if (
@@ -187,7 +220,8 @@ export function createVirtualComponentExportResolver(
         } else if (ts.isExportAssignment(stmt) && !stmt.isExportEquals) {
           const k = resolveDirectComponentKind(
             stmt.expression,
-            (n) => localSafe.get(n) ?? null
+            (n) => localSafe.get(n) ?? null,
+            isValidClassExpr
           );
           if (k) exported.set('default', k);
         } else if (ts.isExportDeclaration(stmt)) {

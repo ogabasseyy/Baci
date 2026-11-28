@@ -38,16 +38,32 @@ function isSafeCompletedNavTarget(val) {
   }
   if (val.startsWith('#')) return true;
   if (val.startsWith('/') && !val.startsWith('//')) {
+    if (
+      val.includes('//') ||
+      val.includes('%') ||
+      val.split('/').some((seg) => seg === '.' || seg === '..')
+    ) {
+      return false;
+    }
     try {
       const u = new URL(val, 'https://store.example');
-      return u.origin === 'https://store.example' && !u.pathname.startsWith('//') && u.search === '' && u.hash === '';
+      return u.origin === 'https://store.example' && u.pathname === val && u.search === '' && u.hash === '';
     } catch {
       return false;
     }
   }
   try {
     const u = new URL(val);
-    if (u.username || u.password || u.search !== '' || u.hash !== '') return false;
+    if (
+      u.username ||
+      u.password ||
+      u.search !== '' ||
+      u.hash !== '' ||
+      u.pathname.includes('//') ||
+      u.pathname.includes('%')
+    ) {
+      return false;
+    }
     return (
       u.origin === 'https://usebaci.com' ||
       u.origin === TRUSTED_ORIGIN ||
@@ -168,11 +184,7 @@ function sanitizeInlineStyle(styleObj) {
 }
 
 function sanitizeJsxNavProps(type, props) {
-  if (
-    (typeof type !== 'string' && (typeof type !== 'object' || type === null)) ||
-    !props ||
-    typeof props !== 'object'
-  ) {
+  if (!type || !props || typeof props !== 'object') {
     return props;
   }
   let cloned = null;

@@ -53,7 +53,14 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
       const baseHref = getBaseHref();
       const baseOrigin = new URL(baseHref).origin;
       const parsed = new URL(rawHref, baseHref);
-      if (!isStorefrontCanonicalOrigin(parsed.origin, baseOrigin)) return;
+      if (!isStorefrontCanonicalOrigin(parsed.origin, baseOrigin)) {
+        if (parsed.origin !== 'https://usebaci.com') event.preventDefault();
+        return;
+      }
+      if ((rawHref.startsWith('/') && rawHref.includes('//')) || /[%\\\\]/.test(rawHref) || parsed.pathname.includes('//')) {
+        event.preventDefault();
+        return;
+      }
       if (parsed.pathname === '/checkout' || parsed.pathname.startsWith('/checkout/')) {
         event.preventDefault();
         void commerce.checkout.open();

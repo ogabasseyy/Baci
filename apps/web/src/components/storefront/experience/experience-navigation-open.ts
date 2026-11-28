@@ -9,6 +9,65 @@ export interface PresentedCanonicalLink {
   href: string;
   presentationId: string;
 }
+
+export function splitExperienceOpenPath(rawPath: string): {
+  pathname: string;
+  suffix: string;
+} {
+  if (
+    typeof rawPath !== 'string' ||
+    rawPath.length === 0 ||
+    rawPath.length > 500 ||
+    !rawPath.startsWith('/') ||
+    rawPath.startsWith('//') ||
+    rawPath.includes('\\') ||
+    [...rawPath].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127)
+  ) {
+    throw Error('INVALID_REQUEST');
+  }
+  const cut = rawPath.search(/[?#]/);
+  const pathname = cut === -1 ? rawPath : rawPath.slice(0, cut);
+  if (
+    !pathname ||
+    pathname.includes('%') ||
+    !/^\/[a-zA-Z0-9_/-]*$/.test(pathname) ||
+    pathname.includes('//') ||
+    pathname.split('/').some((p) => p === '.' || p === '..')
+  ) {
+    throw Error('INVALID_REQUEST');
+  }
+  if (cut === -1) return { pathname, suffix: '' };
+  let parsed: URL;
+  try {
+    parsed = new URL(rawPath, 'https://storefront.baci.internal');
+  } catch {
+    throw Error('INVALID_REQUEST');
+  }
+  if (
+    parsed.origin !== 'https://storefront.baci.internal' ||
+    parsed.pathname !== pathname
+  ) {
+    throw Error('INVALID_REQUEST');
+  }
+  if (parsed.search && /%(?![0-9a-fA-F]{2})/.test(parsed.search)) {
+    throw Error('INVALID_REQUEST');
+  }
+  let searchSuffix = '';
+  if (parsed.search) {
+    try {
+      const canonicalSearch = new URLSearchParams(parsed.search).toString();
+      searchSuffix = canonicalSearch ? `?${canonicalSearch}` : '';
+    } catch {
+      throw Error('INVALID_REQUEST');
+    }
+  }
+  if (parsed.hash && !/^#[a-zA-Z0-9_-]*$/.test(parsed.hash)) {
+    throw Error('INVALID_REQUEST');
+  }
+  const hashSuffix = parsed.hash && parsed.hash !== '#' ? parsed.hash : '';
+  return { pathname, suffix: `${searchSuffix}${hashSuffix}` };
+}
+
 export function canonicalExperiencePath(
   base: string,
   routes: string[],
@@ -90,14 +149,17 @@ export function createNavigationPresentation(deps: {
       const s = deps.state();
       if (s.transition) throw Error('ROUTE_TRANSITION');
       if (!s.active) throw Error('LAUNCH_EXPIRED');
-      const href = canonicalExperiencePath(
+      const { pathname, suffix } = splitExperienceOpenPath(input.path);
+      const normalizedTarget = `${pathname}${suffix}`;
+      const baseHref = canonicalExperiencePath(
         deps.base,
         resolvedPath ? [resolvedPath] : deps.routes,
-        input.path
+        pathname
       );
+      const href = `${baseHref}${suffix}`;
       const old = replay.get(input.requestId);
       if (old) {
-        if (old.path !== input.path) throw Error('IDEMPOTENCY_CONFLICT');
+        if (old.path !== normalizedTarget) throw Error('IDEMPOTENCY_CONFLICT');
         if (old.stamp !== stamp() || current() !== old.link)
           throw Error('STALE_ROUTE');
         return old.link;
@@ -114,9 +176,13 @@ export function createNavigationPresentation(deps: {
         stamp: stamp(),
         expiresAt: deps.now() + 30000,
         requestId: input.requestId,
-        path: input.path,
+        path: normalizedTarget,
       };
-      replay.set(input.requestId, { path: input.path, link, stamp: stamp() });
+      replay.set(input.requestId, {
+        path: normalizedTarget,
+        link,
+        stamp: stamp(),
+      });
       last = deps.now();
       return link;
     },

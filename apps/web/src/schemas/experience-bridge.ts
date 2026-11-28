@@ -19,6 +19,24 @@ const path = z
       !/[\\%]/.test(p) &&
       [...p].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) !== 127)
   );
+const openPath = z
+  .string()
+  .min(1)
+  .max(500)
+  .refine((p) => {
+    if (
+      !p.startsWith('/') ||
+      p.startsWith('//') ||
+      p.includes('\\') ||
+      [...p].some((c) => c.charCodeAt(0) <= 32 || c.charCodeAt(0) === 127)
+    ) {
+      return false;
+    }
+    const cut = p.search(/[?#]/);
+    const pathname = cut === -1 ? p : p.slice(0, cut);
+    if (!pathname || pathname.includes('%')) return false;
+    return cut === -1 || !/%(?![0-9a-fA-F]{2})/.test(p.slice(cut));
+  });
 const args = {
   'catalog.collection': z.strictObject({
     handle: id,
@@ -44,7 +62,7 @@ const args = {
   'checkout.prepare': z.strictObject({}),
   'checkout.open': z.strictObject({}),
   'navigation.go': z.strictObject({ path }),
-  'navigation.open': z.strictObject({ path }),
+  'navigation.open': z.strictObject({ path: openPath }),
 } as const;
 const envelope = z.strictObject({
   protocol: z.literal('baci-commerce/1'),

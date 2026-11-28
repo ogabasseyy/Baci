@@ -57,10 +57,20 @@ describe('experience bridge input', () => {
         args: { path: '/products/device' },
       }).method
     ).toBe('navigation.go');
+    expect(
+      parseBridgeRequest({
+        ...request(),
+        capability: 'navigation',
+        method: 'navigation.open',
+        args: { path: '/collections/devices?q=iphone%2016#top' },
+      }).args
+    ).toEqual({ path: '/collections/devices?q=iphone%2016#top' });
     for (const path of [
       'https://evil.invalid',
       '//evil.invalid',
       '/\\evil.invalid',
+      '/%2f/evil.invalid',
+      '/collections/devices?q=%ZZ',
     ])
       expect(() =>
         parseBridgeRequest({

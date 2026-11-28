@@ -30,6 +30,37 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
     }
   } else if (matchedRoute.view === 'search') {
     const canonical = canonicalizeSearchParams(searchParams);
+    const searchCat =
+      matchedRoute.params.category ||
+      matchedRoute.params.categoryId ||
+      matchedRoute.params.categorySlug ||
+      matchedRoute.params.collection ||
+      matchedRoute.params.collectionId ||
+      matchedRoute.params.collectionSlug ||
+      '';
+    const searchTerm =
+      matchedRoute.params.q ||
+      matchedRoute.params.query ||
+      matchedRoute.params.term ||
+      matchedRoute.params.search ||
+      matchedRoute.params.keyword ||
+      matchedRoute.params.filter ||
+      (Object.entries(matchedRoute.params).find(
+        ([k]) =>
+          !isFilterOnlyRouteParam(k) &&
+          k !== 'category' &&
+          k !== 'categoryId' &&
+          k !== 'categorySlug' &&
+          k !== 'collection' &&
+          k !== 'collectionId' &&
+          k !== 'collectionSlug'
+      )?.[1] ||
+        '');
+    if (searchCat) canonical.set('category', searchCat);
+    if (matchedRoute.params.brand) canonical.set('brand', matchedRoute.params.brand);
+    if (matchedRoute.params.condition) canonical.set('condition', matchedRoute.params.condition);
+    if (matchedRoute.params.page) canonical.set('page', matchedRoute.params.page);
+    if (searchTerm) canonical.set('q', searchTerm);
     const qs = canonical.toString();
     const endpoint = qs
       ? \`https://catalog.baci.internal/v1/search?\${qs}\`

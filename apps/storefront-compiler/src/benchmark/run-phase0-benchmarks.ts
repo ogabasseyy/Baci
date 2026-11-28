@@ -9,6 +9,10 @@ import {
   compileStorefrontWorker,
 } from '../compiler/compile-storefront';
 import { deriveCompileSigkillTimeoutMs } from '../sandbox/container-profiles';
+import {
+  isContainedPublicCatalogJson,
+  isContainedStorefrontHtml,
+} from './catalog-containment-check';
 import { measureColdCliProcessSamples } from './cold-cli-probe';
 import {
   type ChurnScenarioMetrics,
@@ -155,11 +159,7 @@ export async function runPhase0Benchmarks(options?: {
         const bodyText = await webRes.text();
         if (webRes.status === 200) {
           outboundPayloadsInspected += 1;
-          if (
-            bodyText.includes('costPriceNgn') ||
-            bodyText.includes('supplierInternalCode') ||
-            bodyText.includes('SUP-LAGOS-')
-          ) {
+          if (!isContainedPublicCatalogJson(bodyText)) {
             outboundPayloadContained = false;
           }
         }
@@ -198,11 +198,7 @@ export async function runPhase0Benchmarks(options?: {
       let observedStatus = coldRes.status;
 
       if (observedStatus !== item.expectedStatus) true404Verified = false;
-      if (
-        coldHtml.includes('costPriceNgn') ||
-        coldHtml.includes('supplierInternalCode') ||
-        coldHtml.includes('SUP-LAGOS-')
-      ) {
+      if (!isContainedStorefrontHtml(coldHtml, observedStatus)) {
         anonCostPriceContained = false;
       }
 

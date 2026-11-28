@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6';
+import { hasNoStaticallyInvalidReactReturn } from './component-return-validator';
 import { resolveStaticString } from './const-string-fold';
 
 export type SafeExportKind = 'component' | 'reactClass' | 'sdkLink';
@@ -64,10 +65,13 @@ export function isSyncComponentFunction(
   fn: ts.FunctionLikeDeclaration
 ): boolean {
   if (fn.asteriskToken) return false;
-  return !(
+  if (
     ts.canHaveModifiers(fn) &&
     ts.getModifiers(fn)?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)
-  );
+  ) {
+    return false;
+  }
+  return hasNoStaticallyInvalidReactReturn(fn);
 }
 
 function checkInstanceRenderMembers(cls: ts.ClassLikeDeclaration): {

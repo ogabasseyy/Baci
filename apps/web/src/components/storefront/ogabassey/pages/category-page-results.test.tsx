@@ -232,19 +232,23 @@ describe('CategoryPageResults', () => {
     expect(card.className).toBe('');
   });
 
-  it('mounts SIDEBAR_HALF_PAGE in the desktop sticky sidebar when filters are visible', () => {
+  it('mounts SIDEBAR_HALF_PAGE in a separate xl-gated sticky wrapper outside the filter panel', () => {
     renderResults({ canShowFilters: true });
 
     const ads = screen.getAllByTestId('category-ad-unit');
-    expect(ads).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          dataset: expect.objectContaining({
-            placement: 'SIDEBAR_HALF_PAGE',
-            slotInstance: 'category-sidebar',
-          }),
-        }),
-      ])
+    const sidebarAd = ads.find(
+      (ad) => ad.dataset.slotInstance === 'category-sidebar'
     );
+    expect(sidebarAd).toBeDefined();
+    expect(sidebarAd?.dataset.placement).toBe('SIDEBAR_HALF_PAGE');
+    expect(sidebarAd?.parentElement).toHaveClass(
+      'hidden',
+      'xl:block',
+      'xl:sticky',
+      'xl:top-24'
+    );
+    expect(
+      screen.getByLabelText('Filters sidebar').parentElement
+    ).not.toHaveClass('sticky');
   });
 });

@@ -572,9 +572,13 @@ describe('BlogPostBody', () => {
       expect(
         adUnits.map((unit) => unit.getAttribute('data-placement'))
       ).toEqual(['BLOG_SIDEBAR', 'CONTENT_BREAK', 'SIDEBAR_HALF_PAGE']);
-      expect(
-        screen.getByRole('complementary', { name: /sponsored sidebar/i })
-      ).toBeInTheDocument();
+      const sidebarRail = screen.getByRole('complementary', {
+        name: /sponsored sidebar/i,
+      });
+      expect(sidebarRail).toHaveClass('w-[300px]', 'lg:block');
+      expect(sidebarRail.parentElement).toHaveClass(
+        'lg:grid-cols-[minmax(0,1fr)_300px]'
+      );
     });
 
     it('never injects Ogabassey GAM ad units into third-party merchant blog posts', async () => {

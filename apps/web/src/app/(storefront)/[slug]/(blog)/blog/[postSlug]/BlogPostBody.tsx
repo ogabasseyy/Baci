@@ -4,7 +4,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { BlogContentRenderer } from '@/components/blog/renderer/BlogContentRenderer';
 import { TableOfContents } from '@/components/blog/table-of-contents';
-import { DeferredAdUnit } from '@/components/storefront/ogabassey/components/deferred-ad-unit';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -12,6 +11,11 @@ import { rewriteStorefrontContentHref } from '@/lib/storefront-content-link-rewr
 import { isDeadStorefrontContentHref } from '@/lib/storefront-content-link-targets';
 import { isOgabasseyBlogStaticTenant } from '../blog-category-routing';
 import { BlogLegacyContent } from './BlogLegacyContent';
+import {
+  OgabasseyBlogEndAd,
+  OgabasseyBlogPostAdLayout,
+  renderOgabasseyBlogInlineAdSlot,
+} from './BlogPostAdLayout';
 import { BlogRelatedProducts } from './BlogRelatedProducts';
 import { BlogVideoPanel } from './BlogVideoPanel';
 import { resolveContentLinks } from './blog-content-link-resolution';
@@ -135,134 +139,96 @@ export async function BlogPostBody({
   });
 
   const showOgabasseyBlogAds = isOgabasseyBlogStaticTenant(merchantSlug);
-  const articleProseAndMeta = (
-    <>
-      {isJson && <TableOfContents />}
-
-      <div className="mb-8">
-        {isJson ? (
-          <BlogContentRenderer
-            json={renderedContent}
-            basePath={basePath}
-            baseUrl={baseUrl}
-            contentLinkRewrites={hasContentLinkRewrites ? rewrites : undefined}
-            deadContentLinks={
-              hasDeadContentLinks ? deadContentLinks : undefined
-            }
-            inArticleAdSlot={
-              showOgabasseyBlogAds ? (
-                <DeferredAdUnit
-                  activateOnIdle
-                  activateOnInteraction
-                  activateOnScroll
-                  placementKey="BLOG_SIDEBAR"
-                  slotInstance={`blog-post-inline-${post.id}`}
-                  timeoutMs={2500}
-                />
-              ) : undefined
-            }
-            merchantSlug={merchantSlug}
-            priorityInlineImageSrc={hasPreloadedHeroImage ? null : undefined}
-          />
-        ) : (
-          <BlogLegacyContent
-            html={legacyHtml}
-            featuredImageUrl={post.featured_image_url}
-            trustedPriorityImageSources={legacyPriorityImageSources}
-          />
-        )}
-      </div>
-
-      {showOgabasseyBlogAds && (
-        <div className="mb-8 flex justify-center">
-          <DeferredAdUnit
-            activateOnIdle
-            activateOnInteraction
-            activateOnScroll
-            placementKey="CONTENT_BREAK"
-            slotInstance={`blog-post-end-${post.id}`}
-            timeoutMs={2500}
-          />
-        </div>
-      )}
-
-      {video && <BlogVideoPanel video={video} />}
-
-      {post.tags && post.tags.length > 0 && (
-        <div className="mb-8 flex flex-wrap items-center gap-2 border-t pt-8">
-          <Tag className="size-4 text-muted-foreground" />
-          {post.tags.map((tag) => (
-            <Badge key={tag} variant="outline">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      <div className="mb-12 flex items-center gap-4 border-b pb-8">
-        <span className="text-sm text-muted-foreground">
-          Share this article:
-        </span>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="min-h-11" asChild>
-            <a
-              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(shareUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Share on Twitter (opens in new tab)"
-            >
-              Twitter
-            </a>
-          </Button>
-          <Button variant="outline" size="sm" className="min-h-11" asChild>
-            <a
-              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Share on LinkedIn (opens in new tab)"
-            >
-              LinkedIn
-            </a>
-          </Button>
-          <Button variant="outline" size="sm" className="min-h-11" asChild>
-            <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Share on Facebook (opens in new tab)"
-            >
-              Facebook
-            </a>
-          </Button>
-        </div>
-      </div>
-    </>
-  );
 
   return (
     <div className="content-auto [contain-intrinsic-size:1152px_2400px]">
-      {showOgabasseyBlogAds ? (
-        <div className="lg:grid lg:grid-cols-12 lg:gap-10">
-          <div className="min-w-0 lg:col-span-8">{articleProseAndMeta}</div>
-          <aside
-            aria-label="Sponsored sidebar"
-            className="hidden lg:col-span-4 lg:block"
-          >
-            <div className="sticky top-24">
-              <DeferredAdUnit
-                activateOnIdle
-                activateOnInteraction
-                activateOnScroll
-                placementKey="SIDEBAR_HALF_PAGE"
-                slotInstance={`blog-post-rail-${post.id}`}
-                timeoutMs={2500}
-              />
-            </div>
-          </aside>
+      <OgabasseyBlogPostAdLayout
+        enabled={showOgabasseyBlogAds}
+        postId={post.id}
+      >
+        {isJson && <TableOfContents />}
+
+        <div className="mb-8">
+          {isJson ? (
+            <BlogContentRenderer
+              json={renderedContent}
+              basePath={basePath}
+              baseUrl={baseUrl}
+              contentLinkRewrites={
+                hasContentLinkRewrites ? rewrites : undefined
+              }
+              deadContentLinks={
+                hasDeadContentLinks ? deadContentLinks : undefined
+              }
+              inArticleAdSlot={renderOgabasseyBlogInlineAdSlot(
+                post.id,
+                showOgabasseyBlogAds
+              )}
+              merchantSlug={merchantSlug}
+              priorityInlineImageSrc={hasPreloadedHeroImage ? null : undefined}
+            />
+          ) : (
+            <BlogLegacyContent
+              html={legacyHtml}
+              featuredImageUrl={post.featured_image_url}
+              trustedPriorityImageSources={legacyPriorityImageSources}
+            />
+          )}
         </div>
-      ) : (
-        articleProseAndMeta
-      )}
+
+        <OgabasseyBlogEndAd enabled={showOgabasseyBlogAds} postId={post.id} />
+
+        {video && <BlogVideoPanel video={video} />}
+
+        {post.tags && post.tags.length > 0 && (
+          <div className="mb-8 flex flex-wrap items-center gap-2 border-t pt-8">
+            <Tag className="size-4 text-muted-foreground" />
+            {post.tags.map((tag) => (
+              <Badge key={tag} variant="outline">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <div className="mb-12 flex items-center gap-4 border-b pb-8">
+          <span className="text-sm text-muted-foreground">
+            Share this article:
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="min-h-11" asChild>
+              <a
+                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(shareUrl)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Share on Twitter (opens in new tab)"
+              >
+                Twitter
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="min-h-11" asChild>
+              <a
+                href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Share on LinkedIn (opens in new tab)"
+              >
+                LinkedIn
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="min-h-11" asChild>
+              <a
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Share on Facebook (opens in new tab)"
+              >
+                Facebook
+              </a>
+            </Button>
+          </div>
+        </div>
+      </OgabasseyBlogPostAdLayout>
 
       {relatedPosts.length > 0 && (
         <section>

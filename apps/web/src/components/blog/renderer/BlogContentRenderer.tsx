@@ -12,6 +12,7 @@ import {
   normalizeSourceHeadingLevel,
 } from './blog-heading-levels';
 import { BlogImageNodeRenderer } from './blog-image-node-renderer';
+import { BlogDocWithOptionalAd, parseBlogDoc } from './blog-in-article-ad';
 import { findFirstTrustedInlineImage } from './blog-priority-inline-image';
 import { BlogTextRenderer } from './blog-text-renderer';
 import {
@@ -226,30 +227,6 @@ const NodeRenderer = ({
   }
 };
 
-type ParsedBlogDoc = { kind: 'doc'; doc: TipTapNode } | { kind: 'fallback' };
-
-// Parse + validate the TipTap JSON outside of render so JSX is never
-// constructed inside a try/catch (react.dev: construct JSX in an error
-// boundary, not a try/catch, since render errors escape the try block).
-function parseBlogDoc(json: unknown): ParsedBlogDoc {
-  try {
-    const doc = typeof json === 'string' ? JSON.parse(json) : json;
-    if (
-      doc &&
-      typeof doc === 'object' &&
-      (doc as { type?: unknown }).type === 'doc'
-    ) {
-      return { kind: 'doc', doc: doc as TipTapNode };
-    }
-  } catch (e) {
-    logger.error({
-      error: e,
-      message: 'Blog renderer failed to parse document',
-    });
-  }
-  return { kind: 'fallback' };
-}
-
 export const BlogContentRenderer = ({
   json,
   basePath,
@@ -287,69 +264,27 @@ export const BlogContentRenderer = ({
     (Object.keys(contentLinkRewrites.blogSlugs).length > 0 ||
       Object.keys(contentLinkRewrites.productPaths).length > 0);
 
-  const topLevelNodes = parsed.doc.content ?? [];
-  let inArticleAdInsertAfterIndex = -1;
-  if (inArticleAdSlot && topLevelNodes.length >= 5) {
-    let nonEmptyParagraphCount = 0;
-    for (let i = 0; i < topLevelNodes.length; i += 1) {
-      const candidate = topLevelNodes[i];
-      if (
-        candidate?.type === 'paragraph' &&
-        candidate.content &&
-        candidate.content.length > 0
-      ) {
-        nonEmptyParagraphCount += 1;
-        if (nonEmptyParagraphCount === 3 && i < topLevelNodes.length - 1) {
-          inArticleAdInsertAfterIndex = i;
-          break;
-        }
-      }
-    }
-  }
-
   return (
     <div className="blog-content-renderer prose dark:prose-invert prose-baci max-w-none text-foreground">
-      {inArticleAdInsertAfterIndex >= 0 ? (
-        <div className="space-y-4">
-          {topLevelNodes.map((child, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: TipTap sibling nodes do not expose stable ids; document order defines render identity.
-            <div key={`${child.type}-${i}`} className="contents">
-              <NodeRenderer
-                basePath={basePath}
-                baseUrl={baseUrl}
-                contentLinkRewrites={
-                  hasContentLinkRewrites ? contentLinkRewrites : undefined
-                }
-                deadContentLinkSets={deadContentLinkSets}
-                merchantSlug={merchantSlug}
-                node={child}
-                nodePath={`0.${i}`}
-                index={i}
-                priorityInlineImage={priorityInlineImage}
-              />
-              {i === inArticleAdInsertAfterIndex ? (
-                <div className="not-prose my-8 flex justify-center">
-                  {inArticleAdSlot}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <NodeRenderer
-          basePath={basePath}
-          baseUrl={baseUrl}
-          contentLinkRewrites={
-            hasContentLinkRewrites ? contentLinkRewrites : undefined
-          }
-          deadContentLinkSets={deadContentLinkSets}
-          merchantSlug={merchantSlug}
-          node={parsed.doc}
-          nodePath="0"
-          index={0}
-          priorityInlineImage={priorityInlineImage}
-        />
-      )}
+      <BlogDocWithOptionalAd
+        doc={parsed.doc}
+        inArticleAdSlot={inArticleAdSlot}
+        renderNode={(node, nodePath, index) => (
+          <NodeRenderer
+            basePath={basePath}
+            baseUrl={baseUrl}
+            contentLinkRewrites={
+              hasContentLinkRewrites ? contentLinkRewrites : undefined
+            }
+            deadContentLinkSets={deadContentLinkSets}
+            merchantSlug={merchantSlug}
+            node={node}
+            nodePath={nodePath}
+            index={index}
+            priorityInlineImage={priorityInlineImage}
+          />
+        )}
+      />
     </div>
   );
 };

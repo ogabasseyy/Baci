@@ -1183,4 +1183,50 @@ describe('BlogContentRenderer', () => {
       expect(container.querySelector('img')).toBeTruthy();
     });
   });
+
+  describe('inArticleAdSlot placement', () => {
+    it('inserts the mid-article ad slot once after the 3rd paragraph on long articles', () => {
+      render(
+        <BlogContentRenderer
+          inArticleAdSlot={<aside aria-label="Mid-article ad">Ad</aside>}
+          json={doc(
+            paragraph(textNode('Paragraph one')),
+            paragraph(textNode('Paragraph two')),
+            paragraph(textNode('Paragraph three')),
+            paragraph(textNode('Paragraph four')),
+            paragraph(textNode('Paragraph five'))
+          )}
+        />
+      );
+
+      const thirdPara = screen.getByText('Paragraph three');
+      const fourthPara = screen.getByText('Paragraph four');
+      const ad = screen.getByRole('complementary', { name: 'Mid-article ad' });
+
+      expect(
+        thirdPara.compareDocumentPosition(ad) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(
+        ad.compareDocumentPosition(fourthPara) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('omits the mid-article ad slot on short posts (< 5 blocks)', () => {
+      render(
+        <BlogContentRenderer
+          inArticleAdSlot={<aside aria-label="Mid-article ad">Ad</aside>}
+          json={doc(
+            paragraph(textNode('Short one')),
+            paragraph(textNode('Short two')),
+            paragraph(textNode('Short three'))
+          )}
+        />
+      );
+
+      expect(
+        screen.queryByRole('complementary', { name: 'Mid-article ad' })
+      ).toBeNull();
+    });
+  });
 });

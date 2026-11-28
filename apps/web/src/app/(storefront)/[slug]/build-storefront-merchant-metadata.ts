@@ -1,9 +1,25 @@
 import type { Metadata } from 'next';
+import { OGABASSEY_DOMAIN } from '@/config/ogabassey';
 import type { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { getStorefrontOpenGraphImages } from '@/lib/storefront-social-images';
 import { getStorefrontSeoDescription } from './seo-helpers';
+
+const OGABASSEY_ADSENSE_ACCOUNT = 'ca-pub-9332275663101466';
+
+function isOwnedOgabasseyAdMerchant(
+  merchantSlug: string | null | undefined,
+  requestSlug: string
+): boolean {
+  const normalizedMerchantSlug = merchantSlug?.trim().toLowerCase();
+  const normalizedRequestSlug = requestSlug.trim().toLowerCase();
+  return (
+    normalizedMerchantSlug === 'ogabassey' ||
+    normalizedRequestSlug === 'ogabassey' ||
+    normalizedRequestSlug === OGABASSEY_DOMAIN
+  );
+}
 
 type StorefrontLayoutMerchant = NonNullable<
   Awaited<ReturnType<typeof getRequestScopedMerchant>>
@@ -83,9 +99,18 @@ export function buildStorefrontMerchantMetadata(
     alternates: null,
     applicationName: merchant.business_name,
     authors: [{ name: merchant.business_name }],
-    // Emit explicit verification so platform-level google-adsense-account meta never bleeds onto merchant storefronts.
+    // Emit explicit verification so platform-level google-adsense-account meta
+    // never bleeds onto third-party merchant storefronts, while preserving it
+    // on the owned OgaBassey flagship (matching app/ads.txt/route.ts).
     verification: {
       google: verificationCode,
+      ...(isOwnedOgabasseyAdMerchant(merchant.slug, slug)
+        ? {
+            other: {
+              'google-adsense-account': OGABASSEY_ADSENSE_ACCOUNT,
+            },
+          }
+        : {}),
     },
     openGraph: {
       title: merchant.site_title || merchant.business_name,

@@ -3,7 +3,21 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 
 vi.mock('@/lib/routes', () => ({ asRoute: (p: string) => p }));
-vi.mock('../components/AdUnit', () => ({ AdUnit: () => null }));
+vi.mock('../components/AdUnit', () => ({
+  AdUnit: ({
+    placementKey,
+    slotInstance,
+  }: {
+    placementKey: string;
+    slotInstance?: string;
+  }) => (
+    <div
+      data-placement={placementKey}
+      data-slot-instance={slotInstance}
+      data-testid="category-ad-unit"
+    />
+  ),
+}));
 vi.mock('../components/CategoryFiltersSidebar', () => ({
   CategoryFiltersSidebar: () => <div aria-label="Filters sidebar" />,
 }));
@@ -216,5 +230,21 @@ describe('CategoryPageResults', () => {
     const card = screen.getByRole('article', { name: 'Phone A' });
     expect(card).not.toHaveClass('content-auto');
     expect(card.className).toBe('');
+  });
+
+  it('mounts SIDEBAR_HALF_PAGE in the desktop sticky sidebar when filters are visible', () => {
+    renderResults({ canShowFilters: true });
+
+    const ads = screen.getAllByTestId('category-ad-unit');
+    expect(ads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dataset: expect.objectContaining({
+            placement: 'SIDEBAR_HALF_PAGE',
+            slotInstance: 'category-sidebar',
+          }),
+        }),
+      ])
+    );
   });
 });

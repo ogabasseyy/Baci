@@ -17,14 +17,15 @@ export function StorefrontDeferredFooterChrome({
 }: StorefrontDeferredFooterChromeProps) {
   return (
     <>
-      <Footer merchant={merchant} storeSlug={basePath} />
-
-      {/* Reserve the complete wrapper, not only the creative: AdSlotShell adds
-          its Sponsored label + vertical margins, while this container adds
-          py-4. The resulting border-box is ~200px mobile / ~350px desktop. */}
+      {/* Placed above `<Footer />` so shoppers reaching the end of page content
+          actually view the unit (lifting Active View % out of Smart Pricing
+          discounts). Reserves the complete wrapper (~200px mobile / ~350px
+          desktop) so `content-visibility: auto` never shifts layout. */}
       <div className="flex min-h-[200px] justify-center border-store-border border-t bg-store-background py-4 content-auto md:min-h-[350px] [contain-intrinsic-size:1400px_200px] md:[contain-intrinsic-size:1400px_350px]">
         <AdUnit placementKey="FOOTER_BANNER" />
       </div>
+
+      <Footer merchant={merchant} storeSlug={basePath} />
 
       <DeferredCartSidebar />
       <DeferredChatWidget />

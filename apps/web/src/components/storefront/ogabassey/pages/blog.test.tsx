@@ -61,8 +61,10 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-vi.mock('./ad-unit', () => ({
-  AdUnit: () => <div data-testid="ad-unit" />,
+vi.mock('../components/deferred-ad-unit', () => ({
+  DeferredAdUnit: ({ placementKey, slotInstance }: { placementKey: string; slotInstance?: string }) => (
+    <div data-placement={placementKey} data-slot-instance={slotInstance} data-testid="deferred-ad-unit" />
+  ),
 }));
 
 describe('OgabasseyV2Blog', () => {
@@ -289,5 +291,27 @@ describe('OgabasseyV2Blog', () => {
     render(<OgabasseyV2Blog posts={mockPosts} storeSlug="/test-store" />);
     expect(screen.getByRole('link', { name: 'All' })).toHaveAttribute('data-prefetch', 'false');
     expect(screen.getByRole('link', { name: 'View Green Tips' })).toHaveAttribute('data-prefetch', 'false');
+  });
+
+  it('inserts a real deferred BLOG_SIDEBAR ad break after every 6 grid posts instead of a mock placeholder', () => {
+    const eightPosts: BlogPost[] = Array.from({ length: 8 }, (_, idx) => ({
+      id: `post-${idx + 1}`,
+      title: `Post ${idx + 1}`,
+      slug: `post-${idx + 1}`,
+      featured: idx === 0,
+      featured_image_url: `https://example.com/${idx + 1}.jpg`,
+      author_name: 'Ogabassey Team',
+      published_at: '2026-01-01',
+      category: 'Reviews',
+      excerpt: `Excerpt ${idx + 1}`,
+      reading_time_minutes: 4,
+    }));
+
+    render(<OgabasseyV2Blog posts={eightPosts} storeSlug="/ogabassey" />);
+
+    const adUnits = screen.getAllByTestId('deferred-ad-unit');
+    expect(adUnits).toHaveLength(1);
+    expect(adUnits[0]).toHaveAttribute('data-placement', 'BLOG_SIDEBAR');
+    expect(adUnits[0]).toHaveAttribute('data-slot-instance', 'blog-grid-6');
   });
 });

@@ -57,6 +57,12 @@ interface BlogContentRendererProps {
    * products). Links resolving to them render as plain text instead of 404s.
    */
   deadContentLinks?: DeadStorefrontContentLinkSlugs;
+  /**
+   * Optional mid-article ad slot injected once after the 3rd top-level
+   * paragraph on long-form posts (>= 5 top-level blocks) so it stays below the
+   * LCP hero/intro window.
+   */
+  inArticleAdSlot?: React.ReactNode;
   // biome-ignore lint/suspicious/noExplicitAny: TipTap library returns any type
   json: any;
   merchantSlug?: string;
@@ -250,6 +256,7 @@ export const BlogContentRenderer = ({
   baseUrl,
   contentLinkRewrites,
   deadContentLinks,
+  inArticleAdSlot,
   merchantSlug,
   priorityInlineImageSrc,
 }: BlogContentRendererProps) => {
@@ -280,21 +287,69 @@ export const BlogContentRenderer = ({
     (Object.keys(contentLinkRewrites.blogSlugs).length > 0 ||
       Object.keys(contentLinkRewrites.productPaths).length > 0);
 
+  const topLevelNodes = parsed.doc.content ?? [];
+  let inArticleAdInsertAfterIndex = -1;
+  if (inArticleAdSlot && topLevelNodes.length >= 5) {
+    let nonEmptyParagraphCount = 0;
+    for (let i = 0; i < topLevelNodes.length; i += 1) {
+      const candidate = topLevelNodes[i];
+      if (
+        candidate?.type === 'paragraph' &&
+        candidate.content &&
+        candidate.content.length > 0
+      ) {
+        nonEmptyParagraphCount += 1;
+        if (nonEmptyParagraphCount === 3 && i < topLevelNodes.length - 1) {
+          inArticleAdInsertAfterIndex = i;
+          break;
+        }
+      }
+    }
+  }
+
   return (
     <div className="blog-content-renderer prose dark:prose-invert prose-baci max-w-none text-foreground">
-      <NodeRenderer
-        basePath={basePath}
-        baseUrl={baseUrl}
-        contentLinkRewrites={
-          hasContentLinkRewrites ? contentLinkRewrites : undefined
-        }
-        deadContentLinkSets={deadContentLinkSets}
-        merchantSlug={merchantSlug}
-        node={parsed.doc}
-        nodePath="0"
-        index={0}
-        priorityInlineImage={priorityInlineImage}
-      />
+      {inArticleAdInsertAfterIndex >= 0 ? (
+        <div className="space-y-4">
+          {topLevelNodes.map((child, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: TipTap sibling nodes do not expose stable ids; document order defines render identity.
+            <div key={`${child.type}-${i}`} className="contents">
+              <NodeRenderer
+                basePath={basePath}
+                baseUrl={baseUrl}
+                contentLinkRewrites={
+                  hasContentLinkRewrites ? contentLinkRewrites : undefined
+                }
+                deadContentLinkSets={deadContentLinkSets}
+                merchantSlug={merchantSlug}
+                node={child}
+                nodePath={`0.${i}`}
+                index={i}
+                priorityInlineImage={priorityInlineImage}
+              />
+              {i === inArticleAdInsertAfterIndex ? (
+                <div className="not-prose my-8 flex justify-center">
+                  {inArticleAdSlot}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <NodeRenderer
+          basePath={basePath}
+          baseUrl={baseUrl}
+          contentLinkRewrites={
+            hasContentLinkRewrites ? contentLinkRewrites : undefined
+          }
+          deadContentLinkSets={deadContentLinkSets}
+          merchantSlug={merchantSlug}
+          node={parsed.doc}
+          nodePath="0"
+          index={0}
+          priorityInlineImage={priorityInlineImage}
+        />
+      )}
     </div>
   );
 };

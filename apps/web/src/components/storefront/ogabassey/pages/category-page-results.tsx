@@ -121,6 +121,12 @@ export function CategoryPageResults({
                 onClearFilters={onClearFilters}
                 showPriceFilter={showPriceFilter}
               />
+              <div className="mt-6">
+                <AdUnit
+                  placementKey="SIDEBAR_HALF_PAGE"
+                  slotInstance="category-sidebar"
+                />
+              </div>
             </div>
           </div>
         )}

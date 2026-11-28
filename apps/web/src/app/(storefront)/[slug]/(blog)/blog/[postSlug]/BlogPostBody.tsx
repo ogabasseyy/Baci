@@ -4,11 +4,13 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { BlogContentRenderer } from '@/components/blog/renderer/BlogContentRenderer';
 import { TableOfContents } from '@/components/blog/table-of-contents';
+import { DeferredAdUnit } from '@/components/storefront/ogabassey/components/deferred-ad-unit';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { rewriteStorefrontContentHref } from '@/lib/storefront-content-link-rewriting';
 import { isDeadStorefrontContentHref } from '@/lib/storefront-content-link-targets';
+import { isOgabasseyBlogStaticTenant } from '../blog-category-routing';
 import { BlogLegacyContent } from './BlogLegacyContent';
 import { BlogRelatedProducts } from './BlogRelatedProducts';
 import { BlogVideoPanel } from './BlogVideoPanel';
@@ -132,8 +134,9 @@ export async function BlogPostBody({
     ];
   });
 
-  return (
-    <div className="content-auto [contain-intrinsic-size:1152px_2400px]">
+  const showOgabasseyBlogAds = isOgabasseyBlogStaticTenant(merchantSlug);
+  const articleProseAndMeta = (
+    <>
       {isJson && <TableOfContents />}
 
       <div className="mb-8">
@@ -146,6 +149,18 @@ export async function BlogPostBody({
             deadContentLinks={
               hasDeadContentLinks ? deadContentLinks : undefined
             }
+            inArticleAdSlot={
+              showOgabasseyBlogAds ? (
+                <DeferredAdUnit
+                  activateOnIdle
+                  activateOnInteraction
+                  activateOnScroll
+                  placementKey="BLOG_SIDEBAR"
+                  slotInstance={`blog-post-inline-${post.id}`}
+                  timeoutMs={2500}
+                />
+              ) : undefined
+            }
             merchantSlug={merchantSlug}
             priorityInlineImageSrc={hasPreloadedHeroImage ? null : undefined}
           />
@@ -157,6 +172,19 @@ export async function BlogPostBody({
           />
         )}
       </div>
+
+      {showOgabasseyBlogAds && (
+        <div className="mb-8 flex justify-center">
+          <DeferredAdUnit
+            activateOnIdle
+            activateOnInteraction
+            activateOnScroll
+            placementKey="CONTENT_BREAK"
+            slotInstance={`blog-post-end-${post.id}`}
+            timeoutMs={2500}
+          />
+        </div>
+      )}
 
       {video && <BlogVideoPanel video={video} />}
 
@@ -208,6 +236,33 @@ export async function BlogPostBody({
           </Button>
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <div className="content-auto [contain-intrinsic-size:1152px_2400px]">
+      {showOgabasseyBlogAds ? (
+        <div className="lg:grid lg:grid-cols-12 lg:gap-10">
+          <div className="min-w-0 lg:col-span-8">{articleProseAndMeta}</div>
+          <aside
+            aria-label="Sponsored sidebar"
+            className="hidden lg:col-span-4 lg:block"
+          >
+            <div className="sticky top-24">
+              <DeferredAdUnit
+                activateOnIdle
+                activateOnInteraction
+                activateOnScroll
+                placementKey="SIDEBAR_HALF_PAGE"
+                slotInstance={`blog-post-rail-${post.id}`}
+                timeoutMs={2500}
+              />
+            </div>
+          </aside>
+        </div>
+      ) : (
+        articleProseAndMeta
+      )}
 
       {relatedPosts.length > 0 && (
         <section>

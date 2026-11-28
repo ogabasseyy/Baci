@@ -8,6 +8,7 @@ export interface DeferredActivationOptions {
   enabled?: boolean;
   activateOnIdle?: boolean;
   activateOnInteraction?: boolean;
+  activateOnScroll?: boolean;
   deferInteractionActivationUntilNextPaint?: boolean;
   /**
    * When true, touch pointer gestures (`pointerType === 'touch'`, `touchstart`,
@@ -31,6 +32,7 @@ export function useDeferredActivation({
   enabled = true,
   activateOnIdle = true,
   activateOnInteraction = true,
+  activateOnScroll = false,
   deferInteractionActivationUntilNextPaint = false,
   ignoreTouchInteraction = false,
   interactionTargetRef,
@@ -126,6 +128,9 @@ export function useDeferredActivation({
       }, 0);
     };
     const removeInteractionListeners = () => {
+      if (activateOnScroll) {
+        window.removeEventListener('scroll', handleScroll);
+      }
       if (!interactionListenerTarget) return;
       interactionListenerTarget.removeEventListener('touchstart', handleTouchStart);
       interactionListenerTarget.removeEventListener('touchend', handleTouchEnd);
@@ -141,6 +146,9 @@ export function useDeferredActivation({
         return;
       }
       activate();
+    };
+    const handleScroll = () => {
+      handleInteraction();
     };
     const handleTouchStart = () => {
       markTouchInteraction();
@@ -216,6 +224,13 @@ export function useDeferredActivation({
       }
     }
 
+    if (activateOnScroll) {
+      window.addEventListener('scroll', handleScroll, {
+        once: true,
+        passive: true,
+      });
+    }
+
     return () => {
       cancelled = true;
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
@@ -235,6 +250,7 @@ export function useDeferredActivation({
   }, [
     activateOnIdle,
     activateOnInteraction,
+    activateOnScroll,
     deferInteractionActivationUntilNextPaint,
     enabled,
     ignoreTouchInteraction,

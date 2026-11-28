@@ -48,6 +48,15 @@ describe('StorefrontDeferredFooterChrome', () => {
         name: /deferred chat widget/i,
       })
     ).toBeInTheDocument();
+
+    // Footer banner sits above `<Footer />` for Active View viewability.
+    const adUnit = screen.getByRole('complementary', { name: /footer ad unit/i });
+    const footer = screen.getByRole('contentinfo', {
+      name: /full storefront footer/i,
+    });
+    expect(
+      adUnit.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('reserves the complete footer ad wrapper per breakpoint so content-visibility does not shift', async () => {

@@ -7,12 +7,25 @@ export interface AdPlacement {
   height: number;
   mobileWidth: number;
   mobileHeight: number;
+  /**
+   * Eligible creative sizes at >=768px. Every entry must fit inside
+   * `[width, height]` so the reserved `AdSlotShell` never shifts on fill.
+   */
+  desktopSizes?: ReadonlyArray<readonly [number, number]>;
+  /**
+   * Eligible creative sizes at <768px. Every entry must fit inside
+   * `[mobileWidth, mobileHeight]` so the reserved `AdSlotShell` never shifts.
+   */
+  mobileSizes?: ReadonlyArray<readonly [number, number]>;
   type: 'banner' | 'sidebar' | 'in-feed' | 'sticky';
 }
 
 export const DEFERRED_SHELL_MOUNT_DELAY_MS = 1;
-export const HOMEPAGE_STRIP_AD_BOOT_DELAY_MS = 12_000;
-export const SPONSORED_SLIDE_AD_BOOT_DELAY_MS = 9000;
+// `HOMEPAGE_STRIP` is already gated on real shopper interaction/scroll with
+// `timeoutMs={0}`, so zero-interaction Lighthouse runs never boot GPT. Once a
+// shopper scrolls or taps, boot immediately while the strip is still in view.
+export const HOMEPAGE_STRIP_AD_BOOT_DELAY_MS = 0;
+export const SPONSORED_SLIDE_AD_BOOT_DELAY_MS = 4000;
 // The category carousel auto-advances every 6s with the ad in the second slot,
 // so the ad must boot well before it rotates into view (~6s). Keep it past the
 // initial paint but with enough lead time to fill before it's shown.
@@ -36,12 +49,21 @@ export const AD_CONFIG = {
     height: 90,
     mobileWidth: 320,
     mobileHeight: 100,
+    desktopSizes: [
+      [728, 90],
+      [468, 60],
+    ],
+    mobileSizes: [
+      [320, 100],
+      [320, 50],
+      [300, 50],
+    ],
     type: 'banner',
   },
 
   // 2. HOMEPAGE STRIP (High Impact)
   // Location: Between Hero and Product Filters on Home.
-  // Standard: 970x90 (Desktop) | 320x50 (Mobile)
+  // Standard: 970x90 / 728x90 (Desktop) | 320x50 (Mobile)
   HOMEPAGE_STRIP: {
     id: 'div-gpt-ad-home-strip',
     name: 'homepage_large_strip',
@@ -50,13 +72,20 @@ export const AD_CONFIG = {
     height: 90,
     mobileWidth: 320,
     mobileHeight: 50,
+    desktopSizes: [
+      [970, 90],
+      [728, 90],
+    ],
+    mobileSizes: [
+      [320, 50],
+      [300, 50],
+    ],
     type: 'banner',
   },
 
   // 3. PRODUCT SIDEBAR (Half Page - High CPM)
-  // Location: Product Details Sidebar.
-  // Standard: 300x600 (Desktop) | Hidden or 300x250 (Mobile)
-  // Note: 300x600 is one of the fastest growing sizes by impression.
+  // Location: Product Details, Category, & Blog Article Sidebars.
+  // Standard: 300x600 / 300x250 (Desktop) | 300x250 (Mobile)
   SIDEBAR_HALF_PAGE: {
     id: 'div-gpt-ad-sidebar-large',
     name: 'sidebar_half_page',
@@ -65,13 +94,21 @@ export const AD_CONFIG = {
     height: 600,
     mobileWidth: 300,
     mobileHeight: 250,
+    desktopSizes: [
+      [300, 600],
+      [300, 250],
+      [160, 600],
+    ],
+    mobileSizes: [
+      [300, 250],
+      [250, 250],
+    ],
     type: 'sidebar',
   },
 
   // 4. PRODUCT GRID (Medium Rectangle)
-  // Location: Inside product lists (every 8 items).
+  // Location: Inside product lists.
   // Standard: 300x250 (Desktop & Mobile)
-  // Note: The "MPU" (Mid-Page Unit) is the most compatible ad size.
   PRODUCT_GRID_MPU: {
     id: 'div-gpt-ad-grid-mpu',
     name: 'in_feed_mpu',
@@ -84,7 +121,7 @@ export const AD_CONFIG = {
   },
 
   // 5. CONTENT BREAK (Leaderboard)
-  // Location: Between Product Description and Reviews.
+  // Location: Between Product Description / Article Prose and Reviews.
   // Standard: 728x90 (Desktop) | 320x50 (Mobile)
   CONTENT_BREAK: {
     id: 'div-gpt-ad-content',
@@ -94,6 +131,14 @@ export const AD_CONFIG = {
     height: 90,
     mobileWidth: 320,
     mobileHeight: 50,
+    desktopSizes: [
+      [728, 90],
+      [468, 60],
+    ],
+    mobileSizes: [
+      [320, 50],
+      [300, 50],
+    ],
     type: 'banner',
   },
 
@@ -125,9 +170,9 @@ export const AD_CONFIG = {
     type: 'in-feed',
   },
 
-  // 8. FOOTER (Billboard/Leaderboard)
-  // Location: Just above footer.
-  // Standard: 970x250 (Billboard) or 728x90
+  // 8. FOOTER (Billboard/Leaderboard/MPU)
+  // Location: Above footer. Accepts 970x250, 970x90, 728x90, and 300x250
+  // inside the height-locked 250px desktop shell to eliminate no-fill waste.
   FOOTER_BANNER: {
     id: 'div-gpt-ad-footer',
     name: 'footer_banner',
@@ -136,6 +181,17 @@ export const AD_CONFIG = {
     height: 250,
     mobileWidth: 320,
     mobileHeight: 100,
+    desktopSizes: [
+      [970, 250],
+      [970, 90],
+      [728, 90],
+      [300, 250],
+    ],
+    mobileSizes: [
+      [320, 100],
+      [320, 50],
+      [300, 50],
+    ],
     type: 'banner',
   },
 
@@ -150,11 +206,20 @@ export const AD_CONFIG = {
     height: 90,
     mobileWidth: 320,
     mobileHeight: 100,
+    desktopSizes: [
+      [728, 90],
+      [468, 60],
+    ],
+    mobileSizes: [
+      [320, 100],
+      [320, 50],
+      [300, 50],
+    ],
     type: 'banner',
   },
 
-  // 10. BLOG SIDEBAR (Standard MPU)
-  // Location: Sidebar of the Blog Index.
+  // 10. BLOG SIDEBAR / IN-ARTICLE MPU (Standard MPU)
+  // Location: Blog index grid & blog post inline breaks.
   // Standard: 300x250
   BLOG_SIDEBAR: {
     id: 'div-gpt-ad-blog-sidebar',
@@ -194,6 +259,15 @@ export const AD_CONFIG = {
     height: 90,
     mobileWidth: 320,
     mobileHeight: 100,
+    desktopSizes: [
+      [728, 90],
+      [468, 60],
+    ],
+    mobileSizes: [
+      [320, 100],
+      [320, 50],
+      [300, 50],
+    ],
     type: 'banner',
   },
 } as const satisfies Record<string, AdPlacement>;

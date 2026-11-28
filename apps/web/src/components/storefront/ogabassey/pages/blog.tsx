@@ -1,9 +1,10 @@
 import { ArrowRight, Battery, Search } from 'lucide-react';
 import Link from 'next/link';
+import { Fragment } from 'react';
 import { buildBlogCategoryHref } from '@/app/(storefront)/[slug]/(blog)/blog/blog-category-routing';
 import { asRoute, joinRouteBasePath } from '@/lib/routes';
 import type { BlogPostData, TemplateBlogPageProps } from '@/templates/registry';
-import { AdUnit } from './ad-unit';
+import { DeferredAdUnit } from '../components/deferred-ad-unit';
 import { BlogFeaturedStory } from './blog-featured-story';
 import { getBlogListingImageSrc } from './blog-listing-image-src';
 import { BlogPostCard } from './blog-post-card';
@@ -213,14 +214,27 @@ export function OgabasseyV2Blog({
                 post.id !== featuredPost?.id ||
                 activeCategory !== 'All'
             )
-            .map((post) => (
-              <BlogPostCard
-                key={post.id}
-                href={blogHref(basePath, `/${post.slug}`)}
-                imageSrc={getBlogListingImageSrc(post.featured_image_url)}
-                post={post}
-                publishedDateLabel={formatDate(post.published_at)}
-              />
+            .map((post, index) => (
+              <Fragment key={post.id}>
+                <BlogPostCard
+                  href={blogHref(basePath, `/${post.slug}`)}
+                  imageSrc={getBlogListingImageSrc(post.featured_image_url)}
+                  post={post}
+                  publishedDateLabel={formatDate(post.published_at)}
+                />
+                {(index === 5 || index === 11) && (
+                  <div className="col-span-1 flex justify-center md:col-span-2 lg:col-span-3">
+                    <DeferredAdUnit
+                      activateOnIdle
+                      activateOnInteraction
+                      activateOnScroll
+                      placementKey="BLOG_SIDEBAR"
+                      slotInstance={`blog-grid-${index + 1}`}
+                      timeoutMs={2500}
+                    />
+                  </div>
+                )}
+              </Fragment>
             ))}
         </div>
 
@@ -245,8 +259,6 @@ export function OgabasseyV2Blog({
             View Green Tips
           </Link>
         </div>
-
-        <AdUnit placementKey="FOOTER_BANNER" />
       </div>
     </div>
   );

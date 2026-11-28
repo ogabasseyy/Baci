@@ -157,6 +157,12 @@ export const OgabasseyV2CategoryPage: React.FC<
                 onFilterChange={handleFilterChange}
                 onClearFilters={() => setFilters(initialFilterState)}
               />
+              <div className="mt-6">
+                <AdUnit
+                  placementKey="SIDEBAR_HALF_PAGE"
+                  slotInstance="category-sidebar"
+                />
+              </div>
             </div>
           </div>
 

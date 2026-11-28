@@ -127,6 +127,7 @@ export function buildContentSecurityPolicyHeader(
     `connect-src ${connectSrc}`,
     `form-action ${formActions}`,
     `frame-ancestors ${frameAncestors}`,
+    "frame-src 'none'",
     "worker-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",

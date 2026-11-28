@@ -61,6 +61,9 @@ function resolveDeclaredNavigationTarget(rawPath) {
   const fallbackId = target.pathname === '/' ? 'home' : target.pathname.split('/').filter(Boolean)[0] || 'route';
   return { ok: true, normalized: target.normalized, routeId: fallbackId, params: {} };
 }
+function isDeclaredManifestAsset(id) {
+  return typeof id === 'string' && Object.prototype.hasOwnProperty.call(ASSETS_MAP, id);
+}
 function seedInitialCatalogAssets(target, state) {
   const rows = Array.isArray(state?.products)
     ? state.productDetail
@@ -72,11 +75,12 @@ function seedInitialCatalogAssets(target, state) {
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (r && typeof r === 'object' && typeof r.imageUrl === 'string' && r.imageUrl.length > 0) {
-      const aid =
+      const rawAid =
         r.image && typeof r.image === 'object' && typeof r.image.assetId === 'string' && r.image.assetId.length > 0
           ? r.image.assetId
-          : \`catalog-product-\${String(r.id || r.slug || i)}\`;
-      target[aid] = r.imageUrl;
+          : '';
+      const aid = rawAid && !isDeclaredManifestAsset(rawAid) ? rawAid : \`catalog-product-\${String(r.id || r.slug || i)}\`;
+      if (!isDeclaredManifestAsset(aid)) target[aid] = r.imageUrl;
     }
   }
 }
@@ -135,7 +139,7 @@ if (rootElement && stateScript?.textContent) {
             if (payload && typeof payload === 'object' && (payload.status === 'ok' || payload.status === 'error')) {
               if (payload.assets && typeof payload.assets === 'object' && !Array.isArray(payload.assets)) {
                 for (const [aid, aurl] of Object.entries(payload.assets)) {
-                  if (typeof aurl === 'string') runtimeAssets[aid] = aurl;
+                  if (typeof aurl === 'string' && !isDeclaredManifestAsset(aid)) runtimeAssets[aid] = aurl;
                 }
               }
               if (payload.status === 'ok' && payload.value && typeof payload.value.revision === 'string') {
@@ -254,7 +258,7 @@ if (rootElement && stateScript?.textContent) {
           if (!bootstrap || typeof bootstrap !== 'object') return false;
           if (bootstrap.assets && typeof bootstrap.assets === 'object' && !Array.isArray(bootstrap.assets)) {
             for (const [aid, aurl] of Object.entries(bootstrap.assets)) {
-              if (typeof aurl === 'string') runtimeAssets[aid] = aurl;
+              if (typeof aurl === 'string' && !isDeclaredManifestAsset(aid)) runtimeAssets[aid] = aurl;
             }
           }
           if (Number.isSafeInteger(bootstrap.route?.epoch) && bootstrap.route.epoch > routeEpoch) {

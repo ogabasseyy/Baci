@@ -129,17 +129,26 @@ function isValidCatalogPayload(data, kind) {
 
 ${buildProductCanonicalPathSnippet()}
 
+function isDeclaredStaticAssetId(id, baseAssets) {
+  const map = baseAssets || (typeof ASSETS_MAP === 'object' && ASSETS_MAP !== null ? ASSETS_MAP : null);
+  return Boolean(map && typeof id === 'string' && Object.prototype.hasOwnProperty.call(map, id));
+}
+
 function collectCatalogAssetUrls(baseAssets, list, single) {
   const merged = { ...baseAssets };
   const rows = Array.isArray(list) ? (single ? [...list, single] : list) : single ? [single] : [];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (r && typeof r === 'object' && typeof r.imageUrl === 'string' && r.imageUrl.length > 0) {
-      const aid =
+      const rawAid =
         r.image && typeof r.image === 'object' && typeof r.image.assetId === 'string' && r.image.assetId.length > 0
           ? r.image.assetId
+          : '';
+      const aid =
+        rawAid && !isDeclaredStaticAssetId(rawAid, baseAssets)
+          ? rawAid
           : \`catalog-product-\${String(r.id || r.slug || i)}\`;
-      merged[aid] = r.imageUrl;
+      if (!isDeclaredStaticAssetId(aid, baseAssets)) merged[aid] = r.imageUrl;
     }
   }
   return merged;
@@ -161,13 +170,24 @@ function toSdkPublicProduct(p, assetOut) {
         ? p.inStock
         : variants.some((v) => v.available);
   let image = null;
-  if (p.image && typeof p.image === 'object' && !Array.isArray(p.image) && typeof p.image.assetId === 'string' && p.image.assetId.length > 0) {
-    image = { assetId: p.image.assetId, alt: typeof p.image.alt === 'string' && p.image.alt.length > 0 ? p.image.alt : p.name };
-    if (assetOut && typeof p.imageUrl === 'string' && p.imageUrl.length > 0) assetOut[p.image.assetId] = p.imageUrl;
-  } else if (typeof p.imageUrl === 'string' && p.imageUrl.length > 0) {
+  const rawImgAid =
+    p.image && typeof p.image === 'object' && !Array.isArray(p.image) && typeof p.image.assetId === 'string' && p.image.assetId.length > 0
+      ? p.image.assetId
+      : '';
+  const hasImgUrl = typeof p.imageUrl === 'string' && p.imageUrl.length > 0;
+  if (rawImgAid && !(hasImgUrl && isDeclaredStaticAssetId(rawImgAid, null))) {
+    image = { assetId: rawImgAid, alt: typeof p.image.alt === 'string' && p.image.alt.length > 0 ? p.image.alt : p.name };
+    if (assetOut && hasImgUrl && !isDeclaredStaticAssetId(rawImgAid, null)) assetOut[rawImgAid] = p.imageUrl;
+  } else if (hasImgUrl) {
     const assetId = \`catalog-product-\${String(p.id || p.slug || 'item')}\`;
-    if (assetOut) assetOut[assetId] = p.imageUrl;
-    image = { assetId, alt: typeof p.imageAlt === 'string' && p.imageAlt.length > 0 ? p.imageAlt : p.name };
+    if (assetOut && !isDeclaredStaticAssetId(assetId, null)) assetOut[assetId] = p.imageUrl;
+    const altText =
+      p.image && typeof p.image === 'object' && typeof p.image.alt === 'string' && p.image.alt.length > 0
+        ? p.image.alt
+        : typeof p.imageAlt === 'string' && p.imageAlt.length > 0
+          ? p.imageAlt
+          : p.name;
+    image = { assetId, alt: altText };
   }
   return {
     id: String(p.id ?? ''),

@@ -153,7 +153,13 @@ export const workerStorefrontManifestSchema = z
     assets: z
       .array(
         z.strictObject({
-          assetId: z.string().regex(/^[a-z0-9-]{1,80}$/),
+          assetId: z
+            .string()
+            .regex(/^[a-z0-9-]{1,80}$/)
+            .refine(
+              (id) => !id.startsWith('catalog-product-'),
+              'Asset ID prefix "catalog-product-" is reserved for generated catalog product images'
+            ),
           alt: z.string().min(1).max(500),
         })
       )
@@ -175,6 +181,15 @@ export const workerStorefrontManifestSchema = z
     previewOrigin: previewOriginSchema.optional(),
   })
   .superRefine((manifest, ctx) => {
+    if (
+      manifest.hostOrigin?.endsWith('.usebaci.com') &&
+      manifest.hostOrigin !== `https://${manifest.merchantSlug}.usebaci.com`
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'hostOrigin on usebaci.com must match merchantSlug',
+      });
+    }
     const normalizedPaths = manifest.files.map((file) =>
       file.path.toLowerCase()
     );

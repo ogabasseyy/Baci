@@ -62,4 +62,30 @@ export const previewOriginSchema = z
     }
   }, 'previewOrigin must be a valid HTTPS origin or localhost HTTP origin');
 
-export const hostOriginSchema = previewOriginSchema;
+export const hostOriginSchema = z
+  .string()
+  .min(8)
+  .max(200)
+  .refine((raw) => {
+    if (raw.includes('*')) return false;
+    try {
+      const parsed = new URL(raw);
+      return (
+        parsed.protocol === 'https:' &&
+        parsed.port === '' &&
+        parsed.origin === raw &&
+        parsed.username === '' &&
+        parsed.password === '' &&
+        parsed.pathname === '/' &&
+        parsed.search === '' &&
+        parsed.hash === '' &&
+        parsed.hostname.includes('.') &&
+        parsed.hostname !== 'usebaci.com' &&
+        parsed.hostname !== 'api.usebaci.com' &&
+        parsed.hostname !== 'cdn.usebaci.com' &&
+        !IPV4_OR_IPV6_HOST.test(parsed.hostname)
+      );
+    } catch {
+      return false;
+    }
+  }, 'hostOrigin must be a bare HTTPS storefront origin without wildcards, ports, platform-reserved hosts, or raw IPs');

@@ -101,9 +101,19 @@ function normalizeHostBootstrapProduct(p, assetsTarget, fallbackCategory, enrich
       : typeof p.inStock === 'boolean'
         ? p.inStock
         : variants.some((v) => v.available);
-  const aid = p.image && typeof p.image.assetId === 'string' ? p.image.assetId : '';
-  if (typeof p.imageUrl === 'string' && p.imageUrl.length > 0) {
-    assetsTarget[aid || \`catalog-product-\${pid || pslug || 'item'}\`] = p.imageUrl;
+  const rawAid = p.image && typeof p.image.assetId === 'string' ? p.image.assetId : '';
+  const isDeclared =
+    Boolean(rawAid) &&
+    typeof ASSETS_MAP === 'object' &&
+    ASSETS_MAP !== null &&
+    Object.prototype.hasOwnProperty.call(ASSETS_MAP, rawAid);
+  const hasImgUrl = typeof p.imageUrl === 'string' && p.imageUrl.length > 0;
+  const aid = isDeclared && hasImgUrl ? '' : rawAid;
+  const selectedAid = hasImgUrl ? aid || \`catalog-product-\${pid || pslug || 'item'}\` : aid;
+  if (hasImgUrl) {
+    if (!(typeof ASSETS_MAP === 'object' && ASSETS_MAP !== null && Object.prototype.hasOwnProperty.call(ASSETS_MAP, selectedAid))) {
+      assetsTarget[selectedAid] = p.imageUrl;
+    }
   }
   const resolvedImg =
     typeof p.imageUrl === 'string' && p.imageUrl.length > 0
@@ -140,7 +150,10 @@ function normalizeHostBootstrapProduct(p, assetsTarget, fallbackCategory, enrich
     shortSpecs: typeof p.shortSpecs === 'string' && p.shortSpecs.length > 0 ? p.shortSpecs : existing?.shortSpecs || '',
     ...(typeof p.canonicalPath === 'string' ? { canonicalPath: p.canonicalPath } : {}),
     ...(typeof p.requiresVariant === 'boolean' ? { requiresVariant: p.requiresVariant } : {}),
-    image: p.image ?? null,
+    image:
+      p.image && typeof p.image === 'object' && !Array.isArray(p.image) && selectedAid
+        ? { ...p.image, assetId: selectedAid }
+        : (p.image ?? null),
     variants,
   };
 }

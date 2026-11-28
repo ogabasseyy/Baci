@@ -54,14 +54,18 @@ const DIGEST_IMAGE_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
 /**
  * Derives a deterministic hard SIGKILL wall-clock timeout from measured p95
- * compile time (5x p95 safety headroom with a 5,000 ms floor and 30,000 ms cap).
+ * compile time (`max(5 * p95, 5000ms)` safety headroom).
  */
 export function deriveCompileSigkillTimeoutMs(measuredP95Ms: number): number {
-  if (!Number.isFinite(measuredP95Ms) || measuredP95Ms <= 0) {
+  if (
+    !Number.isFinite(measuredP95Ms) ||
+    measuredP95Ms <= 0 ||
+    measuredP95Ms > Number.MAX_SAFE_INTEGER / 5
+  ) {
     throw new Error('measuredP95Ms must be a positive finite number');
   }
   const scaled = Math.ceil(measuredP95Ms * 5);
-  return Math.min(Math.max(scaled, 5000), 30000);
+  return Math.max(scaled, 5000);
 }
 
 export function buildRunscDockerCompilerProfile(options: {

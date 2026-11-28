@@ -23,10 +23,23 @@ function normalizeSsrCatalogProduct(p) {
       : typeof p.inStock === 'boolean'
         ? p.inStock
         : variants.some((v) => v.available);
-  const safeImg =
+  const rawImgAid =
     p.image && typeof p.image === 'object' && !Array.isArray(p.image) && typeof p.image.assetId === 'string' && p.image.assetId.length > 0
-      ? { assetId: p.image.assetId, alt: typeof p.image.alt === 'string' && p.image.alt.length > 0 ? p.image.alt : p.name }
-      : undefined;
+      ? p.image.assetId
+      : '';
+  const collidesDeclared =
+    Boolean(rawImgAid) &&
+    typeof p.imageUrl === 'string' &&
+    p.imageUrl.length > 0 &&
+    typeof ASSETS_MAP === 'object' &&
+    ASSETS_MAP !== null &&
+    Object.prototype.hasOwnProperty.call(ASSETS_MAP, rawImgAid);
+  const safeImg = rawImgAid
+    ? {
+        assetId: collidesDeclared ? \`catalog-product-\${String(p.id || p.slug || 'item')}\` : rawImgAid,
+        alt: typeof p.image.alt === 'string' && p.image.alt.length > 0 ? p.image.alt : p.name,
+      }
+    : undefined;
   return {
     id: p.id,
     slug: p.slug,

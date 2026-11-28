@@ -77,6 +77,10 @@ export function hasLocalLexicalBinding(
 const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set([
   'script',
   'style',
+  'iframe',
+  'frame',
+  'frameset',
+  'portal',
   'object',
   'embed',
   'base',

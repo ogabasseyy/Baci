@@ -26,9 +26,8 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     const safePath = typeof livePath === 'string' && livePath.startsWith('/') ? livePath : '/';
     return \`https://\${slug}.usebaci.com\${safePath}\`;
   };
-  const isPermittedTargetOrigin = (origin, baseOrigin) =>
+  const isStorefrontCanonicalOrigin = (origin, baseOrigin) =>
     origin === baseOrigin ||
-    origin === 'https://usebaci.com' ||
     origin === \`https://\${slug}.usebaci.com\` ||
     (typeof TRUSTED_HOST_ORIGIN === 'string' && TRUSTED_HOST_ORIGIN.length > 0 && origin === TRUSTED_HOST_ORIGIN);
 
@@ -54,7 +53,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
       const baseHref = getBaseHref();
       const baseOrigin = new URL(baseHref).origin;
       const parsed = new URL(rawHref, baseHref);
-      if (!isPermittedTargetOrigin(parsed.origin, baseOrigin)) return;
+      if (!isStorefrontCanonicalOrigin(parsed.origin, baseOrigin)) return;
       if (parsed.pathname === '/checkout' || parsed.pathname.startsWith('/checkout/')) {
         event.preventDefault();
         void commerce.checkout.open();

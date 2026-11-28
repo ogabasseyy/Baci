@@ -1,14 +1,8 @@
 export function buildHostBootstrapStateSnippet(): string {
   return `
-const KNOWN_STOREFRONT_VIEWS = new Set([
-  'home',
-  'collection',
-  'product',
-  'search',
-  'cart',
-  'editorial',
-  'not_found',
-]);
+const KNOWN_STOREFRONT_VIEWS = new Set(
+  'home|collection|product|search|cart|editorial|not_found'.split('|')
+);
 
 function hasOwnEnrichedCardFields(p) {
   return (
@@ -50,6 +44,7 @@ function rememberEnrichedProducts(cache, state) {
       categorySlug: typeof r.categorySlug === 'string' && r.categorySlug.length > 0 ? r.categorySlug : prev.categorySlug || '',
       imageUrl: typeof r.imageUrl === 'string' && r.imageUrl.length > 0 ? r.imageUrl : prev.imageUrl || '',
       imageAlt: typeof r.imageAlt === 'string' && r.imageAlt.length > 0 ? r.imageAlt : prev.imageAlt || '',
+      requiresVariant: typeof r.requiresVariant === 'boolean' ? r.requiresVariant : prev.requiresVariant,
     };
     if (typeof r.id === 'string' && r.id.length > 0) cache.set('id:' + r.id, merged);
     if (typeof r.slug === 'string' && r.slug.length > 0) cache.set('slug:' + r.slug, merged);
@@ -157,7 +152,7 @@ function normalizeHostBootstrapProduct(p, assetsTarget, fallbackCategory, enrich
           : existing?.imageAlt || String(p.name || ''),
     shortSpecs: typeof p.shortSpecs === 'string' && p.shortSpecs.length > 0 ? p.shortSpecs : existing?.shortSpecs || '',
     ...(typeof p.canonicalPath === 'string' ? { canonicalPath: p.canonicalPath } : {}),
-    ...(typeof p.requiresVariant === 'boolean' ? { requiresVariant: p.requiresVariant } : {}),
+    requiresVariant: typeof p.requiresVariant === 'boolean' ? p.requiresVariant : typeof p.has_variants === 'boolean' ? p.has_variants : variants.length > 0 ? true : Boolean(existing?.requiresVariant),
     image:
       p.image && typeof p.image === 'object' && !Array.isArray(p.image) && selectedAid
         ? { ...p.image, assetId: selectedAid }

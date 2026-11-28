@@ -137,9 +137,20 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
         view = 'not_found';
         title = 'Product Not Found';
       } else {
-        productDetail = normalizeSsrCatalogProduct(upstream.data.product);
-        title = productDetail.name;
-        publicDataRevision = formatUpstreamRevision(upstream.data);
+        const candidate = normalizeSsrCatalogProduct(upstream.data.product);
+        const reqBrand = matchedRoute.params.brand || '';
+        const reqCond = matchedRoute.params.condition || '';
+        const brandMismatch = Boolean(reqBrand) && (!candidate.brand || candidate.brand.toLowerCase() !== reqBrand.toLowerCase());
+        const condMismatch = Boolean(reqCond) && (!candidate.condition || candidate.condition.toLowerCase() !== reqCond.toLowerCase());
+        if (brandMismatch || condMismatch) {
+          status = 404;
+          view = 'not_found';
+          title = 'Product Not Found';
+        } else {
+          productDetail = candidate;
+          title = productDetail.name;
+          publicDataRevision = formatUpstreamRevision(upstream.data);
+        }
       }
     }
   }

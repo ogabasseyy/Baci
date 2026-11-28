@@ -28,6 +28,14 @@ function tryBuildSingleProductRoute(p, routePath, slug) {
     if (name === 'category' || name === 'categoryId' || name === 'categorySlug' || name === 'collection' || name === 'collectionId' || name === 'collectionSlug') {
       if (typeof p.categorySlug !== 'string' || p.categorySlug.length === 0) return undefined;
       out.push(encodeURIComponent(p.categorySlug));
+    } else if (name === 'brand') {
+      if (typeof p.brand !== 'string' || p.brand.length === 0) return undefined;
+      out.push(encodeURIComponent(p.brand));
+    } else if (name === 'condition') {
+      if (typeof p.condition !== 'string' || p.condition.length === 0) return undefined;
+      out.push(encodeURIComponent(p.condition));
+    } else if (name === 'filter' || name === 'page') {
+      return undefined;
     } else if (name === 'productId') {
       out.push(encodeURIComponent(typeof p.id === 'string' && p.id.length > 0 ? p.id : slug));
     } else if (name === 'sku') {
@@ -38,7 +46,7 @@ function tryBuildSingleProductRoute(p, routePath, slug) {
       out.push(encodeURIComponent(v0));
     } else if (name === 'productSlug' || name === 'product' || name === 'itemSlug' || i === slugIdx) {
       out.push(encodeURIComponent(slug));
-    } else if (dynIdx.length === 2 && i === dynIdx[0] && typeof p.categorySlug === 'string' && p.categorySlug.length > 0) {
+    } else if (dynIdx.length === 2 && i === dynIdx[0] && !NON_PROD_PARAMS.has(name) && typeof p.categorySlug === 'string' && p.categorySlug.length > 0) {
       out.push(encodeURIComponent(p.categorySlug));
     } else {
       return undefined;

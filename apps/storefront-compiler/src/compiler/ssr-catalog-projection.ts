@@ -55,7 +55,7 @@ function normalizeSsrCatalogProduct(p) {
     currency: typeof p.currency === 'string' && /^[A-Z]{3}$/.test(p.currency) ? p.currency : 'NGN',
     inStock: pAvail,
     available: pAvail,
-    ...(typeof p.requiresVariant === 'boolean' ? { requiresVariant: p.requiresVariant } : {}),
+    requiresVariant: typeof p.requiresVariant === 'boolean' ? p.requiresVariant : Boolean(p.has_variants) || variants.length > 0,
     ...(typeof p.has_variants === 'boolean' ? { has_variants: p.has_variants } : {}),
     imageUrl: typeof p.imageUrl === 'string' ? p.imageUrl : '',
     imageAlt: typeof p.imageAlt === 'string' && p.imageAlt.length > 0 ? p.imageAlt : p.name,

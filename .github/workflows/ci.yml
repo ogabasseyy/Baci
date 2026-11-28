@@ -291,7 +291,10 @@ jobs:
   quality-test:
     name: Quality Gate - Test
     needs: [changes]
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.stage == 'full'
+    # Also runs for mobile-only changes: this job holds the non-web unit tests (Turbo affected
+    # packages, or targeted storefront Jest). Web-only steps below stay behind the web flag. The
+    # mobile-admin suite spawns `ruby`, which the runner must provide.
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.stage == 'full'
     runs-on: ${{ needs.changes.outputs.private_ci_trusted == 'true' && vars.BACI_PRIVATE_QUALITY_TEST_ENABLED == 'true' && fromJSON('["self-hosted","Linux","X64","baci-private-ci"]') || 'ubuntu-24.04' }}
     # Full web/mobile test fan-out reached ~15 minutes warm, but cold runs
     # (Turbo remote cache unavailable) measure 31m+ on GitHub-hosted runners —
@@ -316,10 +319,11 @@ jobs:
           node --test .github/scripts/experience-runner-ci.test.mjs .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs .github/scripts/shared-test-fixtures-boundary.test.mjs .github/scripts/shared-test-fixtures-boundary-patterns.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
       - name: Run portable experience runner units
-        if: steps.test-plan.outputs.mode != 'config-smoke'
+        if: needs.changes.outputs.web == 'true' && steps.test-plan.outputs.mode != 'config-smoke'
         run: pnpm --filter @baci/web test:experience:runner
       - name: Verify authenticated shipping recovery in PostgreSQL
         id: shipping-recovery
+        if: needs.changes.outputs.web == 'true'
         env:
           BACI_SHIPPING_QUOTE_POSTGRES: '1'
         run: |

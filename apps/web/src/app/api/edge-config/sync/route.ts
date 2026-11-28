@@ -93,15 +93,30 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch all active primary domains from Supabase
+    // Fetch active domains plus SaaS bindings currently in verifying_routing.
+    // verifying_routing bindings publish ONLY inbound domain_* → slug so the
+    // routing probe can validate the new hostname while leaving the merchant's
+    // existing slug_* → primaryDomain redirect untouched until commit_domain_active.
     const supabase = createServiceClient();
-    const { data: domains, error } = await supabase
-      .from('domains')
-      .select('domain, is_primary, domain_type, merchants!inner(slug)')
-      .eq('status', 'active');
+    const [
+      { data: domains, error },
+      { data: verifyingBindings, error: verifyingError },
+    ] = await Promise.all([
+      supabase
+        .from('domains')
+        .select('domain, is_primary, domain_type, merchants!inner(slug)')
+        .eq('status', 'active'),
+      supabase
+        .from('domain_provider_bindings')
+        .select('hostname, merchants!inner(slug)')
+        .eq('lifecycle_state', 'verifying_routing'),
+    ]);
 
-    if (error) {
-      console.error('[Edge Config Sync] Supabase error:', error);
+    if (error || verifyingError) {
+      console.error(
+        '[Edge Config Sync] Supabase error:',
+        error ?? verifyingError
+      );
       return NextResponse.json(
         { error: 'Failed to fetch domains' },
         { status: 500 }
@@ -126,6 +141,15 @@ export async function POST(request: Request) {
           const slugKey = getEdgeConfigSlugKey(slug);
           slugToDomain[slugKey] = record.domain;
         }
+      }
+    }
+
+    for (const binding of verifyingBindings || []) {
+      // @ts-expect-error - Supabase nested select typing
+      const slug = binding.merchants?.slug as string | undefined;
+      if (binding.hostname && slug) {
+        const domainKey = getEdgeConfigDomainKey(binding.hostname);
+        domainToSlug[domainKey] = slug;
       }
     }
 

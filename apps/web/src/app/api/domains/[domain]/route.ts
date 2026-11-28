@@ -6,7 +6,13 @@ import {
   hasPermission,
 } from '@/lib/api-auth';
 import { revalidateMerchantFeed } from '@/lib/cache-revalidation';
+import { readCloudflareSaasConfig } from '@/lib/cloudflare-saas';
 import { checkCsrfProtection } from '@/lib/csrf';
+import {
+  createDomainLifecycleWriter,
+  type DomainBindingRow,
+} from '@/lib/domain-lifecycle-writer';
+import { reconcileDeletingBinding } from '@/lib/domain-saas-orchestrator';
 import { triggerDomainEdgeConfigSync } from '@/lib/edge-config-sync';
 import {
   getDomainInformation,
@@ -240,11 +246,136 @@ export async function DELETE(
     }
 
     const merchantId = access.merchantId;
+    const normalizedDomain = domain.trim().toLowerCase();
 
+    // Resolve owned domain row first — return 404 with zero provider calls if absent
+    const { data: ownedDomain, error: lookupError } = await supabase
+      .from('domains')
+      .select('id, domain')
+      .eq('domain', normalizedDomain)
+      .eq('merchant_id', merchantId)
+      .maybeSingle();
+
+    if (lookupError) {
+      return NextResponse.json(
+        { error: 'Failed to look up domain' },
+        { status: 500 }
+      );
+    }
+
+    if (!ownedDomain) {
+      return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
+    }
+
+    // Check if this domain has a Cloudflare for SaaS binding
+    const { data: bindingRow, error: bindingError } = await supabase
+      .from('domain_provider_bindings')
+      .select(
+        'id, domain_id, merchant_id, hostname, dns_routing_provider, cloudflare_zone_id, cloudflare_hostname_id, requested_is_primary, lifecycle_state, current_operation_id, in_flight_lease_until, cloudflare_create_state, vercel_create_state, next_reconcile_at, provider_verification_records'
+      )
+      .eq('domain_id', ownedDomain.id)
+      .maybeSingle();
+
+    if (bindingError) {
+      console.error('Error querying domain provider binding:', bindingError);
+      return NextResponse.json(
+        { error: 'Failed to inspect domain lifecycle state' },
+        { status: 500 }
+      );
+    }
+
+    if (bindingRow) {
+      const cfConfig = readCloudflareSaasConfig();
+      const writer = createDomainLifecycleWriter();
+      if (!cfConfig || !writer) {
+        return NextResponse.json(
+          { error: 'Domain lifecycle service is unavailable' },
+          { status: 503 }
+        );
+      }
+
+      const { data: deletionReq, error: reqError } = await supabase.rpc(
+        'request_merchant_domain_deletion',
+        { p_hostname: normalizedDomain }
+      );
+
+      if (reqError) {
+        if (reqError.message?.includes('in_flight_lease_active')) {
+          return NextResponse.json(
+            { error: 'Domain provisioning is in progress. Try again shortly.' },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json(
+          { error: 'Failed to start domain deletion' },
+          { status: 500 }
+        );
+      }
+
+      const reqData = deletionReq as {
+        status: 'not_found' | 'legacy' | 'deleting' | 'in_flight';
+        domain_id?: string;
+        binding_id?: string;
+        operation_id?: string;
+        cloudflare_zone_id?: string | null;
+        cloudflare_hostname_id?: string | null;
+        cloudflare_create_state?: DomainBindingRow['cloudflare_create_state'];
+        vercel_create_state?: DomainBindingRow['vercel_create_state'];
+      };
+
+      if (reqData.status === 'in_flight') {
+        return NextResponse.json(
+          {
+            success: true,
+            released: false,
+            lifecycleState: 'deleting',
+          },
+          { status: 202 }
+        );
+      }
+
+      if (reqData.status === 'deleting' && reqData.operation_id) {
+        const result = await reconcileDeletingBinding(
+          {
+            ...(bindingRow as DomainBindingRow),
+            lifecycle_state: 'deleting',
+            current_operation_id: reqData.operation_id,
+            cloudflare_zone_id:
+              reqData.cloudflare_zone_id ?? bindingRow.cloudflare_zone_id,
+            cloudflare_hostname_id:
+              reqData.cloudflare_hostname_id ??
+              bindingRow.cloudflare_hostname_id,
+            cloudflare_create_state:
+              reqData.cloudflare_create_state ??
+              (bindingRow.cloudflare_create_state as DomainBindingRow['cloudflare_create_state']),
+            vercel_create_state:
+              reqData.vercel_create_state ??
+              (bindingRow.vercel_create_state as DomainBindingRow['vercel_create_state']),
+          },
+          { cfConfig, writer }
+        );
+
+        revalidateMerchantFeed(merchantId);
+        after(() => triggerDomainEdgeConfigSync());
+
+        return NextResponse.json(
+          {
+            success: true,
+            released: result.released,
+            lifecycleState: result.released
+              ? 'deleted'
+              : 'deleting_reconciling',
+          },
+          { status: result.released ? 200 : 202 }
+        );
+      }
+    }
+
+    // Legacy Vercel BYOD or Baci-purchased domain cleanup (no SaaS binding)
     const { error: deleteError } = await supabase
       .from('domains')
       .delete()
-      .eq('domain', domain)
+      .eq('id', ownedDomain.id)
       .eq('merchant_id', merchantId);
 
     if (deleteError) {
@@ -256,7 +387,7 @@ export async function DELETE(
 
     // Try to remove from Vercel as well (best effort)
     try {
-      await vercel.removeDomain(domain);
+      await vercel.removeDomain(normalizedDomain);
     } catch (vercelError) {
       console.warn('Failed to remove domain from Vercel:', vercelError);
       // We do not fail the request because DB deletion succeeded

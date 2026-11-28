@@ -27,10 +27,12 @@ export async function strictCloudflareHostnamePurge(
   {
     fetchImpl = fetch,
     timeoutMs = DEFAULT_TIMEOUT_MS,
-  }: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}
+    zoneId: explicitZoneId,
+  }: { fetchImpl?: typeof fetch; timeoutMs?: number; zoneId?: string } = {}
 ): Promise<StrictCloudflarePurgeResult> {
   const token = process.env.CLOUDFLARE_API_TOKEN?.trim();
-  const zoneId = process.env.CLOUDFLARE_ZONE_ID?.trim();
+  const zoneId =
+    explicitZoneId?.trim() || process.env.CLOUDFLARE_ZONE_ID?.trim();
   if (!token || !zoneId) {
     return { errorCode: 'cloudflare_missing_configuration', ok: false };
   }

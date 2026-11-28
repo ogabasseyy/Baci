@@ -4,7 +4,16 @@ import {
   getMerchantIdForApiUser,
 } from '@/lib/api-auth';
 import { revalidateMerchantFeed } from '@/lib/cache-revalidation';
+import {
+  CLOUDFLARE_SAAS_CNAME_TARGET,
+  readCloudflareSaasConfig,
+} from '@/lib/cloudflare-saas';
 import { checkCsrfProtection } from '@/lib/csrf';
+import {
+  createDomainLifecycleWriter,
+  type DomainBindingRow,
+} from '@/lib/domain-lifecycle-writer';
+import { reconcileProvisioningBinding } from '@/lib/domain-saas-orchestrator';
 import { triggerDomainEdgeConfigSync } from '@/lib/edge-config-sync';
 import {
   getMerchantFeatureAccess,
@@ -147,6 +156,130 @@ export async function POST(request: NextRequest) {
       return merchantFeatureUpgradeResponse('custom_domain');
     }
 
+    // ---------------------------------------------------------
+    // CLOUDFLARE FOR SAAS MULTI-TENANT ONBOARDING (when configured)
+    // ---------------------------------------------------------
+    const cfConfig = readCloudflareSaasConfig();
+    const writer = cfConfig ? createDomainLifecycleWriter() : null;
+    if (cfConfig && writer) {
+      const { data: reservation, error: reserveError } = await supabase.rpc(
+        'reserve_merchant_domain_onboarding',
+        {
+          p_hostname: domain,
+          p_is_primary: isPrimary ?? null,
+        }
+      );
+
+      if (reserveError) {
+        const msg = reserveError.message ?? '';
+        if (
+          reserveError.code === '23505' ||
+          msg.includes('domain_already_registered')
+        ) {
+          return NextResponse.json(
+            { error: 'This domain is already registered' },
+            { status: 409 }
+          );
+        }
+        if (msg.includes('domain_deletion_in_progress')) {
+          return NextResponse.json(
+            {
+              error: 'Domain deletion is still in progress. Try again shortly.',
+            },
+            { status: 409 }
+          );
+        }
+        if (msg.includes('custom_domain_entitlement_required')) {
+          return merchantFeatureUpgradeResponse('custom_domain');
+        }
+        if (msg.includes('forbidden_settings_edit')) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        console.error('Domain reservation error:', reserveError);
+        return NextResponse.json(
+          { error: 'Failed to reserve domain' },
+          { status: 500 }
+        );
+      }
+
+      const reserved = reservation as {
+        status: 'reserved' | 'resumed' | 'in_flight';
+        domain_id: string;
+        binding_id?: string;
+        operation_id: string;
+        lifecycle_state: DomainBindingRow['lifecycle_state'];
+        cloudflare_create_state?: DomainBindingRow['cloudflare_create_state'];
+        vercel_create_state?: DomainBindingRow['vercel_create_state'];
+        verification_records?: DomainBindingRow['provider_verification_records'];
+      };
+
+      const { data: domainRow } = await supabase
+        .from('domains')
+        .select(DOMAIN_SELECT)
+        .eq('id', reserved.domain_id)
+        .eq('merchant_id', merchantId)
+        .maybeSingle();
+
+      if (reserved.status === 'in_flight') {
+        return NextResponse.json(
+          {
+            domain: domainRow,
+            lifecycleState: reserved.lifecycle_state,
+            verificationRecords: reserved.verification_records ?? [
+              {
+                name: domain,
+                purpose: 'routing',
+                status: 'pending',
+                type: 'CNAME',
+                value: CLOUDFLARE_SAAS_CNAME_TARGET,
+              },
+            ],
+          },
+          { status: 202 }
+        );
+      }
+
+      const initialBinding: DomainBindingRow = {
+        id: reserved.binding_id ?? reserved.domain_id,
+        domain_id: reserved.domain_id,
+        merchant_id: merchantId,
+        hostname: domain,
+        dns_routing_provider: 'cloudflare_saas',
+        cloudflare_zone_id: cfConfig.zoneId,
+        cloudflare_hostname_id: null,
+        requested_is_primary: isPrimary ?? false,
+        lifecycle_state: reserved.lifecycle_state,
+        current_operation_id: reserved.operation_id,
+        in_flight_lease_until: null,
+        cloudflare_create_state: reserved.cloudflare_create_state ?? 'none',
+        vercel_create_state: reserved.vercel_create_state ?? 'none',
+        next_reconcile_at: null,
+        provider_verification_records: [],
+      };
+
+      const reconciled = await reconcileProvisioningBinding(initialBinding, {
+        cfConfig,
+        writer,
+      });
+
+      revalidateMerchantFeed(merchantId);
+
+      return NextResponse.json(
+        {
+          domain: domainRow,
+          lifecycleState: reconciled.binding.lifecycle_state,
+          verificationRecords: reconciled.verificationRecords,
+          verification: {
+            type: 'CNAME',
+            name: domain,
+            value: CLOUDFLARE_SAAS_CNAME_TARGET,
+            instructions: `Point ${domain} to ${CLOUDFLARE_SAAS_CNAME_TARGET} and add any required TXT records`,
+          },
+        },
+        { status: reconciled.settled ? 201 : 202 }
+      );
+    }
+
     // Extract TLD
     let tld = `.${domain.split('.').slice(-1)[0]}`;
     if (domain.endsWith('.ng') || domain.match(/\.[a-z]+\.ng$/)) {
@@ -224,7 +357,7 @@ export async function POST(request: NextRequest) {
         ssl_status: sslStatus,
         verification_token: verificationToken,
         verification_token_expires_at: verificationTokenExpiresAt,
-        is_primary: isPrimary,
+        is_primary: isPrimary ?? false,
       })
       .select(DOMAIN_SELECT)
       .single();

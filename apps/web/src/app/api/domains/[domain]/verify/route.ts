@@ -2,7 +2,15 @@ import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { hasPermission } from '@/lib/api-auth';
 import { revalidateMerchantFeed } from '@/lib/cache-revalidation';
+import {
+  extractCloudflareVerificationRecords,
+  findCloudflareCustomHostnameByName,
+  getCloudflareCustomHostname,
+  readCloudflareSaasConfig,
+} from '@/lib/cloudflare-saas';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { createDomainLifecycleWriter } from '@/lib/domain-lifecycle-writer';
+import { probeStorefrontRouting } from '@/lib/domain-saas-orchestrator';
 import { triggerDomainEdgeConfigSync } from '@/lib/edge-config-sync';
 import {
   getMerchantForApiRequest,
@@ -126,7 +134,121 @@ export async function POST(
       );
     }
 
-    // Call Vercel Verify API
+    // Check if this domain uses the Cloudflare for SaaS binding lifecycle
+    const { data: bindingRow } = await supabase
+      .from('domain_provider_bindings')
+      .select(
+        'id, domain_id, hostname, cloudflare_zone_id, cloudflare_hostname_id, lifecycle_state'
+      )
+      .eq('domain_id', domainRecord.id)
+      .maybeSingle();
+
+    if (bindingRow) {
+      const cfConfig = readCloudflareSaasConfig();
+      const writer = createDomainLifecycleWriter();
+      if (!cfConfig || !writer) {
+        return NextResponse.json(
+          { success: false, error: 'Domain lifecycle service is unavailable' },
+          { status: 503 }
+        );
+      }
+
+      const zoneConfig = {
+        ...cfConfig,
+        zoneId: bindingRow.cloudflare_zone_id ?? cfConfig.zoneId,
+      };
+      const cfRemote = bindingRow.cloudflare_hostname_id
+        ? await getCloudflareCustomHostname(
+            bindingRow.cloudflare_hostname_id,
+            zoneConfig
+          )
+        : await findCloudflareCustomHostnameByName(
+            bindingRow.hostname,
+            zoneConfig
+          );
+
+      const verificationRecords = extractCloudflareVerificationRecords(
+        bindingRow.hostname,
+        cfRemote
+      );
+      const cfActive =
+        cfRemote?.status === 'active' && cfRemote?.ssl?.status === 'active';
+
+      const vercelResult = await vercel.verifyDomain(bindingRow.hostname);
+      if (!cfActive || !vercelResult.verified) {
+        return NextResponse.json(
+          {
+            success: false,
+            verified: false,
+            lifecycleState: bindingRow.lifecycle_state,
+            verificationRecords,
+            error: !cfActive
+              ? 'Cloudflare hostname or SSL certificate is still pending validation.'
+              : getVerificationErrorMessage(
+                  vercelResult.verification,
+                  bindingRow.hostname
+                ),
+          },
+          { status: 400 }
+        );
+      }
+
+      const { data: merchantRow } = await supabase
+        .from('merchants')
+        .select('slug')
+        .eq('id', merchantId)
+        .maybeSingle();
+
+      const expectedSlug = merchantRow?.slug ?? '';
+      if (!expectedSlug) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Merchant slug is unavailable for routing verification',
+          },
+          { status: 500 }
+        );
+      }
+
+      const verifyOpId = crypto.randomUUID();
+      await writer.advanceToVerifyingRouting(domainRecord.id, verifyOpId);
+      await triggerDomainEdgeConfigSync();
+
+      const probe = await probeStorefrontRouting(
+        bindingRow.hostname,
+        expectedSlug
+      );
+      if (!probe.ok) {
+        await writer.withdrawVerifyingRouting(domainRecord.id, verifyOpId);
+        await triggerDomainEdgeConfigSync();
+        return NextResponse.json(
+          {
+            success: false,
+            verified: false,
+            lifecycleState: 'pending_verification',
+            verificationRecords,
+            error:
+              probe.error ??
+              'Storefront routing probe failed; domain remains pending.',
+          },
+          { status: 502 }
+        );
+      }
+
+      await writer.commitDomainActive(domainRecord.id, verifyOpId);
+      revalidateMerchantFeed(merchantId);
+      after(() => triggerDomainEdgeConfigSync());
+
+      return NextResponse.json({
+        success: true,
+        verified: true,
+        lifecycleState: 'active',
+        verificationRecords,
+        message: 'Domain successfully verified and active!',
+      });
+    }
+
+    // Call Vercel Verify API (legacy Vercel BYOD flow)
     let verifyResult: Awaited<ReturnType<typeof vercel.verifyDomain>>;
     try {
       verifyResult = await vercel.verifyDomain(domain);

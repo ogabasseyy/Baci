@@ -8,6 +8,10 @@ vi.mock('./components/PopupSystem', () => ({
   PopupSystem: () => <section aria-label="Popup system" />,
 }));
 
+vi.mock('./components/SnowEffect', () => ({
+  SnowEffect: () => <section aria-label="Snow effect" />,
+}));
+
 vi.mock('./components/OfflineNotice', () => ({
   OfflineNotice: () => <output aria-label="Offline notice" />,
 }));
@@ -56,5 +60,25 @@ describe('StorefrontDeferredOverlayChrome', () => {
     expect(
       await screen.findByRole('status', { name: /offline notice/i })
     ).toBeInTheDocument();
+  });
+
+  it('mounts the seasonal snow on shopping pages', () => {
+    render(<StorefrontDeferredOverlayChrome />);
+    expect(
+      screen.getByRole('region', { name: /snow effect/i })
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    '/ogabassey/checkout',
+    '/ogabassey/account/login',
+    '/ogabassey/track-order',
+    '/auth/callback',
+  ])('keeps snow off %s', (pathname) => {
+    route.pathname = pathname;
+    render(<StorefrontDeferredOverlayChrome />);
+    expect(
+      screen.queryByRole('region', { name: /snow effect/i })
+    ).not.toBeInTheDocument();
   });
 });

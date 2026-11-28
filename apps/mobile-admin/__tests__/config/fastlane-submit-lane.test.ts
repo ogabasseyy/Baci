@@ -18,15 +18,22 @@ interface Store {
   review?: string;
   pastSubmissions?: string[];
   versions?: string[];
+  announce?: boolean;
 }
 
 // Runs the real Ruby guard against a stubbed App Store Connect.
-function runGuard({ review, pastSubmissions = [], versions = [] }: Store) {
+function runGuard({
+  review,
+  pastSubmissions = [],
+  versions = [],
+  announce = true,
+}: Store) {
   const ruby = (value?: string) => (value ? `"${value}"` : 'nil');
   const script = `
     module UI
       def self.user_error!(message); puts "FAIL #{message}"; exit 0; end
       def self.important(message); puts message; end
+      def self.message(message); puts message; end
     end
     module Spaceship
       module ConnectAPI
@@ -52,7 +59,7 @@ function runGuard({ review, pastSubmissions = [], versions = [] }: Store) {
       end
     end
     require ${JSON.stringify(resolve(fastlaneDir, 'pending_review_guard'))}
-    puts "blocked=#{pending_review_blocks_submission?(app_id: "id")}"
+    puts "blocked=#{pending_review_blocks_submission?(app_id: "id", announce: ${announce})}"
   `;
   return execFileSync('ruby', ['-e', script], { encoding: 'utf8' });
 }
@@ -156,5 +163,18 @@ describe('admin iOS submit lane', () => {
     expect(runGuard({ review: 'UNRESOLVED_ISSUES' })).toContain(
       'FAIL Apple rejected the last submission'
     );
+  });
+
+  it('stays quiet about a held slot for the scheduled check', () => {
+    const output = runGuard({ review: 'IN_REVIEW', announce: false });
+    expect(output).not.toContain('::warning');
+    expect(output).toContain('Nothing to do');
+    expect(output).toContain('blocked=true');
+  });
+
+  it('still fails the scheduled check when Apple rejected', () => {
+    expect(
+      runGuard({ review: 'UNRESOLVED_ISSUES', announce: false })
+    ).toContain('FAIL Apple rejected the last submission');
   });
 });

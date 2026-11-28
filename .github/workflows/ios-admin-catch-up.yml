@@ -1,0 +1,121 @@
+name: iOS Admin App Store Catch-up
+
+# Sends the newest admin build from main to App Review once Apple's single slot
+# is free. It builds nothing: ios-release.yml builds and uploads to TestFlight.
+# It never withdraws or cancels a review. To pause it, disable this workflow.
+
+# Every 3 hours, off the hour because GitHub delays top-of-hour schedules.
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+
+# Its own group: joining ios-release's would cancel a release build.
+concurrency:
+  group: ios-admin-catch-up
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  RUBY_VERSION: '3.4'
+  WORKING_DIR: apps/mobile-admin
+  # Must match ios-release.yml: build number = run number + this.
+  BUILD_NUMBER_BASE: '30'
+
+jobs:
+  catch-up:
+    name: Send the newest main build if the slot is free
+    # This job holds the App Store Connect key, so it runs main's code only.
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          # Cache restores stay off in a job that holds ASC credentials.
+          bundler-cache: false
+          working-directory: ${{ env.WORKING_DIR }}
+
+      - name: Install Ruby dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle install --jobs 4 --retry 3
+
+      - name: Test ActiveSupport backport on source fixture
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.test.rb
+
+      - name: Apply ActiveSupport security backport
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.rb
+
+      - name: Verify installed ActiveSupport security backport
+        working-directory: ${{ env.WORKING_DIR }}
+        run: bundle exec ruby ../../.github/scripts/patch-ios-activesupport.test.rb --verify-installed
+
+      - name: Materialize App Store Connect API key
+        env:
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          if [ -z "$ASC_API_KEY_P8_BASE64" ] || [ -z "$ASC_API_KEY_ID" ] || [ -z "$ASC_API_ISSUER_ID" ]; then
+            echo "::error::ASC_API_KEY_P8_BASE64, ASC_API_KEY_ID, and ASC_API_ISSUER_ID secrets must be set"
+            exit 1
+          fi
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          umask 077
+          KEY_PATH="$KEY_DIR/AuthKey_${ASC_API_KEY_ID}.p8"
+          echo "$ASC_API_KEY_P8_BASE64" | base64 -d > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          echo "ASC_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      # Same script as the release workflow's step of this name.
+      - name: Resolve release notes
+        shell: bash
+        env:
+          WORKFLOW_NOTES: ${{ vars.IOS_ADMIN_RELEASE_NOTES }}
+        run: |
+          NOTES="${WORKFLOW_NOTES:-Bug fixes and performance improvements.}"
+          NOTES="${NOTES:0:4000}"
+          DELIM="EOF_$(uuidgen | tr -d '-')"
+          {
+            echo "IOS_RELEASE_NOTES<<$DELIM"
+            echo "$NOTES"
+            echo "$DELIM"
+          } >> "$GITHUB_ENV"
+
+      - name: Send the newest main build to App Review
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          CI: '1'
+          FASTLANE_DISABLE_COLORS: '1'
+          FASTLANE_HIDE_CHANGELOG: '1'
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_PATH: ${{ env.ASC_API_KEY_PATH }}
+          # Read-only: lists release runs to see which builds main uploaded.
+          GITHUB_TOKEN: ${{ github.token }}
+          APP_STORE_PROCESSING_WAIT_TIMEOUT_SECONDS: '1200'
+        run: |
+          if [ -z "${IOS_RELEASE_NOTES:-}" ]; then
+            echo "::error::IOS_RELEASE_NOTES was not resolved before App Store submission"
+            exit 1
+          fi
+          bundle exec fastlane ios catch_up
+
+      - name: Clean up secrets
+        if: always()
+        run: rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_"*.p8

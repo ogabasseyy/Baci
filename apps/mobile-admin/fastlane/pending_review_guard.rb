@@ -14,7 +14,9 @@ APPROVED_UNRELEASED_VERSION_STATES = %w[
 # Submissions on their way out, which the in-progress query does not return.
 UNSETTLED_SUBMISSION_STATES = %w[CANCELING COMPLETING].freeze
 
-def pending_review_blocks_submission?(app_id:)
+# `announce: false` is for the scheduled check: a held slot is its normal state,
+# so a warning on every run would only be noise.
+def pending_review_blocks_submission?(app_id:, announce: true)
   app = Spaceship::ConnectAPI::App.find(app_id)
   UI.user_error!("Could not find App Store Connect app #{app_id}") unless app
 
@@ -33,11 +35,15 @@ def pending_review_blocks_submission?(app_id:)
   holding_state = submission&.state || occupied_slot_state(app, platform)
   return false unless holding_state
 
-  message =
-    "An earlier version still holds the App Store slot (#{holding_state}), so " \
-    "this build was not submitted. It is on TestFlight."
-  UI.important(message)
-  puts "::warning title=Not submitted to App Review::#{message}"
+  if announce
+    message =
+      "An earlier version still holds the App Store slot (#{holding_state}), so " \
+      "this build was not submitted. It is on TestFlight."
+    UI.important(message)
+    puts "::warning title=Not submitted to App Review::#{message}"
+  else
+    UI.message("An earlier version still holds the App Store slot (#{holding_state}). Nothing to do.")
+  end
   true
 end
 

@@ -3,6 +3,7 @@ import 'server-only';
 import { revalidateTag } from 'next/cache';
 import { cacheInvalidationPurgeCausalKey } from '@/lib/cache-invalidation-purge-causal-key';
 import { buildMerchantPublicationDataCacheTags } from '@/lib/merchant-publication-data-cache-tags';
+import { resolveMerchantSaasPurgeTargets } from '@/lib/merchant-saas-purge-targets';
 import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
 import { revalidateCategories } from '@/lib/revalidate-categories';
@@ -173,18 +174,48 @@ export async function drainStorefrontCacheInvalidation(
     };
   }
 
-  if (identity.hostnames.length === 0) return { ok: true };
+  const saasTargets = await resolveMerchantSaasPurgeTargets(claim.merchant_id);
+  if (!saasTargets.ok) {
+    return { errorCode: saasTargets.errorCode, ok: false };
+  }
+
   const hostnames = uniqueStable(identity.hostnames);
+  if (hostnames.length === 0 && saasTargets.zones.size === 0) {
+    return { ok: true };
+  }
+
   const vercelTags = uniqueStable([
     ...dataTags,
     ...productTags,
     ...buildStorefrontPublicationCacheTags(identity),
   ]);
-  // Only duplicate work for the same merchant generation may share a purge.
-  // A newer mutation must purge again even if the older provider response is
-  // still pending. Equivalent slug/hostname rows from one enqueue share work.
-  const key = `${claimKey}:${[...hostnames].sort().join('|')}::${[...vercelTags].sort().join('|')}`;
-  return cloudflarePurgeSingleFlight.run(key, () =>
-    strictCloudflareHostnamePurge(hostnames)
-  );
+
+  if (hostnames.length > 0) {
+    // Only duplicate work for the same merchant generation may share a purge.
+    // A newer mutation must purge again even if the older provider response is
+    // still pending. Equivalent slug/hostname rows from one enqueue share work.
+    const key = `${claimKey}:${[...hostnames].sort().join('|')}::${[...vercelTags].sort().join('|')}`;
+    const legacyResult = await cloudflarePurgeSingleFlight.run(key, () =>
+      strictCloudflareHostnamePurge(hostnames)
+    );
+    if (!legacyResult.ok) {
+      return legacyResult;
+    }
+  }
+
+  // Purge active Cloudflare-for-SaaS hostnames grouped by zone, failing closed
+  // if any zone purge fails so the outbox retries.
+  for (const [zoneId, zoneHostnames] of saasTargets.zones.entries()) {
+    const uniqueZoneHosts = uniqueStable(zoneHostnames);
+    if (uniqueZoneHosts.length === 0) continue;
+    const zoneKey = `${claimKey}:zone:${zoneId}:${[...uniqueZoneHosts].sort().join('|')}::${[...vercelTags].sort().join('|')}`;
+    const zoneResult = await cloudflarePurgeSingleFlight.run(zoneKey, () =>
+      strictCloudflareHostnamePurge(uniqueZoneHosts, { zoneId })
+    );
+    if (!zoneResult.ok) {
+      return zoneResult;
+    }
+  }
+
+  return { ok: true };
 }

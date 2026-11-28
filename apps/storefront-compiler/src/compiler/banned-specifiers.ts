@@ -160,6 +160,9 @@ export const BENIGN_OBJECT_DATA_KEYS: ReadonlySet<string> = new Set([
   'constructor',
   'cookie',
   'serviceWorker',
+  'location',
+  'history',
+  'opener',
 ]);
 
 export const DYNAMIC_CODE_NAMES: ReadonlySet<string> = new Set([

@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6';
+import { resolveStaticString } from './const-string-fold';
 import { collectReassignedIdentifiers } from './dom-mutation-guard';
 import { resolveVirtualModule } from './jsx-export-graph';
 import {
@@ -24,9 +25,14 @@ function unwrap(expr: ts.Expression): ts.Expression {
   return expr;
 }
 
+export interface SdkOpenReceiverChecker {
+  (expr?: ts.Expression): boolean;
+  isCommerceRoot: (expr?: ts.Expression) => boolean;
+}
+
 export function createSdkOpenReceiverChecker(
   parsedFiles: ReadonlyMap<string, ts.SourceFile>
-): (filePath: string, sf: ts.SourceFile) => (expr?: ts.Expression) => boolean {
+): (filePath: string, sf: ts.SourceFile) => SdkOpenReceiverChecker {
   const exportedFactoryCache = new Map<string, ReadonlySet<string>>();
   const visiting = new Set<string>();
 
@@ -150,6 +156,12 @@ export function createSdkOpenReceiverChecker(
       ) {
         return isCommerceExpr(expr.expression, depth + 1);
       }
+      if (ts.isElementAccessExpression(expr)) {
+        const key = resolveStaticString(expr.argumentExpression);
+        if (key === 'navigation' || key === 'checkout') {
+          return isCommerceExpr(expr.expression, depth + 1);
+        }
+      }
       if (ts.isIdentifier(expr) && !unsafeIds.has(expr.text)) {
         const found = findLexicalConstDeclaration(expr, expr.text);
         if (!found?.decl.initializer) return false;
@@ -166,6 +178,10 @@ export function createSdkOpenReceiverChecker(
       return false;
     };
 
-    return (receiver?: ts.Expression) => isOpenSubclient(receiver, 0);
+    const fn = ((receiver?: ts.Expression) =>
+      isOpenSubclient(receiver, 0)) as SdkOpenReceiverChecker;
+    fn.isCommerceRoot = (expr?: ts.Expression) =>
+      expr !== undefined && isCommerceExpr(expr, 0);
+    return fn;
   };
 }

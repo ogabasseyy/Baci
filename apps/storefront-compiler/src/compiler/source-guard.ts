@@ -129,9 +129,8 @@ export function scanManifestSourceSafety(
         if (jsxError !== null) fail('DANGEROUS_INNER_HTML', jsxError);
         checkFormElementSafety(jsxEnv, node, sourceFile);
       }
-      if (ts.isJsxAttribute(node)) {
+      if (ts.isJsxAttribute(node))
         checkJsxAttributeSafety(jsxEnv, node, sourceFile);
-      }
       if (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) {
         classifyMemberName(
           filePath,
@@ -139,9 +138,8 @@ export function scanManifestSourceSafety(
           violations
         );
       }
-      if (ts.isJsxSpreadAttribute(node)) {
+      if (ts.isJsxSpreadAttribute(node))
         checkJsxSpreadAttributeSafety(jsxEnv, node);
-      }
 
       if (
         ts.isPropertyAssignment(node) ||
@@ -289,7 +287,12 @@ export function scanManifestSourceSafety(
     };
 
     visit(sourceFile);
-    checkOpenDestructuringSafety(sourceFile, filePath, violations);
+    checkOpenDestructuringSafety(
+      sourceFile,
+      filePath,
+      violations,
+      isSdkOpenReceiver.isCommerceRoot
+    );
   }
 
   return violations;

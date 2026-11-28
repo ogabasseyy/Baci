@@ -75,10 +75,24 @@ export function classifyMemberName(
       `Forbidden raw HTML or React element sink "${memberName}"`
     );
   } else if (
-    (memberName === 'location' ||
-      memberName === 'history' ||
-      memberName === 'opener') &&
-    receiver !== undefined
+    memberName === 'location' ||
+    memberName === 'history' ||
+    memberName === 'opener' ||
+    memberName === 'pushState' ||
+    memberName === 'replaceState' ||
+    memberName === 'traverseTo' ||
+    memberName === 'reload' ||
+    memberName === 'navigate' ||
+    (memberName === 'replace' &&
+      memberAccessNode?.parent !== undefined &&
+      ts.isCallExpression(memberAccessNode.parent) &&
+      memberAccessNode.parent.expression === memberAccessNode &&
+      memberAccessNode.parent.arguments.length <= 1) ||
+    (memberName === 'navigation' &&
+      receiver !== undefined &&
+      memberAccessNode !== undefined &&
+      ts.isExpression(memberAccessNode) &&
+      !(isSdkOpenReceiver?.(memberAccessNode) ?? false))
   ) {
     push(
       'DYNAMIC_CODE_EVAL',

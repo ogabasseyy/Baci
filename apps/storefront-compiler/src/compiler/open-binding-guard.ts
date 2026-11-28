@@ -1,4 +1,9 @@
 import ts from '@typescript/typescript6';
+import {
+  BENIGN_OBJECT_DATA_KEYS,
+  FORBIDDEN_BROWSER_CAPABILITY_GLOBALS,
+  SENSITIVE_GLOBAL_ROOTS,
+} from './banned-specifiers';
 import { resolveStaticString } from './const-string-fold';
 import { bindingContainsName, hasDeclareModifier } from './jsx-export-graph';
 import { hasLocalLexicalBinding } from './jsx-tag-safety';
@@ -90,10 +95,54 @@ function scopeDeclaresShadow(scope: ts.Node, target: string): boolean {
 export function checkOpenDestructuringSafety(
   sourceFile: ts.SourceFile,
   filePath: string,
-  violations: SourceSafetyViolation[]
+  violations: SourceSafetyViolation[],
+  isCommerceRoot?: (expr?: ts.Expression) => boolean
 ): void {
   const propOpenScopes = new Map<ts.Node, Set<string>>();
   const collect = (node: ts.Node): void => {
+    if (ts.isTypeNode(node)) {
+      if (
+        ts.isExpressionWithTypeArguments(node) &&
+        ts.isHeritageClause(node.parent) &&
+        node.parent.token === ts.SyntaxKind.ExtendsKeyword
+      ) {
+        collect(node.expression);
+      }
+      return;
+    }
+    if (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) {
+      return;
+    }
+    if (
+      ts.isObjectLiteralExpression(node) &&
+      node.parent &&
+      ts.isBinaryExpression(node.parent) &&
+      node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      node.parent.left === node
+    ) {
+      for (const prop of node.properties) {
+        const key = ts.isShorthandPropertyAssignment(prop)
+          ? prop.name.text
+          : ts.isPropertyAssignment(prop)
+            ? ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name)
+              ? prop.name.text
+              : ts.isComputedPropertyName(prop.name)
+                ? resolveStaticString(prop.name.expression)
+                : null
+            : null;
+        if (
+          key === 'open' ||
+          key === 'navigation' ||
+          (key !== null && BENIGN_OBJECT_DATA_KEYS.has(key))
+        ) {
+          violations.push({
+            filePath,
+            rule: 'DYNAMIC_CODE_EVAL',
+            detail: `Assignment destructuring of "${key}" is forbidden`,
+          });
+        }
+      }
+    }
     if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) {
       const keyNode = node.propertyName ?? node.name;
       const key =
@@ -102,7 +151,48 @@ export function checkOpenDestructuringSafety(
           : ts.isComputedPropertyName(keyNode)
             ? resolveStaticString(keyNode.expression)
             : null;
-      if (key === 'open') {
+      if (key === 'navigation') {
+        const decl = ts.isVariableDeclaration(node.parent.parent)
+          ? node.parent.parent
+          : null;
+        const list =
+          decl && ts.isVariableDeclarationList(decl.parent)
+            ? decl.parent
+            : null;
+        const isConst = Boolean(
+          list && (list.flags & ts.NodeFlags.Const) !== 0
+        );
+        if (
+          !decl ||
+          !isConst ||
+          node.dotDotDotToken ||
+          !(isCommerceRoot?.(decl.initializer) ?? false)
+        ) {
+          violations.push({
+            filePath,
+            rule: 'DYNAMIC_CODE_EVAL',
+            detail:
+              'Direct browser navigation via "navigation" destructuring is forbidden; use @baci/experience-sdk navigation',
+          });
+        }
+      } else if (key === 'caches') {
+        violations.push({
+          filePath,
+          rule: 'DIRECT_COOKIE_ACCESS',
+          detail:
+            'Custom storefronts are cookie/storage-free; use @baci/experience-sdk APIs',
+        });
+      } else if (
+        key !== null &&
+        (SENSITIVE_GLOBAL_ROOTS.has(key) ||
+          FORBIDDEN_BROWSER_CAPABILITY_GLOBALS.has(key))
+      ) {
+        violations.push({
+          filePath,
+          rule: 'DYNAMIC_CODE_EVAL',
+          detail: `Destructuring browser global or capability "${key}" is forbidden`,
+        });
+      } else if (key === 'open') {
         const param = ts.isParameter(node.parent.parent)
           ? node.parent.parent
           : null;

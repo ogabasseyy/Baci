@@ -67,7 +67,7 @@ describe('bugfix: a follow-up never ends up half applied', () => {
         update,
         now: NOW,
       })
-    ).resolves.toEqual({ ok: false, code: 'unavailable' });
+    ).resolves.toMatchObject({ ok: false, code: 'unavailable' });
 
     expect(labels()).toContain('follow-up');
     expect(calls.filter((c) => c.path.endsWith('/labels'))).toHaveLength(1);
@@ -164,7 +164,7 @@ describe('bugfix: a follow-up never ends up half applied', () => {
         update,
         now: NOW,
       })
-    ).resolves.toEqual({ ok: false, code: 'unavailable' });
+    ).resolves.toMatchObject({ ok: false, code: 'unavailable' });
 
     // Unknown is not "not snoozed": a visible follow-up beats a vanished one.
     expect(labels()).toContain('follow-up');

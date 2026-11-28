@@ -81,7 +81,7 @@ describe('sendChatEventPush', () => {
         merchant_id: input.merchantId,
       },
       'general',
-      { categoryId: 'chat_reply' }
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -94,7 +94,7 @@ describe('sendChatEventPush', () => {
       'A customer sent a message to your store.',
       expect.anything(),
       'general',
-      { categoryId: 'chat_reply' }
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -120,7 +120,7 @@ describe('sendChatEventPush', () => {
         handover: true,
       },
       'general',
-      { categoryId: 'chat_reply' }
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
   });
 
@@ -136,8 +136,42 @@ describe('sendChatEventPush', () => {
       'The assistant handed this chat to your team. Open it to reply.',
       expect.objectContaining({ handover: true }),
       'general',
-      { categoryId: 'chat_reply' }
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
     );
+  });
+
+  it('pushes a due follow-up with its own wording and a follow-up marker', async () => {
+    await sendChatEventPush(
+      {
+        ...input,
+        eventKey: 'fu-0123456789abcdef0123456789abcdef',
+        preview: '',
+        kind: 'follow_up',
+      },
+      env
+    );
+    expect(mocks.notify).toHaveBeenCalledWith(
+      { store: true },
+      input.merchantId,
+      'Follow up: Ada',
+      'This chat is due for a follow-up. Open it to reply.',
+      {
+        type: 'customer_message',
+        conversation_id: 21,
+        merchant_id: input.merchantId,
+        follow_up: true,
+      },
+      'general',
+      { categoryId: 'chat_reply', onDeliveryStart: expect.any(Function) }
+    );
+  });
+
+  it('uses neutral wording for a follow-up on a chat with no name', async () => {
+    await sendChatEventPush(
+      { ...input, customerName: '', preview: '', kind: 'follow_up' },
+      env
+    );
+    expect(mocks.notify.mock.calls[0][2]).toBe('Time to follow up');
   });
 
   it('keeps ordinary message pushes free of the handover marker', async () => {
@@ -165,6 +199,7 @@ describe('sendChatEventPush', () => {
     );
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
     });
     expect(mocks.notify).not.toHaveBeenCalled();
   });
@@ -184,6 +219,7 @@ describe('sendChatEventPush', () => {
     });
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
     });
   });
 
@@ -191,6 +227,7 @@ describe('sendChatEventPush', () => {
     mocks.notify.mockResolvedValue({ sent: 0, failed: 0, errors: ['boom'] });
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
     });
   });
 
@@ -209,6 +246,7 @@ describe('sendChatEventPush', () => {
       status: 'sent',
       sent: 0,
       failed: 0,
+      noDevices: true,
     });
   });
 
@@ -216,6 +254,18 @@ describe('sendChatEventPush', () => {
     mocks.notify.mockRejectedValue(new Error('expo down'));
     await expect(sendChatEventPush(input, env)).resolves.toEqual({
       status: 'failed',
+      nothingSent: true,
+    });
+  });
+
+  it('bugfix: says a failure may have left once delivery to the provider started', async () => {
+    mocks.notify.mockImplementation(async (...args: unknown[]) => {
+      await (args[6] as { onDeliveryStart: () => void }).onDeliveryStart();
+      throw new Error('timed out');
+    });
+    await expect(sendChatEventPush(input, env)).resolves.toEqual({
+      status: 'failed',
+      nothingSent: false,
     });
   });
 

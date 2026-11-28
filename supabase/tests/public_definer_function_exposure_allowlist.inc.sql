@@ -250,6 +250,14 @@ SELECT * FROM (VALUES
    'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
   ('public.record_chat_handover(text,bigint,uuid,text,bigint,text)',
    'signed chat webhook flow; short-lived HMAC proof verified in the body, no service role'),
+  ('public.list_due_chat_follow_up_reminders(text,bigint,integer)',
+   'cron sweep; short-lived HMAC proof verified in the body, no service role'),
+  ('public.record_chat_follow_up_reminder(text,bigint,uuid,uuid,boolean)',
+   'cron sweep; short-lived HMAC proof verified in the body, no service role'),
+  ('public.release_chat_follow_up_reminder(text,bigint,uuid,uuid,integer)',
+   'cron sweep; short-lived HMAC proof verified in the body, no service role'),
+  ('public.chat_event_mark_push_dispatch(text,bigint,uuid,text,uuid)',
+   'signed chat push flow; action-bound HMAC proof verified in the body, no service role'),
   ('public.oxygen_storefront_pilot_available(uuid)',
    'public storefront/feed read; anon-safe boolean display hint when mode=open')
 ) AS allowlist(signature, reason);

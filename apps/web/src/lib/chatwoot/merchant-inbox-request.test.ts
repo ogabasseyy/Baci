@@ -98,7 +98,7 @@ beforeEach(() => {
 });
 
 describe('resolveMerchantInboxRequest', () => {
-  it('returns the binding of the session merchant for an owner', async () => {
+  it('returns the binding and the caller session client for an owner', async () => {
     await expect(resolveMerchantInboxRequest(request, 'view')).resolves.toEqual(
       {
         ok: true,

@@ -30,8 +30,8 @@ export function merchantInboxJson(body: unknown): NextResponse {
 
 /**
  * Authenticates the caller (cookie or Bearer), resolves their merchant (owner or staff) and
- * returns that merchant's inbox binding. The merchant is never chosen by the
- * request: only the signed-in session selects it.
+ * returns that merchant's inbox binding and the caller's session client. The
+ * merchant is never chosen by the request: only the signed-in session selects it.
  */
 export async function resolveMerchantInboxRequest(
   request: NextRequest,
@@ -40,7 +40,7 @@ export async function resolveMerchantInboxRequest(
   | {
       ok: true;
       binding: MerchantInboxBinding;
-      /** The caller's own RLS-scoped client, for reads on their store. */
+      /** The caller's own RLS-scoped client: reads and writes stay under their rights. */
       supabase: NonNullable<
         Awaited<ReturnType<typeof authenticateApiRequest>>['supabase']
       >;

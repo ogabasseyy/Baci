@@ -5,6 +5,7 @@ import { CHAT_REPLY_NOTIFICATION_CATEGORY } from '@baci/shared';
 import { notifyMerchantWithStore } from '@/lib/expo-push-core';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { CHAT_EVENT_SECRET_PATTERN } from './chat-event-intake';
+import { markChatEventPushDispatch } from './chat-event-push-mark';
 import {
   chatEventPushArgs,
   createChatEventPushStore,
@@ -16,21 +17,28 @@ export type ChatEventPushInput = {
   conversationId: number;
   customerName: string;
   preview: string;
-  /** An assistant handover is worded and marked differently. Default: message. */
-  kind?: 'message' | 'handover';
+  /**
+   * An assistant handover and a due follow-up are worded and marked
+   * differently. Default: message.
+   */
+  kind?: 'message' | 'handover' | 'follow_up';
 };
 
 export type ChatEventPushResult =
-  | { status: 'sent'; sent: number; failed: number }
+  /** `noDevices`: nothing to deliver to, so nothing reached the provider. */
+  | { status: 'sent'; sent: number; failed: number; noDevices?: true }
   | { status: 'partial'; sent: number; failed: number }
   | {
       status: 'skipped';
       reason: 'not_configured' | 'already_claimed' | 'muted';
     }
-  | { status: 'failed' };
+  /** `nothingSent`: the push provably never reached the delivery provider. */
+  | { status: 'failed'; nothingSent: boolean };
 
 const HANDOVER_PUSH_BODY =
   'The assistant handed this chat to your team. Open it to reply.';
+const FOLLOW_UP_PUSH_BODY =
+  'This chat is due for a follow-up. Open it to reply.';
 
 /** Fixed wording per kind; only the bounded customer name and preview vary. */
 function pushContent(input: ChatEventPushInput) {
@@ -45,6 +53,20 @@ function pushContent(input: ChatEventPushInput) {
         conversation_id: input.conversationId,
         merchant_id: input.merchantId,
         handover: true,
+      },
+    };
+  }
+  if (input.kind === 'follow_up') {
+    return {
+      title: input.customerName
+        ? `Follow up: ${input.customerName}`
+        : 'Time to follow up',
+      body: FOLLOW_UP_PUSH_BODY,
+      data: {
+        type: 'customer_message',
+        conversation_id: input.conversationId,
+        merchant_id: input.merchantId,
+        follow_up: true,
       },
     };
   }
@@ -63,11 +85,12 @@ function pushContent(input: ChatEventPushInput) {
 
 /**
  * Pushes a "new customer message" (or, for an assistant handover, "needs a
- * person") notification to the store's merchant-app
+ * person", or for a due follow-up "Follow up") notification to the store's merchant-app
  * devices for one notified chat event, unless the merchant turned chat push
  * alerts off. Best effort and at most once: the
  * database hands out a single claim per event, so a redelivered webhook
- * never pushes twice, and a failed push is not retried here.
+ * never pushes twice, and a failed push is not retried here (a caller may
+ * retry only a failure that says `nothingSent`).
  *
  * Contract: call this only for an event the database just recorded as
  * `notified` (and not as a duplicate). The alert level is applied there: an
@@ -89,6 +112,8 @@ export async function sendChatEventPush(
     eventKey: input.eventKey,
     claim: randomUUID(),
   };
+  // Set just before the first request to the delivery provider.
+  let dispatched = false;
   try {
     const client = createAnonClient();
     // The merchant can mute chat pushes. An unreadable switch is treated as
@@ -103,7 +128,7 @@ export async function sendChatEventPush(
       'chat_event_claim_push',
       chatEventPushArgs(secret, scope, 'claim')
     );
-    if (claimed.error) return { status: 'failed' };
+    if (claimed.error) return { status: 'failed', nothingSent: true };
     if (claimed.data !== true) {
       return { status: 'skipped', reason: 'already_claimed' };
     }
@@ -118,8 +143,20 @@ export async function sendChatEventPush(
       // channel the installed app has not created yet, so moving chat pushes to
       // a louder channel has to wait until the apps that create it are out.
       'general',
-      // The Reply box; apps that do not know the category show the plain push.
-      { categoryId: CHAT_REPLY_NOTIFICATION_CATEGORY }
+      {
+        // The Reply box; apps that do not know the category show the plain push.
+        categoryId: CHAT_REPLY_NOTIFICATION_CATEGORY,
+        onDeliveryStart: async () => {
+          // A follow-up first records that sending is beginning, so a run
+          // stopped before this point can be retried safely. No record, no
+          // send. At most once on purpose: a run killed after this record and
+          // before the request loses the push rather than risk two.
+          if (input.kind === 'follow_up') {
+            await markChatEventPushDispatch(client, secret, scope);
+          }
+          dispatched = true;
+        },
+      }
     );
     // The delivery layer reports provider failures as counts and errors
     // instead of throwing, so the status has to be derived from them.
@@ -127,10 +164,13 @@ export async function sendChatEventPush(
     if (failed > 0) {
       return result.sent > 0
         ? { status: 'partial', sent: result.sent, failed }
-        : { status: 'failed' };
+        : { status: 'failed', nothingSent: !dispatched };
+    }
+    if (result.sent === 0 && !dispatched) {
+      return { status: 'sent', sent: 0, failed: 0, noDevices: true };
     }
     return { status: 'sent', sent: result.sent, failed: 0 };
   } catch {
-    return { status: 'failed' };
+    return { status: 'failed', nothingSent: !dispatched };
   }
 }

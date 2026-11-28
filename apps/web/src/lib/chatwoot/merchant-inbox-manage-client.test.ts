@@ -135,7 +135,7 @@ describe('updateMerchantInboxConversation', () => {
   it('reports unavailable when the provider refuses a write', async () => {
     stubFetch((_url, init) =>
       init?.method === 'POST'
-        ? { status: 500 }
+        ? { status: 422 }
         : { body: { ...conversation(7), labels: [] } }
     );
 

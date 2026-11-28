@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { BRILSTASH_FEED_PATH, BRILSTASH_FULL_FEED_QUERY } from '../config/brilstash-feed';
 import { createBrilStashToolClient } from '../lib/brilstash/cli-client';
 import { readBrilStashCliInput } from '../lib/brilstash/cli-input';
+import { resolveBrilStashProbeMinPrice } from '../lib/brilstash/resolve-probe-min-price';
 import { verifyBrilStashFeed } from '../lib/brilstash/verify-feed';
 import { brilStashFeedHostSchema } from '../schemas/brilstash-feed-deployment';
 import { brilStashProbeInputSchema } from '../schemas/brilstash-probe-input';
@@ -19,13 +20,21 @@ async function main() {
     !/^[A-Za-z0-9_-]{32,256}$/.test(bearer)
   ) throw new Error('Invalid BrilStash probe configuration');
 
-  // The handoff RPC binds this exact query order in the verified URL.
-  const { page, limit, min_price } = BRILSTASH_FULL_FEED_QUERY;
-  const target = new URL(
-    `https://${host.data}${BRILSTASH_FEED_PATH}?page=${page}&limit=${limit}&min_price=${min_price}`
-  );
   const { installationId, expectedGenerationId, expectedPayloadDigest } = parsed.data;
   const client = await createBrilStashToolClient();
+  const { page, limit, min_price } = BRILSTASH_FULL_FEED_QUERY;
+  let minimum = parsed.data.minPrice ?? min_price;
+  if (apply) {
+    const { data, error } = await client.rpc('inspect_brilstash_installation', {
+      p_installation_id: installationId,
+    });
+    if (error) throw new Error('BrilStash handoff price unavailable');
+    minimum = resolveBrilStashProbeMinPrice(data, parsed.data.minPrice);
+  }
+  // The handoff RPC binds this exact query order in the verified URL.
+  const target = new URL(
+    `https://${host.data}${BRILSTASH_FEED_PATH}?page=${page}&limit=${limit}&min_price=${minimum}`
+  );
   const receipt = await verifyBrilStashFeed(target, bearer, {
     fetchFeed: fetch,
     readState: async () => {
@@ -59,7 +68,11 @@ async function main() {
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
 }
 
-main().catch(() => {
-  process.stderr.write('BrilStash feed verification failed\n');
+main().catch((error: unknown) => {
+  const message = error instanceof Error &&
+    /^BrilStash handoff (?:price unavailable|requires minPrice=(?:0|250000))$/.test(error.message)
+    ? error.message
+    : 'BrilStash feed verification failed';
+  process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 });

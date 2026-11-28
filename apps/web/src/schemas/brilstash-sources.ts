@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { BRILSTASH_PILOT_LISTING_LIMIT } from '../config/brilstash-feed';
+import {
+  BRILSTASH_ON_DEMAND_CAPACITY,
+  BRILSTASH_PILOT_LISTING_LIMIT,
+} from '../config/brilstash-feed';
 
 const revision = z.string().regex(/^\d+$/);
 const sourceRow = z.strictObject({
@@ -37,6 +40,10 @@ const sourceRow = z.strictObject({
       units: z.int().nullable(),
     }),
     z.strictObject({ kind: z.literal('untracked') }),
+    z.strictObject({
+      kind: z.literal('on-demand'),
+      units: z.literal(BRILSTASH_ON_DEMAND_CAPACITY),
+    }),
     z.strictObject({
       kind: z.literal('withdrawn'),
       units: z.literal(0),

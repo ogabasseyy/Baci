@@ -53,6 +53,10 @@ export const brilStashOperatorCommands = {
     p_partner_identity: identifier,
     p_single_page_only: z.boolean().default(true),
   }),
+  'bind-source-on-demand': command('bind_brilstash_on_demand_installation', {
+    p_merchant_id: uuid,
+    p_partner_identity: identifier,
+  }),
   'retire-installation': command('retire_brilstash_installation', {
     ...revisioned,
     p_reason: reference,

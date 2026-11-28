@@ -82,6 +82,9 @@ $$;
 \ir ../migrations/20261119122600_brilstash_require_selectable_offer_condition.sql
 \ir ../migrations/20261119122700_brilstash_align_inventory_and_image_port.sql
 \ir ../migrations/20261119122800_brilstash_require_decremented_scalar_stock.sql
+\ir ../migrations/20261127121814_brilstash_source_on_demand.sql
+\ir ../migrations/20261127124914_brilstash_partner_price_floor.sql
+\ir ../migrations/20261127145528_brilstash_handoff_price_and_withdrawal.sql
 \ir brilstash_catalogue_privileges.sql
 \ir brilstash_catalogue_digest.sql
 CREATE SCHEMA fixture;
@@ -212,6 +215,9 @@ END $$;
 \ir brilstash/staging-and-activation.inc.sql
 \ir brilstash/reader.inc.sql
 \ir brilstash/probe-state.inc.sql
+\set brilstash_on_demand false
+\ir brilstash/paged-reader.inc.sql
+\set brilstash_on_demand true
 \ir brilstash/paged-reader.inc.sql
 \ir brilstash/stock-withdrawal.inc.sql
 \ir brilstash/source-remap.inc.sql

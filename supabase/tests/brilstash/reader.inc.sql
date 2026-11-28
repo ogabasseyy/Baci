@@ -16,6 +16,8 @@ BEGIN
     OR result->>'totalCount' IS DISTINCT FROM '1'
     OR result->'products'->0->>'external_id' IS DISTINCT FROM 'fixture-one'
   THEN RAISE EXCEPTION 'credential did not read the expected generation: %', result; END IF;
+  IF fixture.read_brilstash_page(repeat('k', 43), 1, 100, 250000) IS DISTINCT FROM result
+  THEN RAISE EXCEPTION 'partner financing floor did not return the complete generation'; END IF;
   IF fixture.read_brilstash_page(repeat('z', 43), 1, 100, 0)->>'status' IS DISTINCT FROM 'unauthorized'
     OR fixture.read_brilstash_page(repeat('k', 43), 2, 100, 0)->>'status' IS DISTINCT FROM 'invalid_query'
     OR fixture.read_brilstash_page(repeat('k', 43), 1, 100, 300000)->>'status' IS DISTINCT FROM 'invalid_query'

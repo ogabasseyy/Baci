@@ -1,11 +1,19 @@
 import { buildFramedBridgeDispatchersSnippet } from './framed-bridge-dispatchers-snippet';
 
-export function buildFramedHostPortSnippet(previewOrigin?: string): string {
-  const allowedOrigins = previewOrigin
-    ? Array.from(new Set(['https://usebaci.com', previewOrigin]))
-    : ['https://usebaci.com'];
+export function buildFramedHostPortSnippet(
+  previewOrigin?: string,
+  hostOrigin?: string
+): string {
+  const allowedOrigins = Array.from(
+    new Set([
+      'https://usebaci.com',
+      ...(previewOrigin ? [previewOrigin] : []),
+      ...(hostOrigin ? [hostOrigin] : []),
+    ])
+  );
   return `
 const ALLOWED_HOST_ORIGINS = ${JSON.stringify(allowedOrigins)};
+const TRUSTED_HOST_ORIGIN = ${JSON.stringify(hostOrigin ?? '')};
 let hostPort = null;
 let hostInstanceId = '';
 let hostBuildDigest = '';
@@ -65,12 +73,23 @@ function notifyHostRenderFailed() {
   }
 }
 
+function isAllowedConnectOrigin(origin) {
+  if (ALLOWED_HOST_ORIGINS.includes(origin)) return true;
+  try {
+    const raw = typeof document !== 'undefined' ? document.getElementById('__BACI_STOREFRONT_STATE__')?.textContent : '';
+    const slug = raw ? JSON.parse(raw)?.merchantSlug : '';
+    return typeof slug === 'string' && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug) && origin === \`https://\${slug}.usebaci.com\`;
+  } catch {
+    return false;
+  }
+}
+
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   const onHostConnect = (event) => {
     if (
       !window.parent ||
       event.source !== window.parent ||
-      !ALLOWED_HOST_ORIGINS.includes(event.origin) ||
+      !isAllowedConnectOrigin(event.origin) ||
       hostPort ||
       event.data?.type !== 'baci-experience-connect' ||
       !event.ports ||

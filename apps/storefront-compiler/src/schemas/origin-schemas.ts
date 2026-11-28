@@ -61,3 +61,5 @@ export const previewOriginSchema = z
       return false;
     }
   }, 'previewOrigin must be a valid HTTPS origin or localhost HTTP origin');
+
+export const hostOriginSchema = previewOriginSchema;

@@ -3,14 +3,23 @@ import {
   cssColorTokenSchema,
   RESERVED_ROUTE_PARAM_NAMES,
 } from './css-color-token';
-import { httpsOriginSchema, previewOriginSchema } from './origin-schemas';
+import {
+  hostOriginSchema,
+  httpsOriginSchema,
+  previewOriginSchema,
+} from './origin-schemas';
 
 export {
   type CspGovernanceSummary,
   PLATFORM_VETTED_CSP_BY_DIRECTIVE,
   summarizeCspGovernance,
 } from '../compiler/csp-header';
-export { cssColorTokenSchema, httpsOriginSchema, previewOriginSchema };
+export {
+  cssColorTokenSchema,
+  hostOriginSchema,
+  httpsOriginSchema,
+  previewOriginSchema,
+};
 
 const utf8ByteLength = (value: string): number =>
   new TextEncoder().encode(value).length;
@@ -162,6 +171,7 @@ export const workerStorefrontManifestSchema = z
         accent: 'hsl(0 84% 60%)',
       }),
     cspAllowlist: cspAllowlistSchema,
+    hostOrigin: hostOriginSchema.optional(),
     previewOrigin: previewOriginSchema.optional(),
   })
   .superRefine((manifest, ctx) => {

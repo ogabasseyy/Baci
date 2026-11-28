@@ -2,13 +2,16 @@ export const JSX_RUNTIME_VIRTUAL_PATH = '__baci_jsx_runtime__.ts';
 
 export function buildSafeJsxRuntimeSource(
   merchantSlug: string,
-  declaredAssetIds: readonly string[] = []
+  declaredAssetIds: readonly string[] = [],
+  hostOrigin?: string
 ): string {
   const trustedOrigin = `https://${merchantSlug}.usebaci.com`;
+  const customHostOrigin = hostOrigin ?? '';
   return `
 import { Fragment, jsx as rawJsx, jsxs as rawJsxs } from 'react/jsx-runtime';
 
 const TRUSTED_ORIGIN = ${JSON.stringify(trustedOrigin)};
+const CUSTOM_HOST_ORIGIN = ${JSON.stringify(customHostOrigin)};
 const DECLARED_ASSETS = new Set(${JSON.stringify(declaredAssetIds)});
 const CSS_URL_RE = /url\\(\\s*(?:"((?:[^"\\\\]|\\\\[\\s\\S])*)"|'((?:[^'\\\\]|\\\\[\\s\\S])*)'|([^'")\\s]+))\\s*\\)/gi;
 const CSS_SRC_FN_RE = /\\bsrc\\(\\s*(?:"((?:[^"\\\\]|\\\\[\\s\\S])*)"|'((?:[^'\\\\]|\\\\[\\s\\S])*)'|([^'")\\s]+))\\s*\\)/gi;
@@ -45,7 +48,11 @@ function isSafeCompletedNavTarget(val) {
   try {
     const u = new URL(val);
     if (u.username || u.password) return false;
-    return u.origin === 'https://usebaci.com' || u.origin === TRUSTED_ORIGIN;
+    return (
+      u.origin === 'https://usebaci.com' ||
+      u.origin === TRUSTED_ORIGIN ||
+      (CUSTOM_HOST_ORIGIN.length > 0 && u.origin === CUSTOM_HOST_ORIGIN)
+    );
   } catch {
     return false;
   }

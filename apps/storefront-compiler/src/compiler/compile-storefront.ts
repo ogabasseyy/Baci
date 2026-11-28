@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { build } from 'esbuild';
 import {
@@ -18,6 +17,10 @@ import {
   buildSafeJsxRuntimeSource,
   JSX_RUNTIME_VIRTUAL_PATH,
 } from './jsx-runtime-guard';
+import {
+  computeManifestSourceDigest,
+  sha256Hex,
+} from './manifest-source-digest';
 import {
   PREBUNDLE_VIRTUAL_ENTRY,
   prebundleMerchantEntrySource,
@@ -49,12 +52,6 @@ export interface CompiledStorefrontRelease {
   /** Enforced zero-binding contract so User Workers cannot bypass Outbound Worker. */
   bindings: readonly [];
   cspGovernance: CspGovernanceSummary;
-}
-
-function sha256Hex(chunks: readonly string[]): string {
-  const hash = createHash('sha256');
-  for (const chunk of chunks) hash.update(chunk).update('\0');
-  return hash.digest('hex');
 }
 
 export async function compileStorefrontWorker(
@@ -104,9 +101,12 @@ export async function compileStorefrontWorker(
     manifest.assets.map((a) => [a.assetId, `/assets/${a.assetId}`])
   );
 
+  const canonicalHostOrigin =
+    manifest.hostOrigin ?? `https://${manifest.merchantSlug}.usebaci.com`;
   const jsxRuntimeSource = buildSafeJsxRuntimeSource(
     manifest.merchantSlug,
-    manifest.assets.map((a) => a.assetId)
+    manifest.assets.map((a) => a.assetId),
+    canonicalHostOrigin
   );
 
   const clientVirtualFiles = new Map(
@@ -130,7 +130,8 @@ export async function compileStorefrontWorker(
       PREBUNDLE_VIRTUAL_ENTRY,
       assetsMap,
       manifest.routes,
-      manifest.previewOrigin
+      manifest.previewOrigin,
+      canonicalHostOrigin
     )
   );
 
@@ -247,33 +248,7 @@ export async function compileStorefrontWorker(
     );
   }
 
-  const cmpStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-  const canonicalManifest = {
-    format: manifest.format,
-    mode: manifest.mode,
-    merchantSlug: manifest.merchantSlug,
-    entry: manifest.entry,
-    routes: manifest.routes.map((r) => ({ path: r.path, view: r.view })),
-    packages: [...manifest.packages].sort((a, b) => cmpStr(a.name, b.name)),
-    assets: [...manifest.assets].sort((a, b) => cmpStr(a.assetId, b.assetId)),
-    themeTokens: {
-      primary: manifest.themeTokens.primary,
-      secondary: manifest.themeTokens.secondary,
-      accent: manifest.themeTokens.accent,
-    },
-    cspAllowlist: {
-      scriptOrigins: [...manifest.cspAllowlist.scriptOrigins].sort(),
-      connectOrigins: [...manifest.cspAllowlist.connectOrigins].sort(),
-      imgOrigins: [...manifest.cspAllowlist.imgOrigins].sort(),
-    },
-    ...(manifest.previewOrigin
-      ? { previewOrigin: manifest.previewOrigin }
-      : {}),
-    files: [...manifest.files]
-      .sort((a, b) => cmpStr(a.path, b.path))
-      .map((f) => ({ path: f.path, content: f.content })),
-  };
-  const sourceDigest = sha256Hex([JSON.stringify(canonicalManifest)]);
+  const sourceDigest = computeManifestSourceDigest(manifest);
   const buildDigest = sha256Hex([workerCode, clientCode, compiledCss.css]);
 
   return {

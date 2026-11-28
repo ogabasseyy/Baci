@@ -77,6 +77,7 @@ export function scanManifestSourceSafety(
     const jsxEnv = {
       filePath,
       merchantSlug: manifest.merchantSlug,
+      hostOrigin: manifest.hostOrigin,
       declaredAssetIds,
       isSdkLinkTag,
       violations,

@@ -27,7 +27,10 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     return \`https://\${slug}.usebaci.com\${safePath}\`;
   };
   const isPermittedTargetOrigin = (origin, baseOrigin) =>
-    origin === baseOrigin || origin === 'https://usebaci.com' || origin === \`https://\${slug}.usebaci.com\`;
+    origin === baseOrigin ||
+    origin === 'https://usebaci.com' ||
+    origin === \`https://\${slug}.usebaci.com\` ||
+    (typeof TRUSTED_HOST_ORIGIN === 'string' && TRUSTED_HOST_ORIGIN.length > 0 && origin === TRUSTED_HOST_ORIGIN);
 
   container.addEventListener('click', (event) => {
     if (!event || event.defaultPrevented || event.type !== 'click') return;

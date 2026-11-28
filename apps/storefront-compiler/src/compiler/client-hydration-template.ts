@@ -7,7 +7,8 @@ export function buildClientHydrationEntrySource(
   entryPath: string,
   assetsMap: Readonly<Record<string, string>> = {},
   routes: ReadonlyArray<{ path: string; view: string }> = [],
-  previewOrigin?: string
+  previewOrigin?: string,
+  hostOrigin?: string
 ): string {
   return `
 import { CommerceProvider, createCommerceClient } from '@baci/experience-sdk';
@@ -17,7 +18,7 @@ import { hydrateRoot } from 'react-dom/client';
 const ASSETS_MAP = ${JSON.stringify(assetsMap)};
 const DECLARED_ROUTES = ${JSON.stringify(routes)};
 ${buildDeclaredRouteMatcherSnippet()}
-${buildFramedHostPortSnippet(previewOrigin)}
+${buildFramedHostPortSnippet(previewOrigin, hostOrigin)}
 ${buildHostBootstrapStateSnippet()}
 ${buildFramedAnchorInterceptorSnippet()}
 const UNSAFE_PATH_CHARS = /[\\\\\\u0000-\\u001f\\u007f]/;

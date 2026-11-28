@@ -45,7 +45,8 @@ function hasUnsafePathChar(value: string): boolean {
 function isSafeStaticNavTarget(
   val: string,
   merchantSlug: string,
-  internalOnly: boolean
+  internalOnly: boolean,
+  hostOrigin?: string
 ): boolean {
   if (val.length === 0 || hasUnsafePathChar(val)) return false;
   if (val.startsWith('/') && !val.startsWith('//')) {
@@ -65,7 +66,8 @@ function isSafeStaticNavTarget(
     if (u.username || u.password) return false;
     return (
       u.origin === 'https://usebaci.com' ||
-      u.origin === `https://${merchantSlug}.usebaci.com`
+      u.origin === `https://${merchantSlug}.usebaci.com` ||
+      (Boolean(hostOrigin) && u.origin === hostOrigin)
     );
   } catch {
     return false;
@@ -75,6 +77,7 @@ function isSafeStaticNavTarget(
 export interface JsxNavEnv {
   filePath: string;
   merchantSlug: string;
+  hostOrigin?: string;
   declaredAssetIds: ReadonlySet<string>;
   isSdkLinkTag: (tagName: ts.JsxTagNameExpression) => boolean;
   violations: SourceSafetyViolation[];
@@ -164,7 +167,14 @@ function checkJsxPropSafety(
   }
   const staticVal = resolveStaticOrConstString(expr);
   if (staticVal !== null) {
-    if (!isSafeStaticNavTarget(staticVal, env.merchantSlug, isSdkLinkPath)) {
+    if (
+      !isSafeStaticNavTarget(
+        staticVal,
+        env.merchantSlug,
+        isSdkLinkPath,
+        env.hostOrigin
+      )
+    ) {
       env.violations.push({
         filePath: env.filePath,
         rule: 'DYNAMIC_CODE_EVAL',
@@ -182,7 +192,8 @@ function checkJsxPropSafety(
       (head.startsWith('/') && !head.startsWith('//')) ||
       (!isSdkLinkPath &&
         (head.startsWith('https://usebaci.com/') ||
-          head.startsWith(`https://${env.merchantSlug}.usebaci.com/`)));
+          head.startsWith(`https://${env.merchantSlug}.usebaci.com/`) ||
+          (Boolean(env.hostOrigin) && head.startsWith(`${env.hostOrigin}/`))));
     if (safeLiterals && safePrefix) return;
   }
   env.violations.push({

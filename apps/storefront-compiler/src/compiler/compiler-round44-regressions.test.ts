@@ -193,7 +193,7 @@ describe('Round 44 SDK query navigation, categoryId separation, and motion prop/
     });
     expect(navRequests[1]).toMatchObject({
       method: 'navigation.open',
-      args: { path: '/search' },
+      args: { path: '/search?q=iphone' },
     });
     expect(fetchedUrls).toContain(
       'https://ogabassey.mybaci.store/_baci/catalog?op=route&path=%2Fsearch%3Fq%3Diphone'

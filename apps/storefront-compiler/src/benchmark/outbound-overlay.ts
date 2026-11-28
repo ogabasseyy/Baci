@@ -45,14 +45,20 @@ export function applyVariantStockOverlayToJson(
   const mergeProduct = (
     product: PublicProjectedProduct
   ): PublicProjectedProduct => {
-    const mergedVariants = product.variants.map((variant) => ({
-      ...variant,
-      inStock: variantStockById[variant.id] ?? variant.inStock,
-    }));
+    const mergedVariants = product.variants.map((variant) => {
+      const nextInStock = variantStockById[variant.id] ?? variant.inStock;
+      return {
+        ...variant,
+        inStock: nextInStock,
+        ...('available' in variant ? { available: nextInStock } : {}),
+      };
+    });
+    const nextProductInStock = mergedVariants.some((v) => v.inStock);
     return {
       ...product,
       variants: mergedVariants,
-      inStock: mergedVariants.some((v) => v.inStock),
+      inStock: nextProductInStock,
+      ...('available' in product ? { available: nextProductInStock } : {}),
     };
   };
 

@@ -141,14 +141,15 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
       k === 'variant' || k === 'variantId' || k === 'category' || k === 'categoryId' || k === 'categorySlug' || k === 'collection' || k === 'collectionId' || k === 'collectionSlug' || isFilterOnlyRouteParam(k);
     const explicitId = matchedRoute.params.productId || '';
     const explicitSku = matchedRoute.params.sku || '';
-    const fallbackProdEntry = [...paramEntries].reverse().find((e) => !isNonProductParam(e[0]));
-    const productSlug =
+    const fallbackProdEntry = [...paramEntries].reverse().find((e) => !isNonProductParam(e[0]) && e[0] !== 'productId' && e[0] !== 'sku');
+    const explicitSlug =
       matchedRoute.params.productSlug ||
       matchedRoute.params.product ||
       matchedRoute.params.itemSlug ||
-      (!explicitId && !explicitSku
-        ? matchedRoute.params.slug || matchedRoute.params.handle || (fallbackProdEntry ? fallbackProdEntry[1] : '')
-        : '');
+      matchedRoute.params.slug ||
+      matchedRoute.params.handle ||
+      '';
+    const productSlug = explicitSlug || (!explicitId && !explicitSku && fallbackProdEntry ? fallbackProdEntry[1] : '');
     if (!explicitSku && !productSlug && !explicitId) {
       status = 404;
       view = 'not_found';
@@ -163,7 +164,7 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
       if (categoryIdVal) qParts.push(\`categoryId=\${encodeURIComponent(categoryIdVal)}\`);
       if (explicitSku) qParts.push(\`sku=\${encodeURIComponent(explicitSku)}\`);
       if (productSlug) qParts.push(\`productSlug=\${encodeURIComponent(productSlug)}\`);
-      else if (explicitId) qParts.push(\`productId=\${encodeURIComponent(explicitId)}\`);
+      if (explicitId) qParts.push(\`productId=\${encodeURIComponent(explicitId)}\`);
       const upstream = await fetchCatalogJson(\`https://catalog.baci.internal/v1/product?\${qParts.join('&')}\`, 'product');
       if (!upstream.ok) {
         status = 502;
@@ -177,6 +178,12 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
         const reqBrand = matchedRoute.params.brand || '';
         const reqCond = matchedRoute.params.condition || '';
         const reqVariant = matchedRoute.params.variantId || matchedRoute.params.variant || '';
+        const idMismatch = Boolean(explicitId) && String(candidate.id) !== explicitId;
+        const skuMismatch =
+          Boolean(explicitSku) &&
+          candidate.sku !== explicitSku &&
+          !(Array.isArray(candidate.variants) && candidate.variants.some((v) => v && v.sku === explicitSku));
+        const slugMismatch = Boolean(productSlug) && String(candidate.slug) !== productSlug;
         const catMismatch = Boolean(categoryVal) && (!candidate.categorySlug || candidate.categorySlug.toLowerCase() !== categoryVal.toLowerCase());
         const catIdMismatch = Boolean(categoryIdVal) && (!candidate.categoryId || candidate.categoryId.toLowerCase() !== categoryIdVal.toLowerCase());
         const brandMismatch = Boolean(reqBrand) && (!candidate.brand || candidate.brand.toLowerCase() !== reqBrand.toLowerCase());
@@ -184,7 +191,7 @@ async function loadDeclaredRouteCatalog(matchedRoute, searchParams) {
         const variantMismatch =
           Boolean(reqVariant) &&
           (!Array.isArray(candidate.variants) || !candidate.variants.some((v) => v && String(v.id) === reqVariant));
-        if (catMismatch || catIdMismatch || brandMismatch || condMismatch || variantMismatch) {
+        if (idMismatch || skuMismatch || slugMismatch || catMismatch || catIdMismatch || brandMismatch || condMismatch || variantMismatch) {
           status = 404;
           view = 'not_found';
           title = 'Product Not Found';

@@ -58,8 +58,8 @@ describe('Round-11 Codex execCommand/setHTMLUnsafe, multi-param custom product r
         return new MiniflareResponse(
           JSON.stringify({
             product: {
-              id: '1',
-              slug: 'sku-1',
+              id: 'sku-1',
+              slug: 'phones',
               name: 'SKU One',
               brand: 'Apple',
               priceNgn: 1000,
@@ -77,7 +77,7 @@ describe('Round-11 Codex execCommand/setHTMLUnsafe, multi-param custom product r
       );
       expect(res.status).toBe(200);
       expect(requestedUrls).toEqual([
-        'https://catalog.baci.internal/v1/product?productId=sku-1',
+        'https://catalog.baci.internal/v1/product?productSlug=phones&productId=sku-1',
       ]);
     } finally {
       await mf.dispose();

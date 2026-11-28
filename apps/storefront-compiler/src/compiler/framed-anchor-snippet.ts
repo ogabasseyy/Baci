@@ -111,8 +111,13 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
         }
       };
       if (wantsNewTab) {
-        void Promise.resolve(commerce.navigation.open(parsed.pathname)).then((res) => {
-          if (res && res.status === 'ok' && res.value && res.value.presented === false) {
+        const openDest = parsed.pathname + parsed.search + parsed.hash;
+        void Promise.resolve(commerce.navigation.open(openDest)).then((res) => {
+          const fallbackSameFrame =
+            res &&
+            ((res.status === 'ok' && res.value && res.value.presented === false) ||
+              (res.status === 'error' && res.code === 'INVALID_REQUEST' && Boolean(parsed.search || parsed.hash)));
+          if (fallbackSameFrame) {
             rememberQuery();
             void Promise.resolve(commerce.navigation.go(parsed.pathname)).then((goRes) => {
               if (goRes && goRes.status === 'ok' && parsed.hash && typeof setTimeout === 'function') {

@@ -165,7 +165,7 @@ if (rootElement && stateScript?.textContent) {
           if (!resolved.ok) return resolved.error;
           const safePath = resolved.normalized;
           if (window.parent && window.parent !== window) {
-            return dispatchFramedNavigation('navigation.open', resolved.pathname, routeEpoch);
+            return dispatchFramedNavigation('navigation.open', safePath, routeEpoch);
           }
           if (typeof window.open !== 'function') {
             return { status: 'error', code: 'UNSUPPORTED_BROWSER_API', message: 'New browsing context unavailable' };

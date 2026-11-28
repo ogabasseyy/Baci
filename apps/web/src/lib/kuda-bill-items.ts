@@ -38,8 +38,8 @@ interface KudaRawBillItem {
   isFixedPrice?: boolean;
   ItemFee?: number | string;
   itemFee?: number | string;
-  BillItems?: unknown[];
-  billItems?: unknown[];
+  BillItems?: unknown;
+  billItems?: unknown;
 }
 
 function toNumber(value: number | string | undefined, fallback = 0) {
@@ -48,8 +48,11 @@ function toNumber(value: number | string | undefined, fallback = 0) {
   }
 
   if (typeof value === 'string') {
-    // Tolerate grouped figures such as "950,000" or "950 000".
-    const parsed = Number(value.replace(/[,\s]/g, ''));
+    // Tolerate grouped figures such as "950,000" or "950 000". A blank
+    // string is unreadable, not zero, so a fixed price left blank is dropped.
+    const cleaned = value.replace(/[,\s]/g, '');
+    if (cleaned === '') return fallback;
+    const parsed = Number(cleaned);
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
@@ -147,9 +150,10 @@ function mapBillItem(raw: unknown): MappedBillItem | null {
     item.IsFixedPrice ??
     item.isFixedPrice ??
     false;
-  // A fixed price that cannot be read is dropped, so it is never listed as
-  // ₦0 or sold; the purchase check then treats the package as unlisted.
-  if (isAmountFixed && !Number.isFinite(toNumber(rawAmount, Number.NaN))) {
+  // A fixed price that cannot be read, or is zero or less, is dropped, so it
+  // is never listed as ₦0 or sold; the purchase check then treats the
+  // package as unlisted. Open-amount items keep their 0.
+  if (isAmountFixed && !(toNumber(rawAmount, Number.NaN) > 0)) {
     return null;
   }
   const amountValue = toNumber(rawAmount);
@@ -165,6 +169,12 @@ function mapBillItem(raw: unknown): MappedBillItem | null {
   }
 
   const rawChildren = item.BillItems ?? item.billItems;
+  // Children that aren't a list are malformed: the container can't be
+  // trusted, so it is dropped like one whose children were all rejected.
+  const malformedChildren =
+    rawChildren !== undefined &&
+    rawChildren !== null &&
+    !Array.isArray(rawChildren);
   const billItems = mapKudaBillItems(rawChildren);
   const mapped: BillItem = {
     itemCode,
@@ -177,7 +187,9 @@ function mapBillItem(raw: unknown): MappedBillItem | null {
     billItems,
   };
   return {
-    emptiedContainer: !billItems && Boolean(rawChildren?.length),
+    emptiedContainer:
+      malformedChildren ||
+      (!billItems && Array.isArray(rawChildren) && rawChildren.length > 0),
     item: mapped,
     unitInDoubt,
   };
@@ -191,10 +203,8 @@ function mapBillItem(raw: unknown): MappedBillItem | null {
  * prices 100x too low (e.g. "1GB Monthly Plan" sent as 1000 → ₦10) and then
  * charge 100x on purchase. Open-amount items stay, since they carry no price.
  */
-export function mapKudaBillItems(
-  rawItems: unknown[] | undefined
-): BillItem[] | undefined {
-  if (!rawItems || rawItems.length === 0) {
+export function mapKudaBillItems(rawItems: unknown): BillItem[] | undefined {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
     return undefined;
   }
 

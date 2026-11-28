@@ -5,9 +5,13 @@
  * API Documentation: https://docs.kuda.com/
  */
 
-import { type BillItem, mapKudaBillItems } from '@/lib/kuda-bill-items';
+import type { BillItem } from '@/lib/kuda-bill-items';
 import { assertKudaBillListInKobo } from '@/lib/kuda-bill-list-unit-check';
-import { collectRawFixedPricesKobo } from '@/lib/kuda-raw-fixed-prices';
+import {
+  type KudaCamelBiller,
+  type KudaPascalBiller,
+  mapKudaBillersAnswer,
+} from '@/lib/kuda-biller-mapping';
 import { isKudaOutcomeUnknown } from '@/lib/kuda-transport-error';
 import {
   extractKudaTransactionId,
@@ -74,34 +78,17 @@ export interface Biller {
   categoryName: string;
   billerIconUrl?: string;
   billItems?: BillItem[];
-}
-
-/**
- * Raw biller shape returned by Kuda API (PascalCase).
- * See: https://docs.kuda.com/ — GET_BILLERS_BY_TYPE
- */
-interface KudaRawBiller {
-  Id: string;
-  Name: string;
-  Description: string;
-  BillerIconUrl?: string;
-  BillTypeId: string;
-  BillItems?: unknown[];
-}
-
-/**
- * Map a raw Kuda biller (PascalCase) to our normalized Biller interface.
- */
-function mapKudaBiller(raw: KudaRawBiller, categoryName: string): Biller {
-  return {
-    billerId: raw.Id,
-    billerName: raw.Name,
-    billerType: raw.Description,
-    categoryId: raw.BillTypeId,
-    categoryName,
-    billerIconUrl: raw.BillerIconUrl,
-    billItems: mapKudaBillItems(raw.BillItems),
-  };
+  /**
+   * Server-only: codes of fixed-price items Kuda listed that the mapper
+   * dropped from billItems (unusable price, unit in doubt, malformed), so
+   * the price recheck can still see them. Never sent to clients.
+   */
+  unreadableItemCodes?: string[];
+  /**
+   * Server-only: Kuda sent this biller a package list that is not a list,
+   * so none of its packages can be confirmed. Never sent to clients.
+   */
+  packagesUnreadable?: true;
 }
 
 export type { BillItem } from './kuda-bill-items';
@@ -361,41 +348,15 @@ export async function getBillersByType(
   billTypeName: string
 ): Promise<Biller[]> {
   const response = await kudaRequest<{
-    billers?: Array<{
-      id: string;
-      name: string;
-      description: string;
-      billerIconUrl?: string;
-      billTypeId: string;
-      billItems?: unknown[];
-    }>;
-    Billers?: KudaRawBiller[];
+    billers?: KudaCamelBiller[];
+    Billers?: KudaPascalBiller[];
   }>(KudaServiceType.GET_BILLERS_BY_TYPE, { BillTypeName: billTypeName });
 
   // Handle both camelCase (production) and PascalCase (legacy/test) responses
-  const camelBillers = response.data?.billers;
-  const pascalBillers = response.data?.Billers;
-  let billers: Biller[] = [];
-  let rawFixedPricesKobo: number[] = [];
-  if (camelBillers && camelBillers.length > 0) {
-    rawFixedPricesKobo = camelBillers.flatMap((raw) =>
-      collectRawFixedPricesKobo(raw.billItems)
-    );
-    billers = camelBillers.map((raw) => ({
-      billerId: raw.id,
-      billerName: raw.name,
-      billerType: raw.description,
-      categoryId: raw.billTypeId,
-      categoryName: billTypeName,
-      billerIconUrl: raw.billerIconUrl,
-      billItems: mapKudaBillItems(raw.billItems),
-    }));
-  } else if (pascalBillers && pascalBillers.length > 0) {
-    rawFixedPricesKobo = pascalBillers.flatMap((raw) =>
-      collectRawFixedPricesKobo(raw.BillItems)
-    );
-    billers = pascalBillers.map((raw) => mapKudaBiller(raw, billTypeName));
-  }
+  const { billers, rawFixedPricesKobo } = mapKudaBillersAnswer(
+    response.data ?? {},
+    billTypeName
+  );
 
   // One answer shares one unit: a whole answer priced in naira (read as kobo
   // it is 100x too cheap) is refused here, whatever the items are called and

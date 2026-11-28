@@ -212,20 +212,20 @@ describe('Round 27 compiler & runtime regressions', () => {
     });
 
     const submitHandler = rootListeners.get('submit');
+    let formSubmitPrevented = false;
     submitHandler?.({
       type: 'submit',
       defaultPrevented: false,
-      preventDefault: () => {},
+      preventDefault: () => {
+        formSubmitPrevented = true;
+      },
       target: {
         getAttribute: () => null,
         elements: [{ name: 'q', value: 'phone' }],
       },
     });
     await new Promise((r) => setImmediate(r));
-    expect(sentOverPort.at(-1)).toMatchObject({
-      method: 'navigation.go',
-      args: { path: '/search?q=phone' },
-    });
+    expect(formSubmitPrevented).toBe(true);
 
     // Clicking <a href="https://ogabassey.usebaci.com/checkout"> routes to checkout.open over MessagePort
     let checkoutPrevented = false;

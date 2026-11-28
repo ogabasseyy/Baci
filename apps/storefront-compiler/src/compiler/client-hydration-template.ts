@@ -156,7 +156,7 @@ if (rootElement && stateScript?.textContent) {
           if (window.parent && window.parent !== window) {
             const framedRes = await dispatchFramedNavigation('navigation.go', resolved.normalized, routeEpoch);
             if (framedRes.status === 'ok') {
-              routeEpoch = framedRes.value.epoch;
+              if (framedRes.value.epoch > routeEpoch) routeEpoch = framedRes.value.epoch;
               currentRevision = framedRes.value.publicDataRevision;
             }
             return framedRes;

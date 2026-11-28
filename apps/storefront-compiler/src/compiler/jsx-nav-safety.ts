@@ -143,6 +143,14 @@ function checkJsxPropSafety(
     return;
   }
   const isSdkLinkPath = el.isSdkLink && attrName === 'path';
+  if (lower === 'action' || lower === 'formaction') {
+    env.violations.push({
+      filePath: env.filePath,
+      rule: 'DYNAMIC_CODE_EVAL',
+      detail: `Native HTML form navigation via "${attrName}" is unsupported by the storefront host; handle <form onSubmit> in React`,
+    });
+    return;
+  }
   if (!LOWER_NAV_JSX_ATTRS.has(lower) && !isSdkLinkPath) return;
   if (!hasInit || !expr) {
     if (isSdkLinkPath || hasInit) {

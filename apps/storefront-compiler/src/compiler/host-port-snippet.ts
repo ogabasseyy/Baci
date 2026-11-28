@@ -1,3 +1,5 @@
+import { buildFramedBridgeDispatchersSnippet } from './framed-bridge-dispatchers-snippet';
+
 export function buildFramedHostPortSnippet(previewOrigin?: string): string {
   const allowedOrigins = previewOrigin
     ? Array.from(new Set(['https://usebaci.com', previewOrigin]))
@@ -158,7 +160,7 @@ const FRAMED_METHOD_CAPABILITY = {
 };
 const CART_MUTATION_METHODS = new Set(['cart.add', 'cart.remove', 'cart.set_quantity', 'cart.reconcile']);
 
-function sendFramedBridgeRequest(method, args, fallbackEpoch) {
+function sendFramedBridgeRequest(method, args, fallbackEpoch, timeoutMs = 10000) {
   const capability = FRAMED_METHOD_CAPABILITY[method];
   if (!capability) {
     return Promise.resolve({ status: 'error', code: 'INVALID_REQUEST', message: 'Unsupported bridge method' });
@@ -184,7 +186,7 @@ function sendFramedBridgeRequest(method, args, fallbackEpoch) {
               return;
             }
             resolve({ status: 'error', code: 'INVALID_REQUEST', message: 'Host bridge request timed out' });
-          }, 10000)
+          }, timeoutMs)
         : null;
     hostPending.set(requestId, { resolve, timer, requestId });
     hostPort.postMessage({
@@ -199,79 +201,6 @@ function sendFramedBridgeRequest(method, args, fallbackEpoch) {
     });
   });
 }
-
-function dispatchFramedCatalog(method, paramKey, trimmedVal, fallbackEpoch) {
-  if (trimmedVal.length > 100) {
-    return Promise.resolve({ status: 'error', code: 'INVALID_REQUEST', message: \`Catalog \${paramKey} exceeds maximum length\` });
-  }
-  return sendFramedBridgeRequest(method, { [paramKey]: trimmedVal }, fallbackEpoch).then((raw) => {
-    if (raw && typeof raw === 'object') {
-      if (raw.status === 'ok' && raw.value !== undefined) return { status: 'ok', value: raw.value };
-      if (raw.status === 'error' && typeof raw.code === 'string' && typeof raw.message === 'string') {
-        return { status: 'error', code: raw.code, message: raw.message };
-      }
-    }
-    return { status: 'error', code: 'SNAPSHOT_STALE', message: 'Invalid host catalog response' };
-  });
-}
-
-function dispatchFramedNavigation(method, safePath, fallbackEpoch) {
-  if (typeof safePath !== 'string' || safePath.length === 0 || safePath.length > 500) {
-    return Promise.resolve({ status: 'error', code: 'INVALID_REQUEST', message: 'Framed navigation path exceeds maximum length' });
-  }
-  return sendFramedBridgeRequest(method, { path: safePath }, fallbackEpoch).then((raw) => {
-    if (raw && typeof raw === 'object') {
-      if (method === 'navigation.open' && raw.status === 'ok' && typeof raw.value?.presented === 'boolean') {
-        return { status: 'ok', value: { presented: raw.value.presented } };
-      }
-      if (method === 'navigation.go' && raw.status === 'ok' && isValidHostRouteState(raw.value)) {
-        if (raw.value.epoch > hostEpoch) hostEpoch = raw.value.epoch;
-        return { status: 'ok', value: raw.value };
-      }
-      if (method === 'navigation.open' && raw.status === 'error' && raw.code === 'INVALID_REQUEST' && raw.message === 'Use the trusted storefront link.') {
-        return { status: 'ok', value: { presented: false } };
-      }
-      if (raw.status === 'error' && typeof raw.code === 'string' && typeof raw.message === 'string') {
-        return { status: 'error', code: raw.code, message: raw.message };
-      }
-    }
-    return { status: 'error', code: 'INVALID_REQUEST', message: 'Invalid host navigation response' };
-  });
-}
-
-function dispatchFramedCartOrCheckout(method, args, fallbackEpoch) {
-  const safeArgs = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
-  return sendFramedBridgeRequest(method, safeArgs, fallbackEpoch).then((raw) => {
-    if (raw && typeof raw === 'object') {
-      if (raw.status === 'error' && typeof raw.code === 'string' && typeof raw.message === 'string') {
-        return { status: 'error', code: raw.code, message: raw.message };
-      }
-      if (method === 'checkout.prepare' && raw.status === 'ok' && typeof raw.value?.ready === 'boolean') {
-        return { status: 'ok', value: { ready: raw.value.ready } };
-      }
-      if (method === 'checkout.open' && raw.status === 'ok' && typeof raw.value?.presented === 'boolean') {
-        return { status: 'ok', value: { presented: raw.value.presented } };
-      }
-      if (
-        method.startsWith('cart.') &&
-        raw.status === 'ok' &&
-        raw.value &&
-        typeof raw.value === 'object' &&
-        !Array.isArray(raw.value)
-      ) {
-        return { status: 'ok', value: raw.value };
-      }
-      if (CART_MUTATION_METHODS.has(method)) {
-        if (raw.status === 'conflict' && Number.isSafeInteger(raw.currentVersion)) {
-          return { status: 'conflict', currentVersion: raw.currentVersion };
-        }
-        if (raw.status === 'indeterminate' && typeof raw.operationId === 'string') {
-          return { status: 'indeterminate', operationId: raw.operationId };
-        }
-      }
-    }
-    return { status: 'error', code: 'INVALID_REQUEST', message: 'Invalid host commerce response' };
-  });
-}
+${buildFramedBridgeDispatchersSnippet()}
 `;
 }

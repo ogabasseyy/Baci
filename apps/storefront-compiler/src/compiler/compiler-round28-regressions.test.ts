@@ -213,26 +213,19 @@ describe('Round 28 compiler & runtime regressions', () => {
       productDetail: { slug: 'iphone-16' },
     });
 
+    let dialogPrevented = false;
     rootListeners.get('submit')?.({
       type: 'submit',
       defaultPrevented: false,
-      preventDefault: () => {},
-      target: {
-        getAttribute: (k: string) => (k === 'action' ? '/' : null),
-        elements: [{ name: 'q', value: 'pro', type: 'text' }],
+      preventDefault: () => {
+        dialogPrevented = true;
       },
+      target: { getAttribute: () => null, elements: [] },
       submitter: {
-        name: 'brand',
-        value: 'Apple',
-        type: 'submit',
-        getAttribute: (k: string) => (k === 'formaction' ? '/search' : null),
+        getAttribute: (k: string) => (k === 'formmethod' ? 'dialog' : null),
       },
     });
-    await new Promise((r) => setImmediate(r));
-    expect(sent.at(-1)).toMatchObject({
-      method: 'navigation.go',
-      args: { path: '/search?q=pro&brand=Apple' },
-    });
+    expect(dialogPrevented).toBe(false);
   });
 
   it('bounds catalog response bytes before JSON parsing and rejects negative/fractional facet counts with 502', async () => {

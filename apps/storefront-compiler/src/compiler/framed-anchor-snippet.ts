@@ -13,42 +13,6 @@ function readDomStringAttr(el, attrName, propName) {
   return typeof p === 'string' ? p : null;
 }
 
-function serializeGetFormParams(form, submitter) {
-  const params = new URLSearchParams();
-  if (!form) return params;
-  if (typeof FormData === 'function' && typeof HTMLFormElement === 'function' && form instanceof HTMLFormElement) {
-    let fd = null;
-    if (submitter && typeof HTMLElement === 'function' && submitter instanceof HTMLElement) {
-      try {
-        fd = new FormData(form, submitter);
-      } catch {}
-    }
-    if (!fd) {
-      fd = new FormData(form);
-      if (submitter && !submitter.disabled && typeof submitter.name === 'string' && submitter.name.length > 0) {
-        fd.append(submitter.name, typeof submitter.value === 'string' ? submitter.value : '');
-      }
-    }
-    for (const [k, v] of fd.entries()) {
-      if (typeof v === 'string') params.append(k, v);
-    }
-    return params;
-  }
-  const els = form.elements ? Array.from(form.elements) : [];
-  for (let i = 0; i < els.length; i++) {
-    const el = els[i];
-    if (!el || el.disabled || typeof el.name !== 'string' || el.name.length === 0) continue;
-    const type = typeof el.type === 'string' ? el.type.toLowerCase() : '';
-    if ((type === 'checkbox' || type === 'radio') && !el.checked) continue;
-    if (type === 'file' || type === 'submit' || type === 'button' || type === 'reset' || type === 'image') continue;
-    if (typeof el.value === 'string') params.append(el.name, el.value);
-  }
-  if (submitter && !submitter.disabled && typeof submitter.name === 'string' && submitter.name.length > 0) {
-    params.append(submitter.name, typeof submitter.value === 'string' ? submitter.value : '');
-  }
-  return params;
-}
-
 function attachFramedNavigationInterceptors(container, commerce, initialProps, getPathname) {
   if (!window.parent || window.parent === window || typeof container.addEventListener !== 'function') {
     return;
@@ -93,8 +57,7 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
         void commerce.checkout.open();
         return;
       }
-      const rel = parsed.pathname + parsed.search + parsed.hash;
-      void commerce.navigation.go(rel);
+      void commerce.navigation.go(parsed.pathname + parsed.search + parsed.hash);
     } catch {}
   });
 
@@ -112,25 +75,6 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     const formMethod = typeof rawMethod === 'string' && rawMethod.trim().length > 0 ? rawMethod.trim().toLowerCase() : 'get';
     if (formMethod === 'dialog') return;
     event.preventDefault();
-    if (formMethod !== 'get') return;
-    const subAction = readDomStringAttr(submitter, 'formaction', 'formAction');
-    const formAction = readDomStringAttr(form, 'action', 'action');
-    const chosenAction = subAction !== null ? subAction : formAction;
-    try {
-      const baseHref = getBaseHref();
-      const baseOrigin = new URL(baseHref).origin;
-      const effectiveAction = typeof chosenAction === 'string' && chosenAction.length > 0 ? chosenAction : baseHref;
-      const parsed = new URL(effectiveAction, baseHref);
-      if (!isPermittedTargetOrigin(parsed.origin, baseOrigin)) return;
-      if (parsed.pathname === '/checkout' || parsed.pathname.startsWith('/checkout/')) {
-        void commerce.checkout.open();
-        return;
-      }
-      const qs = serializeGetFormParams(form, submitter).toString();
-      parsed.search = qs ? \`?\${qs}\` : '';
-      const rel = parsed.pathname + parsed.search + parsed.hash;
-      void commerce.navigation.go(rel);
-    } catch {}
   });
 }
 `;

@@ -10,6 +10,7 @@ import {
   SENSITIVE_GLOBAL_ROOTS,
 } from './banned-specifiers';
 import { createVirtualComponentExportResolver } from './jsx-export-graph';
+import { checkFormElementSafety } from './jsx-form-safety';
 import {
   checkJsxAttributeSafety,
   checkJsxSpreadAttributeSafety,
@@ -125,6 +126,7 @@ export function scanManifestSourceSafety(
       if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
         const jsxError = checkJsxTag(node.tagName);
         if (jsxError !== null) fail('DANGEROUS_INNER_HTML', jsxError);
+        checkFormElementSafety(jsxEnv, node, sourceFile);
       }
       if (ts.isJsxAttribute(node)) {
         checkJsxAttributeSafety(jsxEnv, node, sourceFile);

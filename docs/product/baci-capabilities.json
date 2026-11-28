@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "reviewed_at": "2026-11-28T12:12:00+00:00",
-  "source_revision": "3d4569b0866c3ea4a148b4b30c97569e71ab9d99",
-  "evidence_digest": "94be13c3ff61a5b8f41f2efd8cd5c1d46dbd2314b159c8e38880752bbec2a89f",
-  "claims_digest": "d394788c0ee7513e9d96bfbb96af9ccfab36dd5a50d8905174e8f126dae7b57e",
+  "source_revision": "86f47583434284c195a42dbab58898fd5c3a8cba",
+  "evidence_digest": "355e0ae93de3d20afc2fd90e0f5f16404cc6c1766ab958137c6250c0a648a556",
+  "claims_digest": "a8410643488cbe98c408cba808e6387a4afc8013acbb5b5762be30729607c4b8",
   "review_scope": "Source evidence only. Re-reviewed custom-domain BYOD onboarding, Cloudflare for SaaS multi-tenant lifecycle (restricted writer boundary, verification refresh, scheduled reconciler, inbound-only verifying_routing Edge Config sync, zone-grouped multi-tenant outbox purge, and multi-record connect-domain UI) alongside existing domain claims. Code-evidenced only; no production capability promotion.",
   "capabilities": [
     {

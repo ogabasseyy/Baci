@@ -21,6 +21,7 @@ export interface OrderGiglWalletState {
   canBook: boolean;
   shortfall: number;
   boundChargeRecovery?: boolean;
+  paidByBaci?: boolean;
 }
 
 export function toOrderGiglWalletState(result: OrderGiglWalletState) {
@@ -29,6 +30,7 @@ export function toOrderGiglWalletState(result: OrderGiglWalletState) {
     canBook: result.canBook,
     shortfall: result.shortfall,
     ...(result.boundChargeRecovery ? { boundChargeRecovery: true } : {}),
+    ...(result.paidByBaci ? { paidByBaci: true } : {}),
   };
 }
 

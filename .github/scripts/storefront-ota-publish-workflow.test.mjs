@@ -21,7 +21,7 @@ test('publish workflow fails closed when signing is enabled without a client-emb
   );
   assert.match(
     workflowText,
-    /if \[\[ "\$base_url" != "https:\/\/ota\.usebaci\.com" \]\]; then/
+    /if \[\[ "\$base_url" != "https:\/\/ota\.ogabassey\.com" && "\$base_url" != "https:\/\/ota\.usebaci\.com" \]\]; then/
   );
   assert.match(
     workflowText,
@@ -54,6 +54,14 @@ test('publish workflow fails closed when signing is enabled without a client-emb
   assert.match(
     workflowText,
     /Compensating rollback FAILED!/
+  );
+  assert.match(
+    workflowText,
+    /vars\.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH \|\| \(inputs\.allow_unsigned != true && '\.\/certs\/ota-code-signing\.crt' \|\| ''\)/
+  );
+  assert.match(
+    workflowText,
+    /EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: \$\{\{ env\.EFFECTIVE_OTA_EXPORT_CERT_PATH \}\}/
   );
   assert.doesNotMatch(
     workflowText,

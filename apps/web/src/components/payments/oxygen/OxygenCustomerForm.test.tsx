@@ -145,7 +145,6 @@ it('asks one bank or income question at a time in the chat application', async (
         last_name: 'Obi',
         email: 'ada@example.com',
       }}
-      onResidentialReady={vi.fn()}
     />
   );
   const next = () =>
@@ -209,9 +208,77 @@ it('asks one bank or income question at a time in the chat application', async (
     target: { value: '25' },
   });
   next();
-  expect(screen.getByLabelText('Proof of address')).toBeVisible();
+  expect(screen.queryByLabelText('Proof of address')).toBeNull();
   expect(
-    screen.getByRole('checkbox', { name: /agree to share/i, hidden: true })
-  ).not.toBeVisible();
+    screen.getByRole('checkbox', { name: /agree to share/i })
+  ).toBeVisible();
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it('auto-opens collapsed contact details and highlights the invalid email when Zod validation rejects it', async () => {
+  const submit = vi.fn();
+  api.fetch.mockImplementation(async (_: string, options: RequestInit) =>
+    JSON.parse(String(options.body)).action === 'banks'
+      ? Response.json({ banks: [{ name: 'Test bank', code: '001' }] })
+      : Response.json({ accountName: 'ADA OKON' })
+  );
+  render(
+    <OxygenCustomerForm
+      busy={false}
+      phone="08000000001"
+      submit={submit}
+      workflowId="60000000-0000-4000-8000-000000000001"
+      prefill={{
+        first_name: 'Ada',
+        last_name: 'Okon',
+        email: 'ada@invalid',
+        date_of_birth: '1990-02-10',
+      }}
+    />
+  );
+  expect(screen.getByLabelText('Email')).not.toBeVisible();
+  fireEvent.change(screen.getByLabelText('BVN'), {
+    target: { value: '12345678901' },
+  });
+  fireEvent.change(screen.getByLabelText('NIN'), {
+    target: { value: '12345678902' },
+  });
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue to bank details' })
+  );
+  await waitFor(() => expect(screen.getByLabelText('Bank')).toBeEnabled());
+  fireEvent.keyDown(screen.getByLabelText('Bank'), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('option', { name: 'Test bank' }));
+  fireEvent.change(screen.getByLabelText('Account number'), {
+    target: { value: '0123456789' },
+  });
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue to income details' })
+    ).toBeEnabled()
+  );
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue to income details' })
+  );
+  fireEvent.change(screen.getByLabelText('Monthly income (₦)'), {
+    target: { value: '200000' },
+  });
+  fireEvent.change(screen.getByLabelText('When are you paid?'), {
+    target: { value: '25' },
+  });
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Continue verification' })
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Please review your identity and contact details before continuing.'
+    )
+  );
+  expect(screen.getByLabelText('Email')).toBeVisible();
+  expect(screen.getByLabelText('Email')).toHaveAttribute(
+    'aria-invalid',
+    'true'
+  );
   expect(submit).not.toHaveBeenCalled();
 });

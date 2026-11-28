@@ -68,8 +68,11 @@ export async function issueChatCustomerLinkToken(
 }
 
 /**
- * Returns a verifier bound to one store, or null when signing is not
- * configured. The key is imported once so a whole page of chats is cheap.
+ * Returns a verifier bound to one store, or null when no usable verification
+ * key is configured. The optional challenge public key is enough on its own;
+ * without it the key is derived from the private signing key, and a malformed
+ * public key turns verification off rather than falling back. The key is
+ * imported once so a whole page of chats is cheap.
  */
 export async function createChatCustomerLinkVerifier(
   merchantId: string,

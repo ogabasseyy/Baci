@@ -48,6 +48,7 @@ import { isMerchantInvoicePartialBalanceReview } from '@/lib/payments/is-merchan
 import { normalizeCurrencyCode } from '@/lib/payments/normalize-currency-code';
 import { routePaystackAmendmentRefund } from '@/lib/payments/paystack-amendment-refund';
 import { readPaystackCheckoutCustomerFeeMinor } from '@/lib/payments/paystack-checkout-customer-fee';
+import { readPaystackWalletTopUpAmount } from '@/lib/payments/paystack-wallet-top-up-amount';
 import { processMerchantInvoicePartialPayment } from '@/lib/payments/process-merchant-invoice-partial-payment';
 import { processWalletFundedOrderPayment } from '@/lib/payments/process-wallet-funded-order-payment';
 import { recordChatOrderSettlement } from '@/lib/payments/record-chat-order-settlement';
@@ -1427,14 +1428,22 @@ export async function POST(request: NextRequest) {
       const transactionAmount = Number(transaction.amount) || 0;
       const expectedCurrency =
         typeof transaction.currency === 'string' ? transaction.currency : null;
+      // A wallet top-up whose customer paid the Paystack fee on top is
+      // compared on its principal; the credit itself uses transaction.amount.
+      const receivedAmount =
+        gateway === 'paystack' &&
+        metadata?.transaction_type === WALLET_TOP_UP_TRANSACTION_TYPE
+          ? (readPaystackWalletTopUpAmount(gatewayResponse) ??
+            verifiedAmount.amount)
+          : verifiedAmount.amount;
 
-      if (Math.abs(verifiedAmount.amount - transactionAmount) > 0.01) {
+      if (Math.abs(receivedAmount - transactionAmount) > 0.01) {
         logger.error({
           message: 'Payment amount mismatch',
           reference,
           gateway,
           expected: transactionAmount,
-          received: verifiedAmount.amount,
+          received: receivedAmount,
           currency: verifiedAmount.currency,
         });
         return NextResponse.json(

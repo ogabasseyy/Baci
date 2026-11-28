@@ -35,7 +35,7 @@ env:
   EXPO_USE_PRECOMPILED_MODULES: '0'
   NODE_VERSION: '24'
   RUBY_VERSION: '3.4'
-  XCODE_VERSION: '26.2'
+  XCODE_VERSION: ${{ vars.IOS_XCODE_VERSION || '27.2' }}
   WORKING_DIR: apps/mobile-storefront
   BUILD_NUMBER_BASE: '30'
   # Major.minor for App Store version. Patch auto-appends build number.
@@ -44,7 +44,9 @@ env:
 jobs:
   build-and-submit:
     name: Build Storefront IPA & Submit to App Store Connect
-    runs-on: macos-26
+    # GitHub's Xcode 27 image is still a preview. To fall back, set the repository
+    # variables IOS_XCODE_RUNNER (e.g. macos-26) and IOS_XCODE_VERSION (e.g. 26.2).
+    runs-on: ${{ vars.IOS_XCODE_RUNNER || 'xcode-27' }}
     timeout-minutes: 90
     # App Store Connect has a single editable version slot, and the submit lane
     # can withdraw an in-progress review to claim it. Share one job-level group
@@ -191,6 +193,9 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
           EXPO_PUBLIC_API_URL: https://usebaci.com
+          EXPO_PUBLIC_OTA_UPDATES_URL: https://ota.ogabassey.com/api/manifest
+          EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH || './certs/ota-code-signing.crt' }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID || vars.OTA_SIGNING_KEY_ID || 'main' }}
           EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY }}
           EXPO_PUBLIC_POSTHOG_API_KEY: ${{ secrets.EXPO_PUBLIC_POSTHOG_API_KEY }}
           EXPO_PUBLIC_POSTHOG_HOST: ${{ secrets.EXPO_PUBLIC_POSTHOG_HOST }}
@@ -267,6 +272,9 @@ jobs:
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
           EXPO_PUBLIC_API_URL: https://usebaci.com
+          EXPO_PUBLIC_OTA_UPDATES_URL: https://ota.ogabassey.com/api/manifest
+          EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_CERTIFICATE_PATH || './certs/ota-code-signing.crt' }}
+          EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID: ${{ vars.EXPO_PUBLIC_OTA_CODE_SIGNING_KEY_ID || vars.OTA_SIGNING_KEY_ID || 'main' }}
           EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY }}
           EXPO_PUBLIC_POSTHOG_API_KEY: ${{ secrets.EXPO_PUBLIC_POSTHOG_API_KEY }}
           EXPO_PUBLIC_POSTHOG_HOST: ${{ secrets.EXPO_PUBLIC_POSTHOG_HOST }}

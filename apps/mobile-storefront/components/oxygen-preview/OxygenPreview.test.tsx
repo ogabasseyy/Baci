@@ -74,9 +74,11 @@ it('walks through the prefilled application and checks the mock eligibility', as
   );
   fireEvent.press(bank);
 
-  fireEvent.press(await screen.findByRole('button', { name: 'Choose file' }));
+  expect(screen.queryByRole('button', { name: 'Choose file' })).toBeNull();
   fireEvent.press(
-    screen.getByRole('checkbox', { name: /I agree to share these details/ })
+    await screen.findByRole('checkbox', {
+      name: /I agree to share these details/,
+    })
   );
   const submit = await screen.findByRole('button', {
     name: 'Continue verification',

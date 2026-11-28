@@ -48,6 +48,44 @@ it('accepts a multipart image and rejects a disguised file', async () => {
   ).rejects.toThrow();
 });
 
+it('accepts submit_address when optional landmark is blank', async () => {
+  const form = new FormData();
+  form.set(
+    'payload',
+    JSON.stringify({
+      workflowId: '60000000-0000-4000-8000-000000000001',
+      version: 1,
+      idempotencyKey: '60000000-0000-4000-8000-000000000002',
+      command: {
+        action: 'submit_address',
+        state: 'Lagos',
+        lga: 'Ikeja',
+        city: 'Ikeja',
+        street: 'Street',
+        landmark: '',
+        house_number: '1',
+      },
+    })
+  );
+  form.set(
+    'file',
+    new Blob([new Uint8Array([255, 216, 255])], { type: 'image/jpeg' }),
+    'bill.jpg'
+  );
+  const result = await readOxygenRuntimeRequest(
+    new Request('https://local', { method: 'POST', body: form })
+  );
+  expect(result.submission.command).toEqual({
+    action: 'submit_address',
+    state: 'Lagos',
+    lga: 'Ikeja',
+    city: 'Ikeja',
+    street: 'Street',
+    landmark: '',
+    house_number: '1',
+  });
+});
+
 it('rejects a PDF signature before enqueuing an approval command', async () => {
   const form = new FormData();
   form.set(

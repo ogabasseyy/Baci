@@ -15,7 +15,7 @@ afterEach(async () => {
   }
 });
 
-async function createExportDir({ platform = 'ios', updatesUrl = 'https://ota.usebaci.com/api/manifest', secretLeak = '' } = {}) {
+async function createExportDir({ platform = 'ios', updatesUrl = 'https://ota.ogabassey.com/api/manifest', secretLeak = '' } = {}) {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'ota-verify-test-'));
   tempDirs.push(dir);
   const sourceSha = 'a'.repeat(40);
@@ -75,13 +75,13 @@ test('verifies valid iOS and Android self-hosted OTA exports and writes provenan
       runtimeVersion,
       channel: 'production',
       sourceSha,
-      expectedUpdatesUrl: 'https://ota.usebaci.com/api/manifest',
+      expectedUpdatesUrl: 'https://ota.ogabassey.com/api/manifest',
       secrets,
     });
     assert.match(res.provenanceSha256, /^[a-f0-9]{64}$/);
     const provenance = JSON.parse(await readFile(path.join(dir, 'provenance.json'), 'utf8'));
     assert.equal(provenance.platform, platform);
-    assert.equal(provenance.updatesUrl, 'https://ota.usebaci.com/api/manifest');
+    assert.equal(provenance.updatesUrl, 'https://ota.ogabassey.com/api/manifest');
   }
 });
 
@@ -99,7 +99,7 @@ test('rejects mismatched updatesUrl or leaked OTA_ADMIN_TOKEN secret', async () 
       runtimeVersion: wrongUrl.runtimeVersion,
       channel: 'production',
       sourceSha: wrongUrl.sourceSha,
-      expectedUpdatesUrl: 'https://ota.usebaci.com/api/manifest',
+      expectedUpdatesUrl: 'https://ota.ogabassey.com/api/manifest',
       secrets,
     }),
     /updates URL/
@@ -113,7 +113,7 @@ test('rejects mismatched updatesUrl or leaked OTA_ADMIN_TOKEN secret', async () 
       runtimeVersion: leaked.runtimeVersion,
       channel: 'production',
       sourceSha: leaked.sourceSha,
-      expectedUpdatesUrl: 'https://ota.usebaci.com/api/manifest',
+      expectedUpdatesUrl: 'https://ota.ogabassey.com/api/manifest',
       secrets,
     }),
     /OTA_ADMIN_TOKEN/

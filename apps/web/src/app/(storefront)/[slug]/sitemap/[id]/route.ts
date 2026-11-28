@@ -37,10 +37,11 @@ export async function GET(
     // sitemap reports separately in Search Console and no URL is listed in
     // two submitted files.
     return createSitemapIndexResponse(
-      await getSitemapIndexLinks(sitemapContext)
+      await getSitemapIndexLinks(sitemapContext),
+      sitemapContext.merchant.id
     );
   }
 
   const entries = await getNamedSitemapEntries(sitemapContext, id);
-  return createSitemapResponse(entries);
+  return createSitemapResponse(entries, sitemapContext.merchant.id);
 }

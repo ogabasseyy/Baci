@@ -57,7 +57,6 @@ export function validateOxygenSection(input: {
   bankSelection: boolean;
   checkingAccount: boolean;
   bankVerified: boolean;
-  requiresResidentialFile: boolean;
 }):
   | { ok: true }
   | { ok: false; error: string; field?: HTMLInputElement | HTMLSelectElement } {
@@ -79,17 +78,6 @@ export function validateOxygenSection(input: {
     return {
       ok: false,
       error: 'Verify your bank account before continuing.',
-    };
-  }
-  if (input.requiresResidentialFile) {
-    const upload =
-      input.form.querySelector<HTMLInputElement>(
-        'input[type="file"][aria-label="Proof of address"]'
-      ) ?? undefined;
-    return {
-      ok: false,
-      error: 'Attach a utility bill or proof of your home address.',
-      field: upload,
     };
   }
   return { ok: true };

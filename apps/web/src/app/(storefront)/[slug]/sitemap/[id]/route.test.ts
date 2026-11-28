@@ -166,10 +166,13 @@ describe('GET /[slug]/sitemap/[id].xml', () => {
     expect(mockGetSitemapIndexLinks).toHaveBeenCalledWith({
       merchant: { id: 'm1' },
     });
-    expect(mockCreateSitemapIndexResponse).toHaveBeenCalledWith([
-      'https://ogabassey.com/sitemap/static.xml',
-      'https://ogabassey.com/sitemap/products.xml',
-    ]);
+    expect(mockCreateSitemapIndexResponse).toHaveBeenCalledWith(
+      [
+        'https://ogabassey.com/sitemap/static.xml',
+        'https://ogabassey.com/sitemap/products.xml',
+      ],
+      'm1'
+    );
     expect(mockGetNamedSitemapEntries).not.toHaveBeenCalled();
     expect(body).toContain('https://ogabassey.com/sitemap/products.xml');
   });

@@ -32,15 +32,25 @@ describe('sitemap-data', () => {
 
   it('creates a cacheable XML response for the sitemap index', async () => {
     const { createSitemapIndexResponse } = sitemapData;
-    const response = createSitemapIndexResponse([
-      'https://ogabassey.com/sitemap/static.xml',
-    ]);
+    const response = createSitemapIndexResponse(
+      ['https://ogabassey.com/sitemap/static.xml'],
+      'merchant-1'
+    );
     const body = await response.text();
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('application/xml');
     expect(response.headers.get('cache-control')).toBe(
-      'public, s-maxage=3600, stale-while-revalidate=86400'
+      'public, max-age=300, stale-while-revalidate=86400'
+    );
+    expect(response.headers.get('cdn-cache-control')).toBe(
+      'public, max-age=3600, stale-while-revalidate=86400, stale-if-error=86400'
+    );
+    expect(response.headers.get('vercel-cdn-cache-control')).toBe(
+      'public, max-age=3600, stale-while-revalidate=86400'
+    );
+    expect(response.headers.get('vercel-cache-tag')).toBe(
+      'sitemap,products-merchant-1'
     );
     expect(body).toContain('<sitemapindex');
   });

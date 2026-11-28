@@ -17,6 +17,10 @@ const MESSAGES: Record<string, string> = {
   expired: 'Your cart session ended. Please reopen your cart.',
   not_found: 'Your cart session ended. Please reopen your cart.',
   refresh_required: 'Your cart needs to refresh. Please try again.',
+  temporarily_unavailable:
+    "We couldn't reach the store, so your cart wasn't changed. Check your connection and try again.",
+  pending_operation:
+    "We're still finishing an earlier change to your cart. Please try again in a moment.",
 };
 const FALLBACK =
   "That change couldn't be saved, so we put your cart back as it was.";

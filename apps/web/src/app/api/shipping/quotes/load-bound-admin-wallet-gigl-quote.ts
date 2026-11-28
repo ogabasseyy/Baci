@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { resolveAdminGiglQuoteFunding } from '@/lib/shipping/gigl-shipping-funding-mode';
 import { assertQuoteItemsMatchOrder } from '@/lib/shipping/international-quote-items-match';
 import {
   assertQuoteReceiverMatchesOrder,
@@ -11,10 +12,7 @@ import {
   toQuoteComparableOrderItems,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import type { ShippingQuote } from '@/lib/shipping/types';
-import {
-  calculateAdminWalletFunding,
-  toAdminPublicQuote,
-} from './admin-order-gigl-quote.helpers';
+import { toAdminPublicQuote } from './admin-order-gigl-quote.helpers';
 
 type BoundWalletOrder = {
   selected_quote_id?: string | null;
@@ -113,7 +111,7 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
 
   const { data: latestCharge, error: chargeError } = await supabase
     .from('merchant_shipping_charges')
-    .select('status')
+    .select('status, funding_source')
     .eq('merchant_id', merchantId)
     .eq('shipping_quote_id', quoteId)
     .order('created_at', { ascending: false })
@@ -133,6 +131,16 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
 
   const expiresAt = Date.parse(String(boundQuote.expires_at ?? ''));
   const isExpired = Number.isFinite(expiresAt) && expiresAt <= Date.now();
+  // Booking rejects every charge awaiting reconciliation, so never offer it.
+  if (latestCharge?.status === 'needs_reconciliation') {
+    return NextResponse.json(
+      {
+        error: 'This shipment booking already requires reconciliation.',
+        code: 'MERCHANT_WALLET_BOOKING_NOT_RETRYABLE',
+      },
+      { status: 409 }
+    );
+  }
   const hasActiveCharge =
     typeof latestCharge?.status === 'string' &&
     ACTIVE_BOUND_QUOTE_CHARGE_STATUSES.has(latestCharge.status);
@@ -141,13 +149,6 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
     return null;
   }
 
-  const wallet = await readMerchantShippingWalletBalance(supabase, merchantId);
-  if (!wallet.ok) {
-    return NextResponse.json(
-      { error: 'Unable to load wallet' },
-      { status: 500 }
-    );
-  }
   const shippingQuote: ShippingQuote = {
     id: boundQuote.id,
     provider: 'GIGL',
@@ -166,21 +167,51 @@ export async function loadBoundAdminWalletGiglQuoteResponse(
         : undefined,
     isStationPickup: Boolean(boundQuote.is_station_pickup),
   };
-  const funding = calculateAdminWalletFunding(
+  const funding = await resolveAdminGiglQuoteFunding(
+    supabase,
+    merchantId,
     shippingQuote.price,
-    wallet.availableBalance
+    async () => {
+      const wallet = await readMerchantShippingWalletBalance(
+        supabase,
+        merchantId
+      );
+      return wallet.ok ? wallet.availableBalance : null;
+    },
+    {
+      existingChargeFundingSource:
+        typeof latestCharge?.funding_source === 'string'
+          ? latestCharge.funding_source
+          : null,
+      existingChargeStatus:
+        typeof latestCharge?.status === 'string' ? latestCharge.status : null,
+    }
   );
+  if (!funding.ok) {
+    return NextResponse.json(
+      { error: 'Unable to load wallet' },
+      { status: 500 }
+    );
+  }
   // An active reserved/provider_submitting charge already holds funds for this
   // quote — resume booking without requiring available balance again.
-  const canBook = hasActiveCharge || funding.canBook;
+  // A revoked platform reservation is released as refunded (no debit) by the
+  // reserve RPC, so only wallet reservations, or platform ones whose flag is
+  // still on, count as holding funds.
+  const holdsFunds =
+    hasActiveCharge &&
+    (latestCharge?.funding_source !== 'platform' ||
+      funding.paidByBaci === true);
+  const canBook = holdsFunds || funding.canBook;
   // Expired quotes with an in-flight/booked charge must not bounce the mobile
   // confirmation gate into a refresh loop — recovery books the same quote.
-  const boundChargeRecovery = hasActiveCharge && isExpired;
+  const boundChargeRecovery = holdsFunds && isExpired;
   return NextResponse.json({
     quote: toAdminPublicQuote(shippingQuote),
     availableBalance: funding.availableBalance,
-    shortfall: hasActiveCharge ? 0 : funding.shortfall,
+    shortfall: holdsFunds ? 0 : funding.shortfall,
     canBook,
+    ...(funding.paidByBaci ? { paidByBaci: true } : {}),
     ...(boundChargeRecovery ? { boundChargeRecovery: true } : {}),
   });
 }

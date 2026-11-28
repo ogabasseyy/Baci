@@ -110,7 +110,9 @@ export async function runQuizFinalizationLoop({
   }
   for (;;) {
     try {
-      const result = await runJob();
+      // Supabase's clock owns scheduled deadlines. Keep refreshing its gate
+      // and running worker maintenance here. One-shot runs can recover deadlines.
+      const result = await runJob({ deadlineMode: 'database-clock' });
       logger.info(
         '[quiz-finalization] completed',
         sanitizeQuizSummary(result)

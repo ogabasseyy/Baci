@@ -106,13 +106,15 @@ the signed trigger service, with cron only as the 10-minute fallback sweep.
 
 These entries require `BACI_WEB_BASE_URL` and `CRON_SECRET` in `/home/bassey/baci-workers/.env`. `BACI_WEB_BASE_URL` must be an `https://` TLS-terminated production web origin, for example `https://ogabassey.com`; do not use `http://` for production web cron calls because `CRON_SECRET` is sent on each request. `CRON_SECRET` must exist in both the VPS worker environment and the web deployment environment with the same value; rotate both copies together through the normal secret-management process.
 
-## Direct Petrock and Quiz Minute Workers
+## Direct Petrock and Quiz Workers
 
-Petrock reconciliation and quiz finalization run directly from the VPS every
-minute through `bin/process-petrock-reconciliation.sh` and
-`bin/process-quiz-finalization.sh`. This is the normal production path; the
-existing `CRON_SECRET`-authenticated `/api/cron/petrock-reconcile` and
-`/api/quiz/finalize` routes remain manual fallbacks only.
+Petrock reconciliation runs every minute through
+`bin/process-petrock-reconciliation.sh`. Supabase's quiz deadline clock owns
+scheduled quiz deadlines. The continuous VPS quiz worker refreshes the
+approval gate, expires unclaimed awards, closes legacy events, and invalidates
+product caches. A one-shot VPS quiz run can process deadlines for recovery.
+The `CRON_SECRET`-authenticated `/api/cron/petrock-reconcile` and
+`/api/quiz/finalize` routes remain manual fallbacks.
 
 The direct workers load the full Baci checkout environment and use server-side
 Supabase/admin access. They do not call Vercel or send `CRON_SECRET`. Petrock

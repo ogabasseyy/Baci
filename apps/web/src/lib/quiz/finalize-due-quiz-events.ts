@@ -29,10 +29,15 @@ type QuizFinalizationClient = SupabaseClient<Database>;
 
 const MISSING_RPC_CODES = new Set(['PGRST202']);
 
-let activeSweepRun: ReturnType<typeof runFinalizeDueQuizEvents> | null = null;
+type DeadlineMode = 'database-clock' | 'fallback';
+
+const activeSweepRuns = new Map<
+  DeadlineMode,
+  ReturnType<typeof runFinalizeDueQuizEvents>
+>();
 
 export function resetQuizSweepStateForTests() {
-  activeSweepRun = null;
+  activeSweepRuns.clear();
   resetQuizSweepBaselineForTests();
 }
 
@@ -72,20 +77,31 @@ function runStep(client: QuizFinalizationClient, step: FinalizationStep) {
   }
 }
 
-export function finalizeDueQuizEvents() {
+export function finalizeDueQuizEvents({
+  deadlineMode = 'fallback',
+}: {
+  deadlineMode?: DeadlineMode;
+} = {}) {
+  const activeSweepRun = activeSweepRuns.get(deadlineMode);
   if (activeSweepRun) {
     return activeSweepRun;
   }
-  const run = runFinalizeDueQuizEvents().finally(() => {
-    if (activeSweepRun === run) {
-      activeSweepRun = null;
+  // Serialize different modes too, since both advance the cache baseline.
+  const previousRun =
+    activeSweepRuns.get('fallback') ?? activeSweepRuns.get('database-clock');
+  const runSweep = () => runFinalizeDueQuizEvents(deadlineMode);
+  const run = (
+    previousRun ? previousRun.then(runSweep, runSweep) : runSweep()
+  ).finally(() => {
+    if (activeSweepRuns.get(deadlineMode) === run) {
+      activeSweepRuns.delete(deadlineMode);
     }
   });
-  activeSweepRun = run;
+  activeSweepRuns.set(deadlineMode, run);
   return run;
 }
 
-async function runFinalizeDueQuizEvents() {
+async function runFinalizeDueQuizEvents(deadlineMode: DeadlineMode) {
   const summary = emptySummary();
   const mutationState: MutationTrackingState = {
     hasUnknownMutationResult: false,
@@ -137,7 +153,7 @@ async function runFinalizeDueQuizEvents() {
   if (runtimeGateResult.error) {
     logRpcFailure(runtimeGateStep.name, runtimeGateResult.error);
     summary.failed += 1;
-  } else {
+  } else if (deadlineMode === 'fallback') {
     const deadlineResult = await runStep(client, deadlineStep);
     if (
       deadlineResult.error &&

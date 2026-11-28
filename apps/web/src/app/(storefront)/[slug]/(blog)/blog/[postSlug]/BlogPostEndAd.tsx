@@ -22,12 +22,11 @@ export function OgabasseyBlogEndAd({
   return (
     <div className="-mx-6 mb-8 hidden justify-center min-[340px]:flex sm:mx-0">
       <DeferredAdUnit
-        activateOnIdle
         activateOnInteraction
         activateOnScroll
         placementKey="BLOG_SIDEBAR"
         slotInstance={`blog-post-end-${postId}`}
-        timeoutMs={2500}
+        timeoutMs={0}
       />
     </div>
   );

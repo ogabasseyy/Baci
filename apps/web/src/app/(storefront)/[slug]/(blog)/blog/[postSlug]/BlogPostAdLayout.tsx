@@ -31,12 +31,11 @@ export function OgabasseyBlogPostAdLayout({
       >
         <div className="sticky top-24">
           <DeferredAdUnit
-            activateOnIdle
             activateOnInteraction
             activateOnScroll
             placementKey="SIDEBAR_HALF_PAGE"
             slotInstance={`blog-post-rail-${postId}`}
-            timeoutMs={2500}
+            timeoutMs={0}
           />
         </div>
       </aside>

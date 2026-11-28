@@ -283,8 +283,10 @@ describe('HomeProductGrid', () => {
     // a mismatched `min-height` fallback.
     expect(mockDeferredAdUnit).toHaveBeenCalledWith(
       expect.objectContaining({
+        activateOnInteraction: true,
+        activateOnScroll: true,
         placementKey: 'PRODUCT_GRID_MPU',
-        timeoutMs: 1,
+        timeoutMs: 0,
       })
     );
     expect(mockDeferredAdUnit.mock.calls[0]?.[0]?.fallback).toBeUndefined();

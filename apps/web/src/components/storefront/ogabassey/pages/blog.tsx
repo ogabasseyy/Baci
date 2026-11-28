@@ -231,12 +231,11 @@ export function OgabasseyV2Blog({
                 {showOgabasseyBlogAds && (index === 5 || index === 11) && (
                   <div className="col-span-1 -mx-4 hidden justify-center min-[300px]:flex sm:mx-0 md:col-span-2 lg:col-span-3">
                     <DeferredAdUnit
-                      activateOnIdle
                       activateOnInteraction
                       activateOnScroll
                       placementKey="BLOG_SIDEBAR"
                       slotInstance={`blog-grid-${index + 1}`}
-                      timeoutMs={2500}
+                      timeoutMs={0}
                     />
                   </div>
                 )}

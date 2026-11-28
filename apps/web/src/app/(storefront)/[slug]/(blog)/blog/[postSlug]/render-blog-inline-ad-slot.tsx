@@ -11,12 +11,11 @@ export function renderOgabasseyBlogInlineAdSlot(
 
   return (
     <DeferredAdUnit
-      activateOnIdle
       activateOnInteraction
       activateOnScroll
       placementKey="BLOG_SIDEBAR"
       slotInstance={`blog-post-inline-${postId}`}
-      timeoutMs={2500}
+      timeoutMs={0}
     />
   );
 }

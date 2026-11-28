@@ -145,7 +145,8 @@ export function classifyMemberName(
     memberName === 'createElement' ||
     memberName === 'createElementNS' ||
     memberName === 'cloneElement' ||
-    memberName === 'createFactory'
+    memberName === 'createFactory' ||
+    memberName === 'createPortal'
   ) {
     push(
       'DANGEROUS_INNER_HTML',

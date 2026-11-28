@@ -5,6 +5,7 @@ import {
   collectFileReactClassImports,
   createVirtualComponentExportResolver,
   hasDeclareModifier,
+  isSyncComponentFunction,
   isVerifiedReactClassNode,
   resolveDirectComponentKind,
   resolveVirtualModule,
@@ -80,20 +81,11 @@ export function hasLocalLexicalBinding(
   return false;
 }
 
-const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set([
-  'script',
-  'style',
-  'iframe',
-  'frame',
-  'frameset',
-  'portal',
-  'object',
-  'embed',
-  'base',
-  'applet',
-  'link',
-  'meta',
-]);
+const FORBIDDEN_INTRINSIC_JSX_TAGS: ReadonlySet<string> = new Set(
+  'script|style|iframe|frame|frameset|portal|object|embed|base|applet|link|meta'.split(
+    '|'
+  )
+);
 
 type BindingKind = 'component' | 'reactClass' | 'sdkLink' | 'motion' | 'unsafe';
 
@@ -204,7 +196,7 @@ export function createJsxTagValidator(
           }
           if (hasHoistedVarInScope(cur, target)) return 'unsafe';
           if (ts.isFunctionExpression(cur) && cur.name?.text === target) {
-            return 'component';
+            return isSyncComponentFunction(cur) ? 'component' : 'unsafe';
           }
         }
         if (ts.isBlock(cur) || ts.isSourceFile(cur)) {
@@ -245,7 +237,7 @@ export function createJsxTagValidator(
               stmt.body &&
               stmt.name?.text === target
             ) {
-              return 'component';
+              return isSyncComponentFunction(stmt) ? 'component' : 'unsafe';
             } else if (
               ts.isClassDeclaration(stmt) &&
               stmt.name?.text === target

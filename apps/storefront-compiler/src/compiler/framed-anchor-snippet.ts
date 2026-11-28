@@ -14,9 +14,16 @@ function readDomStringAttr(el, attrName, propName) {
 }
 
 function attachFramedNavigationInterceptors(container, commerce, initialProps, getPathname, onPendingQuerySearch) {
-  if (!window.parent || window.parent === window || typeof container.addEventListener !== 'function') {
+  const roots = [];
+  if (container && typeof container.addEventListener === 'function') roots.push(container);
+  if (typeof document !== 'undefined' && document !== container && typeof document.addEventListener === 'function') {
+    roots.push(document);
+  }
+  if (!window.parent || window.parent === window || roots.length === 0) {
     return;
   }
+  const seenClicks = typeof WeakSet === 'function' ? new WeakSet() : null;
+  const seenSubmits = typeof WeakSet === 'function' ? new WeakSet() : null;
   const slug = typeof initialProps?.merchantSlug === 'string' && initialProps.merchantSlug.length > 0 ? initialProps.merchantSlug : 'store';
   const getBaseHref = () => {
     if (typeof document !== 'undefined' && typeof document.baseURI === 'string' && /^https?:\\/\\//i.test(document.baseURI)) {
@@ -31,12 +38,16 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     origin === \`https://\${slug}.usebaci.com\` ||
     (typeof TRUSTED_HOST_ORIGIN === 'string' && TRUSTED_HOST_ORIGIN.length > 0 && origin === TRUSTED_HOST_ORIGIN);
 
-  container.addEventListener('click', (event) => {
+  const handleClick = (boundRoot) => (event) => {
     if (!event || event.defaultPrevented || event.type !== 'click') return;
+    if (seenClicks && typeof event === 'object') {
+      if (seenClicks.has(event)) return;
+      seenClicks.add(event);
+    }
     if (typeof event.button === 'number' && event.button !== 0) return;
     if (event.shiftKey || event.altKey) return;
     let node = event.target;
-    while (node && node !== container) {
+    while (node && node !== boundRoot) {
       const tag = typeof node.tagName === 'string' ? node.tagName.toUpperCase() : '';
       if (tag === 'A' || tag === 'AREA') break;
       node = node.parentElement || node.parentNode;
@@ -112,10 +123,14 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
         });
       }
     } catch {}
-  });
+  };
 
-  container.addEventListener('submit', (event) => {
+  const handleSubmit = (event) => {
     if (!event || event.defaultPrevented) return;
+    if (seenSubmits && typeof event === 'object') {
+      if (seenSubmits.has(event)) return;
+      seenSubmits.add(event);
+    }
     const form = event.target;
     const submitter = event.submitter || null;
     const subTarget = readDomStringAttr(submitter, 'formtarget', 'formTarget');
@@ -128,7 +143,12 @@ function attachFramedNavigationInterceptors(container, commerce, initialProps, g
     const formMethod = typeof rawMethod === 'string' && rawMethod.trim().length > 0 ? rawMethod.trim().toLowerCase() : 'get';
     if (formMethod === 'dialog') return;
     event.preventDefault();
-  });
+  };
+
+  for (const r of roots) {
+    r.addEventListener('click', handleClick(r));
+    r.addEventListener('submit', handleSubmit);
+  }
 }
 `;
 }

@@ -124,7 +124,8 @@ export const LOWERCASE_HTML_SINK_NAMES: ReadonlySet<string> = new Set(
     'dangerouslysetinnerhtml|__html|$$typeof|innerhtml|outerhtml|insertadjacenthtml',
     'srcdoc|createcontextualfragment|parsefromstring|setattribute|setattributens',
     'setattributenode|setattributenodens|createattribute|createattributens',
-    'setnameditem|setnameditemns|getattributenode|getattributenodens|execcommand',
+    'setnameditem|setnameditemns|getnameditem|getnameditemns|removenameditem|removenameditemns',
+    'getattributenode|getattributenodens|attributestylemap|execcommand',
     'sethtmlunsafe|parsehtmlunsafe|sethtml|createhtml|createscript|createscripturl',
     'ownerdocument|contentdocument|contentwindow|defaultview|preinit|preinitmodule',
     'preload|preloadmodule|prefetchdns|preconnect|requestsubmit|dispatchevent',
@@ -145,7 +146,7 @@ export const FORBIDDEN_DOM_MUTATION_MEMBERS: ReadonlySet<string> = new Set(
     'location|href|xlinkHref|action|formAction|target|formTarget|method|formMethod',
     'enctype|formEnctype|rel|download|referrerPolicy',
     'protocol|host|hostname|port|pathname|search|hash|username|password',
-    'src|srcset|poster|data|cite|style',
+    'src|srcset|poster|data|cite|style|nodeValue',
   ]
     .join('|')
     .split('|')

@@ -4,6 +4,7 @@ import {
   classifyPackageExport,
   collectFileReactClassImports,
   isDirectComponentExpr,
+  isSyncComponentFunction,
   isVerifiedReactClassNode,
   resolveDirectComponentKind,
   type SafeExportKind,
@@ -15,6 +16,7 @@ export {
   classifyPackageExport,
   collectFileReactClassImports,
   isDirectComponentExpr,
+  isSyncComponentFunction,
   isVerifiedReactClassNode,
   resolveDirectComponentKind,
   type SafeExportKind,
@@ -89,6 +91,7 @@ export function createVirtualComponentExportResolver(
         if (
           ts.isFunctionDeclaration(stmt) &&
           stmt.body &&
+          isSyncComponentFunction(stmt) &&
           stmt.name &&
           !reassigned.has(stmt.name.text)
         ) {
@@ -184,7 +187,7 @@ export function createVirtualComponentExportResolver(
             (m) => m.kind === ts.SyntaxKind.DefaultKeyword
           );
           const declKind: SafeExportKind | null = ts.isFunctionDeclaration(stmt)
-            ? stmt.body
+            ? stmt.body && isSyncComponentFunction(stmt)
               ? 'component'
               : null
             : isVerifiedReactClassNode(stmt, classEnv)

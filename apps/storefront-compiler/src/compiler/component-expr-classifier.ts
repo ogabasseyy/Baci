@@ -1,4 +1,5 @@
 import ts from '@typescript/typescript6';
+import { resolveStaticString } from './const-string-fold';
 
 export type SafeExportKind = 'component' | 'reactClass' | 'sdkLink';
 
@@ -59,29 +60,68 @@ export function collectFileReactClassImports(sf: ts.SourceFile): {
   return { reactClassBases, reactHocWrappers, reactNamespaces };
 }
 
-function hasConcreteInstanceRenderMember(
-  cls: ts.ClassLikeDeclaration
+export function isSyncComponentFunction(
+  fn: ts.FunctionLikeDeclaration
 ): boolean {
-  return cls.members.some((m) => {
+  if (fn.asteriskToken) return false;
+  return !(
+    ts.canHaveModifiers(fn) &&
+    ts.getModifiers(fn)?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)
+  );
+}
+
+function checkInstanceRenderMembers(cls: ts.ClassLikeDeclaration): {
+  hasConcreteSync: boolean;
+  hasInvalid: boolean;
+} {
+  let hasConcreteSync = false;
+  let hasInvalid = false;
+  for (const m of cls.members) {
     const isStatic =
       ts.canHaveModifiers(m) &&
       (ts
         .getModifiers(m)
         ?.some((k) => k.kind === ts.SyntaxKind.StaticKeyword) ??
         false);
-    if (isStatic || !m.name) return false;
+    if (isStatic || !m.name) continue;
     const name =
-      ts.isIdentifier(m.name) || ts.isStringLiteral(m.name)
+      ts.isIdentifier(m.name) ||
+      ts.isStringLiteral(m.name) ||
+      ts.isNumericLiteral(m.name) ||
+      ts.isPrivateIdentifier(m.name)
         ? m.name.text
-        : null;
-    if (name !== 'render') return false;
-    if (ts.isMethodDeclaration(m)) return Boolean(m.body);
+        : ts.isComputedPropertyName(m.name)
+          ? resolveStaticString(m.name.expression)
+          : null;
+    if (name === null) {
+      hasInvalid = true;
+      continue;
+    }
+    if (name !== 'render') continue;
+    if (ts.isMethodDeclaration(m)) {
+      if (!m.body) {
+        if (!isSyncComponentFunction(m)) hasInvalid = true;
+        continue;
+      }
+      if (isSyncComponentFunction(m)) hasConcreteSync = true;
+      else hasInvalid = true;
+      continue;
+    }
     if (ts.isPropertyDeclaration(m) && m.initializer) {
       const init = unwrapExpr(m.initializer);
-      return ts.isArrowFunction(init) || ts.isFunctionExpression(init);
+      if (
+        (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) &&
+        isSyncComponentFunction(init)
+      ) {
+        hasConcreteSync = true;
+      } else {
+        hasInvalid = true;
+      }
+      continue;
     }
-    return false;
-  });
+    hasInvalid = true;
+  }
+  return { hasConcreteSync, hasInvalid };
 }
 
 export function isVerifiedReactClassNode(
@@ -94,6 +134,8 @@ export function isVerifiedReactClassNode(
   ) {
     return false;
   }
+  const renderInfo = checkInstanceRenderMembers(cls);
+  if (renderInfo.hasInvalid) return false;
   const ext = cls.heritageClauses?.find(
     (h) => h.token === ts.SyntaxKind.ExtendsKeyword
   );
@@ -103,10 +145,7 @@ export function isVerifiedReactClassNode(
   if (ts.isIdentifier(baseExpr)) {
     if (env.isVerifiedLocalClass?.(baseExpr, baseExpr.text)) return true;
     if (env.isShadowed?.(baseExpr, baseExpr.text)) return false;
-    return (
-      env.reactClassBases.has(baseExpr.text) &&
-      hasConcreteInstanceRenderMember(cls)
-    );
+    return env.reactClassBases.has(baseExpr.text) && renderInfo.hasConcreteSync;
   }
   if (
     ts.isPropertyAccessExpression(baseExpr) &&
@@ -116,7 +155,7 @@ export function isVerifiedReactClassNode(
     (baseExpr.name.text === 'Component' ||
       baseExpr.name.text === 'PureComponent')
   ) {
-    return hasConcreteInstanceRenderMember(cls);
+    return renderInfo.hasConcreteSync;
   }
   return false;
 }
@@ -156,7 +195,10 @@ export function resolveDirectComponentKind(
   hocEnv?: ReactHocEnv
 ): SafeExportKind | null {
   const inner = unwrapExpr(expr);
-  if (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) {
+  if (
+    (ts.isArrowFunction(inner) || ts.isFunctionExpression(inner)) &&
+    isSyncComponentFunction(inner)
+  ) {
     return 'component';
   }
   if (ts.isClassExpression(inner)) {

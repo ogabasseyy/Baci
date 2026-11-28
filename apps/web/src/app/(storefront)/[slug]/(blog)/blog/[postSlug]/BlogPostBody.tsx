@@ -11,16 +11,14 @@ import { rewriteStorefrontContentHref } from '@/lib/storefront-content-link-rewr
 import { isDeadStorefrontContentHref } from '@/lib/storefront-content-link-targets';
 import { isOgabasseyBlogStaticTenant } from '../blog-category-routing';
 import { BlogLegacyContent } from './BlogLegacyContent';
-import {
-  OgabasseyBlogEndAd,
-  OgabasseyBlogPostAdLayout,
-  renderOgabasseyBlogInlineAdSlot,
-} from './BlogPostAdLayout';
+import { OgabasseyBlogPostAdLayout } from './BlogPostAdLayout';
+import { OgabasseyBlogEndAd } from './BlogPostEndAd';
 import { BlogRelatedProducts } from './BlogRelatedProducts';
 import { BlogVideoPanel } from './BlogVideoPanel';
 import { resolveContentLinks } from './blog-content-link-resolution';
 import { buildBlogUrl, resolveBlogPostContent } from './blog-post-content';
 import type { BlogRelatedProduct } from './blog-related-product';
+import { renderOgabasseyBlogInlineAdSlot } from './render-blog-inline-ad-slot';
 
 export interface BlogPostBodyProps {
   basePath: string;

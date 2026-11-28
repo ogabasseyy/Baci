@@ -144,17 +144,25 @@ describe('OgabasseyLayoutChrome', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('reserves the full footer and ad subtree on the deferred fallback so activation does not shift', () => {
+  it('reserves the pre-footer ad slot before the semantic footer fallback so activation does not shift', () => {
     render(<OgabasseyLayoutChrome basePath="/ogabassey" section="footer" />);
 
+    const adReserve = screen.getByTestId('footer-ad-fallback-reserve');
     const fallbackFooter = screen.getByRole('contentinfo', {
       name: /semantic storefront footer/i,
     });
 
-    // Footer estimates plus the complete footer-ad wrapper reservation.
-    expect(fallbackFooter).toHaveClass('min-h-[1100px]');
-    expect(fallbackFooter).toHaveClass('md:min-h-[910px]');
-    expect(fallbackFooter).toHaveClass('lg:min-h-[770px]');
+    expect(adReserve).toHaveClass('min-h-[200px]', 'md:min-h-[350px]');
+    expect(
+      adReserve.compareDocumentPosition(fallbackFooter) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    // Matches the real `<Footer />` stacked height below the 200/350px ad box
+    // (total = 1100px mobile / 910px md / 770px lg).
+    expect(fallbackFooter).toHaveClass('min-h-[900px]');
+    expect(fallbackFooter).toHaveClass('md:min-h-[560px]');
+    expect(fallbackFooter).toHaveClass('lg:min-h-[420px]');
   });
 
   it('keeps immediate footer links root-relative for domain-routed storefronts', () => {

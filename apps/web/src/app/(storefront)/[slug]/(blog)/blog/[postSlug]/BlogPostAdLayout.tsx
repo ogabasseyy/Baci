@@ -7,51 +7,6 @@ interface OgabasseyBlogPostAdLayoutProps {
   postId: string;
 }
 
-export function renderOgabasseyBlogInlineAdSlot(
-  postId: string,
-  enabled: boolean
-): ReactNode | undefined {
-  if (!enabled) {
-    return undefined;
-  }
-
-  return (
-    <DeferredAdUnit
-      activateOnIdle
-      activateOnInteraction
-      activateOnScroll
-      placementKey="BLOG_SIDEBAR"
-      slotInstance={`blog-post-inline-${postId}`}
-      timeoutMs={2500}
-    />
-  );
-}
-
-export function OgabasseyBlogEndAd({
-  enabled,
-  postId,
-}: {
-  enabled: boolean;
-  postId: string;
-}) {
-  if (!enabled) {
-    return null;
-  }
-
-  return (
-    <div className="mb-8 flex justify-center">
-      <DeferredAdUnit
-        activateOnIdle
-        activateOnInteraction
-        activateOnScroll
-        placementKey="CONTENT_BREAK"
-        slotInstance={`blog-post-end-${postId}`}
-        timeoutMs={2500}
-      />
-    </div>
-  );
-}
-
 /**
  * Two-column desktop layout for OgaBassey blog articles that guarantees a full
  * `300px` right rail track (`lg:grid-cols-[minmax(0,1fr)_300px]`) whenever the

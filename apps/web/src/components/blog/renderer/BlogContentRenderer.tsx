@@ -12,7 +12,7 @@ import {
   normalizeSourceHeadingLevel,
 } from './blog-heading-levels';
 import { BlogImageNodeRenderer } from './blog-image-node-renderer';
-import { BlogDocWithOptionalAd, parseBlogDoc } from './blog-in-article-ad';
+import { BlogDocWithOptionalAd } from './blog-in-article-ad';
 import { findFirstTrustedInlineImage } from './blog-priority-inline-image';
 import { BlogTextRenderer } from './blog-text-renderer';
 import {
@@ -21,6 +21,7 @@ import {
   type PriorityInlineImage,
   type TipTapNode,
 } from './blog-tiptap-node';
+import { parseBlogDoc } from './parse-blog-doc';
 
 // Explicit text alignment class mapping for Tailwind tree-shaking (2026 best practice)
 const TEXT_ALIGN_CLASSES: Record<string, string> = {

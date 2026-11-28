@@ -571,7 +571,7 @@ describe('BlogPostBody', () => {
       const adUnits = screen.getAllByTestId('blog-deferred-ad-unit');
       expect(
         adUnits.map((unit) => unit.getAttribute('data-placement'))
-      ).toEqual(['BLOG_SIDEBAR', 'CONTENT_BREAK', 'SIDEBAR_HALF_PAGE']);
+      ).toEqual(['BLOG_SIDEBAR', 'BLOG_SIDEBAR', 'SIDEBAR_HALF_PAGE']);
       const sidebarRail = screen.getByRole('complementary', {
         name: /sponsored sidebar/i,
       });

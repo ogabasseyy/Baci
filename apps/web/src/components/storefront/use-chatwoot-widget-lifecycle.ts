@@ -1,6 +1,7 @@
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { installChatwootMessageGuard } from './chatwoot-inbound-message-guard';
+import { chatwootSdkUrl } from './chatwoot-sdk-url';
 import {
   reconcileChatwootTenant,
   sealChatwootWidget,
@@ -274,7 +275,7 @@ export function useChatwootWidgetLifecycle(
 
     const script = document.createElement('script');
     script.id = scriptId;
-    script.src = `${platformOrigin}/packs/js/sdk.js`;
+    script.src = chatwootSdkUrl(platformOrigin);
     script.async = true;
     script.defer = true;
     script.addEventListener('load', run, { once: true });
